@@ -1,0 +1,68 @@
+#
+# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+set(CMAKE_SYSTEM_NAME qnx)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+
+if(DEFINED ENV{QNX_BASE})
+  set(QNX_BASE $ENV{QNX_BASE})
+  message(STATUS "Found QNX_BASE = ${QNX_BASE}")
+elseif(DEFINED ENV{TOOLS_BASE})
+  set(QNX_BASE $ENV{TOOLS_BASE}/embedded/qnx/qnx700-ga3)
+  message(STATUS "Found QNX_BASE = ${QNX_BASE}")
+else()
+  message(FATAL_ERROR "QNX_BASE was not found")
+endif()
+
+set(ENV{QNX_HOST} ${QNX_BASE}/host/linux/x86_64)
+set(ENV{QNX_TARGET} ${QNX_BASE}/target/qnx7)
+
+set(QNX_HOST $ENV{QNX_HOST})
+set(QNX_TARGET $ENV{QNX_TARGET})
+
+message(STATUS "QNX_HOST = ${QNX_HOST}")
+message(STATUS "QNX_TARGET = ${QNX_TARGET}")
+
+set(CMAKE_C_COMPILER ${QNX_HOST}/usr/bin/aarch64-unknown-nto-qnx7.0.0-gcc)
+set(CMAKE_CXX_COMPILER ${QNX_HOST}/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++)
+
+set(CMAKE_C_COMPILER_TARGET aarch64)
+set(CMAKE_CXX_COMPILER_TARGET aarch64)
+
+set(CMAKE_C_COMPILER_FORCED TRUE)
+set(CMAKE_CXX_COMPILER_FORCED TRUE)
+
+set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_ROOT})
+set(CUDA_INCLUDE_DIRS ${CUDA_ROOT}/include)
+
+set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE STRING "" FORCE)
+set(CMAKE_CUDA_FLAGS "-I${CUDA_INCLUDE_DIRS} -Xcompiler -fPIC" CACHE STRING "" FORCE)
+set(CMAKE_CUDA_COMPILER_FORCED TRUE)
+
+#...VULCAN (eris) does not use externals, more over libnvToolsExt.so is not even part of .vulcan
+#...So, to resolve for all libs we need to use lib64 (vs normal lib in externals).
+#...Moreover, for libnvToolsExt.so we still need to add externals to the PATH
+if(DEFINED ENV{VULCAN} AND NOT $ENV{VULCAN} STREQUAL "")
+	set(CUDA_LIBS ${DEVLIBPATHS} -L${CUDA_ROOT}/lib64 -L${EXT_PATH}/cuda-10.0-qnx/lib)
+else()
+	set(CUDA_LIBS -L${CUDA_ROOT}/lib)
+endif()
+
+set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcublas  -lcudart)
+#...Disable swig
+set(DISABLE_SWIG TRUE)
+
+set(TRT_PLATFORM_ID "aarch64-qnx")
