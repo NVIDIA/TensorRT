@@ -28,6 +28,9 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <vector>
+#if !defined(_WIN32)
+#include <dlfcn.h>
+#endif
 
 #include "NvCaffeParser.h"
 #include "NvInfer.h"
@@ -75,6 +78,9 @@ struct Params
     bool dumpOutput{false};
     bool dumpLayerTime{false};
     bool help{false};
+#if !defined(_WIN32)
+    std::vector<std::string> plugins;
+#endif
 } gParams;
 
 inline int volume(Dims dims)
@@ -481,6 +487,9 @@ static void printUsage()
     printf("  --verbose               Use verbose logging (default = false)\n");
     printf("  --saveEngine=<file>     Save a serialized engine to file.\n");
     printf("  --loadEngine=<file>     Load a serialized engine from file.\n");
+#if !defined(_WIN32)
+    printf("  --plugins=<file>        Load a TensorRT custom plugin.\n");
+#endif
     printf("  --calib=<file>          Read INT8 calibration cache file.  Currently no support for ONNX model.\n");
     printf(
         "  --useDLACore=N          Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
@@ -657,6 +666,15 @@ bool parseArgs(int argc, char* argv[])
         if (parseFloat(argv[j], "percentile", gParams.pct))
             continue;
 
+#if !defined(_WIN32)
+        std::string plugin;
+        if (parseString(argv[j], "plugins", plugin))
+        {
+            gParams.plugins.push_back(plugin);
+            continue;
+        }
+#endif
+
         if (parseBool(argv[j], "safe", gParams.safeMode) || parseBool(argv[j], "fp16", gParams.fp16)
             || parseBool(argv[j], "int8", gParams.int8) || parseBool(argv[j], "verbose", gParams.verbose)
             || parseBool(argv[j], "allowGPUFallback", gParams.allowGPUFallback)
@@ -797,6 +815,17 @@ int main(int argc, char** argv)
     cudaSetDevice(gParams.device);
 
     initLibNvInferPlugins(&gLogger.getTRTLogger(), "");
+
+#if !defined(_WIN32)
+    for (auto plugin : gParams.plugins)
+    {
+        void *dlhandle = dlopen(plugin.c_str(), RTLD_LAZY);
+        if (dlhandle == nullptr)
+        {
+            gLogError << "Error loading plugin library" << plugin << std::endl;
+        }
+    }
+#endif
 
     ICudaEngine* engine = createEngine();
     if (!engine)
