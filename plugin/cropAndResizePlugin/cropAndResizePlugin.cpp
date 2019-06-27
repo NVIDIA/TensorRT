@@ -277,7 +277,7 @@ IPluginV2Ext* CropAndResizePluginCreator::createPlugin(const char* name, const P
 {
     const PluginField* fields = fc->fields;
     int nbFields = fc->nbFields;
-    int crop_width, crop_height;
+    int crop_width = 0, crop_height = 0;
 
     for (int i = 0; i < nbFields; ++i)
     {
