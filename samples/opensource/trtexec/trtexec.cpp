@@ -75,6 +75,7 @@ struct Params
     bool dumpOutput{false};
     bool dumpLayerTime{false};
     bool help{false};
+    std::vector<std::string> plugins;
 } gParams;
 
 inline int volume(Dims dims)
@@ -481,6 +482,7 @@ static void printUsage()
     printf("  --verbose               Use verbose logging (default = false)\n");
     printf("  --saveEngine=<file>     Save a serialized engine to file.\n");
     printf("  --loadEngine=<file>     Load a serialized engine from file.\n");
+    printf("  --plugins=<file>        Load a TensorRT custom plugin.\n");
     printf("  --calib=<file>          Read INT8 calibration cache file.  Currently no support for ONNX model.\n");
     printf(
         "  --useDLACore=N          Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
@@ -657,6 +659,13 @@ bool parseArgs(int argc, char* argv[])
         if (parseFloat(argv[j], "percentile", gParams.pct))
             continue;
 
+        std::string plugin;
+        if (parseString(argv[j], "plugins", plugin))
+        {
+            gParams.plugins.push_back(plugin);
+            continue;
+        }
+
         if (parseBool(argv[j], "safe", gParams.safeMode) || parseBool(argv[j], "fp16", gParams.fp16)
             || parseBool(argv[j], "int8", gParams.int8) || parseBool(argv[j], "verbose", gParams.verbose)
             || parseBool(argv[j], "allowGPUFallback", gParams.allowGPUFallback)
@@ -797,6 +806,14 @@ int main(int argc, char** argv)
     cudaSetDevice(gParams.device);
 
     initLibNvInferPlugins(&gLogger.getTRTLogger(), "");
+
+    for (const auto& plugin : gParams.plugins)
+    {
+	if (EXIT_SUCCESS != loadLibrary(plugin))
+        {
+            return gLogger.reportFail(sampleTest);
+        }
+    }
 
     ICudaEngine* engine = createEngine();
     if (!engine)
