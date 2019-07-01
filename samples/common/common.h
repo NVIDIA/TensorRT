@@ -776,7 +776,7 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
     return os << ")";
 }
 
-inline int loadLibrary(std::string libName)
+inline int loadLibrary(const std::string& libName)
 {
     void *dlhandle = nullptr;
 #if !defined(_WIN32)

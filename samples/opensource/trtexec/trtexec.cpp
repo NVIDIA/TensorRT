@@ -807,7 +807,7 @@ int main(int argc, char** argv)
 
     initLibNvInferPlugins(&gLogger.getTRTLogger(), "");
 
-    for (auto plugin : gParams.plugins)
+    for (const auto& plugin : gParams.plugins)
     {
 	if (EXIT_SUCCESS != loadLibrary(plugin))
         {
