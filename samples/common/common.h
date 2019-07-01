@@ -41,6 +41,11 @@
 #include <string>
 #include <utility>
 #include <vector>
+#if !defined(_WIN32)
+#include <dlfcn.h>
+#else
+#include <windows.h>
+#endif
 
 using namespace std;
 using namespace nvinfer1;
@@ -769,6 +774,22 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
         os << (i ? ", " : "") << dims.d[i];
     }
     return os << ")";
+}
+
+inline int loadLibrary(const std::string& libName)
+{
+    void *dlhandle = nullptr;
+#if !defined(_WIN32)
+    dlhandle = dlopen(libName.c_str(), RTLD_LAZY);
+#else
+    dlhandle = LoadLibrary(libName.c_str());
+#endif
+    if (!dlhandle)
+    {
+	std::cerr << "Error loading library: " << libName << " Error code: " << dlerror() << std::endl;
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }
 
 #endif // TENSORRT_COMMON_H
