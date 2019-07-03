@@ -54,6 +54,7 @@ struct Params
     std::string saveEngine{};
     std::string loadEngine{};
     std::string calibrationCache{"CalibrationTable"};
+    std::string outputCalibrationCache{"CalibrationTable"};
     std::string uffFile{};
     std::string onnxModelFile{};
     std::vector<std::string> inputs{};
@@ -113,10 +114,11 @@ float percentile(float percentage, std::vector<float>& times)
 class RndInt8Calibrator : public IInt8EntropyCalibrator2
 {
 public:
-    RndInt8Calibrator(int totalSamples, std::string cacheFile)
+    RndInt8Calibrator(int totalSamples, std::string cacheFile, std::string outputCacheFile)
         : mTotalSamples(totalSamples)
         , mCurrentSample(0)
         , mCacheFile(cacheFile)
+	, mOutputCacheFile(outputCacheFile)
     {
         std::default_random_engine generator;
         std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
@@ -172,12 +174,17 @@ public:
         return length ? &mCalibrationCache[0] : nullptr;
     }
 
-    virtual void writeCalibrationCache(const void*, size_t) override {}
+    void writeCalibrationCache(const void* cache, size_t length) override
+    {
+        std::ofstream output(mOutputCacheFile, std::ios::binary);
+        output.write(reinterpret_cast<const char*>(cache), length);
+    }
 
 private:
     int mTotalSamples;
     int mCurrentSample;
     std::string mCacheFile;
+    std::string mOutputCacheFile;
     std::map<std::string, void*> mInputDeviceBuffers;
     std::vector<char> mCalibrationCache;
 };
@@ -248,7 +255,7 @@ ICudaEngine* caffeToTRTModel()
     }
 
     // Build the engine
-    RndInt8Calibrator calibrator(1, gParams.calibrationCache);
+    RndInt8Calibrator calibrator(1, gParams.calibrationCache, gParams.outputCalibrationCache);
     configureBuilder(builder, calibrator);
 
     samplesCommon::enableDLA(builder, gParams.useDLACore, gParams.allowGPUFallback);
@@ -309,7 +316,7 @@ ICudaEngine* uffToTRTModel()
     }
 
     // Build the engine
-    RndInt8Calibrator calibrator(1, gParams.calibrationCache);
+    RndInt8Calibrator calibrator(1, gParams.calibrationCache, gParams.outputCalibrationCache);
     configureBuilder(builder, calibrator);
 
     samplesCommon::enableDLA(builder, gParams.useDLACore);
@@ -349,7 +356,7 @@ ICudaEngine* onnxToTRTModel()
     }
 
     // Build the engine
-    RndInt8Calibrator calibrator(1, gParams.calibrationCache);
+    RndInt8Calibrator calibrator(1, gParams.calibrationCache, gParams.outputCalibrationCache);
     configureBuilder(builder, calibrator);
 
     samplesCommon::enableDLA(builder, gParams.useDLACore);
@@ -484,6 +491,7 @@ static void printUsage()
     printf("  --loadEngine=<file>     Load a serialized engine from file.\n");
     printf("  --plugins=<file>        Load a TensorRT custom plugin.\n");
     printf("  --calib=<file>          Read INT8 calibration cache file.  Currently no support for ONNX model.\n");
+    printf("  --calibOut=<file>       Write INT8 calibration cache file.  Currently no support for ONNX model.\n");
     printf(
         "  --useDLACore=N          Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
         "where n is the number of DLA engines on the platform.\n");
@@ -619,6 +627,9 @@ bool parseArgs(int argc, char* argv[])
         }
 
         if (parseString(argv[j], "calib", gParams.calibrationCache))
+            continue;
+
+        if (parseString(argv[j], "calibOut", gParams.outputCalibrationCache))
             continue;
 
         std::string input;
