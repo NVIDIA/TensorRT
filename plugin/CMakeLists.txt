@@ -88,6 +88,12 @@ set_target_properties(${SHARED_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOVERSI
 
 set_property(TARGET ${SHARED_TARGET} PROPERTY CUDA_STANDARD 11)
 
+target_link_libraries(${SHARED_TARGET}
+    ${CUBLAS_LIB}
+    ${CUDART_LIB}
+    nvinfer
+)
+
 ################################## STATIC LIBRARY #######################################
 
 add_library(${STATIC_TARGET} STATIC
