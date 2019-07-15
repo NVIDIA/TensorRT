@@ -288,22 +288,22 @@ IPluginV2Ext* NormalizePluginCreator::createPlugin(const char* name, const Plugi
         if (!strcmp(attrName, "nbWeights"))
         {
             ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mNbWeights = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+            mNbWeights = *(static_cast<const int*>(fields[i].data));
         }
         else if (!strcmp(attrName, "acrossSpatial"))
         {
             ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mAcrossSpatial = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+            mAcrossSpatial = *(static_cast<const bool*>(fields[i].data));
         }
         else if (!strcmp(attrName, "channelShared"))
         {
             ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mChannelShared = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+            mChannelShared = *(static_cast<const bool*>(fields[i].data));
         }
         else if (!strcmp(attrName, "eps"))
         {
             ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            mEps = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
+            mEps = *(static_cast<const float*>(fields[i].data));
         }
         else if (!strcmp(attrName, "weights"))
         {
