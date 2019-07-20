@@ -16,7 +16,6 @@
 #include "reorgPlugin.h"
 
 using namespace nvinfer1;
-using nvinfer1::PluginType;
 using nvinfer1::plugin::Reorg;
 using nvinfer1::plugin::ReorgPluginCreator;
 
