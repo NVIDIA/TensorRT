@@ -17,6 +17,8 @@
 	* [Generating batch files for Caffe users](#generating-batch-files-for-caffe-users)
 	* [Generating batch files for non-Caffe users](#generating-batch-files-for-non-caffe-users)
 - [Running the sample](#running-the-sample)
+	* [Sample `--help` options](#sample---help-options)
+- [Additional resources](#additional-resources)
 	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additiona-resources)
 - [License](#license)
@@ -355,21 +357,19 @@ The following example depicts the sequence of commands to run `./sample_int8 mni
 
 	This output shows that the sample ran successfully; `PASSED`.
 
-### Sample `--help` options
+### Sample --help options
 
 To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
 ```
-Usage: ./sample_int8 <network name> <optional params>
+Usage: ./sample_int8 <network name> [-h or --help] [--datadir=<path to data directory>] [--useDLACore=<int>]
 
-Optional params
-    --batch=N Set batch size (default = 100).
-    --start=N Set the first batch to be scored (default = 100). All batches before this batch will be used for calibration.
-    --score=N Set the number of batches to be scored (default = 400).
-    --search Search for best calibration. Can only be used with legacy calibration algorithm.
-    --legacy Use legacy calibration algorithm.
-    --useLegacyEntropy Use legacy Entropy calibration algorithm.
-    --useDLACore=N Enable execution on DLA for all layers that support dla. Value can range from 0 to n-1, where n is the number of DLA engines on the      platform.
-    -h or --help Print this help menu.
+--help          Display help information
+--datadir       Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data 					directories are given, the default is to use data/samples/ssd/ and data/ssd/
+--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, where n is the number of DLA engines on the platform.
+--batch=N       Set batch size (default = 100).
+--start=N       Set the first batch to be scored (default = 100). All batches before this batch will be used for calibration.
+--score=N       Set the number of batches to be scored (default = 400).
+
 ```
 
 # Additional resources
