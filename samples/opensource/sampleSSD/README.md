@@ -11,7 +11,7 @@
     * [TensorRT plugin layers in SSD](#tensorrt-plugin-layers-in-ssd)
 - [Prerequisites](#prerequisites)
 - [Running the sample](#running-the-sample)
-    * [Sample `--help` options](#sample-help-options)
+    * [Sample `--help` options](#sample---help-options)
 - [Additional resources](#additonal-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -25,7 +25,7 @@ Unlike Faster R-CNN, SSD completely eliminates proposal generation and subsequen
 
 ## How does this sample work?
 
-This sample pre-processes the input to the SSD network and performs inference on the SSD network in TensorRT, using plugins to run layers that are not natively supported in TensorRT.
+This sample pre-processes the input to the SSD network and performs inference on the SSD network in TensorRT, using plugins to run layers that are not natively supported in TensorRT. Additionally, the sample can also be run in INT8 mode for which it first performs INT8 calibration and then does inference int INT8.
 
 Specifically, this sample:
 -  [Preprocesses the input](#preprocessing-the-input)
@@ -71,6 +71,8 @@ To initialize and register these TensorRT plugins to the plugin registry, the `i
 
 The sampleSSD sample builds a network based on a Caffe model and network description. For details on importing a Caffe model, see [Importing A Caffe Model Using The C++ Parser API](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#import_caffe_c). The SSD network has few non-natively supported layers which are implemented as plugins in TensorRT. The Caffe parser can create plugins for these layers internally using the plugin registry.
 
+This sample can run in FP16 and INT8 modes based on the user input. For more details, see [INT8 Calibration Using C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#optimizing_int8_c) and [Enabling FP16 Inference Using C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#enable_fp16_c). The sample selects the entropy calibrator as a default choice. The `CalibrationMode` parameter in the sample code needs to be set to `0` to switch to the Legacy calibrator.
+ 
 For details on how to build the TensorRT engine, see [Building An Engine In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#build_engine_c). After the engine is built, the next steps are to serialize the engine and run the inference with the deserialized engine. For more information about these steps, see [Serializing A Model In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#serial_model_c).
 
 ### Verifying the output
@@ -83,14 +85,14 @@ In sampleSSD, there is a single input:
 And 2 outputs:
 -  `detectionOut` is the detection array, containing the image ID, label, confidence, 4 coordinates
 -  `keepCount` is the number of valid detections
-
+ 
 The outputs of the SSD network are directly human interpretable. The results are organized as tuples of 7. In each tuple, the 7 elements are:
 -   image ID
 -   object label
 -   confidence score
 -   (x,y) coordinates of the lower left corner of the bounding box
 -   (x,y) coordinates of the upper right corner of the bounding box
-
+  
 This information can be drawn in the output PPM image using the `writePPMFileWithBBox` function. The `kVISUAL_THRESHOLD` parameter can be used to control the visualization of objects in the image. It is currently set to 0.6, therefore, the output will display all objects with confidence score of 60% and above.
 
 ### TensorRT API layers and ops
@@ -98,7 +100,7 @@ This information can be drawn in the output PPM image using the `writePPMFileWit
 In this sample, the following layers are used.  For more information about these layers, see the [TensorRT Developer Guide: Layers](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#layers) documentation.
 
 [Activation layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#activation-layer)
-The Activation layer implements element-wise activation functions. Specifically, this sample uses the Activation layer with the type `kRELU`.
+The Activation layer implements element-wise activation functions. Specifically, this sample uses the Activation layer with the type `kRELU`. 
 
 [Concatenation layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#concatenation-layer)
 The Concatenation layer links together multiple tensors of the same non-channel sizes along the channel dimension.
@@ -222,13 +224,13 @@ message DetectionOutputParameter {
 
 ## Prerequisites
 
-Due to the size of the SSD Caffe model, it is not included in the product bundle. Before you can run the sample, you’ll need to download the model, and perform some configuration.
+Due to the size of the SSD Caffe model, it is not included in the product bundle. Before you can run the sample, you’ll need to download the model, perform some configuration, and generate INT8 calibration batches.
 
 1.  Download [models_VGGNet_VOC0712_SSD_300x300.tar.gz](https://drive.google.com/file/d/0BzKzrI_SkD1_WVVTSmQxU0dVRzA/view).
 
 2.  Extract the contents.
     `tar xvf models_VGGNet_VOC0712_SSD_300x300.tar.gz`
-
+    
     1. Generate MD5 hash and compare against the reference below:
         `md5sum models_VGGNet_VOC0712_SSD_300x300.tar.gz`
 
@@ -258,6 +260,23 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
         mv VGG_VOC0712_SSD_300x300_iter_120000.caffemodel <TensorRT_Install_Directory>/data/ssd
         ```
 
+3.  Generate the INT8 calibration batches.
+    1.  Install Pillow.
+        -   For Python 2 users, run:
+             `python2 -m pip install Pillow`
+
+        -   For Python 3 users, run:
+            `python3 -m pip install Pillow`
+
+    2.  Generate the INT8 batches.
+        `prepareINT8CalibrationBatches.sh`
+
+        The script selects 500 random JPEG images from the PASCAL VOC dataset and converts them to PPM images. These 500 PPM images are used to generate INT8 calibration batches.
+
+        **Note:** Do not move the batch files from the `<TensorRT_Install_Directory>/data/ssd/batches` directory.
+
+        If you want to use a different dataset to generate INT8 batches, use the `batchPrepare.py` script and place the batch files in the `<TensorRT_Install_Directory>/data/ssd/batches` directory.
+
 ## Running the sample
 
 1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleSSD` directory. The binary named `sample_ssd` will be created in the `<TensorRT root directory>/bin` directory.
@@ -266,10 +285,10 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
     make
     ```
     Where `<TensorRT root directory>` is where you installed TensorRT.
-
+    
 2. Run the sample to perform inference on the digit:
     ```
-    ./sample_ssd [-h]
+    ./sample_ssd [-h] [--fp16] [--int8]
     ```
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
     ```
@@ -286,7 +305,7 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
     ```
 
     This output shows that the sample ran successfully; `PASSED`.
-
+ 
 
 ### Sample --help options
 
@@ -296,6 +315,8 @@ Usage: ./build/x86_64-linux/sample_ssd
 Optional Parameters:
     -h, --help      Display help information.
     --useDLACore=N  Specify the DLA engine to run on.
+    --fp16          Specify to run in fp16 mode.
+    --int8          Specify to run in int8 mode.
 ```
 
 # Additional resources
@@ -326,6 +347,4 @@ This `README.md` file was recreated, updated and reviewed.
 
 # Known issues
 
-* FP16 and INT8 modes are disabled for this sample due to an issue identified in theTensorRT core library during the migration of `PriorBox_TRT` plugin from `IPluginV2` to `IPluginV2Ext` interface.
-  * This issue will be fixed in the subsequent update to TensorRT OSS release.
-  * NOTE: sampleSSD shipped with the TensorRT 5.1.5 binary release, however, is based on the `IPluginV2` interface, and is fully functional in all modes.
+- On Windows, the INT8 calibration script is not supported natively. You can generate the INT8 batches on a Linux machine and copy them over in order to run sample_ssd in INT8 mode.
