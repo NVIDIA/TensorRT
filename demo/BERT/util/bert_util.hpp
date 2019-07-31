@@ -74,6 +74,7 @@ struct Args
     bool runInFp16{false};
     bool help{false};
     int num_heads;
+    std::string saveEngine{};
     std::vector<std::string> dataDirs;
 };
 
@@ -90,7 +91,8 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
     {
         int arg;
         static struct option long_options[] = {{"help", no_argument, 0, 'h'}, {"datadir", required_argument, 0, 'd'},
-            {"fp16", no_argument, 0, 'f'}, {"nheads", required_argument, 0, 'n'}, {nullptr, 0, nullptr, 0}};
+            {"fp16", no_argument, 0, 'f'}, {"nheads", required_argument, 0, 'n'}, {"saveEngine", required_argument, 0, 's'},
+            {nullptr, 0, nullptr, 0}};
         int option_index = 0;
         arg = getopt_long(argc, argv, "hd:iu", long_options, &option_index);
         if (arg == -1)
@@ -115,6 +117,17 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
             else
             {
                 std::cerr << "ERROR: --datadir requires option argument" << std::endl;
+                return false;
+            }
+            break;
+        case 's':
+            if (optarg)
+            {
+                args.saveEngine = optarg;
+            }
+            else
+            {
+                std::cerr << "ERROR: --saveEngine requires option argument" << std::endl;
                 return false;
             }
             break;
