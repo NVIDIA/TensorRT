@@ -284,22 +284,25 @@ int main(int argc, char* argv[])
         return gLogger.reportFail(sampleTest);
     }
 
-    std::ofstream engineFile(gArgs.saveEngine, std::ios::binary);
-    if (!engineFile)
+    if (!gArgs.saveEngine.empty())
     {
-        gLogError << "Cannot open engine file: " << gArgs.saveEngine << std::endl;
-        return gLogger.reportFail(sampleTest);
-    }
+        std::ofstream engineFile(gArgs.saveEngine, std::ios::binary);
+        if (!engineFile)
+        {
+            gLogError << "Cannot open engine file: " << gArgs.saveEngine << std::endl;
+            return gLogger.reportFail(sampleTest);
+        }
 
-    nvinfer1::IHostMemory* serializedEngine{engine->serialize()};
-    if (serializedEngine == nullptr)
-    {
-        gLogError << "Engine serialization failed" << std::endl;
-        return false;
-    }
+        nvinfer1::IHostMemory* serializedEngine{engine->serialize()};
+        if (serializedEngine == nullptr)
+        {
+            gLogError << "Engine serialization failed" << std::endl;
+            return false;
+        }
 
-    engineFile.write(static_cast<char*>(serializedEngine->data()), serializedEngine->size());
-    serializedEngine->destroy();
+        engineFile.write(static_cast<char*>(serializedEngine->data()), serializedEngine->size());
+        serializedEngine->destroy();
+    }
 
     nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(gLogger);
     if (runtime == nullptr)
