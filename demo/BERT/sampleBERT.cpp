@@ -126,7 +126,7 @@ nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int num
 {
 
     // Currently, the batch size is handled in the model, by passing an input
-    // Tensor with an explicit batch dimension. There is a tranpose in the 
+    // Tensor with an explicit batch dimension. There is a tranpose in the
     // attention layer, that relies on the exact batch size to be available at
     // network definition time. This will change in the near future.
     builder->setMaxBatchSize(1);
@@ -229,6 +229,7 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--fp16          OPTIONAL: Run in FP16 mode." << std::endl;
     std::cout << "--nheads        Number of attention heads." << std::endl;
+    std::cout << "--saveEngine    The path at which to write a serialized engine." << std::endl;
 }
 
 int main(int argc, char* argv[])
@@ -282,6 +283,23 @@ int main(int argc, char* argv[])
         gLogError << "Unable to build engine." << std::endl;
         return gLogger.reportFail(sampleTest);
     }
+
+    std::ofstream engineFile(gArgs.saveEngine, std::ios::binary);
+    if (!engineFile)
+    {
+        gLogError << "Cannot open engine file: " << gArgs.saveEngine << std::endl;
+        return gLogger.reportFail(sampleTest);
+    }
+
+    nvinfer1::IHostMemory* serializedEngine{engine->serialize()};
+    if (serializedEngine == nullptr)
+    {
+        gLogError << "Engine serialization failed" << std::endl;
+        return false;
+    }
+
+    engineFile.write(static_cast<char*>(serializedEngine->data()), serializedEngine->size());
+    serializedEngine->destroy();
 
     nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(gLogger);
     if (runtime == nullptr)
