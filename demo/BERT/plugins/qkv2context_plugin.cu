@@ -41,7 +41,6 @@ constexpr HDI IntType alignTo(IntType a, IntType b)
 
 constexpr size_t my_align = 256;
 
-
 template <typename T>
 cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m,
     int n, int k, const T alpha, const T* A, int lda, const T* B, int ldb, const T beta, T* C, int ldc);
@@ -109,11 +108,165 @@ struct CublasConfigHelper
 };
 
 template <typename T>
+__global__ void transpose_ctx(const int H, const T* input, T* output)
+{
+    // Input:  HxSxNxB
+    // Output: HxNxSxB
+
+    int n = threadIdx.y;
+    int s = blockIdx.x;
+    int b = blockIdx.y;
+
+    int N = blockDim.y;
+    int S = gridDim.x;
+    // B = gridDim.y 
+
+    int NH = N * H;
+    int NHS = NH * S;
+    int in_offset = s * H + n * S * H + b * NHS;
+    int out_offset = n * H + s * NH + b * NHS;
+
+    int i = threadIdx.x;
+    if (i < H)
+    {
+        output[out_offset + i] = input[in_offset + i];
+    }
+}
+
+void launch_trans_ctx(cudaStream_t stream, const int S, const int B, const int head_size, const int num_heads,
+    const float* input, float* output)
+{
+
+    dim3 grid(S, B, 1);
+    if (0 == (head_size & 1))
+    {
+        int H = head_size / 2;
+        const float2* input2 = reinterpret_cast<const float2*>(input);
+        float2* output2 = reinterpret_cast<float2*>(output);
+        dim3 block(H, num_heads, 1);
+        transpose_ctx<float2><<<grid, block, 0, stream>>>(H, input2, output2);
+        CHECK(cudaPeekAtLastError());
+    }
+    else
+    {
+        dim3 block(head_size, num_heads, 1);
+        transpose_ctx<float><<<grid, block, 0, stream>>>(head_size, input, output);
+        CHECK(cudaPeekAtLastError());
+    }
+}
+
+void launch_trans_ctx(cudaStream_t stream, const int S, const int B, const int head_size, const int num_heads,
+    const half* input, half* output)
+{
+    dim3 grid(S, B, 1);
+    if (0 == (head_size % 4))
+    {
+        int H = head_size / 4;
+        dim3 block(H, num_heads, 1);
+        const float2* input2 = reinterpret_cast<const float2*>(input);
+        float2* output2 = reinterpret_cast<float2*>(output);
+        transpose_ctx<float2><<<grid, block, 0, stream>>>(H, input2, output2);
+    }
+    else if (0 == (head_size & 1))
+    {
+        int H = head_size / 2;
+        dim3 block(H, num_heads, 1);
+        const half2* input2 = reinterpret_cast<const half2*>(input);
+        half2* output2 = reinterpret_cast<half2*>(output);
+        transpose_ctx<half2><<<grid, block, 0, stream>>>(H, input2, output2);
+    }
+    else
+    { // this should be an "odd" case. probably not worth catching it in the half2 kernel.
+        dim3 block(head_size, num_heads, 1);
+        transpose_ctx<half><<<grid, block, 0, stream>>>(head_size, input, output);
+    }
+    CHECK(cudaPeekAtLastError());
+}
+
+template <typename T>
+__global__ void transpose_qkv(const int H, const T* input, T* output)
+{
+    // Input:  HxNx3xSxB
+    // Output: HxSxNxBx3
+
+    int n = threadIdx.y;
+    int s = blockIdx.x;
+    int b = blockIdx.y;
+    int m = blockIdx.z;//matrix id
+
+    int N = blockDim.y;
+
+    int S = gridDim.x;
+    int B = gridDim.y;
+    int NH = N * H;
+    int NHS = NH * S;
+    int in_offset = n * H + m * NH + s * 3 * NH + b * NHS * 3;
+    int out_offset = s * H + n * S * H + b * NHS + m * NHS * B;
+
+    int i = threadIdx.x;
+    if (i < H)
+    {
+        output[out_offset + i] = input[in_offset + i];
+    }
+}
+
+void launch_trans_qkv(cudaStream_t stream, const int S, const int B, const int head_size, const int num_heads,
+    const float* input, float* output)
+{
+
+    dim3 grid(S, B, 3);
+    if (0 == (head_size & 1))
+    {
+        int H = head_size / 2;
+        const float2* input2 = reinterpret_cast<const float2*>(input);
+        float2* output2 = reinterpret_cast<float2*>(output);
+        dim3 block(H, num_heads, 1);
+        transpose_qkv<float2><<<grid, block, 0, stream>>>(H, input2, output2);
+        CHECK(cudaPeekAtLastError());
+    }
+    else
+    {
+        dim3 block(head_size, num_heads, 1);
+        transpose_qkv<float><<<grid, block, 0, stream>>>(head_size, input, output);
+        CHECK(cudaPeekAtLastError());
+    }
+}
+
+void launch_trans_qkv(cudaStream_t stream, const int S, const int B, const int head_size, const int num_heads,
+    const half* input, half* output)
+{
+    dim3 grid(S, B, 3);
+    if (0 == (head_size % 4))
+    {
+        int H = head_size / 4;
+        dim3 block(H, num_heads, 1);
+        const float2* input2 = reinterpret_cast<const float2*>(input);
+        float2* output2 = reinterpret_cast<float2*>(output);
+        transpose_qkv<float2><<<grid, block, 0, stream>>>(H, input2, output2);
+    }
+    else if (0 == (head_size & 1))
+    {
+        int H = head_size / 2;
+        dim3 block(H, num_heads, 1);
+        const half2* input2 = reinterpret_cast<const half2*>(input);
+        half2* output2 = reinterpret_cast<half2*>(output);
+        transpose_qkv<half2><<<grid, block, 0, stream>>>(H, input2, output2);
+    }
+    else
+    { // this should be an "odd" case. probably not worth catching it in the half2 kernel..
+        dim3 block(head_size, num_heads, 1);
+        transpose_qkv<half><<<grid, block, 0, stream>>>(head_size, input, output);
+    }
+    CHECK(cudaPeekAtLastError());
+}
+
+template <typename T>
 int compute_qkv2ctx(cublasHandle_t& cublas, const int mB, const int mS, const int mNumHeads, const int mHeadSize,
-    const float mRsqrtHeadSize, const T* input, T* output, T* qkptr, T* pptr, cudaStream_t stream,
+    const float mRsqrtHeadSize, const T* input, T* output, T* qkptr, T* pptr, T* tptr, cudaStream_t stream,
     const int* mask_idx = nullptr)
 {
-    // input should be 3xBxNxSxH
+    // input should be BxSx3xNxH => tptr: 3xBxNxSxH
+    launch_trans_qkv(stream, mS, mB, mHeadSize, mNumHeads, input, tptr);
 
     cublasSetStream(cublas, stream);
 
@@ -122,9 +275,9 @@ int compute_qkv2ctx(cublasHandle_t& cublas, const int mB, const int mS, const in
     int omat_size = mS * mS;
     int num_mats = mB * mNumHeads;
 
-    const T* qptr = input;
-    const T* kptr = input + tsize;
-    const T* vptr = input + 2 * tsize;
+    const T* qptr = tptr; 
+    const T* kptr = qptr + tsize;
+    const T* vptr = kptr + tsize;
 
     CublasConfigHelper helper(cublas);
 
@@ -149,8 +302,10 @@ int compute_qkv2ctx(cublasHandle_t& cublas, const int mB, const int mS, const in
 
     // compute P*V (as V*P)
     CHECK(cublasGemmStridedBatched<T>(cublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, 1.f, vptr, mHeadSize,
-        imat_size, pptr, mS, omat_size, 0.f, output, mHeadSize, imat_size, num_mats));
+        imat_size, pptr, mS, omat_size, 0.f, tptr, mHeadSize, imat_size, num_mats));
 
+    // tptr is 3xBxNxSxH, so 3x output
+    launch_trans_ctx(stream, mS, mB, mHeadSize, mNumHeads, tptr, output);
     return 0;
 }
 
@@ -224,13 +379,7 @@ Dims QKV2ContextPlugin::getOutputDimensions(int index, const Dims* inputs, int n
     assert(nbInputDims == 1 + mHasImask);
     assert(index == 0);
 
-    Dims ret{inputs->nbDims - 1};
-    for (int it = 0; it < inputs->nbDims - 1; it++)
-    {
-        ret.d[it] = inputs->d[it + 1];
-    }
-
-    return ret;
+    return Dims{5, mB, mS, mNumHeads * mHeadSize, 1, 1};
 }
 
 void QKV2ContextPlugin::attachToContext(cudnnContext* cudnn, cublasContext* cublas_, IGpuAllocator* alloc)
@@ -255,6 +404,7 @@ int QKV2ContextPlugin::enqueue(
 
     char* scratch1 = scratch_bytes;
     char* scratch2 = scratch_bytes + bytes_aligned;
+    char* scratch3 = scratch2 + bytes_aligned;
 
     int status = -1;
     const int* mask_idx = nullptr;
@@ -269,9 +419,10 @@ int QKV2ContextPlugin::enqueue(
         float* output = static_cast<float*>(outputs[0]);
         float* scr1 = reinterpret_cast<float*>(scratch1);
         float* scr2 = reinterpret_cast<float*>(scratch2);
+        float* scr3 = reinterpret_cast<float*>(scratch3);
 
         status = compute_qkv2ctx(
-            cublas, mB, mS, mNumHeads, mHeadSize, mRsqrtHeadSize, input, output, scr1, scr2, stream, mask_idx);
+            cublas, mB, mS, mNumHeads, mHeadSize, mRsqrtHeadSize, input, output, scr1, scr2, scr3, stream, mask_idx);
     }
     else if (mType == DataType::kHALF)
     {
@@ -279,9 +430,10 @@ int QKV2ContextPlugin::enqueue(
         half* output = static_cast<half*>(outputs[0]);
         half* scr1 = reinterpret_cast<half*>(scratch1);
         half* scr2 = reinterpret_cast<half*>(scratch2);
+        half* scr3 = reinterpret_cast<half*>(scratch3);
 
         status = compute_qkv2ctx(
-            cublas, mB, mS, mNumHeads, mHeadSize, mRsqrtHeadSize, input, output, scr1, scr2, stream, mask_idx);
+            cublas, mB, mS, mNumHeads, mHeadSize, mRsqrtHeadSize, input, output, scr1, scr2, scr3, stream, mask_idx);
     }
     else
     {
@@ -331,18 +483,20 @@ void QKV2ContextPlugin::configurePlugin(const Dims* inputDims, int nbInputs, con
     // Validate input arguments
     assert(nbInputs == 1 + mHasImask);
     assert(nbOutputs == 1);
-    assert(inputDims[0].nbDims == 5);
-    assert(inputDims[0].d[0] == 3);
-    assert(inputDims[0].d[1] == mB);
-    assert(inputDims[0].d[2] == mNumHeads);
-    assert(inputDims[0].d[3] == mS);
-    assert(inputDims[0].d[4] == mHeadSize);
 
-    assert(outputDims[0].nbDims == 4);
+    assert(inputDims[0].nbDims == 5);
+    assert(inputDims[0].d[0] == mB);
+    assert(inputDims[0].d[1] == mS);
+    assert(inputDims[0].d[2] == 3 * mHeadSize * mNumHeads);
+    assert(inputDims[0].d[3] == 1);
+    assert(inputDims[0].d[4] == 1);
+
+    assert(outputDims[0].nbDims == 5);
     assert(outputDims[0].d[0] == mB);
-    assert(outputDims[0].d[1] == mNumHeads);
-    assert(outputDims[0].d[2] == mS);
-    assert(outputDims[0].d[3] == mHeadSize);
+    assert(outputDims[0].d[1] == mS);
+    assert(outputDims[0].d[2] == mNumHeads * mHeadSize);
+    assert(outputDims[0].d[3] == 1);
+    assert(outputDims[0].d[4] == 1);
 
     mType = outputTypes[0];
     if (!(mType == DataType::kHALF || mType == DataType::kFLOAT))
@@ -386,12 +540,15 @@ size_t QKV2ContextPlugin::getWorkspaceSize(int batchsize) const
     size_t two = 2;
     size_t ws = two * bytes_aligned;
 
-    return ws;
+    int word_size = sizeof(float);
+    if (mType == DataType::kHALF)
+        word_size /= 2;
+    size_t tp = 3 * mB * mS * mNumHeads * mHeadSize * word_size;
+
+    return ws + tp;
 }
 
-void QKV2ContextPlugin::destroy()
-{
-}
+void QKV2ContextPlugin::destroy() {}
 
 IPluginV2Ext* QKV2ContextPlugin::clone() const
 {

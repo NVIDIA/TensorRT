@@ -49,7 +49,7 @@ const std::string gSampleName = "TensorRT.sample_bert";
 const std::string TEST_INPUT_NAME = "test_inputs.weights_int32";
 const std::string TEST_OUTPUT_NAME = "test_outputs.weights";
 const std::string BERT_WEIGHTS_NAME = "bert.weights";
-const int NUM_RUNS = 5;
+const int NUM_RUNS = 10;
 
 void doInference(IExecutionContext& context, const std::map<std::string, nvinfer1::Weights>& in_cfg,
     std::map<std::string, std::vector<float>>& out_cfg, int batchSize, cudaStream_t stream,

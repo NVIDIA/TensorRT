@@ -9,6 +9,7 @@ docker run -it --rm \
     -u $(id -u):$(id -g) \
     -v ${HOME}:/host/ \
     -v $1:/data/ \
+    -v $(pwd)/../../:/workspace/TensorRT \
     sample-bert bash
 
 

@@ -46,9 +46,77 @@ To build the TensorRT OSS components, ensure you meet the following package requ
 * [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-5x-download) v5.1.5
 
 
-## Building the example
+## Example Workflow
 
-The example was tested in a docker container based on NVIDIA NGC images, that provides the required dependencies, such as CUDA, CuDNN and TensorRT.
+The example provides scripts to convert fine-tuned Tensorflow model checkpoints into a simple binary format that can be read by sample binary.
+
+The high-level workflow consists of the following steps:
+
+1. Download a pre-trained BERT SQuAD checkpoint from NGC model registry (See optional section if you would like to train your own model)
+2. Convert the fine-tuned checkpoint into our simple format, described in the appendix (the original weights are assumed to be float32 values)
+3. Generate a test input/output pair (input sequences are assumed to be int32 values)
+4. Build and run the sample
+
+### 1. Download a pre-trained BERT SQuAD checkpoint from NGC model registry
+```
+wget -O bert-base-squad1.1.zip https://api.ngc.nvidia.com/v2/models/nvidia/bert_tf_v1_1_base_fp32_128/versions/1/zip
+unzip bert-base-squad1.1.zip -d squad_output_path
+```
+
+You need to prepare bert_config.json file corresponding to the checkpoint. For the above checkpoint, use the following.
+
+```
+{
+	"attention_probs_dropout_prob": 0.1,
+	"hidden_act": "gelu",
+	"hidden_dropout_prob": 0.1,
+	"hidden_size": 768,
+	"initializer_range": 0.02,
+	"intermediate_size": 3072,
+	"max_position_embeddiungs": 512,
+	"num_attention_heads": 12,
+	"num_hidden_layers": 12,
+	"type_vocab_size": 2,
+	"vocab_size": 30522
+}
+```
+
+Below, we will refer to the location `<squad output path>/model.ckpt-<number>` as shell variable `CHECKPOINT` and the path to the folder that contains the `bert_config.json` as `BERT_PATH`.
+
+
+#### (Optional) Downloading the BERT reference code and pre-trained language model, and running SQuAD Fine-tuning
+
+Please follow the instructions in the [DeepLearningExamples repository](https://github.com/NVIDIA/DeepLearningExamples/tree/master/TensorFlow/LanguageModeling/BERT) for fine-tuning SQuAD, which involves downloading the pre-trained language model as well as the SQuAD training data.
+
+Then, in the scripts folder, there is `run_squad.sh` script, that adds a SQuAD-specific task layer to BERT and performs the fine-tuning.
+
+This will create three files prefixed with `model.ckpt-<number>` that contain the fine-tuned model parameters, in the specified output directory.
+
+
+### 2. Convert the fine-tuned checkpoint into a simple format
+Python scripts in step 2 and 3 require Tensorflow on the system. We tested using tensorflow:19.06-py3 NGC container image.
+
+The SQuAD fine-tuned Tensorflow checkpoint can be converted using the following command:
+
+```
+python python/convert_weights.py -m $CHECKPOINT -o <weight path>/filename
+```
+
+This will generate a file `<weight path>/<filename>.weights`. The path that contains the weights file, will be referred to as `WEIGHT_PATH`.
+
+
+### 3. Generate an input/output pair
+
+To run the sample on random inputs and compare the output to the reference Tensorflow implementation, the following command produces test inputs and outputs:
+
+```python python/generate_dbg.py -f $CHECKPOINT -p $BERT_PATH -o $OUTPUT_PATH -s <seq.len.> -b <batch size>```
+
+Please refer to the help of `generate_dbg.py` for more options.
+
+
+### 4. Build and run the example
+
+The C++ example was tested using TensorRT OSS docker container image created by following the instruction [in this link](https://github.com/NVIDIA/TensorRT#setting-up-the-build-environment)
 
 This example uses `cmake` and can be built with the following steps:
 ```
@@ -60,55 +128,11 @@ make -j
 
 This will produce an executable `sample_bert` in the `build` folder.
 
-
-## Example Workflow
-
-The example provides scripts to convert fine-tuned Tensorflow model checkpoints into a simple binary format that can be read by sample binary.
-
-The high-level workflow consists of the following steps:
-1. Download the BERT reference code and pre-trained language model
-2. Run the fine-tuning script for squad to obtain task specific network weights
-3. Convert the fine-tuned checkpoint into our simple format, described in the appendix (the original weights are assumed to be float32 values)
-4. Generate a test input/output pair (input sequences are assumed to be int32 values)
-5. run the sample
-
-
-### Downloading the BERT reference code and pre-trained language model, and running SQuAD Fine-tuning
-
-Please follow the instructions in the [DeepLearningExamples repository](https://github.com/NVIDIA/DeepLearningExamples/tree/master/TensorFlow/LanguageModeling/BERT) for fine-tuning SQuAD, which involves downloading the pre-trained language model as well as the SQuAD training data.
-
-Then, in the scripts folder, there is `run_squad.sh` script, that adds a SQuAD-specific task layer to BERT and performs the fine-tuning.
-
-This will create three files prefixed with `model.ckpt-<number>` that contain the fine-tuned model parameters, in the specified output directory.
-
-Below, we will refer to the location `<squad output path>/model.ckpt-<number>` as shell variable `CHECKPOINT` and the path to the folder that contains the `bert_config.json` as `BERT_PATH`.
-
-### Convert the fine-tuned checkpoint into a simple format
-
-After the fine-tuning is complete, the generated Tensorflow checkpoint can be converted using the following command:
-
-```
-python python/convert_weights.py -m $CHECKPOINT -o <weight path>/filename
-```
-
-This will generate a file `<weight path>/<filename>.weights`. The path that contains the weights file, will be referred to as `WEIGHT_PATH`.
-
-
-### Generate an input/output pair
-
-To run the sample on random inputs and compare the output to the reference Tensorflow implementation, the following command produces test inputs and outputs:
-
-```python python/generate_dbg.py -f $CHECKPOINT -p $BERT_PATH -o $OUTPUT_PATH -s <seq.len.> -b <batch size>```
-
-Please refer to the help of `generate_dbg.py` for more options.
-
-### Running the example
-
 The binary `sample_bert` requires as arguments the paths that contain `bert_config.json` (from the pre-trained BERT checkpoint), `bert.weights` and `test_inputs.weights_int32` and `test_outputs.weights` as generated by the steps above.
 
-```build/sample_bert -d $WEIGHT_PATH -d $OUTPUT_PATH --fp16 --nheads <num heads>```
+```build/sample_bert -d $WEIGHT_PATH -d $OUTPUT_PATH --fp16 --nheads <num_attention_heads>```
 
-`<num heads>` refers to the number of attention heads and can be found in the `bert_config.json`.
+`<num_attention_heads>` refers to the number of attention heads and can be found in the `bert_config.json`.
 
 # Appendix
 

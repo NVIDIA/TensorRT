@@ -47,16 +47,19 @@ outputbase = opt.output
 bert_path = opt.pretrained
 init_checkpoint = opt.finetuned
 
-def del_all_flags(FLAGS):
-    flags_dict = FLAGS._flags()
-    keys_list = [keys for keys in flags_dict]
+def del_flags_by_key(FLAGS, keys_list):
     for keys in keys_list:
         FLAGS.__delattr__(keys)
 
 site.addsitedir('dle/TensorFlow/LanguageModeling/BERT')
+
+# we need to remove all default flags set by importing the Example code below
+# we save the original keys to diff against
+keys_orig = set([k for k in tf.flags.FLAGS._flags()])
 import run_squad
 import modeling
-del_all_flags(tf.flags.FLAGS)
+keys_imported = [k for k in tf.flags.FLAGS._flags() if k not in keys_orig]
+del_flags_by_key(tf.flags.FLAGS, keys_imported)
 tf.flags.FLAGS(['test'])
 
 np.random.seed(opt.randomseed)
