@@ -102,6 +102,7 @@ __device__ inline half myTanh(const half& x)
 template <>
 __device__ inline half2 myTanh(const half2& x)
 {
+    //at the moment, there is no half2 tanh builtin
     float2 tmp = (__half22float2(x));
     tmp.x = tanhf(tmp.x);
     tmp.y = tanhf(tmp.y);

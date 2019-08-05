@@ -23,14 +23,12 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  \
 -O3")
 
 set(BERT_LIBS 
-    common
-    bert_plugins
     cudart
+    cublas
     nvinfer
     pthread
     z
-    cublas
-)
+    )
 
 include_directories(
     ../../include
@@ -45,6 +43,10 @@ include_directories(
     /workspace/cutlass/
     )
 
+link_directories(
+    /usr/local/cuda-10.1/targets/x86_64-linux/lib
+    /tensorrt/lib
+    )
 
 add_library(common SHARED
     ../../samples/common/logger.cpp
@@ -58,12 +60,13 @@ add_library(bert_plugins SHARED
     plugins/emb_layer_norm_plugin.cu
     )
 
-
-link_directories(
-    /usr/local/cuda-10.1/targets/x86_64-linux/lib
-    /tensorrt/lib
+target_link_libraries(bert_plugins 
+    ${BERT_LIBS}
     )
 
+target_link_libraries(common 
+    ${BERT_LIBS}
+    )
 
 add_executable(sample_bert
     sampleBERT.cpp
@@ -72,5 +75,8 @@ add_executable(sample_bert
 target_compile_features(sample_bert PUBLIC cxx_std_11)
 
 target_link_libraries(sample_bert 
-    ${BERT_LIBS}
+    common
+    bert_plugins
     )
+
+

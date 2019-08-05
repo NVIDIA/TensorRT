@@ -82,28 +82,24 @@ int compute_skip_layer_norm(
 
     if (ld <= 32)
     {
-
         const int blockSize = 32;
         skip_layer_norm_kernel_small<T, blockSize>
             <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
     }
     else if (ld <= 128)
     {
-
         const int blockSize = 128;
         skip_layer_norm_kernel_small<T, blockSize>
             <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
     }
     else if (ld == 384)
     {
-
         const int blockSize = 384;
         skip_layer_norm_kernel_small<T, blockSize>
             <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
     }
     else
     {
-
         const int blockSize = 256;
         skip_layer_norm_kernel<T, blockSize><<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
     }
