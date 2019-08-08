@@ -144,4 +144,4 @@ Then there are `N` lines, each line following the format
 `[tensor name: String] [element type: DataType] [number of dimensions D: int] [dim1, dim2, ..., dimD] [binary tensor data]\n`
 DataType is the `nvinfer1` enumeration, that encodes types as numbers. E.g. `DataType::kFLOAT = 0` (float32) and `DataType::kINT32 = 3`. 
 The binary tensor data is dim1 * dim2 * ... * dimD * sizeof(type) bytes followed by a line break.
-Methods to read this format can be found in `data_utils.hpp`
+Methods to read this format can be found in `dataUtils.hpp`

@@ -14,9 +14,13 @@
  * limitations under the License.
  */
 
-#pragma once
-namespace bert{
+#ifndef TRT_ATTENTION_KEYS_H
+#define TRT_ATTENTION_KEYS_H
 
+#include <string>
+
+namespace bert
+{
 const std::string WQ = "query_kernel";
 const std::string BQ = "query_bias";
 const std::string WK = "key_kernel";
@@ -28,3 +32,4 @@ const std::string WQKV = "qkv_kernel";
 const std::string BQKV = "qkv_bias";
 }
 
+#endif // TRT_ATTENTION_KEYS_H

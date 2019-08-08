@@ -16,64 +16,69 @@
 
 #include "NvInfer.h"
 #include "logger.h"
-#include "plugin_kernels.hpp"
-#include "plugin_util.hpp"
-#include "skip_layer_norm_plugin.hpp"
+#include "pluginKernels.h"
+#include "pluginUtil.h"
+#include "skipLayerNormPlugin.h"
 
 #include <cassert>
 #include <cstring>
 #include <vector>
 
-template <typename T, unsigned TPB>
-__global__ void skip_layer_norm_kernel_small(
-    int ld, const T* input, const T* skip, const float* beta, const float* gamma, T* output)
+using bert::operator+;
+
+namespace bert
 {
 
-    T rld = T(1) / T(ld);
-    int offset = blockIdx.x * ld;
+template <typename T, unsigned TPB>
+__global__ void skipLayerNormKernelSmall(
+    const int ld, const T* input, const T* skip, const float* beta, const float* gamma, T* output)
+{
+
+    const T rld = T(1) / T(ld);
+    const int offset = blockIdx.x * ld;
 
     cub::Sum pairSum;
     // reduce x and x^2
-    kvp<T> thread_data(0, 0);
-    int idx = offset + threadIdx.x;
+    kvp<T> threadData(0, 0);
+    const int idx = offset + threadIdx.x;
     T val = 0;
 
     if (threadIdx.x < ld)
     {
         val = input[idx] + skip[idx];
-        T rldval = rld * val;
-        thread_data = pairSum(thread_data, kvp<T>(rldval, rldval * val));
+        const T rldval = rld * val;
+        threadData = pairSum(threadData, kvp<T>(rldval, rldval * val));
     }
 
-    layer_norm_small<T, TPB>(val, thread_data, ld, idx, beta, gamma, output);
+    layerNormSmall<T, TPB>(val, threadData, ld, idx, beta, gamma, output);
 }
 
 template <typename T, unsigned TPB>
-__global__ void skip_layer_norm_kernel(
-    int ld, const T* input, const T* skip, const float* beta, const float* gamma, T* output)
+__global__ void skipLayerNormKernel(
+    const int ld, const T* input, const T* skip, const float* beta, const float* gamma, T* output)
 {
-    T rld = T(1) / T(ld);
-    int offset = blockIdx.x * ld;
+    const T rld = T(1) / T(ld);
+    const int offset = blockIdx.x * ld;
 
     cub::Sum pairSum;
     // reduce x and x^2
-    kvp<T> thread_data(0, 0);
+    kvp<T> threadData(0, 0);
 
     for (int i = threadIdx.x; i < ld; i += TPB)
     {
-        int idx = offset + i;
-        T val = input[idx] + skip[idx];
-        T rldval = rld * val;
-        thread_data = pairSum(thread_data, kvp<T>(rldval, rldval * val));
+        const int idx = offset + i;
+        const T val = input[idx] + skip[idx];
+        const T rldval = rld * val;
+        threadData = pairSum(threadData, kvp<T>(rldval, rldval * val));
         output[idx] = val;
     }
 
-    layer_norm<T, TPB>(thread_data, ld, offset, beta, gamma, output);
+    layerNorm<T, TPB>(threadData, ld, offset, beta, gamma, output);
 }
 
 template <typename T>
-int compute_skip_layer_norm(
-    cudaStream_t stream, int ld, int n, const T* input, const T* skip, const float* beta, const float* gamma, T* output)
+int computeSkipLayerNorm(cudaStream_t stream, const int ld, const int n, const T* input, const T* skip,
+    const float* beta, const float* gamma, T* output)
 {
 
     // this must be true because n is the total size of the tensor
@@ -82,26 +87,26 @@ int compute_skip_layer_norm(
 
     if (ld <= 32)
     {
-        const int blockSize = 32;
-        skip_layer_norm_kernel_small<T, blockSize>
+        constexpr int blockSize = 32;
+        skipLayerNormKernelSmall<T, blockSize>
             <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
     }
     else if (ld <= 128)
     {
-        const int blockSize = 128;
-        skip_layer_norm_kernel_small<T, blockSize>
+        constexpr int blockSize = 128;
+        skipLayerNormKernelSmall<T, blockSize>
             <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
     }
     else if (ld == 384)
     {
-        const int blockSize = 384;
-        skip_layer_norm_kernel_small<T, blockSize>
+        constexpr int blockSize = 384;
+        skipLayerNormKernelSmall<T, blockSize>
             <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
     }
     else
     {
-        const int blockSize = 256;
-        skip_layer_norm_kernel<T, blockSize><<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
+        constexpr int blockSize = 256;
+        skipLayerNormKernel<T, blockSize><<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output);
     }
     CHECK(cudaPeekAtLastError());
 
@@ -126,9 +131,9 @@ REGISTER_TENSORRT_PLUGIN(SkipLayerNormPluginCreator);
 SkipLayerNormPlugin::SkipLayerNormPlugin(
     const std::string name, const int ld, const Weights& beta, const Weights& gamma)
     : mLayerName(name)
-    , m_ld(ld)
-    , m_gamma(gamma)
-    , m_beta(beta)
+    , mLd(ld)
+    , mGamma(gamma)
+    , mBeta(beta)
 {
 }
 
@@ -140,16 +145,16 @@ SkipLayerNormPlugin::SkipLayerNormPlugin(const std::string name, const void* dat
     const char* d = static_cast<const char*>(data);
     const char* a = d;
     DESER(d, mType);
-    DESER(d, m_ld);
+    DESER(d, mLd);
     DESER(d, mInputVolume);
-    beta_dev = deser2dev<float>(d, m_ld);
-    gamma_dev = deser2dev<float>(d, m_ld);
+    mBetaDev = deserToDev<float>(d, mLd);
+    mGammaDev = deserToDev<float>(d, mLd);
     assert(d == (a + length));
     // this signals init not to allocate/copy
-    m_gamma.count = m_ld;
-    m_gamma.values = nullptr;
-    m_beta.count = m_ld;
-    m_beta.values = nullptr;
+    mGamma.count = mLd;
+    mGamma.values = nullptr;
+    mBeta.count = mLd;
+    mBeta.values = nullptr;
 
     gLogInfo << "Skip LN Deser done\n";
 }
@@ -185,15 +190,15 @@ Dims SkipLayerNormPlugin::getOutputDimensions(int index, const Dims* inputs, int
 
 int SkipLayerNormPlugin::initialize()
 {
-    if (m_gamma.values)
+    if (mGamma.values)
     {
-        cudaMalloc(&gamma_dev, sizeof(float) * m_gamma.count);
-        cudaMemcpy(gamma_dev, m_gamma.values, sizeof(float) * m_gamma.count, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc(&mGammaDev, sizeof(float) * mGamma.count));
+        CHECK(cudaMemcpy(mGammaDev, mGamma.values, sizeof(float) * mGamma.count, cudaMemcpyHostToDevice));
     }
-    if (m_beta.values)
+    if (mBeta.values)
     {
-        cudaMalloc(&beta_dev, sizeof(float) * m_beta.count);
-        cudaMemcpy(beta_dev, m_beta.values, sizeof(float) * m_gamma.count, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc(&mBetaDev, sizeof(float) * mBeta.count));
+        CHECK(cudaMemcpy(mBetaDev, mBeta.values, sizeof(float) * mGamma.count, cudaMemcpyHostToDevice));
     }
     return 0;
 }
@@ -211,7 +216,8 @@ int SkipLayerNormPlugin::enqueue(int batchSize, const void* const* inputs, void*
         const float* input = static_cast<const float*>(inputs[0]);
         const float* skip = static_cast<const float*>(inputs[1]);
         float* output = static_cast<float*>(outputs[0]);
-        status = compute_skip_layer_norm<float>(stream, m_ld, mInputVolume, input, skip, beta_dev, gamma_dev, output);
+        status = computeSkipLayerNorm<float>(
+            stream, mLd, mInputVolume * batchSize, input, skip, mBetaDev, mGammaDev, output);
     }
     else if (mType == DataType::kHALF)
     {
@@ -219,17 +225,19 @@ int SkipLayerNormPlugin::enqueue(int batchSize, const void* const* inputs, void*
         const half* skip = static_cast<const half*>(inputs[1]);
         half* output = static_cast<half*>(outputs[0]);
 
-        status = compute_skip_layer_norm<half>(stream, m_ld, mInputVolume, input, skip, beta_dev, gamma_dev, output);
+        status = computeSkipLayerNorm<half>(
+            stream, mLd, mInputVolume * batchSize, input, skip, mBetaDev, mGammaDev, output);
     }
     else
+    {
         assert(false);
-
+    }
     return status;
 }
 
 size_t SkipLayerNormPlugin::getSerializationSize() const
 {
-    return 2 * sizeof(float) * m_ld + sizeof(DataType) + sizeof(m_ld) + sizeof(mInputVolume);
+    return 2 * sizeof(float) * mLd + sizeof(DataType) + sizeof(mLd) + sizeof(mInputVolume);
 }
 
 void SkipLayerNormPlugin::serialize(void* buffer) const
@@ -238,10 +246,10 @@ void SkipLayerNormPlugin::serialize(void* buffer) const
     const char* a = d;
 
     writeToBuffer(d, mType);
-    writeToBuffer(d, m_ld);
+    writeToBuffer(d, mLd);
     writeToBuffer(d, mInputVolume);
-    serFromDev(d, beta_dev, m_ld);
-    serFromDev(d, gamma_dev, m_ld);
+    serFromDev(d, mBetaDev, mLd);
+    serFromDev(d, mGammaDev, mLd);
     assert(d == a + getSerializationSize());
 }
 
@@ -259,10 +267,10 @@ void SkipLayerNormPlugin::configureWithFormat(
         volume *= inputs->d[i];
     }
     mInputVolume = volume;
-    assert(inputs->nbDims == 5);
-    assert(inputs->d[4] == 1);
+    assert(inputs->nbDims == 4);
+    mLd = inputs->d[1]; // hiddensize
+    assert(inputs->d[2] == 1);
     assert(inputs->d[3] == 1);
-    m_ld = inputs->d[2];
 
     mType = type;
 }
@@ -271,16 +279,20 @@ bool SkipLayerNormPlugin::supportsFormat(DataType type, PluginFormat format) con
 {
     // This plugin only supports ordinary floats, and NCHW input format
     if (type == DataType::kFLOAT || type == DataType::kHALF)
+    {
         return format == PluginFormat::kNCHW;
+    }
     else
+    {
         return false;
+    }
 }
 
 void SkipLayerNormPlugin::terminate()
 {
     gLogInfo << "SKIPLN terminate start" << std::endl;
-    cudaFree(gamma_dev);
-    cudaFree(beta_dev);
+    cudaFree(mGammaDev);
+    cudaFree(mBetaDev);
     gLogInfo << "SKIPLN terminate done" << std::endl;
 }
 
@@ -292,7 +304,7 @@ void SkipLayerNormPlugin::destroy()
 
 IPluginV2* SkipLayerNormPlugin::clone() const
 {
-    return new SkipLayerNormPlugin(mLayerName, m_ld, m_beta, m_gamma);
+    return new SkipLayerNormPlugin(mLayerName, mLd, mBeta, mGamma);
 }
 
 void SkipLayerNormPlugin::setPluginNamespace(const char* libNamespace)
@@ -347,4 +359,5 @@ void SkipLayerNormPluginCreator::setPluginNamespace(const char* libNamespace)
 const char* SkipLayerNormPluginCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
+}
 }

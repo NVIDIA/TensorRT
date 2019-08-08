@@ -33,13 +33,13 @@
 #include <sys/stat.h>
 #include <vector>
 
-#include "bert_util.hpp"
+#include "bertUtils.h"
 
-#include "data_utils.hpp"
+#include "dataUtils.h"
 
-#include "bert_encoder.hpp"
-#include "emb_layer_norm_plugin.hpp"
-#include "task_specific.hpp"
+#include "bertEncoder.h"
+#include "embLayerNormPlugin.h"
+#include "squad.h"
 
 using namespace bert;
 
@@ -51,66 +51,66 @@ const std::string TEST_OUTPUT_NAME = "test_outputs.weights";
 const std::string BERT_WEIGHTS_NAME = "bert.weights";
 const int NUM_RUNS = 10;
 
-void doInference(IExecutionContext& context, const std::map<std::string, nvinfer1::Weights>& in_cfg,
-    std::map<std::string, std::vector<float>>& out_cfg, int batchSize, cudaStream_t stream,
-    std::vector<float>& times_tot, std::vector<float>& times_cmp, int verbose = 1)
+void doInference(IExecutionContext& context, const std::map<std::string, nvinfer1::Weights>& inCfg,
+    std::map<std::string, std::vector<float>>& outCfg, const int batchSize, cudaStream_t stream,
+    std::vector<float>& timesTotal, std::vector<float>& timesCompute, int verbose = 1)
 {
 
-    int n_runs = times_tot.size();
-    assert(n_runs == times_cmp.size());
-    assert(n_runs > 0);
+    const int numRuns = timesTotal.size();
+    assert(numRuns == timesCompute.size());
+    assert(numRuns > 0);
 
     const ICudaEngine& engine = context.getEngine();
-    const int n_bind = engine.getNbBindings();
-    assert(n_bind == in_cfg.size() + out_cfg.size());
-    std::vector<void*> buffers(n_bind);
-    alloc_bindings(engine, buffers, batchSize, in_cfg, verbose);
-    alloc_bindings(engine, buffers, batchSize, out_cfg, verbose);
+    const int numBindings = engine.getNbBindings();
+    assert(numBindings == inCfg.size() + outCfg.size());
+    std::vector<void*> buffers(numBindings);
+    allocBindingsFromWeights(engine, buffers, batchSize, inCfg, verbose);
+    allocBindingsFromVectors(engine, buffers, batchSize, outCfg, verbose);
 
-    void** bs = &buffers[0];
+    void** bs = buffers.data();
 
-    std::vector<cudaEvent_t> starts_tot(n_runs);
-    std::vector<cudaEvent_t> stops_tot(n_runs);
-    std::vector<cudaEvent_t> starts_cmp(n_runs);
-    std::vector<cudaEvent_t> stops_cmp(n_runs);
+    std::vector<cudaEvent_t> startsTotal(numRuns);
+    std::vector<cudaEvent_t> stopsTotal(numRuns);
+    std::vector<cudaEvent_t> startsCompute(numRuns);
+    std::vector<cudaEvent_t> stopsCompute(numRuns);
 
-    for (int it = 0; it < n_runs; it++)
+    for (int it = 0; it < numRuns; it++)
     {
-        cudaEventCreate(&starts_tot[it]);
-        cudaEventCreate(&stops_tot[it]);
+        cudaEventCreate(&startsTotal[it]);
+        cudaEventCreate(&stopsTotal[it]);
 
-        cudaEventCreate(&starts_cmp[it]);
-        cudaEventCreate(&stops_cmp[it]);
+        cudaEventCreate(&startsCompute[it]);
+        cudaEventCreate(&stopsCompute[it]);
     }
 
     cudaProfilerStart();
-    for (int it = 0; it < n_runs; it++)
+    for (int it = 0; it < numRuns; it++)
     {
-        CHECK(cudaEventRecord(starts_tot[it], stream));
-        upload(engine, buffers, batchSize, in_cfg, stream);
-        CHECK(cudaEventRecord(starts_cmp[it], stream));
+        CHECK(cudaEventRecord(startsTotal[it], stream));
+        copyToDeviceBindings(engine, buffers, batchSize, inCfg, stream);
+        CHECK(cudaEventRecord(startsCompute[it], stream));
         context.enqueue(batchSize, bs, stream, nullptr);
-        CHECK(cudaEventRecord(stops_cmp[it], stream));
-        download(engine, buffers, batchSize, out_cfg, stream);
-        CHECK(cudaEventRecord(stops_tot[it], stream));
+        CHECK(cudaEventRecord(stopsCompute[it], stream));
+        copyFromDeviceBindings(engine, buffers, batchSize, outCfg, stream);
+        CHECK(cudaEventRecord(stopsTotal[it], stream));
     }
     CHECK(cudaDeviceSynchronize());
 
     cudaProfilerStop();
     float milliseconds = 0;
-    for (int it = 0; it < n_runs; it++)
+    for (int it = 0; it < numRuns; it++)
     {
-        cudaEventElapsedTime(&milliseconds, starts_tot[it], stops_tot[it]);
-        times_tot[it] = milliseconds;
-        cudaEventElapsedTime(&milliseconds, starts_cmp[it], stops_cmp[it]);
-        times_cmp[it] = milliseconds;
+        cudaEventElapsedTime(&milliseconds, startsTotal[it], stopsTotal[it]);
+        timesTotal[it] = milliseconds;
+        cudaEventElapsedTime(&milliseconds, startsCompute[it], stopsCompute[it]);
+        timesCompute[it] = milliseconds;
 
-        cudaEventDestroy(starts_tot[it]);
-        cudaEventDestroy(stops_tot[it]);
-        cudaEventDestroy(starts_cmp[it]);
-        cudaEventDestroy(stops_cmp[it]);
+        cudaEventDestroy(startsTotal[it]);
+        cudaEventDestroy(stopsTotal[it]);
+        cudaEventDestroy(startsCompute[it]);
+        cudaEventDestroy(stopsCompute[it]);
 
-        printf("Run %d; Total: %fms Comp.only: %fms\n", it, times_tot[it], times_cmp[it]);
+        printf("Run %d; Total: %fms Comp.only: %fms\n", it, timesTotal[it], timesCompute[it]);
     }
 
     cudaProfilerStop();
@@ -122,14 +122,14 @@ void doInference(IExecutionContext& context, const std::map<std::string, nvinfer
 }
 
 // Create the Engine using only the API and not any parser.
-nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int num_heads, const int B, const int S)
+nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int numHeads, const int B, const int S)
 {
 
     // Currently, the batch size is handled in the model, by passing an input
     // Tensor with an explicit batch dimension. There is a tranpose in the
     // attention layer, that relies on the exact batch size to be available at
     // network definition time. This will change in the near future.
-    builder->setMaxBatchSize(1);
+    builder->setMaxBatchSize(B);
     builder->setMaxWorkspaceSize(5000_MB);
     builder->setFp16Mode(gArgs.runInFp16);
     if (gArgs.runInFp16)
@@ -140,54 +140,56 @@ nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int num
 
     nvinfer1::INetworkDefinition* network = builder->createNetwork();
 
+    WeightMap weightMap;
+
+    const std::string weightsPath(locateFile(BERT_WEIGHTS_NAME, gArgs.dataDirs));
+
+    loadWeights(weightsPath, weightMap);
+
     // infer these from the parameters
-    int intermediate_size = 0;
-    int num_hidden_layers = 0;
-    int hidden_size = 0;
+    int intermediateSize = 0;
+    int numHiddenLayers = 0;
+    int hiddenSize = 0;
 
-    WeightDict init_dict;
+    inferNetworkSizes(weightMap, hiddenSize, intermediateSize, numHiddenLayers);
 
-    const std::string wts_path(locateFile("bert.weights", gArgs.dataDirs));
-
-    load_weights(wts_path, init_dict);
-    infer_network_sizes(init_dict, hidden_size, intermediate_size, num_hidden_layers);
-    assert(intermediate_size);
-    assert(hidden_size);
-    assert(num_hidden_layers);
+    assert(intermediateSize);
+    assert(hiddenSize);
+    assert(numHiddenLayers);
 
     /// Embeddings Layer
 
-    ITensor* input_ids = network->addInput("input_ids", DataType::kINT32, Dims2{B, S});
+    ITensor* inputIds = network->addInput("input_ids", DataType::kINT32, Dims{1, S});
 
-    ITensor* segment_ids = network->addInput("segment_ids", DataType::kINT32, Dims2{B, S});
+    ITensor* segmentIds = network->addInput("segment_ids", DataType::kINT32, Dims{1, S});
 
-    ITensor* input_mask = network->addInput("input_mask", DataType::kINT32, Dims2{B, S});
+    ITensor* inputMask = network->addInput("input_mask", DataType::kINT32, Dims{1, S});
 
-    const Weights& wbeta = init_dict.at("bert_embeddings_layernorm_beta");
-    const Weights& wgamma = init_dict.at("bert_embeddings_layernorm_gamma");
-    const Weights& wwordemb = init_dict.at("bert_embeddings_word_embeddings");
-    const Weights& wtokemb = init_dict.at("bert_embeddings_token_type_embeddings");
-    const Weights& wposemb = init_dict.at("bert_embeddings_position_embeddings");
-    ITensor* inputs[3] = {input_ids, segment_ids, input_mask};
+    const Weights& wBeta = weightMap.at("bert_embeddings_layernorm_beta");
+    const Weights& wGamma = weightMap.at("bert_embeddings_layernorm_gamma");
+    const Weights& wWordEmb = weightMap.at("bert_embeddings_word_embeddings");
+    const Weights& wTokEmb = weightMap.at("bert_embeddings_token_type_embeddings");
+    const Weights& wPosEmb = weightMap.at("bert_embeddings_position_embeddings");
+    ITensor* inputs[3] = {inputIds, segmentIds, inputMask};
 
-    auto emb_plug = EmbLayerNormPlugin("embeddings", gArgs.runInFp16, wbeta, wgamma, wwordemb, wposemb, wtokemb);
-    IPluginV2Layer* emb_layer = network->addPluginV2(inputs, 3, emb_plug);
-    set_name(emb_layer, "embeddings", "output");
+    auto embPlugin = EmbLayerNormPlugin("embeddings", gArgs.runInFp16, wBeta, wGamma, wWordEmb, wPosEmb, wTokEmb);
+    IPluginV2Layer* embLayer = network->addPluginV2(inputs, 3, embPlugin);
+    setOutputName(embLayer, "embeddings_", "output");
 
-    ITensor* embeddings = emb_layer->getOutput(0);
-    ITensor* mask_idx = emb_layer->getOutput(1);
+    ITensor* embeddings = embLayer->getOutput(0);
+    ITensor* maskIdx = embLayer->getOutput(1);
 
     /// BERT Encoder
 
-    BertConfig config(num_heads, hidden_size, intermediate_size, num_hidden_layers, gArgs.runInFp16);
+    const BertConfig config(numHeads, hiddenSize, intermediateSize, numHiddenLayers, gArgs.runInFp16);
 
-    ITensor* bert_out = bert_model(config, init_dict, network, embeddings, mask_idx, nullptr);
+    ILayer* bertLayer = bertModel(config, weightMap, network, embeddings, maskIdx);
 
     /// SQuAD Output Layer
 
-    ITensor* squad_logits = squad_output("cls_", config, init_dict, network, bert_out, nullptr);
+    ILayer* squadLayer = squad("cls_", config, weightMap, network, bertLayer->getOutput(0));
 
-    network->markOutput(*squad_logits);
+    network->markOutput(*squadLayer->getOutput(0));
 
     // Build the engine
 
@@ -196,19 +198,19 @@ nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int num
     network->destroy();
 
     // Once we have built the cuda engine, we can release all of our held memory.
-    for (auto& w : init_dict)
+    for (auto& w : weightMap)
         free(const_cast<void*>(w.second.values));
     return engine;
 }
 
-nvinfer1::ICudaEngine* APIToModel(const int num_heads, const int B, const int S)
+nvinfer1::ICudaEngine* APIToModel(const int numHeads, const int B, const int S)
 {
     // create the builder
     nvinfer1::IBuilder* builder = nvinfer1::createInferBuilder(gLogger.getTRTLogger());
     assert(builder != nullptr);
 
     // create the model to populate the network, then set the outputs and create an engine
-    nvinfer1::ICudaEngine* engine = fromAPIToModel(builder, num_heads, B, S);
+    nvinfer1::ICudaEngine* engine = fromAPIToModel(builder, numHeads, B, S);
 
     assert(engine != nullptr);
 
@@ -227,15 +229,13 @@ void printHelpInfo()
                  "multiple times to add multiple directories. The given path(s) must contain the weights and test "
                  "inputs/outputs."
               << std::endl;
-    std::cout << "--fp16          OPTIONAL: Run in FP16 mode." << std::endl;
     std::cout << "--nheads        Number of attention heads." << std::endl;
+    std::cout << "--fp16          OPTIONAL: Run in FP16 mode." << std::endl;
     std::cout << "--saveEngine    The path at which to write a serialized engine." << std::endl;
 }
 
 int main(int argc, char* argv[])
 {
-    int S = 0;
-    int Bmax = 0;
 
     bool argsOK = parseArgs(gArgs, argc, argv);
     if (gArgs.help)
@@ -255,29 +255,33 @@ int main(int argc, char* argv[])
         printHelpInfo();
         return EXIT_FAILURE;
     }
-    if (gArgs.num_heads <= 0)
+    if (gArgs.numHeads <= 0)
     {
         gLogError << "invalid number of heads" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
-    const std::string wts_path(locateFile(TEST_OUTPUT_NAME, gArgs.dataDirs));
-    std::map<std::string, nvinfer1::Weights> test_outputs;
-    load_weights(wts_path, test_outputs);
+    const std::string weightsPath(locateFile(TEST_OUTPUT_NAME, gArgs.dataDirs));
+    std::map<std::string, nvinfer1::Weights> testOutputs;
+    loadWeights(weightsPath, testOutputs);
 
-    std::vector<nvinfer1::Weights> in_ids;
-    std::vector<nvinfer1::Weights> in_masks;
-    std::vector<nvinfer1::Weights> segment_ids;
-    std::vector<nvinfer1::Dims> in_dims;
-    std::string records_path(locateFile(TEST_INPUT_NAME, gArgs.dataDirs));
-    load_inputs(records_path, Bmax, S, in_ids, in_masks, segment_ids, in_dims);
+    std::vector<nvinfer1::Weights> inputIds;
+    std::vector<nvinfer1::Weights> inputMasks;
+    std::vector<nvinfer1::Weights> segmentIds;
+    std::vector<nvinfer1::Dims> inputDims;
+    std::string inputPath(locateFile(TEST_INPUT_NAME, gArgs.dataDirs));
+
+    int S = 0;
+    int Bmax = 0;
+    loadInputs(inputPath, Bmax, S, inputIds, inputMasks, segmentIds, inputDims);
+    assert(inputIds.size() > 0);
 
     auto sampleTest = gLogger.defineTest(gSampleName, argc, const_cast<const char**>(argv));
 
     gLogger.reportTestStart(sampleTest);
 
-    const int num_heads = gArgs.num_heads;
-    nvinfer1::ICudaEngine* engine = APIToModel(num_heads, Bmax, S);
+    const int numHeads = gArgs.numHeads;
+    nvinfer1::ICudaEngine* engine = APIToModel(numHeads, Bmax, S);
     if (engine == nullptr)
     {
         gLogError << "Unable to build engine." << std::endl;
@@ -318,39 +322,43 @@ int main(int argc, char* argv[])
         return gLogger.reportFail(sampleTest);
     }
 
-    std::map<std::string, nvinfer1::Weights> in_cfg{std::make_pair("input_ids", in_ids[0]),
-        std::make_pair("input_mask", in_masks[0]), std::make_pair("segment_ids", segment_ids[0])};
+    const std::map<std::string, nvinfer1::Weights> inCfg{std::make_pair("input_ids", inputIds[0]),
+        std::make_pair("input_mask", inputMasks[0]), std::make_pair("segment_ids", segmentIds[0])};
+    const int B = inputDims[0].d[0];
 
-    std::string output_name("cls_squad_logits");
-    std::map<std::string, std::vector<float>> out_cfg = {make_pair(output_name, std::vector<float>(2 * Bmax * S))};
+    const std::string outputName("cls_squad_logits");
+    std::map<std::string, std::vector<float>> outCfg = {make_pair(outputName, std::vector<float>(2 * B * S))};
 
     cudaStream_t stream;
     cudaStreamCreate(&stream);
-    std::vector<float> times_tot(NUM_RUNS); // total time
-    std::vector<float> times_cmp(NUM_RUNS); // computation time
+    std::vector<float> timesTotal(NUM_RUNS);   // total time
+    std::vector<float> timesCompute(NUM_RUNS); // computation time
 
-    doInference(*context, in_cfg, out_cfg, 1, stream, times_tot, times_cmp);
+    doInference(*context, inCfg, outCfg, B, stream, timesTotal, timesCompute);
 
     cudaStreamDestroy(stream);
     context->destroy();
     engine->destroy();
     runtime->destroy();
-    auto& output = out_cfg[output_name];
-    const float* test = reinterpret_cast<const float*>(test_outputs["logits"].values);
+    auto& output = outCfg[outputName];
+    transposeLogits(output, B, S);
+    const float* test = reinterpret_cast<const float*>(testOutputs["logits"].values);
 
     float mae = 0;
     float maxdiff = 0;
-    for (int it = 0; it < test_outputs["logits"].count; it++)
+    for (int it = 0; it < testOutputs["logits"].count; it++)
     {
-        float diff = std::abs(test[it] - output[it]);
+        const float diff = std::abs(test[it] - output[it]);
         mae += diff;
         maxdiff = std::max(diff, maxdiff);
     }
-    float avg_tot = std::accumulate(times_tot.begin(), times_tot.end(), 0.f, std::plus<float>()) / times_tot.size();
-    float avg_cmp = std::accumulate(times_cmp.begin(), times_cmp.end(), 0.f, std::plus<float>()) / times_cmp.size();
+    const float avgTotal
+        = std::accumulate(timesTotal.begin(), timesTotal.end(), 0.f, std::plus<float>()) / timesTotal.size();
+    const float avgCompute
+        = std::accumulate(timesCompute.begin(), timesCompute.end(), 0.f, std::plus<float>()) / timesCompute.size();
 
-    printf("B=%d S=%d MAE=%.12e MaxDiff=%.12e ", Bmax, S, (mae) / output.size(), maxdiff);
-    printf(" Runtime(total avg)=%.6fms Runtime(comp ms)=%.6f\n", avg_tot, avg_cmp);
+    printf("B=%d S=%d MAE=%.12e MaxDiff=%.12e ", B, S, (mae) / output.size(), maxdiff);
+    printf(" Runtime(total avg)=%.6fms Runtime(comp ms)=%.6f\n", avgTotal, avgCompute);
 
     // destroy the engine
     bool pass{true};

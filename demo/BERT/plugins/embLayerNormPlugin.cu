@@ -15,18 +15,23 @@
  */
 
 #include "NvInfer.h"
-#include "emb_layer_norm_plugin.hpp"
+#include "embLayerNormPlugin.h"
 #include "logger.h"
-#include "plugin_kernels.hpp"
-#include "plugin_util.hpp"
+#include "pluginKernels.h"
+#include "pluginUtil.h"
 
 #include <cassert>
 #include <cstring>
 #include <vector>
 
+using bert::operator+;
+
+namespace bert
+{
+
 template <typename T, unsigned TPB>
-__global__ void emb_layer_norm_kernel(int ld, const int* input_ids, const int* tok_ids, const float* beta,
-    const float* gamma, const float* word_emb, const float* pos_emb, const float* tok_emb, T* output)
+__global__ void embLayerNormKernel(int ld, const int* inputIds, const int* tokenIds, const float* beta,
+    const float* gamma, const float* wordEmb, const float* posEmb, const float* tokEmb, T* output)
 {
 
     cub::Sum pairSum;
@@ -35,55 +40,55 @@ __global__ void emb_layer_norm_kernel(int ld, const int* input_ids, const int* t
     // blockIdx.y = batch
     // gridDim.x = S
     // gridDim.y = B
-    __shared__ int word_id;
-    __shared__ int tok_id;
+    __shared__ int wordId;
+    __shared__ int tokenId;
 
-    T rld = T(1.f) / T(ld);
-    int seq_pos = blockIdx.y * gridDim.x + blockIdx.x;
+    const T rld = T(1.f) / T(ld);
+    const int seqPos = blockIdx.y * gridDim.x + blockIdx.x;
     if (threadIdx.x == 0)
     {
-        word_id = input_ids[seq_pos];
-        tok_id = tok_ids[seq_pos];
+        wordId = inputIds[seqPos];
+        tokenId = tokenIds[seqPos];
     }
     __syncthreads();
 
     // 2. load pos/tok/word embeddings and add them toghether
-    // offset into embeddings is given by word_id * hidden_size
-    int poffset = blockIdx.x * ld;
-    int woffset = word_id * ld;
-    int toffset = tok_id * ld; 
+    // offset into embeddings is given by wordId * hidden_size
+    const int poffset = blockIdx.x * ld;
+    const int woffset = wordId * ld;
+    const int toffset = tokenId * ld;
     // the output offset is given by b * (S*hidden_size) + s * hidden_size
-    int out_offset = seq_pos * ld;
+    const int outOffset = seqPos * ld;
 
-    kvp<T> thread_data(0, 0);
+    kvp<T> threadData(0, 0);
 
     for (int it = threadIdx.x; it < ld; it += TPB)
     {
-        T w(word_emb[woffset + it]);
-        T t(tok_emb[toffset + it]);
-        T p(pos_emb[poffset + it]);
-        T val = w + t + p;
+        const T w(wordEmb[woffset + it]);
+        const T t(tokEmb[toffset + it]);
+        const T p(posEmb[poffset + it]);
+        const T val = w + t + p;
 
-        output[out_offset + it] = val;
-        T rldval = rld * val;
-        thread_data = pairSum(thread_data, kvp<T>(rldval, rldval * val));
+        output[outOffset + it] = val;
+        const T rldval = rld * val;
+        threadData = pairSum(threadData, kvp<T>(rldval, rldval * val));
     }
 
     // 3. layer norm on the sum
-    layer_norm<T, TPB>(thread_data, ld, out_offset, beta, gamma, output);
+    layerNorm<T, TPB>(threadData, ld, outOffset, beta, gamma, output);
 }
 
 template <typename T>
-int emb_skip_layer_norm(cudaStream_t stream, int ld, int B, int S, const int* input_ids, const int* token_ids,
-    const float* beta, const float* gamma, const float* word_emb, const float* pos_emb, const float* tok_emb, T* output)
+int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* inputIds, const int* token_ids,
+    const float* beta, const float* gamma, const float* wordEmb, const float* posEmb, const float* tokEmb, T* output)
 {
 
-    const int tpb = 256;
-    dim3 grid(S, B, 1);
-    dim3 block(tpb, 1, 1);
+    constexpr int tpb = 256;
+    const dim3 grid(S, B, 1);
+    const dim3 block(tpb, 1, 1);
 
-    emb_layer_norm_kernel<T, tpb>
-        <<<grid, block, 0, stream>>>(ld, input_ids, token_ids, beta, gamma, word_emb, pos_emb, tok_emb, output);
+    embLayerNormKernel<T, tpb>
+        <<<grid, block, 0, stream>>>(ld, inputIds, token_ids, beta, gamma, wordEmb, posEmb, tokEmb, output);
     CHECK(cudaPeekAtLastError());
 
     return 0;
@@ -104,34 +109,34 @@ std::vector<PluginField> EmbLayerNormPluginCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormPluginCreator);
 
-EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string name, const bool output_fp16, const Weights& beta,
-    const Weights& gamma, const Weights& word_emb, const Weights& pos_emb, const Weights& tok_emb)
+EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const bool outputFp16, const Weights& beta,
+    const Weights& gamma, const Weights& wordEmb, const Weights& posEmb, const Weights& tokEmb)
     : mLayerName(name)
-    , m_ld(beta.count)
-    , m_gamma(gamma)
-    , m_beta(beta)
-    , mWordEmb(word_emb)
-    , mPosEmb(pos_emb)
-    , mTokEmb(tok_emb)
-    , gamma_dev(nullptr)
-    , beta_dev(nullptr)
-    , wemb_dev(nullptr)
-    , temb_dev(nullptr)
-    , pemb_dev(nullptr)
+    , mLd(beta.count)
+    , mGamma(gamma)
+    , mBeta(beta)
+    , mWordEmb(wordEmb)
+    , mPosEmb(posEmb)
+    , mTokEmb(tokEmb)
+    , mGammaDev(nullptr)
+    , mBetaDev(nullptr)
+    , mWordEmbDev(nullptr)
+    , mTokEmbDev(nullptr)
+    , mPosEmbDev(nullptr)
 {
     // Assuming Weights.count is the number of elements and not bytes
     assert(beta.count == gamma.count);
-    assert(word_emb.count % m_ld == 0);
-    assert(pos_emb.count % m_ld == 0);
-    assert(tok_emb.count % m_ld == 0);
-    mWordVocabSize = word_emb.count / m_ld;
-    mPosVocabSize = pos_emb.count / m_ld;
-    mTokVocabSize = tok_emb.count / m_ld;
-    // We set mB and mS in configure
-    mType = output_fp16 ? DataType::kHALF : DataType::kFLOAT;
+    assert(wordEmb.count % mLd == 0);
+    assert(posEmb.count % mLd == 0);
+    assert(tokEmb.count % mLd == 0);
+    mWordVocabSize = wordEmb.count / mLd;
+    mPosVocabSize = posEmb.count / mLd;
+    mTokVocabSize = tokEmb.count / mLd;
+    // We set mS in configure
+    mType = outputFp16 ? DataType::kHALF : DataType::kFLOAT;
 }
 
-EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string name, const void* data, size_t length)
+EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const void* data, size_t length)
     : mLayerName(name)
 {
     gLogInfo << "EMB LN Deser start\n";
@@ -139,27 +144,26 @@ EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string name, const void* data,
     const char* d = static_cast<const char*>(data);
     const char* a = d;
     DESER(d, mType);
-    DESER(d, m_ld);
-    DESER(d, mB);
+    DESER(d, mLd);
     DESER(d, mS);
     DESER(d, mWordVocabSize);
     DESER(d, mPosVocabSize);
     DESER(d, mTokVocabSize);
-    beta_dev = deser2dev<float>(d, m_ld);
-    gamma_dev = deser2dev<float>(d, m_ld);
+    mBetaDev = deserToDev<float>(d, mLd);
+    mGammaDev = deserToDev<float>(d, mLd);
 
-    wemb_dev = deser2dev<float>(d, m_ld * mWordVocabSize);
-    pemb_dev = deser2dev<float>(d, m_ld * mPosVocabSize);
-    temb_dev = deser2dev<float>(d, m_ld * mTokVocabSize);
+    mWordEmbDev = deserToDev<float>(d, mLd * mWordVocabSize);
+    mPosEmbDev = deserToDev<float>(d, mLd * mPosVocabSize);
+    mTokEmbDev = deserToDev<float>(d, mLd * mTokVocabSize);
     assert(d == (a + length));
     // this signals init not to allocate/copy
-    m_gamma.count = -1;
-    m_beta.count = -1;
+    mGamma.count = -1;
+    mBeta.count = -1;
     mWordEmb.count = -1;
     mTokEmb.count = -1;
     mPosEmb.count = -1;
-    m_gamma.values = nullptr;
-    m_beta.values = nullptr;
+    mGamma.values = nullptr;
+    mBeta.values = nullptr;
     mWordEmb.values = nullptr;
     mTokEmb.values = nullptr;
     mPosEmb.values = nullptr;
@@ -198,53 +202,50 @@ Dims EmbLayerNormPlugin::getOutputDimensions(int index, const Dims* inputs, int 
     // Input should be input ids and token ids and the input mask
     // Output should be the embeddings tensor and mask indices
     assert(nbInputDims == 3);
+    assert(inputs[0].nbDims == 1); // S
     assert(inputs[0].nbDims == inputs[1].nbDims);
-    assert(inputs[0].nbDims == 2); // B x S
-    int B = inputs[0].d[0];
-    int S = inputs[0].d[1];
-    assert(inputs[1].d[0] == B);
-    assert(inputs[1].d[1] == S);
-    assert(inputs[2].d[0] == B);
-    assert(inputs[2].d[1] == S);
+    const int S = inputs[0].d[0];
+    assert(inputs[1].d[0] == S);
+    assert(inputs[2].d[0] == S);
 
     assert(index == 0 || index == 1);
 
     if (index == 0)
     {
-        int hidden_size = m_ld;
-        return Dims{5, B, S, hidden_size, 1, 1};
+        const int hidden_size = mLd;
+        return Dims4{S, hidden_size, 1, 1};
     }
-    return Dims2{B, 1};
+    return Dims{1, 1};
 }
 
 int EmbLayerNormPlugin::initialize()
 {
-    if (m_gamma.values)
+    if (mGamma.values)
     {
-        cudaMalloc(&gamma_dev, sizeof(float) * m_gamma.count);
-        cudaMemcpy(gamma_dev, m_gamma.values, sizeof(float) * m_gamma.count, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc(&mGammaDev, sizeof(float) * mGamma.count));
+        CHECK(cudaMemcpy(mGammaDev, mGamma.values, sizeof(float) * mGamma.count, cudaMemcpyHostToDevice));
     }
-    if (m_beta.values)
+    if (mBeta.values)
     {
-        cudaMalloc(&beta_dev, sizeof(float) * m_beta.count);
-        cudaMemcpy(beta_dev, m_beta.values, sizeof(float) * m_beta.count, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc(&mBetaDev, sizeof(float) * mBeta.count));
+        CHECK(cudaMemcpy(mBetaDev, mBeta.values, sizeof(float) * mBeta.count, cudaMemcpyHostToDevice));
     }
 
     if (mWordEmb.values)
     {
-        cudaMalloc(&wemb_dev, sizeof(float) * mWordEmb.count);
-        cudaMemcpy(wemb_dev, mWordEmb.values, sizeof(float) * mWordEmb.count, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc(&mWordEmbDev, sizeof(float) * mWordEmb.count));
+        CHECK(cudaMemcpy(mWordEmbDev, mWordEmb.values, sizeof(float) * mWordEmb.count, cudaMemcpyHostToDevice));
     }
     if (mTokEmb.values)
     {
-        cudaMalloc(&temb_dev, sizeof(float) * mTokEmb.count);
-        cudaMemcpy(temb_dev, mTokEmb.values, sizeof(float) * mTokEmb.count, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc(&mTokEmbDev, sizeof(float) * mTokEmb.count));
+        CHECK(cudaMemcpy(mTokEmbDev, mTokEmb.values, sizeof(float) * mTokEmb.count, cudaMemcpyHostToDevice));
     }
 
     if (mPosEmb.values)
     {
-        cudaMalloc(&pemb_dev, sizeof(float) * mPosEmb.count);
-        cudaMemcpy(pemb_dev, mPosEmb.values, sizeof(float) * mPosEmb.count, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc(&mPosEmbDev, sizeof(float) * mPosEmb.count));
+        CHECK(cudaMemcpy(mPosEmbDev, mPosEmb.values, sizeof(float) * mPosEmb.count, cudaMemcpyHostToDevice));
     }
     return 0;
 }
@@ -254,39 +255,39 @@ int EmbLayerNormPlugin::enqueue(int batchSize, const void* const* inputs, void**
     int status = -1;
 
     // Our plugin outputs only one tensor
-    const int* input_ids = static_cast<const int*>(inputs[0]);
-    const int* segment_ids = static_cast<const int*>(inputs[1]);
-    const int* input_mask = static_cast<const int*>(inputs[2]);
+    const int* inputIds = static_cast<const int*>(inputs[0]);
+    const int* segmentIds = static_cast<const int*>(inputs[1]);
+    const int* inputMask = static_cast<const int*>(inputs[2]);
 
     if (mType == DataType::kFLOAT)
     {
         float* output = static_cast<float*>(outputs[0]);
-        emb_skip_layer_norm<float>(
-            stream, m_ld, mB, mS, input_ids, segment_ids, beta_dev, gamma_dev, wemb_dev, pemb_dev, temb_dev, output);
+        embSkipLayerNorm<float>(stream, mLd, batchSize, mS, inputIds, segmentIds, mBetaDev, mGammaDev, mWordEmbDev,
+            mPosEmbDev, mTokEmbDev, output);
     }
     else if (mType == DataType::kHALF)
     {
         half* output = static_cast<half*>(outputs[0]);
-        emb_skip_layer_norm<half>(
-            stream, m_ld, mB, mS, input_ids, segment_ids, beta_dev, gamma_dev, wemb_dev, pemb_dev, temb_dev, output);
+        embSkipLayerNorm<half>(stream, mLd, batchSize, mS, inputIds, segmentIds, mBetaDev, mGammaDev, mWordEmbDev,
+            mPosEmbDev, mTokEmbDev, output);
     }
     else
     {
         assert(false);
     }
-    int* mask_idx = static_cast<int*>(outputs[1]);
-    compute_mask_idx(stream, mS, mB, input_mask, mask_idx);
+    int* maskIdx = static_cast<int*>(outputs[1]);
+    computeMaskIdx(stream, mS, batchSize, inputMask, maskIdx);
 
     return status;
 }
 
 size_t EmbLayerNormPlugin::getSerializationSize() const
 {
-    return 2 * sizeof(float) * m_ld             // beta + gamma
-        + sizeof(mType) + sizeof(m_ld) * 6      //m_ld, mB,mS, m*VocabSize
-        + sizeof(float) * m_ld * mWordVocabSize // word emb
-        + sizeof(float) * m_ld * mPosVocabSize  // pos emb
-        + sizeof(float) * m_ld * mTokVocabSize  // tok emb
+    return 2 * sizeof(float) * mLd             // beta + gamma
+        + sizeof(mType) + sizeof(mLd) * 5      //mLd, mS, m*VocabSize
+        + sizeof(float) * mLd * mWordVocabSize // word emb
+        + sizeof(float) * mLd * mPosVocabSize  // pos emb
+        + sizeof(float) * mLd * mTokVocabSize  // tok emb
         ;
 }
 
@@ -295,17 +296,16 @@ void EmbLayerNormPlugin::serialize(void* buffer) const
     char* d = static_cast<char*>(buffer);
     const char* a = d;
     writeToBuffer(d, mType);
-    writeToBuffer(d, m_ld);
-    writeToBuffer(d, mB);
+    writeToBuffer(d, mLd);
     writeToBuffer(d, mS);
     writeToBuffer(d, mWordVocabSize);
     writeToBuffer(d, mPosVocabSize);
     writeToBuffer(d, mTokVocabSize);
-    serFromDev(d, beta_dev, m_ld);
-    serFromDev(d, gamma_dev, m_ld);
-    serFromDev(d, wemb_dev, m_ld * mWordVocabSize);
-    serFromDev(d, pemb_dev, m_ld * mPosVocabSize);
-    serFromDev(d, temb_dev, m_ld * mTokVocabSize);
+    serFromDev(d, mBetaDev, mLd);
+    serFromDev(d, mGammaDev, mLd);
+    serFromDev(d, mWordEmbDev, mLd * mWordVocabSize);
+    serFromDev(d, mPosEmbDev, mLd * mPosVocabSize);
+    serFromDev(d, mTokEmbDev, mLd * mTokVocabSize);
 
     assert(d == a + getSerializationSize());
 }
@@ -319,30 +319,25 @@ void EmbLayerNormPlugin::configurePlugin(const Dims* inputs, int nbInputs, const
     assert(nbOutputs == 2);
     assert(nbInputs == 3);
 
-    assert(inputs[0].nbDims == 2);
-    mB = inputs[0].d[0];
-    mS = inputs[0].d[1];
-    assert(mB == inputs[1].d[0]);
-    assert(mS == inputs[1].d[1]);
-    assert(mB == inputs[2].d[0]);
-    assert(mS == inputs[2].d[1]);
+    assert(inputs[0].nbDims == 1);
+    mS = inputs[0].d[0];
+    assert(mS == inputs[1].d[0]);
+    assert(mS == inputs[2].d[0]);
 
-    assert(outputs[0].nbDims == 5);
-    assert(outputs[0].d[0] == mB);
-    assert(outputs[0].d[1] == mS);
-    assert(outputs[0].d[2] == m_ld);
+    assert(outputs[0].nbDims == 4);
+    assert(outputs[0].d[0] == mS);
+    assert(outputs[0].d[1] == mLd);
+    assert(outputs[0].d[2] == 1);
     assert(outputs[0].d[3] == 1);
-    assert(outputs[0].d[4] == 1);
 
-    assert(outputs[1].nbDims == 2);
-    assert(outputs[1].d[0] == mB);
-    assert(outputs[1].d[1] == 1);
+    assert(outputs[1].nbDims == 1);
+    assert(outputs[1].d[0] == 1);
 
     assert(format == PluginFormat::kNCHW);
     assert(inputTypes[0] == DataType::kINT32);
     assert(inputTypes[1] == DataType::kINT32);
     assert(inputTypes[2] == DataType::kINT32);
-    DataType out_type = outputTypes[0];
+    const DataType out_type = outputTypes[0];
     assert(out_type == DataType::kFLOAT || out_type == DataType::kHALF);
     assert(outputTypes[1] == DataType::kINT32);
 }
@@ -362,11 +357,11 @@ bool EmbLayerNormPlugin::supportsFormat(DataType type, PluginFormat format) cons
 void EmbLayerNormPlugin::terminate()
 {
     gLogInfo << "EMBLN terminate start" << std::endl;
-    cudaFree(gamma_dev);
-    cudaFree(beta_dev);
-    cudaFree(wemb_dev);
-    cudaFree(temb_dev);
-    cudaFree(pemb_dev);
+    cudaFree(mGammaDev);
+    cudaFree(mBetaDev);
+    cudaFree(mWordEmbDev);
+    cudaFree(mTokEmbDev);
+    cudaFree(mPosEmbDev);
     gLogInfo << "EMBLN terminate done" << std::endl;
 }
 
@@ -381,16 +376,14 @@ void EmbLayerNormPlugin::destroy()
 IPluginV2Ext* EmbLayerNormPlugin::clone() const
 {
     gLogInfo << "EMBLN clone start" << std::endl;
-    auto ret
-        = new EmbLayerNormPlugin(mLayerName, mType == DataType::kHALF, m_beta, m_gamma, mWordEmb, mPosEmb, mTokEmb);
-    ret->mB = mB;
+    auto ret = new EmbLayerNormPlugin(mLayerName, mType == DataType::kHALF, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
     ret->mS = mS;
 
-    ret->wemb_dev = wemb_dev;
-    ret->pemb_dev = pemb_dev;
-    ret->temb_dev = temb_dev;
-    ret->beta_dev = beta_dev;
-    ret->gamma_dev = gamma_dev;
+    ret->mWordEmbDev = mWordEmbDev;
+    ret->mPosEmbDev = mPosEmbDev;
+    ret->mTokEmbDev = mTokEmbDev;
+    ret->mBetaDev = mBetaDev;
+    ret->mGammaDev = mGammaDev;
     gLogInfo << "EMBLN clone done" << std::endl;
     return ret;
 }
@@ -449,4 +442,5 @@ void EmbLayerNormPluginCreator::setPluginNamespace(const char* libNamespace)
 const char* EmbLayerNormPluginCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
+}
 }
