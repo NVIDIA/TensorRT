@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors.
 #
@@ -143,44 +145,44 @@ if not os.path.exists(outputbase):
     print("Output path does not exist. Creating.")
     os.makedirs(outputbase)
 
-outputFileName = jp(outputbase,  TEST_INPUT_FN)
+out_fn = jp(outputbase,  TEST_INPUT_FN)
 
-with open(outputFileName, 'wb') as outputFile:
+with open(out_fn, 'wb') as output_file:
     count = 3
-    outputFile.write("{}\n".format(count).encode('ASCII'))
+    output_file.write("{}\n".format(count).encode('ASCII'))
     idx = 0
     for k,v in fd.items():
         outname = '{}_{}'.format(k[:-2], idx)
         shape = v.shape
         shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
-        outputFile.write("{} 3 {} ".format(outname, shape_str).encode('ASCII'))
-        outputFile.write(v.tobytes())
-        outputFile.write("\n".encode('ASCII'))
+        output_file.write("{} 3 {} ".format(outname, shape_str).encode('ASCII'))
+        output_file.write(v.tobytes())
+        output_file.write("\n".encode('ASCII'))
 
-outputFileName = jp(outputbase,  TEST_OUTPUT_FN)
+out_fn = jp(outputbase,  TEST_OUTPUT_FN)
 
-with open(outputFileName, 'wb') as outputFile:
+with open(out_fn, 'wb') as output_file:
     count = 2 + len(out_enc)
-    outputFile.write("{}\n".format(count).encode('ASCII'))
+    output_file.write("{}\n".format(count).encode('ASCII'))
     outname = 'embedding_output'
     shape = out_emb.shape
     shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
-    outputFile.write("{} 0 {} ".format(outname, shape_str).encode('ASCII'))
-    outputFile.write(out_emb.tobytes())
-    outputFile.write("\n".encode('ASCII'))
+    output_file.write("{} 0 {} ".format(outname, shape_str).encode('ASCII'))
+    output_file.write(out_emb.tobytes())
+    output_file.write("\n".encode('ASCII'))
 
     outname = 'logits'
     shape = out_logits.shape
     shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
-    outputFile.write("{} 0 {} ".format(outname, shape_str).encode('ASCII'))
-    outputFile.write(out_logits.tobytes())
-    outputFile.write("\n".encode('ASCII'))
+    output_file.write("{} 0 {} ".format(outname, shape_str).encode('ASCII'))
+    output_file.write(out_logits.tobytes())
+    output_file.write("\n".encode('ASCII'))
 
     for it, enc in enumerate(out_enc):
         outname = 'l{}_output'.format(it)
         shape = enc.shape
         shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
-        outputFile.write("{} 0 {} ".format(outname, shape_str).encode('ASCII'))
-        outputFile.write(enc.tobytes())
-        outputFile.write("\n".encode('ASCII'))
+        output_file.write("{} 0 {} ".format(outname, shape_str).encode('ASCII'))
+        output_file.write(enc.tobytes())
+        output_file.write("\n".encode('ASCII'))
 

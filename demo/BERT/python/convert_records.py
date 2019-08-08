@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+# The reference bert implementation preprocesses the input e.g. a squad dataset
+# generating a tf record dataset of token ids, input masks and segment ids.
+# Given such a dataset (e.g. eval.tf_record), this script converts the tf records
+# into a simpler binary format readable by the bert sample.
 
 import sys
 import struct
@@ -64,29 +69,26 @@ def _decode_record(record, name_to_features):
 
     return example
 
-try:
-    raw_dataset = tf.data.TFRecordDataset([inputbase])
-    outputFileName = outputbase + ".weights_int32"
-    with open(outputFileName, 'wb') as outputFile:
+raw_dataset = tf.data.TFRecordDataset([inputbase])
+out_fn = outputbase + ".weights_int32"
+with open(out_fn, 'wb') as output_file:
+    
+    count = raw_dataset.reduce(0, lambda x,y: x+ 1).numpy()
+    print(count)
+
+    output_file.write("{}\n".format(count).encode('ASCII'))
+    
+    for idx, record in enumerate(raw_dataset):
+        dec = _decode_record(record, name_to_features)
         
-        count = raw_dataset.reduce(0, lambda x,y: x+ 1).numpy()
-        print(count)
+        for k,v in dec.items():
+            a = v.numpy()
+            outname = '{}_{}'.format(k, idx)
 
-        outputFile.write("{}\n".format(count).encode('ASCII'))
+            shape = a.shape
+            shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
+
+            output_file.write("{} 3 {} ".format(outname, shape_str).encode('ASCII'))
+            output_file.write(a.tobytes())
+            output_file.write("\n".encode('ASCII'));
         
-        for idx, record in enumerate(raw_dataset):
-            dec = _decode_record(record, name_to_features)
-            
-            for k,v in dec.items():
-                a = v.numpy()
-                outname = '{}_{}'.format(k, idx)
-
-                shape = a.shape
-                shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
-
-                outputFile.write("{} 3 {} ".format(outname, shape_str).encode('ASCII'))
-                outputFile.write(a.tobytes())
-                outputFile.write("\n".encode('ASCII'));
-            
-except Exception as error:
-    print(str(error))

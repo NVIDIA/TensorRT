@@ -50,14 +50,14 @@ link_directories(
 
 add_library(common SHARED
     ../../samples/common/logger.cpp
-    util/data_utils.cpp
+    util/dataUtils.cpp
     )
 
 add_library(bert_plugins SHARED
-    plugins/gelu_plugin.cu
-    plugins/skip_layer_norm_plugin.cu
-    plugins/qkv2context_plugin.cu
-    plugins/emb_layer_norm_plugin.cu
+    plugins/geluPlugin.cu
+    plugins/skipLayerNormPlugin.cu
+    plugins/qkvToContextPlugin.cu
+    plugins/embLayerNormPlugin.cu
     )
 
 target_link_libraries(bert_plugins 
@@ -78,5 +78,4 @@ target_link_libraries(sample_bert
     common
     bert_plugins
     )
-
 

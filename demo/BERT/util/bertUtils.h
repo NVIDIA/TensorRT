@@ -14,56 +14,52 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef TRT_BERT_UTILS_H
+#define TRT_BERT_UTILS_H
 
 #include "cuda_profiler_api.h"
 #include <getopt.h>
+#include <algorithm>
 
 namespace bert
 {
 
-typedef std::map<std::string, Weights> WeightDict;
-typedef std::map<std::string, ITensor*> TensorDict;
+using WeightMap = std::map<std::string, Weights>;
+using TensorMap = std::map<std::string, ITensor*>;
 
 struct BertConfig
 {
-    int num_attention_heads;
-    int hidden_size;
-    int head_size;
-    int intermediate_size;
-    int num_hidden_layers;
+    int numAttentionHeads; // N
+    int hiddenSize;        // H*N
+    int headSize;          // H
+    int intermediateSize;  // 4*H*N
+    int numHiddenLayers;
 
     bool use_fp16;
 
-    BertConfig(int num_heads_, int hidden_size_, int intermediate_size_, int num_hidden_layers_, bool use_fp16_)
-        : hidden_size(hidden_size_)
-        , num_attention_heads(num_heads_)
-        , intermediate_size(intermediate_size_)
-        , num_hidden_layers(num_hidden_layers_)
-        , use_fp16(use_fp16_)
+    BertConfig(int num_heads, int hidden_size, int intermediate_size, int num_hidden_layers, bool use_fp16)
+        : hiddenSize(hidden_size)
+        , numAttentionHeads(num_heads)
+        , intermediateSize(intermediate_size)
+        , numHiddenLayers(num_hidden_layers)
+        , use_fp16(use_fp16)
     {
 
-        assert(hidden_size % num_attention_heads == 0);
-        head_size = hidden_size / num_attention_heads;
+        assert(hiddenSize % numAttentionHeads == 0);
+        headSize = hiddenSize / numAttentionHeads;
     }
 };
 
 Weights noop{DataType::kFLOAT, nullptr, 0};
 
-int size(ITensor* t)
-{
-    Dims dims = t->getDimensions();
-    return std::accumulate(dims.d, dims.d + dims.nbDims, 1, std::multiplies<int>());
-}
-
-void set_name(ITensor* tensor, const std::string& prefix, const std::string& name)
+void setTensorName(ITensor* tensor, const std::string& prefix, const std::string& name)
 {
     tensor->setName((prefix + name).c_str());
 }
 
-void set_name(ILayer* layer, const std::string& prefix, const std::string& name, int out_idx = 0)
+void setOutputName(ILayer* layer, const std::string& prefix, const std::string& name, int out_idx = 0)
 {
-    set_name(layer->getOutput(out_idx), prefix, name);
+    setTensorName(layer->getOutput(out_idx), prefix, name);
 }
 
 //!
@@ -73,7 +69,7 @@ struct Args
 {
     bool runInFp16{false};
     bool help{false};
-    int num_heads;
+    int numHeads;
     std::string saveEngine{};
     std::vector<std::string> dataDirs;
 };
@@ -91,8 +87,8 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
     {
         int arg;
         static struct option long_options[] = {{"help", no_argument, 0, 'h'}, {"datadir", required_argument, 0, 'd'},
-            {"fp16", no_argument, 0, 'f'}, {"nheads", required_argument, 0, 'n'}, {"saveEngine", required_argument, 0, 's'},
-            {nullptr, 0, nullptr, 0}};
+            {"fp16", no_argument, 0, 'f'}, {"nheads", required_argument, 0, 'n'},
+            {"saveEngine", required_argument, 0, 's'}, {nullptr, 0, nullptr, 0}};
         int option_index = 0;
         arg = getopt_long(argc, argv, "hd:iu", long_options, &option_index);
         if (arg == -1)
@@ -103,7 +99,7 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
         case 'h': args.help = true; return false;
         case 'n':
             if (optarg)
-                args.num_heads = std::stoi(optarg);
+                args.numHeads = std::stoi(optarg);
             else
             {
                 std::cerr << "ERROR: --datadir requires option argument" << std::endl;
@@ -137,4 +133,19 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
     }
     return true;
 }
+
+bool operator==(const nvinfer1::Dims& d1, const nvinfer1::Dims& d2)
+{
+    if (d1.d == d2.d)
+    {
+        return true;
+    }
+    if (d1.nbDims != d2.nbDims)
+    {
+        return false;
+    }
+
+    return std::equal(d1.d, d1.d + d1.nbDims, d2.d);
 }
+}
+#endif // TRT_BERT_UTILS_H
