@@ -137,10 +137,12 @@ void loadWeights(const std::string& wts_path, WeightMap& weightMap)
         weightMap[name] = tmp;
     }
 
+
     input.close();
 
     for (auto& kv : weightMap)
     {
+
 
         const int pos = kv.first.find(BQ); // starting pos of BQ
         if (pos != std::string::npos)

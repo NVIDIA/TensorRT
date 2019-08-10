@@ -39,7 +39,7 @@
 
 #include "bertEncoder.h"
 #include "embLayerNormPlugin.h"
-#include "squad.h"
+#include "clf.h"
 
 using namespace bert;
 
@@ -150,9 +150,9 @@ nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int num
     int intermediateSize = 0;
     int numHiddenLayers = 0;
     int hiddenSize = 0;
-
+    
     inferNetworkSizes(weightMap, hiddenSize, intermediateSize, numHiddenLayers);
-
+    
     assert(intermediateSize);
     assert(hiddenSize);
     assert(numHiddenLayers);
@@ -185,11 +185,11 @@ nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int num
 
     ILayer* bertLayer = bertModel(config, weightMap, network, embeddings, maskIdx);
 
-    /// SQuAD Output Layer
+    /// Clf Output Layer
 
-    ILayer* squadLayer = squad("cls_", config, weightMap, network, bertLayer->getOutput(0));
+    ILayer* clfLayer = clf("cls_", config, weightMap, network, bertLayer->getOutput(0));
 
-    network->markOutput(*squadLayer->getOutput(0));
+    network->markOutput(*clfLayer->getOutput(0));
 
     // Build the engine
 
@@ -326,8 +326,9 @@ int main(int argc, char* argv[])
         std::make_pair("input_mask", inputMasks[0]), std::make_pair("segment_ids", segmentIds[0])};
     const int B = inputDims[0].d[0];
 
-    const std::string outputName("cls_squad_logits");
-    std::map<std::string, std::vector<float>> outCfg = {make_pair(outputName, std::vector<float>(2 * B * S))};
+    const std::string outputName("cls_clf_logits");
+    std::map<std::string, std::vector<float>> outCfg = {make_pair(outputName, std::vector<float>(B*S))};
+
 
     cudaStream_t stream;
     cudaStreamCreate(&stream);
@@ -341,14 +342,17 @@ int main(int argc, char* argv[])
     engine->destroy();
     runtime->destroy();
     auto& output = outCfg[outputName];
-    transposeLogits(output, B, S);
     const float* test = reinterpret_cast<const float*>(testOutputs["logits"].values);
+
 
     float mae = 0;
     float maxdiff = 0;
+
     for (int it = 0; it < testOutputs["logits"].count; it++)
     {
-        const float diff = std::abs(test[it] - output[it]);
+        printf("***batch: %d***\n", it);
+        printf("tensorflow output:%.5e | tensorrt output:%.5e\n", test[it], output[it*S]);
+        const float diff = std::abs(test[it] - output[it*S]);
         mae += diff;
         maxdiff = std::max(diff, maxdiff);
     }
@@ -356,7 +360,6 @@ int main(int argc, char* argv[])
         = std::accumulate(timesTotal.begin(), timesTotal.end(), 0.f, std::plus<float>()) / timesTotal.size();
     const float avgCompute
         = std::accumulate(timesCompute.begin(), timesCompute.end(), 0.f, std::plus<float>()) / timesCompute.size();
-
     printf("B=%d S=%d MAE=%.12e MaxDiff=%.12e ", B, S, (mae) / output.size(), maxdiff);
     printf(" Runtime(total avg)=%.6fms Runtime(comp ms)=%.6f\n", avgTotal, avgCompute);
 

@@ -46,7 +46,7 @@ out_fn = outputbase + ".weights"
 with open(out_fn, 'wb') as output_file:
 
     # there might be training-related variables in the checkpoint that can be discarded
-    param_names = [key for key in sorted(tensor_dict) if 'adam' not in key and 'global_step' not in key and 'pooler' not in key]
+    param_names = [key for key in sorted(tensor_dict) if 'adam' not in key and 'step' not in key and 'loss' not in key and 'gradients' not in key]
 
     count = len(param_names) 
     print(count)
