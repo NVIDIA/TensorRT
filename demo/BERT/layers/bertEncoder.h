@@ -38,7 +38,6 @@ ILayer* bertModel(const BertConfig& config, WeightMap& weightMap, INetworkDefini
         prevInput = prevLayer->getOutput(0);
     }
     assert(prevLayer);
-    
     return prevLayer;
 }
 }
