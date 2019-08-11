@@ -21,6 +21,9 @@ from os.path import join as jp
 import numpy as np
 import re
 import site
+import time
+import tokenization
+import preprocess
 
 os.system("git clone https://github.com/NVIDIA/DeepLearningExamples.git dle 2> /dev/null || git -C dle pull")
 try:
@@ -40,6 +43,7 @@ parser.add_argument('-b', '--batchsize',type=int, required=True, help='The seque
 parser.add_argument('-f', '--finetuned', required=True, help='The checkpoint file basename of the fine-tuned model, example basename(model.ckpt-766908.data-00000-of-00001) -> model.ckpt-766908')
 parser.add_argument('-p', '--pretrained', required=True, help='The folder containing the bert_config.json, which can be downloaded e.g. from https://github.com/google-research/bert#pre-trained-models or by running download_models.py in dle/TensorFlow/LanguageModeling/BERT/data/pretrained_models_google')
 parser.add_argument('-r', '--randomseed',type=int, required=False, default=12345, help='Seed for PRNG')
+parser.add_argument('-d', '--dict', type=str, required=True)
 
 opt = parser.parse_args()
 
@@ -124,17 +128,34 @@ sess = tf.Session(graph=g, config=config)
 sess.run(init_op)
 
 
-test_word_ids = np.random.randint(0, bert_config.vocab_size, (B, slen), dtype=np.int32)
-test_input_mask = np.ones((B,slen), dtype=np.int32)
-test_segment_ids = np.random.randint(0, bert_config.type_vocab_size, (B, slen), dtype=np.int32)
+# test_word_ids = np.random.randint(0, bert_config.vocab_size, (B, slen), dtype=np.int32)
+# test_input_mask = np.ones((B,slen), dtype=np.int32)
+# test_segment_ids = np.random.randint(0, bert_config.type_vocab_size, (B, slen), dtype=np.int32)
+# fd = {'input_ids:0' : test_word_ids,
+#         'input_mask:0':test_input_mask,
+#         'segment_ids:0':test_segment_ids}
 
-fd = {'input_ids:0' : test_word_ids,
-        'input_mask:0':test_input_mask,
-        'segment_ids:0':test_segment_ids}
+
+query = '怎么查'
+candidate = '怎么查工资'
+tokenizer = tokenization.FullTokenizer(
+            vocab_file=opt.dict,
+            do_lower_case=True,
+            do_chinese_char=False)
+example = preprocess.InputExample(query, candidate)
+feature = preprocess.convert_predict_example(example, slen, tokenizer)
+fd = {'input_ids:0' : np.reshape(np.array(feature.input_ids, dtype=np.int32), (1, slen)),
+      'input_mask:0':np.reshape(np.array(feature.input_mask, dtype=np.int32), (1, slen)),
+      'segment_ids:0':np.reshape(np.array(feature.segment_ids, dtype=np.int32), (1, slen))}
 
 out_emb = sess.run(model.embedding_output, feed_dict=fd)
 out_enc = sess.run(model.all_encoder_layers, feed_dict=fd)
+sess.run(logits, feed_dict=fd) #warm-up seesion
+
+start_time = time.time()
 out_logits = sess.run(logits, feed_dict=fd)
+print('eval time: %.2f s'%(time.time() - start_time))
+print(out_logits)
 
 if not os.path.exists(outputbase):
     print("Output path does not exist. Creating.")

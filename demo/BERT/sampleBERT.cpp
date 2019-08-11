@@ -150,9 +150,7 @@ nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int num
     int intermediateSize = 0;
     int numHiddenLayers = 0;
     int hiddenSize = 0;
-    
     inferNetworkSizes(weightMap, hiddenSize, intermediateSize, numHiddenLayers);
-    
     assert(intermediateSize);
     assert(hiddenSize);
     assert(numHiddenLayers);
@@ -329,7 +327,6 @@ int main(int argc, char* argv[])
     const std::string outputName("cls_clf_logits");
     std::map<std::string, std::vector<float>> outCfg = {make_pair(outputName, std::vector<float>(B*S))};
 
-
     cudaStream_t stream;
     cudaStreamCreate(&stream);
     std::vector<float> timesTotal(NUM_RUNS);   // total time
@@ -344,10 +341,8 @@ int main(int argc, char* argv[])
     auto& output = outCfg[outputName];
     const float* test = reinterpret_cast<const float*>(testOutputs["logits"].values);
 
-
     float mae = 0;
     float maxdiff = 0;
-
     for (int it = 0; it < testOutputs["logits"].count; it++)
     {
         printf("***batch: %d***\n", it);
@@ -362,6 +357,9 @@ int main(int argc, char* argv[])
         = std::accumulate(timesCompute.begin(), timesCompute.end(), 0.f, std::plus<float>()) / timesCompute.size();
     printf("B=%d S=%d MAE=%.12e MaxDiff=%.12e ", B, S, (mae) / output.size(), maxdiff);
     printf(" Runtime(total avg)=%.6fms Runtime(comp ms)=%.6f\n", avgTotal, avgCompute);
+
+
+
 
     // destroy the engine
     bool pass{true};
