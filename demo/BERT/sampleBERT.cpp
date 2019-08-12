@@ -125,10 +125,6 @@ void doInference(IExecutionContext& context, const std::map<std::string, nvinfer
 nvinfer1::ICudaEngine* fromAPIToModel(nvinfer1::IBuilder* builder, const int numHeads, const int B, const int S)
 {
 
-    // Currently, the batch size is handled in the model, by passing an input
-    // Tensor with an explicit batch dimension. There is a tranpose in the
-    // attention layer, that relies on the exact batch size to be available at
-    // network definition time. This will change in the near future.
     builder->setMaxBatchSize(B);
     builder->setMaxWorkspaceSize(5000_MB);
     builder->setFp16Mode(gArgs.runInFp16);

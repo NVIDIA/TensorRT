@@ -140,7 +140,7 @@ SkipLayerNormPlugin::SkipLayerNormPlugin(
 SkipLayerNormPlugin::SkipLayerNormPlugin(const std::string name, const void* data, size_t length)
     : mLayerName(name)
 {
-    gLogInfo << "Skip LN Deser start\n";
+    gLogVerbose << "Skip LN Deser start\n";
     // Deserialize in the same order as serialization
     const char* d = static_cast<const char*>(data);
     const char* a = d;
@@ -156,7 +156,7 @@ SkipLayerNormPlugin::SkipLayerNormPlugin(const std::string name, const void* dat
     mBeta.count = mLd;
     mBeta.values = nullptr;
 
-    gLogInfo << "Skip LN Deser done\n";
+    gLogVerbose << "Skip LN Deser done\n";
 }
 
 const char* SkipLayerNormPlugin::getPluginType() const
@@ -290,10 +290,10 @@ bool SkipLayerNormPlugin::supportsFormat(DataType type, PluginFormat format) con
 
 void SkipLayerNormPlugin::terminate()
 {
-    gLogInfo << "SKIPLN terminate start" << std::endl;
+    gLogVerbose << "SKIPLN terminate start" << std::endl;
     cudaFree(mGammaDev);
     cudaFree(mBetaDev);
-    gLogInfo << "SKIPLN terminate done" << std::endl;
+    gLogVerbose << "SKIPLN terminate done" << std::endl;
 }
 
 void SkipLayerNormPlugin::destroy()
@@ -340,8 +340,40 @@ const PluginFieldCollection* SkipLayerNormPluginCreator::getFieldNames()
 
 IPluginV2* SkipLayerNormPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
-    gLogError << "SkipLayerNormPluginCreator::createPlugin - not implemented\n";
-    return nullptr;
+    gLogVerbose << "Creating SkipLayerNormPluginCreator...\n";
+
+    int ld;
+    Weights beta;
+    Weights gamma;
+
+    for(int i=0; i< fc->nbFields; i++)
+    {
+        std::string field_name(fc->fields[i].name);
+        if (field_name.compare("ld")==0)
+        {
+            ld = *static_cast<const int*>(fc->fields[i].data);
+            gLogVerbose << "Building ld: " << ld << std::endl;
+        }
+
+        if (field_name.compare("beta")==0)
+        {
+            gLogVerbose << "Building beta...\n";
+            beta.values = fc->fields[i].data;
+            beta.count = fc->fields[i].length;
+            beta.type = static_cast<DataType>(fc->fields[i].type);
+        }
+
+        if (field_name.compare("gamma")==0)
+        {
+            gLogVerbose << "Building gamma...\n";
+            gamma.values = fc->fields[i].data;
+            gamma.count = fc->fields[i].length;
+            gamma.type = static_cast<DataType>(fc->fields[i].type);
+        }
+    }
+
+    SkipLayerNormPlugin* p = new SkipLayerNormPlugin(name, ld, beta, gamma);
+    return p;
 }
 
 IPluginV2* SkipLayerNormPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)

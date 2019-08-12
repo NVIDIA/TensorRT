@@ -139,7 +139,7 @@ EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const bool outpu
 EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const void* data, size_t length)
     : mLayerName(name)
 {
-    gLogInfo << "EMB LN Deser start\n";
+    gLogVerbose << "EMB LN Deser start\n";
     // Deserialize in the same order as serialization
     const char* d = static_cast<const char*>(data);
     const char* a = d;
@@ -168,7 +168,7 @@ EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const void* data
     mTokEmb.values = nullptr;
     mPosEmb.values = nullptr;
 
-    gLogInfo << "EMB LN Deser done\n";
+    gLogVerbose << "EMB LN Deser done\n";
 }
 
 const char* EmbLayerNormPlugin::getPluginType() const
@@ -356,26 +356,26 @@ bool EmbLayerNormPlugin::supportsFormat(DataType type, PluginFormat format) cons
 
 void EmbLayerNormPlugin::terminate()
 {
-    gLogInfo << "EMBLN terminate start" << std::endl;
+    gLogVerbose << "EMBLN terminate start" << std::endl;
     cudaFree(mGammaDev);
     cudaFree(mBetaDev);
     cudaFree(mWordEmbDev);
     cudaFree(mTokEmbDev);
     cudaFree(mPosEmbDev);
-    gLogInfo << "EMBLN terminate done" << std::endl;
+    gLogVerbose << "EMBLN terminate done" << std::endl;
 }
 
 void EmbLayerNormPlugin::destroy()
 {
-    gLogInfo << "EMBLN destroy start" << std::endl;
+    gLogVerbose << "EMBLN destroy start" << std::endl;
     // This gets called when the network containing plugin is destroyed
     delete this;
-    gLogInfo << "EMBLN destroy start" << std::endl;
+    gLogVerbose << "EMBLN destroy start" << std::endl;
 }
 
 IPluginV2Ext* EmbLayerNormPlugin::clone() const
 {
-    gLogInfo << "EMBLN clone start" << std::endl;
+    gLogVerbose << "EMBLN clone start" << std::endl;
     auto ret = new EmbLayerNormPlugin(mLayerName, mType == DataType::kHALF, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
     ret->mS = mS;
 
@@ -384,7 +384,7 @@ IPluginV2Ext* EmbLayerNormPlugin::clone() const
     ret->mTokEmbDev = mTokEmbDev;
     ret->mBetaDev = mBetaDev;
     ret->mGammaDev = mGammaDev;
-    gLogInfo << "EMBLN clone done" << std::endl;
+    gLogVerbose << "EMBLN clone done" << std::endl;
     return ret;
 }
 
@@ -421,10 +421,61 @@ const PluginFieldCollection* EmbLayerNormPluginCreator::getFieldNames()
 
 IPluginV2* EmbLayerNormPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
+    gLogVerbose << "Creating EmbLayerNormPlugin...\n";
 
-    gLogError << "EmbLayerNormPluginCreator::createPlugin - not implemented\n";
-    assert(false);
-    return nullptr; // new EmbLayerNormPlugin(name, ld);
+    bool output_fp16 = true;
+    Weights beta;
+    Weights gamma;
+    Weights word_emb;
+    Weights pos_emb;
+    Weights tok_emb;
+    for(int i=0; i< fc->nbFields; i++)
+    {
+        std::string field_name(fc->fields[i].name);
+        if (field_name.compare("bert_embeddings_layernorm_beta")==0)
+        {
+            gLogVerbose << "Building bert_embeddings_layernorm_beta...\n";
+            beta.values = fc->fields[i].data;
+            beta.count = fc->fields[i].length;
+            beta.type = static_cast<DataType>(fc->fields[i].type);
+        }
+
+        if (field_name.compare("bert_embeddings_layernorm_gamma")==0)
+        {
+            gLogVerbose << "Building bert_embeddings_layernorm_gamma...\n";
+            gamma.values = fc->fields[i].data;
+            gamma.count = fc->fields[i].length;
+            gamma.type = static_cast<DataType>(fc->fields[i].type);
+        }
+
+        if (field_name.compare("bert_embeddings_word_embeddings")==0)
+        {
+            gLogVerbose << "Building bert_embeddings_word_embeddings...\n";
+            word_emb.values = fc->fields[i].data;
+            word_emb.count = fc->fields[i].length;
+            word_emb.type = static_cast<DataType>(fc->fields[i].type);
+        }
+
+        if (field_name.compare("bert_embeddings_token_type_embeddings")==0)
+        {
+            gLogVerbose << "Building bert_embeddings_token_type_embeddings...\n";
+            tok_emb.values = fc->fields[i].data;
+            tok_emb.count = fc->fields[i].length;
+            tok_emb.type = static_cast<DataType>(fc->fields[i].type);
+        }
+
+        if (field_name.compare("bert_embeddings_position_embeddings")==0)
+        {
+            gLogVerbose << "Building bert_embeddings_position_embeddings...\n";
+            pos_emb.values = fc->fields[i].data;
+            pos_emb.count = fc->fields[i].length;
+            pos_emb.type = static_cast<DataType>(fc->fields[i].type);
+        }
+    }
+
+    gLogVerbose << "Building the Plugin...\n";
+    EmbLayerNormPlugin* p =  new EmbLayerNormPlugin(name, output_fp16, beta, gamma, word_emb, pos_emb, tok_emb);
+    return p;
 }
 
 IPluginV2* EmbLayerNormPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)

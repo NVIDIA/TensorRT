@@ -18,7 +18,7 @@ To build the TensorRT OSS components, ensure you meet the following package requ
 * [CUDA](https://developer.nvidia.com/cuda-toolkit)
   * Recommended versions:
   * [cuda-10.1](https://developer.nvidia.com/cuda-10.1-download-archive-base) + cuDNN-7.5
- 
+
 * [GNU Make](https://ftp.gnu.org/gnu/make/) >= v4.1
 
 * [CMake](https://github.com/Kitware/CMake/releases) >= v3.8
@@ -59,26 +59,8 @@ The high-level workflow consists of the following steps:
 
 ### 1. Download a pre-trained BERT SQuAD checkpoint from NGC model registry
 ```
-wget -O bert-base-squad1.1.zip https://api.ngc.nvidia.com/v2/models/nvidia/bert_tf_v1_1_base_fp32_128/versions/1/zip
+wget -O bert-base-squad1.1.zip https://api.ngc.nvidia.com/v2/models/nvidia/bert_tf_v1_1_base_fp32_128/versions/2/zip
 unzip bert-base-squad1.1.zip -d squad_output_path
-```
-
-You need to prepare bert_config.json file corresponding to the checkpoint. For the above checkpoint, use the following.
-
-```
-{
-	"attention_probs_dropout_prob": 0.1,
-	"hidden_act": "gelu",
-	"hidden_dropout_prob": 0.1,
-	"hidden_size": 768,
-	"initializer_range": 0.02,
-	"intermediate_size": 3072,
-	"max_position_embeddiungs": 512,
-	"num_attention_heads": 12,
-	"num_hidden_layers": 12,
-	"type_vocab_size": 2,
-	"vocab_size": 30522
-}
 ```
 
 Below, we will refer to the location `<squad output path>/model.ckpt-<number>` as shell variable `CHECKPOINT` and the path to the folder that contains the `bert_config.json` as `BERT_PATH`.
@@ -99,7 +81,7 @@ Python scripts in step 2 and 3 require Tensorflow on the system. We tested using
 The SQuAD fine-tuned Tensorflow checkpoint can be converted using the following command:
 
 ```
-python python/convert_weights.py -m $CHECKPOINT -o <weight path>/filename
+python helpers/convert_weights.py -m $CHECKPOINT -o <weight path>/filename
 ```
 
 This will generate a file `<weight path>/<filename>.weights`. The path that contains the weights file, will be referred to as `WEIGHT_PATH`.
@@ -109,7 +91,7 @@ This will generate a file `<weight path>/<filename>.weights`. The path that cont
 
 To run the sample on random inputs and compare the output to the reference Tensorflow implementation, the following command produces test inputs and outputs:
 
-```python python/generate_dbg.py -f $CHECKPOINT -p $BERT_PATH -o $OUTPUT_PATH -s <seq.len.> -b <batch size>```
+```python helpers/generate_dbg.py -f $CHECKPOINT -p $BERT_PATH -o $OUTPUT_PATH -s <seq.len.> -b <batch size>```
 
 Please refer to the help of `generate_dbg.py` for more options.
 
@@ -136,12 +118,12 @@ The binary `sample_bert` requires as arguments the paths that contain `bert_conf
 
 # Appendix
 
-## Description of the binary format 
+## Description of the binary format
 
-The example expects weights and inputs in a simple tensor dictionary format. 
+The example expects weights and inputs in a simple tensor dictionary format.
 It consists of an integer in the first line `N` denoting the number of entries in the dictionary.
 Then there are `N` lines, each line following the format
 `[tensor name: String] [element type: DataType] [number of dimensions D: int] [dim1, dim2, ..., dimD] [binary tensor data]\n`
-DataType is the `nvinfer1` enumeration, that encodes types as numbers. E.g. `DataType::kFLOAT = 0` (float32) and `DataType::kINT32 = 3`. 
+DataType is the `nvinfer1` enumeration, that encodes types as numbers. E.g. `DataType::kFLOAT = 0` (float32) and `DataType::kINT32 = 3`.
 The binary tensor data is dim1 * dim2 * ... * dimD * sizeof(type) bytes followed by a line break.
 Methods to read this format can be found in `dataUtils.hpp`
