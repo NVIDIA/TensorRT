@@ -110,13 +110,13 @@ GeluPlugin::GeluPlugin(const std::string name, const void* data, size_t length)
     : mLayerName(name)
 {
 
-    gLogInfo << "Gelu Deser start" << std::endl;
+    gLogVerbose << "Gelu Deser start" << std::endl;
     const char* d = static_cast<const char*>(data);
     const char* a = d;
     mInputVolume = readFromBuffer<decltype(mInputVolume)>(d);
     mType = readFromBuffer<DataType>(d);
     assert(d == a + length);
-    gLogInfo << "Gelu Deser done" << std::endl;
+    gLogVerbose << "Gelu Deser done" << std::endl;
 }
 
 const char* GeluPlugin::getPluginType() const
@@ -263,9 +263,9 @@ const PluginFieldCollection* GeluPluginCreator::getFieldNames()
 
 IPluginV2* GeluPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
-    gLogError << "GeluPluginCreator::createPlugin not implemented\n" << std::endl;
-    assert(false);
-    return nullptr;
+    gLogVerbose << "Creating GeluPlugin...\n";
+    GeluPlugin* p = new GeluPlugin(name);
+    return p;
 }
 
 IPluginV2* GeluPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)

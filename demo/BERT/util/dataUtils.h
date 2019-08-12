@@ -28,17 +28,17 @@ namespace bert
 
 //! \brief Loads a dictionary of weights
 //! \details The function loads the weights of the BERT network from a weights file. The Weights in the dictionary own
-//! the storage behind the Weights::values pointer. It is therefore the callers responsibility to free it. See also python/convert_weights.py 
-//!\param path path to inputs 
+//! the storage behind the Weights::values pointer. It is therefore the callers responsibility to free it. See also helpers/convert_weights.py 
+//!\param path path to inputs
 //!\param weightMap map of weights that the function will populate
 void loadWeights(const std::string& path, WeightMap& weightMap);
 
-//! \brief Loads a batch of inputs 
+//! \brief Loads a batch of inputs
 //! \details The function loads inputs for the network consisting batches of tokenized text, input masks and segement ids.
 //! Each batch is represented as a matrix of int32 elements of size sequence length x batch size.
 //! Each batch is assumed to have the same sequence length S, which the function outputs, so that the batch size of each batch can be computed.
 //! If multiple batches are present, tokens, masks and segement ids are associated with each other in the order in which they are encountered.
-//! See also python/generate_dbg.py
+//! See also helpers/generate_dbg.py
 //!\param path Path to the input file
 //!\param Bmax Ouputs the largest batch size encountered
 //!\param S Outputs the sequence lenght of the inputs

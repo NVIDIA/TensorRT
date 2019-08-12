@@ -265,7 +265,7 @@ QKVToContextPlugin::QKVToContextPlugin(const std::string name, const void* data,
     const char* d = static_cast<const char*>(data);
     const char* a = d;
 
-    gLogInfo << "QKV Deser Start" << std::endl;
+    gLogVerbose << "QKV Deser Start" << std::endl;
 
     DESER(d, mType);
     DESER(d, mS);
@@ -274,7 +274,7 @@ QKVToContextPlugin::QKVToContextPlugin(const std::string name, const void* data,
     DESER(d, mRsqrtHeadSize);
     DESER(d, mHasImask);
 
-    gLogInfo << "QKV Deser done" << std::endl;
+    gLogVerbose << "QKV Deser done" << std::endl;
 
     assert(d == (a + length));
 }
@@ -305,12 +305,12 @@ Dims QKVToContextPlugin::getOutputDimensions(int index, const Dims* inputs, int 
 
 void QKVToContextPlugin::attachToContext(cudnnContext* cudnn, cublasContext* cublas_, IGpuAllocator* alloc)
 {
-    gLogInfo << "QKV AttachToContext" << std::endl;
+    gLogVerbose << "QKV AttachToContext" << std::endl;
 }
 
 int QKVToContextPlugin::initialize()
 {
-    gLogInfo << "QKV Initialize" << std::endl;
+    gLogVerbose << "QKV Initialize" << std::endl;
     cublasCreate(&cublas);
 
     return 0;
@@ -434,9 +434,9 @@ bool QKVToContextPlugin::supportsFormat(DataType type, PluginFormat format) cons
 
 void QKVToContextPlugin::terminate()
 {
-    gLogInfo << "QKV Terminate " << std::endl;
+    gLogVerbose << "QKV Terminate " << std::endl;
     CHECK(cublasDestroy(cublas));
-    gLogInfo << "QKV Terminate done" << std::endl;
+    gLogVerbose << "QKV Terminate done" << std::endl;
 }
 
 size_t QKVToContextPlugin::scratchSize(int batchsize) const
@@ -465,11 +465,11 @@ void QKVToContextPlugin::destroy() {}
 
 IPluginV2Ext* QKVToContextPlugin::clone() const
 {
-    gLogInfo << "QKV Clone" << std::endl;
+    gLogVerbose << "QKV Clone" << std::endl;
     auto ret = new QKVToContextPlugin(mLayerName, mHiddenSize, mNumHeads, mS, mHasImask);
     ret->mType = mType;
     ret->initialize();
-    gLogInfo << "QKV Clone done" << std::endl;
+    gLogVerbose << "QKV Clone done" << std::endl;
     return ret;
 }
 
@@ -506,9 +506,41 @@ const PluginFieldCollection* QKVToContextPluginCreator::getFieldNames()
 
 IPluginV2* QKVToContextPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
-    gLogError << "QKVToContextPluginCreator::createPlugin not implemented\n";
-    assert(false);
-    return nullptr;
+    gLogVerbose << "Creating QKV2ContextPlugin...\n";
+
+    int hidden_size;
+    int num_heads;
+    int S;
+    bool has_mask;
+
+    for(int i=0; i< fc->nbFields; i++)
+    {
+        std::string field_name(fc->fields[i].name);
+        if (field_name.compare("hidden_size")==0)
+        {
+            hidden_size = *static_cast<const int*>(fc->fields[i].data);
+            gLogVerbose << "Building hidden_size: " << hidden_size << std::endl;
+        }
+        if (field_name.compare("num_heads")==0)
+        {
+            num_heads =  *static_cast<const int*>(fc->fields[i].data);
+            gLogVerbose << "Building num_heads: " << num_heads << std::endl;
+        }
+        if (field_name.compare("S")==0)
+        {
+            S =  *static_cast<const int*>(fc->fields[i].data);
+            gLogVerbose << "Building S: " << S << std::endl;
+        }
+        if (field_name.compare("has_mask")==0)
+        {
+            has_mask =  *static_cast<const bool*>(fc->fields[i].data);
+            gLogVerbose << "Building has_mask: " << has_mask  << std::endl;
+        }
+    }
+
+    gLogVerbose << "Building the Plugin...\n";
+    QKVToContextPlugin* p =  new QKVToContextPlugin(name, hidden_size, num_heads, S, has_mask);
+    return p;
 }
 
 IPluginV2* QKVToContextPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
