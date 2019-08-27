@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef TRT_TRANSFORMER_KEYS_H
+#define TRT_TRANSFORMER_KEYS_H
+
+#include <string>
+
 namespace bert
 {
-
 const std::string W_AOUT = "attention_output_dense_kernel";
 const std::string B_AOUT = "attention_output_dense_bias";
 const std::string AOUT_LN_BETA = "attention_output_layernorm_beta";
@@ -29,3 +32,5 @@ const std::string B_LOUT = "output_dense_bias";
 const std::string LOUT_LN_BETA = "output_layernorm_beta";
 const std::string LOUT_LN_GAMMA = "output_layernorm_gamma";
 }
+
+#endif // TRT_TRANSFORMER_KEYS_H

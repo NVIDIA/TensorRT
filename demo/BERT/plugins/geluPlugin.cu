@@ -15,77 +15,71 @@
  */
 
 #include "NvInfer.h"
-#include "gelu_plugin.hpp"
-#include "plugin_kernels.hpp"
+#include "geluPlugin.h"
+#include "pluginKernels.h"
 
 #include "logger.h"
 #include <cassert>
 #include <cstring>
 #include <vector>
 
+namespace bert
+{
 ////// CUDA KERNELS ///////////////////////
 
-template <unsigned TPB>
-__global__ void gelu_kernel(int n, const float* input, float* output)
+// constants for approximating the normal cdf
+constexpr float A = 0.5;
+
+constexpr float B = 0.7978845608028654; // sqrt(2.0/M_PI)
+
+constexpr float C = 0.035677408136300125; // 0.044715 * sqrt(2.0/M_PI)
+
+template <typename T, unsigned TPB>
+__global__ void geluKernel(const T a, const T b, const T c, int n, const T* input, T* output)
 {
 
-    const float b = sqrt(2.0 / M_PI);
-    const float c = 0.044715 * sqrt(2.0 / M_PI);
-
-    int idx = blockIdx.x * TPB + threadIdx.x;
+    const int idx = blockIdx.x * TPB + threadIdx.x;
 
     if (idx < n)
     {
-        float in = input[idx];
-        float cdf = (0.5f) + (0.5f) * myTanh(in * (c * in * in + b));
+        const T in = input[idx];
+        const T cdf = a + a * tanh(in * (c * in * in + b));
         output[idx] = in * cdf;
     }
 }
 
-template <unsigned TPB>
-__global__ void gelu_kernel(int n, const half* input, half* output)
+int computeGelu(cudaStream_t stream, int n, const float* input, float* output)
 {
-    const int n2 = n / 2;
-    const half2* in2 = (half2*) input;
-    half2* out2 = (half2*) output;
 
-    const half a = 0.5;
+    constexpr int blockSize = 256;
+    const int gridSize = (n + blockSize - 1) / blockSize;
+    geluKernel<float, blockSize><<<gridSize, blockSize, 0, stream>>>(A, B, C, n, input, output);
 
-    const half b = sqrt(2.0 / M_PI);
-    const half c = 0.044715 * sqrt(2.0 / M_PI);
-
-    const half2 a2 = __halves2half2(a, a);
-    const half2 b2 = __halves2half2(b, b);
-    const half2 c2 = __halves2half2(c, c);
-
-    int idx = blockIdx.x * TPB + threadIdx.x;
-
-    if (idx < n2)
-    {
-        half2 in = in2[idx];
-        half2 cpow3pb = __hmul2(__hfma2(__hmul2(in, in), c2, b2), in);
-        half2 th = myTanh(cpow3pb);
-        half2 cdf = __hfma2(th, a2, a2);
-        out2[idx] = __hmul2(in, cdf);
-    }
-
-    if ((n & 1) && blockIdx.x == 0 && threadIdx.x == 0)
-    {
-        int idx = n - 1;
-        half in = input[idx];
-        half cpow3pb = __hmul(__hfma(__hmul(in, in), c, b), in);
-        half th = myTanh(cpow3pb);
-        half cdf = __hfma(th, a, a);
-        output[idx] = __hmul(in, cdf);
-    }
+    CHECK(cudaPeekAtLastError());
+    return 0;
 }
 
-template <typename T>
-int compute_gelu(cudaStream_t stream, int n, const T* input, T* output)
+int computeGelu(cudaStream_t stream, int n, const half* input, half* output)
 {
     const int blockSize = 256;
-    const int gridSize = (n / blockSize) + ((blockSize * (n / blockSize)) < n);
-    gelu_kernel<blockSize><<<gridSize, blockSize, 0, stream>>>(n, input, output);
+
+    if (0 == (n & 1))
+    {
+        const int n2 = n / 2;
+
+        const int gridSize = (n2 + blockSize - 1) / blockSize;
+        const half2 A2 = __floats2half2_rn(A, A);
+        const half2 B2 = __floats2half2_rn(B, B);
+        const half2 C2 = __floats2half2_rn(C, C);
+        const half2* input2 = reinterpret_cast<const half2*>(input);
+        half2* output2 = reinterpret_cast<half2*>(output);
+        geluKernel<half2, blockSize><<<gridSize, blockSize, 0, stream>>>(A2, B2, C2, n2, input2, output2);
+    }
+    else
+    {
+        const int gridSize = (n + blockSize - 1) / blockSize;
+        geluKernel<half, blockSize><<<gridSize, blockSize, 0, stream>>>(A, B, C, n, input, output);
+    }
 
     CHECK(cudaPeekAtLastError());
     return 0;
@@ -116,12 +110,13 @@ GeluPlugin::GeluPlugin(const std::string name, const void* data, size_t length)
     : mLayerName(name)
 {
 
-    gLogInfo << "Gelu Deser start" << std::endl;
-    const char *d = static_cast<const char*>(data), *a = d;
+    gLogVerbose << "Gelu Deser start" << std::endl;
+    const char* d = static_cast<const char*>(data);
+    const char* a = d;
     mInputVolume = readFromBuffer<decltype(mInputVolume)>(d);
     mType = readFromBuffer<DataType>(d);
     assert(d == a + length);
-    gLogInfo << "Gelu Deser done" << std::endl;
+    gLogVerbose << "Gelu Deser done" << std::endl;
 }
 
 const char* GeluPlugin::getPluginType() const
@@ -165,13 +160,13 @@ int GeluPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs
     {
         const float* input = static_cast<const float*>(inputs[0]);
         float* output = static_cast<float*>(outputs[0]);
-        status = compute_gelu<float>(stream, mInputVolume, input, output);
+        status = computeGelu(stream, mInputVolume * batchSize, input, output);
     }
     else if (mType == DataType::kHALF)
     {
         const half* input = static_cast<const half*>(inputs[0]);
         half* output = static_cast<half*>(outputs[0]);
-        status = compute_gelu<half>(stream, mInputVolume, input, output);
+        status = computeGelu(stream, mInputVolume * batchSize, input, output);
     }
     else
     {
@@ -268,9 +263,9 @@ const PluginFieldCollection* GeluPluginCreator::getFieldNames()
 
 IPluginV2* GeluPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
-    gLogError << "GeluPluginCreator::createPlugin not implemented\n" << std::endl;
-    assert(false);
-    return nullptr;
+    gLogVerbose << "Creating GeluPlugin...\n";
+    GeluPlugin* p = new GeluPlugin(name);
+    return p;
 }
 
 IPluginV2* GeluPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
@@ -288,4 +283,5 @@ void GeluPluginCreator::setPluginNamespace(const char* libNamespace)
 const char* GeluPluginCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
+}
 }

@@ -13,11 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-add_custom_target(samples)
-
-add_subdirectory(opensource)
-
-if(NVINTERNAL)
-    add_subdirectory(proprietary)
-endif()
+file(GLOB SRCS *.cpp *.cu)
+set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
+set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)

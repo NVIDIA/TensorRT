@@ -28,125 +28,8 @@
 
 namespace nvinfer1
 {
-//!
-//! \enum PluginType
-//!
-//! \brief The type values for the various plugins.
-//!
-//! \see INvPlugin::getPluginType()
-//!
-enum class PluginType : int
-{
-    kFASTERRCNN = 0,         //!< FasterRCNN fused plugin (RPN + ROI pooling).
-    kNORMALIZE = 1,          //!< Normalize plugin.
-    kPERMUTE = 2,            //!< Permute plugin.
-    kPRIORBOX = 3,           //!< PriorBox plugin.
-    kSSDDETECTIONOUTPUT = 4, //!< SSD DetectionOutput plugin.
-    kCONCAT = 5,             //!< Concat plugin.
-    kPRELU = 6,              //!< YOLO PReLU Plugin.
-    kYOLOREORG = 7,          //!< YOLO Reorg Plugin.
-    kYOLOREGION = 8,         //!< YOLO Region Plugin.
-    kANCHORGENERATOR = 9,    //!< SSD Grid Anchor Generator.
-};
-
-//!< Maximum number of elements in PluginType enum. \see PluginType
-template <>
-inline int EnumMax<PluginType>()
-{
-    return 10;
-}
-
 namespace plugin
 {
-//!
-//! \class INvPlugin
-//!
-//! \brief Common interface for the Nvidia created plugins.
-//!
-//! This class provides a common subset of functionality that is used
-//! to provide distinguish the Nvidia created plugins. Each plugin provides a
-//! function to validate the parameter options and create the plugin
-//! object.
-//!
-class INvPlugin : public IPlugin
-{
-public:
-    //!
-    //! \brief Get the parameter plugin ID.
-    //!
-    //! \return The ID of the plugin.
-    //!
-    virtual PluginType getPluginType() const = 0;
-
-    //!
-    //! \brief Get the name of the plugin from the ID
-    //!
-    //! \return The name of the plugin specified by \p id. Return nullptr if invalid ID is specified.
-    //!
-    //! The valid \p id values are ranged [0, numPlugins()).
-    //!
-    virtual const char* getName() const = 0;
-
-    //!
-    //! \brief Destroy the plugin.
-    //!
-    //! The valid \p id values are ranged [0, numPlugins()).
-    //!
-    virtual void destroy() = 0;
-
-protected:
-    ~INvPlugin() {}
-}; // INvPlugin
-
-//!
-//! \param featureStride Feature stride.
-//! \param preNmsTop Number of proposals to keep before applying NMS.
-//! \param nmsMaxOut Number of remaining proposals after applying NMS.
-//! \param iouThreshold IoU threshold.
-//! \param minBoxSize Minimum allowed bounding box size before scaling.
-//! \param spatialScale Spatial scale between the input image and the last feature map.
-//! \param pooling Spatial dimensions of pooled ROIs.
-//! \param anchorRatios Aspect ratios for generating anchor windows.
-//! \param anchorScales Scales for generating anchor windows.
-//! \brief Create a plugin layer that fuses the RPN and ROI pooling using user-defined parameters.
-//!
-//! \return Returns a FasterRCNN fused RPN+ROI pooling plugin. Returns nullptr on invalid inputs.
-//!
-//! \see INvPlugin
-//! \deprecated. This plugin is superseded by createRPNROIPlugin()
-//!
-TENSORRTAPI INvPlugin* createFasterRCNNPlugin(int featureStride, int preNmsTop,
-                                              int nmsMaxOut, float iouThreshold, float minBoxSize,
-                                              float spatialScale, DimsHW pooling,
-                                              Weights anchorRatios, Weights anchorScales);
-TENSORRTAPI INvPlugin* createFasterRCNNPlugin(const void* data, size_t length);
-
-//!
-//! \brief The Normalize plugin layer normalizes the input to have L2 norm of 1 with scale learnable.
-//! \param scales Scale weights that are applied to the output tensor.
-//! \param acrossSpatial Whether to compute the norm over adjacent channels (acrossSpatial is true) or nearby spatial locations (within channel in which case acrossSpatial is false).
-//! \param channelShared Whether the scale weight(s) is shared across channels.
-//! \param eps Epsilon for not diviiding by zero.
-//! \deprecated. This plugin is superseded by createNormalizePlugin()
-//!
-TENSORRTAPI INvPlugin* createSSDNormalizePlugin(const Weights* scales, bool acrossSpatial, bool channelShared, float eps);
-TENSORRTAPI INvPlugin* createSSDNormalizePlugin(const void* data, size_t length);
-
-//!
-//! \brief The Permute plugin layer permutes the input tensor by changing the memory order of the data.
-//! Quadruple defines a structure that contains an array of 4 integers. They can represent the permute orders or the strides in each dimension.
-//!
-typedef struct
-{
-    int data[4];
-} Quadruple;
-
-//!
-//! \param permuteOrder The new orders that are used to permute the data.
-//! \deprecated. Please use the TensorRT Shuffle layer for Permute operation
-//!
-TENSORRTAPI INvPlugin* createSSDPermutePlugin(Quadruple permuteOrder);
-TENSORRTAPI INvPlugin* createSSDPermutePlugin(const void* data, size_t length);
 
 //!
 //! \brief The PriorBox plugin layer generates the prior boxes of designated sizes and aspect ratios across all dimensions (H x W).
@@ -200,22 +83,6 @@ struct GridAnchorParameters
 };
 
 //!
-//! \param param Set of parameters for creating the PriorBox plugin layer.
-//! \deprecated. This plugin is superseded by createPriorBoxPlugin()
-//!
-TENSORRTAPI INvPlugin* createSSDPriorBoxPlugin(PriorBoxParameters param);
-TENSORRTAPI INvPlugin* createSSDPriorBoxPlugin(const void* data, size_t length);
-
-//!
-//! \brief The Grid Anchor Generator plugin layer generates the prior boxes of
-//! designated sizes and aspect ratios across all dimensions (H x W) for all feature maps.
-//! GridAnchorParameters defines a set of parameters for creating the GridAnchorGenerator plugin layer.
-//! \deprecated. This plugin is superseded by createAnchorGeneratorPlugin()
-//!
-TENSORRTAPI INvPlugin* createSSDAnchorGeneratorPlugin(GridAnchorParameters* param, int numLayers);
-TENSORRTAPI INvPlugin* createSSDAnchorGeneratorPlugin(const void* data, size_t length);
-
-//!
 //! \enum CodeTypeSSD
 //! \brief The type of encoding used for decoding the bounding boxes and loc_data.
 //!
@@ -257,41 +124,6 @@ struct DetectionOutputParameters
 };
 
 //!
-//! \param param Set of parameters for creating the DetectionOutput plugin layer.
-//! \deprecated. This plugin is superseded by createNMSPlugin()
-//!
-TENSORRTAPI INvPlugin* createSSDDetectionOutputPlugin(DetectionOutputParameters param);
-TENSORRTAPI INvPlugin* createSSDDetectionOutputPlugin(const void* data, size_t length);
-
-//!
-//! \brief The Concat plugin layer basically performs the concatention for 4D tensors. Unlike the Concatenation layer in early version of TensorRT,
-//! it allows the user to specify the axis along which to concatenate. The axis can be 1 (across channel), 2 (across H), or 3 (across W).
-//! More particularly, this Concat plugin layer also implements the "ignoring the batch dimension" switch. If turned on, all the input tensors will be treated as if their batch sizes were 1.
-//! \param concatAxis Axis along which to concatenate. Can't be the "N" dimension.
-//! \param ignoreBatch If true, all the input tensors will be treated as if their batch sizes were 1.
-//! \deprecated. This plugin is superseded by native TensorRT concatenation layer
-//!
-TENSORRTAPI INvPlugin* createConcatPlugin(int concatAxis, bool ignoreBatch);
-TENSORRTAPI INvPlugin* createConcatPlugin(const void* data, size_t length);
-
-//!
-//! \brief The PReLu plugin layer performs leaky ReLU for 4D tensors. Give an input value x, the PReLU layer computes the output as x if x > 0
-//!  and negative_slope //! x if x <= 0.
-//! \param negSlope Negative_slope value.
-//! \deprecated. This plugin is superseded by createLReLUPlugin()
-//!
-TENSORRTAPI INvPlugin* createPReLUPlugin(float negSlope);
-TENSORRTAPI INvPlugin* createPReLUPlugin(const void* data, size_t length);
-
-//!
-//! \brief The Reorg plugin layer maps the 512x26x26 feature map onto a 2048x13x13 feature map, so that it can be concatenated with the feature maps at 13x13 resolution.
-//! \param stride Strides in H and W.
-//! \deprecated. This plugin is superseded by createReorgPlugin()
-//!
-TENSORRTAPI INvPlugin* createYOLOReorgPlugin(int stride);
-TENSORRTAPI INvPlugin* createYOLOReorgPlugin(const void* data, size_t length);
-
-//!
 //! \brief The Region plugin layer performs region proposal calculation: generate 5 bounding boxes per cell (for yolo9000, generate 3 bounding boxes per cell).
 //! For each box, calculating its probablities of objects detections from 80 pre-defined classifications (yolo9000 has 9416 pre-defined classifications,
 //! and these 9416 items are organized as work-tree structure).
@@ -323,9 +155,6 @@ struct RegionParameters
     int classes;
     softmaxTree* smTree;
 };
-
-TENSORRTAPI INvPlugin* createYOLORegionPlugin(RegionParameters params);
-TENSORRTAPI INvPlugin* createYOLORegionPlugin(const void* data, size_t length);
 
 //!
 //! \brief The NMSParameters are used by the BatchedNMSPlugin for performing
@@ -410,13 +239,6 @@ TENSORRTAPI nvinfer1::IPluginV2* createAnchorGeneratorPlugin(nvinfer1::plugin::G
 TENSORRTAPI nvinfer1::IPluginV2* createNMSPlugin(nvinfer1::plugin::DetectionOutputParameters param);
 
 //!
-//! \brief The LReLu plugin layer performs leaky ReLU for 4D tensors. Give an input value x, the PReLU layer computes the output as x if x > 0 and negative_slope //! x if x <= 0.
-//! Registered plugin type "LReLU_TRT". Registered plugin version "1".
-//! \param negSlope Negative_slope value.
-//!
-TENSORRTAPI nvinfer1::IPluginV2* createLReLUPlugin(float negSlope);
-
-//!
 //! \brief The Reorg plugin reshapes input of shape CxHxW into a (C*stride*stride)x(H/stride)x(W/stride) shape, used in YOLOv2.
 //! It does that by taking 1 x stride x stride slices from tensor and flattening them into (stridexstride) x 1 x 1 shape.
 //! Registered plugin type "Reorg_TRT". Registered plugin version "1".
@@ -432,18 +254,6 @@ TENSORRTAPI nvinfer1::IPluginV2* createReorgPlugin(int stride);
 //! Registered plugin type "Region_TRT". Registered plugin version "1".
 //!
 TENSORRTAPI nvinfer1::IPluginV2* createRegionPlugin(nvinfer1::plugin::RegionParameters params);
-
-//!
-//! \brief The Clip Plugin performs a clip operation on the input tensor. It
-//! clips the tensor values to a specified min and max. Any value less than clipMin are set to clipMin.
-//! Any values greater than clipMax are set to clipMax. For example, this plugin can be used
-//! to perform a Relu6 operation by specifying clipMin=0.0 and clipMax=6.0
-//! Registered plugin type "Clip_TRT". Registered plugin version "1".
-//! \param layerName The name of the TensorRT layer.
-//! \param clipMin The minimum value to clip to.
-//! \param clipMax The maximum value to clip to.
-//!
-TENSORRTAPI nvinfer1::IPluginV2* createClipPlugin(const char* layerName, float clipMin, float clipMax);
 
 //!
 //! \brief The BatchedNMS Plugin performs non_max_suppression on the input boxes, per batch, across all classes.

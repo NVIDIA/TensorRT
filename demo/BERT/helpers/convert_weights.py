@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,37 +40,34 @@ print( "Buffer type is hard-coded to 0 (float), i.e. 4 bytes per coefficient")
 inputbase = opt.model
 outputbase = opt.output
 
-try:
-    reader = pyTF.NewCheckpointReader(inputbase)
-    tensorDict = reader.get_variable_to_shape_map()
-    outputFileName = outputbase + ".weights"
-    with open(outputFileName, 'wb') as outputFile:
+reader = pyTF.NewCheckpointReader(inputbase)
+tensor_dict = reader.get_variable_to_shape_map()
+out_fn = outputbase + ".weights"
+with open(out_fn, 'wb') as output_file:
 
-        # there might be training-related variables in the checkpoint that can be discarded
-        paramNames = [key for key in sorted(tensorDict) if 'adam' not in key and 'global_step' not in key and 'pooler' not in key]
+    # there might be training-related variables in the checkpoint that can be discarded
+    param_names = [key for key in sorted(tensor_dict) if 'adam' not in key and 'global_step' not in key and 'pooler' not in key]
 
-        count = len(paramNames) 
-        print(count)
+    count = len(param_names) 
+    print(count)
 
-        outputFile.write('{}\n'.format(count).encode('ASCII'))
-        for pn in paramNames:
-            toks = pn.lower().split('/')
-            if 'encoder' in pn:
-                assert('layer' in pn)
-                l = (re.findall('\d+',pn))[0]
-                outname = 'l{}_'.format(l) + '_'.join(toks[3:])
-            else:
-                outname = '_'.join(toks)
+    output_file.write('{}\n'.format(count).encode('ASCII'))
+    for pn in param_names:
+        toks = pn.lower().split('/')
+        if 'encoder' in pn:
+            assert('layer' in pn)
+            l = (re.findall('\d+',pn))[0]
+            outname = 'l{}_'.format(l) + '_'.join(toks[3:])
+        else:
+            outname = '_'.join(toks)
 
-            tensor = reader.get_tensor(pn)
-            shape = tensor.shape
-            flat_tensor = tensor.flatten()
-            shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
+        tensor = reader.get_tensor(pn)
+        shape = tensor.shape
+        flat_tensor = tensor.flatten()
+        shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
 
-            outputFile.write('{} 0 {} '.format(outname, shape_str).encode('ASCII'))
-            outputFile.write(flat_tensor.tobytes())
-            outputFile.write('\n'.encode('ASCII'));
-            print('Orig.name:', pn,'TRT name:', outname, 'shape:' , shape_str)
+        output_file.write('{} 0 {} '.format(outname, shape_str).encode('ASCII'))
+        output_file.write(flat_tensor.tobytes())
+        output_file.write('\n'.encode('ASCII'));
+        print('Orig.name:', pn,'TRT name:', outname, 'shape:' , shape_str)
 
-except Exception as error:
-    print(str(error))
