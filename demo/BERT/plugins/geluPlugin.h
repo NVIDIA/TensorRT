@@ -14,11 +14,15 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef TRT_GELU_PLUGIN_H
+#define TRT_GELU_PLUGIN_H
 
 #include "NvInferPlugin.h"
 #include <string>
 #include <vector>
+
+namespace bert
+{
 
 using namespace nvinfer1;
 
@@ -26,17 +30,16 @@ using namespace nvinfer1;
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.
 // For requirements for overriden functions, check TensorRT API docs.
 
-class EmbLayerNormPlugin : public IPluginV2Ext
+class GeluPlugin : public IPluginV2
 {
 public:
-    EmbLayerNormPlugin(const std::string name, const bool use_fp16, const Weights& beta, const Weights& gamma,
-        const Weights& word_emb, const Weights& pos_emb, const Weights& tok_emb);
+    GeluPlugin(const std::string name);
 
-    EmbLayerNormPlugin(const std::string name, const void* data, size_t length);
+    GeluPlugin(const std::string name, const void* data, size_t length);
 
-    // It doesn't make sense to make EmbLayerNormPlugin without arguments, so we
-    // delete default constructor.
-    EmbLayerNormPlugin() = delete;
+    // It doesn't make sense to make GeluPlugin without arguments, so we delete
+    // default constructor.
+    GeluPlugin() = delete;
 
     int getNbOutputs() const override;
 
@@ -58,6 +61,9 @@ public:
 
     void serialize(void* buffer) const override;
 
+    void configureWithFormat(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type,
+        PluginFormat format, int maxBatchSize) override;
+
     bool supportsFormat(DataType type, PluginFormat format) const override;
 
     const char* getPluginType() const override;
@@ -66,47 +72,24 @@ public:
 
     void destroy() override;
 
-    nvinfer1::IPluginV2Ext* clone() const override;
+    nvinfer1::IPluginV2* clone() const override;
 
     void setPluginNamespace(const char* pluginNamespace) override;
 
     const char* getPluginNamespace() const override;
 
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
-
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-    {
-        return false;
-    }
-
-    bool canBroadcastInputAcrossBatch(int inputIndex) const
-    {
-        return false;
-    }
-
-    void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) override;
-
 private:
     const std::string mLayerName;
+    size_t mInputVolume;
     std::string mNamespace;
 
-    float *gamma_dev, *beta_dev, *wemb_dev, *temb_dev, *pemb_dev;
-    size_t m_ld; // leading dim = hidden size
-    size_t mB;   // batch size
-    size_t mS;   // sequence length
-    size_t mWordVocabSize;
-    size_t mPosVocabSize;
-    size_t mTokVocabSize;
-    Weights m_beta, m_gamma, mWordEmb, mTokEmb, mPosEmb;
     DataType mType;
 };
 
-class EmbLayerNormPluginCreator : public IPluginCreator
+class GeluPluginCreator : public IPluginCreator
 {
 public:
-    EmbLayerNormPluginCreator();
+    GeluPluginCreator();
 
     const char* getPluginName() const override;
 
@@ -127,3 +110,5 @@ private:
     static std::vector<PluginField> mPluginAttributes;
     std::string mNamespace;
 };
+}
+#endif // TRT_GELU_PLUGIN_H

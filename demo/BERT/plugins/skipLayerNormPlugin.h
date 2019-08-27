@@ -14,39 +14,32 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef TRT_SKIP_LAYER_NORM_PLUGIN_H
+#define TRT_SKIP_LAYER_NORM_PLUGIN_H
 
 #include "NvInferPlugin.h"
-#include "cublas_v2.h"
 #include <string>
 #include <vector>
+
+namespace bert
+{
+
 using namespace nvinfer1;
 
 // One of the preferred ways of making TensorRT to be able to see
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.
 // For requirements for overriden functions, check TensorRT API docs.
 
-class QKV2ContextPlugin : public IPluginV2Ext
+class SkipLayerNormPlugin : public IPluginV2
 {
 public:
-    QKV2ContextPlugin(const std::string name, const int hidden_size, const int num_heads, const int B, const int S,
-        bool has_imask = false);
+    SkipLayerNormPlugin(const std::string name, const int ld, const Weights& beta, const Weights& gamma);
 
-    QKV2ContextPlugin(const std::string name, const void* data, size_t length);
+    SkipLayerNormPlugin(const std::string name, const void* data, size_t length);
 
-    // It doesn't make sense to make QKV2ContextPlugin without arguments, so we
+    // It doesn't make sense to make SkipLayerNormPlugin without arguments, so we
     // delete default constructor.
-    QKV2ContextPlugin() = delete;
-
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-    {
-        return false;
-    }
-
-    bool canBroadcastInputAcrossBatch(int inputIndex) const
-    {
-        return false;
-    }
+    SkipLayerNormPlugin() = delete;
 
     int getNbOutputs() const override;
 
@@ -56,7 +49,10 @@ public:
 
     void terminate() override;
 
-    size_t getWorkspaceSize(int) const override;
+    size_t getWorkspaceSize(int) const override
+    {
+        return 0;
+    };
 
     int enqueue(
         int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
@@ -65,11 +61,8 @@ public:
 
     void serialize(void* buffer) const override;
 
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
-
-    void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) override;
+    void configureWithFormat(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type,
+        PluginFormat format, int maxBatchSize) override;
 
     bool supportsFormat(DataType type, PluginFormat format) const override;
 
@@ -79,34 +72,27 @@ public:
 
     void destroy() override;
 
-    nvinfer1::IPluginV2Ext* clone() const override;
+    nvinfer1::IPluginV2* clone() const override;
 
     void setPluginNamespace(const char* pluginNamespace) override;
 
     const char* getPluginNamespace() const override;
 
-    void attachToContext(cudnnContext* cudnn, cublasContext* cublas, IGpuAllocator* alloc) override;
-
 private:
-    size_t scratchSize(int bs) const;
-    float mRsqrtHeadSize;
-    int mHeadSize;
-    int mB;
-    int mS;
-    int mHiddenSize;
-    int mNumHeads;
-    bool mHasImask;
     const std::string mLayerName;
+    size_t mInputVolume;
     std::string mNamespace;
 
+    float *mGammaDev, *mBetaDev;
+    size_t mLd; // leading dim
+    Weights mBeta, mGamma;
     DataType mType;
-    cublasHandle_t cublas;
 };
 
-class QKV2ContextPluginCreator : public IPluginCreator
+class SkipLayerNormPluginCreator : public IPluginCreator
 {
 public:
-    QKV2ContextPluginCreator();
+    SkipLayerNormPluginCreator();
 
     const char* getPluginName() const override;
 
@@ -127,3 +113,5 @@ private:
     static std::vector<PluginField> mPluginAttributes;
     std::string mNamespace;
 };
+}
+#endif // TRT_SKIP_LAYER_NORM_PLUGIN_H

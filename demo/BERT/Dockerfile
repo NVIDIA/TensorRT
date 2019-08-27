@@ -23,14 +23,14 @@ RUN  echo $mygid
 RUN groupadd -r -g ${mygid} nb && useradd -r -u ${myuid} -g ${mygid} -ms /bin/bash nb
 
 RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:ubuntu-toolchain-r/test
-RUN apt-get update && apt-get install -y pbzip2 pv bzip2  sudo gcc-7 g++-7  zlib1g-dev
+RUN apt-get update && apt-get install -y pbzip2 pv bzip2  sudo gcc-7 g++-7  zlib1g-dev g++-4.9
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 60 \
                                  --slave /usr/bin/g++ g++ /usr/bin/g++-7  && \
                                  update-alternatives --config gcc
 
 RUN wget https://cmake.org/files/v3.14/cmake-3.14.0-Linux-x86_64.sh && \
     sh cmake-3.14.0-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir
-RUN pip install tensorflow==1.13.1 horovod
+RUN pip install tensorflow==1.13.1 && pip install horovod
 
 RUN echo 'nb:abc123' | chpasswd
 

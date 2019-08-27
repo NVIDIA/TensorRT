@@ -14,27 +14,33 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef TRT_BERT_ENCODER_H
+#define TRT_BERT_ENCODER_H
 
-#include "transformer_layer_opt.hpp"
+#include "transformer.h"
 
 namespace bert
 {
 
-ITensor* bert_model(const BertConfig& config, WeightDict& init_dict, INetworkDefinition* network, ITensor* input_tensor,
-    ITensor* input_mask = nullptr, TensorDict* dbg = nullptr)
+ILayer* bertModel(const BertConfig& config, WeightMap& weightMap, INetworkDefinition* network, ITensor* inputTensor,
+    ITensor* input_mask = nullptr)
 {
 
-    ITensor* prev_input = input_tensor;
+    ITensor* prevInput = inputTensor;
+    ILayer* prevLayer = nullptr;
 
-    for (int layer = 0; layer < config.num_hidden_layers; layer++)
+    for (int layer = 0; layer < config.numHiddenLayers; layer++)
     {
         std::stringstream ss;
         ss << "l" << layer << "_";
 
-        prev_input = transformer_layer_opt(ss.str(), config, init_dict, network, prev_input, input_mask, dbg);
+        prevLayer = transformer(ss.str(), config, weightMap, network, prevInput, input_mask);
+        prevInput = prevLayer->getOutput(0);
     }
+    assert(prevLayer);
 
-    return prev_input;
+    return prevLayer;
 }
 }
+
+#endif // TRT_BERT_ENCODER_H
