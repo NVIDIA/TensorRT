@@ -76,7 +76,7 @@ Dims BatchedNMSPlugin::getOutputDimensions(int index, const Dims* inputs, int nb
     // num_detections
     if (index == 0)
     {
-        Dims dim0;
+        Dims dim0{};
         dim0.nbDims = 0;
         return dim0;
     }
@@ -86,7 +86,7 @@ Dims BatchedNMSPlugin::getOutputDimensions(int index, const Dims* inputs, int nb
         return DimsHW(param.keepTopK, 4);
     }
     // nmsed_scores or nmsed_classes
-    Dims dim1;
+    Dims dim1{};
     dim1.nbDims = 1;
     dim1.d[0] = param.keepTopK;
     return dim1;

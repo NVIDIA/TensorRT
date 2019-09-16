@@ -20,12 +20,13 @@
 #include "cuda_profiler_api.h"
 #include <getopt.h>
 #include <algorithm>
+#include <cassert>
+#include <iostream>
 
 namespace bert
 {
 
 using WeightMap = std::map<std::string, Weights>;
-using TensorMap = std::map<std::string, ITensor*>;
 
 struct BertConfig
 {
@@ -50,14 +51,12 @@ struct BertConfig
     }
 };
 
-Weights noop{DataType::kFLOAT, nullptr, 0};
-
-void setTensorName(ITensor* tensor, const std::string& prefix, const std::string& name)
+inline void setTensorName(ITensor* tensor, const std::string& prefix, const std::string& name)
 {
     tensor->setName((prefix + name).c_str());
 }
 
-void setOutputName(ILayer* layer, const std::string& prefix, const std::string& name, int out_idx = 0)
+inline void setOutputName(ILayer* layer, const std::string& prefix, const std::string& name, int out_idx = 0)
 {
     setTensorName(layer->getOutput(out_idx), prefix, name);
 }
@@ -134,7 +133,7 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
     return true;
 }
 
-bool operator==(const nvinfer1::Dims& d1, const nvinfer1::Dims& d2)
+inline bool operator==(const nvinfer1::Dims& d1, const nvinfer1::Dims& d2)
 {
     if (d1.d == d2.d)
     {

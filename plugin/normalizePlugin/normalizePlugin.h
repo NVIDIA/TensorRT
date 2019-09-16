@@ -92,11 +92,14 @@ private:
 
     cublasHandle_t mCublas{};
 
-    int C, H, W, mNbWeights;
-    bool acrossSpatial;
-    bool channelShared;
-    float eps;
-    Weights mWeights;
+    int C{};
+    int H{};
+    int W{};
+    int mNbWeights{};
+    bool acrossSpatial{};
+    bool channelShared{};
+    float eps{};
+    Weights mWeights{};
     const char* mPluginNamespace;
 };
 
@@ -119,9 +122,10 @@ public:
 
 private:
     static PluginFieldCollection mFC;
-    bool mAcrossSpatial, mChannelShared;
-    float mEps;
-    int mNbWeights;
+    bool mAcrossSpatial{};
+    bool mChannelShared{};
+    float mEps{};
+    int mNbWeights{};
     static std::vector<PluginField> mPluginAttributes;
 };
 } // namespace plugin

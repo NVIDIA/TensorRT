@@ -124,6 +124,11 @@ bool SampleUffMNIST::build()
     {
         return false;
     }
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
     auto parser = SampleUniquePtr<nvuffparser::IUffParser>(nvuffparser::createUffParser());
     if (!parser)
     {
@@ -131,14 +136,21 @@ bool SampleUffMNIST::build()
     }
     constructNetwork(parser, network);
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(16_MB);
-    builder->allowGPUFallback(true);
-    builder->setFp16Mode(mParams.fp16);
-    builder->setInt8Mode(mParams.int8);
+    config->setMaxWorkspaceSize(16_MiB);
+    config->setFlag(BuilderFlag::kGPU_FALLBACK);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
+    if (mParams.int8)
+    {
+        config->setFlag(BuilderFlag::kINT8);
+    }
 
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
 
     if (!mEngine)
     {

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef TRT_QKV_TO_CONTEXT_PLUGIN_h
-#define TRT_QKV_TO_CONTEXT_PLUGIN_h
+#ifndef TRT_QKV_TO_CONTEXT_PLUGIN_H
+#define TRT_QKV_TO_CONTEXT_PLUGIN_H
 
 #include "NvInferPlugin.h"
 #include "cublas_v2.h"
@@ -25,75 +25,55 @@
 namespace bert
 {
 
-using namespace nvinfer1;
+namespace test
+{
 
 // One of the preferred ways of making TensorRT to be able to see
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.
 // For requirements for overriden functions, check TensorRT API docs.
 
-class QKVToContextPlugin : public IPluginV2Ext
+class QKVToContextPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    QKVToContextPlugin(
-        const std::string name, const int hidden_size, const int num_heads, const int S, bool has_imask = false);
+    QKVToContextPluginDynamic(
+        const std::string name, const int hidden_size, const int num_heads,  bool has_imask = false);
 
-    QKVToContextPlugin(const std::string name, const void* data, size_t length);
+    QKVToContextPluginDynamic(const std::string name, const void* data, size_t length);
 
-    // It doesn't make sense to make QKVToContextPlugin without arguments, so we
+    // It doesn't make sense to make QKVToContextPluginDynamic without arguments, so we
     // delete default constructor.
-    QKVToContextPlugin() = delete;
+    QKVToContextPluginDynamic() = delete;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-    {
-        return false;
-    }
+    // IPluginV2DynamicExt Methods
+    nvinfer1::IPluginV2DynamicExt* clone() const override;
+    nvinfer1::DimsExprs getOutputDimensions(
+        int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) override;
+    bool supportsFormatCombination(
+        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) override;
+    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
+        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) override;
+    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
+        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const override;
+    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const
-    {
-        return false;
-    }
+    // IPluginV2Ext Methods
+    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
 
-    int getNbOutputs() const override;
-
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) override;
-
-    int initialize() override;
-
-    void terminate() override;
-
-    size_t getWorkspaceSize(int) const override;
-
-    int enqueue(
-        int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
-
-    size_t getSerializationSize() const override;
-
-    void serialize(void* buffer) const override;
-
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
-
-    void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) override;
-
-    bool supportsFormat(DataType type, PluginFormat format) const override;
-
+    // IPluginV2 Methods
     const char* getPluginType() const override;
-
     const char* getPluginVersion() const override;
-
+    int getNbOutputs() const override;
+    int initialize() override;
+    void terminate() override;
+    size_t getSerializationSize() const override;
+    void serialize(void* buffer) const override;
     void destroy() override;
-
-    nvinfer1::IPluginV2Ext* clone() const override;
-
     void setPluginNamespace(const char* pluginNamespace) override;
-
     const char* getPluginNamespace() const override;
 
-    void attachToContext(cudnnContext* cudnn, cublasContext* cublas, IGpuAllocator* alloc) override;
-
 private:
-    size_t scratchSize(int bs) const;
+    size_t scratchSize(const int B, const int S) const;
     float mRsqrtHeadSize;
     int mHeadSize;
     int mB;
@@ -104,33 +84,34 @@ private:
     const std::string mLayerName;
     std::string mNamespace;
 
-    DataType mType;
+    nvinfer1::DataType mType;
     cublasHandle_t cublas;
 };
 
-class QKVToContextPluginCreator : public IPluginCreator
+class QKVToContextPluginDynamicCreator : public nvinfer1::IPluginCreator
 {
 public:
-    QKVToContextPluginCreator();
+    QKVToContextPluginDynamicCreator();
 
     const char* getPluginName() const override;
 
     const char* getPluginVersion() const override;
 
-    const PluginFieldCollection* getFieldNames() override;
+    const nvinfer1::PluginFieldCollection* getFieldNames() override;
 
-    IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) override;
+    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) override;
 
-    IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
+    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
 
     void setPluginNamespace(const char* pluginNamespace) override;
 
     const char* getPluginNamespace() const override;
 
 private:
-    static PluginFieldCollection mFC;
-    static std::vector<PluginField> mPluginAttributes;
+    static nvinfer1::PluginFieldCollection mFC;
+    static std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
 };
 }
-#endif // TRT_QKV_TO_CONTEXT_PLUGIN_h
+}
+#endif // TRT_QKV_TO_CONTEXT_PLUGIN_H

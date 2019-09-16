@@ -57,31 +57,54 @@ ILayer* parseReduction(INetworkDefinition& network, const trtcaffe::LayerParamet
     axis = (axis < 0) ? 4 + axis : axis;                // axis negative number correction
     float coeff = hasCoeff ? p.coeff() : 1.0;           // default is 1
 
-    // acceptable axis values: 1, 2, 3, -1, -2, -3
-    // unacceptable axis values: 0 and anything else
-    // acceptable corrected axis values: 1, 2, 3
-    // unacceptable corrected axis values: 0 and anything else
+    // With implicit batch dimensions:
+    //   acceptable axis values: 1, 2, 3, -1, -2, -3
+    //   unacceptable axis values: 0 and anything else
+    //   acceptable corrected axis values: 1, 2, 3
+    //   unacceptable corrected axis values: 0 and anything else
+    //
+    // With implicit batch dimensions:
+    //   acceptable axis values: 1, 2, 3, 0, -1, -2, -3
+    //   unacceptable axis values: anything else
+    //   acceptable corrected axis values: 0, 1, 2, 3
+    //   unacceptable corrected axis values: 0
+    //
     // protect against "garbage" input arguments
-    bool axisAbort = (axis != 1 && axis != 2 && axis != 3);
-
-    if (axisAbort)
+    if (axis < 0 || axis > 3)
     {
-        std::cout << "Caffe Parser: Invalid axis in reduction layer - cannot reduce over batch size dimension and can only reduce NCHW input" << std::endl;
+        std::cout << "Caffe Parser: Invalid axis in reduction layer - can only reduce NCHW input." << std::endl;
+        return nullptr;
+    }
+    if (network.hasImplicitBatchDimension() && axis == 0)
+    {
+        std::cout << "Caffe Parser: Invalid axis in reduction layer - cannot reduce over batch size dimension."
+                  << std::endl;
         return nullptr;
     }
 
     ReduceOperation op = (operation == MEAN ? ReduceOperation::kAVG : ReduceOperation::kSUM);
-    // corrected axis values are 1, 2, 3
+    // For implicit batch, corrected axis values are 1, 2, 3
     // only reduction along tail dimensions is supported
     // 1 means 111 or 4 + 2 + 1 = 7
     // 2 means 110 or 4 + 2 = 6
     // 3 means 100 or 4
     // Let's employ a bit shift trick instead
-    // 1000 = 8
-    // axis == 1: 1u << (axis - 1) is 1 and so 8 - 1 = 7 or 111
-    // axis == 2: 1u << (axis - 1) is 2 and so 8 - 2 = 6 or 110
-    // axis == 3: 1u << (axis - 1) is 4 and so 8 - 4 = 4 or 100
-    uint32_t reduceAxes = 8 - (1u << (axis - 1));
+    // 10000 = 16
+    // axis == 1: 1u << axis is 2 and so (16 - 2) >> 1 = 7 or 111
+    // axis == 2: 1u << axis is 4 and so (16 - 4) >> 1 = 6 or 110
+    // axis == 3: 1u << axis is 8 and so (16 - 8) >> 1 = 4 or 100
+    //
+    // For explicit batch, corrected axis values are 0, 1, 2, 3
+    // 1 means 1111 or 8 + 4 + 2 + 1 = 15
+    // 2 means 1110 or 8 + 4 + 2 = 14
+    // 3 means 1100 or 8 + 4 = 12
+    // 4 means 1000 or 8
+    // 10000 = 16
+    // axis == 0: 1u << axis is 1 and so 16 - 1 = 15 or 1111
+    // axis == 1: 1u << axis is 2 and so 16 - 2 = 14 or 1110
+    // axis == 2: 1u << axis is 4 and so 16 - 4 = 12 or 1100
+    // axis == 3: 1u << axis is 8 and so 16 - 8 = 8 or 1000
+    uint32_t reduceAxes = (16 - (1u << axis)) >> static_cast<int>(network.hasImplicitBatchDimension());
 
     ITensor* input = tensors[msg.bottom(0)];
     ILayer* returnVal = nullptr;

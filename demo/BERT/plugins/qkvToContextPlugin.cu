@@ -25,13 +25,15 @@
 #include <cstring>
 #include <half.h>
 #include <vector>
+#include <iostream>
+
+using namespace nvinfer1;
 
 namespace bert
 {
 
-using namespace nvinfer1;
-
-constexpr size_t kAlignment = 256;
+namespace test
+{
 
 template <typename T>
 __global__ void transposeCtx(const int H, const T* input, T* output)
@@ -59,7 +61,7 @@ __global__ void transposeCtx(const int H, const T* input, T* output)
     }
 }
 
-void launchTransCtx(cudaStream_t stream, const int S, const int B, const int headSize, const int numHeads,
+inline void launchTransCtx(cudaStream_t stream, const int S, const int B, const int headSize, const int numHeads,
     const float* input, float* output)
 {
 
@@ -81,7 +83,7 @@ void launchTransCtx(cudaStream_t stream, const int S, const int B, const int hea
     }
 }
 
-void launchTransCtx(cudaStream_t stream, const int S, const int B, const int headSize, const int numHeads,
+inline void launchTransCtx(cudaStream_t stream, const int S, const int B, const int headSize, const int numHeads,
     const half* input, half* output)
 {
     const dim3 grid(S, B, 1);
@@ -136,7 +138,7 @@ __global__ void transposeQKV(const int H, const T* input, T* output)
     }
 }
 
-void launchTransQkv(cudaStream_t stream, const int S, const int B, const int headSize, const int numHeads,
+inline void launchTransQkv(cudaStream_t stream, const int S, const int B, const int headSize, const int numHeads,
     const float* input, float* output)
 {
 
@@ -157,7 +159,7 @@ void launchTransQkv(cudaStream_t stream, const int S, const int B, const int hea
     CHECK(cudaPeekAtLastError());
 }
 
-void launchTransQkv(cudaStream_t stream, const int S, const int B, const int headSize, const int numHeads,
+inline void launchTransQkv(cudaStream_t stream, const int S, const int B, const int headSize, const int numHeads,
     const half* input, half* output)
 {
     const dim3 grid(S, B, 3);
@@ -186,7 +188,7 @@ void launchTransQkv(cudaStream_t stream, const int S, const int B, const int hea
 }
 
 template <typename T>
-int qkvToCtx(cublasHandle_t& cublas, const int B, const int S, const int numHeads, const int headSize,
+inline int qkvToCtx(cublasHandle_t& cublas, const int B, const int S, const int numHeads, const int headSize,
     const float rsqrtHeadSize, const T* input, T* output, T* qkptr, T* pptr, T* tptr, cudaStream_t stream,
     const int* maskIdx = nullptr)
 {
@@ -234,22 +236,25 @@ int qkvToCtx(cublasHandle_t& cublas, const int B, const int S, const int numHead
 
 namespace
 {
-static const char* QKVToCONTEXT_PLUGIN_VERSION{"1"};
-static const char* QKVToCONTEXT_PLUGIN_NAME{"CustomQKVToContextPlugin"};
+static const char* QKV_TO_CONTEXT_PLUGIN_VERSION{"1"};
+static const char* QKV_TO_CONTEXT_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
-PluginFieldCollection QKVToContextPluginCreator::mFC{};
-std::vector<PluginField> QKVToContextPluginCreator::mPluginAttributes;
+PluginFieldCollection QKVToContextPluginDynamicCreator::mFC{};
+std::vector<PluginField> QKVToContextPluginDynamicCreator::mPluginAttributes;
 
-REGISTER_TENSORRT_PLUGIN(QKVToContextPluginCreator);
+REGISTER_TENSORRT_PLUGIN(QKVToContextPluginDynamicCreator);
 
-QKVToContextPlugin::QKVToContextPlugin(
-    const std::string name, const int hiddenSize, const int numHeads, const int S, bool hasImask)
+constexpr size_t kAlignment = 256;
+constexpr uint32_t IIDX = 0; // index of the input tensor
+constexpr uint32_t MIDX = 1; // index of the mask
+
+
+QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, const int hiddenSize, const int numHeads, bool hasImask)
     : mLayerName(name)
     , mHiddenSize(hiddenSize)
     , mNumHeads(numHeads)
-    , mS(S)
     , mHasImask(hasImask)
 {
     assert(hiddenSize % numHeads == 0);
@@ -257,7 +262,7 @@ QKVToContextPlugin::QKVToContextPlugin(
     mRsqrtHeadSize = 1.f / sqrt(float(mHeadSize));
 }
 
-QKVToContextPlugin::QKVToContextPlugin(const std::string name, const void* data, size_t length)
+QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, const void* data, size_t length)
     : mLayerName(name)
 {
 
@@ -268,59 +273,205 @@ QKVToContextPlugin::QKVToContextPlugin(const std::string name, const void* data,
     gLogVerbose << "QKV Deser Start" << std::endl;
 
     DESER(d, mType);
-    DESER(d, mS);
     DESER(d, mNumHeads);
     DESER(d, mHeadSize);
     DESER(d, mRsqrtHeadSize);
     DESER(d, mHasImask);
+    DESER(d, mHiddenSize);
 
     gLogVerbose << "QKV Deser done" << std::endl;
 
     assert(d == (a + length));
 }
 
-const char* QKVToContextPlugin::getPluginType() const
+// IPluginV2DynamicExt Methods
+nvinfer1::IPluginV2DynamicExt* QKVToContextPluginDynamic::clone() const
 {
-    return QKVToCONTEXT_PLUGIN_NAME;
+    gLogVerbose << "QKV Clone" << std::endl;
+    auto ret = new QKVToContextPluginDynamic(mLayerName, mHiddenSize, mNumHeads,  mHasImask);
+    ret->mType = mType;
+    ret->initialize();
+    gLogVerbose << "QKV Clone done" << std::endl;
+    return ret;
 }
 
-const char* QKVToContextPlugin::getPluginVersion() const
+DimsExprs QKVToContextPluginDynamic::getOutputDimensions(int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder)
 {
-    return QKVToCONTEXT_PLUGIN_VERSION;
+    // Input is BxSx3*N*H, output should be BxSxN*H
+    assert(outputIndex == 0);
+    // Copy over everything
+    DimsExprs output(inputs[IIDX]);
+    // Divide last dim by three
+    auto three = exprBuilder.constant(3);
+    output.d[HDIM] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[IIDX].d[HDIM], *three);
+    return output;
+}
+bool QKVToContextPluginDynamic::supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
+{
+    assert(pos >= 0);
+    assert(pos < 2 + mHasImask);
+    assert(nbInputs == 1 + mHasImask);
+    const auto* in = inOut;
+    const auto* out = inOut + nbInputs;
+    if (pos == 0)
+    {
+        // must not check descriptions > pos
+        return (in->type == DataType::kFLOAT || in->type == DataType::kHALF) && // precision
+            (in->format == TensorFormat::kLINEAR) &&                            // format
+            (in->dims.nbDims == 5) &&                                           // num dims
+            ((in->dims.d[HDIM] % 3) == 0) &&                                    // see getOutputDimensions
+            ((in->dims.d[3]) == 1) &&                                           // for fc
+            ((in->dims.d[4]) == 1)                                              // for fc
+            ;
+    }
+    else
+    { // pos==1
+        if ((mHasImask && pos == 1))
+        {
+            const auto* inMask = &inOut[1];
+            return (inMask->type == DataType::kINT32) &&     // precision
+                (inMask->format == TensorFormat::kLINEAR) && // format
+                (inMask->dims.nbDims == 1) &&                // num dims
+                ((inMask->dims.d[BDIM]) == in->dims.d[BDIM]) // check B
+                ;
+        }
+        if (!mHasImask || (pos == 2))
+        {
+            return (in->type == out->type) &&                      // precision
+                (out->format == TensorFormat::kLINEAR) &&          // format
+                (out->dims.nbDims == 5) &&                         // num dims
+                ((in->dims.d[HDIM] / 3) == (out->dims.d[HDIM])) && // div 3
+                ((out->dims.d[3]) == 1) &&                         // for fc
+                ((out->dims.d[4]) == 1) &&                         // for fc
+                ((out->dims.d[BDIM]) == in->dims.d[BDIM]) &&       // check B
+                ((out->dims.d[SDIM]) == in->dims.d[SDIM])          // check S
+                ;
+        }
+    }
+    return false;
+}
+void QKVToContextPluginDynamic::configurePlugin(const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs)
+{
+    assert(nbInputs == 1 + mHasImask);
+    assert(nbOutputs == 1);
+    const PluginTensorDesc& inDesc = in[IIDX].desc;
+    const PluginTensorDesc& outDesc = out->desc;
+    mType = inDesc.type;
+    assert(mType == outDesc.type);
+    assert(inDesc.dims.d[BDIM] == outDesc.dims.d[BDIM]);
+    assert(inDesc.dims.d[SDIM] == outDesc.dims.d[SDIM]);
+    assert(inDesc.dims.d[HDIM] == 3 * outDesc.dims.d[HDIM]);
+    if (mHasImask)
+    {
+        const PluginTensorDesc& maskDesc = in[MIDX].desc;
+        assert(maskDesc.type == DataType::kINT32);
+        assert(maskDesc.dims.d[0] == inDesc.dims.d[BDIM]);
+    }
 }
 
-int QKVToContextPlugin::getNbOutputs() const
+size_t QKVToContextPluginDynamic::scratchSize(const int B, const int S) const
+{
+    size_t wordSize = samplesCommon::getElementSize(mType);
+    const size_t len = B * mNumHeads * S * S;
+    const size_t bytes = len * wordSize;
+
+    return bytes;
+}
+
+size_t QKVToContextPluginDynamic::getWorkspaceSize(const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const
+{
+    const int B = inputs->dims.d[BDIM];
+    const int S = inputs->dims.d[SDIM];
+    const size_t bytes = scratchSize(B, S);
+    const size_t bytesAligned = alignTo<size_t>(bytes, kAlignment);
+    const size_t two = 2;
+    const size_t ws = two * bytesAligned;
+
+    const size_t wordSize = samplesCommon::getElementSize(mType);
+    const size_t tp = 3 * B * S * mNumHeads * mHeadSize * wordSize;
+
+    return ws + tp;
+}
+
+// IPluginV2Ext Methods
+DataType QKVToContextPluginDynamic::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+{
+    assert(index == 0);
+    assert(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
+    return inputTypes[0];
+}
+
+// IPluginV2 Methods
+const char* QKVToContextPluginDynamic::getPluginType() const
+{
+    return QKV_TO_CONTEXT_PLUGIN_NAME;
+}
+
+const char* QKVToContextPluginDynamic::getPluginVersion() const
+{
+    return QKV_TO_CONTEXT_PLUGIN_VERSION;
+}
+
+int QKVToContextPluginDynamic::getNbOutputs() const
 {
     return 1;
 }
 
-Dims QKVToContextPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+int QKVToContextPluginDynamic::initialize()
 {
-    // Validate input arguments
-    assert(nbInputDims == 1 + mHasImask);
-    assert(index == 0);
-
-    return Dims4{mS, mNumHeads * mHeadSize, 1, 1};
-}
-
-void QKVToContextPlugin::attachToContext(cudnnContext* cudnn, cublasContext* cublas_, IGpuAllocator* alloc)
-{
-    gLogVerbose << "QKV AttachToContext" << std::endl;
-}
-
-int QKVToContextPlugin::initialize()
-{
-    gLogVerbose << "QKV Initialize" << std::endl;
     cublasCreate(&cublas);
-
     return 0;
 }
 
-int QKVToContextPlugin::enqueue(
-    int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+void QKVToContextPluginDynamic::terminate()
+{
+    CHECK(cublasDestroy(cublas));
+}
+
+size_t QKVToContextPluginDynamic::getSerializationSize() const
+{
+    return sizeof(mNumHeads) +  sizeof(mHeadSize) + sizeof(DataType) + sizeof(mRsqrtHeadSize)
+        + sizeof(mHasImask) + sizeof(mHiddenSize);
+}
+
+void QKVToContextPluginDynamic::serialize(void* buffer) const
+{
+    char* d = static_cast<char*>(buffer);
+    const char* a = d;
+
+    writeToBuffer(d, mType);
+    writeToBuffer(d, mNumHeads);
+    writeToBuffer(d, mHeadSize);
+    writeToBuffer(d, mRsqrtHeadSize);
+    writeToBuffer(d, mHasImask);
+    writeToBuffer(d, mHiddenSize);
+
+    assert(d == a + getSerializationSize());
+}
+
+void QKVToContextPluginDynamic::destroy()
+{
+    delete this;
+}
+
+void QKVToContextPluginDynamic::setPluginNamespace(const char* libNamespace)
+{
+    mNamespace = libNamespace;
+}
+
+const char* QKVToContextPluginDynamic::getPluginNamespace() const
+{
+    return mNamespace.c_str();
+}
+
+int QKVToContextPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
 {
 
-    const size_t bytesAligned = alignTo<size_t>(scratchSize(batchSize), kAlignment);
+    const int batchSize = inputDesc->dims.d[BDIM];
+    const int S = inputDesc->dims.d[SDIM];
+
+    const size_t bytesAligned = alignTo<size_t>(scratchSize(batchSize, S), kAlignment);
     char* scratchBytes = reinterpret_cast<char*>(workspace);
 
     char* scratch1 = scratchBytes;
@@ -338,7 +489,7 @@ int QKVToContextPlugin::enqueue(
         float* scr2 = reinterpret_cast<float*>(scratch2);
         float* scr3 = reinterpret_cast<float*>(scratch3);
 
-        status = qkvToCtx(cublas, batchSize, mS, mNumHeads, mHeadSize, mRsqrtHeadSize, input, output, scr1, scr2, scr3,
+        status = qkvToCtx(cublas, batchSize, S, mNumHeads, mHeadSize, mRsqrtHeadSize, input, output, scr1, scr2, scr3,
             stream, maskIdx);
     }
     else if (mType == DataType::kHALF)
@@ -349,7 +500,7 @@ int QKVToContextPlugin::enqueue(
         half* scr2 = reinterpret_cast<half*>(scratch2);
         half* scr3 = reinterpret_cast<half*>(scratch3);
 
-        status = qkvToCtx(cublas, batchSize, mS, mNumHeads, mHeadSize, mRsqrtHeadSize, input, output, scr1, scr2, scr3,
+        status = qkvToCtx(cublas, batchSize, S, mNumHeads, mHeadSize, mRsqrtHeadSize, input, output, scr1, scr2, scr3,
             stream, maskIdx);
     }
     else
@@ -360,203 +511,75 @@ int QKVToContextPlugin::enqueue(
     return status;
 }
 
-size_t QKVToContextPlugin::getSerializationSize() const
-{
-    return sizeof(mNumHeads) + sizeof(mS) + sizeof(mHeadSize) + sizeof(DataType) + sizeof(mRsqrtHeadSize)
-        + sizeof(mHasImask);
-}
-
-void QKVToContextPlugin::serialize(void* buffer) const
-{
-    char* d = static_cast<char*>(buffer);
-    const char* a = d;
-
-    writeToBuffer(d, mType);
-    writeToBuffer(d, mS);
-    writeToBuffer(d, mNumHeads);
-    writeToBuffer(d, mHeadSize);
-    writeToBuffer(d, mRsqrtHeadSize);
-    writeToBuffer(d, mHasImask);
-
-    assert(d == a + getSerializationSize());
-}
-
-DataType QKVToContextPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-{
-    DataType type = inputTypes[0];
-    if (type == DataType::kFLOAT || type == DataType::kHALF)
-    {
-        return type;
-    }
-    type = DataType::kFLOAT;
-    return type;
-}
-
-void QKVToContextPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
-{
-    // Validate input arguments
-    assert(nbInputs == 1 + mHasImask);
-    assert(nbOutputs == 1);
-
-    assert(inputDims[0].nbDims == 4);
-    assert(inputDims[0].d[0] == mS);
-    assert(inputDims[0].d[1] == 3 * mHeadSize * mNumHeads);
-    assert(inputDims[0].d[2] == 1);
-    assert(inputDims[0].d[3] == 1);
-
-    assert(outputDims[0].nbDims == 4);
-    assert(outputDims[0].d[0] == mS);
-    assert(outputDims[0].d[1] == mNumHeads * mHeadSize);
-    assert(outputDims[0].d[2] == 1);
-    assert(outputDims[0].d[3] == 1);
-    mType = outputTypes[0];
-    if (!(mType == DataType::kHALF || mType == DataType::kFLOAT))
-        mType = DataType::kFLOAT;
-    if (mHasImask)
-    {
-        assert(inputTypes[1] == DataType::kINT32);
-    }
-}
-
-bool QKVToContextPlugin::supportsFormat(DataType type, PluginFormat format) const
-{
-    if (type == DataType::kFLOAT || type == DataType::kHALF || type == DataType::kINT32)
-    {
-        return format == PluginFormat::kNCHW;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-void QKVToContextPlugin::terminate()
-{
-    gLogVerbose << "QKV Terminate " << std::endl;
-    CHECK(cublasDestroy(cublas));
-    gLogVerbose << "QKV Terminate done" << std::endl;
-}
-
-size_t QKVToContextPlugin::scratchSize(int batchsize) const
-{
-    size_t wordSize = samplesCommon::getElementSize(mType);
-    const size_t len = batchsize * mNumHeads * mS * mS;
-    const size_t bytes = len * wordSize;
-
-    return bytes;
-}
-
-size_t QKVToContextPlugin::getWorkspaceSize(int batchsize) const
-{
-    const size_t bytes = scratchSize(batchsize);
-    const size_t bytesAligned = alignTo<size_t>(bytes, kAlignment);
-    const size_t two = 2;
-    const size_t ws = two * bytesAligned;
-
-    size_t wordSize = samplesCommon::getElementSize(mType);
-    const size_t tp = 3 * batchsize * mS * mNumHeads * mHeadSize * wordSize;
-
-    return ws + tp;
-}
-
-void QKVToContextPlugin::destroy() {}
-
-IPluginV2Ext* QKVToContextPlugin::clone() const
-{
-    gLogVerbose << "QKV Clone" << std::endl;
-    auto ret = new QKVToContextPlugin(mLayerName, mHiddenSize, mNumHeads, mS, mHasImask);
-    ret->mType = mType;
-    ret->initialize();
-    gLogVerbose << "QKV Clone done" << std::endl;
-    return ret;
-}
-
-void QKVToContextPlugin::setPluginNamespace(const char* libNamespace)
-{
-    mNamespace = libNamespace;
-}
-
-const char* QKVToContextPlugin::getPluginNamespace() const
-{
-    return mNamespace.c_str();
-}
-
-QKVToContextPluginCreator::QKVToContextPluginCreator()
+QKVToContextPluginDynamicCreator::QKVToContextPluginDynamicCreator()
 {
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* QKVToContextPluginCreator::getPluginName() const
+const char* QKVToContextPluginDynamicCreator::getPluginName() const
 {
-    return QKVToCONTEXT_PLUGIN_NAME;
+    return QKV_TO_CONTEXT_PLUGIN_NAME;
 }
 
-const char* QKVToContextPluginCreator::getPluginVersion() const
+const char* QKVToContextPluginDynamicCreator::getPluginVersion() const
 {
-    return QKVToCONTEXT_PLUGIN_VERSION;
+    return QKV_TO_CONTEXT_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* QKVToContextPluginCreator::getFieldNames()
+const PluginFieldCollection* QKVToContextPluginDynamicCreator::getFieldNames()
 {
     return &mFC;
 }
 
-IPluginV2* QKVToContextPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2* QKVToContextPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
     gLogVerbose << "Creating QKV2ContextPlugin...\n";
 
     int hidden_size;
     int num_heads;
-    int S;
     bool has_mask;
 
-    for(int i=0; i< fc->nbFields; i++)
+    for (int i = 0; i < fc->nbFields; i++)
     {
         std::string field_name(fc->fields[i].name);
-        if (field_name.compare("hidden_size")==0)
+        if (field_name.compare("hidden_size") == 0)
         {
             hidden_size = *static_cast<const int*>(fc->fields[i].data);
             gLogVerbose << "Building hidden_size: " << hidden_size << std::endl;
         }
-        if (field_name.compare("num_heads")==0)
+        if (field_name.compare("num_heads") == 0)
         {
-            num_heads =  *static_cast<const int*>(fc->fields[i].data);
+            num_heads = *static_cast<const int*>(fc->fields[i].data);
             gLogVerbose << "Building num_heads: " << num_heads << std::endl;
         }
-        if (field_name.compare("S")==0)
+        if (field_name.compare("has_mask") == 0)
         {
-            S =  *static_cast<const int*>(fc->fields[i].data);
-            gLogVerbose << "Building S: " << S << std::endl;
-        }
-        if (field_name.compare("has_mask")==0)
-        {
-            has_mask =  *static_cast<const bool*>(fc->fields[i].data);
-            gLogVerbose << "Building has_mask: " << has_mask  << std::endl;
+            has_mask = *static_cast<const bool*>(fc->fields[i].data);
+            gLogVerbose << "Building has_mask: " << has_mask << std::endl;
         }
     }
 
     gLogVerbose << "Building the Plugin...\n";
-    QKVToContextPlugin* p =  new QKVToContextPlugin(name, hidden_size, num_heads, S, has_mask);
+    QKVToContextPluginDynamic* p = new QKVToContextPluginDynamic(name, hidden_size, num_heads, has_mask);
     return p;
 }
 
-IPluginV2* QKVToContextPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2* QKVToContextPluginDynamicCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
 {
     // This object will be deleted when the network is destroyed, which will
-    // call QKVToContextPlugin::destroy()
-    return new QKVToContextPlugin(name, serialData, serialLength);
+    // call QKVToContextPluginDynamic::destroy()
+    return new QKVToContextPluginDynamic(name, serialData, serialLength);
 }
 
-void QKVToContextPluginCreator::setPluginNamespace(const char* libNamespace)
+void QKVToContextPluginDynamicCreator::setPluginNamespace(const char* libNamespace)
 {
     mNamespace = libNamespace;
 }
 
-const char* QKVToContextPluginCreator::getPluginNamespace() const
+const char* QKVToContextPluginDynamicCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
+}
 }
 }

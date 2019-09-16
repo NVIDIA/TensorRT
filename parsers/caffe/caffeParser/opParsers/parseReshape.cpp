@@ -32,15 +32,18 @@ ILayer* parseReshape(INetworkDefinition& network, const trtcaffe::LayerParameter
 
     const ::trtcaffe::BlobShape& shape = p.shape();
     // Check that N (batch dim) is 0. TensorRT does not support reshape in batch dimension
-    if ((axis == 0) && (shape.dim(0) != 0))
+    if (network.hasImplicitBatchDimension() && (axis == 0) && (shape.dim(0) != 0))
     {
-        std::cout << "Caffe Parser: Invalid reshape param. TensorRT does not support reshape in N (batch) dimension" << std::endl;
+        std::cout << "Caffe Parser: Invalid reshape param. TensorRT does not support reshape in N (batch) dimension"
+                  << std::endl;
         return nullptr;
     }
 
     // Handle axis and dims parameters
     int axStart = std::max(0, axis - 1);
-    int axEnd = p.has_num_axes() ? std::max(0, axis - 1 + p.num_axes()) : bottomDims.nbDims;
+    int axEnd = p.has_num_axes()
+        ? std::max(0, axis - static_cast<int>(network.hasImplicitBatchDimension()) + p.num_axes())
+        : bottomDims.nbDims;
     std::vector<int> reshapeDims;
 
     reshapeDims.reserve(axStart);
@@ -52,7 +55,7 @@ ILayer* parseReshape(INetworkDefinition& network, const trtcaffe::LayerParameter
     for (int i = 0; i < shape.dim_size(); i++)
     {
         // skip first 0 (batch)
-        if (axis == 0 && i == 0)
+        if (network.hasImplicitBatchDimension() && axis == 0 && i == 0)
         {
             continue;
         }

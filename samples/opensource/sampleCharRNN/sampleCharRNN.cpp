@@ -20,7 +20,7 @@
 //! It uses weights from a trained TensorFlow model and creates the network
 //! using the TensorRT network definition API
 //! It can be run with the following command line:
-//! Command: ./sample_char_rnn [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]
+//! Command: ./sample_char_rnn [-h or --help] [-d or --datadir=<path to data directory>]
 //!
 
 #include <algorithm>
@@ -181,8 +181,8 @@ private:
     //!
     //! \brief Create full model using the TensorRT network definition API and build the engine.
     //!
-    void constructNetwork(
-        SampleUniquePtr<nvinfer1::IBuilder>& builder, SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
+    void constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config);
 
     //!
     //! \brief Looks up the embedding tensor for a given char and copies it to input buffer
@@ -228,15 +228,19 @@ bool SampleCharRNN::build()
     {
         return false;
     }
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
 
     mWeightMap = SampleCharRNN::loadWeights(mParams.weightFileName);
 
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(32_MB);
-    builder->allowGPUFallback(true);
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    config->setMaxWorkspaceSize(32_MiB);
+    config->setFlag(BuilderFlag::kGPU_FALLBACK);
 
-    constructNetwork(builder, network);
+    constructNetwork(builder, network, config);
 
     if (!mEngine)
     {
@@ -274,7 +278,9 @@ std::map<std::string, nvinfer1::Weights> SampleCharRNN::loadWeights(const std::s
     while (count--)
     {
         if (mParams.weightNames.names.empty())
+        {
             break;
+        }
 
         nvinfer1::Weights wt{nvinfer1::DataType::kFLOAT, nullptr, 0};
 
@@ -413,7 +419,9 @@ nvinfer1::IRNNv2Layer* SampleCharRNN::addRNNv2Layer(SampleUniquePtr<nvinfer1::IN
     rnn->getOutput(0)->setName("RNN output");
     rnn->setHiddenState(*hiddenIn);
     if (rnn->getOperation() == nvinfer1::RNNOperation::kLSTM)
+    {
         rnn->setCellState(*cellIn);
+    }
 
     // Specify sequence lengths.  Note this can be omitted since we are always using the maximum
     // sequence length, but for illustrative purposes we explicitly pass in sequence length data
@@ -469,8 +477,8 @@ nvinfer1::IRNNv2Layer* SampleCharRNN::addRNNv2Layer(SampleUniquePtr<nvinfer1::IN
 //! \param weightMap Map that contains all the weights required by the model.
 //! \param modelStream The stream within which the engine is serialized once built.
 //!
-void SampleCharRNN::constructNetwork(
-    SampleUniquePtr<nvinfer1::IBuilder>& builder, SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+void SampleCharRNN::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config)
 {
     // add RNNv2 layer and set its parameters
     auto rnn = SampleCharRNN::addRNNv2Layer(network);
@@ -514,7 +522,8 @@ void SampleCharRNN::constructNetwork(
 
     gLogInfo << "Done constructing network..." << std::endl;
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
 }
 
 //!
@@ -696,8 +705,6 @@ SampleCharRNNParams initializeSampleParams(const samplesCommon::Args& args)
     params.vocabSize = 65;
     params.outputSize = 1;
     params.weightFileName = locateFile("char-rnn.wts", params.dataDirs);
-    params.dlaCore = args.useDLACore;
-    params.fp16 = args.runInFp16;
 
     // Input strings and their respective expected output strings
     const std::vector<std::string> inS{
@@ -736,15 +743,11 @@ SampleCharRNNParams initializeSampleParams(const samplesCommon::Args& args)
 //!
 void printHelpInfo()
 {
-    std::cout
-        << "Usage: ./sample_char_rnn [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]\n";
+    std::cout << "Usage: ./sample_char_rnn [-h or --help] [-d or --datadir=<path to data directory>]\n";
     std::cout << "--help          Display help information\n";
     std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
                  "data/samples/char-rnn/ and data/char-rnn/"
-              << std::endl;
-    std::cout << "--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
-                 "where n is the number of DLA engines on the platform."
               << std::endl;
 }
 
@@ -753,6 +756,7 @@ void printHelpInfo()
 //!
 int main(int argc, char** argv)
 {
+    setReportableSeverity(Logger::Severity::kVERBOSE);
     samplesCommon::Args args;
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)

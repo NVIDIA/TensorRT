@@ -18,8 +18,6 @@
 	* [Generating batch files for non-Caffe users](#generating-batch-files-for-non-caffe-users)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample---help-options)
-- [Additional resources](#additional-resources)
-	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additiona-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -36,7 +34,7 @@ Specifically, this sample demonstrates how to perform inference in 8-bit integer
 
 INT8 engines are build from 32-bit network definitions, similarly to 32-bit and 16-bit engines, but with more configuration steps. In particular, the builder and network must be configured to use INT8, which requires per-tensor dynamic ranges. The INT8 calibrator can determine how best to represent weights and activations as 8-bit integers and sets the per tensor dynamic ranges accordingly. Alternatively, you can set custom per tensor dynamic ranges; this is covered in sampleINT8API.
 
-This sample is accompanied by the [MNIST training set](https://github.com/BVLC/caffe/blob/master/data/mnist/get_mnist.sh) located in the TensorRT-5.1.0.4/data/mnist/batches directory. The packaged MNIST model that is shipped with this sample is based on [lenet.prototxt](https://github.com/BVLC/caffe/edit/master/examples/mnist/lenet.prototxt). For more information, see the [MNIST BVLC Caffe example](https://github.com/BVLC/caffe/tree/master/examples/mnist). This sample can also be used with other Image classification models, for example, [deploy.prototxt](https://github.com/BVLC/caffe/blob/master/models/bvlc_googlenet/deploy.prototxt).
+This sample is accompanied by the [MNIST training set](https://github.com/BVLC/caffe/blob/master/data/mnist/get_mnist.sh) located in the `TensorRT-x.x.x.x/data/mnist` directory, where `x.x.x.x` is your installed version of TensorRT. The packaged MNIST model that is shipped with this sample is based on [lenet.prototxt](https://github.com/BVLC/caffe/edit/master/examples/mnist/lenet.prototxt). For more information, see the [MNIST BVLC Caffe example](https://github.com/BVLC/caffe/tree/master/examples/mnist). This sample can also be used with other Image classification models, for example, [deploy.prototxt](https://github.com/BVLC/caffe/blob/master/models/bvlc_googlenet/deploy.prototxt).
 
 The packaged data set file that is shipped with this sample is based on the [MNIST data set](https://github.com/BVLC/caffe/tree/master/data/mnist). However, the batch file generation from the above data set is described in [Batch files for calibration](#batch-files-for-calibration).
 
@@ -215,102 +213,10 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
 
 ## Batch files for calibration
 
-You can use the calibrated data that comes with this sample or you can generate the calibration data yourself. This sample uses batch files in order to calibrate for the INT8 data. The INT8 batch file is a binary file containing a set of N images, whose format is as follows:
-
--   Four 32-bit integer values representing `{N, C, H, W}` representing the number of images N in the file, and the dimensions `{C, H, W}` of each image.
--   N 32-bit floating point data blobs of dimensions `{C, H, W}` that are used as inputs to the network.
-
-If you want to generate calibration data yourself, refer to the following sections.
-
-### Generating batch files for Caffe users
-
-Calibration requires that the images passed to the calibrator are in the same format as those that will be passed to TensorRT at runtime. For developers using Caffe for training, or who can easily transfer their network to Caffe, a supplied patchset supports capturing images after image preprocessing.
-
-The instructions are provided so that users can easily use the sample code to test accuracy and performance on classification networks. In typical production use cases, applications will have such preprocessing already implemented, and should integrate with the calibrator directly.
-
-These instructions are for [Caffe git commit 473f143f9422e7fc66e9590da6b2a1bb88e50b2f](https://github.com/BVLC/caffe.git). The patch file might be slightly different for later versions of Caffe.
-
-1.  Apply the patch. The patch can be applied by going to the root directory of the Caffe source tree and applying the patch with the command:
-    `patch -p1 < int8_caffe.patch`
-
-2.  Rebuild Caffe and set the environment variable `TENSORRT_INT8_BATCH_DIRECTORY` to the location where the batch files are to be generated.
-
-After training for 1000 iterations, there are 1003 batch files in the directory specified. This occurs because Caffe preprocesses three batches in advance of the current iteration.
-
-These batch files can then be used with the `BatchStream` and `Int8Calibrator` to calibrate the data for INT8.
-
-**Note:** When running Caffe to generate the batch files, the training prototxt, and not the deployment prototxt, is required to be used.
-
-The following example depicts the sequence of commands to run `./sample_int8 mnist` with Caffe generated batch files.
-
-1.  Navigate to the samples data directory and create an INT8 `mnist` directory:
-	```
-	cd <TensorRT>/samples/data
-	mkdir -p int8/mnist
-	cd int8/mnist
-	```
-
-	**Note:** If Caffe is not installed anywhere, ensure you clone, checkout, patch, and build Caffe at the specific commit:
-
-	```
-	git clone https://github.com/BVLC/caffe.git
-	cd caffe
-	git checkout 473f143f9422e7fc66e9590da6b2a1bb88e50b2f
-	patch -p1 < <TensorRT>/samples/mnist/int8_caffe.patch
-	mkdir build
-	pushd build
-	cmake -DUSE_OPENCV=FALSE -DUSE_CUDNN=OFF ../
-	make -j4
-	popd
-	```
-
-2.  Download the `mnist` dataset from Caffe and create a link to it:
-	```
-	bash data/mnist/get_mnist.sh
-	bash examples/mnist/create_mnist.sh
-	cd ..
-	ln -s caffe/examples .
-	```
-
-3.  Set the directory to store the batch data, execute Caffe, and link the `mnist` files:
-	```
-	mkdir batches
-	export TENSORRT_INT8_BATCH_DIRECTORY=batches
-	caffe/build/tools/caffe test -gpu 0 -iterations 1000 -model examples/mnist/lenet_train_test.prototxt -weights <TensorRT>/samples/mnist/mnist.caffemodel
-	ln -s <TensorRT>/samples/mnist/mnist.caffemodel .
-	ln -s <TensorRT>/samples/mnist/mnist.prototxt .
-	```
-
-4.  Execute sampleINT8 from the bin directory after being built with the following command:
-    `./sample_int8 mnist`
-
-### Generating batch files for non-Caffe users
-
-For developers that are not using Caffe, or cannot easily convert to Caffe, the batch files can be generated via the following sequence of steps on the input training data.
-
-1.  Subtract out the normalized mean from the dataset.
-
-2.  Crop all of the input data to the same dimensions.
-
-3.  Split the data into batch files where each batch file has `N` preprocessed images and labels.
-
-4.  Generate the batch files based on the format specified in [Batch files for calibration](#batch-files-for-calibration).
-
-The following example depicts the sequence of commands to run `./sample_int8 mnist` without Caffe.
-
-1.  Navigate to the samples data directory and create an INT8 `mnist` directory:
-	```
-	cd <TensorRT>/samples/data
-	mkdir -p int8/mnist/batches
-	cd int8/mnist
-	ln -s <TensorRT>/samples/mnist/mnist.caffemodel .
-	ln -s <TensorRT>/samples/mnist/mnist.prototxt .
-	```
-
-2.  Copy the generated batch files to the `int8/mnist/batches/` directory.
-
-3.  Execute sampleINT8 from the `bin` directory after being built with the following command:
-	`./sample_int8 mnist`
+Download the [MNIST dataset](http://yann.lecun.com/exdb/mnist/)
+    - This sample requires the [training set](http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz) and [training labels](http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz)
+    - Unzip the files obtained above using the `gunzip` utility. For example, `gunzip t10k-labels-idx1-ubyte.gz`.
+	- Lastly, copy these files to the `<TensorRT root directory>/samples/data/int8/mnist/` directory
 
 ## Running the sample
 
@@ -357,20 +263,9 @@ The following example depicts the sequence of commands to run `./sample_int8 mni
 
 	This output shows that the sample ran successfully; `PASSED`.
 
-### Sample --help options
+### Sample `--help` options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
-```
-Usage: ./sample_int8 <network name> [-h or --help] [--datadir=<path to data directory>] [--useDLACore=<int>]
-
---help          Display help information
---datadir       Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data 					directories are given, the default is to use data/samples/ssd/ and data/ssd/
---useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, where n is the number of DLA engines on the platform.
---batch=N       Set batch size (default = 100).
---start=N       Set the first batch to be scored (default = 100). All batches before this batch will be used for calibration.
---score=N       Set the number of batches to be scored (default = 400).
-
-```
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
 
 # Additional resources
 

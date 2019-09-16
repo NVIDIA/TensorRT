@@ -139,6 +139,8 @@ __global__ void allClassNMS_kernel(
         Bbox<T_BBOX> loc_bbox[TSIZE];
 
 // initialize Bbox, Bboxinfo, kept_bboxinfo_flag
+        // Eliminate shared memory RAW hazard  
+        __syncthreads();
 #pragma unroll
         for (int t = 0; t < TSIZE; t++)
         {
@@ -185,6 +187,9 @@ __global__ void allClassNMS_kernel(
             ref_bbox.ymin = flipXY ? bbox_data[ref_bbox_idx * 4 + 0] : bbox_data[ref_bbox_idx * 4 + 1];
             ref_bbox.xmax = flipXY ? bbox_data[ref_bbox_idx * 4 + 3] : bbox_data[ref_bbox_idx * 4 + 2];
             ref_bbox.ymax = flipXY ? bbox_data[ref_bbox_idx * 4 + 2] : bbox_data[ref_bbox_idx * 4 + 3];
+
+            // Eliminate shared memory RAW hazard  
+            __syncthreads();
 
             for (int t = 0; t < TSIZE; t++)
             {

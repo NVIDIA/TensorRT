@@ -111,7 +111,8 @@ private:
     //! \brief Parses a Uff model for a MLP NCF model, creates a TensorRT network, and builds a TensorRT engine.
     //!
     void constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvuffparser::IUffParser>& parser);
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+        SampleUniquePtr<nvuffparser::IUffParser>& parser);
     //!
     //! \brief Copies a batch of input data from SampleMovieLensParams into managed input buffers
     //!
@@ -172,6 +173,11 @@ bool SampleMovieLens::build()
     {
         return false;
     }
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
     auto parser = SampleUniquePtr<nvuffparser::IUffParser>(nvuffparser::createUffParser());
     if (!parser)
     {
@@ -179,13 +185,16 @@ bool SampleMovieLens::build()
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(1_GB);
-    builder->allowGPUFallback(true);
-    builder->setStrictTypeConstraints(true);
-    builder->setFp16Mode(mParams.fp16);
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    config->setMaxWorkspaceSize(1_GiB);
+    config->setFlag(BuilderFlag::kGPU_FALLBACK);
+    config->setFlag(BuilderFlag::kSTRICT_TYPES);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    constructNetwork(builder, network, parser);
+    constructNetwork(builder, network, config, parser);
 
     if (!mEngine)
     {
@@ -199,12 +208,15 @@ bool SampleMovieLens::build()
 //! \brief Parses a Uff model for a MLP NCF model, creates a TensorRT network, and builds a TensorRT engine.
 //!
 void SampleMovieLens::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvuffparser::IUffParser>& parser)
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+    SampleUniquePtr<nvuffparser::IUffParser>& parser)
 {
 
     nvinfer1::Dims inputIndices;
-    inputIndices.nbDims = 1;
+    inputIndices.nbDims = 3;
     inputIndices.d[0] = mParams.numMoviesPerUser;
+    inputIndices.d[1] = 1;
+    inputIndices.d[2] = 1;
 
     // There should be two input and three output tensors
     assert(mParams.inputTensorNames.size() == 2);
@@ -252,7 +264,8 @@ void SampleMovieLens::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
 
     gLogInfo << "Done constructing network..." << std::endl;
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
 }
 
 //!
@@ -378,7 +391,7 @@ void SampleMovieLens::readInputSample(std::ifstream& file, OutputParams& outPara
         }
 
         i = i.substr(0, i.size() - 1);
-        outParams.allItems.push_back(stoi(i));
+        outParams.allItems.push_back(std::stoi(i));
     }
 
     // read expected predicted max rating item
@@ -399,7 +412,7 @@ void SampleMovieLens::readInputSample(std::ifstream& file, OutputParams& outPara
         auto pos = line.find(delim);
         int32_t item = std::stoi(line.substr(0, pos - 1));
         float prob = std::stof(line.substr(pos + 2));
-        outParams.itemProbPairVec.emplace_back((make_pair(item, prob)));
+        outParams.itemProbPairVec.emplace_back((std::make_pair(item, prob)));
         std::getline(file, line);
     }
 }
@@ -485,8 +498,9 @@ bool SampleMovieLens::verifyOutput(
             float predictedProb = topKItemProb[i * mParams.topKMovies + k];
             float expectedProb = mParams.userToExpectedItemProbMap.at(userIdx).at(k).second;
             int predictedItem = mParams.userToItemsMap.at(userIdx).at(predictedIdx);
-            gLogVerbose << "|" << setw(10) << userIdx << " | " << setw(10) << predictedItem << " | " << setw(15)
-                        << expectedProb << " | " << setw(15) << predictedProb << " | " << std::endl;
+            gLogVerbose << "|" << std::setw(10) << userIdx << " | " << std::setw(10) << predictedItem << " | "
+                        << std::setw(15) << expectedProb << " | " << std::setw(15) << predictedProb << " | "
+                        << std::endl;
         }
     }
 
@@ -496,8 +510,8 @@ bool SampleMovieLens::verifyOutput(
         int maxPredictedIdx = topKItemNumber[i * mParams.topKMovies];
         int maxExpectedItem = mParams.userToExpectedItemProbMap.at(userIdx).at(0).first;
         int maxPredictedItem = mParams.userToItemsMap.at(userIdx).at(maxPredictedIdx);
-        gLogInfo << "| User :" << setw(4) << userIdx << "  |  Expected Item :" << setw(5) << maxExpectedItem
-                 << "  |  Predicted Item :" << setw(5) << maxPredictedItem << " | " << std::endl;
+        gLogInfo << "| User :" << std::setw(4) << userIdx << "  |  Expected Item :" << std::setw(5) << maxExpectedItem
+                 << "  |  Predicted Item :" << std::setw(5) << maxPredictedItem << " | " << std::endl;
     }
 
     return pass;
@@ -548,7 +562,7 @@ bool parseSampleMovieLensArgs(SampleMovieLensArgs& args, int argc, char* argv[])
         }
         else if (argStr.substr(0, 13) == "--useDLACore=" && argStr.size() > 13)
         {
-            args.dlaCore = stoi(argv[i] + 13);
+            args.dlaCore = std::stoi(argv[i] + 13);
         }
         else
         {
@@ -595,8 +609,9 @@ SampleMovieLensParams initializeSampleParams(const SampleMovieLensArgs& args)
 void printHelpInfo()
 {
     std::cout << "Usage: ./sample_movielens [-h or --help] [-b NUM_USERS] [--useDLACore=<int>] [--verbose]\n";
-    std::cout << "--help          Display help information\n";
-    std::cout << "-b NUM_USERS    Number of Users i.e. Batch Size (default numUsers==32)\n";
+    std::cout << "--help          Display help information.\n";
+    std::cout << "--verbose       Enable verbose prints.\n";
+    std::cout << "-b NUM_USERS    Number of Users i.e. Batch Size (default numUsers==32).\n";
     std::cout << "--useDLACore=N  Specify a DLA engine for layers that support "
                  "DLA. Value can range from 0 to n-1, where n is the number of "
                  "DLA engines on the platform."

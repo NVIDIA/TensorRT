@@ -123,6 +123,12 @@ bool SampleMNIST::build()
         return false;
     }
 
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
     auto parser = SampleUniquePtr<nvcaffeparser1::ICaffeParser>(nvcaffeparser1::createCaffeParser());
     if (!parser)
     {
@@ -131,15 +137,22 @@ bool SampleMNIST::build()
 
     constructNetwork(parser, network);
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(16_MB);
-    builder->allowGPUFallback(true);
-    builder->setStrictTypeConstraints(true);
-    builder->setFp16Mode(mParams.fp16);
-    builder->setInt8Mode(mParams.int8);
+    config->setMaxWorkspaceSize(16_MiB);
+    config->setFlag(BuilderFlag::kGPU_FALLBACK);
+    config->setFlag(BuilderFlag::kSTRICT_TYPES);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
+    if (mParams.int8)
+    {
+        config->setFlag(BuilderFlag::kINT8);
+    }
 
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
 
     if (!mEngine)
         return false;
@@ -236,7 +249,9 @@ void SampleMNIST::constructNetwork(
     mMeanBlob
         = SampleUniquePtr<nvcaffeparser1::IBinaryProtoBlob>(parser->parseBinaryProto(mParams.meanFileName.c_str()));
     nvinfer1::Weights meanWeights{nvinfer1::DataType::kFLOAT, mMeanBlob->getData(), inputDims.d[1] * inputDims.d[2]};
-    // For this sample, a large range based on the mean data is chosen and applied to the entire network.
+    // For this sample, a large range based on the mean data is chosen and applied to the head of the network.
+    // After the mean subtraction occurs, the range is expected to be between -127 and 127, so the rest of the network
+    // is given a generic range.
     // The preferred method is use scales computed based on a representative data set
     // and apply each one individually based on the tensor. The range here is large enough for the
     // network, but is chosen for example purposes only.
@@ -244,9 +259,12 @@ void SampleMNIST::constructNetwork(
         = samplesCommon::getMaxValue(static_cast<const float*>(meanWeights.values), samplesCommon::volume(inputDims));
 
     auto mean = network->addConstant(nvinfer1::Dims3(1, inputDims.d[1], inputDims.d[2]), meanWeights);
+    mean->getOutput(0)->setDynamicRange(-maxMean, maxMean);
+    network->getInput(0)->setDynamicRange(-maxMean, maxMean);
     auto meanSub = network->addElementWise(*network->getInput(0), *mean->getOutput(0), ElementWiseOperation::kSUB);
+    meanSub->getOutput(0)->setDynamicRange(-maxMean, maxMean);
     network->getLayer(0)->setInput(0, *meanSub->getOutput(0));
-    samplesCommon::setAllTensorScales(network.get(), maxMean, maxMean);
+    samplesCommon::setAllTensorScales(network.get(), 127.0f, 127.0f);
 }
 
 //!

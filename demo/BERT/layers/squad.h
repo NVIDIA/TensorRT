@@ -23,18 +23,18 @@ namespace bert
 const std::string SQD_W = "squad_output_weights";
 const std::string SQD_B = "squad_output_bias";
 
-ILayer* squad(const std::string& prefix, const BertConfig& config, WeightMap& weightMap, INetworkDefinition* network,
+inline ILayer* squadDynamic(const std::string& prefix, const BertConfig& config, WeightMap& weightMap, INetworkDefinition* network,
     ITensor* inputTensor)
 {
 
     assert(inputTensor);
     assert(network);
 
-    const Dims idims = inputTensor->getDimensions();
-    assert(idims.nbDims == 4);
+    //const Dims idims = inputTensor->getDimensions();
+    //assert(idims.nbDims == 5);
 
-    const int S = idims.d[0];
-    const int hiddenSize = idims.d[1];
+    //const int S = idims.d[1];
+    const int hiddenSize = config.hiddenSize; //idims.d[2];
 
     const Weights W_out = weightMap.at(prefix + SQD_W);
     const Weights B_out = weightMap.at(prefix + SQD_B);

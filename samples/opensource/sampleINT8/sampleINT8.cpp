@@ -101,8 +101,8 @@ private:
     //! \brief Parses a Caffe model and creates a TensorRT network
     //!
     bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser,
-        DataType dataType);
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+        SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, DataType dataType);
 
     //!
     //! \brief Reads the input and stores it in a managed buffer
@@ -139,6 +139,12 @@ bool SampleINT8::build(DataType dataType)
         return false;
     }
 
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
     auto parser = SampleUniquePtr<nvcaffeparser1::ICaffeParser>(nvcaffeparser1::createCaffeParser());
     if (!parser)
     {
@@ -151,7 +157,7 @@ bool SampleINT8::build(DataType dataType)
         return false;
     }
 
-    auto constructed = constructNetwork(builder, network, parser, dataType);
+    auto constructed = constructNetwork(builder, network, config, parser, dataType);
     if (!constructed)
     {
         return false;
@@ -195,9 +201,10 @@ bool SampleINT8::isSupported(DataType dataType)
 //! \param builder Pointer to the engine builder
 //!
 bool SampleINT8::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser,
-    DataType dataType)
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+    SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, DataType dataType)
 {
+    mEngine = nullptr;
     const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor
         = parser->parse(locateFile(mParams.prototxtFileName, mParams.dataDirs).c_str(),
             locateFile(mParams.weightsFileName, mParams.dataDirs).c_str(), *network,
@@ -211,26 +218,32 @@ bool SampleINT8::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     // Calibrator life time needs to last until after the engine is built.
     std::unique_ptr<IInt8Calibrator> calibrator;
 
-    builder->setAverageFindIterations(1);
-    builder->setMinFindIterations(1);
-    builder->setMaxWorkspaceSize(1_GB);
-    builder->setDebugSync(true);
-    builder->setFp16Mode(dataType == DataType::kHALF);
-    builder->setInt8Mode(dataType == DataType::kINT8);
+    config->setAvgTimingIterations(1);
+    config->setMinTimingIterations(1);
+    config->setMaxWorkspaceSize(1_GiB);
+    config->setFlag(BuilderFlag::kDEBUG);
+    if (dataType == DataType::kHALF)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
+    if (dataType == DataType::kINT8)
+    {
+        config->setFlag(BuilderFlag::kINT8);
+    }
     builder->setMaxBatchSize(mParams.batchSize);
 
     if (dataType == DataType::kINT8)
     {
-        BatchStream calibrationStream(
-            mParams.calBatchSize, mParams.nbCalBatches, "batches/batch", "", mParams.dataDirs);
-        calibrator.reset(new Int8EntropyCalibrator2(
+        MNISTBatchStream calibrationStream(mParams.calBatchSize, mParams.nbCalBatches, "train-images-idx3-ubyte",
+            "train-labels-idx1-ubyte", mParams.dataDirs);
+        calibrator.reset(new Int8EntropyCalibrator2<MNISTBatchStream>(
             calibrationStream, 0, mParams.networkName.c_str(), mParams.inputTensorNames[0].c_str()));
-        builder->setInt8Calibrator(calibrator.get());
+        config->setInt8Calibrator(calibrator.get());
     }
 
     if (mParams.dlaCore >= 0)
     {
-        samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+        samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
         if (mParams.batchSize > builder->getMaxDLABatchSize())
         {
             gLogError << "Requested batch size " << mParams.batchSize << " is greater than the max DLA batch size of "
@@ -239,7 +252,8 @@ bool SampleINT8::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
         }
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -267,12 +281,13 @@ bool SampleINT8::infer(std::pair<float, float>& score, int firstScoreBatch, int 
         return false;
     }
 
-    BatchStream batchStream(mParams.batchSize, nbScoreBatches, "batches/batch", "", mParams.dataDirs);
+    MNISTBatchStream batchStream(
+        mParams.batchSize, nbScoreBatches, "train-images-idx3-ubyte", "train-labels-idx1-ubyte", mParams.dataDirs);
     batchStream.skip(firstScoreBatch);
 
-    Dims3 outputDims = static_cast<Dims3&&>(context->getEngine().getBindingDimensions(
-        context->getEngine().getBindingIndex(mParams.outputTensorNames[0].c_str())));
-    int outputSize = outputDims.d[0] * outputDims.d[1] * outputDims.d[2];
+    Dims outputDims = context->getEngine().getBindingDimensions(
+        context->getEngine().getBindingIndex(mParams.outputTensorNames[0].c_str()));
+    int outputSize = samplesCommon::volume(outputDims);
     int top1{0}, top5{0};
     float totalTime{0.0f};
 
@@ -353,15 +368,9 @@ bool SampleINT8::teardown()
 //!
 bool SampleINT8::processInput(const samplesCommon::BufferManager& buffers, const float* data)
 {
-    const int inputC = mInputDims.d[0];
-    const int inputH = mInputDims.d[1];
-    const int inputW = mInputDims.d[2];
-    const int batchSize = mParams.batchSize;
-
     // Fill data buffer
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
-    memcpy(hostDataBuffer, data, batchSize * inputC * inputH * inputW * sizeof(float));
-
+    std::memcpy(hostDataBuffer, data, mParams.batchSize * samplesCommon::volume(mInputDims) * sizeof(float));
     return true;
 }
 
@@ -397,20 +406,18 @@ int SampleINT8::calculateScore(
 //!
 //! \brief Initializes members of the params struct using the command line args
 //!
-SampleINT8Params initializeSampleParams(const samplesCommon::Args& args, const std::string& networkName, int batchSize)
+SampleINT8Params initializeSampleParams(const samplesCommon::Args& args, int batchSize)
 {
     SampleINT8Params params;
-    if (args.dataDirs.empty()) //!< Use default directories if user hasn't provided directory paths
-    {
-        params.dataDirs.push_back(std::string("data/") + networkName + std::string("/"));
-        params.dataDirs.push_back(std::string("int8/") + networkName + std::string("/"));
-        params.dataDirs.push_back(std::string("data/int8/") + networkName + std::string("/"));
-        params.dataDirs.push_back(std::string("data/int8_samples/") + networkName + std::string("/"));
-    }
-    else //!< Use the data directory provided by the user
-    {
-        params.dataDirs = args.dataDirs;
-    }
+    // Use directories provided by the user, in addition to default directories.
+    params.dataDirs = args.dataDirs;
+    params.dataDirs.emplace_back("data/mnist/");
+    params.dataDirs.emplace_back("int8/mnist/");
+    params.dataDirs.emplace_back("samples/mnist/");
+    params.dataDirs.emplace_back("data/samples/mnist/");
+    params.dataDirs.emplace_back("data/int8/mnist/");
+    params.dataDirs.emplace_back("data/int8_samples/mnist/");
+
     params.batchSize = batchSize;
     params.dlaCore = args.useDLACore;
     params.nbCalBatches = 10;
@@ -419,12 +426,7 @@ SampleINT8Params initializeSampleParams(const samplesCommon::Args& args, const s
     params.outputTensorNames.push_back("prob");
     params.prototxtFileName = "deploy.prototxt";
     params.weightsFileName = "mnist_lenet.caffemodel";
-    params.networkName = networkName;
-    if (networkName != std::string("mnist"))
-    {
-        params.weightsFileName = networkName + ".caffemodel";
-    }
-
+    params.networkName = "mnist";
     return params;
 }
 
@@ -433,18 +435,17 @@ SampleINT8Params initializeSampleParams(const samplesCommon::Args& args, const s
 //!
 void printHelpInfo()
 {
-    std::cout << "Usage: ./sample_int8 <network name> [-h or --help] [-d or --datadir=<path to data directory>] "
+    std::cout << "Usage: ./sample_int8 [-h or --help] [-d or --datadir=<path to data directory>] "
                  "[--useDLACore=<int>]"
               << std::endl;
     std::cout << "--help          Display help information" << std::endl;
     std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
-                 "multiple times to add multiple directories. If no data directories are given, the default is to use "
-                 "data/samples/ssd/ and data/ssd/"
+                 "multiple times to add multiple directories."
               << std::endl;
     std::cout << "--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
                  "where n is the number of DLA engines on the platform."
               << std::endl;
-    std::cout << "batch=N         Set batch size (default = 100)." << std::endl;
+    std::cout << "batch=N         Set batch size (default = 32)." << std::endl;
     std::cout << "start=N         Set the first batch to be scored (default = 100). All batches before this batch will "
                  "be used for calibration."
               << std::endl;
@@ -453,20 +454,19 @@ void printHelpInfo()
 
 int main(int argc, char** argv)
 {
-    if (argc < 2 || !strncmp(argv[1], "help", 4) || !strncmp(argv[1], "--help", 6) || !strncmp(argv[1], "--h", 3))
+    if (argc >= 2 && (!strncmp(argv[1], "help", 4) || !strncmp(argv[1], "--help", 6) || !strncmp(argv[1], "--h", 3)))
     {
         printHelpInfo();
         return EXIT_FAILURE;
     }
-    std::string networkName = argv[1];
 
-    // By default we score over 40K images starting at 10000, so we don't score those used to search calibration
-    int batchSize = 100;
+    // By default we score over 40K images starting at 3200, so we don't score those used to search calibration
+    int batchSize = 32;
     int firstScoreBatch = 100;
     int nbScoreBatches = 400;
 
     // Parse extra arguments
-    for (int i = 2; i < argc; i++)
+    for (int i = 1; i < argc; ++i)
     {
         if (!strncmp(argv[i], "batch=", 6))
         {
@@ -497,7 +497,7 @@ int main(int argc, char** argv)
     samplesCommon::Args args;
     samplesCommon::parseArgs(args, argc, argv);
 
-    SampleINT8 sample(initializeSampleParams(args, networkName, batchSize));
+    SampleINT8 sample(initializeSampleParams(args, batchSize));
 
     auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
 

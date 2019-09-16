@@ -23,7 +23,6 @@ using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 
 #include "batchedNMSPlugin/batchedNMSPlugin.h"
-#include "batchTilePlugin/batchTilePlugin.h"
 #include "cropAndResizePlugin/cropAndResizePlugin.h"
 #include "flattenConcat/flattenConcat.h"
 #include "gridAnchorPlugin/gridAnchorPlugin.h"
@@ -35,6 +34,14 @@ using namespace nvinfer1::plugin;
 #include "regionPlugin/regionPlugin.h"
 #include "reorgPlugin/reorgPlugin.h"
 
+#include "batchTilePlugin/batchTilePlugin.h"
+#include "detectionLayerPlugin/detectionLayerPlugin.h"
+#include "proposalLayerPlugin/proposalLayerPlugin.h"
+#include "pyramidROIAlignPlugin/pyramidROIAlignPlugin.h"
+#include "resizeNearestPlugin/resizeNearestPlugin.h"
+#include "specialSlicePlugin/specialSlicePlugin.h"
+#include "instanceNormalizationPlugin/instanceNormalizationPlugin.h"
+
 using nvinfer1::plugin::RPROIParams;
 
 namespace nvinfer1
@@ -42,7 +49,7 @@ namespace nvinfer1
 
 namespace plugin
 {
-ILogger* gLogger {};
+ILogger* gLogger{};
 
 // Instances of this class are statically constructed in initializePlugin.
 // This ensures that each plugin is only registered a single time, as further calls to
@@ -105,6 +112,12 @@ bool initLibNvInferPlugins(void* logger, const char* libNamespace)
     initializePlugin<nvinfer1::plugin::CropAndResizePluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::BatchTilePluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::DetectionLayerPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::ProposalLayerPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::PyramidROIAlignPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::ResizeNearestPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::InstanceNormalizationPluginCreator>(logger, libNamespace);
     return true;
 }
 } // extern "C"

@@ -62,6 +62,7 @@ set_target_properties(${SHARED_TARGET}
 
 target_link_libraries(${SHARED_TARGET} 
     ${Protobuf_LIBRARY}
+    nvinfer
 )
 
 # modify google namespace to avoid namespace collision.

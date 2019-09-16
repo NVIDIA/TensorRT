@@ -32,6 +32,7 @@ set(CAFFE_PARSER_SRCS
     caffeParser/opParsers/parsePermute.cpp
     caffeParser/opParsers/parsePooling.cpp
     caffeParser/opParsers/parsePower.cpp
+    caffeParser/opParsers/parsePReLU.cpp
     caffeParser/opParsers/parseReduction.cpp
     caffeParser/opParsers/parseReLU.cpp
     caffeParser/opParsers/parseReshape.cpp

@@ -23,7 +23,7 @@ import data_processing as dp
 import pycuda.driver as cuda
 import pycuda.autoinit
 
-TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 
 def parse_args():
     """
@@ -32,24 +32,23 @@ def parse_args():
     parser = argparse.ArgumentParser(description='BERT QA Inference')
     parser.add_argument('-e', '--bert_engine', dest='bert_engine',
             help='Path to BERT TensorRT engine')
-    parser.add_argument('-p', '--passage', nargs='*', dest='passage',
+    parser.add_argument('-p', '--passage', nargs='*',
             help='Text for paragraph/passage for BERT QA',
             default='')
-    parser.add_argument('-pf', '--passage_file', dest='passage_file',
+    parser.add_argument('-pf', '--passage-file',
             help='File containing input passage',
             default='')
-    parser.add_argument('-q', '--question', nargs='*', dest='question',
+    parser.add_argument('-q', '--question', nargs='*',
             help='Text for query/question for BERT QA',
             default='')
-    parser.add_argument('-qf', '--question_file', dest='question_file',
+    parser.add_argument('-qf', '--question-file',
             help='File containiner input question',
             default='')
-    parser.add_argument('-v', '--vocab_file', dest='vocab_file',
+    parser.add_argument('-v', '--vocab-file',
             help='Path to file containing entire understandable vocab',
             default='./pre-trained_model/uncased_L-24_H-1024_A-16/vocab.txt')
-    parser.add_argument('-b', '--batch_size', dest='batch_size',
-            help='Batch size for inference', default=1, type=int)
-    return parser.parse_args()
+    args, _ = parser.parse_known_args()
+    return args
 
 if __name__ == '__main__':
     args = parse_args()
@@ -87,35 +86,44 @@ if __name__ == '__main__':
         return dp.convert_examples_to_features(doc_tokens, question, tokenizer, max_seq_length, doc_stride, max_query_length)
 
     # Import necessary plugins for BERT TensorRT
-    nvinfer =  ctypes.CDLL("libnvinfer_plugin.so", mode=ctypes.RTLD_GLOBAL)
-    cm = ctypes.CDLL("/workspace/TensorRT/demo/BERT/build/libcommon.so", mode=ctypes.RTLD_GLOBAL)
-    pg = ctypes.CDLL("/workspace/TensorRT/demo/BERT/build/libbert_plugins.so", mode=ctypes.RTLD_GLOBAL)
+    ctypes.CDLL("libnvinfer_plugin.so", mode=ctypes.RTLD_GLOBAL)
+    ctypes.CDLL("/workspace/TensorRT/demo/BERT/build/libcommon.so", mode=ctypes.RTLD_GLOBAL)
+    ctypes.CDLL("/workspace/TensorRT/demo/BERT/build/libbert_plugins.so", mode=ctypes.RTLD_GLOBAL)
 
+    # The first context created will use the 0th profile. A new context must be created
+    # for each additional profile needed. Here, we only use batch size 1, thus we only need the first profile.
     with open(args.bert_engine, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime, \
         runtime.deserialize_cuda_engine(f.read()) as engine, engine.create_execution_context() as context:
 
-        def binding_nbytes(binding):
-            return trt.volume(engine.get_binding_shape(binding)) * engine.get_binding_dtype(binding).itemsize
+        # We always use batch size 1.
+        input_shape = (1, max_seq_length)
+        input_nbytes = trt.volume(input_shape) * trt.int32.itemsize
 
-        # Allocate device memory for inputs and outputs.
-        d_inputs = [cuda.mem_alloc(binding_nbytes(binding)) for binding in engine if engine.binding_is_input(binding)]
-        h_output = cuda.pagelocked_empty(tuple(engine.get_binding_shape(3)), dtype=np.float32)
-        d_output = cuda.mem_alloc(h_output.nbytes)
-
+        # Allocate device memory for inputs.
+        d_inputs = [cuda.mem_alloc(input_nbytes) for binding in range(3)]
         # Create a stream in which to copy inputs/outputs and run inference.
         stream = cuda.Stream()
 
-        def inference(input_features):
+        # Specify input shapes. These must be within the min/max bounds of the active profile (0th profile in this case)
+        # Note that input shapes can be specified on a per-inference basis, but in this case, we only have a single shape.
+        for binding in range(3):
+            context.set_binding_shape(binding, input_shape)
+        assert context.all_binding_shapes_specified
+
+        # Allocate output buffer by querying the size from the context. This may be different for different input shapes.
+        h_output = cuda.pagelocked_empty(tuple(context.get_binding_shape(3)), dtype=np.float32)
+        d_output = cuda.mem_alloc(h_output.nbytes)
+
+        def inference(features):
             print("\nRunning Inference...")
             eval_start_time = time.time()
 
             # Copy inputs
-            cuda.memcpy_htod_async(d_inputs[0], input_features["input_ids"], stream)
-            cuda.memcpy_htod_async(d_inputs[1], input_features["segment_ids"], stream)
-            cuda.memcpy_htod_async(d_inputs[2], input_features["input_mask"], stream)
-
+            cuda.memcpy_htod_async(d_inputs[0], features["input_ids"], stream)
+            cuda.memcpy_htod_async(d_inputs[1], features["segment_ids"], stream)
+            cuda.memcpy_htod_async(d_inputs[2], features["input_mask"], stream)
             # Run inference
-            context.execute_async(bindings=[int(d_inp) for d_inp in d_inputs] + [int(d_output)], stream_handle=stream.handle)
+            context.execute_async_v2(bindings=[int(d_inp) for d_inp in d_inputs] + [int(d_output)], stream_handle=stream.handle)
             # Transfer predictions back from GPU
             cuda.memcpy_dtoh_async(h_output, d_output, stream)
             # Synchronize the stream
@@ -123,26 +131,28 @@ if __name__ == '__main__':
 
             eval_time_elapsed = time.time() - eval_start_time
 
-            # Data Post-processing
-            start_logits = h_output[:, 0]
-            end_logits = h_output[:, 1]
-
-            # Total number of n-best predictions to generate in the nbest_predictions.json output file
-            n_best_size = 20
-
-            # The maximum length of an answer that can be generated. This is needed
-            # because the start and end predictions are not conditioned on one another
-            max_answer_length = 30
-
-            prediction, nbest_json, scores_diff_json = dp.get_predictions(doc_tokens, input_features,
-                    start_logits, end_logits, n_best_size, max_answer_length)
-
             print("------------------------")
             print("Running inference in {:.3f} Sentences/Sec".format(1.0/eval_time_elapsed))
             print("------------------------")
 
-            print("Answer: '{}'".format(prediction))
-            print("With probability: {:.3f}".format(nbest_json[0]['probability']*100.0))
+            for index, batch in enumerate(h_output):
+                # Data Post-processing
+                start_logits = batch[:, 0]
+                end_logits = batch[:, 1]
+
+                # Total number of n-best predictions to generate in the nbest_predictions.json output file
+                n_best_size = 20
+
+                # The maximum length of an answer that can be generated. This is needed
+                # because the start and end predictions are not conditioned on one another
+                max_answer_length = 30
+
+                prediction, nbest_json, scores_diff_json = dp.get_predictions(doc_tokens, features,
+                        start_logits, end_logits, n_best_size, max_answer_length)
+
+                print("Processing output {:} in batch".format(index))
+                print("Answer: '{}'".format(prediction))
+                print("With probability: {:.3f}".format(nbest_json[0]['probability'] * 100.0))
 
         if question_text:
             print("\nQuestion: {}".format(question_text))

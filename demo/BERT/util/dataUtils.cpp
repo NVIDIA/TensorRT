@@ -29,8 +29,6 @@ namespace bert
 
 using namespace nvinfer1;
 using namespace samplesCommon;
-using std::cout;
-using std::endl;
 
 void parseDims(std::ifstream& input, const std::string& name, Dims& d)
 {
@@ -39,7 +37,6 @@ void parseDims(std::ifstream& input, const std::string& name, Dims& d)
     {
         input >> d.d[it];
     }
-    cout << name << ": nbDim=" << d.nbDims << " dim: " << d << endl;
     assert(input.peek() == ' ');
     input.get();
 }
@@ -109,7 +106,7 @@ void loadWeights(const std::string& wts_path, WeightMap& weightMap)
     std::ifstream input(wts_path, std::ios_base::binary);
     int32_t count;
     input >> count;
-    cout << "Number of parameters: " << count << endl;
+    gLogInfo << "Number of parameters: " << count << std::endl;
 
     for (int it = 0; it < count; it++)
     {
@@ -126,7 +123,7 @@ void loadWeights(const std::string& wts_path, WeightMap& weightMap)
         // output as squad_output_weights
         if (name.find("kernel") != std::string::npos)
         {
-            cout << "Transposing\n";
+            gLogVerbose << "Transposing\n";
             transposeMatrix(data, d);
         }
         Weights tmp;
@@ -188,7 +185,7 @@ void loadInputs(const std::string& weightsPath, int& Bmax, int& S, std::vector<n
     std::ifstream input(weightsPath, std::ios_base::binary);
     int32_t count;
     input >> count;
-    cout << "Number of buffers: " << count << endl;
+    gLogInfo << "Number of buffers: " << count << std::endl;
     assert(count % 3 == 0);
     S = 0;
     Bmax = 0;
@@ -281,80 +278,6 @@ void inferNetworkSizes(const WeightMap& weightMap, int& hiddenSize, int& interme
             const int layer = std::stoi(tok);
             numHiddenLayers = std::max(numHiddenLayers, layer + 1);
         }
-    }
-}
-
-void allocBindingsFromWeights(const ICudaEngine& engine, std::vector<void*>& buffers, const int batchSize,
-    const std::map<std::string, nvinfer1::Weights>& dict, int verbose)
-{
-
-    Weights W;
-    std::string name;
-
-    for (auto& kv : dict)
-    {
-        std::tie(name, W) = kv;
-        const int idx = engine.getBindingIndex(name.c_str());
-        if (verbose)
-        {
-            printf(" idx %d name %s\n", idx, name.c_str());
-        }
-        assert(idx >= 0);
-        const int outlen = W.count * getElementSize(W.type);
-        CHECK(cudaMalloc(&buffers[idx], outlen));
-        if (verbose)
-        {
-            printf(" idx %d allocated %d bytes\n", idx, outlen);
-        }
-    }
-}
-
-void allocBindingsFromVectors(const ICudaEngine& engine, std::vector<void*>& buffers, const int batchSize,
-    const std::map<std::string, std::vector<float>>& dict, int verbose)
-{
-
-    for (auto& kv : dict)
-    {
-        const int idx = engine.getBindingIndex(kv.first.c_str());
-        if (verbose)
-        {
-            printf(" idx %d name %s\n", idx, kv.first.c_str());
-        }
-        assert(idx >= 0);
-        const int outlen = sizeof(float) * kv.second.size();
-        CHECK(cudaMalloc(&buffers[idx], outlen));
-        if (verbose)
-        {
-            printf(" idx %d allocated %d bytes\n", idx, outlen);
-        }
-    }
-}
-
-void copyToDeviceBindings(const ICudaEngine& engine, std::vector<void*>& buffers, const int batchSize,
-    const std::map<std::string, Weights>& dict, cudaStream_t stream)
-{
-
-    Weights W;
-    std::string name;
-
-    for (auto kv : dict)
-    {
-        std::tie(name, W) = kv;
-        const int idx = engine.getBindingIndex(name.c_str());
-        const int len = W.count * getElementSize(W.type);
-        CHECK(cudaMemcpyAsync(buffers[idx], W.values, len, cudaMemcpyHostToDevice, stream));
-    }
-}
-
-void copyFromDeviceBindings(const ICudaEngine& engine, std::vector<void*>& buffers, const int batchSize,
-    std::map<std::string, std::vector<float>>& dict, cudaStream_t stream)
-{
-    for (auto& kv : dict)
-    {
-        const int idx = engine.getBindingIndex(kv.first.c_str());
-        const int len = kv.second.size() * sizeof(float);
-        CHECK(cudaMemcpyAsync(&kv.second[0], buffers[idx], len, cudaMemcpyDeviceToHost, stream));
-        printf("Binding %s idx %d downloading %d bytes\n", kv.first.c_str(), idx, len);
     }
 }
 

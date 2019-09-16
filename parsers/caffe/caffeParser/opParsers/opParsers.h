@@ -62,6 +62,7 @@ nvinfer1::ILayer* parseLRN(nvinfer1::INetworkDefinition& network, const trtcaffe
 nvinfer1::ILayer* parsePermute(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
 nvinfer1::ILayer* parsePooling(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
 nvinfer1::ILayer* parsePower(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& weightFactory, BlobNameToTensor& tensors);
+nvinfer1::ILayer* parsePReLU(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& weightFactory, BlobNameToTensor& tensors);
 nvinfer1::ILayer* parseReduction(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& weightFactory, BlobNameToTensor& tensors);
 nvinfer1::ILayer* parseReLU(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
 nvinfer1::ILayer* parseReshape(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
@@ -94,7 +95,8 @@ static std::unordered_map<std::string, LayerParseFn> gParseTable
     {"ELU", parseELU},
     {"BNLL", parseBNLL},
     {"Clip", parseClip},
-    {"AbsVal", parseAbsVal}
+    {"AbsVal", parseAbsVal},
+    {"PReLU", parsePReLU}
 };
 } // namespace nvcaffeparser1
 #endif //TRT_CAFFE_PARSER_OP_PARSERS_H

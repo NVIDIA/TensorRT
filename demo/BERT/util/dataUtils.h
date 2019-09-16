@@ -28,7 +28,7 @@ namespace bert
 
 //! \brief Loads a dictionary of weights
 //! \details The function loads the weights of the BERT network from a weights file. The Weights in the dictionary own
-//! the storage behind the Weights::values pointer. It is therefore the callers responsibility to free it. See also helpers/convert_weights.py 
+//! the storage behind the Weights::values pointer. It is therefore the callers responsibility to free it. See also helpers/convert_weights.py
 //!\param path path to inputs
 //!\param weightMap map of weights that the function will populate
 void loadWeights(const std::string& path, WeightMap& weightMap);
@@ -56,18 +56,6 @@ void loadInputs(const std::string& path, int& Bmax, int& S, std::vector<nvinfer1
 //! \param numHiddenLayers Outputs the number of transformer layers requested
 void inferNetworkSizes(const WeightMap& weightMap, int& hiddenSize,
     int& intermediateSize, int& numHiddenLayers);
-
-void allocBindingsFromWeights(const nvinfer1::ICudaEngine& engine, std::vector<void*>& buffers, const int batchSize,
-    const std::map<std::string, nvinfer1::Weights>& dict, int verbose);
-
-void allocBindingsFromVectors(const nvinfer1::ICudaEngine& engine, std::vector<void*>& buffers, const int batchSize,
-    const std::map<std::string, std::vector<float>>& dict, int verbose);
-
-void copyToDeviceBindings(const nvinfer1::ICudaEngine& engine, std::vector<void*>& buffers, const int batchSize,
-    const std::map<std::string, nvinfer1::Weights>& dict, cudaStream_t stream);
-
-void copyFromDeviceBindings(const nvinfer1::ICudaEngine& engine, std::vector<void*>& buffers, const int batchSize,
-    std::map<std::string, std::vector<float>>& dict, cudaStream_t stream);
 
 //! \brief Transposes logits from BxSx2 to 2xBxS
 //! \details Due to a limitation of TensorRT, the network itself cannot transpose the output of the squad logits

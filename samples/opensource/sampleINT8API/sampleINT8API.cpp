@@ -92,17 +92,17 @@ public:
     //!
     //! \brief Builds the network engine
     //!
-    bool build();
+    Logger::TestResult build();
 
     //!
     //! \brief Runs the TensorRT inference engine for this sample
     //!
-    bool infer();
+    Logger::TestResult infer();
 
     //!
     //! \brief Used to clean up any state created in the sample class
     //!
-    bool teardown();
+    Logger::TestResult teardown();
 
     SampleINT8APIParams mParams; //!< Stores Sample Parameter
 
@@ -445,27 +445,34 @@ bool SampleINT8API::verifyOutput(const samplesCommon::BufferManager& buffers) co
 //!
 //! \return Returns true if the engine was created successfully and false otherwise
 //!
-bool SampleINT8API::build()
+Logger::TestResult SampleINT8API::build()
 {
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
     if (!builder)
     {
         gLogError << "Unable to create builder object." << std::endl;
-        return false;
+        return Logger::TestResult::kFAILED;
     }
 
     auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
     if (!network)
     {
         gLogError << "Unable to create network object." << mParams.referenceFileName << std::endl;
-        return false;
+        return Logger::TestResult::kFAILED;
+    }
+
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        gLogError << "Unable to create config object." << mParams.referenceFileName << std::endl;
+        return Logger::TestResult::kFAILED;
     }
 
     auto parser = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, gLogger.getTRTLogger()));
     if (!parser)
     {
         gLogError << "Unable to create parser object." << mParams.referenceFileName << std::endl;
-        return false;
+        return Logger::TestResult::kFAILED;
     }
 
     // Parse ONNX model file to populate TensorRT INetwork
@@ -473,34 +480,34 @@ bool SampleINT8API::build()
     if (!parser->parseFromFile(mParams.modelFileName.c_str(), verbosity))
     {
         gLogError << "Unable to parse ONNX model file: " << mParams.modelFileName << std::endl;
-        return false;
+        return Logger::TestResult::kFAILED;
     }
 
     if (mParams.writeNetworkTensors)
     {
         writeNetworkTensorNames(network);
-        return false;
+        return Logger::TestResult::kWAIVED;
     }
 
     if (!builder->platformHasFastInt8())
     {
-        gLogError << "Platform does not support INT8 inference. SampleINT8API can only run in INT8 Mode." << std::endl;
-        return false;
+        gLogError << "Platform does not support INT8 inference. sampleINT8API can only run in INT8 Mode." << std::endl;
+        return Logger::TestResult::kWAIVED;
     }
 
     // Configure buider
-    builder->allowGPUFallback(true);
-    builder->setMaxWorkspaceSize(1_GB);
+    config->setFlag(BuilderFlag::kGPU_FALLBACK);
+    config->setMaxWorkspaceSize(1_GiB);
 
     // Enable INT8 model. Required to set custom per tensor dynamic range or INT8 Calibration
-    builder->setInt8Mode(true);
+    config->setFlag(BuilderFlag::kINT8);
     // Mark calibrator as null. As user provides dynamic range for each tensor, no calibrator is required
-    builder->setInt8Calibrator(nullptr);
+    config->setInt8Calibrator(nullptr);
 
     auto maxBatchSize = mParams.batchSize;
     if (mParams.dlaCore >= 0)
     {
-        samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+        samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
         if (maxBatchSize > builder->getMaxDLABatchSize())
         {
             std::cerr << "Requested batch size " << maxBatchSize << " is greater than the max DLA batch size of "
@@ -511,22 +518,23 @@ bool SampleINT8API::build()
     builder->setMaxBatchSize(maxBatchSize);
 
     // force layer to execute with required precision
-    builder->setStrictTypeConstraints(true);
+    config->setFlag(BuilderFlag::kSTRICT_TYPES);
     setLayerPrecision(network);
 
     // set INT8 Per Tensor Dynamic range
     if (!setDynamicRange(network))
     {
         gLogError << "Unable to set per tensor dynamic range." << std::endl;
-        return false;
+        return Logger::TestResult::kFAILED;
     }
 
     // build TRT engine
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         gLogError << "Unable to build cuda engine." << std::endl;
-        return false;
+        return Logger::TestResult::kFAILED;
     }
 
     // populates input output map structure
@@ -539,7 +547,7 @@ bool SampleINT8API::build()
     const int outputIndex = mEngine.get()->getBindingIndex(mInOut["output"].c_str());
     mOutputDims = mEngine.get()->getBindingDimensions(outputIndex);
 
-    return true;
+    return Logger::TestResult::kRUNNING;
 }
 
 //!
@@ -548,7 +556,7 @@ bool SampleINT8API::build()
 //! \details This function is the main execution function of the sample. It allocates
 //!          the buffer, sets inputs, executes the engine, and verifies the output
 //!
-bool SampleINT8API::infer()
+Logger::TestResult SampleINT8API::infer()
 {
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine, mParams.batchSize);
@@ -556,7 +564,7 @@ bool SampleINT8API::infer()
     auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
     {
-        return false;
+        return Logger::TestResult::kFAILED;
     }
 
     // Read the input data into the managed buffers
@@ -564,7 +572,7 @@ bool SampleINT8API::infer()
 
     if (!prepareInput(buffers))
     {
-        return false;
+        return Logger::TestResult::kFAILED;
     }
 
     // Create CUDA stream for the execution of this inference
@@ -577,7 +585,7 @@ bool SampleINT8API::infer()
     // Asynchronously enqueue the inference work
     if (!context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr))
     {
-        return false;
+        return Logger::TestResult::kFAILED;
     }
 
     // Asynchronously copy data from device output buffers to host output buffers
@@ -590,15 +598,15 @@ bool SampleINT8API::infer()
     cudaStreamDestroy(stream);
 
     // Check and print the output of the inference
-    return verifyOutput(buffers);
+    return verifyOutput(buffers) ? Logger::TestResult::kRUNNING : Logger::TestResult::kFAILED;
 }
 
 //!
 //! \brief Used to clean up any state created in the sample class
 //!
-bool SampleINT8API::teardown()
+Logger::TestResult SampleINT8API::teardown()
 {
-    return true;
+    return Logger::TestResult::kRUNNING;
 }
 
 //!
@@ -616,7 +624,7 @@ struct SampleINT8APIArgs : public samplesCommon::Args
     std::string networkTensorsFileName{"network_tensors.txt"};
 };
 
-//! \brief This function parses arguments specific to sampleINT8API
+//! \brief This function parses arguments specific to SampleINT8API
 //!
 bool parseSampleINT8APIArgs(SampleINT8APIArgs& args, int argc, char* argv[])
 {
@@ -804,17 +812,22 @@ int main(int argc, char** argv)
     SampleINT8API sample(params);
     gLogInfo << "Building and running a INT8 GPU inference engine for " << params.modelFileName << std::endl;
 
-    if (!sample.build())
+    auto buildStatus = sample.build();
+    if (buildStatus == Logger::TestResult::kWAIVED)
+    {
+        return gLogger.reportWaive(sampleTest);
+    }
+    else if (buildStatus == Logger::TestResult::kFAILED)
     {
         return gLogger.reportFail(sampleTest);
     }
 
-    if (!sample.infer())
+    if (sample.infer() != Logger::TestResult::kRUNNING)
     {
         return gLogger.reportFail(sampleTest);
     }
 
-    if (!sample.teardown())
+    if (sample.teardown() != Logger::TestResult::kRUNNING)
     {
         return gLogger.reportFail(sampleTest);
     }

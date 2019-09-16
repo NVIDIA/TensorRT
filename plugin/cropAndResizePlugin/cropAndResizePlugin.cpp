@@ -30,7 +30,7 @@ namespace
 {
 static const char* CROP_AND_RESIZE_PLUGIN_VERSION{"1"};
 static const char* CROP_AND_RESIZE_PLUGIN_NAME{"CropAndResize"};
-}
+} // namespace
 
 // Static class fields initialization
 PluginFieldCollection CropAndResizePluginCreator::mFC{};
@@ -93,9 +93,7 @@ CropAndResizePlugin::CropAndResizePlugin(const std::string name, int crop_width,
 {
 }
 
-CropAndResizePlugin::~CropAndResizePlugin()
-{
-}
+CropAndResizePlugin::~CropAndResizePlugin() {}
 
 const char* CropAndResizePlugin::getPluginType() const
 {
@@ -172,9 +170,7 @@ bool CropAndResizePlugin::supportsFormat(DataType type, PluginFormat format) con
     }
 }
 
-void CropAndResizePlugin::terminate()
-{
-}
+void CropAndResizePlugin::terminate() {}
 
 void CropAndResizePlugin::destroy()
 {
@@ -242,9 +238,7 @@ void CropAndResizePlugin::attachToContext(
 }
 
 // Detach the plugin object from its execution context.
-void CropAndResizePlugin::detachFromContext()
-{
-}
+void CropAndResizePlugin::detachFromContext() {}
 
 CropAndResizePluginCreator::CropAndResizePluginCreator()
 {
@@ -254,9 +248,7 @@ CropAndResizePluginCreator::CropAndResizePluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-CropAndResizePluginCreator::~CropAndResizePluginCreator()
-{
-}
+CropAndResizePluginCreator::~CropAndResizePluginCreator() {}
 
 const char* CropAndResizePluginCreator::getPluginName() const
 {

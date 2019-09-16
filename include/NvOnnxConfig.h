@@ -61,7 +61,7 @@ public:
     //!
     //! \see getModelDtype()
     //!
-    virtual void setModelDtype(const nvinfer1::DataType) = 0;
+    virtual void setModelDtype(const nvinfer1::DataType) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Get the Model Data Type.
@@ -70,7 +70,7 @@ public:
     //!
     //! \see setModelDtype() and #DataType
     //!
-    virtual nvinfer1::DataType getModelDtype() const = 0;
+    virtual nvinfer1::DataType getModelDtype() const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Get the Model FileName.
@@ -79,7 +79,7 @@ public:
     //!
     //! \see setModelFileName()
     //!
-    virtual const char* getModelFileName() const = 0;
+    virtual const char* getModelFileName() const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Set the Model File Name.
@@ -92,7 +92,7 @@ public:
     //!
     //! \see getModelFileName()
     //!
-    virtual void setModelFileName(const char* onnxFilename) = 0;
+    virtual void setModelFileName(const char* onnxFilename) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Get the Verbosity Level.
@@ -101,7 +101,7 @@ public:
     //!
     //! \see addVerbosity(), reduceVerbosity()
     //!
-    virtual Verbosity getVerbosityLevel() const = 0;
+    virtual Verbosity getVerbosityLevel() const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Increase the Verbosity Level.
@@ -110,9 +110,9 @@ public:
     //!
     //! \see addVerbosity(), reduceVerbosity(), setVerbosity(Verbosity)
     //!
-    virtual void addVerbosity() = 0;               //!< Increase verbosity Level.
-    virtual void reduceVerbosity() = 0;            //!< Decrease verbosity Level.
-    virtual void setVerbosityLevel(Verbosity) = 0; //!< Set to specific verbosity Level.
+    virtual void addVerbosity() TRTNOEXCEPT = 0;               //!< Increase verbosity Level.
+    virtual void reduceVerbosity() TRTNOEXCEPT = 0;            //!< Decrease verbosity Level.
+    virtual void setVerbosityLevel(Verbosity) TRTNOEXCEPT = 0; //!< Set to specific verbosity Level.
 
     //!
     //! \brief Returns the File Name of the Network Description as a Text File.
@@ -121,7 +121,7 @@ public:
     //!
     //! \see setTextFilename()
     //!
-    virtual const char* getTextFileName() const = 0;
+    virtual const char* getTextFileName() const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Set the File Name of the Network Description as a Text File.
@@ -134,7 +134,7 @@ public:
     //!
     //! \see getTextFilename()
     //!
-    virtual void setTextFileName(const char* textFileName) = 0;
+    virtual void setTextFileName(const char* textFileName) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Get the File Name of the Network Description as a Text File, including the weights.
@@ -143,7 +143,7 @@ public:
     //!
     //! \see setFullTextFilename()
     //!
-    virtual const char* getFullTextFileName() const = 0;
+    virtual const char* getFullTextFileName() const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Set the File Name of the Network Description as a Text File, including the weights.
@@ -156,7 +156,7 @@ public:
     //!
     //! \see getFullTextFilename()
     //!
-    virtual void setFullTextFileName(const char* fullTextFileName) = 0;
+    virtual void setFullTextFileName(const char* fullTextFileName) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Get whether the layer information will be printed.
@@ -165,19 +165,19 @@ public:
     //!
     //! \see setPrintLayerInfo()
     //!
-    virtual bool getPrintLayerInfo() const = 0;
+    virtual bool getPrintLayerInfo() const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Set whether the layer information will be printed.
     //!
     //! \see getPrintLayerInfo()
     //!
-    virtual void setPrintLayerInfo(bool) = 0;
+    virtual void setPrintLayerInfo(bool) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Destroy IOnnxConfig object.
     //!
-    virtual void destroy() = 0;
+    virtual void destroy() TRTNOEXCEPT = 0;
 
 }; // class IOnnxConfig
 
@@ -185,4 +185,4 @@ TENSORRTAPI IOnnxConfig* createONNXConfig();
 
 } // namespace nvonnxparser
 
-#endif
+#endif // NV_ONNX_CONFIG_H

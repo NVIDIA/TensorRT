@@ -24,9 +24,15 @@ ILayer* parseConcat(INetworkDefinition& network, const trtcaffe::LayerParameter&
     const trtcaffe::ConcatParameter& p = msg.concat_param();
     bool hasAxis = p.has_axis(); // optional parameter
 
-    if (hasAxis && p.axis() <= 0)
+    if (hasAxis && p.axis() < 0)
     {
-        std::cout << "Caffe parser: Concat along batch axis or negative axis is not supported." << std::endl;
+        std::cout << "Caffe parser: Concat negative axis is not supported." << std::endl;
+        return nullptr;
+    }
+    if (network.hasImplicitBatchDimension() && p.axis() == 0)
+    {
+        std::cout << "Caffe parser: Concat across batch axis with implicit batch dimensions is not supported."
+                  << std::endl;
         return nullptr;
     }
 
@@ -42,7 +48,7 @@ ILayer* parseConcat(INetworkDefinition& network, const trtcaffe::LayerParameter&
     // Rely on the default axis setting inside TRT which takes into account NPCHW and higher dimensional input.
     if (hasAxis)
     {
-        concat->setAxis(p.axis() - 1);
+        concat->setAxis(p.axis() - static_cast<int>(network.hasImplicitBatchDimension()));
     }
 
     return concat;

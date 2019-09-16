@@ -14,6 +14,8 @@
 # limitations under the License.
 #
 SET(SAMPLE_SOURCES
+    ../../common/sampleEngines.cpp
+    ../../common/sampleOptions.cpp
     trtexec.cpp
 )
 

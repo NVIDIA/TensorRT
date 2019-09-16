@@ -130,6 +130,12 @@ bool SamplePlugin::build()
         return false;
     }
 
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
     auto parser = SampleUniquePtr<nvcaffeparser1::ICaffeParser>(nvcaffeparser1::createCaffeParser());
     if (!parser)
     {
@@ -143,17 +149,25 @@ bool SamplePlugin::build()
     constructNetwork(builder, parser, network);
 
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(1_MB);
-    builder->setFp16Mode(mParams.fp16);
-    builder->setInt8Mode(mParams.int8);
-    samplesCommon::setDummyInt8Scales(builder.get(), network.get());
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    config->setMaxWorkspaceSize(1_MiB);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
+    if (mParams.int8)
+    {
+        config->setFlag(BuilderFlag::kINT8);
+    }
+    samplesCommon::setDummyInt8Scales(config.get(), network.get());
+
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
     // For illustrative purposes, we will use the builder to create a CUDA engine,
     // serialize it to mModelStream object (which can be written to a file), then
     // deserialize mModelStream with a IRuntime object to recreate the original engine.
     // Note for this sample we could have simply used the original engine produced by builder->buildEngineWithConfig()
-    auto modelStream = SampleUniquePtr<nvinfer1::IHostMemory>(builder->buildCudaEngine(*network)->serialize());
+    auto modelStream
+        = SampleUniquePtr<nvinfer1::IHostMemory>(builder->buildEngineWithConfig(*network, *config)->serialize());
     assert(modelStream != nullptr);
 
     auto runtime = SampleUniquePtr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(gLogger.getTRTLogger()));

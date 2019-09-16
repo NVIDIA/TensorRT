@@ -87,13 +87,12 @@ If you want to train your own model and not use the pre-trained model included i
 
 To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. The following example output is printed when running the sample:
 ```
-Usage: ./sample_char_rnn [-h or --help] [-d or --datadir=<path_to_data_directory>] [--useDLACore=<int>]
+Usage: ./sample_char_rnn [-h or --help] [-d or --datadir=<path_to_data_directory>]
 
 --help Display help information
 
 --datadir Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use data/samples/char-rnn/ and data/char-rnn/
 
---useDLACore=N Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, where n is the number of DLA engines on the platform.
 ```
 
 

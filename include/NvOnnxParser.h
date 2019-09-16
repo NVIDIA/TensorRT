@@ -26,6 +26,11 @@
 static const int NV_ONNX_PARSER_VERSION = ((NV_ONNX_PARSER_MAJOR * 10000) + (NV_ONNX_PARSER_MINOR * 100) + NV_ONNX_PARSER_PATCH);
 
 class onnxTensorDescriptorV1;
+//!
+//! \namespace nvonnxparser
+//!
+//! \brief The TensorRT ONNX parser API namespace
+//!
 namespace nvonnxparser
 {
 

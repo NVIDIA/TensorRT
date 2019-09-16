@@ -44,6 +44,12 @@ set(PLUGIN_LISTS
     cropAndResizePlugin
     proposalPlugin
     batchTilePlugin
+    detectionLayerPlugin
+    proposalLayerPlugin
+    pyramidROIAlignPlugin
+    resizeNearestPlugin
+    specialSlicePlugin
+    instanceNormalizationPlugin
     )
 
 include_directories(common common/kernels)
@@ -81,7 +87,7 @@ set_target_properties(${SHARED_TARGET} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
 )
 
-set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,--version-script=${PLUGIN_EXPORT_MAP}")
+set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
 
 set_target_properties(${SHARED_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})
 
@@ -92,6 +98,7 @@ set_property(TARGET ${SHARED_TARGET} PROPERTY CUDA_STANDARD 11)
 target_link_libraries(${SHARED_TARGET}
     ${CUBLAS_LIB}
     ${CUDART_LIB}
+    ${CUDNN_LIB}
     nvinfer
 )
 

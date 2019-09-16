@@ -110,4 +110,4 @@ This is the first release of this `README.md` file.
 
 ## Known issues
 
-There are no known issues in this plugin.
+When running `cub::DeviceSegmentedRadixSort::SortPairsDescending` with `cuda-memcheck --tool racecheck`, it will not work correctly.

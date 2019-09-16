@@ -18,22 +18,22 @@
 #define TRT_ATTENTION_H
 
 #include "attentionKeys.h"
+#include "bertUtils.h"
 #include "qkvToContextPlugin.h"
 
 namespace bert
 {
 
-ILayer* attention(const std::string& prefix, const BertConfig& config, WeightMap& weightMap,
+inline ILayer* attentionDynamic(const std::string& prefix, const BertConfig& config, WeightMap& weightMap,
     INetworkDefinition* network, ITensor* inputTensor, ITensor* inputMask = nullptr)
 {
     assert(inputTensor);
     assert(network);
 
     const Dims idims = inputTensor->getDimensions();
-    assert(idims.nbDims == 4);
+    gLogVerbose << "Attention input dimensions: " <<idims.nbDims << std::endl;
 
-    const int S = idims.d[0];
-    const int hiddenSize = idims.d[1];
+    const int hiddenSize = config.hiddenSize;
     const int numHeads = config.numAttentionHeads;
     const int headSize = hiddenSize / numHeads;
 
@@ -43,14 +43,16 @@ ILayer* attention(const std::string& prefix, const BertConfig& config, WeightMap
     const Weights Ball = weightMap.at(prefix + BQKV);
 
     IFullyConnectedLayer* multAllLayer = network->addFullyConnected(*inputTensor, 3 * hiddenSize, Wall, Ball);
+    multAllLayer->setName((prefix+"FC_QKV").c_str());
     setOutputName(multAllLayer, prefix, "qkv_mult");
 
     ITensor* shuffleOut = multAllLayer->getOutput(0);
 
     const bool hasMask = inputMask != nullptr;
-    QKVToContextPlugin qkvPlugin("qkv2ctx", hiddenSize, numHeads, S, hasMask);
+    test::QKVToContextPluginDynamic qkvPlugin("qkv2ctx", hiddenSize, numHeads, hasMask);
     ITensor* qkvIn[2] = {shuffleOut, inputMask};
     IPluginV2Layer* qkv2ctxLayer = network->addPluginV2(qkvIn, 1 + hasMask, qkvPlugin);
+    qkv2ctxLayer->setName((prefix + "QKV2CTX").c_str());
     setOutputName(qkv2ctxLayer, prefix, "context_layer");
     return qkv2ctxLayer;
 }

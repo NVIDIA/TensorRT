@@ -66,7 +66,6 @@
  * limitations under the License.
  */
 
-
 #include <errno.h>
 #include <getopt.h>
 #include <stdarg.h>

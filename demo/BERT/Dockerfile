@@ -12,18 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM nvcr.io/nvidia/tensorrt:19.05-py3
+FROM nvcr.io/nvidia/tensorrt:19.09-py3
 ARG myuid
 ARG mygid
 
-RUN  echo $myuid
-RUN  echo $mygid
+RUN echo $myuid
+RUN echo $mygid
 
-# TODO: Depending on the docker version, this might work without mapping the user for home dir access
 RUN groupadd -r -g ${mygid} nb && useradd -r -u ${myuid} -g ${mygid} -ms /bin/bash nb
 
 RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:ubuntu-toolchain-r/test
-RUN apt-get update && apt-get install -y pbzip2 pv bzip2  sudo gcc-7 g++-7  zlib1g-dev g++-4.9
+RUN apt-get update && apt-get install -y pbzip2 pv bzip2 sudo gcc-7 g++-7 zlib1g-dev g++-4.8
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 60 \
                                  --slave /usr/bin/g++ g++ /usr/bin/g++-7  && \
                                  update-alternatives --config gcc
@@ -31,6 +30,7 @@ RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 60 \
 RUN wget https://cmake.org/files/v3.14/cmake-3.14.0-Linux-x86_64.sh && \
     sh cmake-3.14.0-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir
 RUN pip install tensorflow==1.13.1 && pip install horovod
+RUN pip install jupyter
 
 RUN echo 'nb:abc123' | chpasswd
 
@@ -42,4 +42,3 @@ WORKDIR /workspace
 
 RUN git clone https://github.com/NVlabs/cub.git
 RUN git clone https://github.com/NVIDIA/cutlass.git
-

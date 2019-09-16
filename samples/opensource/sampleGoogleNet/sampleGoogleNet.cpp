@@ -103,6 +103,12 @@ bool SampleGoogleNet::build()
         return false;
     }
 
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
     auto parser = SampleUniquePtr<nvcaffeparser1::ICaffeParser>(nvcaffeparser1::createCaffeParser());
     if (!parser)
     {
@@ -111,10 +117,11 @@ bool SampleGoogleNet::build()
 
     constructNetwork(parser, network);
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(16_MB);
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    config->setMaxWorkspaceSize(16_MiB);
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
         return false;
 

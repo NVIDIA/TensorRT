@@ -11,7 +11,7 @@
 
 ## Description
 
-The `cropAndResizePlugin` performs object detection for the Faster R-CNN model.
+The `cropAndResizePlugin` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT and used in [sampleUffFasterRCNN] to perform inference.
 
 `cropAndResizePlugin` implements the TensorFlow style of ROIPooling(a.k.a. CropAndResize). It crops multiple region of interests(ROIs) from the input image with given ROI coordinates and then (bilinearly) resizes the cropped patches to a target spatial(width and height) size. 
 

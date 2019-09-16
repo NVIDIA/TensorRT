@@ -112,8 +112,10 @@ if("uff" IN_LIST SAMPLE_PARSERS)
     list(APPEND SAMPLE_DEP_LIBS nvuffparser)
 endif()
 
+# Necessary to link nvinfer_plugin library.
 target_link_libraries(${TARGET_NAME}
     ${SAMPLE_DEP_LIBS}
+    -Wl,--unresolved-symbols=ignore-in-shared-libs
 )
 
 set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL")

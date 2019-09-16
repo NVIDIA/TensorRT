@@ -30,6 +30,10 @@ To build the TensorRT OSS components, ensure you meet the following package requ
 
 * [PIP](https://pypi.org/project/pip/#history) >= v19.0
 
+* [TensorFlow](https://www.tensorflow.org/install)
+
+* [Horovod](https://github.com/horovod/horovod#install)
+
 * Essential libraries and utilities
   * [Git](https://git-scm.com/downloads), [pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/), [Wget](https://www.gnu.org/software/wget/faq.html#download), [Zlib](https://zlib.net/)
 
@@ -43,7 +47,7 @@ To build the TensorRT OSS components, ensure you meet the following package requ
 
 **TensorRT Release**
 
-* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-5x-download) v5.1.5
+* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-6x-download) v6.0.0
 
 
 ## Example Workflow
@@ -84,7 +88,7 @@ The SQuAD fine-tuned Tensorflow checkpoint can be converted using the following 
 python helpers/convert_weights.py -m $CHECKPOINT -o <weight path>/filename
 ```
 
-This will generate a file `<weight path>/<filename>.weights`. The path that contains the weights file, will be referred to as `WEIGHT_PATH`.
+This will generate a file `<weight path>/bert.weights`. The path that contains the weights file, will be referred to as `WEIGHT_PATH`.
 
 
 ### 3. Generate an input/output pair

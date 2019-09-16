@@ -1,0 +1,11 @@
+--- converter_functions.py	2019-07-30 14:02:10.215925898 +0800
++++ converter_functions_fix_softmax.py	2019-07-30 13:53:46.187910972 +0800
+@@ -231,7 +231,7 @@
+     else:
+         axis = 0
+     fmt = convert_to_str(tf_node.attr['data_format'].s)
+-    fmt = fmt if fmt else "NHWC"
++    fmt = fmt if fmt else "NCHW"
+     data_fmt = tf2uff.convert_tf2uff_data_format(fmt)
+     uff_graph.softmax(inputs[0], axis, data_fmt, name)
+     return [tf2uff.split_node_name_and_output(inp)[0] for inp in inputs]

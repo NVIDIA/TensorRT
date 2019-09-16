@@ -14,19 +14,24 @@
  * limitations under the License.
  */
 
+#include <cassert>
+#include <cstring>
+#include <vector>
+
 #include "NvInfer.h"
+#include "common.h"
 #include "embLayerNormPlugin.h"
 #include "logger.h"
 #include "pluginKernels.h"
 #include "pluginUtil.h"
 
-#include <cassert>
-#include <cstring>
-#include <vector>
-
+using namespace nvinfer1;
 using bert::operator+;
 
 namespace bert
+{
+
+namespace test
 {
 
 template <typename T, unsigned TPB>
@@ -79,7 +84,7 @@ __global__ void embLayerNormKernel(int ld, const int* inputIds, const int* token
 }
 
 template <typename T>
-int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* inputIds, const int* token_ids,
+inline int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* inputIds, const int* token_ids,
     const float* beta, const float* gamma, const float* wordEmb, const float* posEmb, const float* tokEmb, T* output)
 {
 
@@ -94,23 +99,21 @@ int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* input
     return 0;
 }
 
-using namespace nvinfer1;
-
 // Clip plugin specific constants
 namespace
 {
 static const char* EMB_LAYER_NORM_VERSION{"1"};
-static const char* EMB_LAYER_NORM_NAME{"CustomEmbLayerNormPlugin"};
+static const char* EMB_LAYER_NORM_NAME{"CustomEmbLayerNormPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
-PluginFieldCollection EmbLayerNormPluginCreator::mFC{};
-std::vector<PluginField> EmbLayerNormPluginCreator::mPluginAttributes;
+PluginFieldCollection EmbLayerNormPluginDynamicCreator::mFC{};
+std::vector<PluginField> EmbLayerNormPluginDynamicCreator::mPluginAttributes;
 
-REGISTER_TENSORRT_PLUGIN(EmbLayerNormPluginCreator);
+REGISTER_TENSORRT_PLUGIN(EmbLayerNormPluginDynamicCreator);
 
-EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const bool outputFp16, const Weights& beta,
-    const Weights& gamma, const Weights& wordEmb, const Weights& posEmb, const Weights& tokEmb)
+EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(const std::string& name, const bool outputFp16,
+    const Weights& beta, const Weights& gamma, const Weights& wordEmb, const Weights& posEmb, const Weights& tokEmb)
     : mLayerName(name)
     , mLd(beta.count)
     , mGamma(gamma)
@@ -136,7 +139,7 @@ EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const bool outpu
     mType = outputFp16 ? DataType::kHALF : DataType::kFLOAT;
 }
 
-EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const void* data, size_t length)
+EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(const std::string& name, const void* data, size_t length)
     : mLayerName(name)
 {
     gLogVerbose << "EMB LN Deser start\n";
@@ -171,23 +174,160 @@ EmbLayerNormPlugin::EmbLayerNormPlugin(const std::string& name, const void* data
     gLogVerbose << "EMB LN Deser done\n";
 }
 
-const char* EmbLayerNormPlugin::getPluginType() const
+// IPluginV2DynamicExt Methods
+IPluginV2DynamicExt* EmbLayerNormPluginDynamic::clone() const
 {
-    return EMB_LAYER_NORM_NAME;
+    gLogVerbose << "EMBLN clone start" << std::endl;
+    auto ret = new EmbLayerNormPluginDynamic(
+        mLayerName, mType == DataType::kHALF, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
+    ret->mS = mS;
+
+    ret->mWordEmbDev = mWordEmbDev;
+    ret->mPosEmbDev = mPosEmbDev;
+    ret->mTokEmbDev = mTokEmbDev;
+    ret->mBetaDev = mBetaDev;
+    ret->mGammaDev = mGammaDev;
+    gLogVerbose << "EMBLN clone done" << std::endl;
+    return ret;
 }
 
-const char* EmbLayerNormPlugin::getPluginVersion() const
+DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder)
 {
-    return EMB_LAYER_NORM_VERSION;
+    // Input should be input ids and token ids and the input mask
+    // Output should be the embeddings tensor and mask indices
+    assert(nbInputs == 3);
+
+    assert(inputs[0].nbDims == 2); // BxS
+    assert(inputs[0].nbDims == inputs[1].nbDims);
+    assert(inputs[0].nbDims == inputs[2].nbDims);
+
+    assert(outputIndex == 0 || outputIndex == 1);
+
+    if (outputIndex == 0)
+    {
+        DimsExprs ret;
+        ret.nbDims = 5;
+        ret.d[0] = inputs[0].d[0];
+        ret.d[1] = inputs[0].d[1];
+        ret.d[2] = exprBuilder.constant(mLd);
+        ret.d[3] = exprBuilder.constant(1);
+        ret.d[4] = exprBuilder.constant(1);
+        return ret;
+    }
+
+    DimsExprs ret;
+    ret.nbDims = 1;
+    ret.d[0] = inputs[0].d[BDIM];
+    return ret;
 }
 
-int EmbLayerNormPlugin::getNbOutputs() const
+bool EmbLayerNormPluginDynamic::supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
 {
-    return 2;
+    // 3 inputs of size BxS
+    assert(nbInputs == 3);
+    assert(nbOutputs == 2);
+
+    const PluginTensorDesc& desc = inOut[pos];
+    if (pos == 0)
+    {
+        return desc.type == DataType::kINT32 && desc.format == TensorFormat::kLINEAR && desc.dims.nbDims == 2;
+    }
+
+    const PluginTensorDesc& prev = inOut[pos - 1];
+    if (pos == 1 || pos == 2)
+    {
+        return desc.type == DataType::kINT32 && desc.format == TensorFormat::kLINEAR && desc.dims.nbDims == 2
+            && desc.dims.d[BDIM] == prev.dims.d[BDIM] && desc.dims.d[SDIM] == prev.dims.d[SDIM];
+    }
+
+    if (pos == 3)
+    { // embedded sequence
+        return desc.type == mType && desc.format == TensorFormat::kLINEAR && desc.dims.nbDims == 5
+            && desc.dims.d[BDIM] == prev.dims.d[BDIM] && desc.dims.d[SDIM] == prev.dims.d[SDIM]
+            && desc.dims.d[3] == 1 && desc.dims.d[4] == 1;
+    }
+    // pos == 4: mask
+    return desc.type == DataType::kINT32 && desc.format == TensorFormat::kLINEAR
+        && desc.dims.nbDims == 1 && desc.dims.d[BDIM] == prev.dims.d[BDIM];
 }
 
-DataType EmbLayerNormPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+void EmbLayerNormPluginDynamic::configurePlugin(const DynamicPluginTensorDesc* inputs, int nbInputs,
+    const DynamicPluginTensorDesc* outputs, int nbOutputs)
 {
+    // Validate input arguments
+    assert(nbOutputs == 2);
+    assert(nbInputs == 3);
+
+    assert(inputs[0].desc.dims.nbDims == 2);
+    mS = inputs[0].desc.dims.d[SDIM];
+    const int B = inputs[0].desc.dims.d[BDIM];
+    assert(mS == inputs[1].desc.dims.d[SDIM]);
+    assert(B == inputs[1].desc.dims.d[BDIM]);
+    assert(mS == inputs[2].desc.dims.d[SDIM]);
+    assert(B == inputs[2].desc.dims.d[BDIM]);
+
+    assert(outputs[0].desc.dims.nbDims == 5);
+    assert(outputs[0].desc.dims.d[SDIM] == mS);
+    assert(outputs[0].desc.dims.d[BDIM] == B);
+    assert(outputs[0].desc.dims.d[2] == mLd);
+    assert(outputs[0].desc.dims.d[3] == 1);
+    assert(outputs[0].desc.dims.d[4] == 1);
+
+    assert(outputs[1].desc.dims.nbDims == 1);
+    assert(outputs[1].desc.dims.d[0] == B);
+
+    assert(inputs[0].desc.type== DataType::kINT32);
+    assert(inputs[1].desc.type== DataType::kINT32);
+    assert(inputs[2].desc.type== DataType::kINT32);
+    const DataType out_type = outputs[0].desc.type;
+    assert(out_type == DataType::kFLOAT || out_type == DataType::kHALF);
+    assert(outputs[1].desc.type == DataType::kINT32);
+}
+
+size_t EmbLayerNormPluginDynamic::getWorkspaceSize(const PluginTensorDesc* inputs, int nbInputs,
+    const PluginTensorDesc* outputs, int nbOutputs) const
+{
+    return 0;
+}
+
+int EmbLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+{
+    const int batchSize = inputDesc->dims.d[BDIM];
+    const int S = inputDesc->dims.d[SDIM];
+    int status = -1;
+
+    // Our plugin outputs only one tensor
+    const int* inputIds = static_cast<const int*>(inputs[0]);
+    const int* segmentIds = static_cast<const int*>(inputs[1]);
+    const int* inputMask = static_cast<const int*>(inputs[2]);
+
+    if (mType == DataType::kFLOAT)
+    {
+        float* output = static_cast<float*>(outputs[0]);
+        embSkipLayerNorm<float>(stream, mLd, batchSize, S, inputIds, segmentIds, mBetaDev, mGammaDev, mWordEmbDev,
+            mPosEmbDev, mTokEmbDev, output);
+    }
+    else if (mType == DataType::kHALF)
+    {
+        half* output = static_cast<half*>(outputs[0]);
+        embSkipLayerNorm<half>(stream, mLd, batchSize, S, inputIds, segmentIds, mBetaDev, mGammaDev, mWordEmbDev,
+            mPosEmbDev, mTokEmbDev, output);
+    }
+    else
+    {
+        assert(false);
+    }
+    int* maskIdx = static_cast<int*>(outputs[1]);
+    computeMaskIdx(stream, S, batchSize, inputMask, maskIdx);
+
+    return status;
+}
+
+// IPluginV2Ext Methods
+DataType EmbLayerNormPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const
+{
+
     assert(index == 0 || index == 1);
     if (index == 0)
     {
@@ -197,28 +337,23 @@ DataType EmbLayerNormPlugin::getOutputDataType(int index, const nvinfer1::DataTy
     return DataType::kINT32;
 }
 
-Dims EmbLayerNormPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+// IPluginV2 Methods
+const char* EmbLayerNormPluginDynamic::getPluginType() const
 {
-    // Input should be input ids and token ids and the input mask
-    // Output should be the embeddings tensor and mask indices
-    assert(nbInputDims == 3);
-    assert(inputs[0].nbDims == 1); // S
-    assert(inputs[0].nbDims == inputs[1].nbDims);
-    const int S = inputs[0].d[0];
-    assert(inputs[1].d[0] == S);
-    assert(inputs[2].d[0] == S);
-
-    assert(index == 0 || index == 1);
-
-    if (index == 0)
-    {
-        const int hidden_size = mLd;
-        return Dims4{S, hidden_size, 1, 1};
-    }
-    return Dims{1, 1};
+    return EMB_LAYER_NORM_NAME;
 }
 
-int EmbLayerNormPlugin::initialize()
+const char* EmbLayerNormPluginDynamic::getPluginVersion() const
+{
+    return EMB_LAYER_NORM_VERSION;
+}
+
+int EmbLayerNormPluginDynamic::getNbOutputs() const
+{
+    return 2;
+}
+
+int EmbLayerNormPluginDynamic::initialize()
 {
     if (mGamma.values)
     {
@@ -250,38 +385,18 @@ int EmbLayerNormPlugin::initialize()
     return 0;
 }
 
-int EmbLayerNormPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream)
+void EmbLayerNormPluginDynamic::terminate()
 {
-    int status = -1;
-
-    // Our plugin outputs only one tensor
-    const int* inputIds = static_cast<const int*>(inputs[0]);
-    const int* segmentIds = static_cast<const int*>(inputs[1]);
-    const int* inputMask = static_cast<const int*>(inputs[2]);
-
-    if (mType == DataType::kFLOAT)
-    {
-        float* output = static_cast<float*>(outputs[0]);
-        embSkipLayerNorm<float>(stream, mLd, batchSize, mS, inputIds, segmentIds, mBetaDev, mGammaDev, mWordEmbDev,
-            mPosEmbDev, mTokEmbDev, output);
-    }
-    else if (mType == DataType::kHALF)
-    {
-        half* output = static_cast<half*>(outputs[0]);
-        embSkipLayerNorm<half>(stream, mLd, batchSize, mS, inputIds, segmentIds, mBetaDev, mGammaDev, mWordEmbDev,
-            mPosEmbDev, mTokEmbDev, output);
-    }
-    else
-    {
-        assert(false);
-    }
-    int* maskIdx = static_cast<int*>(outputs[1]);
-    computeMaskIdx(stream, mS, batchSize, inputMask, maskIdx);
-
-    return status;
+    gLogVerbose << "EMBLN terminate start" << std::endl;
+    CHECK(cudaFree(mGammaDev));
+    CHECK(cudaFree(mBetaDev));
+    CHECK(cudaFree(mWordEmbDev));
+    CHECK(cudaFree(mTokEmbDev));
+    CHECK(cudaFree(mPosEmbDev));
+    gLogVerbose << "EMBLN terminate done" << std::endl;
 }
 
-size_t EmbLayerNormPlugin::getSerializationSize() const
+size_t EmbLayerNormPluginDynamic::getSerializationSize() const
 {
     return 2 * sizeof(float) * mLd             // beta + gamma
         + sizeof(mType) + sizeof(mLd) * 5      //mLd, mS, m*VocabSize
@@ -291,7 +406,7 @@ size_t EmbLayerNormPlugin::getSerializationSize() const
         ;
 }
 
-void EmbLayerNormPlugin::serialize(void* buffer) const
+void EmbLayerNormPluginDynamic::serialize(void* buffer) const
 {
     char* d = static_cast<char*>(buffer);
     const char* a = d;
@@ -310,62 +425,7 @@ void EmbLayerNormPlugin::serialize(void* buffer) const
     assert(d == a + getSerializationSize());
 }
 
-void EmbLayerNormPlugin::configurePlugin(const Dims* inputs, int nbInputs, const Dims* outputs, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat format, int maxBatchSize)
-{
-
-    // Validate input arguments
-    assert(nbOutputs == 2);
-    assert(nbInputs == 3);
-
-    assert(inputs[0].nbDims == 1);
-    mS = inputs[0].d[0];
-    assert(mS == inputs[1].d[0]);
-    assert(mS == inputs[2].d[0]);
-
-    assert(outputs[0].nbDims == 4);
-    assert(outputs[0].d[0] == mS);
-    assert(outputs[0].d[1] == mLd);
-    assert(outputs[0].d[2] == 1);
-    assert(outputs[0].d[3] == 1);
-
-    assert(outputs[1].nbDims == 1);
-    assert(outputs[1].d[0] == 1);
-
-    assert(format == PluginFormat::kNCHW);
-    assert(inputTypes[0] == DataType::kINT32);
-    assert(inputTypes[1] == DataType::kINT32);
-    assert(inputTypes[2] == DataType::kINT32);
-    const DataType out_type = outputTypes[0];
-    assert(out_type == DataType::kFLOAT || out_type == DataType::kHALF);
-    assert(outputTypes[1] == DataType::kINT32);
-}
-
-bool EmbLayerNormPlugin::supportsFormat(DataType type, PluginFormat format) const
-{
-    if (type == DataType::kINT32 || type == DataType::kFLOAT || type == DataType::kHALF)
-    {
-        return format == PluginFormat::kNCHW;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-void EmbLayerNormPlugin::terminate()
-{
-    gLogVerbose << "EMBLN terminate start" << std::endl;
-    cudaFree(mGammaDev);
-    cudaFree(mBetaDev);
-    cudaFree(mWordEmbDev);
-    cudaFree(mTokEmbDev);
-    cudaFree(mPosEmbDev);
-    gLogVerbose << "EMBLN terminate done" << std::endl;
-}
-
-void EmbLayerNormPlugin::destroy()
+void EmbLayerNormPluginDynamic::destroy()
 {
     gLogVerbose << "EMBLN destroy start" << std::endl;
     // This gets called when the network containing plugin is destroyed
@@ -373,55 +433,42 @@ void EmbLayerNormPlugin::destroy()
     gLogVerbose << "EMBLN destroy start" << std::endl;
 }
 
-IPluginV2Ext* EmbLayerNormPlugin::clone() const
-{
-    gLogVerbose << "EMBLN clone start" << std::endl;
-    auto ret = new EmbLayerNormPlugin(mLayerName, mType == DataType::kHALF, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
-    ret->mS = mS;
-
-    ret->mWordEmbDev = mWordEmbDev;
-    ret->mPosEmbDev = mPosEmbDev;
-    ret->mTokEmbDev = mTokEmbDev;
-    ret->mBetaDev = mBetaDev;
-    ret->mGammaDev = mGammaDev;
-    gLogVerbose << "EMBLN clone done" << std::endl;
-    return ret;
-}
-
-void EmbLayerNormPlugin::setPluginNamespace(const char* libNamespace)
+void EmbLayerNormPluginDynamic::setPluginNamespace(const char* libNamespace)
 {
     mNamespace = libNamespace;
 }
 
-const char* EmbLayerNormPlugin::getPluginNamespace() const
+const char* EmbLayerNormPluginDynamic::getPluginNamespace() const
 {
     return mNamespace.c_str();
 }
 
-EmbLayerNormPluginCreator::EmbLayerNormPluginCreator()
+///////////////////////
+
+EmbLayerNormPluginDynamicCreator::EmbLayerNormPluginDynamicCreator()
 {
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* EmbLayerNormPluginCreator::getPluginName() const
+const char* EmbLayerNormPluginDynamicCreator::getPluginName() const
 {
     return EMB_LAYER_NORM_NAME;
 }
 
-const char* EmbLayerNormPluginCreator::getPluginVersion() const
+const char* EmbLayerNormPluginDynamicCreator::getPluginVersion() const
 {
     return EMB_LAYER_NORM_VERSION;
 }
 
-const PluginFieldCollection* EmbLayerNormPluginCreator::getFieldNames()
+const PluginFieldCollection* EmbLayerNormPluginDynamicCreator::getFieldNames()
 {
     return &mFC;
 }
 
-IPluginV2* EmbLayerNormPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
-    gLogVerbose << "Creating EmbLayerNormPlugin...\n";
+    gLogVerbose << "Creating EmbLayerNormPluginDynamic...\n";
 
     bool output_fp16 = true;
     Weights beta;
@@ -429,10 +476,10 @@ IPluginV2* EmbLayerNormPluginCreator::createPlugin(const char* name, const Plugi
     Weights word_emb;
     Weights pos_emb;
     Weights tok_emb;
-    for(int i=0; i< fc->nbFields; i++)
+    for (int i = 0; i < fc->nbFields; i++)
     {
         std::string field_name(fc->fields[i].name);
-        if (field_name.compare("bert_embeddings_layernorm_beta")==0)
+        if (field_name.compare("bert_embeddings_layernorm_beta") == 0)
         {
             gLogVerbose << "Building bert_embeddings_layernorm_beta...\n";
             beta.values = fc->fields[i].data;
@@ -440,7 +487,7 @@ IPluginV2* EmbLayerNormPluginCreator::createPlugin(const char* name, const Plugi
             beta.type = static_cast<DataType>(fc->fields[i].type);
         }
 
-        if (field_name.compare("bert_embeddings_layernorm_gamma")==0)
+        if (field_name.compare("bert_embeddings_layernorm_gamma") == 0)
         {
             gLogVerbose << "Building bert_embeddings_layernorm_gamma...\n";
             gamma.values = fc->fields[i].data;
@@ -448,7 +495,7 @@ IPluginV2* EmbLayerNormPluginCreator::createPlugin(const char* name, const Plugi
             gamma.type = static_cast<DataType>(fc->fields[i].type);
         }
 
-        if (field_name.compare("bert_embeddings_word_embeddings")==0)
+        if (field_name.compare("bert_embeddings_word_embeddings") == 0)
         {
             gLogVerbose << "Building bert_embeddings_word_embeddings...\n";
             word_emb.values = fc->fields[i].data;
@@ -456,7 +503,7 @@ IPluginV2* EmbLayerNormPluginCreator::createPlugin(const char* name, const Plugi
             word_emb.type = static_cast<DataType>(fc->fields[i].type);
         }
 
-        if (field_name.compare("bert_embeddings_token_type_embeddings")==0)
+        if (field_name.compare("bert_embeddings_token_type_embeddings") == 0)
         {
             gLogVerbose << "Building bert_embeddings_token_type_embeddings...\n";
             tok_emb.values = fc->fields[i].data;
@@ -464,7 +511,7 @@ IPluginV2* EmbLayerNormPluginCreator::createPlugin(const char* name, const Plugi
             tok_emb.type = static_cast<DataType>(fc->fields[i].type);
         }
 
-        if (field_name.compare("bert_embeddings_position_embeddings")==0)
+        if (field_name.compare("bert_embeddings_position_embeddings") == 0)
         {
             gLogVerbose << "Building bert_embeddings_position_embeddings...\n";
             pos_emb.values = fc->fields[i].data;
@@ -474,24 +521,27 @@ IPluginV2* EmbLayerNormPluginCreator::createPlugin(const char* name, const Plugi
     }
 
     gLogVerbose << "Building the Plugin...\n";
-    EmbLayerNormPlugin* p =  new EmbLayerNormPlugin(name, output_fp16, beta, gamma, word_emb, pos_emb, tok_emb);
+    EmbLayerNormPluginDynamic* p
+        = new EmbLayerNormPluginDynamic(name, output_fp16, beta, gamma, word_emb, pos_emb, tok_emb);
     return p;
 }
 
-IPluginV2* EmbLayerNormPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2* EmbLayerNormPluginDynamicCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength)
 {
     // This object will be deleted when the network is destroyed, which will
-    // call EmbLayerNormPlugin::destroy()
-    return new EmbLayerNormPlugin(name, serialData, serialLength);
+    // call EmbLayerNormPluginDynamic::destroy()
+    return new EmbLayerNormPluginDynamic(name, serialData, serialLength);
 }
 
-void EmbLayerNormPluginCreator::setPluginNamespace(const char* libNamespace)
+void EmbLayerNormPluginDynamicCreator::setPluginNamespace(const char* libNamespace)
 {
     mNamespace = libNamespace;
 }
 
-const char* EmbLayerNormPluginCreator::getPluginNamespace() const
+const char* EmbLayerNormPluginDynamicCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
+}
 }
 }

@@ -24,36 +24,36 @@
 
 namespace bert
 {
-
-ILayer* skipln(
-    const std::string& prefix, WeightMap& weightMap, INetworkDefinition* network, ITensor* inputTensor, ITensor* skip)
+inline ILayer* skiplnDynamic(
+    const std::string& prefix,const BertConfig & config,  WeightMap& weightMap, INetworkDefinition* network, ITensor* inputTensor, ITensor* skip)
 {
 
-    const Dims idims = inputTensor->getDimensions();
-    assert(idims.nbDims == 4);
-    const int hiddenSize = idims.d[1];
+    //const Dims idims = inputTensor->getDimensions();
+    //assert(idims.nbDims == 5);
+    //const int hiddenSize = idims.d[2];
+    const int hiddenSize = config.hiddenSize;
 
     const Weights& wbeta = weightMap.at(prefix + "beta");
     const Weights& wgamma = weightMap.at(prefix + "gamma");
-    SkipLayerNormPlugin skipln_plug("skipln", hiddenSize, wbeta, wgamma);
+    test::SkipLayerNormPluginDynamic skipln_plug("skipln", hiddenSize, wbeta, wgamma);
     ITensor* skiplnInputs[2] = {inputTensor, skip};
 
     IPluginV2Layer* skiplnLayer = network->addPluginV2(skiplnInputs, 2, skipln_plug);
     return skiplnLayer;
 }
 
-ILayer* transformer(const std::string& prefix, const BertConfig& config, WeightMap& weightMap,
+inline ILayer* transformerDynamic(const std::string& prefix, const BertConfig& config, WeightMap& weightMap,
     INetworkDefinition* network, ITensor* inputTensor, ITensor* imask = nullptr)
 {
 
     assert(inputTensor);
     assert(network);
 
-    const Dims idims = inputTensor->getDimensions();
-    assert(idims.nbDims == 4);
-    const int hiddenSize = idims.d[1];
+    //const Dims idims = inputTensor->getDimensions();
+    //assert(idims.nbDims == 5);
+    const int hiddenSize = config.hiddenSize;
 
-    ILayer* attentionHeads = attention(prefix + "attention_self_", config, weightMap, network, inputTensor, imask);
+    ILayer* attentionHeads = attentionDynamic(prefix + "attention_self_", config, weightMap, network, inputTensor, imask);
 
     const Weights wA = weightMap.at(prefix + W_AOUT);
     const Weights bA = weightMap.at(prefix + B_AOUT);
@@ -61,7 +61,7 @@ ILayer* transformer(const std::string& prefix, const BertConfig& config, WeightM
     IFullyConnectedLayer* attOutFCLayer = network->addFullyConnected(*attentionHeads->getOutput(0), hiddenSize, wA, bA);
 
     ILayer* attLNLayer
-        = skipln(prefix + "attention_output_layernorm_", weightMap, network, attOutFCLayer->getOutput(0), inputTensor);
+        = skiplnDynamic(prefix + "attention_output_layernorm_",config, weightMap, network, attOutFCLayer->getOutput(0), inputTensor);
 
     const Weights wMid = weightMap.at(prefix + W_MID);
     const Weights bMid = weightMap.at(prefix + B_MID);
@@ -70,7 +70,7 @@ ILayer* transformer(const std::string& prefix, const BertConfig& config, WeightM
         = network->addFullyConnected(*attLNLayer->getOutput(0), config.intermediateSize, wMid, bMid);
 
     // gelu
-    auto geluPlugin = GeluPlugin("gelu");
+    auto geluPlugin = test::GeluPluginDynamic("gelu");
     ITensor* midDenseOut = midDenseLayer->getOutput(0);
     IPluginV2Layer* geluLayer = network->addPluginV2(&midDenseOut, 1, geluPlugin);
     ITensor* midAct = geluLayer->getOutput(0);
@@ -84,8 +84,8 @@ ILayer* transformer(const std::string& prefix, const BertConfig& config, WeightM
     IFullyConnectedLayer* outDenseLayer = network->addFullyConnected(*midAct, hiddenSize, wL, bL);
     setOutputName(outDenseLayer, prefix + "output_", "dense");
 
-    ILayer* outLNLayer = skipln(
-        prefix + "output_layernorm_", weightMap, network, outDenseLayer->getOutput(0), attLNLayer->getOutput(0));
+    ILayer* outLNLayer = skiplnDynamic(
+        prefix + "output_layernorm_", config, weightMap, network, outDenseLayer->getOutput(0), attLNLayer->getOutput(0));
 
     assert(outLNLayer);
 

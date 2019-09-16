@@ -82,10 +82,12 @@ public:
     void setClipParam(bool clip);
 
 private:
-    NMSParameters param;
-    int boxesSize, scoresSize, numPriors;
+    NMSParameters param{};
+    int boxesSize{};
+    int scoresSize{};
+    int numPriors{};
     std::string mNamespace;
-    bool mClipBoxes;
+    bool mClipBoxes{};
     const char* mPluginNamespace;
 };
 

@@ -18,78 +18,58 @@
 #define TRT_EMB_LAYER_NORM_PLUGIN_H
 
 #include "NvInferPlugin.h"
+#include "NvInferRuntime.h"
 #include <string>
 #include <vector>
 namespace bert
 {
 
-using namespace nvinfer1;
+namespace test
+{
 
 // One of the preferred ways of making TensorRT to be able to see
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.
 // For requirements for overriden functions, check TensorRT API docs.
 
-class EmbLayerNormPlugin : public IPluginV2Ext
+class EmbLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    EmbLayerNormPlugin(const std::string& name, const bool use_fp16, const Weights& beta, const Weights& gamma,
+    EmbLayerNormPluginDynamic(const std::string& name, const bool use_fp16, const Weights& beta, const Weights& gamma,
         const Weights& word_emb, const Weights& pos_emb, const Weights& tok_emb);
 
-    EmbLayerNormPlugin(const std::string& name, const void* data, size_t length);
+    EmbLayerNormPluginDynamic(const std::string& name, const void* data, size_t length);
 
-    // It doesn't make sense to make EmbLayerNormPlugin without arguments, so we
+    // It doesn't make sense to make EmbLayerNormPluginDynamic without arguments, so we
     // delete default constructor.
-    EmbLayerNormPlugin() = delete;
+    EmbLayerNormPluginDynamic() = delete;
 
-    int getNbOutputs() const override;
+    // IPluginV2DynamicExt Methods
+    nvinfer1::IPluginV2DynamicExt* clone() const override;
+    nvinfer1::DimsExprs getOutputDimensions(
+        int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) override;
+    bool supportsFormatCombination(
+        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) override;
+    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
+        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) override;
+    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
+        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const override;
+    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
 
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) override;
+    // IPluginV2Ext Methods
+    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
 
-    int initialize() override;
-
-    void terminate() override;
-
-    size_t getWorkspaceSize(int) const override
-    {
-        return 0;
-    };
-
-    int enqueue(
-        int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
-
-    size_t getSerializationSize() const override;
-
-    void serialize(void* buffer) const override;
-
-    bool supportsFormat(DataType type, PluginFormat format) const override;
-
+    // IPluginV2 Methods
     const char* getPluginType() const override;
-
     const char* getPluginVersion() const override;
-
+    int getNbOutputs() const override;
+    int initialize() override;
+    void terminate() override;
+    size_t getSerializationSize() const override;
+    void serialize(void* buffer) const override;
     void destroy() override;
-
-    nvinfer1::IPluginV2Ext* clone() const override;
-
     void setPluginNamespace(const char* pluginNamespace) override;
-
     const char* getPluginNamespace() const override;
-
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
-
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-    {
-        return false;
-    }
-
-    bool canBroadcastInputAcrossBatch(int inputIndex) const
-    {
-        return false;
-    }
-
-    void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) override;
 
 private:
     const std::string mLayerName;
@@ -106,37 +86,38 @@ private:
     size_t mWordVocabSize;
     size_t mPosVocabSize;
     size_t mTokVocabSize;
-    Weights mBeta;
-    Weights mGamma;
-    Weights mWordEmb;
-    Weights mTokEmb;
-    Weights mPosEmb;
-    DataType mType;
+    nvinfer1::Weights mBeta;
+    nvinfer1::Weights mGamma;
+    nvinfer1::Weights mWordEmb;
+    nvinfer1::Weights mTokEmb;
+    nvinfer1::Weights mPosEmb;
+    nvinfer1::DataType mType;
 };
 
-class EmbLayerNormPluginCreator : public IPluginCreator
+class EmbLayerNormPluginDynamicCreator : public nvinfer1::IPluginCreator
 {
 public:
-    EmbLayerNormPluginCreator();
+    EmbLayerNormPluginDynamicCreator();
 
     const char* getPluginName() const override;
 
     const char* getPluginVersion() const override;
 
-    const PluginFieldCollection* getFieldNames() override;
+    const nvinfer1::PluginFieldCollection* getFieldNames() override;
 
-    IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) override;
+    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) override;
 
-    IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
+    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
 
     void setPluginNamespace(const char* pluginNamespace) override;
 
     const char* getPluginNamespace() const override;
 
 private:
-    static PluginFieldCollection mFC;
-    static std::vector<PluginField> mPluginAttributes;
+    static nvinfer1::PluginFieldCollection mFC;
+    static std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
 };
+}
 }
 #endif // TRT_EMB_LAYER_NORM_PLUGIN_H

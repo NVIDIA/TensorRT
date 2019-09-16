@@ -94,8 +94,8 @@ private:
     //!
     //! \brief Uses the API to create the MLP Network
     //!
-    bool constructNetwork(
-        SampleUniquePtr<nvinfer1::IBuilder>& builder, SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
+    bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config);
 
     //!
     //! \brief Reads the input  and stores the result in a managed buffer
@@ -153,7 +153,13 @@ bool SampleMLP::build()
         return false;
     }
 
-    auto constructed = constructNetwork(builder, network);
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
+    auto constructed = constructNetwork(builder, network, config);
     if (!constructed)
     {
         return false;
@@ -177,8 +183,8 @@ bool SampleMLP::build()
 //!
 //! \param builder Pointer to the engine builder
 //!
-bool SampleMLP::constructNetwork(
-    SampleUniquePtr<nvinfer1::IBuilder>& builder, SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+bool SampleMLP::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config)
 {
     // FC layers must still have 3 dimensions, so we create a {C, 1, 1,} matrix.
     // Currently the mnist example is only trained in FP32 mode.
@@ -213,19 +219,23 @@ bool SampleMLP::constructNetwork(
 
     // Build engine
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(16_MB);
+    config->setMaxWorkspaceSize(16_MiB);
     builder->setFp16Mode(mParams.fp16);
     builder->setInt8Mode(mParams.int8);
-    builder->setFp16Mode(mParams.fp16);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
     if (mParams.int8)
     {
-        builder->setInt8Mode(true);
+        config->setFlag(BuilderFlag::kINT8);
         samplesCommon::setAllTensorScales(network.get(), 64.0f, 64.0f);
     }
 
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;

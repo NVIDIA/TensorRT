@@ -18,11 +18,12 @@
 #define TRT_BERT_ENCODER_H
 
 #include "transformer.h"
+#include <sstream>
 
 namespace bert
 {
 
-ILayer* bertModel(const BertConfig& config, WeightMap& weightMap, INetworkDefinition* network, ITensor* inputTensor,
+inline ILayer* bertModelDynamic(const BertConfig& config, WeightMap& weightMap, INetworkDefinition* network, ITensor* inputTensor,
     ITensor* input_mask = nullptr)
 {
 
@@ -34,7 +35,7 @@ ILayer* bertModel(const BertConfig& config, WeightMap& weightMap, INetworkDefini
         std::stringstream ss;
         ss << "l" << layer << "_";
 
-        prevLayer = transformer(ss.str(), config, weightMap, network, prevInput, input_mask);
+        prevLayer = transformerDynamic(ss.str(), config, weightMap, network, prevInput, input_mask);
         prevInput = prevLayer->getOutput(0);
     }
     assert(prevLayer);

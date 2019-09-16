@@ -25,7 +25,19 @@ python python/bert_builder.py -m /workspace/models/fine-tuned/bert_tf_v2_base_fp
 This will build and engine with a maximum batch size of 1 (`-b 1`), and sequence length of 384 (`-s 384`) using the `bert_config.json` file located in `workspace/models/fine-tuned/bert_tf_v2_base_fp16_384_v2`
 
 ## Running Inference
-Finally, you can run inference with the engine generated from the previous step using the `bert_inference.py` script. This script also accepts a passage and a question. For example,
+
+### Using the Python Script
+You can run inference with the engine generated from the previous step using the `bert_inference.py` script.
+This script accepts a passage and a question. For example,
 ```
-python python/bert_inference.py -e bert_base_384.engine -p "TensorRT is a high performance deep learning inference platform that delivers low latency and high throughput for apps such as recommenders, speech and image/video on NVIDIA GPUs. It includes parsers to import models, and plugins to support novel ops and layers before applying optimizations for inference. Today NVIDIA is open sourcing parsers and plugins in TensorRT so that the deep learning community can customize and extend these components to take advantage of powerful TensorRT optimizations for your apps." -q "What is TensorRT?" -v /workspace/models/fine-tuned/bert_tf_v2_base_fp16_384_v2/vocab.txt -b 1
+python python/bert_inference.py -e bert_base_384.engine -p "TensorRT is a high performance deep learning inference platform that delivers low latency and high throughput for apps such as recommenders, speech and image/video on NVIDIA GPUs. It includes parsers to import models, and plugins to support novel ops and layers before applying optimizations for inference. Today NVIDIA is open sourcing parsers and plugins in TensorRT so that the deep learning community can customize and extend these components to take advantage of powerful TensorRT optimizations for your apps." -q "What is TensorRT?" -v /workspace/models/fine-tuned/bert_tf_v2_base_fp16_384_v2/vocab.txt
 ```
+
+### Using the Jupyter Notebook
+Alternatively, you can run inference using the included Jupyter notebook.
+To launch the jupyter notebook from inside the container, run:
+```
+jupyter notebook --ip 0.0.0.0 python/BERT_TRT.ipynb
+```
+Then, use your browser to open the link displayed.
+The link should look something like this: `http://127.0.0.1:8888/?token=<TOKEN>`

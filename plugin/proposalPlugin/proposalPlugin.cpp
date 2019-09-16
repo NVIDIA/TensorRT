@@ -32,7 +32,7 @@ namespace
 static const char* PROPOSAL_PLUGIN_VERSION{"1"};
 static const char* PROPOSAL_PLUGIN_NAME{"Proposal"};
 static const float RPN_STD_SCALING{1.0f};
-}
+} // namespace
 
 // Static class fields initialization
 PluginFieldCollection ProposalPluginCreator::mFC{};
@@ -145,9 +145,7 @@ ProposalPlugin::ProposalPlugin(const std::string name, const void* serial_buf, s
     ASSERT(a == d + serial_size);
 }
 
-ProposalPlugin::~ProposalPlugin()
-{
-}
+ProposalPlugin::~ProposalPlugin() {}
 
 const char* ProposalPlugin::getPluginType() const
 {
@@ -247,9 +245,7 @@ bool ProposalPlugin::supportsFormat(DataType type, PluginFormat format) const
     }
 }
 
-void ProposalPlugin::terminate()
-{
-}
+void ProposalPlugin::terminate() {}
 
 void ProposalPlugin::destroy()
 {
@@ -316,9 +312,7 @@ void ProposalPlugin::attachToContext(
 }
 
 // Detach the plugin object from its execution context.
-void ProposalPlugin::detachFromContext()
-{
-}
+void ProposalPlugin::detachFromContext() {}
 
 ProposalPluginCreator::ProposalPluginCreator()
 {
@@ -335,9 +329,7 @@ ProposalPluginCreator::ProposalPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-ProposalPluginCreator::~ProposalPluginCreator()
-{
-}
+ProposalPluginCreator::~ProposalPluginCreator() {}
 
 const char* ProposalPluginCreator::getPluginName() const
 {
@@ -429,7 +421,7 @@ IPluginV2Ext* ProposalPluginCreator::createPlugin(const char* name, const Plugin
         }
     }
 
-    ASSERT(input_height > 0 && input_width > 0 && rpn_stride > 0 && pre_nms_top_n > 0 && post_nms_top_n 
+    ASSERT(input_height > 0 && input_width > 0 && rpn_stride > 0 && pre_nms_top_n > 0 && post_nms_top_n
         && roi_min_size >= 0.0f && nms_iou_threshold > 0.0f);
 
     IPluginV2Ext* plugin = new ProposalPlugin(name, input_height, input_width, RPN_STD_SCALING, rpn_stride,

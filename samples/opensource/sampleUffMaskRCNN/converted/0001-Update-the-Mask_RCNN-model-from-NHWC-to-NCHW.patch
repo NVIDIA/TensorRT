@@ -1,0 +1,241 @@
+From 00cfd7d7ce323df1f71048d959681349ca4fed78 Mon Sep 17 00:00:00 2001
+From: Nine Feng <nfeng@nvidia.com>
+Date: Wed, 24 Jul 2019 09:22:44 +0800
+Subject: [PATCH] Update the Mask_RCNN model from NHWC to NCHW
+
+1. Change all BN layers from NHWC to NCHW
+2. Modify class PyramidROIAlign to be compatible with NCHW format
+3. Change the input format in function `build_rpn_model`
+4. Permute the feature in function `rpn_graph` and change 'lambda' to 'Reshape'
+5. Change squeeze axis in function `fpn_classifier_graph`
+6. Change the input format in function `build` of class `MaskRCNN`
+7. (Optional) Change the input blob for prediction in function `detect` of class `MaskRCNN`
+8. Change urllib.request.urlopen to urllib.urlopen to be compatible with python 2.x
+---
+ mrcnn/model.py | 63 +++++++++++++++++++++++++++++++++++-----------------------
+ mrcnn/utils.py |  4 ++--
+ 2 files changed, 40 insertions(+), 27 deletions(-)
+
+diff --git a/mrcnn/model.py b/mrcnn/model.py
+index 62cb2b0..1508f2c 100644
+--- a/mrcnn/model.py
++++ b/mrcnn/model.py
+@@ -110,17 +110,17 @@ def identity_block(input_tensor, kernel_size, filters, stage, block,
+ 
+     x = KL.Conv2D(nb_filter1, (1, 1), name=conv_name_base + '2a',
+                   use_bias=use_bias)(input_tensor)
+-    x = BatchNorm(name=bn_name_base + '2a')(x, training=train_bn)
++    x = BatchNorm(name=bn_name_base + '2a', axis=1)(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+     x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
+                   name=conv_name_base + '2b', use_bias=use_bias)(x)
+-    x = BatchNorm(name=bn_name_base + '2b')(x, training=train_bn)
++    x = BatchNorm(name=bn_name_base + '2b', axis=1)(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+     x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c',
+                   use_bias=use_bias)(x)
+-    x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
++    x = BatchNorm(name=bn_name_base + '2c', axis=1)(x, training=train_bn)
+ 
+     x = KL.Add()([x, input_tensor])
+     x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
+@@ -147,21 +147,21 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
+ 
+     x = KL.Conv2D(nb_filter1, (1, 1), strides=strides,
+                   name=conv_name_base + '2a', use_bias=use_bias)(input_tensor)
+-    x = BatchNorm(name=bn_name_base + '2a')(x, training=train_bn)
++    x = BatchNorm(name=bn_name_base + '2a', axis=1)(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+     x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
+                   name=conv_name_base + '2b', use_bias=use_bias)(x)
+-    x = BatchNorm(name=bn_name_base + '2b')(x, training=train_bn)
++    x = BatchNorm(name=bn_name_base + '2b', axis=1)(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+     x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base +
+                   '2c', use_bias=use_bias)(x)
+-    x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
++    x = BatchNorm(name=bn_name_base + '2c', axis=1)(x, training=train_bn)
+ 
+     shortcut = KL.Conv2D(nb_filter3, (1, 1), strides=strides,
+                          name=conv_name_base + '1', use_bias=use_bias)(input_tensor)
+-    shortcut = BatchNorm(name=bn_name_base + '1')(shortcut, training=train_bn)
++    shortcut = BatchNorm(name=bn_name_base + '1', axis=1)(shortcut, training=train_bn)
+ 
+     x = KL.Add()([x, shortcut])
+     x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
+@@ -178,7 +178,7 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
+     # Stage 1
+     x = KL.ZeroPadding2D((3, 3))(input_image)
+     x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1', use_bias=True)(x)
+-    x = BatchNorm(name='bn_conv1')(x, training=train_bn)
++    x = BatchNorm(name='bn_conv1', axis=1)(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+     C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
+     # Stage 2
+@@ -365,6 +365,19 @@ class PyramidROIAlign(KE.Layer):
+         super(PyramidROIAlign, self).__init__(**kwargs)
+         self.pool_shape = tuple(pool_shape)
+ 
++    def NCHW_crop_and_resize(self, feature_map, level_boxes, box_indices, crop_size, method="bilinear"):
++        # NCHW(0,1,2,3) -> NHWC(0,2,3,1)
++        feature_map = tf.transpose(feature_map, [0, 2, 3, 1])
++
++        # crop and resize
++        box_feature = tf.image.crop_and_resize(feature_map, level_boxes,
++                box_indices, crop_size, method=method)
++
++        # NHWC(0,1,2,3) -> NCHW(0,3,1,2)
++        box_feature = tf.transpose(box_feature, [0, 3, 1, 2])
++
++        return box_feature
++
+     def call(self, inputs):
+         # Crop boxes [batch, num_boxes, (y1, x1, y2, x2)] in normalized coords
+         boxes = inputs[0]
+@@ -418,9 +431,7 @@ class PyramidROIAlign(KE.Layer):
+             # Here we use the simplified approach of a single value per bin,
+             # which is how it's done in tf.crop_and_resize()
+             # Result: [batch * num_boxes, pool_height, pool_width, channels]
+-            pooled.append(tf.image.crop_and_resize(
+-                feature_maps[i], level_boxes, box_indices, self.pool_shape,
+-                method="bilinear"))
++            pooled.append(self.NCHW_crop_and_resize(feature_maps[i], level_boxes, box_indices, self.pool_shape, method="bilinear"))
+ 
+         # Pack pooled features into one tensor
+         pooled = tf.concat(pooled, axis=0)
+@@ -447,7 +458,7 @@ class PyramidROIAlign(KE.Layer):
+         return pooled
+ 
+     def compute_output_shape(self, input_shape):
+-        return input_shape[0][:2] + self.pool_shape + (input_shape[2][-1], )
++        return input_shape[0][:2]  + (input_shape[2][1], ) + self.pool_shape
+ 
+ 
+ ############################################################
+@@ -853,8 +864,9 @@ def rpn_graph(feature_map, anchors_per_location, anchor_stride):
+                   activation='linear', name='rpn_class_raw')(shared)
+ 
+     # Reshape to [batch, anchors, 2]
+-    rpn_class_logits = KL.Lambda(
+-        lambda t: tf.reshape(t, [tf.shape(t)[0], -1, 2]))(x)
++    x = KL.Permute((2,3,1))(x)
++    rpn_class_logits = KL.Reshape((-1, 2))(x)
++    x = KL.Permute((2,3,1))(x)
+ 
+     # Softmax on last dimension of BG/FG.
+     rpn_probs = KL.Activation(
+@@ -866,7 +878,7 @@ def rpn_graph(feature_map, anchors_per_location, anchor_stride):
+                   activation='linear', name='rpn_bbox_pred')(shared)
+ 
+     # Reshape to [batch, anchors, 4]
+-    rpn_bbox = KL.Lambda(lambda t: tf.reshape(t, [tf.shape(t)[0], -1, 4]))(x)
++    rpn_bbox = KL.Reshape((-1, 4))(x)
+ 
+     return [rpn_class_logits, rpn_probs, rpn_bbox]
+ 
+@@ -887,7 +899,7 @@ def build_rpn_model(anchor_stride, anchors_per_location, depth):
+     rpn_bbox: [batch, H * W * anchors_per_location, (dy, dx, log(dh), log(dw))] Deltas to be
+                 applied to anchors.
+     """
+-    input_feature_map = KL.Input(shape=[None, None, depth],
++    input_feature_map = KL.Input(shape=[depth, None, None],
+                                  name="input_rpn_feature_map")
+     outputs = rpn_graph(input_feature_map, anchors_per_location, anchor_stride)
+     return KM.Model([input_feature_map], outputs, name="rpn_model")
+@@ -926,14 +938,14 @@ def fpn_classifier_graph(rois, feature_maps, image_meta,
+     # Two 1024 FC layers (implemented with Conv2D for consistency)
+     x = KL.TimeDistributed(KL.Conv2D(fc_layers_size, (pool_size, pool_size), padding="valid"),
+                            name="mrcnn_class_conv1")(x)
+-    x = KL.TimeDistributed(BatchNorm(), name='mrcnn_class_bn1')(x, training=train_bn)
++    x = KL.TimeDistributed(BatchNorm(axis=1), name='mrcnn_class_bn1')(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+     x = KL.TimeDistributed(KL.Conv2D(fc_layers_size, (1, 1)),
+                            name="mrcnn_class_conv2")(x)
+-    x = KL.TimeDistributed(BatchNorm(), name='mrcnn_class_bn2')(x, training=train_bn)
++    x = KL.TimeDistributed(BatchNorm(axis=1), name='mrcnn_class_bn2')(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+-    shared = KL.Lambda(lambda x: K.squeeze(K.squeeze(x, 3), 2),
++    shared = KL.Lambda(lambda x: K.squeeze(K.squeeze(x, 4), 3),
+                        name="pool_squeeze")(x)
+ 
+     # Classifier head
+@@ -976,25 +988,25 @@ def build_fpn_mask_graph(rois, feature_maps, image_meta,
+     # Conv layers
+     x = KL.TimeDistributed(KL.Conv2D(256, (3, 3), padding="same"),
+                            name="mrcnn_mask_conv1")(x)
+-    x = KL.TimeDistributed(BatchNorm(),
++    x = KL.TimeDistributed(BatchNorm(axis=1),
+                            name='mrcnn_mask_bn1')(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+     x = KL.TimeDistributed(KL.Conv2D(256, (3, 3), padding="same"),
+                            name="mrcnn_mask_conv2")(x)
+-    x = KL.TimeDistributed(BatchNorm(),
++    x = KL.TimeDistributed(BatchNorm(axis=1),
+                            name='mrcnn_mask_bn2')(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+     x = KL.TimeDistributed(KL.Conv2D(256, (3, 3), padding="same"),
+                            name="mrcnn_mask_conv3")(x)
+-    x = KL.TimeDistributed(BatchNorm(),
++    x = KL.TimeDistributed(BatchNorm(axis=1),
+                            name='mrcnn_mask_bn3')(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+     x = KL.TimeDistributed(KL.Conv2D(256, (3, 3), padding="same"),
+                            name="mrcnn_mask_conv4")(x)
+-    x = KL.TimeDistributed(BatchNorm(),
++    x = KL.TimeDistributed(BatchNorm(axis=1),
+                            name='mrcnn_mask_bn4')(x, training=train_bn)
+     x = KL.Activation('relu')(x)
+ 
+@@ -1853,7 +1865,7 @@ class MaskRCNN():
+ 
+         # Inputs
+         input_image = KL.Input(
+-            shape=[None, None, config.IMAGE_SHAPE[2]], name="input_image")
++            shape=[config.IMAGE_SHAPE[2], 1024, 1024 ], name="input_image")
+         input_image_meta = KL.Input(shape=[config.IMAGE_META_SIZE],
+                                     name="input_image_meta")
+         if mode == "training":
+@@ -2520,8 +2532,9 @@ class MaskRCNN():
+             log("image_metas", image_metas)
+             log("anchors", anchors)
+         # Run object detection
++        molded_input_images = np.transpose(molded_images, (0, 3, 1, 2))
+         detections, _, _, mrcnn_mask, _, _, _ =\
+-            self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
++            self.keras_model.predict([molded_input_images, image_metas, anchors], verbose=0)
+         # Process detections
+         results = []
+         for i, image in enumerate(images):
+diff --git a/mrcnn/utils.py b/mrcnn/utils.py
+index ff93e10..baceb4c 100644
+--- a/mrcnn/utils.py
++++ b/mrcnn/utils.py
+@@ -18,7 +18,7 @@ import scipy
+ import skimage.color
+ import skimage.io
+ import skimage.transform
+-import urllib.request
++import urllib
+ import shutil
+ import warnings
+ from distutils.version import LooseVersion
+@@ -844,7 +844,7 @@ def download_trained_weights(coco_model_path, verbose=1):
+     """
+     if verbose > 0:
+         print("Downloading pretrained model to " + coco_model_path + " ...")
+-    with urllib.request.urlopen(COCO_MODEL_URL) as resp, open(coco_model_path, 'wb') as out:
++    with urllib.urlopen(COCO_MODEL_URL) as resp, open(coco_model_path, 'wb') as out:
+         shutil.copyfileobj(resp, out)
+     if verbose > 0:
+         print("... done downloading pretrained model!")
+-- 
+2.7.4
+

@@ -99,7 +99,8 @@ private:
     //! \brief Parses an UFF model for SSD and creates a TensorRT network
     //!
     bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvuffparser::IUffParser>& parser);
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+        SampleUniquePtr<nvuffparser::IUffParser>& parser);
 
     //!
     //! \brief Reads the input and mean data, preprocesses, and stores the result in a managed buffer
@@ -136,13 +137,19 @@ bool SampleUffSSD::build()
         return false;
     }
 
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
     auto parser = SampleUniquePtr<nvuffparser::IUffParser>(nvuffparser::createUffParser());
     if (!parser)
     {
         return false;
     }
 
-    auto constructed = constructNetwork(builder, network, parser);
+    auto constructed = constructNetwork(builder, network, config, parser);
     if (!constructed)
     {
         return false;
@@ -166,7 +173,8 @@ bool SampleUffSSD::build()
 //! \param builder Pointer to the engine builder
 //!
 bool SampleUffSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvuffparser::IUffParser>& parser)
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+    SampleUniquePtr<nvuffparser::IUffParser>& parser)
 {
     parser->registerInput(mParams.inputTensorNames[0].c_str(), DimsCHW(3, 300, 300), nvuffparser::UffInputOrder::kNCHW);
     parser->registerOutput(mParams.outputTensorNames[0].c_str());
@@ -178,8 +186,11 @@ bool SampleUffSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(2_GB);
-    builder->setFp16Mode(mParams.fp16);
+    config->setMaxWorkspaceSize(1_GiB);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
 
     // Calibrator life time needs to last until after the engine is built.
     std::unique_ptr<IInt8Calibrator> calibrator;
@@ -191,16 +202,18 @@ bool SampleUffSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder
         const int imageC = 3;
         const int imageH = 300;
         const int imageW = 300;
-        const nvinfer1::DimsNCHW imageDims{mParams.calBatchSize, imageC, imageH, imageW};
+        nvinfer1::DimsNCHW imageDims{};
+        imageDims = nvinfer1::DimsNCHW{mParams.calBatchSize, imageC, imageH, imageW};
         BatchStream calibrationStream(
             mParams.calBatchSize, mParams.nbCalBatches, imageDims, listFileName, mParams.dataDirs);
-        calibrator.reset(
-            new Int8EntropyCalibrator2(calibrationStream, 0, "UffSSD", mParams.inputTensorNames[0].c_str()));
-        builder->setInt8Mode(true);
-        builder->setInt8Calibrator(calibrator.get());
+        calibrator.reset(new Int8EntropyCalibrator2<BatchStream>(
+            calibrationStream, 0, "UffSSD", mParams.inputTensorNames[0].c_str()));
+        config->setFlag(BuilderFlag::kINT8);
+        config->setInt8Calibrator(calibrator.get());
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;

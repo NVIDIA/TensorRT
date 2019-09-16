@@ -19,14 +19,19 @@
 #include "pluginKernels.h"
 #include "pluginUtil.h"
 #include "skipLayerNormPlugin.h"
+#include "common.h"
 
 #include <cassert>
 #include <cstring>
 #include <vector>
 
+using namespace nvinfer1;
 using bert::operator+;
 
 namespace bert
+{
+
+namespace test
 {
 
 template <typename T, unsigned TPB>
@@ -113,22 +118,20 @@ int computeSkipLayerNorm(cudaStream_t stream, const int ld, const int n, const T
     return 0;
 }
 
-using namespace nvinfer1;
-
 // Clip plugin specific constants
 namespace
 {
 static const char* SKIP_LAYER_NORM_VERSION{"1"};
-static const char* SKIP_LAYER_NORM_NAME{"CustomSkipLayerNormPlugin"};
+static const char* SKIP_LAYER_NORM_NAME{"CustomSkipLayerNormPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
-PluginFieldCollection SkipLayerNormPluginCreator::mFC{};
-std::vector<PluginField> SkipLayerNormPluginCreator::mPluginAttributes;
+PluginFieldCollection SkipLayerNormPluginDynamicCreator::mFC{};
+std::vector<PluginField> SkipLayerNormPluginDynamicCreator::mPluginAttributes;
 
-REGISTER_TENSORRT_PLUGIN(SkipLayerNormPluginCreator);
+REGISTER_TENSORRT_PLUGIN(SkipLayerNormPluginDynamicCreator);
 
-SkipLayerNormPlugin::SkipLayerNormPlugin(
+SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(
     const std::string name, const int ld, const Weights& beta, const Weights& gamma)
     : mLayerName(name)
     , mLd(ld)
@@ -137,7 +140,7 @@ SkipLayerNormPlugin::SkipLayerNormPlugin(
 {
 }
 
-SkipLayerNormPlugin::SkipLayerNormPlugin(const std::string name, const void* data, size_t length)
+SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, const void* data, size_t length)
     : mLayerName(name)
 {
     gLogVerbose << "Skip LN Deser start\n";
@@ -146,7 +149,6 @@ SkipLayerNormPlugin::SkipLayerNormPlugin(const std::string name, const void* dat
     const char* a = d;
     DESER(d, mType);
     DESER(d, mLd);
-    DESER(d, mInputVolume);
     mBetaDev = deserToDev<float>(d, mLd);
     mGammaDev = deserToDev<float>(d, mLd);
     assert(d == (a + length));
@@ -159,36 +161,124 @@ SkipLayerNormPlugin::SkipLayerNormPlugin(const std::string name, const void* dat
     gLogVerbose << "Skip LN Deser done\n";
 }
 
-const char* SkipLayerNormPlugin::getPluginType() const
+// IPluginV2DynamicExt Methods
+IPluginV2DynamicExt* SkipLayerNormPluginDynamic::clone() const
+{
+    return new SkipLayerNormPluginDynamic(mLayerName, mLd, mBeta, mGamma);
+}
+
+DimsExprs SkipLayerNormPluginDynamic::getOutputDimensions(int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder)
+{
+    assert(nbInputs == 2);
+    assert(outputIndex == 0);
+    assert(inputs[0].nbDims == inputs[1].nbDims);
+    return inputs[0];
+}
+
+bool SkipLayerNormPluginDynamic::supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
+{
+    assert(nbInputs == 2);
+    assert(nbOutputs == 1);
+
+    const PluginTensorDesc& in = inOut[pos];
+    if (pos == 0)
+    {
+        return (in.type == DataType::kFLOAT || in.type == DataType::kHALF) && (in.format == TensorFormat::kLINEAR);
+    }
+    const PluginTensorDesc& prev = inOut[pos - 1];
+
+    if (pos == 1)
+    {
+        return in.type == prev.type && in.format == prev.format;
+    }
+    // output
+    return in.type == prev.type && in.format == prev.format;
+}
+
+void SkipLayerNormPluginDynamic::configurePlugin(const DynamicPluginTensorDesc* inputs, int nbInputs,
+    const DynamicPluginTensorDesc* outputs, int nbOutputs)
+{
+    // Validate input arguments
+    assert(nbOutputs == 1);
+    assert(nbInputs == 2);
+    mType = inputs[0].desc.type;
+    assert(mType == inputs[1].desc.type);
+    const auto& inDims0 = inputs[0].desc.dims;
+    const auto& inDims1 = inputs[1].desc.dims;
+    assert(inDims0.nbDims == inDims1.nbDims);
+
+    assert(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
+
+    assert(inDims0.nbDims== 5);
+    mLd = inDims0.d[2]; // hiddensize
+    assert(inDims0.d[3] == 1);
+    assert(inDims0.d[4] == 1);
+}
+
+size_t SkipLayerNormPluginDynamic::getWorkspaceSize(const PluginTensorDesc* inputs, int nbInputs,
+    const PluginTensorDesc* outputs, int nbOutputs) const
+{
+    return 0;
+}
+
+int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc,
+    const PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace,
+    cudaStream_t stream)
+{
+    const int inputVolume = samplesCommon::volume(inputDesc[0].dims);
+    int status = -1;
+
+    // Our plugin outputs only one tensor
+    // Launch CUDA kernel wrapper and save its return value
+    if (mType == DataType::kFLOAT)
+    {
+        const float* input = static_cast<const float*>(inputs[0]);
+        const float* skip = static_cast<const float*>(inputs[1]);
+        float* output = static_cast<float*>(outputs[0]);
+        status = computeSkipLayerNorm<float>(stream, mLd, inputVolume, input, skip, mBetaDev, mGammaDev, output);
+    }
+    else if (mType == DataType::kHALF)
+    {
+        const half* input = static_cast<const half*>(inputs[0]);
+        const half* skip = static_cast<const half*>(inputs[1]);
+        half* output = static_cast<half*>(outputs[0]);
+
+        status = computeSkipLayerNorm<half>(stream, mLd, inputVolume, input, skip, mBetaDev, mGammaDev, output);
+    }
+    else
+    {
+        gLogError << "Unsupported Type\n";
+        assert(false);
+    }
+    return status;
+}
+
+// IPluginV2Ext Methods
+DataType SkipLayerNormPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const
+{
+    assert(index == 0);
+    assert(nbInputs == 2);
+    assert(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
+    assert(inputTypes[0] == inputTypes[1]);
+    return inputTypes[0];
+}
+
+// IPluginV2 Methods
+const char* SkipLayerNormPluginDynamic::getPluginType() const
 {
     return SKIP_LAYER_NORM_NAME;
 }
 
-const char* SkipLayerNormPlugin::getPluginVersion() const
+const char* SkipLayerNormPluginDynamic::getPluginVersion() const
 {
     return SKIP_LAYER_NORM_VERSION;
 }
 
-int SkipLayerNormPlugin::getNbOutputs() const
+int SkipLayerNormPluginDynamic::getNbOutputs() const
 {
     return 1;
 }
-
-Dims SkipLayerNormPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
-{
-    // Validate input arguments
-    assert(nbInputDims == 2);
-    assert(index == 0);
-    assert(inputs[0].nbDims == inputs[1].nbDims);
-    for (int d = 0; d < inputs[0].nbDims; d++)
-    {
-        assert(inputs[0].d[d] == inputs[1].d[d]);
-    }
-
-    return inputs[0];
-}
-
-int SkipLayerNormPlugin::initialize()
+int SkipLayerNormPluginDynamic::initialize()
 {
     if (mGamma.values)
     {
@@ -203,92 +293,7 @@ int SkipLayerNormPlugin::initialize()
     return 0;
 }
 
-int SkipLayerNormPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream)
-{
-    int status = -1;
-
-    // Our plugin outputs only one tensor
-
-    // Launch CUDA kernel wrapper and save its return value
-    if (mType == DataType::kFLOAT)
-    {
-
-        const float* input = static_cast<const float*>(inputs[0]);
-        const float* skip = static_cast<const float*>(inputs[1]);
-        float* output = static_cast<float*>(outputs[0]);
-        status = computeSkipLayerNorm<float>(
-            stream, mLd, mInputVolume * batchSize, input, skip, mBetaDev, mGammaDev, output);
-    }
-    else if (mType == DataType::kHALF)
-    {
-        const half* input = static_cast<const half*>(inputs[0]);
-        const half* skip = static_cast<const half*>(inputs[1]);
-        half* output = static_cast<half*>(outputs[0]);
-
-        status = computeSkipLayerNorm<half>(
-            stream, mLd, mInputVolume * batchSize, input, skip, mBetaDev, mGammaDev, output);
-    }
-    else
-    {
-        assert(false);
-    }
-    return status;
-}
-
-size_t SkipLayerNormPlugin::getSerializationSize() const
-{
-    return 2 * sizeof(float) * mLd + sizeof(DataType) + sizeof(mLd) + sizeof(mInputVolume);
-}
-
-void SkipLayerNormPlugin::serialize(void* buffer) const
-{
-    char* d = static_cast<char*>(buffer);
-    const char* a = d;
-
-    writeToBuffer(d, mType);
-    writeToBuffer(d, mLd);
-    writeToBuffer(d, mInputVolume);
-    serFromDev(d, mBetaDev, mLd);
-    serFromDev(d, mGammaDev, mLd);
-    assert(d == a + getSerializationSize());
-}
-
-void SkipLayerNormPlugin::configureWithFormat(
-    const Dims* inputs, int nbInputs, const Dims* outputs, int nbOutputs, DataType type, PluginFormat format, int)
-{
-    // Validate input arguments
-    assert(nbOutputs == 1);
-    assert(nbInputs == 2);
-
-    // Fetch volume for future enqueue() operations
-    size_t volume = 1;
-    for (int i = 0; i < inputs->nbDims; i++)
-    {
-        volume *= inputs->d[i];
-    }
-    mInputVolume = volume;
-    assert(inputs->nbDims == 4);
-    mLd = inputs->d[1]; // hiddensize
-    assert(inputs->d[2] == 1);
-    assert(inputs->d[3] == 1);
-
-    mType = type;
-}
-
-bool SkipLayerNormPlugin::supportsFormat(DataType type, PluginFormat format) const
-{
-    // This plugin only supports ordinary floats, and NCHW input format
-    if (type == DataType::kFLOAT || type == DataType::kHALF)
-    {
-        return format == PluginFormat::kNCHW;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-void SkipLayerNormPlugin::terminate()
+void SkipLayerNormPluginDynamic::terminate()
 {
     gLogVerbose << "SKIPLN terminate start" << std::endl;
     cudaFree(mGammaDev);
@@ -296,66 +301,80 @@ void SkipLayerNormPlugin::terminate()
     gLogVerbose << "SKIPLN terminate done" << std::endl;
 }
 
-void SkipLayerNormPlugin::destroy()
+size_t SkipLayerNormPluginDynamic::getSerializationSize() const
+{
+    return 2 * sizeof(float) * mLd + sizeof(DataType) + sizeof(mLd) ;
+}
+
+void SkipLayerNormPluginDynamic::serialize(void* buffer) const
+{
+    char* d = static_cast<char*>(buffer);
+    const char* a = d;
+
+    writeToBuffer(d, mType);
+    writeToBuffer(d, mLd);
+    serFromDev(d, mBetaDev, mLd);
+    serFromDev(d, mGammaDev, mLd);
+    assert(d == a + getSerializationSize());
+}
+
+void SkipLayerNormPluginDynamic::destroy()
 {
     // This gets called when the network containing plugin is destroyed
     delete this;
 }
 
-IPluginV2* SkipLayerNormPlugin::clone() const
-{
-    return new SkipLayerNormPlugin(mLayerName, mLd, mBeta, mGamma);
-}
-
-void SkipLayerNormPlugin::setPluginNamespace(const char* libNamespace)
+void SkipLayerNormPluginDynamic::setPluginNamespace(const char* libNamespace)
 {
     mNamespace = libNamespace;
 }
 
-const char* SkipLayerNormPlugin::getPluginNamespace() const
+const char* SkipLayerNormPluginDynamic::getPluginNamespace() const
 {
     return mNamespace.c_str();
 }
 
-SkipLayerNormPluginCreator::SkipLayerNormPluginCreator()
+/////////////////////////////////////////////////////////
+
+SkipLayerNormPluginDynamicCreator::SkipLayerNormPluginDynamicCreator()
 {
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* SkipLayerNormPluginCreator::getPluginName() const
+const char* SkipLayerNormPluginDynamicCreator::getPluginName() const
 {
     return SKIP_LAYER_NORM_NAME;
 }
 
-const char* SkipLayerNormPluginCreator::getPluginVersion() const
+const char* SkipLayerNormPluginDynamicCreator::getPluginVersion() const
 {
     return SKIP_LAYER_NORM_VERSION;
 }
 
-const PluginFieldCollection* SkipLayerNormPluginCreator::getFieldNames()
+const PluginFieldCollection* SkipLayerNormPluginDynamicCreator::getFieldNames()
 {
     return &mFC;
 }
 
-IPluginV2* SkipLayerNormPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
-    gLogVerbose << "Creating SkipLayerNormPluginCreator...\n";
+    gLogVerbose << "Creating SkipLayerNormPluginDynamicCreator...\n";
 
     int ld;
     Weights beta;
     Weights gamma;
 
-    for(int i=0; i< fc->nbFields; i++)
+    for (int i = 0; i < fc->nbFields; i++)
     {
         std::string field_name(fc->fields[i].name);
-        if (field_name.compare("ld")==0)
+        if (field_name.compare("ld") == 0)
         {
             ld = *static_cast<const int*>(fc->fields[i].data);
             gLogVerbose << "Building ld: " << ld << std::endl;
         }
 
-        if (field_name.compare("beta")==0)
+        if (field_name.compare("beta") == 0)
         {
             gLogVerbose << "Building beta...\n";
             beta.values = fc->fields[i].data;
@@ -363,7 +382,7 @@ IPluginV2* SkipLayerNormPluginCreator::createPlugin(const char* name, const Plug
             beta.type = static_cast<DataType>(fc->fields[i].type);
         }
 
-        if (field_name.compare("gamma")==0)
+        if (field_name.compare("gamma") == 0)
         {
             gLogVerbose << "Building gamma...\n";
             gamma.values = fc->fields[i].data;
@@ -372,24 +391,25 @@ IPluginV2* SkipLayerNormPluginCreator::createPlugin(const char* name, const Plug
         }
     }
 
-    SkipLayerNormPlugin* p = new SkipLayerNormPlugin(name, ld, beta, gamma);
+    SkipLayerNormPluginDynamic* p = new SkipLayerNormPluginDynamic(name, ld, beta, gamma);
     return p;
 }
 
-IPluginV2* SkipLayerNormPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2* SkipLayerNormPluginDynamicCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
 {
     // This object will be deleted when the network is destroyed, which will
-    // call SkipLayerNormPlugin::destroy()
-    return new SkipLayerNormPlugin(name, serialData, serialLength);
+    // call SkipLayerNormPluginDynamic::destroy()
+    return new SkipLayerNormPluginDynamic(name, serialData, serialLength);
 }
 
-void SkipLayerNormPluginCreator::setPluginNamespace(const char* libNamespace)
+void SkipLayerNormPluginDynamicCreator::setPluginNamespace(const char* libNamespace)
 {
     mNamespace = libNamespace;
 }
 
-const char* SkipLayerNormPluginCreator::getPluginNamespace() const
+const char* SkipLayerNormPluginDynamicCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
+}
 }
 }

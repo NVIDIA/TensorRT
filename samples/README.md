@@ -4,15 +4,15 @@ This guide shows how to cross compile TensorRT samples for AArch64 QNX, Linux an
 
 ### Common Prerequisites
 
-* Install the CUDA cross-platform toolkit for the the corresponding target, and set the environment variable `CUDA_INSTALL_DIR` 
+* Install the CUDA cross-platform toolkit for the the corresponding target, and set the environment variable `CUDA_INSTALL_DIR`
 
   ```shell
   export CUDA_INSTALL_DIR="your cuda install dir"
   ```
 
-  `CUDA_INSTALL_DIR` is set to `/usr/local/cuda` by default. 
+  `CUDA_INSTALL_DIR` is set to `/usr/local/cuda` by default.
 
-* Install the cuDNN cross-platform libraries for the corresponding target, and set the environment variable `CUDNN_INSTALL_DIR` 
+* Install the cuDNN cross-platform libraries for the corresponding target, and set the environment variable `CUDNN_INSTALL_DIR`
 
   ```shell
   export CUDNN_INSTALL_DIR="your cudnn install dir"
@@ -20,7 +20,7 @@ This guide shows how to cross compile TensorRT samples for AArch64 QNX, Linux an
 
   `CUDNN_INSTALL_DIR` is set to `CUDA_INSTALL_DIR` by default.
 
-* Install the TensorRT cross compilation debian packages for the corresponding target. 
+* Install the TensorRT cross compilation debian packages for the corresponding target.
   * QNX AArch64: libnvinfer-dev-cross-qnx, libnvinfer5-cross-qnx
   * Linux AArch64: libnvinfer-dev-cross-aarch64, libnvinfer5-cross-aarch64
   * Android AArch64: No debian packages are available.

@@ -17,28 +17,7 @@
 /* Hides all symbols except those specified in the global section */
 {
   global:
-    createInferBuilder_INTERNAL;
-    createInferRuntime_INTERNAL;
-    createInferRefitter_INTERNAL;
-    getInferLibVersion;
-    createRPNROIPlugin;
-    createNormalizePlugin;
-    createPriorBoxPlugin;
-    createAnchorGeneratorPlugin;
-    createNMSPlugin;
-    createLReLUPlugin;
-    createReorgPlugin;
-    createRegionPlugin;
-    createClipPlugin;
-    createBatchedNMSPlugin;
-    getPluginRegistry;
     initLibNvInferPlugins;
-    extern "C++" {
-      nvinfer1::*;
-      nvcaffeparser1::*;
-      nvonnxparser::*;
-      nvuffparser::*;
-    };
   local: *;
 };
 

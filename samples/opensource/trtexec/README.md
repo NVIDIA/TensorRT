@@ -74,71 +74,7 @@ For more information about DLA, see [Working With DLA](https://docs.nvidia.com/d
 
 ## Tool command line arguments
 
-To see the full list of available options and their descriptions, use the `./trtexec --help` command.
-```
-&&&& RUNNING TensorRT.trtexec # ./trtexec --help
-=== Model Options ===
-  --uff=<file>                UFF model
-  --onnx=<file>               ONNX model
-  --model=<file>              Caffe model (default = no model, random weights used)
-  --deploy=<file>             Caffe prototxt file
-  --output=<name>[,<name>]*   Output names (it can be specified multiple times); at least one output is required for UFF and Caffe
-  --uffInput=<name>,X,Y,Z     Input blob name and its dimensions (X,Y,Z=C,H,W), it can be specified multiple times; at least one is required for UFF models
-  --uffNHWC                   Set if inputs are in the NHWC layout instead of NCHW (use X,Y,Z=H,W,C order in --uffInput)
-
-=== Build Options ===
-  --minBatch=N                Set min batch size when building the engine (default = 1)
-  --optBatch=N                Set optimal batch size when building the engine (default = maxBatch size)
-  --maxBatch=N                Set max batch size when building the engine (default = minBatch size)
-  --dynamicShapes             Enable dynamic shape for lower 3 (CWH or HWC) dimensions on inputs
-  --inputIOFormats=spec       Type and formats of the input tensors (default = all inputs in fp32:chw)
-  --outputIOFormats=spec      Type and formats of the output tensors (default = all outputs in fp32:chw)
-                              IO Formats: spec  ::= IOfmt[","spec]
-                                          IOfmt ::= type:fmt
-                                          type  ::= "fp32"|"fp16"|"int32"|"int8"
-                                          fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32")["+"fmt]
-  --workspace=N               Set workspace size in megabytes (default = 16)
-  --minTiming=M               Set the minimum number of iterations used in kernel selection (default = 1)
-  --avgTiming=M               Set the number of times averaged in each iteration for kernel selection (default = 8)
-  --fp16                      Enable fp16 mode (default = disabled)
-  --int8                      Run in int8 mode (default = disabled)
-  --calib=<file>              Read INT8 calibration cache file
-  --safe                      Only test the functionality available in safety restricted flows
-  --saveEngine=<file>         Save the serialized engine
-  --loadEngine=<file>         Load a serialized engine
-
-=== Inference Options ===
-  --batch=N                   Set batch size (default = 1)
-  --iterations=N              Run N inference iterations (default = 10)
-  --warmUp=N                  Run for N milliseconds to warmup before measuring performance (default = 200)
-  --duration=N                Run performance measurements for at least N seconds of wallclock time (default = 10)
-  --sleepTime=N               Delay inference start with a gap of N milliseconds between launch and compute (default = 0)
-  --streams=N                 Instantiate N engines to use concurrently (default = 1)
-  --threads                   Enable multithreading to drive engines with independent threads (default = disabled)
-  --useCudaGraph              Use cuda graph to capture engine execution and then launch inference (default = false)
-  --buildOnly                 Skip inference perf measurement (default = disabled)
-Note: if a batch size is specified only for inference, it will be used also as min, opt, and max batch size for the builder
-
-=== Reporting Options ===
-  --verbose                   Use verbose logging (default = false)
-  --avgRuns=N                 Report performance measurements averaged over N consecutive iterations (default = 10)
-  --percentile=P              Report performance for the P percentage (0<=P<=100, 0 representing max perf, and 100 representing min perf; (default = 99%)
-  --dumpOutput                Print the output tensor(s) of the last inference iteration (default = disabled)
-  --dumpProfile               Print profile information per layer (default = disabled)
-  --exportTimes=<file>        Write the timing results in a json file (default = disabled)
-  --exportProfile=<file>      Write the profile information per layer in a json file (default = disabled)
-
-=== System Options ===
-  --device=N                  Select cuda device N (default = 0)
-  --useDLACore=N              Select DLA core N for layers that support DLA (default = none)
-  --allowGPUFallback          When DLA is enabled, allow GPU fallback for unsupported layers (default = disabled)
-  --plugins                   Plugin library (.so) to load (can be specified multiple times)
-
-=== Help ===
-  --help                      Print this message
-&&&& PASSED TensorRT.trtexec # ./trtexec --help
-
-```
+To see the full list of available options and their descriptions, issue the `./trtexec --help` command.
 
 **Note:** Specifying the `--safe` parameter turns the safety mode switch `ON`. By default, the `--safe` parameter is not specified; the safety mode switch is `OFF`. The layers and parameters that are contained within the `--safe` subset are restricted if the switch is set to `ON`. The switch is used for prototyping the safety restricted flows until the TensorRT safety runtime is made available. For more information, see the [Working With Automotive Safety section in the TensorRT Developer Guide](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#working_auto_safety).
 

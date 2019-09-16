@@ -46,9 +46,10 @@ out_fn = outputbase + ".weights"
 with open(out_fn, 'wb') as output_file:
 
     # there might be training-related variables in the checkpoint that can be discarded
-    param_names = [key for key in sorted(tensor_dict) if 'adam' not in key and 'global_step' not in key and 'pooler' not in key]
+    exclude_list = ["adam", "global_step", "pooler", "bad_steps", "good_steps", "loss_scale"]
+    param_names = [key for key in sorted(tensor_dict) if all([exclude not in key for exclude in exclude_list])]
 
-    count = len(param_names) 
+    count = len(param_names)
     print(count)
 
     output_file.write('{}\n'.format(count).encode('ASCII'))
@@ -70,4 +71,3 @@ with open(out_fn, 'wb') as output_file:
         output_file.write(flat_tensor.tobytes())
         output_file.write('\n'.encode('ASCII'));
         print('Orig.name:', pn,'TRT name:', outname, 'shape:' , shape_str)
-

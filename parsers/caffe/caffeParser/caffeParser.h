@@ -56,6 +56,8 @@ public:
     void setPluginNamespace(const char* libNamespace) override { mPluginNamespace = libNamespace; }
     IBinaryProtoBlob* parseBinaryProto(const char* fileName) override;
     void destroy() override { delete this; }
+    void setErrorRecorder(nvinfer1::IErrorRecorder* recorder) override { (void)recorder; assert(!"TRT- Not implemented."); }
+    nvinfer1::IErrorRecorder* getErrorRecorder() const override { assert(!"TRT- Not implemented."); return nullptr; }
 
 private:
     ~CaffeParser() override;

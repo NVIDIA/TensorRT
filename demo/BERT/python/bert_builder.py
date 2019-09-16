@@ -28,21 +28,21 @@ except ImportError as err:
     sys.stderr.write("""Error: Failed to import tensorflow module ({})""".format(err))
     sys.exit()
 
-nvinfer = ctypes.CDLL("libnvinfer_plugin.so", mode=ctypes.RTLD_GLOBAL)
-cm = ctypes.CDLL("/workspace/TensorRT/demo/BERT/build/libcommon.so", mode=ctypes.RTLD_GLOBAL)
-pg = ctypes.CDLL("/workspace/TensorRT/demo/BERT/build/libbert_plugins.so", mode=ctypes.RTLD_GLOBAL)
-
-
 """
 TensorRT Initialization
 """
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
+
+ctypes.CDLL("libnvinfer_plugin.so", mode=ctypes.RTLD_GLOBAL)
+ctypes.CDLL("/workspace/TensorRT/demo/BERT/build/libcommon.so", mode=ctypes.RTLD_GLOBAL)
+ctypes.CDLL("/workspace/TensorRT/demo/BERT/build/libbert_plugins.so", mode=ctypes.RTLD_GLOBAL)
+
 trt.init_libnvinfer_plugins(TRT_LOGGER, "")
 plg_registry = trt.get_plugin_registry()
-qkv2_plg_creator = plg_registry.get_plugin_creator("CustomQKVToContextPlugin", "1", "")
-skln_plg_creator = plg_registry.get_plugin_creator("CustomSkipLayerNormPlugin", "1", "")
-gelu_plg_creator = plg_registry.get_plugin_creator("CustomGeluPlugin", "1", "")
-emln_plg_creator = plg_registry.get_plugin_creator("CustomEmbLayerNormPlugin", "1", "")
+qkv2_plg_creator = plg_registry.get_plugin_creator("CustomQKVToContextPluginDynamic", "1", "")
+skln_plg_creator = plg_registry.get_plugin_creator("CustomSkipLayerNormPluginDynamic", "1", "")
+gelu_plg_creator = plg_registry.get_plugin_creator("CustomGeluPluginDynamic", "1", "")
+emln_plg_creator = plg_registry.get_plugin_creator("CustomEmbLayerNormPluginDynamic", "1", "")
 
 
 """
@@ -79,7 +79,6 @@ Squad Output Keys
 SQD_W = "squad_output_weights"
 SQD_B = "squad_output_bias"
 
-
 class BertConfig:
     def __init__(self, bert_config_path):
         with open(bert_config_path, 'r') as f:
@@ -101,8 +100,8 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, imask)
     """
     Add the attention layer
     """
-    assert(len(input_tensor.shape) == 4)
-    S, hidden_size, _, _ = input_tensor.shape
+    assert(len(input_tensor.shape) == 5)
+    B, S, hidden_size, _, _ = input_tensor.shape
     num_heads = config.num_attention_heads
     head_size = int(hidden_size / num_heads)
 
@@ -112,14 +111,13 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, imask)
     mult_all = network.add_fully_connected(input_tensor, 3 * hidden_size, Wall, Ball)
     set_layer_name(mult_all, prefix, "qkv_mult")
 
-    has_mask = imask != None
+    has_mask = imask is not None
 
     pf_hidden_size = trt.PluginField("hidden_size", np.array([hidden_size], np.int32), trt.PluginFieldType.INT32)
     pf_num_heads = trt.PluginField("num_heads", np.array([num_heads], np.int32), trt.PluginFieldType.INT32)
-    pf_S = trt.PluginField("S", np.array([S], np.int32), trt.PluginFieldType.INT32)
     pf_has_mask = trt.PluginField("has_mask", np.array([has_mask], np.int32), trt.PluginFieldType.INT32)
 
-    pfc = trt.PluginFieldCollection([pf_hidden_size, pf_num_heads, pf_S, pf_has_mask])
+    pfc = trt.PluginFieldCollection([pf_hidden_size, pf_num_heads, pf_has_mask])
     qkv2ctx_plug = qkv2_plg_creator.create_plugin("qkv2ctx", pfc)
 
     qkv_in = [mult_all.get_output(0), imask]
@@ -133,8 +131,8 @@ def skipln(prefix, init_dict, network, input_tensor, skip):
     Add the skip layer
     """
     idims = input_tensor.shape
-    assert len(idims) == 4
-    hidden_size = idims[1]
+    assert len(idims) == 5
+    hidden_size = idims[2]
 
     pf_ld = trt.PluginField("ld", np.array([hidden_size], np.int32), trt.PluginFieldType.INT32)
     wbeta = init_dict[prefix + "beta"]
@@ -155,8 +153,8 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
     Add the transformer layer
     """
     idims = input_tensor.shape
-    assert len(idims) == 4
-    hidden_size = idims[1]
+    assert len(idims) == 5
+    hidden_size = idims[2]
 
     context_transposed = attention_layer_opt(prefix + "attention_self_", config, init_dict, network, input_tensor, imask)
     attention_heads = context_transposed.get_output(0)
@@ -213,8 +211,8 @@ def squad_output(prefix, config, init_dict, network, input_tensor):
     """
 
     idims = input_tensor.shape
-    assert len(idims) == 4
-    S, hidden_size, _, _ = idims
+    assert len(idims) == 5
+    B, S, hidden_size, _, _ = idims
 
     W_out = init_dict[prefix + SQD_W]
     B_out = init_dict[prefix + SQD_B]
@@ -238,7 +236,7 @@ def load_weights(inputbase):
         # There might be training-related variables in the checkpoint that can be discarded
         param_names = [key for key in sorted(tensor_dict) if 'adam' not in key and 'global_step' not in key and 'pooler' not in key]
         count = len(param_names)
-        TRT_LOGGER.log(TRT_LOGGER.INFO, str(count))
+        TRT_LOGGER.log(TRT_LOGGER.INFO, "Found {:} entries in weight map".format(count))
 
         for pn in param_names:
             toks = pn.lower().split('/')
@@ -252,7 +250,7 @@ def load_weights(inputbase):
             tensor = reader.get_tensor(pn)
             shape = tensor.shape
             if pn.find('kernel') != -1:
-                TRT_LOGGER.log(TRT_LOGGER.INFO, "Transposing {}\n".format(np))
+                TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Transposing {}\n".format(np))
                 tensor = np.transpose(tensor)
 
             shape = tensor.shape
@@ -260,7 +258,7 @@ def load_weights(inputbase):
             shape_str = '{} '.format(len(shape)) + ' '.join([str(d) for d in shape])
             weights_dict[outname] = trt.Weights(flat_tensor)
 
-            TRT_LOGGER.log(TRT_LOGGER.INFO, "Orig.name: {:}, TRT name: {:}, shape: {:}".format(pn, outname, shape_str))
+            TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Orig.name: {:}, TRT name: {:}, shape: {:}".format(pn, outname, shape_str))
 
         additional_dict = dict()
         for key, value in weights_dict.items():
@@ -300,18 +298,13 @@ def load_weights(inputbase):
 
 def main(inputbase, B, S, bert_path, outputbase):
     bert_config_path = os.path.join(bert_path, 'bert_config.json')
-    TRT_LOGGER.log(TRT_LOGGER.INFO, bert_config_path)
+    TRT_LOGGER.log(TRT_LOGGER.INFO, "Using configuration file: {:}".format(bert_config_path))
     config = BertConfig(bert_config_path)
 
     # Load weights from checkpoint file
     init_dict = load_weights(inputbase)
 
     with trt.Builder(TRT_LOGGER) as builder:
-        builder.max_batch_size = B
-        builder.max_workspace_size = 5000 * (1024 * 1024)
-        builder.fp16_mode = True
-        builder.strict_type_constraints = False
-
         ty = trt.PluginFieldType.FLOAT32
 
         w = init_dict["bert_embeddings_layernorm_beta"]
@@ -332,10 +325,36 @@ def main(inputbase, B, S, bert_path, outputbase):
         pfc = trt.PluginFieldCollection([wbeta, wgamma, wwordemb, wtokemb, wposemb])
         fn = emln_plg_creator.create_plugin("embeddings", pfc)
 
-        with builder.create_network() as network:
-            input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(S, ))
-            segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(S, ))
-            input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(S, ))
+        explicit_batch_flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+        with builder.create_network(explicit_batch_flag) as network, builder.create_builder_config() as builder_config:
+            builder_config.max_workspace_size = 5000 * (1024 * 1024) # 5000 MiB
+            builder_config.set_flag(trt.BuilderFlag.FP16)
+
+            input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1, S))
+            segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1, S))
+            input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1, S))
+
+            def set_profile_shape(profile, batch_size):
+                shape = (batch_size, S)
+                profile.set_shape("input_ids", min=shape, opt=shape, max=shape)
+                profile.set_shape("segment_ids", min=shape, opt=shape, max=shape)
+                profile.set_shape("input_mask", min=shape, opt=shape, max=shape)
+
+            # Specify profiles for the batch sizes we're interested in.
+            # For maximum performance, we will tie each profile to exactly one shape rather than a range.
+            bs1_profile = builder.create_optimization_profile()
+            set_profile_shape(bs1_profile, 1)
+            builder_config.add_optimization_profile(bs1_profile)
+
+            bs_user_profile = builder.create_optimization_profile()
+            set_profile_shape(bs_user_profile, B)
+            builder_config.add_optimization_profile(bs_user_profile)
+
+            bs8_profile = builder.create_optimization_profile()
+            set_profile_shape(bs8_profile, 8)
+            builder_config.add_optimization_profile(bs8_profile)
+
+            # Create the network
             inputs = [input_ids, segment_ids, input_mask]
             emb_layer = network.add_plugin_v2(inputs, fn)
 
@@ -346,25 +365,26 @@ def main(inputbase, B, S, bert_path, outputbase):
 
             squad_logits = squad_output("cls_", config, init_dict, network, bert_out)
             squad_logits_out = squad_logits.get_output(0)
+
             network.mark_output(squad_logits_out)
 
-            engine = builder.build_cuda_engine(network)
 
-            TRT_LOGGER.log(TRT_LOGGER.INFO, "Serializing the engine....")
-            serialized_engine = engine.serialize()
-            TRT_LOGGER.log(TRT_LOGGER.INFO, "Saving the engine....")
-            with open(outputbase, 'wb') as fout:
-                fout.write(serialized_engine)
-            TRT_LOGGER.log(TRT_LOGGER.INFO, "Done.")
+            with builder.build_engine(network, builder_config) as engine:
+                TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Serializing Engine...")
+                serialized_engine = engine.serialize()
+                TRT_LOGGER.log(TRT_LOGGER.INFO, "Saving Engine to {:}".format(outputbase))
+                with open(outputbase, 'wb') as fout:
+                    fout.write(serialized_engine)
+                TRT_LOGGER.log(TRT_LOGGER.INFO, "Done.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='TensorRT BERT Sample')
+    parser = argparse.ArgumentParser(description='TensorRT BERT Sample', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-m', '--model', required=True,
-                        help='The checkpoint file basename, example basename(model.ckpt-766908.data-00000-of-00001)-> model.ckpt-766908')
-    parser.add_argument('-o', '--output', required=True, help='The bert engine file, ex bert.engine')
-    parser.add_argument('-b', '--batchsize', required=False, default=1, help='Batch size (default=1)')
-    parser.add_argument('-s', '--sequence', required=False, default=384, help='Sequence length of the BERT model (default=384)')
+                        help='The checkpoint file basename, e.g.: basename(model.ckpt-766908.data-00000-of-00001) is model.ckpt-766908')
+    parser.add_argument('-o', '--output', required=True, default="bert_base_384.engine", help='The bert engine file, ex bert.engine')
+    parser.add_argument('-b', '--batchsize', default=1, help='Batch size')
+    parser.add_argument('-s', '--sequence', default=384, help='Sequence length of the BERT model')
     parser.add_argument('-c', '--config', required=True,
                         help='The folder containing the bert_config.json, which can be downloaded e.g. from https://github.com/google-research/bert#pre-trained-models or by running download_models.py in dle/TensorFlow/LanguageModeling/BERT/data/pretrained_models_google')
 
@@ -376,5 +396,3 @@ if __name__ == "__main__":
     S = int(opt.sequence)
     bert_path = opt.config
     main(inputbase, B, S, bert_path, outputbase)
-    # Required to work around a double free issue in TRT 5.1
-    os._exit(0)

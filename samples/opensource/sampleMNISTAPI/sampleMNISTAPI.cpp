@@ -95,8 +95,8 @@ private:
     //!
     //! \brief Uses the API to create the MNIST Network
     //!
-    bool constructNetwork(
-        SampleUniquePtr<nvinfer1::IBuilder>& builder, SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
+    bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config);
 
     //!
     //! \brief Reads the input  and stores the result in a managed buffer
@@ -138,7 +138,13 @@ bool SampleMNISTAPI::build()
         return false;
     }
 
-    auto constructed = constructNetwork(builder, network);
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
+    auto constructed = constructNetwork(builder, network, config);
     if (!constructed)
     {
         return false;
@@ -162,8 +168,8 @@ bool SampleMNISTAPI::build()
 //!
 //! \param builder Pointer to the engine builder
 //!
-bool SampleMNISTAPI::constructNetwork(
-    SampleUniquePtr<nvinfer1::IBuilder>& builder, SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config)
 {
     // Create input tensor of shape { 1, 1, 28, 28 }
     ITensor* data = network->addInput(
@@ -222,17 +228,21 @@ bool SampleMNISTAPI::constructNetwork(
 
     // Build engine
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(16_MB);
-    builder->setFp16Mode(mParams.fp16);
+    config->setMaxWorkspaceSize(16_MiB);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
     if (mParams.int8)
     {
-        builder->setInt8Mode(true);
+        config->setFlag(BuilderFlag::kINT8);
         samplesCommon::setAllTensorScales(network.get(), 64.0f, 64.0f);
     }
 
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;

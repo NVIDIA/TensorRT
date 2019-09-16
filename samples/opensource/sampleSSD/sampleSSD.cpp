@@ -97,7 +97,8 @@ private:
     //! \brief Parses a Caffe model for SSD and creates a TensorRT network
     //!
     bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser);
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+        SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser);
 
     //!
     //! \brief Reads the input and mean data, preprocesses, and stores the result in a managed buffer
@@ -134,13 +135,19 @@ bool SampleSSD::build()
         return false;
     }
 
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
     auto parser = SampleUniquePtr<nvcaffeparser1::ICaffeParser>(nvcaffeparser1::createCaffeParser());
     if (!parser)
     {
         return false;
     }
 
-    auto constructed = constructNetwork(builder, network, parser);
+    auto constructed = constructNetwork(builder, network, config, parser);
     if (!constructed)
     {
         return false;
@@ -162,7 +169,8 @@ bool SampleSSD::build()
 //! \param builder Pointer to the engine builder
 //!
 bool SampleSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser)
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+    SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser)
 {
     const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor
         = parser->parse(locateFile(mParams.prototxtFileName, mParams.dataDirs).c_str(),
@@ -174,10 +182,29 @@ bool SampleSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(36_MB);
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    config->setMaxWorkspaceSize(36_MiB);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    // Calibrator life time needs to last until after the engine is built.
+    std::unique_ptr<IInt8Calibrator> calibrator;
+
+    if (mParams.int8)
+    {
+        gLogInfo << "Using Entropy Calibrator 2" << std::endl;
+        BatchStream calibrationStream(
+            mParams.batchSize, mParams.nbCalBatches, mParams.calibrationBatches, mParams.dataDirs);
+        calibrator.reset(
+            new Int8EntropyCalibrator2<BatchStream>(calibrationStream, 0, "SSD", mParams.inputTensorNames[0].c_str()));
+        config->setFlag(BuilderFlag::kINT8);
+        config->setInt8Calibrator(calibrator.get());
+    }
+
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -351,6 +378,8 @@ SampleSSDParams initializeSampleParams(const samplesCommon::Args& args)
     {
         params.dataDirs.push_back("data/ssd/");
         params.dataDirs.push_back("data/samples/ssd/");
+        params.dataDirs.push_back("data/int8_samples/ssd/");
+        params.dataDirs.push_back("int8/ssd/");
     }
     else //!< Use the data directory provided by the user
     {
@@ -363,6 +392,8 @@ SampleSSDParams initializeSampleParams(const samplesCommon::Args& args)
     params.outputTensorNames.push_back("detection_out");
     params.outputTensorNames.push_back("keep_count");
     params.dlaCore = args.useDLACore;
+    params.int8 = args.runInInt8;
+    params.fp16 = args.runInFp16;
 
     params.outputClsSize = 21;
     params.keepTopK = 200; // Number of total bboxes to be kept per image after NMS step. It is same as
@@ -389,6 +420,8 @@ void printHelpInfo()
     std::cout << "--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
                  "where n is the number of DLA engines on the platform."
               << std::endl;
+    std::cout << "--fp16          Specify to run in fp16 mode." << std::endl;
+    std::cout << "--int8          Specify to run in int8 mode." << std::endl;
 }
 
 int main(int argc, char** argv)

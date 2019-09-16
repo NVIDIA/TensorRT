@@ -41,33 +41,22 @@ private:
     std::string mReferenceFilename;
     std::string mOutputFilename;
     std::string mCalibrationFilename;
-    int64_t mMaxBatchSize;
-    int64_t mMaxWorkspaceSize;
-    int64_t mCalibBatchSize;
-    int64_t mMaxNCalibBatch;
-    int64_t mFirstCalibBatch;
-    int64_t mUseDLACore;
-    nvinfer1::DataType mModelDtype;
-    Verbosity mVerbosity;
-    bool mPrintLayercInfo;
-    bool mDebugBuilder;
-    InputDataFormat mInputDataFormat;
-    uint64_t mTopK;
+    int64_t mMaxBatchSize{32};
+    int64_t mMaxWorkspaceSize{1 * 1024 * 1024 * 1024};
+    int64_t mCalibBatchSize{0};
+    int64_t mMaxNCalibBatch{0};
+    int64_t mFirstCalibBatch{0};
+    int64_t mUseDLACore{-1};
+    nvinfer1::DataType mModelDtype{nvinfer1::DataType::kFLOAT};
+    Verbosity mVerbosity{static_cast<int>(nvinfer1::ILogger::Severity::kWARNING)};
+    bool mPrintLayercInfo{false};
+    bool mDebugBuilder{false};
+    InputDataFormat mInputDataFormat{InputDataFormat::kASCII};
+    uint64_t mTopK{0};
+    float mFailurePercentage{-1.0f};
 
 public:
     SampleConfig()
-        : mMaxBatchSize(32)
-        , mMaxWorkspaceSize(1 * 1024 * 1024 * 1024)
-        , mCalibBatchSize(0)
-        , mMaxNCalibBatch(0)
-        , mFirstCalibBatch(0)
-        , mUseDLACore(-1)
-        , mModelDtype(nvinfer1::DataType::kFLOAT)
-        , mVerbosity(static_cast<int>(nvinfer1::ILogger::Severity::kWARNING))
-        , mPrintLayercInfo(false)
-        , mDebugBuilder(false)
-        , mInputDataFormat(InputDataFormat::kASCII)
-        , mTopK(0)
     {
 #ifdef ONNX_DEBUG
         if (isDebug())
@@ -220,10 +209,10 @@ public:
         return mDebugBuilder;
     } //!<  get the boolean variable, corresponding to the debug builder
 
-    const char* getImageFileName() const
+    const char* getImageFileName() const //!<  set Image file name (PPM or ASCII)
     {
         return mImageFilename.c_str();
-    }                                                //!<  set Image file name (PPM or ASCII)
+    }
     void setImageFileName(const char* imageFilename) //!< get the Image file name
     {
         mImageFilename = string(imageFilename);
@@ -246,10 +235,10 @@ public:
         return mInputDataFormat;
     } //!<  returns the expected data format of the image file.
 
-    const char* getOutputFileName() const
+    const char* getOutputFileName() const //!<  specifies the file to save the results
     {
         return mOutputFilename.c_str();
-    }                                                  //!<  specifies the file to save the results
+    }
     void setOutputFileName(const char* outputFilename) //!<  get the output file name
     {
         mOutputFilename = string(outputFilename);
@@ -272,6 +261,16 @@ public:
     {
         mTopK = topK;
     } //!<  If this options is specified, return the K top probabilities.
+
+    float getFailurePercentage() const
+    {
+        return mFailurePercentage;
+    }
+
+    void setFailurePercentage(float f)
+    {
+        mFailurePercentage = f;
+    }
 
     bool isDebug() const
     {

@@ -19,20 +19,15 @@
 
 #include "cublas_v2.h"
 #include "cuda_fp16.h"
+#include "common.h"
+#include <cub/cub.cuh>
 
 namespace bert
 {
 
-#define CHECK(status)                                                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        auto ret = (status);                                                                                           \
-        if (ret != 0)                                                                                                  \
-        {                                                                                                              \
-            std::cout << "Cuda failure: " << ret << std::endl;                                                         \
-            abort();                                                                                                   \
-        }                                                                                                              \
-    } while (0)
+constexpr uint32_t BDIM = 0; // batch dimension
+constexpr uint32_t SDIM = 1; // seq len dimension
+constexpr uint32_t HDIM = 2; // hidden dimension
 
 #define DESER(d, m) m = readFromBuffer<decltype(m)>(d)
 

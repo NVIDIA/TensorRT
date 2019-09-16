@@ -11,7 +11,7 @@
 
 ## Description
 
-The `proposalPlugin` performs object detection for the Faster R-CNN model.
+The `proposalPlugin` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT and used in [sampleUffFasterRCNN] to perform inference.
 
 `proposalPlugin` decodes predicted bounding boxes, extracts their corresponding objectness score, extracts region of interest from predicted bounding boxes using non maximum suppression, for downstreaming ROIPooling tasks.
 

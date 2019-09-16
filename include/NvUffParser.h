@@ -19,11 +19,16 @@
 
 #include "NvInfer.h"
 
-//Current supported Universal Framework Format (UFF) version for the parser.
+// Current supported Universal Framework Format (UFF) version for the parser.
 #define UFF_REQUIRED_VERSION_MAJOR 0
 #define UFF_REQUIRED_VERSION_MINOR 6
-#define UFF_REQUIRED_VERSION_PATCH 3
+#define UFF_REQUIRED_VERSION_PATCH 5
 
+//!
+//! \namespace nvuffparser
+//!
+//! \brief The TensorRT UFF parser API namespace.
+//!
 namespace nvuffparser
 {
 
@@ -70,7 +75,7 @@ public:
     FieldType type = FieldType::kUNKNOWN;
     int length = 1;
 
-    FieldMap(const char* name, const void* data, const FieldType type, int length = 1);
+    FieldMap(const char* name, const void* data, const FieldType type, int length = 1) TRTNOEXCEPT;
 };
 
 struct FieldCollection
@@ -92,7 +97,7 @@ public:
     //!
     //! \param layerName Name of the layer which the user wishes to validate.
     //!
-    virtual bool isPlugin(const char* layerName) = 0;
+    virtual bool isPlugin(const char* layerName) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Creates a plugin.
@@ -105,7 +110,7 @@ public:
     //! \see FieldCollection
     //!
     virtual nvinfer1::IPlugin* createPlugin(const char* layerName, const nvinfer1::Weights* weights, int nbWeights,
-                                            const FieldCollection fc) = 0;
+                                            const FieldCollection fc) TRTNOEXCEPT = 0;
 
 };
 
@@ -117,7 +122,7 @@ public:
 class IPluginFactoryExt : public IPluginFactory
 {
 public:
-    virtual int getVersion() const
+    virtual int getVersion() const TRTNOEXCEPT
     {
         return NV_TENSORRT_VERSION;
     }
@@ -127,7 +132,7 @@ public:
     //!
     //! \param layerName Name of the layer which the user wishes to validate.
     //!
-    virtual bool isPluginExt(const char* layerName) = 0;
+    virtual bool isPluginExt(const char* layerName) TRTNOEXCEPT = 0;
 };
 
 //!
@@ -147,14 +152,14 @@ public:
     //! \param inputDims Input dimensions.
     //! \param inputOrder Input order on which the framework input was originally.
     //!
-    virtual bool registerInput(const char* inputName, nvinfer1::Dims inputDims, UffInputOrder inputOrder) = 0;
+    virtual bool registerInput(const char* inputName, nvinfer1::Dims inputDims, UffInputOrder inputOrder) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Register an output name of a UFF network.
     //!
     //! \param outputName Output name.
     //!
-    virtual bool registerOutput(const char* outputName) = 0;
+    virtual bool registerOutput(const char* outputName) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Parse a UFF file.
@@ -165,7 +170,7 @@ public:
     //!
     virtual bool parse(const char* file,
                        nvinfer1::INetworkDefinition& network,
-                       nvinfer1::DataType weightsType=nvinfer1::DataType::kFLOAT) = 0;
+                       nvinfer1::DataType weightsType=nvinfer1::DataType::kFLOAT) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Parse a UFF buffer, useful if the file already live in memory.
@@ -177,46 +182,73 @@ public:
     //!
     virtual bool parseBuffer(const char* buffer, std::size_t size,
                              nvinfer1::INetworkDefinition& network,
-                             nvinfer1::DataType weightsType=nvinfer1::DataType::kFLOAT) = 0;
+                             nvinfer1::DataType weightsType=nvinfer1::DataType::kFLOAT) TRTNOEXCEPT = 0;
 
-    virtual void destroy() = 0;
+    virtual void destroy() TRTNOEXCEPT = 0;
 
     //!
     //! \brief Return Version Major of the UFF.
     //!
-    virtual int getUffRequiredVersionMajor() = 0;
+    virtual int getUffRequiredVersionMajor() TRTNOEXCEPT = 0;
 
     //!
     //! \brief Return Version Minor of the UFF.
     //!
-    virtual int getUffRequiredVersionMinor() = 0;
+    virtual int getUffRequiredVersionMinor() TRTNOEXCEPT = 0;
 
     //!
     //! \brief Return Patch Version of the UFF.
     //!
-    virtual int getUffRequiredVersionPatch() = 0;
+    virtual int getUffRequiredVersionPatch() TRTNOEXCEPT = 0;
 
     //!
     //! \brief Set the IPluginFactory used to create the user defined plugins.
     //!
     //! \param factory Pointer to an instance of the user implmentation of IPluginFactory.
     //!
-    virtual void setPluginFactory(IPluginFactory* factory) = 0;
+    virtual void setPluginFactory(IPluginFactory* factory) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Set the IPluginFactoryExt used to create the user defined pluginExts.
     //!
     //! \param factory Pointer to an instance of the user implmentation of IPluginFactoryExt.
     //!
-    virtual void setPluginFactoryExt(IPluginFactoryExt* factory) = 0;
+    virtual void setPluginFactoryExt(IPluginFactoryExt* factory) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Set the namespace used to lookup and create plugins in the network.
     //!
-    virtual void setPluginNamespace(const char* libNamespace) = 0;
+    virtual void setPluginNamespace(const char* libNamespace) TRTNOEXCEPT = 0;
 
 protected:
     virtual ~IUffParser() {}
+
+public:
+    //!
+    //! \brief Set the ErrorRecorder for this interface
+    //!
+    //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
+    //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
+    //! a recorder has been registered.
+    //!
+    //! \param recorder The error recorder to register with this interface.
+    //
+    //! \see getErrorRecorder
+    //!
+    virtual void setErrorRecorder(nvinfer1::IErrorRecorder* recorder) TRTNOEXCEPT = 0;
+
+    //!
+    //! \brief get the ErrorRecorder assigned to this interface.
+    //!
+    //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
+    //! so a nullptr will be returned if setErrorRecorder has not been called.
+    //!
+    //! \return A pointer to the IErrorRecorder object that has been registered.
+    //!
+    //! \see setErrorRecorder
+    //!
+    virtual nvinfer1::IErrorRecorder* getErrorRecorder() const TRTNOEXCEPT = 0;
 };
 
 //!
@@ -226,17 +258,17 @@ protected:
 //!
 //! \see nvuffparser::IUffParser
 //!
-TENSORRTAPI IUffParser* createUffParser();
+TENSORRTAPI IUffParser* createUffParser() TRTNOEXCEPT;
 
 //!
 //! \brief Shuts down protocol buffers library.
 //!
 //! \note No part of the protocol buffers library can be used after this function is called.
 //!
-TENSORRTAPI void shutdownProtobufLibrary(void);
+TENSORRTAPI void shutdownProtobufLibrary(void) TRTNOEXCEPT;
 
 }
 
-extern "C" TENSORRTAPI void* createNvUffParser_INTERNAL();
+extern "C" TENSORRTAPI void* createNvUffParser_INTERNAL() TRTNOEXCEPT;
 
-#endif /* !NV_UFF_PARSER_H */
+#endif // NV_UFF_PARSER_H

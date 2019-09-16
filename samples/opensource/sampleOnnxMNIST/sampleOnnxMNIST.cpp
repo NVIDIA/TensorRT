@@ -78,7 +78,8 @@ private:
     //! \brief Parses an ONNX model for MNIST and creates a TensorRT network
     //!
     bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvonnxparser::IParser>& parser);
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+        SampleUniquePtr<nvonnxparser::IParser>& parser);
 
     //!
     //! \brief Reads the input  and stores the result in a managed buffer
@@ -113,19 +114,26 @@ bool SampleOnnxMNIST::build()
         return false;
     }
 
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return false;
+    }
+
     auto parser = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, gLogger.getTRTLogger()));
     if (!parser)
     {
         return false;
     }
 
-    auto constructed = constructNetwork(builder, network, parser);
+    auto constructed = constructNetwork(builder, network, config, parser);
     if (!constructed)
     {
         return false;
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -151,7 +159,8 @@ bool SampleOnnxMNIST::build()
 //! \param builder Pointer to the engine builder
 //!
 bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvonnxparser::IParser>& parser)
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+    SampleUniquePtr<nvonnxparser::IParser>& parser)
 {
     auto parsed = parser->parseFromFile(
         locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(), static_cast<int>(gLogger.getReportableSeverity()));
@@ -161,15 +170,18 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(16_MB);
-    builder->setFp16Mode(mParams.fp16);
+    config->setMaxWorkspaceSize(16_MiB);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
     if (mParams.int8)
     {
-        builder->setInt8Mode(true);
+        config->setFlag(BuilderFlag::kINT8);
         samplesCommon::setAllTensorScales(network.get(), 127.0f, 127.0f);
     }
 
-    samplesCommon::enableDLA(builder.get(), mParams.dlaCore);
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
     return true;
 }

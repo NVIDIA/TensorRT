@@ -15,6 +15,7 @@
 #
 set(OPENSOURCE_SAMPLES_LIST
     sampleCharRNN
+    sampleDynamicReshape
     sampleFasterRCNN
     sampleGoogleNet
     sampleINT8
@@ -23,10 +24,16 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleMNIST
     sampleMNISTAPI
     sampleMovieLens
+    sampleMovieLensMPS
+    sampleNMT
     sampleOnnxMNIST
     samplePlugin
+    sampleReformatFreeIO
     sampleSSD
+    sampleUffFasterRCNN
+    sampleUffMaskRCNN
     sampleUffMNIST
+    sampleUffPluginV2Ext
     sampleUffSSD
     trtexec
 )

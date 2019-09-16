@@ -1,0 +1,419 @@
+Copyright 1993-2019 NVIDIA Corporation.  All rights reserved.
+
+NOTICE TO LICENSEE:
+
+This source code and/or documentation ("Licensed Deliverables") are subject to
+NVIDIA intellectual property rights under U.S. and international Copyright
+laws.
+
+These Licensed Deliverables contained herein is PROPRIETARY and CONFIDENTIAL
+to NVIDIA and is being provided under the terms and conditions of a form of
+NVIDIA software license agreement by and between NVIDIA and Licensee ("License
+Agreement") or electronically accepted by Licensee.  Notwithstanding any terms
+or conditions to the contrary in the License Agreement, reproduction or
+disclosure of the Licensed Deliverables to any third party without the express
+written consent of NVIDIA is prohibited.
+
+NOTWITHSTANDING ANY TERMS OR CONDITIONS TO THE CONTRARY IN THE LICENSE
+AGREEMENT, NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THESE
+LICENSED DELIVERABLES FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS
+OR IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH REGARD
+TO THESE LICENSED DELIVERABLES, INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
+NOTWITHSTANDING ANY TERMS OR CONDITIONS TO THE CONTRARY IN THE LICENSE
+AGREEMENT, IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT,
+INCIDENTAL, OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THESE LICENSED DELIVERABLES.
+
+U.S. Government End Users.  These Licensed Deliverables are a "commercial
+item" as that term is defined at 48 C.F.R. 2.101 (OCT 1995), consisting of
+"commercial computer software" and "commercial computer software
+documentation" as such terms are used in 48 C.F.R. 12.212 (SEPT 1995) and is
+provided to the U.S. Government only as a commercial end item.  Consistent
+with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through 227.7202-4 (JUNE 1995),
+all U.S. Government End Users acquire the Licensed Deliverables with only
+those rights set forth herein.
+
+Any use of the Licensed Deliverables in individual and commercial software
+must include, in the user documentation and internal comments to the code, the
+above Disclaimer and U.S. Government End Users Notice.
+
+diff --git a/MLP.py b/MLP.py
+index 70566c7..93c0d53 100644
+--- a/MLP.py
++++ b/MLP.py
+@@ -1,30 +1,27 @@
+ '''
+ Created on Aug 9, 2016
+ Keras Implementation of Multi-Layer Perceptron (GMF) recommender model in:
+-He Xiangnan et al. Neural Collaborative Filtering. In WWW 2017.
++He Xiangnan et al. Neural Collaborative Filtering. In WWW 2017.
+
+ @author: Xiangnan He (xiangnanhe@gmail.com)
+ '''
+-
++import shutil
+ import numpy as np
++import tensorflow as tf
+
+-import theano
+-import theano.tensor as T
+-import keras
+-from keras import backend as K
+-from keras import initializations
+-from keras.regularizers import l2, activity_l2
+-from keras.models import Sequential, Graph, Model
+-from keras.layers.core import Dense, Lambda, Activation
+-from keras.layers import Embedding, Input, Dense, merge, Reshape, Merge, Flatten, Dropout
+-from keras.constraints import maxnorm
+-from keras.optimizers import Adagrad, Adam, SGD, RMSprop
++from tensorflow import keras
++from tensorflow.python.keras import initializers
++from tensorflow.python.keras.regularizers import l2
++from tensorflow.python.keras.models import Model
++from tensorflow.python.keras.layers import Dense, Embedding, Input, Flatten, \
++     concatenate
++from tensorflow.python.keras.optimizers import Adam, Adagrad, SGD, RMSprop
++from tensorflow.python.framework import graph_util
+ from evaluate import evaluate_model
++from evaluate import infer_model
+ from Dataset import Dataset
+ from time import time
+-import sys
+ import argparse
+-import multiprocessing as mp
+
+ #################### Arguments ####################
+ def parse_args():
+@@ -54,7 +51,50 @@ def parse_args():
+     return parser.parse_args()
+
+ def init_normal(shape, name=None):
+-    return initializations.normal(shape, scale=0.01, name=name)
++    return initializers.he_normal()
++
++def freeze_checkpoint_graph(output_node_names, checkpoint_model_folder, output_graph_filename):
++    # retrieve the checkpoint fullpath
++    checkpoint = tf.train.get_checkpoint_state(checkpoint_model_folder)
++    input_checkpoint = checkpoint.model_checkpoint_path
++
++    print(input_checkpoint)
++    # precise the file fullname of our freezed graph
++    absolute_model_folder = "/".join(input_checkpoint.split("/")[:-1])
++
++    # we clear devices, to allow tensorflow to control on the loading, where it wants operations to be calculated
++    clear_devices = True
++
++    # the checkpoint directory has - .meta and .data i.e. weights file to be retrieved
++    saver = tf.train.import_meta_graph(input_checkpoint + '.meta', clear_devices=clear_devices)
++
++    # retrieve protobuf graph definition
++    # returns the default graph of the current thread - will be the innermost graph
++    # on which Graph.as_default() context has been entered - global_default_graph if non has been explicitly created
++    graph = tf.get_default_graph()
++
++    # retrieve graph def for a grpah
++    input_graph_def = graph.as_graph_def()
++
++    # print the output nodes
++    output_node_list = [n.name for n in tf.get_default_graph().as_graph_def().node]
++
++    # start the session and restore the weights
++    with tf.Session() as sess:
++        saver.restore(sess, input_checkpoint)
++
++        # in order to freeze the graph - need to export the variables to constants
++        output_graph_def = graph_util.convert_variables_to_constants(
++                sess,   # session have weights stored
++                input_graph_def,
++                output_node_names.split(",")
++        )
++
++        # finally we serialize and dump the output graph to the filesystem
++        with tf.gfile.GFile(output_graph_filename, "wb") as f:
++            f.write(output_graph_def.SerializeToString())
++
++        print("[FREEZE_INFO] ", len(output_graph_def.node), " ops in the final graph.")
+
+ def get_model(num_users, num_items, layers = [20,10], reg_layers=[0,0]):
+     assert len(layers) == len(reg_layers)
+@@ -63,29 +103,43 @@ def get_model(num_users, num_items, layers = [20,10], reg_layers=[0,0]):
+     user_input = Input(shape=(1,), dtype='int32', name = 'user_input')
+     item_input = Input(shape=(1,), dtype='int32', name = 'item_input')
+
+-    MLP_Embedding_User = Embedding(input_dim = num_users, output_dim = layers[0]/2, name = 'user_embedding',
+-                                  init = init_normal, W_regularizer = l2(reg_layers[0]), input_length=1)
+-    MLP_Embedding_Item = Embedding(input_dim = num_items, output_dim = layers[0]/2, name = 'item_embedding',
+-                                  init = init_normal, W_regularizer = l2(reg_layers[0]), input_length=1)
+-
++    MLP_Embedding_User = Embedding(input_dim=num_users,
++                                   output_dim=int(layers[0] // 2),
++                                   name='user_embedding',
++                                   embeddings_initializer='random_uniform',
++                                   embeddings_regularizer=l2(reg_layers[0]),
++                                   input_length=1)
++    MLP_Embedding_Item = Embedding(input_dim=num_items,
++                                   output_dim=int(layers[0] // 2),
++                                   name='item_embedding',
++                                   embeddings_initializer='random_uniform',
++                                   embeddings_regularizer=l2(reg_layers[0]),
++                                   input_length=1)
+     # Crucial to flatten an embedding vector!
+     user_latent = Flatten()(MLP_Embedding_User(user_input))
+     item_latent = Flatten()(MLP_Embedding_Item(item_input))
+-
++
+     # The 0-th layer is the concatenation of embedding layers
+-    vector = merge([user_latent, item_latent], mode = 'concat')
+-
++    vector = concatenate([user_latent, item_latent])
++
+     # MLP layers
+-    for idx in xrange(1, num_layer):
+-        layer = Dense(layers[idx], W_regularizer= l2(reg_layers[idx]), activation='relu', name = 'layer%d' %idx)
++    for idx in range(1, num_layer):
++        print(idx, " : ", layers[idx])
++        layer = Dense(layers[idx],
++                      kernel_regularizer=l2(reg_layers[idx]),
++                      activation='relu',
++                      name='layer%d'%idx)
+         vector = layer(vector)
+-
++
+     # Final prediction layer
+-    prediction = Dense(1, activation='sigmoid', init='lecun_uniform', name = 'prediction')(vector)
+-
+-    model = Model(input=[user_input, item_input],
+-                  output=prediction)
+-
++    prediction = Dense(1,
++                       activation='sigmoid',
++                       kernel_initializer='lecun_uniform',
++                       name='prediction')(vector)
++
++    model = Model(inputs=[user_input, item_input],
++                  outputs=prediction)
++
+     return model
+
+ def get_train_instances(train, num_negatives):
+@@ -97,9 +151,10 @@ def get_train_instances(train, num_negatives):
+         item_input.append(i)
+         labels.append(1)
+         # negative instances
+-        for t in xrange(num_negatives):
++        for t in range(num_negatives):
+             j = np.random.randint(num_items)
+-            while train.has_key((u, j)):
++            #while train.has_key((u, j)):
++            while (u, j) in train:
+                 j = np.random.randint(num_items)
+             user_input.append(u)
+             item_input.append(j)
+@@ -118,61 +173,73 @@ if __name__ == '__main__':
+     batch_size = args.batch_size
+     epochs = args.epochs
+     verbose = args.verbose
+-
++
+     topK = 10
+     evaluation_threads = 1 #mp.cpu_count()
+     print("MLP arguments: %s " %(args))
+-    model_out_file = 'Pretrain/%s_MLP_%s_%d.h5' %(args.dataset, args.layers, time())
+-
++
+     # Loading data
+     t1 = time()
+     dataset = Dataset(args.path + args.dataset)
+     train, testRatings, testNegatives = dataset.trainMatrix, dataset.testRatings, dataset.testNegatives
+     num_users, num_items = train.shape
+-    print("Load data done [%.1f s]. #user=%d, #item=%d, #train=%d, #test=%d"
++    print("Load data done [%.1f s]. #user=%d, #item=%d, #train=%d, #test=%d"
+           %(time()-t1, num_users, num_items, train.nnz, len(testRatings)))
+-
++
+     # Build model
+     model = get_model(num_users, num_items, layers, reg_layers)
+-    if learner.lower() == "adagrad":
++    if learner.lower() == "adagrad":
+         model.compile(optimizer=Adagrad(lr=learning_rate), loss='binary_crossentropy')
+     elif learner.lower() == "rmsprop":
+         model.compile(optimizer=RMSprop(lr=learning_rate), loss='binary_crossentropy')
+     elif learner.lower() == "adam":
+         model.compile(optimizer=Adam(lr=learning_rate), loss='binary_crossentropy')
+     else:
+-        model.compile(optimizer=SGD(lr=learning_rate), loss='binary_crossentropy')
+-
++        model.compile(optimizer=SGD(lr=learning_rate), loss='binary_crossentropy')
++
+     # Check Init performance
+     t1 = time()
+     (hits, ndcgs) = evaluate_model(model, testRatings, testNegatives, topK, evaluation_threads)
+     hr, ndcg = np.array(hits).mean(), np.array(ndcgs).mean()
+     print('Init: HR = %.4f, NDCG = %.4f [%.1f]' %(hr, ndcg, time()-t1))
+-
++
++    saver = tf.train.Saver()
++
+     # Train model
+     best_hr, best_ndcg, best_iter = hr, ndcg, -1
+-    for epoch in xrange(epochs):
++    for epoch in range(epochs):
++        print("Training epochs : ", epoch)
+         t1 = time()
+         # Generate training instances
+         user_input, item_input, labels = get_train_instances(train, num_negatives)
+-
+-        # Training
++
++        # Training
+         hist = model.fit([np.array(user_input), np.array(item_input)], #input
+-                         np.array(labels), # labels
+-                         batch_size=batch_size, nb_epoch=1, verbose=0, shuffle=True)
++                         np.array(labels), # labels
++                         batch_size=batch_size, epochs=1, verbose=0, shuffle=True)
+         t2 = time()
+
+         # Evaluation
+         if epoch %verbose == 0:
+             (hits, ndcgs) = evaluate_model(model, testRatings, testNegatives, topK, evaluation_threads)
+             hr, ndcg, loss = np.array(hits).mean(), np.array(ndcgs).mean(), hist.history['loss'][0]
+-            print('Iteration %d [%.1f s]: HR = %.4f, NDCG = %.4f, loss = %.4f [%.1f s]'
++            print('Iteration %d [%.1f s]: HR = %.4f, NDCG = %.4f, loss = %.4f [%.1f s]'
+                   % (epoch,  t2-t1, hr, ndcg, loss, time()-t2))
+             if hr > best_hr:
+                 best_hr, best_ndcg, best_iter = hr, ndcg, epoch
+-                if args.out > 0:
+-                    model.save_weights(model_out_file, overwrite=True)
++    # Model is trained, all epochs are done, save the golden data
++    infer_model(model, testRatings, testNegatives, topK, evaluation_threads)
+
+     print("End. Best Iteration %d:  HR = %.4f, NDCG = %.4f. " %(best_iter, best_hr, best_ndcg))
+-    if args.out > 0:
+-        print("The best MLP model is saved to %s" %(model_out_file))
++    # Get keras session
++    save_path = saver.save(tf.keras.backend.get_session(), './ckpts/sampleMovieLens.ckpt')
++
++    output_node_names = "prediction/Sigmoid"
++    checkpoint_model_folder = "./ckpts/";
++    output_graph_filename = "sampleMovieLens.pb"
++
++    # convert checkpoints to frozen graph
++    freeze_checkpoint_graph(output_node_names, checkpoint_model_folder, output_graph_filename)
++
++    # delete checkpoints file
++    shutil.rmtree("./ckpts")
+diff --git a/evaluate.py b/evaluate.py
+index 729f07a..6079a8a 100644
+--- a/evaluate.py
++++ b/evaluate.py
+@@ -20,6 +20,71 @@ _testRatings = None
+ _testNegatives = None
+ _K = None
+
++def infer_model(model, testRatings, testNegatives, K, num_thread):
++    """
++    Evaluate the performance (Hit_Ratio, NDCG) of top-K recommendation
++    Return: score of each test rating.
++    """
++    global _model
++    global _testRatings
++    global _testNegatives
++    global _K
++    _model = model
++    _testRatings = testRatings
++    _testNegatives = testNegatives
++    _K = K
++
++    hits, ndcgs = [],[]
++    if(num_thread > 1): # Multi-thread
++        pool = multiprocessing.Pool(processes=num_thread)
++        res = pool.map(eval_one_rating, range(len(_testRatings)))
++        pool.close()
++        pool.join()
++        hits = [r[0] for r in res]
++        ndcgs = [r[1] for r in res]
++        return (hits, ndcgs)
++
++    # open file to overwrite
++    r = open("./movielens_ratings.txt", 'w')
++    # Single thread
++    for idx in range(len(_testRatings)):
++        (hr,ndcg) = infer_one_rating(idx, r)
++        hits.append(hr)
++        ndcgs.append(ndcg)
++    return (hits, ndcgs)
++def infer_one_rating(idx, r):
++    rating = _testRatings[idx]
++    items = _testNegatives[idx]
++    u = rating[0]
++    gtItem = rating[1]
++    items.append(gtItem)
++
++    # Get prediction scores
++    map_item_score = {}
++    users = np.full(len(items), u, dtype = 'int32')
++    predictions = _model.predict([users, np.array(items)],
++                                 batch_size=100, verbose=0)
++    for i in range(len(items)):
++        item = items[i]
++        map_item_score[item] = predictions[i]
++
++    # Evaluate top rank list
++    ranklist = heapq.nlargest(_K, map_item_score, key=map_item_score.get)
++
++    r.write("user : %s\n" % u)
++    r.write("items : %s\n" % items)
++    r.write("predicted_max_rating_item : %s\n" % ranklist[0])
++    r.write("predicted_max_rating_prob : %s\n" % map_item_score[ranklist[0]])
++    r.write("Top 10 Ratings:\n")
++    for i in range(len(ranklist)):
++        r.write("%s : %s\n" % (int(ranklist[i]), float(map_item_score[ranklist[i]])))
++    r.write("#########################################################\n")
++
++    hr = getHitRatio(ranklist, gtItem)
++    ndcg = getNDCG(ranklist, gtItem)
++    items.pop()
++    return (hr, ndcg)
++
+ def evaluate_model(model, testRatings, testNegatives, K, num_thread):
+     """
+     Evaluate the performance (Hit_Ratio, NDCG) of top-K recommendation
+@@ -44,7 +109,7 @@ def evaluate_model(model, testRatings, testNegatives, K, num_thread):
+         ndcgs = [r[1] for r in res]
+         return (hits, ndcgs)
+     # Single thread
+-    for idx in xrange(len(_testRatings)):
++    for idx in range(len(_testRatings)):
+         (hr,ndcg) = eval_one_rating(idx)
+         hits.append(hr)
+         ndcgs.append(ndcg)
+@@ -61,15 +126,15 @@ def eval_one_rating(idx):
+     users = np.full(len(items), u, dtype = 'int32')
+     predictions = _model.predict([users, np.array(items)],
+                                  batch_size=100, verbose=0)
+-    for i in xrange(len(items)):
++    for i in range(len(items)):
+         item = items[i]
+         map_item_score[item] = predictions[i]
+-    items.pop()
+
+     # Evaluate top rank list
+     ranklist = heapq.nlargest(_K, map_item_score, key=map_item_score.get)
+     hr = getHitRatio(ranklist, gtItem)
+     ndcg = getNDCG(ranklist, gtItem)
++    items.pop()
+     return (hr, ndcg)
+
+ def getHitRatio(ranklist, gtItem):
+@@ -79,7 +144,7 @@ def getHitRatio(ranklist, gtItem):
+     return 0
+
+ def getNDCG(ranklist, gtItem):
+-    for i in xrange(len(ranklist)):
++    for i in range(len(ranklist)):
+         item = ranklist[i]
+         if item == gtItem:
+             return math.log(2) / math.log(i+2)

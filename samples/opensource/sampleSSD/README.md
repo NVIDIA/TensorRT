@@ -12,7 +12,7 @@
 - [Prerequisites](#prerequisites)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample---help-options)
-- [Additional resources](#additonal-resources)
+- [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
 - [Known issues](#known-issues)
@@ -72,7 +72,7 @@ To initialize and register these TensorRT plugins to the plugin registry, the `i
 The sampleSSD sample builds a network based on a Caffe model and network description. For details on importing a Caffe model, see [Importing A Caffe Model Using The C++ Parser API](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#import_caffe_c). The SSD network has few non-natively supported layers which are implemented as plugins in TensorRT. The Caffe parser can create plugins for these layers internally using the plugin registry.
 
 This sample can run in FP16 and INT8 modes based on the user input. For more details, see [INT8 Calibration Using C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#optimizing_int8_c) and [Enabling FP16 Inference Using C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#enable_fp16_c). The sample selects the entropy calibrator as a default choice. The `CalibrationMode` parameter in the sample code needs to be set to `0` to switch to the Legacy calibrator.
- 
+
 For details on how to build the TensorRT engine, see [Building An Engine In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#build_engine_c). After the engine is built, the next steps are to serialize the engine and run the inference with the deserialized engine. For more information about these steps, see [Serializing A Model In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#serial_model_c).
 
 ### Verifying the output

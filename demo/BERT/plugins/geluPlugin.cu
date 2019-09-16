@@ -14,24 +14,27 @@
  * limitations under the License.
  */
 
-#include "NvInfer.h"
-#include "geluPlugin.h"
-#include "pluginKernels.h"
-
-#include "logger.h"
 #include <cassert>
 #include <cstring>
 #include <vector>
 
+#include "NvInfer.h"
+#include "geluPlugin.h"
+#include "pluginKernels.h"
+#include "common.h"
+#include "logger.h"
+
+using namespace nvinfer1;
+
 namespace bert
 {
-////// CUDA KERNELS ///////////////////////
+
+namespace test
+{
 
 // constants for approximating the normal cdf
 constexpr float A = 0.5;
-
 constexpr float B = 0.7978845608028654; // sqrt(2.0/M_PI)
-
 constexpr float C = 0.035677408136300125; // 0.044715 * sqrt(2.0/M_PI)
 
 template <typename T, unsigned TPB>
@@ -48,7 +51,7 @@ __global__ void geluKernel(const T a, const T b, const T c, int n, const T* inpu
     }
 }
 
-int computeGelu(cudaStream_t stream, int n, const float* input, float* output)
+inline int computeGelu(cudaStream_t stream, int n, const float* input, float* output)
 {
 
     constexpr int blockSize = 256;
@@ -59,7 +62,7 @@ int computeGelu(cudaStream_t stream, int n, const float* input, float* output)
     return 0;
 }
 
-int computeGelu(cudaStream_t stream, int n, const half* input, half* output)
+inline int computeGelu(cudaStream_t stream, int n, const half* input, half* output)
 {
     const int blockSize = 256;
 
@@ -85,73 +88,79 @@ int computeGelu(cudaStream_t stream, int n, const half* input, half* output)
     return 0;
 }
 
-////////////////////////////////////////////
-
-using namespace nvinfer1;
-
 namespace
 {
 static const char* GELU_PLUGIN_VERSION{"1"};
-static const char* GELU_PLUGIN_NAME{"CustomGeluPlugin"};
+static const char* GELU_PLUGIN_NAME{"CustomGeluPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
-PluginFieldCollection GeluPluginCreator::mFC{};
-std::vector<PluginField> GeluPluginCreator::mPluginAttributes;
+PluginFieldCollection GeluPluginDynamicCreator::mFC{};
+std::vector<PluginField> GeluPluginDynamicCreator::mPluginAttributes;
 
-REGISTER_TENSORRT_PLUGIN(GeluPluginCreator);
+REGISTER_TENSORRT_PLUGIN(GeluPluginDynamicCreator);
 
-GeluPlugin::GeluPlugin(const std::string name)
+GeluPluginDynamic::GeluPluginDynamic(const std::string name)
     : mLayerName(name)
 {
 }
 
-GeluPlugin::GeluPlugin(const std::string name, const void* data, size_t length)
+GeluPluginDynamic::GeluPluginDynamic(const std::string name, const void* data, size_t length)
     : mLayerName(name)
 {
 
     gLogVerbose << "Gelu Deser start" << std::endl;
     const char* d = static_cast<const char*>(data);
     const char* a = d;
-    mInputVolume = readFromBuffer<decltype(mInputVolume)>(d);
     mType = readFromBuffer<DataType>(d);
     assert(d == a + length);
     gLogVerbose << "Gelu Deser done" << std::endl;
 }
-
-const char* GeluPlugin::getPluginType() const
+// IPluginV2DynamicExt Methods
+nvinfer1::IPluginV2DynamicExt* GeluPluginDynamic::clone() const
 {
-    return GELU_PLUGIN_NAME;
+    return new GeluPluginDynamic(mLayerName);
 }
 
-const char* GeluPlugin::getPluginVersion() const
+nvinfer1::DimsExprs GeluPluginDynamic::getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder)
 {
-    return GELU_PLUGIN_VERSION;
+    return inputs[0];
 }
 
-int GeluPlugin::getNbOutputs() const
+bool GeluPluginDynamic::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
 {
-    return 1;
+
+    const PluginTensorDesc& input = inOut[0];
+    if (pos == 0)
+    {
+        return (input.type == DataType::kFLOAT || input.type == DataType::kHALF)
+            && (input.format == TensorFormat::kLINEAR);
+    }
+    if (pos == 1)
+    {
+        const PluginTensorDesc& output = inOut[1];
+        return (input.type == output.type) && (output.format == TensorFormat::kLINEAR);
+    }
+    return false;
 }
 
-Dims GeluPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+void GeluPluginDynamic::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
+    const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs)
 {
-    // Validate input arguments
-    assert(nbInputDims == 1);
-    assert(index == 0);
-
-    // doesn't change input dimension, so output Dims will be the same as
-    // input Dims
-    return *inputs;
+    mType = in[0].desc.type;
 }
 
-int GeluPlugin::initialize()
+size_t GeluPluginDynamic::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
+    const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const
 {
     return 0;
 }
-
-int GeluPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream)
+int GeluPluginDynamic::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
+    const nvinfer1::PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace,
+    cudaStream_t stream)
 {
+
+    const int inputVolume = samplesCommon::volume(inputDesc[0].dims);
     int status = -1;
 
     // Our plugin outputs only one tensor
@@ -160,13 +169,13 @@ int GeluPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs
     {
         const float* input = static_cast<const float*>(inputs[0]);
         float* output = static_cast<float*>(outputs[0]);
-        status = computeGelu(stream, mInputVolume * batchSize, input, output);
+        status = computeGelu(stream, inputVolume, input, output);
     }
     else if (mType == DataType::kHALF)
     {
         const half* input = static_cast<const half*>(inputs[0]);
         half* output = static_cast<half*>(outputs[0]);
-        status = computeGelu(stream, mInputVolume * batchSize, input, output);
+        status = computeGelu(stream, inputVolume, input, output);
     }
     else
     {
@@ -176,69 +185,69 @@ int GeluPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs
     return status;
 }
 
-size_t GeluPlugin::getSerializationSize() const
+// IPluginV2Ext Methods
+nvinfer1::DataType GeluPluginDynamic::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
 {
-    return sizeof(mInputVolume) + sizeof(DataType);
+    assert(index == 0);
+    assert(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
+    return inputTypes[0];
 }
 
-void GeluPlugin::serialize(void* buffer) const
+// IPluginV2 Methods
+
+const char* GeluPluginDynamic::getPluginType() const
+{
+    return GELU_PLUGIN_NAME;
+}
+
+const char* GeluPluginDynamic::getPluginVersion() const
+{
+    return GELU_PLUGIN_VERSION;
+}
+
+int GeluPluginDynamic::getNbOutputs() const
+{
+    return 1;
+}
+
+int GeluPluginDynamic::initialize()
+{
+    return 0;
+}
+
+void GeluPluginDynamic::terminate() {}
+
+size_t GeluPluginDynamic::getSerializationSize() const
+{
+    return sizeof(DataType);
+}
+
+void GeluPluginDynamic::serialize(void* buffer) const
 {
     char *d = static_cast<char*>(buffer), *a = d;
-    writeToBuffer(d, mInputVolume);
     writeToBuffer(d, mType);
     assert(d == a + getSerializationSize());
 }
 
-void GeluPlugin::configureWithFormat(
-    const Dims* inputs, int nbInputs, const Dims* outputs, int nbOutputs, DataType type, PluginFormat format, int)
-{
-
-    // Validate input arguments
-    assert(nbOutputs == 1);
-    assert(format == PluginFormat::kNCHW);
-
-    // Fetch volume for future enqueue() operations
-    size_t volume = 1;
-    for (int i = 0; i < inputs->nbDims; i++)
-    {
-        volume *= inputs->d[i];
-    }
-    mInputVolume = volume;
-    mType = type;
-}
-
-bool GeluPlugin::supportsFormat(DataType type, PluginFormat format) const
-{
-    if (type == DataType::kFLOAT || type == DataType::kHALF)
-        return format == PluginFormat::kNCHW;
-    else
-        return false;
-}
-
-void GeluPlugin::terminate() {}
-
-void GeluPlugin::destroy()
+void GeluPluginDynamic::destroy()
 {
     // This gets called when the network containing plugin is destroyed
     delete this;
 }
 
-IPluginV2* GeluPlugin::clone() const
-{
-    return new GeluPlugin(mLayerName);
-}
-
-void GeluPlugin::setPluginNamespace(const char* libNamespace)
+void GeluPluginDynamic::setPluginNamespace(const char* libNamespace)
 {
     mNamespace = libNamespace;
 }
 
-const char* GeluPlugin::getPluginNamespace() const
+const char* GeluPluginDynamic::getPluginNamespace() const
 {
     return mNamespace.c_str();
 }
 
-GeluPluginCreator::GeluPluginCreator()
+///////////////
+
+GeluPluginDynamicCreator::GeluPluginDynamicCreator()
 {
 
     // Fill PluginFieldCollection with PluginField arguments metadata
@@ -246,42 +255,43 @@ GeluPluginCreator::GeluPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* GeluPluginCreator::getPluginName() const
+const char* GeluPluginDynamicCreator::getPluginName() const
 {
     return GELU_PLUGIN_NAME;
 }
 
-const char* GeluPluginCreator::getPluginVersion() const
+const char* GeluPluginDynamicCreator::getPluginVersion() const
 {
     return GELU_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* GeluPluginCreator::getFieldNames()
+const PluginFieldCollection* GeluPluginDynamicCreator::getFieldNames()
 {
     return &mFC;
 }
 
-IPluginV2* GeluPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2* GeluPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
-    gLogVerbose << "Creating GeluPlugin...\n";
-    GeluPlugin* p = new GeluPlugin(name);
+    gLogVerbose << "Creating GeluPluginDynamic...\n";
+    GeluPluginDynamic* p = new GeluPluginDynamic(name);
     return p;
 }
 
-IPluginV2* GeluPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2* GeluPluginDynamicCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
 {
     // This object will be deleted when the network is destroyed, which will
-    // call GeluPlugin::destroy()
-    return new GeluPlugin(name, serialData, serialLength);
+    // call GeluPluginDynamic::destroy()
+    return new GeluPluginDynamic(name, serialData, serialLength);
 }
 
-void GeluPluginCreator::setPluginNamespace(const char* libNamespace)
+void GeluPluginDynamicCreator::setPluginNamespace(const char* libNamespace)
 {
     mNamespace = libNamespace;
 }
 
-const char* GeluPluginCreator::getPluginNamespace() const
+const char* GeluPluginDynamicCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
+}
 }
 }

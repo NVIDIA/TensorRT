@@ -41,7 +41,8 @@ ILayer* parseConvolution(INetworkDefinition& network, const trtcaffe::LayerParam
 
     weightFactory.convert(kernelWeights);
     weightFactory.convert(biasWeights);
-    auto layer = network.addConvolution(*tensors[msg.bottom(0)], nbOutputs, DimsHW{kernelH, kernelW}, kernelWeights, biasWeights);
+    auto inTensor = tensors[msg.bottom(0)];
+    auto layer = network.addConvolution(*inTensor, nbOutputs, DimsHW{kernelH, kernelW}, kernelWeights, biasWeights);
 
     if (layer)
     {

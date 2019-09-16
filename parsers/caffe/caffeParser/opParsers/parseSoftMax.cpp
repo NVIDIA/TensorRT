@@ -39,11 +39,19 @@ ILayer* parseSoftMax(INetworkDefinition& network, const trtcaffe::LayerParameter
     bool hasAxis = p.has_axis();       // optional parameter
     int axis = hasAxis ? p.axis() : 1; // default is 1
 
-    bool axisAbort = (axis <= 0) || (axis > 3) || (axis > nbDims);
-
-    if (axisAbort)
+    if (network.hasImplicitBatchDimension() && axis == 0)
     {
-        std::cout << "Caffe Parser: Invalid axis in softmax layer - Cannot perform softmax along batch size dimension and expects NCHW input. Negative axis is not supported in TensorRT, please use positive axis indexing" << std::endl;
+        std::cout << "Caffe Parser: Invalid axis in softmax layer - TensorRT does not support softmax across the batch "
+                     "axis with implicit batch dimensions networks."
+                  << std::endl;
+        return nullptr;
+    }
+
+    if (axis < 0 || axis > 3 || (axis > nbDims))
+    {
+        std::cout << "Caffe Parser: Invalid axis in softmax layer - TensorRT expects NCHW input. Negative axis is not "
+                     "supported in TensorRT, please use positive axis indexing"
+                  << std::endl;
         return nullptr;
     }
 
@@ -54,7 +62,7 @@ ILayer* parseSoftMax(INetworkDefinition& network, const trtcaffe::LayerParameter
     // NPCHW -> default axis when setAxes is not called will be 2 (the C dimension)
     if (hasAxis)
     {
-        uint32_t axes = 1u << (axis - 1);
+        uint32_t axes = 1u << (axis - static_cast<int>(network.hasImplicitBatchDimension()));
         softmax->setAxes(axes);
     }
     return softmax;

@@ -244,7 +244,7 @@ void Normalize::destroy()
 IPluginV2Ext* Normalize::clone() const
 {
     // Create a new instance
-    IPluginV2Ext* plugin = new Normalize(&mWeights, mNbWeights, acrossSpatial, channelShared, eps);
+    IPluginV2Ext* plugin = new Normalize(&mWeights, mNbWeights, acrossSpatial, channelShared, eps, C, H, W);
 
     // Set the namespace
     plugin->setPluginNamespace(mPluginNamespace);

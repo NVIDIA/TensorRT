@@ -20,62 +20,72 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  \
 --expt-extended-lambda \
 -gencode arch=compute_70,code=sm_70 \
 -gencode arch=compute_75,code=sm_75 \
--O3")
+-Wno-deprecated-declarations")
 
-set(BERT_LIBS 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
+
+set(BERT_LIBS
     cudart
     cublas
     nvinfer
+    nvinfer_plugin
     pthread
     z
-    )
+)
 
 include_directories(
-    ../../include
-    ../../samples/common
-    /usr/local/cuda-10.1/targets/x86_64-linux/include
     ./
-    ./plugins
+    ./bert
     ./layers
+    ./plugins
     ./util
+    ../../include/
+    ../../samples/common/
     ../../third_party/cub/
+    /usr/include/x86_64-linux-gnu
+    /usr/local/cuda-10.1/targets/x86_64-linux/include
+    /workspace/tensorrt/include
+    /workspace/tensorrt/samples/common
     /workspace/cub/
     /workspace/cutlass/
-    )
+)
 
 link_directories(
+    /usr/lib/x86_64-linux-gnu
     /usr/local/cuda-10.1/targets/x86_64-linux/lib
-    /tensorrt/lib
-    )
+    /workspace/tensorrt/lib
+)
 
 add_library(common SHARED
     ../../samples/common/logger.cpp
-    util/dataUtils.cpp
-    )
+)
 
 add_library(bert_plugins SHARED
-    plugins/geluPlugin.cu
-    plugins/skipLayerNormPlugin.cu
-    plugins/qkvToContextPlugin.cu
     plugins/embLayerNormPlugin.cu
-    )
+    plugins/geluPlugin.cu
+    plugins/qkvToContextPlugin.cu
+    plugins/skipLayerNormPlugin.cu
+)
 
-target_link_libraries(bert_plugins 
+target_link_libraries(bert_plugins
+    common
     ${BERT_LIBS}
-    )
+)
 
-target_link_libraries(common 
+target_link_libraries(common
     ${BERT_LIBS}
-    )
+)
 
 add_executable(sample_bert
+    bert/bert.cpp
+    bert/driver.cpp
+    util/dataUtils.cpp
     sampleBERT.cpp
-    )
+)
 
 target_compile_features(sample_bert PUBLIC cxx_std_11)
 
-target_link_libraries(sample_bert 
+target_link_libraries(sample_bert
     common
     bert_plugins
-    )
-
+)

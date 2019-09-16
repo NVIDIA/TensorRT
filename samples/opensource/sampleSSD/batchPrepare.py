@@ -80,9 +80,9 @@ for i in range(NUM_BATCHES):
 	batchfile = outDir + "/batch_calibration" + str(i) + ".batch"
 	batchlistfile = outDir + "/batch_calibration" + str(i) + ".list"
 	batchlist = open(batchlistfile,'a')
-  	batch = np.zeros(shape=(NUM_PER_BATCH, 3, height, width), dtype=np.float32)
+	batch = np.zeros(shape=(NUM_PER_BATCH, 3, height, width), dtype = np.float32)
 	for j in range(NUM_PER_BATCH):
-                batchlist.write(os.path.basename(imgs[img])+'\n')
+		batchlist.write(os.path.basename(imgs[img]) + '\n')
 		im = Image.open(imgs[img]).resize((width,height), Image.NEAREST)
 		in_ = np.array(im, dtype=np.float32, order='C')
 		in_ = in_[:,:,::-1]
