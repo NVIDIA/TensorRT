@@ -19,8 +19,8 @@
 
 #include <iostream>
 
-#include "NvCaffeParser.h"
 #include "NvInfer.h"
+#include "NvCaffeParser.h"
 #include "NvOnnxParser.h"
 #include "NvUffParser.h"
 
@@ -31,9 +31,9 @@ namespace sample
 
 struct Parser
 {
-    unique_ptr<nvcaffeparser1::ICaffeParser> caffeParser;
-    unique_ptr<nvuffparser::IUffParser> uffParser;
-    unique_ptr<nvonnxparser::IParser> onnxParser;
+    TrtUniquePtr<nvcaffeparser1::ICaffeParser> caffeParser;
+    TrtUniquePtr<nvuffparser::IUffParser> uffParser;
+    TrtUniquePtr<nvonnxparser::IParser> onnxParser;
 
     operator bool() const
     {
@@ -80,6 +80,13 @@ nvinfer1::ICudaEngine* loadEngine(const std::string& engine, int DLACore, std::o
 //! \return boolean Return true if the engine was successfully saved
 //!
 bool saveEngine(const nvinfer1::ICudaEngine& engine, const std::string& fileName, std::ostream& err);
+
+//!
+//! \brief Create an engine from model or serialized file, and optionally save engine
+//!
+//! \return Pointer to the engine created or nullptr if the creation failed
+//!
+TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
 
 } // namespace sample
 

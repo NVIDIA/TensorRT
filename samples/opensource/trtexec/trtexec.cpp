@@ -28,140 +28,21 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <vector>
+#include <memory>
 
-#include "NvCaffeParser.h"
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
-#include "NvOnnxParser.h"
-#include "NvUffParser.h"
 
 #include "buffers.h"
 #include "common.h"
 #include "logger.h"
 #include "sampleOptions.h"
 #include "sampleEngines.h"
+#include "sampleInference.h"
+#include "sampleReporting.h"
 
 using namespace nvinfer1;
 using namespace sample;
-
-float percentile(float percentage, std::vector<float>& times)
-{
-    int all = static_cast<int>(times.size());
-    int exclude = static_cast<int>((1 - percentage / 100) * all);
-    if (0 <= exclude && exclude <= all)
-    {
-        std::sort(times.begin(), times.end());
-        return times[all == exclude ? 0 : all - 1 - exclude];
-    }
-    return std::numeric_limits<float>::infinity();
-}
-
-bool doInference(ICudaEngine& engine, const InferenceOptions& inference, const ReportingOptions& reporting)
-{
-    IExecutionContext* context = engine.createExecutionContext();
-
-    // Dump inferencing time per layer basis
-    SimpleProfiler profiler("Layer time");
-    if (reporting.profile)
-    {
-        context->setProfiler(&profiler);
-    }
-
-    for (int b = 0; b < engine.getNbBindings(); ++b)
-    {
-        if (!engine.bindingIsInput(b))
-        {
-            continue;
-        }
-        auto dims = context->getBindingDimensions(b);
-        if (dims.d[0] == -1)
-        {
-            auto shape = inference.shapes.find(engine.getBindingName(b));
-            if (shape == inference.shapes.end())
-            {
-                gLogError << "Missing dynamic batch size in inference" << std::endl;
-                return false;
-            }
-            dims.d[0] = shape->second.d[0];
-            context->setBindingDimensions(b, dims);
-        }
-    }
-
-    // Use an aliasing shared_ptr since we don't want engine to be deleted when bufferManager goes out of scope.
-    std::shared_ptr<ICudaEngine> emptyPtr{};
-    std::shared_ptr<ICudaEngine> aliasPtr(emptyPtr, &engine);
-    samplesCommon::BufferManager bufferManager(aliasPtr, inference.batch, inference.batch ? nullptr : context);
-    std::vector<void*> buffers = bufferManager.getDeviceBindings();
-
-    cudaStream_t stream;
-    CHECK(cudaStreamCreate(&stream));
-    cudaEvent_t start, end;
-    CHECK(cudaEventCreate(&start));
-    CHECK(cudaEventCreate(&end));
-
-    std::vector<float> times(reporting.avgs);
-    for (int j = 0; j < inference.iterations; j++)
-    {
-        float totalGpu{0};  // GPU timer
-        float totalHost{0}; // Host timer
-
-        for (int i = 0; i < reporting.avgs; i++)
-        {
-            auto tStart = std::chrono::high_resolution_clock::now();
-            cudaEventRecord(start, stream);
-            if (inference.batch)
-            {
-                context->enqueue(inference.batch, &buffers[0], stream, nullptr);
-            }
-            else
-            {
-                context->enqueueV2(&buffers[0], stream, nullptr);
-            }
-            cudaEventRecord(end, stream);
-            cudaEventSynchronize(end);
-
-            auto tEnd = std::chrono::high_resolution_clock::now();
-            totalHost += std::chrono::duration<float, std::milli>(tEnd - tStart).count();
-            float ms;
-            cudaEventElapsedTime(&ms, start, end);
-            times[i] = ms;
-            totalGpu += ms;
-        }
-
-        totalGpu /= reporting.avgs;
-        totalHost /= reporting.avgs;
-        gLogInfo << "Average over " << reporting.avgs << " runs is " << totalGpu << " ms (host walltime is "
-                 << totalHost << " ms, " << static_cast<int>(reporting.percentile) << "\% percentile time is "
-                 << percentile(reporting.percentile, times) << ")." << std::endl;
-    }
-
-    if (reporting.output)
-    {
-        bufferManager.copyOutputToHost();
-        int nbBindings = engine.getNbBindings();
-        for (int i = 0; i < nbBindings; i++)
-        {
-            if (!engine.bindingIsInput(i))
-            {
-                const char* tensorName = engine.getBindingName(i);
-                gLogInfo << "Dumping output tensor " << tensorName << ":" << std::endl;
-                bufferManager.dumpBuffer(gLogInfo, tensorName);
-            }
-        }
-    }
-
-    if (reporting.profile)
-    {
-        gLogInfo << profiler;
-    }
-
-    cudaStreamDestroy(stream);
-    cudaEventDestroy(start);
-    cudaEventDestroy(end);
-    context->destroy();
-
-    return true;
-}
 
 int main(int argc, char** argv)
 {
@@ -236,42 +117,36 @@ int main(int argc, char** argv)
         samplesCommon::loadLibrary(pluginPath);
     }
 
-    ICudaEngine* engine{nullptr};
-    if (options.build.load)
+    InferenceEnvironment iEnv;
+    iEnv.engine = getEngine(options.model, options.build, options.system, gLogError);
+    if (!iEnv.engine)
     {
-        engine = loadEngine(options.build.engine, options.system.DLACore, gLogError);
-    }
-    else
-    {
-        engine = modelToEngine(options.model, options.build, options.system, gLogError);
-    }
-    if (!engine)
-    {
-        gLogError << "Engine could not be created" << std::endl;
+        gLogError << "Engine set up failed" << std::endl;
         return gLogger.reportFail(sampleTest);
     }
-    if (options.build.save)
+    if (options.inference.skip)
     {
-        saveEngine(*engine, options.build.engine, gLogError);
+        return gLogger.reportPass(sampleTest);
     }
 
-    if (!options.inference.skip)
+    if (options.build.safe && options.system.DLACore >= 0)
     {
-        if (options.build.safe && options.system.DLACore >= 0)
-        {
-            gLogInfo << "Safe DLA capability is detected. Please save DLA loadable with --saveEngine option, "
-                        "then use dla_safety_runtime to run inference with saved DLA loadable, "
-                        "or alternatively run with your own application"
-                     << std::endl;
-            return gLogger.reportFail(sampleTest);
-        }
-        if (!doInference(*engine, options.inference, options.reporting))
-        {
-            gLogError << "Inference failure" << std::endl;
-            return gLogger.reportFail(sampleTest);
-        }
+        gLogInfo << "Safe DLA capability is detected. Please save DLA loadable with --saveEngine option, "
+                    "then use dla_safety_runtime to run inference with saved DLA loadable, "
+                    "or alternatively run with your own application" << std::endl;
+        return gLogger.reportFail(sampleTest);
     }
-    engine->destroy();
+
+    if (options.reporting.profile)
+    {
+        iEnv.profiler.reset(new SimpleProfiler("Layer time"));
+    }
+
+    setUpInference(iEnv, options.inference);
+    std::vector<InferenceTime> times;
+    runInference(options.inference, iEnv, times);
+
+    printTimes(times, options.reporting, options.inference.batch * options.inference.streams, gLogInfo);
 
     return gLogger.reportPass(sampleTest);
 }
