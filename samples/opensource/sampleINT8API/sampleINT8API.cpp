@@ -48,7 +48,7 @@ struct SampleINT8APIPreprocessing
     std::vector<float> mean{0.485f, 0.456f, 0.406f};
     std::vector<float> std{0.229f, 0.224f, 0.225f};
     float scale{255.0f};
-    std::vector<int> inputDims{3, 224, 224};
+    std::vector<int> inputDims{1, 3, 224, 224};
 };
 
 //!
@@ -366,9 +366,9 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
         return false;
     }
 
-    int channels = mParams.mPreproc.inputDims.at(0);
-    int height = mParams.mPreproc.inputDims.at(1);
-    int width = mParams.mPreproc.inputDims.at(2);
+    int channels = mParams.mPreproc.inputDims.at(1);
+    int height = mParams.mPreproc.inputDims.at(2);
+    int width = mParams.mPreproc.inputDims.at(3);
     int max{0};
     std::string magic{""};
 
@@ -414,7 +414,7 @@ bool SampleINT8API::verifyOutput(const samplesCommon::BufferManager& buffers) co
 {
     // copy output host buffer data for further processing
     const float* probPtr = static_cast<const float*>(buffers.getHostBuffer(mInOut.at("output")));
-    vector<float> output(probPtr, probPtr + mOutputDims.d[0] * mParams.batchSize);
+    vector<float> output(probPtr, probPtr + mOutputDims.d[1] * mParams.batchSize);
 
     auto inds = samplesCommon::argsort(output.cbegin(), output.cend(), true);
 
@@ -453,8 +453,9 @@ Logger::TestResult SampleINT8API::build()
         gLogError << "Unable to create builder object." << std::endl;
         return Logger::TestResult::kFAILED;
     }
-
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    
+    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
     if (!network)
     {
         gLogError << "Unable to create network object." << mParams.referenceFileName << std::endl;
@@ -583,7 +584,7 @@ Logger::TestResult SampleINT8API::infer()
     buffers.copyInputToDeviceAsync(stream);
 
     // Asynchronously enqueue the inference work
-    if (!context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr))
+    if (!context->enqueueV2(buffers.getDeviceBindings().data(), stream, nullptr))
     {
         return Logger::TestResult::kFAILED;
     }

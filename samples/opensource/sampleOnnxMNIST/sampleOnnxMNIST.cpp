@@ -108,7 +108,8 @@ bool SampleOnnxMNIST::build()
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);     
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
     if (!network)
     {
         return false;
@@ -141,11 +142,11 @@ bool SampleOnnxMNIST::build()
 
     assert(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    assert(mInputDims.nbDims == 4);
 
     assert(network->getNbOutputs() == 1);
     mOutputDims = network->getOutput(0)->getDimensions();
-    assert(mOutputDims.nbDims == 1);
+    assert(mOutputDims.nbDims == 2);
 
     return true;
 }
@@ -213,7 +214,7 @@ bool SampleOnnxMNIST::infer()
     // Memcpy from host input buffers to device input buffers
     buffers.copyInputToDevice();
 
-    bool status = context->execute(mParams.batchSize, buffers.getDeviceBindings().data());
+    bool status = context->executeV2(buffers.getDeviceBindings().data());
     if (!status)
     {
         return false;
@@ -236,8 +237,8 @@ bool SampleOnnxMNIST::infer()
 //!
 bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 {
-    const int inputH = mInputDims.d[1];
-    const int inputW = mInputDims.d[2];
+    const int inputH = mInputDims.d[2];
+    const int inputW = mInputDims.d[3];
 
     // Read a random digit file
     srand(unsigned(time(nullptr)));
@@ -269,7 +270,7 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 //!
 bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 {
-    const int outputSize = mOutputDims.d[0];
+    const int outputSize = mOutputDims.d[1];
     float* output = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
     float val{0.0f};
     int idx{0};
