@@ -17,14 +17,14 @@
 #ifndef TRT_SAMPLE_OPTIONS_H
 #define TRT_SAMPLE_OPTIONS_H
 
-#include <algorithm>
-#include <array>
-#include <iostream>
+#include <utility>
 #include <stdexcept>
+#include <vector>
+#include <array>
 #include <string>
 #include <unordered_map>
-#include <utility>
-#include <vector>
+#include <algorithm>
+#include <iostream>
 
 #include "NvInfer.h"
 
@@ -45,7 +45,7 @@ constexpr int defaultBatch{1};
 constexpr int defaultStreams{1};
 constexpr int defaultIterations{10};
 constexpr int defaultWarmUp{200};
-constexpr int defaultDuration{10};
+constexpr int defaultDuration{3};
 constexpr int defaultSleep{0};
 
 // Reporting default params
@@ -105,7 +105,6 @@ struct ModelOptions : public Options
 
 struct BuildOptions : public Options
 {
-    // bool explicitBatch{false};
     int maxBatch{defaultMaxBatch}; // Parsing sets maxBatch to 0 if explicitBatch is true
     int workspace{defaultWorkspace};
     int minTiming{defaultMinTiming};
@@ -146,9 +145,11 @@ struct InferenceOptions : public Options
     int duration{defaultDuration};
     int sleep{defaultSleep};
     int streams{defaultStreams};
-    bool threads{true};
+    bool spin{false};
+    bool threads{false};
     bool graph{false};
     bool skip{false};
+    std::string inputs;
     std::unordered_map<std::string, nvinfer1::Dims> shapes;
 
     void parse(Arguments& arguments) override;
@@ -163,8 +164,9 @@ struct ReportingOptions : public Options
     float percentile{defaultPercentile};
     bool output{false};
     bool profile{false};
-    std::string exportTimes{};
-    std::string exportProfile{};
+    std::string exportTimes;
+    std::string exportOutput;
+    std::string exportProfile;
 
     void parse(Arguments& arguments) override;
 
@@ -215,152 +217,6 @@ std::ostream& operator<<(std::ostream& os, const ReportingOptions& options);
 
 std::ostream& operator<<(std::ostream& os, const AllOptions& options);
 
-// Utils to extract options
-
-inline std::vector<std::string> splitToStringVec(const std::string& option, char separator)
-{
-    std::vector<std::string> options;
-
-    for (size_t start = 0; start < option.length();)
-    {
-        size_t separatorIndex = option.find(separator, start);
-        if (separatorIndex == std::string::npos)
-        {
-            separatorIndex = option.length();
-        }
-        options.emplace_back(option.substr(start, separatorIndex - start));
-        start = separatorIndex + 1;
-    }
-
-    return options;
-}
-
-template <typename T>
-inline T stringToValue(const std::string& option)
-{
-    return T{option};
-}
-
-template <>
-inline int stringToValue<int>(const std::string& option)
-{
-    return std::stoi(option);
-}
-
-template <>
-inline float stringToValue<float>(const std::string& option)
-{
-    return std::stof(option);
-}
-
-template <>
-inline bool stringToValue<bool>(const std::string& option)
-{
-    return true;
-}
-
-template <>
-inline nvinfer1::Dims stringToValue<nvinfer1::Dims>(const std::string& option)
-{
-    nvinfer1::Dims dims;
-    dims.nbDims = 0;
-    std::vector<std::string> dimsStrings = splitToStringVec(option, 'x');
-    for (const auto& d : dimsStrings)
-    {
-        if (d == "*")
-        {
-            break;
-        }
-        dims.d[dims.nbDims] = stringToValue<int>(d);
-        ++dims.nbDims;
-    }
-    return dims;
-}
-
-template <>
-inline nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
-{
-    const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
-        {"fp16", nvinfer1::DataType::kHALF}, {"int8", nvinfer1::DataType::kINT8},
-        {"int32", nvinfer1::DataType::kINT32}};
-    auto dt = strToDT.find(option);
-    if (dt == strToDT.end())
-    {
-        throw std::invalid_argument("Invalid DataType " + option);
-    }
-    return dt->second;
-}
-
-template <>
-inline nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(const std::string& option)
-{
-    std::vector<std::string> optionStrings = splitToStringVec(option, '+');
-    const std::unordered_map<std::string, nvinfer1::TensorFormat> strToFmt{{"chw", nvinfer1::TensorFormat::kLINEAR},
-        {"chw2", nvinfer1::TensorFormat::kCHW2}, {"chw4", nvinfer1::TensorFormat::kCHW4},
-        {"hwc8", nvinfer1::TensorFormat::kHWC8}, {"chw16", nvinfer1::TensorFormat::kCHW16},
-        {"chw32", nvinfer1::TensorFormat::kCHW32}};
-    nvinfer1::TensorFormats formats{};
-    for (auto f : optionStrings)
-    {
-        auto tf = strToFmt.find(f);
-        if (tf == strToFmt.end())
-        {
-            throw std::invalid_argument(std::string("Invalid TensorFormat ") + f);
-        }
-        formats |= 1U << int(tf->second);
-    }
-
-    return formats;
-}
-
-template <>
-inline IOFormat stringToValue<IOFormat>(const std::string& option)
-{
-    IOFormat ioFormat{};
-    size_t colon = option.find(':');
-
-    if (colon == std::string::npos)
-    {
-        throw std::invalid_argument(std::string("Invalid IOFormat ") + option);
-    }
-    ioFormat.first = stringToValue<nvinfer1::DataType>(option.substr(0, colon));
-    ioFormat.second = stringToValue<nvinfer1::TensorFormats>(option.substr(colon + 1));
-
-    return ioFormat;
-}
-
-inline const char* boolToEnabled(bool enable)
-{
-    return enable ? "Enabled" : "Disabled";
-}
-
-template <typename T>
-inline bool checkEraseOption(Arguments& arguments, const std::string& option, T& value)
-{
-    auto match = arguments.find(option);
-    if (match != arguments.end())
-    {
-        value = stringToValue<T>(match->second);
-        arguments.erase(match);
-        return true;
-    }
-
-    return false;
-}
-
-template <typename T>
-inline bool checkEraseRepeatedOption(Arguments& arguments, const std::string& option, std::vector<T>& values)
-{
-    auto match = arguments.equal_range(option);
-    if (match.first == match.second)
-    {
-        return false;
-    }
-    auto addValue = [&values](Arguments::value_type& value) { values.emplace_back(stringToValue<T>(value.second)); };
-    std::for_each(match.first, match.second, addValue);
-    arguments.erase(match.first, match.second);
-    return true;
-}
 
 } // namespace sample
 

@@ -17,41 +17,93 @@
 #ifndef TRT_SAMPLE_UTILS_H
 #define TRT_SAMPLE_UTILS_H
 
-#include <cuda_runtime.h>
 #include <iostream>
 #include <memory>
 #include <numeric>
+#include <unordered_map>
+#include <vector>
 
 #include "NvInfer.h"
+
+#include "sampleDevice.h"
 
 namespace sample
 {
 
-inline void cudaCheck(cudaError_t ret, std::ostream& err = std::cerr)
-{
-    if (ret != cudaSuccess)
-    {
-        err << "Cuda failure: " << ret << std::endl;
-        abort();
-    }
-}
-
 template <typename T>
-struct destroyer
+struct TrtDestroyer
 {
-    void operator()(T* t)
-    {
-        t->destroy();
-    }
+    void operator()(T* t) { t->destroy(); }
 };
 
-template <typename T>
-using unique_ptr = std::unique_ptr<T, destroyer<T>>;
+template <typename T> using TrtUniquePtr = std::unique_ptr<T, TrtDestroyer<T> >;
 
-inline int64_t volume(const nvinfer1::Dims& d)
+inline int volume(const nvinfer1::Dims& d)
 {
-    return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
+    return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int>());
 }
+
+inline int dataTypeSize(nvinfer1::DataType t)
+{
+    switch (t)
+    {
+    case nvinfer1::DataType::kINT32:
+    case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kHALF: return 2;
+    case nvinfer1::DataType::kINT8: return 1;
+    }
+    return 0;
+}
+
+template <typename T>
+inline T roundUp(T m, T n) { return ((m + n - 1) / n) * n; }
+
+class BindingBuffers
+{
+public:
+
+    void allocate(size_t size)
+    {
+        mSize = size;
+        mHostBuffer.allocate(size);
+        mDeviceBuffer.allocate(size);
+    }
+
+    void* getDeviceBuffer() const { return mDeviceBuffer.get(); }
+
+    void* getHostBuffer() const { return mHostBuffer.get(); }
+
+private:
+
+    int mSize{0};
+    TrtHostBuffer mHostBuffer;
+    TrtDeviceBuffer mDeviceBuffer;
+};
+
+class Bindings
+{
+public:
+
+    void addBinding(int b, const std::string& name, size_t size)
+    {
+        while (mBuffers.size() <= static_cast<size_t>(b))
+        {
+             mBuffers.emplace_back();
+             mDevicePointers.emplace_back();
+        }
+        mBindings[name] = b;
+        mBuffers[b].allocate(size);
+        mDevicePointers[b] = mBuffers[b].getDeviceBuffer();
+    }
+
+    void** getDeviceBuffers() { return mDevicePointers.data(); }
+
+private:
+
+    std::unordered_map<std::string, int> mBindings;
+    std::vector<BindingBuffers> mBuffers;
+    std::vector<void*> mDevicePointers; 
+};
 
 } // namespace sample
 

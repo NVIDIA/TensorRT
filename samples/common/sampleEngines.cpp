@@ -15,7 +15,6 @@
  */
 
 #include <algorithm>
-#include <cuda.h>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -23,15 +22,15 @@
 #include <random>
 #include <string>
 
-#include "NvCaffeParser.h"
 #include "NvInfer.h"
+#include "NvCaffeParser.h"
 #include "NvOnnxParser.h"
 #include "NvUffParser.h"
 
 #include "logger.h"
+#include "sampleUtils.h"
 #include "sampleOptions.h"
 #include "sampleEngines.h"
-#include "sampleUtils.h"
 
 using namespace nvinfer1;
 
@@ -137,7 +136,8 @@ Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& n
         }
         break;
     }
-    case ModelFormat::kANY: break;
+    case ModelFormat::kANY:
+        break;
     }
 
     return parser;
@@ -277,7 +277,7 @@ void setTensorScales(const INetworkDefinition& network, float inScales = 2.0f, f
 ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys, IBuilder& builder,
     INetworkDefinition& network, std::ostream& err)
 {
-    unique_ptr<IBuilderConfig> config{builder.createBuilderConfig()};
+    TrtUniquePtr<IBuilderConfig> config{builder.createBuilderConfig()};
 
     IOptimizationProfile* profile{nullptr};
     if (build.maxBatch)
@@ -345,7 +345,7 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
         config->addOptimizationProfile(profile);
     }
 
-    for (unsigned int i = 0, n = network.getNbOutputs(); i < n; i++) // BUILD->NETWORK
+    for (unsigned int i = 0, n = network.getNbOutputs(); i < n; i++)
     {
         // Set formats and data types of outputs
         auto output = network.getOutput(i);
@@ -423,15 +423,15 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
 ICudaEngine* modelToEngine(
     const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
 {
-    unique_ptr<IBuilder> builder{createInferBuilder(gLogger.getTRTLogger())};
+    TrtUniquePtr<IBuilder> builder{createInferBuilder(gLogger.getTRTLogger())};
     if (builder == nullptr)
     {
         err << "Builder creation failed" << std::endl;
         return nullptr;
     }
-    auto batchFlag = (build.maxBatch ? 0U : 1U)
+    auto batchFlag = build.maxBatch ? 0U : 1U
         << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    unique_ptr<INetworkDefinition> network{builder->createNetworkV2(batchFlag)};
+    TrtUniquePtr<INetworkDefinition> network{builder->createNetworkV2(batchFlag)};
     if (!network)
     {
         err << "Network creation failed" << std::endl;
@@ -468,7 +468,7 @@ ICudaEngine* loadEngine(const std::string& engine, int DLACore, std::ostream& er
         return nullptr;
     }
 
-    unique_ptr<IRuntime> runtime{createInferRuntime(gLogger.getTRTLogger())};
+    TrtUniquePtr<IRuntime> runtime{createInferRuntime(gLogger.getTRTLogger())};
     if (DLACore != -1)
     {
         runtime->setDLACore(DLACore);
@@ -486,7 +486,7 @@ bool saveEngine(const ICudaEngine& engine, const std::string& fileName, std::ost
         return false;
     }
 
-    unique_ptr<IHostMemory> serializedEngine{engine.serialize()};
+    TrtUniquePtr<IHostMemory> serializedEngine{engine.serialize()};
     if (serializedEngine == nullptr)
     {
         err << "Engine serialization failed" << std::endl;
@@ -495,6 +495,30 @@ bool saveEngine(const ICudaEngine& engine, const std::string& fileName, std::ost
 
     engineFile.write(static_cast<char*>(serializedEngine->data()), serializedEngine->size());
     return !engineFile.fail();
+}
+
+TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
+{
+    TrtUniquePtr<nvinfer1::ICudaEngine> engine;
+    if (build.load)
+    {
+        engine.reset(loadEngine(build.engine, sys.DLACore, err));
+    }
+    else
+    {
+        engine.reset(modelToEngine(model, build, sys, err));
+    }
+    if (!engine)
+    {
+        err << "Engine creation failed" << std::endl;
+        return nullptr;
+    }
+    if (build.save && !saveEngine(*engine, build.engine, err))
+    {
+        err << "Saving engine to file failed" << std::endl;
+        return nullptr;
+    }
+    return engine;
 }
 
 } // namespace sample

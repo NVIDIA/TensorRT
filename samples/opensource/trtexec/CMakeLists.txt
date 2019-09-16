@@ -15,7 +15,9 @@
 #
 SET(SAMPLE_SOURCES
     ../../common/sampleEngines.cpp
+    ../../common/sampleInference.cpp
     ../../common/sampleOptions.cpp
+    ../../common/sampleReporting.cpp
     trtexec.cpp
 )
 
