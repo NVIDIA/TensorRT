@@ -382,9 +382,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='TensorRT BERT Sample', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-m', '--model', required=True,
                         help='The checkpoint file basename, e.g.: basename(model.ckpt-766908.data-00000-of-00001) is model.ckpt-766908')
-    parser.add_argument('-o', '--output', required=True, default="bert_base_384.engine", help='The bert engine file, ex bert.engine')
+    parser.add_argument('-o', '--output', required=True, default="bert_large_128.engine", help='The bert engine file, ex bert.engine')
     parser.add_argument('-b', '--batchsize', default=1, help='Batch size')
-    parser.add_argument('-s', '--sequence', default=384, help='Sequence length of the BERT model')
+    parser.add_argument('-s', '--sequence-length', default=384, help='Sequence length of the BERT model')
     parser.add_argument('-c', '--config', required=True,
                         help='The folder containing the bert_config.json, which can be downloaded e.g. from https://github.com/google-research/bert#pre-trained-models or by running download_models.py in dle/TensorFlow/LanguageModeling/BERT/data/pretrained_models_google')
 
@@ -393,6 +393,6 @@ if __name__ == "__main__":
     inputbase = opt.model
     outputbase = opt.output
     B = int(opt.batchsize)
-    S = int(opt.sequence)
+    S = int(opt.sequence_length)
     bert_path = opt.config
     main(inputbase, B, S, bert_path, outputbase)
