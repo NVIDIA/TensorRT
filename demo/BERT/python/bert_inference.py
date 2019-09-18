@@ -47,6 +47,9 @@ def parse_args():
     parser.add_argument('-v', '--vocab-file',
             help='Path to file containing entire understandable vocab',
             default='./pre-trained_model/uncased_L-24_H-1024_A-16/vocab.txt')
+    parser.add_argument('-s', '--sequence-length',
+            help='The sequence length to use. Defaults to 128',
+            default=128, type=int)
     args, _ = parser.parse_known_args()
     return args
 
@@ -77,7 +80,7 @@ if __name__ == '__main__':
     doc_stride = 128
     # The maximum total input sequence length after WordPiece tokenization.
     # Sequences longer than this will be truncated, and sequences shorter
-    max_seq_length = 384
+    max_seq_length = args.sequence_length
     # Extract tokecs from the paragraph
     doc_tokens = dp.convert_doc_tokens(paragraph_text)
 

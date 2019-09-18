@@ -16,9 +16,9 @@
 
 
 # Setup default parameters (if no command-line parameters given)
-MODEL='base'
+MODEL='large'
 FT_PRECISION='fp16'
-SEQ_LEN='384'
+SEQ_LEN='128'
 
 SCRIPT=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname ${SCRIPT})
