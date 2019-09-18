@@ -17,26 +17,23 @@
 - [Known issues](#known-issues)
 
 ## Description
-
-This sample, sampleUffFasterRCNN, is a UFF TensorRT sample for Faster-RCNN in [NVIDIA Transfer Learning Toolkit SDK](https://developer.nvidia.com/transfer-learning-toolkit). This sample serves as a demo of how to use pretrained Faster-RCNN model in Transfer Learning Toolkit to do inference with TensorRT. Besides the sample itself, it also provides two TensorRT plugins: `Proposal` and `CropAndResize` to implement the proposal layer and ROIPooling layer as custom layers in the model since TensorRT has no native support for them.
+This sample, sampleUffFasterRCNN, serves as a demo on how to use a TensorFlow based Faster-RCNN model. It uses the `Proposal` and `CropAndResize` TensorRT plugins to implement the proposal layer and ROIPooling layer as custom layers since TensorRT has no native support for them.
 
 ## How does this sample work?
 
-The UFF Faster R-CNN network performs the task of object detection and localization in a single forward pass of the network. The UFF Faster R-CNN network was trained on the ResNet-18 backbone (feature extractor) to detect 4 classes of objects: `Automobile`, `Roadsign`, `Bicycle` and `Person` along with the `background` class(nothing).
+The UFF Faster R-CNN network performs the task of object detection and localization in a single forward pass of the network. The Faster R-CNN network was trained on the ResNet-10 backbone (feature extractor) to detect 4 classes of objects: `Automobile`, `Roadsign`, `Bicycle` and `Person` along with the `background` class(nothing).
 
 This sample makes use of TensorRT plugins to run the UFF Faster R-CNN network. To use these plugins, the TensorFlow graph needs to be preprocessed, and we use the GraphSurgeon utility to do this.
 
 The main components of this network are the Image Preprocessor, FeatureExtractor, Region Proposal Network (RPN), Proposal, ROIPooling (CropAndResize), Classifier and Postprocessor.
-  
-In this sample, we provide a UFF model as a demo. While in the Transfer Learning Toolkit workflow, we can't provide the UFF model. Instead, we can only get the `.tlt` model during training and the `.etlt` model after `tlt-export`. Both of them are encrypted models and the Transfer Learning Toolkit user will use `tlt-converter` to decrypt the `.etlt` model and generate a TensorRT engine file in a single step. Therefore, in the Transfer Learning Toolkit workflow, we will consume the TensorRT engine instead of a UFF model. However, this sample can still serve as a demo on how to use the UFF Faster R-CNN model regardless of its format.
 
 **Image Preprocessor**
 The image preprocessor step of the graph is responsible for resizing the image. The image is resized to a 3x272x480(CHW) size tensor. This step also performs per-channel mean value subtraction of the images. After preprocessing, the input images's channel order is `BGR` instead of `RGB`.
 
 **FeatureExtractor**
-The FeatureExtractor portion of the graph runs the ResNet18 network on the preprocessed image. The feature maps generated are used by the RPN layer and the Proposal layer to generate the Region of Interests (ROIs) that may contain objects. As a second branch, the feature maps are also used in the ROIPooling (or more precisely, CropAndResize layer) to crop out the patches from the feature maps with the specified ROIs output from Proposal layer.
+The FeatureExtractor portion of the graph runs the ResNet10 network on the preprocessed image. The feature maps generated are used by the RPN layer and the Proposal layer to generate the Regions of Interest(ROIs) that may contain objects. As a second branch, the feature maps are also used in the ROIPooling (or more precisely, CropAndResize layer) to crop out the patches from the feature maps with the specified ROIs output from Proposal layer.
 
-In this network, the feature maps come from an intermediate layer's output in the ResNet-18 backbone. The intermediate layer has a cumulative stride of 16.
+In this network, the feature maps come from an intermediate layer's output in the ResNet-10 backbone. The intermediate layer has a cumulative stride of 16.
 
 **Region Proposal Network (RPN)**
 The RPN takes the feature maps from the stride-16 backbone and append a small Convolutional Neural Network (CNN) head after it to detect whether a specific region of the image has object or not. It also outputs a rough coordinates of the candidate object.
