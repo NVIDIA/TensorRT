@@ -74,8 +74,8 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	Download and extract the *TensorRT 6.0.1.5 GA for Ubuntu 18.04 and CUDA 10.1 tar package*
 	```bash
 	cd ~/Downloads
-	# Download TensorRT-6.0.1.5.Ubuntu-18.04.2.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
-	tar -xvzf TensorRT-6.0.1.5.Ubuntu-18.04.2.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
+	# Download TensorRT-6.0.1.5.Ubuntu-18.04.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
+	tar -xvzf TensorRT-6.0.1.5.Ubuntu-18.04.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
 	export TRT_RELEASE=`pwd`/TensorRT-6.0.1.5
 	```
 
