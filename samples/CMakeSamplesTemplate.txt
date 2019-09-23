@@ -29,6 +29,9 @@ get_filename_component(SAMPLE_DIR_NAME ${TARGET_DIR} NAME)
 
 set(CUDA_INSTALL_DIR /usr/local/cuda)
 
+# Make sure the shared library path is correct for samples
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 # SAMPLES_COMMON_SOURCES
 set(SAMPLES_COMMON_SOURCES
     ${SAMPLES_DIR}/common/logger.cpp
