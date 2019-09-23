@@ -74,9 +74,10 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	Download and extract the *TensorRT 6.0.1.5 GA for Ubuntu 18.04 and CUDA 10.1 tar package*
 	```bash
 	cd ~/Downloads
-	# Download TensorRT-6.0.1.5.Ubuntu-18.04.2.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
-	tar -xvzf TensorRT-6.0.1.5.Ubuntu-18.04.2.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
+	# Download TensorRT-6.0.1.5.Ubuntu-18.04.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
+	tar -xvzf TensorRT-6.0.1.5.Ubuntu-18.04.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
 	export TRT_RELEASE=`pwd`/TensorRT-6.0.1.5
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TRT_RELEASE/lib
 	```
 
 	**Example: CentOS/RedHat 7 with cuda-9.0**
@@ -86,7 +87,8 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	cd ~/Downloads
 	# Download TensorRT-6.0.1.5.Red-Hat.x86_64-gnu.cuda-9.0.cudnn7.6.tar.gz
 	tar -xvzf TensorRT-6.0.1.5.Red-Hat.x86_64-gnu.cuda-9.0.cudnn7.6.tar.gz
-	export TRT_RELEASE=~/Downloads/TensorRT-6.0.1.5
+	export TRT_RELEASE=`pwd`/TensorRT-6.0.1.5
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TRT_RELEASE/lib
 	```
 
 ## Setting Up The Build Environment
@@ -187,6 +189,24 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 
 	```bash
 	sudo make install
+	```
+* Verify the TensorRT samples have been installed correctly.
+
+	```bash
+	cd $TRT_LIB_DIR/../bin/
+	./sample_googlenet
+	```
+
+	If the sample was installed correctly, the following information will be printed out in the terminal.
+
+	```bash
+	[08/23/2019-22:08:57] [I] Building and running a GPU inference engine for GoogleNet
+	[08/23/2019-22:08:59] [I] [TRT] Some tactics do not have sufficient workspace memory to run. Increasing workspace size may increase performance, please check verbose output.
+	[08/23/2019-22:09:05] [I] [TRT] Detected 1 inputs and 1 output network tensors.
+	[08/23/2019-22:09:05] [I] Ran /tensorrt/bin/sample_googlenet with: 
+	[08/23/2019-22:09:05] [I] Input(s): data 
+	[08/23/2019-22:09:05] [I] Output(s): prob 
+	&&&& PASSED TensorRT.sample_googlenet # /tensorrt/bin/sample_googlenet
 	```
 
 ## Useful Resources
