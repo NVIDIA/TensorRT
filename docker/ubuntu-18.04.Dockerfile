@@ -41,6 +41,7 @@ RUN cd /tmp &&\
 # Set environment and working directory
 ENV TRT_RELEASE /tensorrt
 ENV TRT_SOURCE /workspace/TensorRT
+ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$TRT_RELEASE/lib
 WORKDIR /workspace
 
 RUN ["/bin/bash"]

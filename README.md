@@ -77,6 +77,7 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	# Download TensorRT-6.0.1.5.Ubuntu-18.04.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
 	tar -xvzf TensorRT-6.0.1.5.Ubuntu-18.04.x86_64-gnu.cuda-10.1.cudnn7.6.tar.gz
 	export TRT_RELEASE=`pwd`/TensorRT-6.0.1.5
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TRT_RELEASE/lib
 	```
 
 	**Example: CentOS/RedHat 7 with cuda-9.0**
@@ -87,6 +88,7 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	# Download TensorRT-6.0.1.5.Red-Hat.x86_64-gnu.cuda-9.0.cudnn7.6.tar.gz
 	tar -xvzf TensorRT-6.0.1.5.Red-Hat.x86_64-gnu.cuda-9.0.cudnn7.6.tar.gz
 	export TRT_RELEASE=~/Downloads/TensorRT-6.0.1.5
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TRT_RELEASE/lib
 	```
 
 ## Setting Up The Build Environment

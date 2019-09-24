@@ -85,6 +85,7 @@ RUN cd /pdk_files/tensorrt \
 # Set environment and working directory
 ENV TRT_RELEASE /pdk_files/tensorrt
 ENV TRT_SOURCE /workspace/TensorRT
+ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$TRT_RELEASE/lib
 WORKDIR /workspace
 
 RUN ["/bin/bash"]
