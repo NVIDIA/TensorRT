@@ -193,7 +193,8 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 * Verify the TensorRT samples have been installed correctly.
 
 	```bash
-	$TRT_LIB_DIR/../bin/sample_googlenet
+	cd $TRT_LIB_DIR/../bin/
+	./sample_googlenet
 	```
 
 	If the sample was installed correctly, the following information will be printed out in the terminal.
