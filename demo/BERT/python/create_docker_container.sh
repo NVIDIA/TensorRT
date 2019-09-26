@@ -33,7 +33,6 @@ docker run -it --rm \
     --ulimit memlock=1 \
     --ulimit stack=67108864 \
     --publish 0.0.0.0:8888:8888 \
-    --ip 0.0.0.0 \
     -u $(id -u):$(id -g) \
     -v ${HOME}/models:/models \
     -v ${TENSORRT_DIR}:/workspace/TensorRT \
