@@ -28,7 +28,7 @@ docker build --build-arg myuid=$(id -u) --build-arg mygid=$(id -g) --rm -t bert-
 # Launch the docker container based on the image we just created
 docker run -it --rm \
     --name bert-tensorrt \
-    --runtime=nvidia \
+    --gpus=all \
     --shm-size=1g \
     --ulimit memlock=1 \
     --ulimit stack=67108864 \
