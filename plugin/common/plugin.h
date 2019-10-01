@@ -16,6 +16,7 @@
 #ifndef TRT_PLUGIN_H
 #define TRT_PLUGIN_H
 #include "NvInferPlugin.h"
+#include <cstring>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <memory>
@@ -57,7 +58,7 @@ protected:
 template <typename T>
 void write(char*& buffer, const T& val)
 {
-    *reinterpret_cast<T*>(buffer) = val;
+    std::memcpy(buffer, &val, sizeof(T));
     buffer += sizeof(T);
 }
 
@@ -65,7 +66,8 @@ void write(char*& buffer, const T& val)
 template <typename T>
 T read(const char*& buffer)
 {
-    T val = *reinterpret_cast<const T*>(buffer);
+    T val;
+    std::memcpy(&val, buffer, sizeof(T));
     buffer += sizeof(T);
     return val;
 }

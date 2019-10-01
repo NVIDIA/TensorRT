@@ -18,10 +18,10 @@
 #include "NvUffParser.h"
 #include <cassert>
 #include <chrono>
+#include <cstring>
 #include <cudnn.h>
 #include <iostream>
 #include <map>
-#include <string.h>
 #include <unordered_map>
 #include <vector>
 
@@ -579,14 +579,15 @@ private:
     template <typename T>
     void write(char*& buffer, const T& val) const
     {
-        *reinterpret_cast<T*>(buffer) = val;
+        std::memcpy(buffer, &val, sizeof(T));
         buffer += sizeof(T);
     }
 
     template <typename T>
     T read(const char*& buffer) const
     {
-        T val = *reinterpret_cast<const T*>(buffer);
+        T val;
+        std::memcpy(&val, buffer, sizeof(T));
         buffer += sizeof(T);
         return val;
     }
