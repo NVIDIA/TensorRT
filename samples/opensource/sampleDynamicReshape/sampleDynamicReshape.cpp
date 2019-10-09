@@ -75,7 +75,7 @@ private:
 
     samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
 
-    nvinfer1::Dims mPredictionInputDims;   //!< The dimensions of the input of the MNIST model.
+    nvinfer1::Dims4 mPredictionInputDims; //!< The dimensions of the input of the MNIST model.
     nvinfer1::Dims mPredictionOutputDims; //!< The dimensions of the output of the MNIST model.
 
     // Engines used for inference. The first is used for resizing inputs, the second for prediction.
@@ -161,8 +161,7 @@ void SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
 void SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder)
 {
     // Create a network using the parser.
-    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    auto network = makeUnique(builder->createNetworkV2(explicitBatch));
+    auto network = makeUnique(builder->createNetwork());
     auto parser = nvonnxparser::createParser(*network, gLogger.getTRTLogger());
     bool parsingSuccess = parser->parseFromFile(
         locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(), static_cast<int>(gLogger.getReportableSeverity()));
@@ -173,13 +172,12 @@ void SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
 
     // Attach a softmax layer to the end of the network.
     auto softmax = network->addSoftMax(*network->getOutput(0));
-    // Set softmax axis to 1 since network output has shape [1, 10] in full dims mode
-    softmax->setAxes(1 << 1);
     network->unmarkOutput(*network->getOutput(0));
     network->markOutput(*softmax->getOutput(0));
 
     // Get information about the inputs/outputs directly from the model.
-    mPredictionInputDims = network->getInput(0)->getDimensions();
+    auto dims = network->getInput(0)->getDimensions();
+    mPredictionInputDims = Dims4{1, dims.d[0], dims.d[1], dims.d[2]};
     mPredictionOutputDims = network->getOutput(0)->getDimensions();
 
     // Create a builder config
@@ -254,7 +252,7 @@ bool SampleDynamicReshape::infer()
 
     // Next, run the model to generate a prediction.
     std::vector<void*> predicitonBindings = {mPredictionInput.data(), mOutput.deviceBuffer.data()};
-    status = mPredictionContext->executeV2(predicitonBindings.data());
+    status = mPredictionContext->execute(mParams.batchSize, predicitonBindings.data());
     if (!status)
     {
         return false;
