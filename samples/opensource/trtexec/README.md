@@ -7,7 +7,7 @@
     * [Example 1: Simple MNIST model from Caffe](#example-1-simple-mnist-model-from-caffe)
     * [Example 2: Profiling a custom layer](#example-2-profiling-a-custom-layer)
     * [Example 3: Running a network on DLA](#example-3-running-a-network-on-dla)
-    * [Example 4: Running an ONNX model with full dimensions](#example-4-running-an-onnx-model-with-full-dimensions)
+    * [Example 4: Running an ONNX model with full dimensions and dynamic shapes](#example-4-running-an-onnx-model-with-full-dimensions-and-dynamic-shapes)
 - [Tool command line arguments](#tool-command-line-arguments)
 - [Additional resources](#additional-resources)
 - [License](#license)
@@ -72,7 +72,7 @@ To run the MNIST network on DLA using `trtexec`, issue:
 ```
 For more information about DLA, see [Working With DLA](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#dla_topic).
 
-### Example 4: Running an ONNX model with full dimensions
+### Example 4: Running an ONNX model with full dimensions and dynamic shapes
 
 To run an ONNX model in full-dimensions mode with static input shapes:
 
