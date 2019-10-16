@@ -349,15 +349,30 @@ void BuildOptions::parse(Arguments& arguments)
         std::vector<std::string> shapeList{splitToStringVec(list, ',')};
         for (const auto& s : shapeList)
         {
-            std::vector<std::string> nameRange{splitToStringVec(s, ':')};
-            if (shapes.find(nameRange[0]) == shapes.end())
+            std::string tensorName, dimsString;
+            std::vector<std::string> nameWithQuotes{splitToStringVec(s, '\'')};
+            if (nameWithQuotes.size() == 1)
             {
-                auto dims = stringToValue<nvinfer1::Dims>(nameRange[1]);
-                insertShapes(shapes, nameRange[0], dims);
+                // Name not wrapped with single quotes
+                std::vector<std::string> nameRange{splitToStringVec(s, ':')};
+                tensorName = nameRange[0];
+                dimsString = nameRange[1];
             }
             else
             {
-                shapes[nameRange[0]][static_cast<size_t>(selector)] = stringToValue<nvinfer1::Dims>(nameRange[1]);
+                // Name wrapped with single quotes
+                tensorName = nameWithQuotes[1];
+                dimsString = splitToStringVec(nameWithQuotes[2], ':')[1];
+            }
+
+            if (shapes.find(tensorName) == shapes.end())
+            {
+                auto dims = stringToValue<nvinfer1::Dims>(dimsString);
+                insertShapes(shapes, tensorName, dims);
+            }
+            else
+            {
+                shapes[tensorName][static_cast<size_t>(selector)] = stringToValue<nvinfer1::Dims>(dimsString);
             }
         }
     };
@@ -440,8 +455,20 @@ void InferenceOptions::parse(Arguments& arguments)
     std::vector<std::string> shapeList{splitToStringVec(list, ',')};
     for (const auto& s : shapeList)
     {
-        std::vector<std::string> shapeSpec{splitToStringVec(s, ':')};
-        shapes.insert({shapeSpec[0], stringToValue<nvinfer1::Dims>(shapeSpec[1])});
+        std::vector<std::string> nameWithQuotes{splitToStringVec(s, '\'')};
+        if (nameWithQuotes.size() == 1)
+        {
+            // Name not wrapped with single quotes
+            std::vector<std::string> shapeSpec{splitToStringVec(s, ':')};
+            shapes.insert({shapeSpec[0], stringToValue<nvinfer1::Dims>(shapeSpec[1])});
+        }
+        else
+        {
+            // Name wrapped with single quotes
+            std::string tensorName = nameWithQuotes[1];
+            std::string dimsString = splitToStringVec(nameWithQuotes[2], ':')[1];
+            shapes.insert({tensorName, stringToValue<nvinfer1::Dims>(dimsString)});
+        }
     }
 
     int batchOpt{0};

@@ -309,29 +309,24 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
 
         if (profile)
         {
-            Dims dims = input->getDimensions();
-            if (std::any_of(dims.d + 1, dims.d + dims.nbDims, [](int dim) { return dim == -1; }))
+            if (input->isShapeTensor())
             {
-                err << "Only dynamic batch dimension is currently supported, other dimensions must be static"
-                    << std::endl;
+                err << "Shape tensor inputs are unsupported" << std::endl;
                 return nullptr;
             }
-            dims.d[0] = -1;
-            Dims profileDims = dims;
+            Dims profileDims = input->getDimensions();;
             auto shape = build.shapes.find(input->getName());
             if (shape == build.shapes.end())
             {
                 err << "Dynamic dimensions required for input " << input->getName() << std::endl;
                 return nullptr;
             }
-            profileDims.d[0] = shape->second[static_cast<size_t>(OptProfileSelector::kMIN)].d[0];
+            profileDims = shape->second[static_cast<size_t>(OptProfileSelector::kMIN)];
             profile->setDimensions(input->getName(), OptProfileSelector::kMIN, profileDims);
-            profileDims.d[0] = shape->second[static_cast<size_t>(OptProfileSelector::kOPT)].d[0];
+            profileDims = shape->second[static_cast<size_t>(OptProfileSelector::kOPT)];
             profile->setDimensions(input->getName(), OptProfileSelector::kOPT, profileDims);
-            profileDims.d[0] = shape->second[static_cast<size_t>(OptProfileSelector::kMAX)].d[0];
+            profileDims = shape->second[static_cast<size_t>(OptProfileSelector::kMAX)];
             profile->setDimensions(input->getName(), OptProfileSelector::kMAX, profileDims);
-
-            input->setDimensions(dims);
         }
     }
 

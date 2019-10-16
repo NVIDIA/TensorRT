@@ -7,6 +7,7 @@
     * [Example 1: Simple MNIST model from Caffe](#example-1-simple-mnist-model-from-caffe)
     * [Example 2: Profiling a custom layer](#example-2-profiling-a-custom-layer)
     * [Example 3: Running a network on DLA](#example-3-running-a-network-on-dla)
+    * [Example 4: Running an ONNX model with full dimensions and dynamic shapes](#example-4-running-an-onnx-model-with-full-dimensions-and-dynamic-shapes)
 - [Tool command line arguments](#tool-command-line-arguments)
 - [Additional resources](#additional-resources)
 - [License](#license)
@@ -69,8 +70,31 @@ To run the MNIST network on DLA using `trtexec`, issue:
 ```
 ./trtexec --deploy=data/mnist/mnist.prototxt --output=prob --useDLACore=0 --fp16 --allowGPUFallback
 ```
-
 For more information about DLA, see [Working With DLA](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#dla_topic).
+
+### Example 4: Running an ONNX model with full dimensions and dynamic shapes
+
+To run an ONNX model in full-dimensions mode with static input shapes:
+
+```
+./trtexec --onnx=model.onnx --explicitBatch
+```
+
+The following examples assumes an ONNX model with one dynamic input with name `input` and dimensions `[-1, 3, 244, 244]`
+
+To run an ONNX model with dynamic shapes with a given input shape:
+
+```
+./trtexec --onnx=model.onnx --explicitBatch --shapes=input:32x3x244x244
+```
+
+To benchmark your ONNX model with a range of possible input shapes:
+
+```
+./trtexec --onnx=model.onnx --explicitBatch --minShapes=input:1x3x244x244 --optShapes=input:16x3x244x244 --maxShapes=input:32x3x244x244 --shapes=input:5x3x244x244
+```
+
+For more information about using dynamic shapes, see [Working With Dynamic Shapes](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#work_dynamic_shapes)
 
 ## Tool command line arguments
 
