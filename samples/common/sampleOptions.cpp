@@ -353,14 +353,14 @@ void BuildOptions::parse(Arguments& arguments)
             std::vector<std::string> nameWithQuotes{splitToStringVec(s, '\'')};
             if (nameWithQuotes.size() == 1)
             {
-                //Name not wrapped with single quotes
+                // Name not wrapped with single quotes
                 std::vector<std::string> nameRange{splitToStringVec(s, ':')};
                 tensorName = nameRange[0];
                 dimsString = nameRange[1];
             }
             else
             {
-                //Name wrapped with single quotes
+                // Name wrapped with single quotes
                 tensorName = nameWithQuotes[1];
                 dimsString = splitToStringVec(nameWithQuotes[2], ':')[1];
             }
