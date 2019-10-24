@@ -87,7 +87,7 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	cd ~/Downloads
 	# Download TensorRT-6.0.1.5.Red-Hat.x86_64-gnu.cuda-9.0.cudnn7.6.tar.gz
 	tar -xvzf TensorRT-6.0.1.5.Red-Hat.x86_64-gnu.cuda-9.0.cudnn7.6.tar.gz
-	export TRT_RELEASE=~/Downloads/TensorRT-6.0.1.5
+	export TRT_RELEASE=`pwd`/TensorRT-6.0.1.5
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$TRT_RELEASE/lib
 	```
 
