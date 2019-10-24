@@ -45,7 +45,7 @@ In this network, the size of feature maps that are used for anchor generation ar
 The BoxPredictor step takes in a high level feature map as input and produces a list of box encodings (x-y coordinates) and a list of class scores for each of these encodings per feature map. This information is passed to the postprocessor.
 
 **GridAnchorGenerator**
-The goal of this step is to generate a set of default bounding boxes (given the scale and aspect ratios mentioned in the config) for each feature map cell. This is implemented as a plugin layer in TensorRT called the `gridAnchorGenerator` plugin. The registered plugin name is `GridAnchor_TRT`.
+The goal of this step is to generate a set of default bounding boxes (given the scale and aspect ratios mentioned in the config) for each feature map cell. This is implemented as a plugin layer in TensorRT called the `gridAnchorGenerator` plugin. The registered plugin name is `GridAnchorRect_TRT`.
 
 **Postprocessor**
 The postprocessor step performs the final steps to generate the network output. The bounding box data and confidence scores for all feature maps are fed to the step along with the pre-computed default bounding boxes (generated in the `GridAnchorGenerator` namespace). It then performs NMS (non-maximum suppression) which prunes away most of the bounding boxes based on a confidence threshold and IoU (Intersection over Union) overlap, thus storing only the top `N` boxes per class. This is implemented as a plugin layer in TensorRT called the NMS plugin. The registered plugin name is `NMS_TRT`.
@@ -96,16 +96,16 @@ The `config.py` defined for the `convert-to-uff` command should have the custom 
 
 ```
 PriorBox = gs.create_plugin_node(name="GridAnchor",
-op="GridAnchor_TRT",  
+op="GridAnchorRect_TRT",  
 	numLayers=6,  
 	minSize=0.2,  
 	maxSize=0.95,  
 	aspectRatios=[1.0, 2.0, 0.5, 3.0, 0.33],  
 	variance=[0.1,0.1,0.2,0.2],  
-	featureMapShapes=[19, 10, 5, 3, 2, 1])  
+	featureMapShapes=[19, 19, 10, 10, 5, 5, 3, 3, 2, 2, 1, 1])  
 ```  
 
-Here, `GridAnchor_TRT` matches the registered plugin name and the parameters have the same name and type as expected by the plugin.
+Here, `GridAnchorRect_TRT` matches the registered plugin name and the parameters have the same name and type as expected by the plugin.
 
 If the `config.py` is defined as above, the NvUffParser will be able to parse the network and call the appropriate plugins with the correct parameters.
 
@@ -221,7 +221,7 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 
 		The `config.py` script specifies the preprocessing operations necessary for the SSD TensorFlow graph. The plugin nodes and plugin parameters used in the `config.py` script should match the registered plugins in TensorRT.
 
-	3.  Copy the converted `.uff` file to the data directory and rename it to `sample_ssd_relu6.uff <TensorRT Install>/data/ssd/sample_ssd_relu6.uff`.
+	3.  Copy the converted `.uff` file to the data directory and rename it to `sample_ssd_rect.uff <TensorRT Install>/data/ssd/sample_ssd_rect.uff`.
 
 4.  The sample also requires a `labels.txt` file with a list of all labels used to train the model. The labels file for this network is `<TensorRT Install>/data/ssd/ssd_coco_labels.txt`.
 
@@ -249,7 +249,7 @@ calibration can be performed. Currently, we require a file called `list.txt`, wi
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	```
 	&&&& RUNNING TensorRT.sample_uff_ssd # ./build/x86_64-linux/sample_uff_ssd
-	[I] ../data/samples/ssd/sample_ssd_relu6.uff
+	[I] ../data/samples/ssd/sample_ssd_rect.uff
 	[I] Begin parsing model...
 	[I] End parsing model...
 	[I] Begin building engine...
