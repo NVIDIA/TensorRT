@@ -410,7 +410,7 @@ SampleUffSSDParams initializeSampleParams(const samplesCommon::Args& args)
     {
         params.dataDirs = args.dataDirs;
     }
-    params.uffFileName = "sample_ssd_relu6.uff";
+    params.uffFileName = "sample_ssd_rect.uff";
     params.labelsFileName = "ssd_coco_labels.txt";
     params.inputTensorNames.push_back("Input");
     params.batchSize = 2;
