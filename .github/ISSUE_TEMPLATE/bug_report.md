@@ -14,16 +14,16 @@ A clear and concise description of the bug or issue.
 
 ## Environment
 
-Operating System + Version:
-GPU Type:
-Nvidia Driver Version:
-CUDA Version:
-CUDNN Version:
-Python Version (if applicable):
-TensorFlow Version (if applicable):
-PyTorch Version (if applicable):
-TensorRT Version:
-Baremetal or Container (if container which image + tag):
+**Operating System + Version**: 
+**GPU Type**: 
+**Nvidia Driver Version**: 
+**CUDA Version**: 
+**CUDNN Version**: 
+**Python Version (if applicable)**: 
+**TensorFlow Version (if applicable)**: 
+**PyTorch Version (if applicable)**: 
+**TensorRT Version**: 
+**Baremetal or Container (if container which image + tag)**: 
 
 
 ## Steps To Reproduce
