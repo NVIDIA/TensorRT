@@ -14,7 +14,7 @@ A clear and concise description of the bug or issue.
 
 ## Environment
 
-**Operating System + Version**: 
+**TensorRT Version**: 
 **GPU Type**: 
 **Nvidia Driver Version**: 
 **CUDA Version**: 
@@ -22,14 +22,22 @@ A clear and concise description of the bug or issue.
 **Python Version (if applicable)**: 
 **TensorFlow Version (if applicable)**: 
 **PyTorch Version (if applicable)**: 
-**TensorRT Version**: 
+**Operating System + Version**: 
 **Baremetal or Container (if container which image + tag)**: 
+
+
+## Relevant Files
+
+Please include links to any models, data, files, or scripts necessary to reproduce your issue. (Github repo, Google Drive, Dropbox, etc.)
 
 
 ## Steps To Reproduce
 
 Craft a minimal bug report following this guide - https://matthewrocklin.com/blog/work/2018/02/28/minimal-bug-reports
 
-This helps us reproduce the issue you're having and resolve the issue more quickly:
+Please include:
+* Exact steps/commands to build your repro
+* Exact steps/commands to run your repro
+* Full traceback of errors encountered
 
 
