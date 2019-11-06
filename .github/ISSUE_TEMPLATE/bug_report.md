@@ -9,7 +9,7 @@ assignees: ''
 
 ## Description
 
-A clear and concise description of the bug or issue.
+<!-- A clear and concise description of the bug or issue. -->
 
 
 ## Environment
@@ -28,16 +28,17 @@ A clear and concise description of the bug or issue.
 
 ## Relevant Files
 
-Please include links to any models, data, files, or scripts necessary to reproduce your issue. (Github repo, Google Drive, Dropbox, etc.)
+<!-- Please include links to any models, data, files, or scripts necessary to reproduce your issue. (Github repo, Google Drive, Dropbox, etc.) -->
 
 
 ## Steps To Reproduce
 
-Craft a minimal bug report following this guide - https://matthewrocklin.com/blog/work/2018/02/28/minimal-bug-reports
+<!-- 
+  Craft a minimal bug report following this guide - https://matthewrocklin.com/blog/work/2018/02/28/minimal-bug-reports
 
-Please include:
-* Exact steps/commands to build your repro
-* Exact steps/commands to run your repro
-* Full traceback of errors encountered
-
+  Please include:
+  * Exact steps/commands to build your repro
+  * Exact steps/commands to run your repro
+  * Full traceback of errors encountered 
+-->
 
