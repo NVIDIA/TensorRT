@@ -101,6 +101,7 @@ extern "C" {
 bool initLibNvInferPlugins(void* logger, const char* libNamespace)
 {
     initializePlugin<nvinfer1::plugin::GridAnchorPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::GridAnchorRectPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::NMSPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::ReorgPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::RegionPluginCreator>(logger, libNamespace);

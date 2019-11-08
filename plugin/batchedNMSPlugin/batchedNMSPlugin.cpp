@@ -68,7 +68,7 @@ Dims BatchedNMSPlugin::getOutputDimensions(int index, const Dims* inputs, int nb
     ASSERT(nbInputDims == 2);
     ASSERT(index >= 0 && index < this->getNbOutputs());
     ASSERT(inputs[0].nbDims == 3);
-    ASSERT(inputs[1].nbDims == 2);
+    ASSERT(inputs[1].nbDims == 2 || (inputs[1].nbDims == 3 && inputs[1].d[2] == 1));
     // boxesSize: number of box coordinates for one sample
     boxesSize = inputs[0].d[0] * inputs[0].d[1] * inputs[0].d[2];
     // scoresSize: number of scores for one sample
@@ -141,7 +141,7 @@ void BatchedNMSPlugin::configurePlugin(const Dims* inputDims, int nbInputs, cons
     ASSERT(nbInputs == 2);
     ASSERT(nbOutputs == 4);
     ASSERT(inputDims[0].nbDims == 3);
-    ASSERT(inputDims[1].nbDims == 2);
+    ASSERT(inputDims[1].nbDims == 2 || (inputDims[1].nbDims == 3 && inputDims[1].d[2] == 1));
     ASSERT(std::none_of(inputIsBroadcast, inputIsBroadcast + nbInputs, [](bool b) { return b; }));
     ASSERT(std::none_of(outputIsBroadcast, outputIsBroadcast + nbInputs, [](bool b) { return b; }));
 
