@@ -75,7 +75,7 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
 	    dilation=None, number_groups=number_groups,
 	    left_format=lhs_fmt, right_format=rhs_fmt,
 	    name=name, fields=fields
-	    )
+	)
 	```
 
 4.  Download the Mask R-CNN repo and export to `PYTHONPATH`.
@@ -91,45 +91,48 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
 	git am $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/0001-Update-the-Mask_RCNN-model-from-NHWC-to-NCHW.patch
 	```
 
-6.  Download the pre-trained Keras model and place it into your `/data` folder
+5.  Create a data directory to hold the models and inputs.
+    ```
+    DATA_DIR=$TRT_SOURCE/data
+    mkdir -p $DATA_DIR
+    ```
+
+6.  Download the pre-trained Keras model and place it into your `$DATA_DIR` folder.
 	```
-	wget https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5
+	wget -P $DATA_DIR https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5
 	```
 
 	**Note:** The md5sum of model file is e98aaff6f99e307b5e2a8a3ff741a518.
 
-7.  Convert the h5 model to the UFF model and place it into your `/data` folder
+7.  Convert the h5 model to the UFF model and place it into your `$DATA_DIR` folder.
 	```
 	cd $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/
-	python mrcnn_to_trt_single.py -w /path/to/data/mask_rcnn_coco.h5 -o /path/to/data/mrcnn_nchw.uff -p ./config.py
+	python mrcnn_to_trt_single.py -w $DATA_DIR/mask_rcnn_coco.h5 -o $DATA_DIR/mrcnn_nchw.uff -p ./config.py
 	```
  
-8.  Populate your `/data` folder with the following test images.
+8.  Populate your `$DATA_DIR` folder with the following test images.
 	```
-	/usr/src/tensorrt/data/faster-rcnn/001763.ppm
-	/usr/src/tensorrt/data/faster-rcnn/004545.ppm
+	cp /usr/src/tensorrt/data/faster-rcnn/001763.ppm $DATA_DIR
+	cp /usr/src/tensorrt/data/faster-rcnn/004545.ppm $DATA_DIR
 	```
 
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sample_uff_maskRCNN` directory. The binary named `sample_uff_maskRCNN` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sample_uff_maskRCNN
-	make
-	```
- 
-	Where `<TensorRT root directory>` is where you installed TensorRT.  
+1.  Build the samples by following the instructions for [generating the Makefiles](https://github.com/NVIDIA/TensorRT#building-the-tensorrt-oss-components) and [installing the build artifacts](https://github.com/NVIDIA/TensorRT#building-the-tensorrt-oss-components). The binary named `sample_uff_maskRCNN` will be created in the `$TRT_RELEASE/bin` directory.
+    ```
+    cd $TRT_RELEASE/bin
+    ```
 
 2.  Run the sample to perform object detection and object mask prediction.
 
 	To run the sample in FP32 mode:
 	```
-	./sample_uff_maskRCNN -d path/to/data
+	./sample_uff_maskRCNN -d $DATA_DIR
 	```
 
 	To run the sample in FP16 mode:
 	```
-	./sample_uff_maskRCNN -d path/to/data --fp16
+	./sample_uff_maskRCNN -d $DATA_DIR --fp16
 	```
 	
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
@@ -177,3 +180,4 @@ This is the first release of the `README.md` file and sample.
 ## Known issues
 
 1. Tensorflow installed from PyPI (`pip install tensorflow-gpu`) requires CUDA 10.0 and is incompatible with CUDA 10.1. To generate the UFF model required for this sample, use a container built with `CUDA_VERSION=10.0`.
+2. Tensorflow >= 1.15 may create ops called `addV2` instead of `add`, which may cause an error similar to: `Unsupported operation _AddV2`. Using Tensorflow < 1.15 should solve this.
