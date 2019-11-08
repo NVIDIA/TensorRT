@@ -19,10 +19,10 @@ assignees: ''
 **Nvidia Driver Version**: 
 **CUDA Version**: 
 **CUDNN Version**: 
+**Operating System + Version**: 
 **Python Version (if applicable)**: 
 **TensorFlow Version (if applicable)**: 
 **PyTorch Version (if applicable)**: 
-**Operating System + Version**: 
 **Baremetal or Container (if container which image + tag)**: 
 
 
