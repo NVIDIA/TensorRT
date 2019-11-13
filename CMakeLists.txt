@@ -165,6 +165,8 @@ else()
     find_library(CUBLAS_LIB cublas HINTS
         ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/stubs)
 
+    find_library(CUBLASLT_LIB cublasLt HINTS
+        ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/stubs)
     if(BUILD_PARSERS)
         configure_protobuf(${PROTOBUF_VERSION})
     endif()

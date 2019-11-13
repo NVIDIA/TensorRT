@@ -63,6 +63,8 @@ using namespace plugin;
 #define ENABLE_DLA_API 1
 #endif
 
+#define TRT_UNUSED (void)
+
 #define CHECK(status)                                                                                                  \
     do                                                                                                                 \
     {                                                                                                                  \

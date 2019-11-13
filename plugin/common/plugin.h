@@ -69,6 +69,7 @@ T read(const char*& buffer)
     buffer += sizeof(T);
     return val;
 }
+
 } // namespace plugin
 } // namespace nvinfer1
 
