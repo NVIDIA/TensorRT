@@ -107,8 +107,10 @@ endif()
 
 
 find_package(Threads REQUIRED)
-include(third_party/zlib.cmake)
-include(third_party/protobuf.cmake)
+if (BUILD_PLUGINS OR BUILD_PARSERS)
+    include(third_party/zlib.cmake)
+    include(third_party/protobuf.cmake)
+endif()
 if (NVINTERNAL)
 ########################################### DEPENDENCIES FOR BUILDING IN NVIDIA's TREE ############################################
     set(EXTERNALS ${PROJECT_SOURCE_DIR}/../externals)
