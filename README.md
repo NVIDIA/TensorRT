@@ -187,7 +187,7 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
   * Installation might require superuser privileges depending on the path and permissions of files being replaced.
   * Installation is not supported in cross compilation scenario. Please copy the result files from `build/out` folder into the target device.
 
-  To install the TensorRT built components to the default directory `$TRT_LIB_DIR/../bin/` (`$TRT_RELEASE/bin`), please run the following command after the TensorRT OSS components were built.
+  To automatically install the built TensorRT OSS components to the default directory `$TRT_LIB_DIR/../bin/` (`$TRT_RELEASE/bin`), please run the following command after the TensorRT OSS components were built.
 
   ```bash
   cd $TRT_SOURCE/build/
