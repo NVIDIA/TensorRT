@@ -187,10 +187,10 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
   * Installation might require superuser privileges depending on the path and permissions of files being replaced.
   * Installation is not supported in cross compilation scenario. Please copy the result files from `build/out` folder into the target device.
 
-```bash
-cd $TRT_SOURCE/build/
-sudo make install
-```
+  ```bash
+  cd $TRT_SOURCE/build/
+  sudo make install
+  ```
 
 * Verify the TensorRT samples have been installed correctly.
 
