@@ -376,7 +376,7 @@ void EmbLayerNormPluginDynamic::configurePlugin(
     assert(inputs[0].desc.type == DataType::kINT32);
     assert(inputs[1].desc.type == DataType::kINT32);
     assert(inputs[2].desc.type == DataType::kINT32);
-    assert(outputs[0].desc.type == DataType::kFLOAT || out_type == DataType::kHALF);
+    assert(outputs[0].desc.type == DataType::kFLOAT || outputs[0].desc.type == DataType::kHALF);
     assert(outputs[1].desc.type == DataType::kINT32);
 }
 
