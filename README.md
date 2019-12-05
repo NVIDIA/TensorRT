@@ -174,11 +174,12 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 
 	- `CUB_VERSION`: The version of CUB to use, for example [`1.8.0`].
 
-	- `GPU_ARCHS`: GPU (SM) architectures to target. By default we generate CUDA code for the latest SM version. If lower SM versions are desired, they can be specified here as a comma separated list. Table of compute capabilities of NVIDIA GPUs can be found [here](https://developer.nvidia.com/cuda-gpus). Examples:
+	- `GPU_ARCHS`: GPU (SM) architectures to target. By default we generate CUDA code for all major SMs. Specific SM versions can be specified here as a quoted space-separated list to reduce compilation time and binary size. Table of compute capabilities of NVIDIA GPUs can be found [here](https://developer.nvidia.com/cuda-gpus). Examples:
 	  - Titan V: `-DGPU_ARCHS="70"`
 	  - Tesla V100: `-DGPU_ARCHS="70"`
 	  - GeForce RTX 2080: `-DGPU_ARCHS="75"`
 	  - Tesla T4: `-DGPU_ARCHS="75"`
+	  - Multiple SMs: `-DGPU_ARCHS="70 75"`
 
 ## Install the TensorRT OSS Components [Optional]
 

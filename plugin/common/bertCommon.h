@@ -35,6 +35,8 @@ extern LogStreamConsumer gLogFatal;
 
 void setReportableSeverity(Logger::Severity severity);
 
+#define TRT_UNUSED (void)
+
 #include <numeric>
 #include <vector>
 

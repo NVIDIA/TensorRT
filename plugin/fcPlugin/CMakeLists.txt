@@ -13,15 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-string(FIND ${CMAKE_CUDA_FLAGS} "sm_7" POS_SM)
-string(FIND ${CMAKE_CUDA_FLAGS} "compute_7" POS_COMPUTE)
-
-if(${POS_SM} GREATER_EQUAL 0 OR ${POS_COMPUTE} GREATER_EQUAL 0)
-    file(GLOB SRCS *.cpp *.cu)
-
-    set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
-    set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)
-endif()
-
-
+file(GLOB CU_SRCS *.cu)
+set(BERT_CU_SOURCES ${BERT_CU_SOURCES} ${CU_SRCS})
+set(BERT_CU_SOURCES ${BERT_CU_SOURCES} PARENT_SCOPE)
