@@ -26,17 +26,10 @@ if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 endif()
 
-set(PLUGIN_SRCS)
 set(PLUGIN_SOURCES)
-set(CUDA_SRCS)
-set(COMMON_SRCS)
+set(PLUGIN_CU_SOURCES)
 
 set(PLUGIN_LISTS
-    embLayerNormPlugin
-    fcPlugin
-    geluPlugin
-    bertQKVToContextPlugin
-    skipLayerNormPlugin
     nmsPlugin
     normalizePlugin
     priorBoxPlugin
@@ -57,6 +50,19 @@ set(PLUGIN_LISTS
     instanceNormalizationPlugin
     )
 
+# Add BERT sources if ${BERT_GENCODES} was populated
+if(BERT_GENCODES)
+    set(BERT_CU_SOURCES)
+    set(PLUGIN_LISTS
+        ${PLUGIN_LISTS}
+        embLayerNormPlugin
+        fcPlugin
+        geluPlugin
+        bertQKVToContextPlugin
+        skipLayerNormPlugin
+        )
+endif()
+
 include_directories(common common/kernels ../samples/common)
 
 foreach(PLUGIN_ITER ${PLUGIN_LISTS})
@@ -66,6 +72,14 @@ endforeach(PLUGIN_ITER)
 
 # Add common
 add_subdirectory(common)
+
+# Set gencodes
+set_source_files_properties(${PLUGIN_CU_SOURCES} PROPERTIES COMPILE_FLAGS ${GENCODES})
+list(APPEND PLUGIN_SOURCES "${PLUGIN_CU_SOURCES}")
+if (BERT_CU_SOURCES)
+    set_source_files_properties(${BERT_CU_SOURCES} PROPERTIES COMPILE_FLAGS ${BERT_GENCODES})
+    list(APPEND PLUGIN_SOURCES "${BERT_CU_SOURCES}")
+endif()
 
 list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/InferPlugin.cpp")
 list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../samples/common/logger.cpp")

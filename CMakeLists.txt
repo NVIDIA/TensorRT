@@ -77,6 +77,33 @@ endif()
 
 set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations ${CMAKE_CXX_FLAGS} -DBUILD_SYSTEM=cmake_oss")
 
+if (DEFINED GPU_ARCHS)
+  message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Generating CUDA code for SM ${GPU_ARCHS}")
+  separate_arguments(GPU_ARCHS)
+else()
+  list(APPEND GPU_ARCHS
+      35
+      53
+      61
+      70
+      75
+    )
+  message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${GPU_ARCHS}")
+endif()
+set(BERT_GENCODES)
+# Generate SASS for each architecture
+foreach(arch ${GPU_ARCHS})
+    if (${arch} GREATER_EQUAL 70)
+        set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
+    endif()
+    set(GENCODES "${GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
+endforeach()
+# Generate PTX for the last architecture in the list.
+list(GET GPU_ARCHS -1 LATEST_SM)
+set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
+if (${LATEST_SM} GREATER_EQUAL 70)
+    set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
+endif()
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -Wno-deprecated-declarations")
 
 ################################### DEPENDENCIES ##########################################

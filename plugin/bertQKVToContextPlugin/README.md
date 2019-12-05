@@ -72,4 +72,4 @@ This is the first release of this `README.md` file.
 
 ## Known issues
 
-There are no known issues in this plugin.
+This plugin only supports GPUs with compute capability >= 7.0. For more information see the [CUDA GPU Compute Capability Support Matrix](https://developer.nvidia.com/cuda-gpus#compute)
