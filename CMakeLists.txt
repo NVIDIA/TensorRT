@@ -188,14 +188,21 @@ else()
 
     include_directories(
         ${CUDA_INCLUDE_DIRS}
+        ${CUDNN_ROOT_DIR}/include
     )
     find_library(CUDNN_LIB cudnn HINTS
         ${CUDA_TOOLKIT_ROOT_DIR} ${CUDNN_ROOT_DIR} PATH_SUFFIXES lib64 lib)
     find_library(CUBLAS_LIB cublas HINTS
         ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/stubs)
-
-    find_library(CUBLASLT_LIB cublasLt HINTS
-        ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/stubs)
+    # CUBLASLT libraries are only available in CUDA versions > 10. Check for CUDA version here and
+    # remove dependency on the libarary and unset BERT_GENCODES.
+    if (CUDA_VERSION VERSION_LESS_EQUAL 10.0)
+        message(WARNING "Detected CUDA version is <= 10.0! Removing BERT plugins from compilation list.")
+        unset(BERT_GENCODES)
+    else()
+        find_library(CUBLASLT_LIB cublasLt HINTS
+            ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/stubs)
+    endif()
     if(BUILD_PARSERS)
         configure_protobuf(${PROTOBUF_VERSION})
     endif()
