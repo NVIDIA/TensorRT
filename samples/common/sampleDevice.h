@@ -38,7 +38,11 @@ class TrtCudaEvent;
 namespace
 {
 
+#if CUDA_VERSION < 10000
+void cudaSleep(cudaStream_t stream, cudaError_t status, void* sleep)
+#else
 void cudaSleep(void* sleep)
+#endif
 {
     std::this_thread::sleep_for(std::chrono::duration<int, std::milli>(*static_cast<int*>(sleep)));
 }
@@ -76,7 +80,12 @@ public:
 
     void sleep(int* ms)
     {
+#if CUDA_VERSION < 10000
+        cudaCheck(cudaStreamAddCallback(mStream, cudaSleep, ms, 0));
+#else
         cudaCheck(cudaLaunchHostFunc(mStream, cudaSleep, ms));
+#endif
+
     }
 
 private:
