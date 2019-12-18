@@ -18,12 +18,28 @@
 #define NV_ONNX_PARSER_H
 
 #include "NvInfer.h"
+#include <stddef.h>
+#include <vector>
 
 #define NV_ONNX_PARSER_MAJOR 0
 #define NV_ONNX_PARSER_MINOR 1
 #define NV_ONNX_PARSER_PATCH 0
 
 static const int NV_ONNX_PARSER_VERSION = ((NV_ONNX_PARSER_MAJOR * 10000) + (NV_ONNX_PARSER_MINOR * 100) + NV_ONNX_PARSER_PATCH);
+
+//! \typedef SubGraph_t
+//!
+//! \brief The data structure containing the parsing capability of
+//! a set of nodes in an ONNX graph.
+//!
+typedef std::pair<std::vector<size_t>, bool> SubGraph_t;
+
+//! \typedef SubGraphCollection_t
+//!
+//! \brief The data structure containing all SubGraph_t partitioned
+//! out of an ONNX graph.
+//!
+typedef std::vector<SubGraph_t> SubGraphCollection_t;
 
 class onnxTensorDescriptorV1;
 //!
@@ -128,10 +144,12 @@ public:
      * \param serialized_onnx_model Pointer to the serialized ONNX model
      * \param serialized_onnx_model_size Size of the serialized ONNX model
      *        in bytes
+     * \param sub_graph_collection Container to hold supported subgraphs
      * \return true if the model is supported
      */
     virtual bool supportsModel(void const* serialized_onnx_model,
-                               size_t serialized_onnx_model_size)
+                               size_t serialized_onnx_model_size,
+                               SubGraphCollection_t& sub_graph_collection)
         = 0;
 
     /** \brief Parse a serialized ONNX model into the TensorRT network

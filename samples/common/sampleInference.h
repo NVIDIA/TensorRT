@@ -33,9 +33,9 @@ namespace sample
 struct InferenceEnvironment
 {
     TrtUniquePtr<nvinfer1::ICudaEngine> engine;
-    std::unique_ptr<nvinfer1::IProfiler> profiler;
+    std::unique_ptr<Profiler> profiler;
     std::vector<TrtUniquePtr<nvinfer1::IExecutionContext>> context;
-    std::vector<Bindings> bindings;
+    std::vector<std::unique_ptr<Bindings>> bindings;
 };
 
 //!
@@ -46,7 +46,7 @@ void setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inferenc
 //!
 //! \brief Run inference and collect timing
 //!
-void runInference(const InferenceOptions& inference, InferenceEnvironment& iEnv, std::vector<InferenceTime>& trace);
+void runInference(const InferenceOptions& inference, InferenceEnvironment& iEnv, std::vector<InferenceTrace>& trace);
 
 } // namespace sample
 

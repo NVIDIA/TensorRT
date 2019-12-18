@@ -24,6 +24,7 @@
 
 #include "NvInfer.h"
 
+#include "sampleUtils.h"
 #include "sampleOptions.h"
 
 namespace sample
@@ -140,6 +141,37 @@ inline IOFormat stringToValue<IOFormat>(const std::string& option)
     ioFormat.second = stringToValue<nvinfer1::TensorFormats>(option.substr(colon+1));
 
     return ioFormat;
+}
+
+template <typename T>
+inline std::pair<std::string, T> splitNameAndValue(const std::string& s)
+{
+    std::string tensorName;
+    std::string valueString;
+    std::vector<std::string> nameWithQuotes{splitToStringVec(s, '\'')};
+    if (nameWithQuotes.size() == 1)
+    {
+        // Name not wrapped with single quotes
+        std::vector<std::string> nameRange{splitToStringVec(s, ':')};
+        tensorName = nameRange[0];
+        valueString = nameRange[1];
+    }
+    else
+    {
+        // Name wrapped with single quotes
+        tensorName = nameWithQuotes[1];
+        valueString = splitToStringVec(nameWithQuotes[2], ':')[1];
+    }
+    return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
+}
+
+template <typename T>
+inline void splitInsertKeyValue(const std::vector<std::string>& kvList, T& map)
+{
+    for (const auto& kv : kvList)
+    {
+        map.insert(splitNameAndValue<typename T::mapped_type>(kv));
+    }
 }
 
 inline const char* boolToEnabled(bool enable)
@@ -342,37 +374,23 @@ void BuildOptions::parse(Arguments& arguments)
     getFormats(outputFormats, "--outputIOFormats");
 
     auto getShapes = [&arguments](std::unordered_map<std::string, ShapeRange>& shapes, const char* argument,
-                         nvinfer1::OptProfileSelector selector)
-    {
+                         nvinfer1::OptProfileSelector selector) {
         std::string list;
         checkEraseOption(arguments, argument, list);
         std::vector<std::string> shapeList{splitToStringVec(list, ',')};
         for (const auto& s : shapeList)
         {
-            std::string tensorName, dimsString;
-            std::vector<std::string> nameWithQuotes{splitToStringVec(s, '\'')};
-            if (nameWithQuotes.size() == 1)
-            {
-                // Name not wrapped with single quotes
-                std::vector<std::string> nameRange{splitToStringVec(s, ':')};
-                tensorName = nameRange[0];
-                dimsString = nameRange[1];
-            }
-            else
-            {
-                // Name wrapped with single quotes
-                tensorName = nameWithQuotes[1];
-                dimsString = splitToStringVec(nameWithQuotes[2], ':')[1];
-            }
+            auto nameDimsPair = splitNameAndValue<nvinfer1::Dims>(s);
+            std::string tensorName = nameDimsPair.first;
+            nvinfer1::Dims dims = nameDimsPair.second;
 
             if (shapes.find(tensorName) == shapes.end())
             {
-                auto dims = stringToValue<nvinfer1::Dims>(dimsString);
                 insertShapes(shapes, tensorName, dims);
             }
             else
             {
-                shapes[tensorName][static_cast<size_t>(selector)] = stringToValue<nvinfer1::Dims>(dimsString);
+                shapes[tensorName][static_cast<size_t>(selector)] = dims;
             }
         }
     };
@@ -444,32 +462,25 @@ void InferenceOptions::parse(Arguments& arguments)
     checkEraseOption(arguments, "--duration", duration);
     checkEraseOption(arguments, "--warmUp", warmup);
     checkEraseOption(arguments, "--sleepTime", sleep);
+    bool exposeDMA{false};
+    if (checkEraseOption(arguments, "--exposeDMA", exposeDMA))
+    {
+        overlap = !exposeDMA;
+    }
     checkEraseOption(arguments, "--useSpinWait", spin);
     checkEraseOption(arguments, "--threads", threads);
-    checkEraseOption(arguments, "--loadInputs", inputs);
     checkEraseOption(arguments, "--useCudaGraph", graph);
     checkEraseOption(arguments, "--buildOnly", skip);
 
     std::string list;
+    checkEraseOption(arguments, "--loadInputs", list);
+    std::vector<std::string> inputsList{splitToStringVec(list, ',')};
+    splitInsertKeyValue(inputsList, inputs);
+
+    list.erase();
     checkEraseOption(arguments, "--shapes", list);
     std::vector<std::string> shapeList{splitToStringVec(list, ',')};
-    for (const auto& s : shapeList)
-    {
-        std::vector<std::string> nameWithQuotes{splitToStringVec(s, '\'')};
-        if (nameWithQuotes.size() == 1)
-        {
-            // Name not wrapped with single quotes
-            std::vector<std::string> shapeSpec{splitToStringVec(s, ':')};
-            shapes.insert({shapeSpec[0], stringToValue<nvinfer1::Dims>(shapeSpec[1])});
-        }
-        else
-        {
-            // Name wrapped with single quotes
-            std::string tensorName = nameWithQuotes[1];
-            std::string dimsString = splitToStringVec(nameWithQuotes[2], ':')[1];
-            shapes.insert({tensorName, stringToValue<nvinfer1::Dims>(dimsString)});
-        }
-    }
+    splitInsertKeyValue(shapeList, shapes);
 
     int batchOpt{0};
     checkEraseOption(arguments, "--batch", batchOpt);
@@ -521,7 +532,7 @@ void AllOptions::parse(Arguments& arguments)
     system.parse(arguments);
     inference.parse(arguments);
 
-    if ((!build.maxBatch && inference.batch && inference.batch != defaultBatch)
+    if ((!build.maxBatch && inference.batch && inference.batch != defaultBatch && !build.shapes.empty())
         || (build.maxBatch && build.maxBatch != defaultMaxBatch && !inference.batch))
     {
         // If either has selected implict batch and the other has selected explicit batch
@@ -705,6 +716,11 @@ std::ostream& operator<<(std::ostream& os, const IOFormat& format)
         os << "int32:";
         break;
     }
+    case nvinfer1::DataType::kBOOL:
+    {
+        os << "Bool:";
+        break;
+    }
     }
 
     for (int f = 0; f < nvinfer1::EnumMax<nvinfer1::TensorFormat>(); ++f)
@@ -752,15 +768,6 @@ std::ostream& operator<<(std::ostream& os, const IOFormat& format)
     }
     return os;
 };
-
-std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
-{
-    for (int i = 0; i < dims.nbDims; ++i)
-    {
-        os << (i ? "x" : "") << dims.d[i];
-    }
-    return os;
-}
 
 std::ostream& operator<<(std::ostream& os, const ShapeRange& dims)
 {
@@ -837,31 +844,36 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
 std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
 {
 // clang-format off
-    os << "=== Inference Options ==="                                        << std::endl <<
+    os << "=== Inference Options ==="                                << std::endl <<
 
           "Batch: ";
     if (options.batch && options.shapes.empty())
     {
-                          os << options.batch                                << std::endl;
+                          os << options.batch                        << std::endl;
     }
     else
     {
-                          os << "Explicit"                                   << std::endl;
+                          os << "Explicit"                           << std::endl;
     }
-    os << "Iterations: "     << options.iterations << " (" << options.warmup <<
-                                                      " ms warm up)"         << std::endl <<
-          "Inputs: "         << options.inputs                               << std::endl <<
-          "Duration: "       << options.duration   << "s"                    << std::endl <<
-          "Sleep time: "     << options.sleep      << "ms"                   << std::endl <<
-          "Streams: "        << options.streams                              << std::endl <<
-          "Spin-wait: "      << boolToEnabled(options.spin)                  << std::endl <<
-          "Multithreading: " << boolToEnabled(options.threads)               << std::endl <<
-          "CUDA Graph: "     << boolToEnabled(options.graph)                 << std::endl <<
-          "Skip inference: " << boolToEnabled(options.skip)                  << std::endl;
-// clang-format on
+    os << "Iterations: "     << options.iterations                   << std::endl <<
+          "Duration: "       << options.duration   << "s (+ "
+                             << options.warmup     << "ms warm up)"  << std::endl <<
+          "Sleep time: "     << options.sleep      << "ms"           << std::endl <<
+          "Streams: "        << options.streams                      << std::endl <<
+          "ExposeDMA: "      << boolToEnabled(!options.overlap)      << std::endl <<
+          "Spin-wait: "      << boolToEnabled(options.spin)          << std::endl <<
+          "Multithreading: " << boolToEnabled(options.threads)       << std::endl <<
+          "CUDA Graph: "     << boolToEnabled(options.graph)         << std::endl <<
+          "Skip inference: " << boolToEnabled(options.skip)          << std::endl;
     if (options.batch)
     {
         printShapes(os, "inference", options.shapes);
+    }
+// clang-format on
+    os << "Inputs:" << std::endl;
+    for (const auto& input : options.inputs)
+    {
+        os << input.first << "<-" << input.second << std::endl;
     }
 
     return os;
@@ -936,6 +948,7 @@ void BuildOptions::help(std::ostream& os)
           "                                    provided and assuming that opt will be equal to max unless they are both specified;"   << std::endl <<           
           "                                    partially specified shapes are applied starting from the batch size;"                  << std::endl <<           
           "                                    dynamic shapes imply explicit batch"                                                   << std::endl <<           
+          "                                    input names can be wrapped with single quotes (ex: 'Input:0')"                         << std::endl <<
           "                              Input shapes spec ::= Ishp[\",\"spec]"                                                       << std::endl <<
           "                                           Ishp ::= name\":\"shape"                                                        << std::endl <<
           "                                          shape ::= N[[\"x\"N]*\"*\"]"                                                     << std::endl <<
@@ -950,8 +963,8 @@ void BuildOptions::help(std::ostream& os)
                                                                                                            << defaultMinTiming << ")" << std::endl <<
           "  --avgTiming=M               Set the number of times averaged in each iteration for kernel selection (default = "
                                                                                                            << defaultAvgTiming << ")" << std::endl <<
-          "  --fp16                      Enable fp16 mode (default = disabled)"                                                       << std::endl <<
-          "  --int8                      Run in int8 mode (default = disabled)"                                                       << std::endl <<
+          "  --fp16                      Enable fp16 algorithms, in addition to fp32 (default = disabled)"                            << std::endl <<
+          "  --int8                      Enable int8 algorithms, in addition to fp32 (default = disabled)"                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                            << std::endl <<
           "  --safe                      Only test the functionality available in safety restricted flows"                            << std::endl <<
           "  --saveEngine=<file>         Save the serialized engine"                                                                  << std::endl <<
@@ -974,26 +987,31 @@ void SystemOptions::help(std::ostream& os)
 void InferenceOptions::help(std::ostream& os)
 {
 // clang-format off
-    os << "=== Inference Options ==="                                                                                            << std::endl <<
-          "  --batch=N                   Set batch size for implicit batch engines (default = "           << defaultBatch << ")" << std::endl <<
-          "  --shapes=spec               Set input shapes for explicit batch and dynamic shapes inputs"                          << std::endl <<
-          "  --loadInputs=<file>         Load input values from file (default = disabled)"                                       << std::endl <<
-          "                              Input shapes spec ::= Ishp[\",\"spec]"                                                  << std::endl <<
-          "                                           Ishp ::= name\":\"shape"                                                   << std::endl <<
-          "                                          shape ::= N[[\"x\"N]*\"*\"]"                                                << std::endl <<
-          "  --iterations=N              Run at least N inference iterations (default = "            << defaultIterations << ")" << std::endl <<
+    os << "=== Inference Options ==="                                                                                               << std::endl <<
+          "  --batch=N                   Set batch size for implicit batch engines (default = "              << defaultBatch << ")" << std::endl <<
+          "  --shapes=spec               Set input shapes for dynamic shapes inputs. Input names can be wrapped with single quotes"
+                                                                                                                  "(ex: 'Input:0')" << std::endl <<
+          "                              Input shapes spec ::= Ishp[\",\"spec]"                                                     << std::endl <<
+          "                                           Ishp ::= name\":\"shape"                                                      << std::endl <<
+          "                                          shape ::= N[[\"x\"N]*\"*\"]"                                                   << std::endl <<
+          "  --loadInputs=spec           Load input values from files (default = generate random inputs). Input names can be "
+                                                                                       "wrapped with single quotes (ex: 'Input:0')" << std::endl <<
+          "                              Input values spec ::= Ival[\",\"spec]"                                                     << std::endl <<
+          "                                           Ival ::= name\":\"file"                                                       << std::endl <<
+          "  --iterations=N              Run at least N inference iterations (default = "               << defaultIterations << ")" << std::endl <<
           "  --warmUp=N                  Run for N milliseconds to warmup before measuring performance (default = "
-                                                                                                         << defaultWarmUp << ")" << std::endl <<
+                                                                                                            << defaultWarmUp << ")" << std::endl <<
           "  --duration=N                Run performance measurements for at least N seconds wallclock time (default = "
-                                                                                               << defaultDuration << ")"         << std::endl <<
+                                                                                                          << defaultDuration << ")" << std::endl <<
           "  --sleepTime=N               Delay inference start with a gap of N milliseconds between launch and compute "
-                                                                                            "(default = " << defaultSleep << ")" << std::endl <<
-          "  --streams=N                 Instantiate N engines to use concurrently (default = "         << defaultStreams << ")" << std::endl <<
+                                                                                               "(default = " << defaultSleep << ")" << std::endl <<
+          "  --streams=N                 Instantiate N engines to use concurrently (default = "            << defaultStreams << ")" << std::endl <<
+          "  --exposeDMA                 Serialize DMA transfers to and from device. (default = disabled)"                          << std::endl <<
           "  --useSpinWait               Actively synchronize on GPU events. This option may decrease synchronization time but "
-                                                                                "increase CPU usage and power (default = false)" << std::endl <<
-          "  --threads                   Enable multithreading to drive engines with independent threads (default = disabled)"   << std::endl <<
-          "  --useCudaGraph              Use cuda graph to capture engine execution and then launch inference (default = false)" << std::endl <<
-          "  --buildOnly                 Skip inference perf measurement (default = disabled)"                                   << std::endl;
+                                                                             "increase CPU usage and power (default = disabled)"    << std::endl <<
+          "  --threads                   Enable multithreading to drive engines with independent threads (default = disabled)"      << std::endl <<
+          "  --useCudaGraph              Use cuda graph to capture engine execution and then launch inference (default = disabled)" << std::endl <<
+          "  --buildOnly                 Skip inference perf measurement (default = disabled)"                                      << std::endl;
 // clang-format on
 }
 

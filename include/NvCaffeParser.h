@@ -97,6 +97,8 @@ public:
     //! \param nbWeights Number of weights.
     //!
     virtual nvinfer1::IPlugin* createPlugin(const char* layerName, const nvinfer1::Weights* weights, int nbWeights) TRTNOEXCEPT = 0;
+
+    virtual ~IPluginFactory() {}
 };
 
 //!
@@ -144,6 +146,8 @@ public:
     //! \param libNamespace Library Namespace associated with the plugin object
     //!
     virtual nvinfer1::IPluginV2* createPlugin(const char* layerName, const nvinfer1::Weights* weights, int nbWeights, const char* libNamespace = "") TRTNOEXCEPT = 0;
+
+    virtual ~IPluginFactoryV2() {}
 };
 //!
 //! \class ICaffeParser
@@ -259,14 +263,14 @@ public:
     //! \brief Set the ErrorRecorder for this interface
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting 
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
     //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
     //! a recorder has been registered.
-    //! 
+    //!
     //! \param recorder The error recorder to register with this interface.
-    //
+    //!
     //! \see getErrorRecorder
-    //! 
+    //!
     virtual void setErrorRecorder(nvinfer1::IErrorRecorder* recorder) TRTNOEXCEPT = 0;
 
     //!
@@ -297,7 +301,11 @@ TENSORRTAPI ICaffeParser* createCaffeParser() TRTNOEXCEPT;
 //! \note No part of the protocol buffers library can be used after this function is called.
 //!
 TENSORRTAPI void shutdownProtobufLibrary() TRTNOEXCEPT;
-}
+} // namespace nvcaffeparser1
 
+//!
+//! Internal C entry point for creating ICaffeParser.
+//! @private
+//!
 extern "C" TENSORRTAPI void* createNvCaffeParser_INTERNAL();
 #endif

@@ -344,7 +344,7 @@ bool EmbLayerNormPluginDynamic::supportsFormatCombination(
     }
 
     // pos == 4: mask
-    return desc.type == DataType::kINT32 && desc.dims.nbDims == 1 && desc.dims.d[0] == prev.dims.d[0];
+    return desc.type == DataType::kINT32 && desc.dims.nbDims == 1 && desc.dims.d[0] == prev.dims.d[1];
 }
 
 void EmbLayerNormPluginDynamic::configurePlugin(

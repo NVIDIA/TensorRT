@@ -72,7 +72,7 @@ public:
             std::time_t timestamp = std::time(nullptr);
             tm* tm_local = std::localtime(&timestamp);
             std::cout << "[";
-            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_mon << "/";
+            std::cout << std::setw(2) << std::setfill('0') << 1 + tm_local->tm_mon << "/";
             std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_mday << "/";
             std::cout << std::setw(4) << std::setfill('0') << 1900 + tm_local->tm_year << "-";
             std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_hour << ":";

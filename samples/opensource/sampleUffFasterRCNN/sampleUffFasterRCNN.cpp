@@ -332,7 +332,7 @@ bool SampleUffFasterRcnn::infer()
 
     // Memcpy from host input buffers to device input buffers
     buffers.copyInputToDevice();
-    bool status;
+    bool status{true};
 
     for (int i = 0; i < mParams.repeat; ++i)
     {
@@ -358,7 +358,7 @@ bool SampleUffFasterRcnn::infer()
         return false;
     }
 
-    return true;
+    return status;
 }
 
 bool SampleUffFasterRcnn::teardown()
@@ -446,7 +446,7 @@ SampleUffFasterRcnnParams initializeSampleParams(const FrcnnArgs& args)
         params.dataDirs.push_back("data/samples/faster-rcnn/");
     }
 
-    assert(args.batchSize == args.inputImages.size());
+    assert(args.batchSize == static_cast<int>(args.inputImages.size()));
     params.inputImages = args.inputImages;
     params.uffFileName = "faster_rcnn.uff";
     params.inputNodeName = "input_1";

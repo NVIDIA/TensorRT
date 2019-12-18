@@ -47,6 +47,8 @@ using namespace sample;
 int main(int argc, char** argv)
 {
     const std::string sampleName = "TensorRT.trtexec";
+    const std::string supportNote{"Note: CUDA graphs is not supported in this version."};
+
     auto sampleTest = gLogger.defineTest(sampleName, argc, argv);
 
     gLogger.reportTestStart(sampleTest);
@@ -79,10 +81,7 @@ int main(int argc, char** argv)
         if (failed)
         {
             AllOptions::help(std::cout);
-            std::cout << "Note: the following options are not fully supported in trtexec:"
-                         " dynamic shapes, multistream/threads, cuda graphs, json logs,"
-                         " and actual data IO"
-                      << std::endl;
+            std::cout << supportNote << std::endl;
             return gLogger.reportFail(sampleTest);
         }
     }
@@ -94,10 +93,7 @@ int main(int argc, char** argv)
     if (options.helps)
     {
         AllOptions::help(std::cout);
-        std::cout << "Note: the following options are not fully supported in trtexec:"
-                     " dynamic shapes, multistream/threads, cuda graphs, json logs,"
-                     " and actual data IO"
-                  << std::endl;
+        std::cout << supportNote << std::endl;
         return gLogger.reportPass(sampleTest);
     }
 
@@ -137,16 +133,37 @@ int main(int argc, char** argv)
         return gLogger.reportFail(sampleTest);
     }
 
-    if (options.reporting.profile)
+    if (options.reporting.profile || !options.reporting.exportTimes.empty())
     {
-        iEnv.profiler.reset(new SimpleProfiler("Layer time"));
+        iEnv.profiler.reset(new Profiler);
     }
 
     setUpInference(iEnv, options.inference);
-    std::vector<InferenceTime> times;
-    runInference(options.inference, iEnv, times);
+    std::vector<InferenceTrace> trace;
+    runInference(options.inference, iEnv, trace);
 
-    printTimes(times, options.reporting, options.inference.batch * options.inference.streams, gLogInfo);
+    printPerformanceReport(trace, options.reporting, static_cast<float>(options.inference.warmup), options.inference.batch, gLogInfo);
+
+    if (options.reporting.output)
+    {
+        dumpOutputs(*iEnv.context.front(), *iEnv.bindings.front(), gLogInfo);
+    }
+    if (!options.reporting.exportOutput.empty())
+    {
+        exportJSONOutput(*iEnv.context.front(), *iEnv.bindings.front(), options.reporting.exportOutput);
+    }
+    if (!options.reporting.exportTimes.empty())
+    {
+        exportJSONTrace(trace, options.reporting.exportTimes);
+    }
+    if (options.reporting.profile)
+    {
+        iEnv.profiler->print(gLogInfo);
+    }
+    if (!options.reporting.exportProfile.empty())
+    {
+        iEnv.profiler->exportJSONProfile(options.reporting.exportProfile);
+    }
 
     return gLogger.reportPass(sampleTest);
 }

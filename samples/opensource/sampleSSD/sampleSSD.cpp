@@ -187,7 +187,6 @@ bool SampleSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     {
         config->setFlag(BuilderFlag::kFP16);
     }
-    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
     // Calibrator life time needs to last until after the engine is built.
     std::unique_ptr<IInt8Calibrator> calibrator;
@@ -203,6 +202,7 @@ bool SampleSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
         config->setInt8Calibrator(calibrator.get());
     }
 
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
         builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
@@ -398,7 +398,7 @@ SampleSSDParams initializeSampleParams(const samplesCommon::Args& args)
     params.outputClsSize = 21;
     params.keepTopK = 200; // Number of total bboxes to be kept per image after NMS step. It is same as
                            // detection_output_param.keep_top_k in prototxt file
-    params.nbCalBatches = 500;
+    params.nbCalBatches = 50;
     params.visualThreshold = 0.6f;
     params.calibrationBatches = "batches/batch_calibration";
 

@@ -89,9 +89,11 @@ To see the full list of available options and their descriptions, use the `-h` o
 ```
 Usage: ./sample_char_rnn [-h or --help] [-d or --datadir=<path_to_data_directory>]
 
---help Display help information
+--help          Display help information
 
---datadir Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use data/samples/char-rnn/ and data/char-rnn/
+--useILoop      Use ILoop LSTM definition
+
+--datadir       Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use data/samples/char-rnn/ and data/char-rnn/
 
 ```
 

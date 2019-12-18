@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+#ifndef _MSC_VER
+#include <unistd.h>
+#include <sys/time.h>
+#endif
+
 #include <assert.h>
 #include <chrono>
 #include <ctime>
@@ -23,7 +28,6 @@
 #include <sstream>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <time.h>
 #include <vector>
 
@@ -37,9 +41,6 @@
 
 // max
 #include <algorithm>
-
-// data type
-#include <unistd.h>
 
 // MaskRCNN Parameter
 #include "mrcnn_config.h"

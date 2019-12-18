@@ -12,13 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#ARG CUDA_VERSION=10.1
-#FROM ubuntu:18.04 
-FROM nvidia/cuda:10.0-devel-ubuntu18.04
+ARG CUDA_VERSION=10.0
+ARG UBUNTU_VERSION=18.04
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
 
 LABEL maintainer="NVIDIA CORPORATION"
 
+ARG uid=1000
+ARG gid=1000
+RUN groupadd -r -f -g ${gid} trtuser && useradd -r -u ${uid} -g ${gid} -ms /bin/bash trtuser
+RUN usermod -aG sudo trtuser
+RUN echo 'trtuser:nvidia' | chpasswd
+RUN mkdir -p /workspace && chown trtuser /workspace
 # Install requried libraries
+RUN apt-get update && apt-get install -y software-properties-common
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     wget \
@@ -26,20 +34,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     pkg-config \
     python3 \
-    python3-pip
+    python3-pip \
+    python3-dev \
+    python3-setuptools \
+    python3-wheel \
+    sudo \
+    ssh \
+    pbzip2 \
+    pv \
+    bzip2 \
+    unzip
 
 RUN cd /usr/local/bin &&\
     ln -s /usr/bin/python3 python &&\
     ln -s /usr/bin/pip3 pip
 
 # Install Cmake
-RUN cd /tmp &&\
-    wget https://github.com/Kitware/CMake/releases/download/v3.14.4/cmake-3.14.4-Linux-x86_64.sh &&\
-    chmod +x cmake-3.14.4-Linux-x86_64.sh &&\
-    ./cmake-3.14.4-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license &&\
+RUN cd /tmp && \
+    wget https://github.com/Kitware/CMake/releases/download/v3.14.4/cmake-3.14.4-Linux-x86_64.sh && \
+    chmod +x cmake-3.14.4-Linux-x86_64.sh && \
+    ./cmake-3.14.4-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
     rm ./cmake-3.14.4-Linux-x86_64.sh
 
-        
+
 COPY docker/jetpack_files /pdk_files
 COPY scripts/stubify.sh /pdk_files
 
@@ -57,7 +74,7 @@ RUN dpkg -x /pdk_files/libcudnn7_7.5.0.56-1+cuda10.0_arm64.deb /pdk_files/cudnn 
     && ln -s libcudnn.so.7 libcudnn.so \
     && cd /pdk_files/cudnn \
     && ln -s usr/include/aarch64-linux-gnu include \
-    && ln -s usr/lib/aarch64-linux-gnu lib \ 
+    && ln -s usr/lib/aarch64-linux-gnu lib \
     && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_v7.h /usr/include/cudnn.h
 
 # Unpack libnvinfer
@@ -69,9 +86,9 @@ RUN dpkg -x /pdk_files/libnvinfer6_6.0.1-1+cuda10.0_arm64.deb /pdk_files/tensorr
     && dpkg -x /pdk_files/libnvinfer-plugin6_6.0.1-1+cuda10.0_arm64.deb /pdk_files/tensorrt \
     && dpkg -x /pdk_files/libnvinfer-plugin-dev_6.0.1-1+cuda10.0_arm64.deb /pdk_files/tensorrt \
     && dpkg -x /pdk_files/libnvonnxparsers6_6.0.1-1+cuda10.0_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvonnxparsers-dev_6.0.1-1+cuda10.0_arm64.deb /pdk_files/tensorrt 
+    && dpkg -x /pdk_files/libnvonnxparsers-dev_6.0.1-1+cuda10.0_arm64.deb /pdk_files/tensorrt
 
-# create stub libraries 
+# create stub libraries
 RUN cd /pdk_files/tensorrt \
     && ln -s usr/include/aarch64-linux-gnu include \
     && ln -s usr/lib/aarch64-linux-gnu lib \
@@ -84,9 +101,8 @@ RUN cd /pdk_files/tensorrt \
 
 # Set environment and working directory
 ENV TRT_RELEASE /pdk_files/tensorrt
-ENV TRT_LIB_DIR $TRT_RELEASE/lib
 ENV TRT_SOURCE /workspace/TensorRT
-ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$TRT_LIB_DIR
 WORKDIR /workspace
 
+USER trtuser
 RUN ["/bin/bash"]

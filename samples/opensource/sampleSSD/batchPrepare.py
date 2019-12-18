@@ -35,7 +35,7 @@ height = 300
 width = 300
 NUM_BATCHES = 0
 NUM_PER_BATCH = 1
-NUM_CALIBRATION_IMAGES = 500
+NUM_CALIBRATION_IMAGES = 50
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--inDir', required=True, help='Input directory')

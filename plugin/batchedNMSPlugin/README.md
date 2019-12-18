@@ -110,4 +110,5 @@ This is the first release of this `README.md` file.
 
 ## Known issues
 
-When running `cub::DeviceSegmentedRadixSort::SortPairsDescending` with `cuda-memcheck --tool racecheck`, it will not work correctly.
+- When running `cub::DeviceSegmentedRadixSort::SortPairsDescending` with `cuda-memcheck --tool racecheck`, it will not work correctly.
+- BatchedNMS plugin cannot handle greater than 4096 rectangles in the input.

@@ -145,11 +145,12 @@ struct InferenceOptions : public Options
     int duration{defaultDuration};
     int sleep{defaultSleep};
     int streams{defaultStreams};
+    bool overlap{true};
     bool spin{false};
     bool threads{false};
     bool graph{false};
     bool skip{false};
-    std::string inputs;
+    std::unordered_map<std::string, std::string> inputs;
     std::unordered_map<std::string, nvinfer1::Dims> shapes;
 
     void parse(Arguments& arguments) override;
@@ -200,8 +201,6 @@ std::ostream& operator<<(std::ostream& os, const BaseModelOptions& options);
 std::ostream& operator<<(std::ostream& os, const UffInput& input);
 
 std::ostream& operator<<(std::ostream& os, const IOFormat& format);
-
-std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims);
 
 std::ostream& operator<<(std::ostream& os, const ShapeRange& dims);
 

@@ -90,14 +90,16 @@ This sample comes with a pre-trained model. However, if you want to train your o
     -   `sampleMovieLens.pb`: The frozen TensorFlow graph which contains the information of the network structure and parameters.
 
 5.  Convert the trained model weights to UFF format which sampleMovieLens understands.
-    1.  Install UFF. The `convert_to_uff.py` utility is located in the `/usr/local/bin/convert-to-uff` directory. This utility is installed with the `UFF.whl` file that is shipped with TensorRT.
-    2.  Convert the `frozen .pb` file to `.uff` format.
+    1.  Convert the `frozen .pb` file to `.uff` format.
         ```
-        python3 convert_to_uff.py sampleMovieLens.pb -p preprocess.py
+        convert-to-uff sampleMovieLens.pb -p preprocess.py
         ```
 
         The `preprocess.py` script is a preprocessing step that needs to be applied to the TensorFlow graph before it can be used by TensorRT. The reason for this is that TensorFlow's concatenation operation accounts for the batch dimension while TensorRT's concatenation operation does not.
-    3.  Copy:
+
+        The `convert-to-uff` tool is installed together with UFF installation. If you install UFF with deb/rpm, please use the `convert_to_uff.py` script located in `/usr/lib/python3.X/dist-packages/uff*/bin`.
+
+    2.  Copy:
         -   The `sampleMovieLens.uff` file to the `<TensorRT Install>/data/movielens` directory.
         -   The `movielens_ratings.txt` file to the `<TensorRT Install>/data/movielens` directory.
 

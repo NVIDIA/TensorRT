@@ -63,7 +63,7 @@ When you build a network by individually creating every layer, ensure you provid
     In this statement, we are loading the filter weights weightsMap["conv1filter"] and bias weightsMap["conv1bias"] to the
     convolution layer.
 	```
-	IConvolutionLayer* conv1 = network->addConvolution(*scale_1->getOutput(0), 20, DimsHW{5, 5}, weightMap["conv1filter"], weightMap["conv1bias"]);
+	IConvolutionLayer* conv1 = network->addConvolutionNd(*scale_1->getOutput(0), 20, Dims{2, {5, 5}, {}}, weightMap["conv1filter"], weightMap["conv1bias"]);
 	```
 
 ## Running the sample
@@ -152,7 +152,7 @@ The following resources provide a deeper understanding about MNIST:
 - [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md)
 
 **Documentation**
-- [Introduction To NVIDIA’s TensorRT Samples](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#samples)
+- [Introduction To NVIDIA’s TensorRT Samples](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#samples)
 - [Working With TensorRT Using The C++ API](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#c_topics)
 - [NVIDIA’s TensorRT Documentation Library](https://docs.nvidia.com/deeplearning/sdk/tensorrt-archived/index.html)
 

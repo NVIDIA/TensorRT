@@ -18,7 +18,7 @@
 	* [Generating batch files for non-Caffe users](#generating-batch-files-for-non-caffe-users)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample---help-options)
-- [Additional resources](#additiona-resources)
+- [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
 - [Known issues](#known-issues)
@@ -34,7 +34,7 @@ Specifically, this sample demonstrates how to perform inference in 8-bit integer
 
 INT8 engines are build from 32-bit network definitions, similarly to 32-bit and 16-bit engines, but with more configuration steps. In particular, the builder and network must be configured to use INT8, which requires per-tensor dynamic ranges. The INT8 calibrator can determine how best to represent weights and activations as 8-bit integers and sets the per tensor dynamic ranges accordingly. Alternatively, you can set custom per tensor dynamic ranges; this is covered in sampleINT8API.
 
-This sample is accompanied by the [MNIST training set](https://github.com/BVLC/caffe/blob/master/data/mnist/get_mnist.sh) located in the `TensorRT-x.x.x.x/data/mnist` directory, where `x.x.x.x` is your installed version of TensorRT. The packaged MNIST model that is shipped with this sample is based on [lenet.prototxt](https://github.com/BVLC/caffe/edit/master/examples/mnist/lenet.prototxt). For more information, see the [MNIST BVLC Caffe example](https://github.com/BVLC/caffe/tree/master/examples/mnist). This sample can also be used with other Image classification models, for example, [deploy.prototxt](https://github.com/BVLC/caffe/blob/master/models/bvlc_googlenet/deploy.prototxt).
+This sample is accompanied by the [MNIST training set](https://github.com/BVLC/caffe/blob/master/data/mnist/get_mnist.sh) located in the `TensorRT-x.x.x.x/data/mnist` directory, where `x.x.x.x` is your installed version of TensorRT. The packaged MNIST model that is shipped with this sample is based on [lenet.prototxt](https://github.com/BVLC/caffe/edit/master/examples/mnist/lenet.prototxt). For more information, see the [MNIST BVLC Caffe example](https://github.com/BVLC/caffe/tree/master/examples/mnist).
 
 The packaged data set file that is shipped with this sample is based on the [MNIST data set](https://github.com/BVLC/caffe/tree/master/data/mnist). However, the batch file generation from the above data set is described in [Batch files for calibration](#batch-files-for-calibration).
 
