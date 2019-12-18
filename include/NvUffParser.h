@@ -112,6 +112,7 @@ public:
     virtual nvinfer1::IPlugin* createPlugin(const char* layerName, const nvinfer1::Weights* weights, int nbWeights,
                                             const FieldCollection fc) TRTNOEXCEPT = 0;
 
+    virtual ~IPluginFactory() {}
 };
 
 //!
@@ -267,8 +268,13 @@ TENSORRTAPI IUffParser* createUffParser() TRTNOEXCEPT;
 //!
 TENSORRTAPI void shutdownProtobufLibrary(void) TRTNOEXCEPT;
 
-}
+} // namespace nvuffparser
 
+
+//!
+//! Internal C entry point for creating IUffParser
+//! @private
+//!
 extern "C" TENSORRTAPI void* createNvUffParser_INTERNAL() TRTNOEXCEPT;
 
-#endif // NV_UFF_PARSER_H
+#endif /* !NV_UFF_PARSER_H */

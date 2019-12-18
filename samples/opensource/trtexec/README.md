@@ -8,6 +8,8 @@
     * [Example 2: Profiling a custom layer](#example-2-profiling-a-custom-layer)
     * [Example 3: Running a network on DLA](#example-3-running-a-network-on-dla)
     * [Example 4: Running an ONNX model with full dimensions and dynamic shapes](#example-4-running-an-onnx-model-with-full-dimensions-and-dynamic-shapes)
+    * [Example 5: Collecting and printing a timing trace](#example-5-collecting-and-printing-a-timing-trace)
+    * [Example 6: Tune throughput with multi-streaming](#example-6-tune-throughput-with-multi-streaming)
 - [Tool command line arguments](#tool-command-line-arguments)
 - [Additional resources](#additional-resources)
 - [License](#license)
@@ -77,25 +79,53 @@ For more information about DLA, see [Working With DLA](https://docs.nvidia.com/d
 To run an ONNX model in full-dimensions mode with static input shapes:
 
 ```
-./trtexec --onnx=model.onnx --explicitBatch
+./trtexec --onnx=model.onnx
 ```
 
 The following examples assumes an ONNX model with one dynamic input with name `input` and dimensions `[-1, 3, 244, 244]`
 
-To run an ONNX model with dynamic shapes with a given input shape:
+To run an ONNX model in full-dimensions mode with an given input shape:
 
 ```
-./trtexec --onnx=model.onnx --explicitBatch --shapes=input:32x3x244x244
+./trtexec --onnx=model.onnx --shapes=input:32x3x244x244
 ```
 
 To benchmark your ONNX model with a range of possible input shapes:
 
 ```
-./trtexec --onnx=model.onnx --explicitBatch --minShapes=input:1x3x244x244 --optShapes=input:16x3x244x244 --maxShapes=input:32x3x244x244 --shapes=input:5x3x244x244
+./trtexec --onnx=model.onnx --minShapes=input:1x3x244x244 --optShapes=input:16x3x244x244 --maxShapes=<inputName1>input:32x3x244x244 --shapes=input:5x3x244x244
 ```
 
 For more information about using dynamic shapes, see [Working With Dynamic Shapes](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#work_dynamic_shapes)
 
+### Example 5: Collecting and printing a timing trace
+
+When running, `trtexec` prints the measured performance, but can also export the measurement trace to a json file:
+```
+./trtexec --deploy=data/AlexNet/AlexNet_N2.prototxt --output=prob --exportTimes=trace.json
+```
+Once the trace is stored in a file, it can be printed using the `tracer.py` utility. This tool prints timestamps and duration of input, compute, and output, in different forms:
+```
+./tracer.py trace.json
+```
+Similarly, profiles can also be printed and stored in a json file. The utility `profiler.py` can be used to read and print the profile from a json file.
+
+### Example 6: Tune throughput with multi-streaming
+
+Tuning throughput may require running multiple concurrent streams of execution. This is the case for example when the latency achieved is well within the desired
+threshold, and we can increase the throughput, even at the expense of some latency. For example, saving engines for batch sizes 1 and 2 and assume that both
+execute within 2ms, the latency threshold:
+```
+trtexec --deploy=GoogleNet_N2.prototxt --output=prob --batch=1 --saveEngine=g1.trt --int8 --buildOnly
+trtexec --deploy=GoogleNet_N2.prototxt --output=prob --batch=2 --saveEngine=g2.trt --int8 --buildOnly
+```
+Now, the saved engines can be tried to find the combination batch/streams below 2 ms that maximizes the throughput:
+```
+trtexec --loadEngine=g1.trt --batch=1 --streams=2
+trtexec --loadEngine=g1.trt --batch=1 --streams=3
+trtexec --loadEngine=g1.trt --batch=1 --streams=4
+trtexec --loadEngine=g2.trt --batch=2 --streams=2
+```
 ## Tool command line arguments
 
 To see the full list of available options and their descriptions, issue the `./trtexec --help` command.

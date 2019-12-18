@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
+#include <array>
 #include <vector>
-#include <chrono>
 #include <numeric>
-#include <utility> 
+#include <algorithm>
+#include <utility>
 #include <thread>
 #include <mutex>
 #include <functional>
 #include <limits>
+#include <memory>
 
 #include "NvInfer.h"
 
+#include "logger.h"
+#include "sampleDevice.h"
 #include "sampleUtils.h"
 #include "sampleOptions.h"
 #include "sampleReporting.h"
@@ -35,15 +39,15 @@ namespace sample
 
 void setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inference)
 {
+    for (int s = 0; s < inference.streams; ++s)
+    {
+        iEnv.context.emplace_back(iEnv.engine->createExecutionContext());
+        iEnv.bindings.emplace_back(new Bindings);
+    }
     if (iEnv.profiler)
     {
         iEnv.context.front()->setProfiler(iEnv.profiler.get());
     }
-    for (int s = 0; s < inference.streams; ++s)
-    {
-        iEnv.context.emplace_back(iEnv.engine->createExecutionContext());
-    }
-    iEnv.bindings.resize(inference.streams);
 
     // Set all input dimensions before all bindings can be allocated
     for (int b = 0; b < iEnv.engine->getNbBindings(); ++b)
@@ -51,13 +55,43 @@ void setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inferenc
         if (iEnv.engine->bindingIsInput(b))
         {
             auto dims = iEnv.context.front()->getBindingDimensions(b);
-            if (std::any_of(dims.d, dims.d + dims.nbDims, [](int d) { return d == -1; }))
+            const bool isDynamicInput = std::any_of(dims.d, dims.d + dims.nbDims, [](int dim){ return dim == -1; }) || iEnv.engine->isShapeBinding(b);
+            if (isDynamicInput)
             {
                 auto shape = inference.shapes.find(iEnv.engine->getBindingName(b));
-                std::copy(shape->second.d, shape->second.d + shape->second.nbDims, dims.d);
+
+                // If no shape is provided, set dynamic dimensions to 1.
+                nvinfer1::Dims staticDims{};
+                if (shape == inference.shapes.end())
+                {
+                    constexpr int DEFAULT_DIMENSION = 1;
+                    if (iEnv.engine->isShapeBinding(b))
+                    {
+                        staticDims.nbDims = dims.d[0];
+                        std::fill(staticDims.d, staticDims.d + staticDims.nbDims, DEFAULT_DIMENSION);
+                    }
+                    else
+                    {
+                        staticDims.nbDims = dims.nbDims;
+                        std::transform(dims.d, dims.d + dims.nbDims, staticDims.d, [&](int dim) { return dim > 0 ? dim : DEFAULT_DIMENSION; });
+                    }
+                    gLogWarning << "Dynamic dimensions required for input: " << iEnv.engine->getBindingName(b) << ", but no shapes were provided. Automatically overriding shape to: " << staticDims << std::endl;
+                }
+                else
+                {
+                    staticDims = shape->second;
+                }
+
                 for (auto& c : iEnv.context)
                 {
-                    c->setBindingDimensions(b, dims);
+                    if (iEnv.engine->isShapeBinding(b))
+                    {
+                        c->setInputShapeBinding(b, staticDims.d);
+                    }
+                    else
+                    {
+                        c->setBindingDimensions(b, staticDims);
+                    }
                 }
             }
         }
@@ -65,169 +99,298 @@ void setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inferenc
 
     for (int b = 0; b < iEnv.engine->getNbBindings(); ++b)
     {
-        auto dims = iEnv.context.front()->getBindingDimensions(b);
-        auto vecDim = iEnv.engine->getBindingVectorizedDim(b);
-        if (vecDim != -1)
+        const auto dims = iEnv.context.front()->getBindingDimensions(b);
+        const auto vecDim = iEnv.engine->getBindingVectorizedDim(b);
+        const auto comps = iEnv.engine->getBindingComponentsPerElement(b);
+        const auto dataType = iEnv.engine->getBindingDataType(b);
+        const auto vol = volume(dims, vecDim, comps, inference.batch);
+        const auto name = iEnv.engine->getBindingName(b);
+        const auto isInput = iEnv.engine->bindingIsInput(b);
+        for (auto& bindings : iEnv.bindings)
         {
-            dims.d[vecDim] = roundUp(dims.d[vecDim], iEnv.engine->getBindingComponentsPerElement(b));
-        }
-        auto name = iEnv.engine->getBindingName(b);
-        auto vol = volume(dims) * std::max(inference.batch, 1);
-        vol *= dataTypeSize(iEnv.engine->getBindingDataType(b));
-        for (auto& bin : iEnv.bindings)
-        {
-            bin.addBinding(b, name, vol);
+            const auto input = inference.inputs.find(name);
+            if (isInput && input != inference.inputs.end())
+            {
+                bindings->addBinding(b, name, isInput, vol, dataType, input->second);
+            }
+            else
+            {
+                bindings->addBinding(b, name, isInput, vol, dataType);
+            }
         }
     }
 }
 
 namespace {
 
-struct SynchStruct
+//!
+//! \struct SyncStruct
+//! \brief Threads synchronization structure
+//!
+struct SyncStruct
 {
     std::mutex mutex;
     TrtCudaStream mainStream;
     TrtCudaEvent mainStart{cudaEventBlockingSync};
     int sleep{0};
-    InferenceTime totalTime;
 };
 
-struct IterStruct
+//!
+//! \class EnqueueImplicit
+//! \brief Functor to enqueue inference with implict batch
+//!
+class EnqueueImplicit
 {
-    TrtCudaStream stream;
-    TrtCudaEvent start{cudaEventBlockingSync};
-    TrtCudaEvent end{cudaEventBlockingSync};
-    nvinfer1::IExecutionContext* context{nullptr};
-    void** buffers{nullptr};
-};
 
-inline
-void enqueue(nvinfer1::IExecutionContext& context, int batch, void** buffers, TrtCudaStream& stream)
-{
-    if (batch)
+public:
+
+    explicit EnqueueImplicit(int batch): mBatch(batch) {}
+
+    void operator() (nvinfer1::IExecutionContext& context, void** buffers, TrtCudaStream& stream) const
     {
-        context.enqueue(batch, buffers, stream.get(), nullptr);
+        context.enqueue(mBatch, buffers, stream.get(), nullptr);
     }
-    else
+
+private:
+
+    int mBatch{};
+};
+
+//!
+//! \class EnqueueExplicit
+//! \brief Functor to enqueue inference with explict batch
+//!
+class EnqueueExplicit
+{
+
+public:
+
+    void operator() (nvinfer1::IExecutionContext& context, void** buffers, TrtCudaStream& stream) const
     {
         context.enqueueV2(buffers, stream.get(), nullptr);
     }
-}
+};
 
-void inferenceLoop(std::vector<IterStruct>& streamItor, SynchStruct& synch, int batch, int iterations, float maxDuration, float warmup, std::vector<InferenceTime>& times)
+using EnqueueFunction = std::function<void(nvinfer1::IExecutionContext&, void**, TrtCudaStream&)>;
+
+enum class StreamType : int
 {
-    float duration = 0;
-    float gpuStart = 0;
+    kINPUT = 0,
+    kCOMPUTE = 1,
+    kOUTPUT = 2,
+    kNUM = 3
+};
+
+enum class EventType : int
+{
+    kINPUT_S = 0,
+    kINPUT_E = 1,
+    kCOMPUTE_S = 2,
+    kCOMPUTE_E = 3,
+    kOUTPUT_S = 4,
+    kOUTPUT_E = 5,
+    kNUM = 6
+};
+
+using MultiStream = std::array<TrtCudaStream, static_cast<int>(StreamType::kNUM)>;
+
+using MultiEvent = std::array<std::unique_ptr<TrtCudaEvent>, static_cast<int>(EventType::kNUM)>;
+
+//!
+//! \class Iteration
+//! \brief Inference iteration and streams management
+//!
+class Iteration
+{
+
+public:
+
+    Iteration(int id, bool overlap, bool spin, nvinfer1::IExecutionContext& context, Bindings& bindings,
+               EnqueueFunction enqueue): mContext(context), mBindings(bindings), mEnqueue(enqueue),
+               mStreamId(id), mDepth(1 + overlap), mActive(mDepth), mEvents(mDepth)
+    {
+        for (int d = 0; d < mDepth; ++d)
+        {
+            for (int e = 0; e < static_cast<int>(EventType::kNUM); ++e)
+            {
+                mEvents[d][e].reset(new TrtCudaEvent(!spin));
+            }
+        }
+    }
+
+    void query()
+    {
+        if (mActive[mNext])
+        {
+            return;
+        }
+
+        record(EventType::kINPUT_S, StreamType::kINPUT);
+        mBindings.transferInputToDevice(getStream(StreamType::kINPUT));
+        record(EventType::kINPUT_E, StreamType::kINPUT);
+
+        wait(EventType::kINPUT_E, StreamType::kCOMPUTE); // Wait for input DMA before compute
+        record(EventType::kCOMPUTE_S, StreamType::kCOMPUTE);
+        mEnqueue(mContext, mBindings.getDeviceBuffers(), getStream(StreamType::kCOMPUTE));
+        record(EventType::kCOMPUTE_E, StreamType::kCOMPUTE);
+
+        wait(EventType::kCOMPUTE_E, StreamType::kOUTPUT); // Wait for compute before output DMA
+        record(EventType::kOUTPUT_S, StreamType::kOUTPUT);
+        mBindings.transferOutputToHost(getStream(StreamType::kOUTPUT));
+        record(EventType::kOUTPUT_E, StreamType::kOUTPUT);
+
+        mActive[mNext] = true;
+        moveNext();
+    }
+
+    float sync(const TrtCudaEvent& start, std::vector<InferenceTrace>& trace)
+    {
+        if (mActive[mNext])
+        {
+            getEvent(EventType::kOUTPUT_E).synchronize();
+            trace.emplace_back(getTrace(start));
+            mActive[mNext] = false;
+            return getEvent(EventType::kCOMPUTE_S) - start;
+        }
+        return 0;
+    }
+
+    void syncAll(const TrtCudaEvent& start, std::vector<InferenceTrace>& trace)
+    {
+        for (int d = 0; d < mDepth; ++d)
+        {
+            sync(start, trace);
+            moveNext();
+        }
+    }
+
+    void wait(TrtCudaEvent& start)
+    {
+        getStream(StreamType::kINPUT).wait(start);
+    }
+
+private:
+
+    void moveNext()
+    {
+        mNext = mDepth - 1 - mNext;
+    }
+
+    TrtCudaStream& getStream(StreamType t)
+    {
+        return mStream[static_cast<int>(t)];
+    }
+
+    TrtCudaEvent& getEvent(EventType t)
+    {
+        return *mEvents[mNext][static_cast<int>(t)];
+    }
+
+    void record(EventType e, StreamType s)
+    {
+        getEvent(e).record(getStream(s));
+    }
+
+    void wait(EventType e, StreamType s)
+    {
+        getStream(s).wait(getEvent(e));
+    }
+
+    InferenceTrace getTrace(const TrtCudaEvent& start)
+    {
+        return InferenceTrace(mStreamId, getEvent(EventType::kINPUT_S) - start, getEvent(EventType::kINPUT_E) - start,
+                                         getEvent(EventType::kCOMPUTE_S) - start, getEvent(EventType::kCOMPUTE_E) - start,
+                                         getEvent(EventType::kOUTPUT_S)- start, getEvent(EventType::kOUTPUT_E)- start);
+    }
+
+    nvinfer1::IExecutionContext& mContext;
+    Bindings& mBindings;
+
+    EnqueueFunction mEnqueue;
+
+    int mStreamId{0};
+    int mNext{0};
+    int mDepth{2}; // default to double buffer to hide DMA transfers
+
+    std::vector<bool> mActive;
+    MultiStream mStream;
+    std::vector<MultiEvent> mEvents;
+};
+
+using IterationStreams = std::vector<std::unique_ptr<Iteration>>;
+
+void inferenceLoop(IterationStreams& iStreams, const TrtCudaEvent& mainStart, int batch, int iterations, float maxDurationMs, float warmupMs, std::vector<InferenceTrace>& trace)
+{
+    float durationMs = 0;
     int skip = 0;
 
-    auto loopStart = std::chrono::high_resolution_clock::now();
-    auto timingStart{loopStart};
-    auto timingEnd{loopStart};
-
-    for (int i = 0; i - skip < iterations || duration < maxDuration; ++i)
+    for (int i = 0; i < iterations + skip || durationMs < maxDurationMs; ++i)
     {
-        auto iterStart = std::chrono::high_resolution_clock::now();
-
-        for (auto& s : streamItor)
+        for (auto& s : iStreams)
         {
-            s.start.record(s.stream);
-            enqueue(*s.context, batch, s.buffers, s.stream);
-            s.end.record(s.stream);
+            s->query();
         }
-        float currentGpuStart = std::numeric_limits<float>::max();
-        for (auto& s : streamItor)
+        for (auto& s : iStreams)
         {
-            s.end.synchronize();
-            currentGpuStart = std::min(currentGpuStart, s.start - synch.mainStart);
+            durationMs = std::max(durationMs, s->sync(mainStart, trace));
         }
-
-        auto iterEnd = std::chrono::high_resolution_clock::now();
-        duration = std::chrono::duration<float, std::milli>(iterEnd - loopStart).count();
-
-        if (duration < warmup)
+        if (durationMs < warmupMs) // Warming up
         {
-            ++skip;
-            timingStart = std::chrono::high_resolution_clock::now();
-            gpuStart = currentGpuStart;
+            if (durationMs) // Skip complete iterations
+            {
+                ++skip;
+            }
             continue;
         }
-        else
-        {
-            timingEnd = iterEnd;
-        }
-
-        float latency = std::chrono::duration<float, std::milli>(iterEnd - iterStart).count();
-        for (auto& s : streamItor)
-        {
-            float gpuTime = s.end - s.start;
-            times.emplace_back(latency, gpuTime);
-        }
     }
-
-    float totalLatency = std::chrono::duration<float, std::milli>(timingEnd - timingStart).count();
-    float totalGpuTime = 0;
-    for (auto& s : streamItor)
+    for (auto& s : iStreams)
     {
-        totalGpuTime = std::max(totalGpuTime, s.end - synch.mainStart);
+        s->syncAll(mainStart, trace);
     }
-    totalGpuTime -= gpuStart;
-    times.emplace_back(totalLatency, totalGpuTime);
 }
 
-void inferenceExecution(const InferenceOptions& inference, InferenceEnvironment& iEnv, SynchStruct& synch, int offset, int streams, std::vector<InferenceTime>& trace)
+void inferenceExecution(const InferenceOptions& inference, InferenceEnvironment& iEnv, SyncStruct& sync, int offset, int streams, std::vector<InferenceTrace>& trace)
 {
-    float warmup = static_cast<float>(inference.warmup);
-    float duration = static_cast<float>(inference.duration * 1000 + inference.warmup);
+    float warmupMs = static_cast<float>(inference.warmup);
+    float durationMs = static_cast<float>(inference.duration) * 1000 + warmupMs;
 
-    std::vector<IterStruct> streamItor(streams);
-    for (auto& s : streamItor)
+    auto enqueue = inference.batch ? EnqueueFunction(EnqueueImplicit(inference.batch)) : EnqueueFunction(EnqueueExplicit());
+
+    IterationStreams iStreams;
+    for (int s = 0; s < streams; ++s)
     {
-        if (inference.spin)
-        {
-            s.start.reset(cudaEventDefault);
-            s.end.reset(cudaEventDefault);
-        }
-
-        s.context = iEnv.context[offset].get();
-        s.buffers = iEnv.bindings[offset].getDeviceBuffers();
-        ++offset;
+        iStreams.emplace_back(new Iteration(offset + s, inference.overlap, inference.spin, *iEnv.context[offset], *iEnv.bindings[offset], enqueue));
     }
 
-    // Allocate enough space for all iterations and the duration assuming 1ms inference
-    // to avoid allocations during timing
-    std::vector<InferenceTime> times;
-    times.reserve(static_cast<size_t>(std::max(inference.iterations, static_cast<int>(duration * 1000))));
-
-    for (auto& s : streamItor)
+    for (auto& s : iStreams)
     {
-        s.stream.wait(synch.mainStart);
+        s->wait(sync.mainStart);
     }
 
-    inferenceLoop(streamItor, synch, inference.batch, inference.iterations, duration, warmup, times);
+    std::vector<InferenceTrace> localTrace;
+    inferenceLoop(iStreams, sync.mainStart, inference.batch, inference.iterations, durationMs, warmupMs, localTrace);
 
-    synch.mutex.lock();
-    trace.insert(trace.end(), times.begin(), times.end() - 1);
-    synch.totalTime.latency = std::max(synch.totalTime.latency, times.back().latency);
-    synch.totalTime.gpuTime = std::max(synch.totalTime.gpuTime, times.back().gpuTime);
-    synch.mutex.unlock();
+    sync.mutex.lock();
+    trace.insert(trace.end(), localTrace.begin(), localTrace.end());
+    sync.mutex.unlock();
 }
 
 inline
-std::thread makeThread(const InferenceOptions& inference, InferenceEnvironment& iEnv, SynchStruct& synch, int thread, int streamsPerThread, std::vector<InferenceTime>& trace)
+std::thread makeThread(const InferenceOptions& inference, InferenceEnvironment& iEnv, SyncStruct& sync, int thread, int streamsPerThread, std::vector<InferenceTrace>& trace)
 {
-    return std::thread(inferenceExecution, std::cref(inference), std::ref(iEnv), std::ref(synch), thread, streamsPerThread, std::ref(trace));
+    return std::thread(inferenceExecution, std::cref(inference), std::ref(iEnv), std::ref(sync), thread, streamsPerThread, std::ref(trace));
 }
 
 } // namespace
 
-void runInference(const InferenceOptions& inference, InferenceEnvironment& iEnv, std::vector<InferenceTime>& trace)
+void runInference(const InferenceOptions& inference, InferenceEnvironment& iEnv, std::vector<InferenceTrace>& trace)
 {
     trace.resize(0);
 
-    SynchStruct synch;
-    synch.sleep = inference.sleep;
-    synch.mainStream.sleep(&synch.sleep);
-    synch.mainStart.record(synch.mainStream);
+    SyncStruct sync;
+    sync.sleep = inference.sleep;
+    sync.mainStream.sleep(&sync.sleep);
+    sync.mainStart.record(sync.mainStream);
 
     int threadsNum = inference.threads ? inference.streams : 1;
     int streamsPerThread  = inference.streams / threadsNum;
@@ -235,14 +398,15 @@ void runInference(const InferenceOptions& inference, InferenceEnvironment& iEnv,
     std::vector<std::thread> threads;
     for (int t = 0; t < threadsNum; ++t)
     {
-        threads.emplace_back(makeThread(inference, iEnv, synch, t, streamsPerThread, trace));
+        threads.emplace_back(makeThread(inference, iEnv, sync, t, streamsPerThread, trace));
     }
     for (auto& th : threads)
     {
         th.join();
     }
 
-    trace.emplace_back(synch.totalTime);
+    auto cmpTrace = [](const InferenceTrace& a, const InferenceTrace& b) { return a.inStart < b.inStart; };
+    std::sort(trace.begin(), trace.end(), cmpTrace);
 }
 
 } // namespace sample

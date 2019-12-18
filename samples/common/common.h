@@ -63,8 +63,6 @@ using namespace plugin;
 #define ENABLE_DLA_API 1
 #endif
 
-#define TRT_UNUSED (void)
-
 #define CHECK(status)                                                                                                  \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -607,6 +605,7 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kINT32: return 4;
     case nvinfer1::DataType::kFLOAT: return 4;
     case nvinfer1::DataType::kHALF: return 2;
+    case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kINT8: return 1;
     }
     throw std::runtime_error("Invalid DataType.");
@@ -625,6 +624,7 @@ inline unsigned int elementSize(DataType t)
     case DataType::kINT32:
     case DataType::kFLOAT: return 4;
     case DataType::kHALF: return 2;
+    case DataType::kBOOL:
     case DataType::kINT8: return 1;
     }
     return 0;

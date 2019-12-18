@@ -91,7 +91,7 @@ public:
 
     nvinfer1::Dims getDims() const override
     {
-        return mDims;
+        return Dims{4, {mBatchSize, mDims.d[0], mDims.d[1], mDims.d[2]}, {}};
     }
 
 private:

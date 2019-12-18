@@ -86,13 +86,23 @@ namespace {
 PluginFieldCollection InstanceNormalizationPluginCreator::mFC{};
 std::vector<PluginField> InstanceNormalizationPluginCreator::mPluginAttributes;
 
+
+InstanceNormalizationPlugin::InstanceNormalizationPlugin(
+    float epsilon, const std::vector<float>& scale, const std::vector<float>& bias)
+    : _epsilon(epsilon)
+    , _nchan(scale.size())
+    , _h_scale(scale)
+    , _h_bias(bias)
+    , _initialized(false)
+{
+    ASSERT(scale.size() == bias.size());
+}
+
 InstanceNormalizationPlugin::InstanceNormalizationPlugin(
     float epsilon, nvinfer1::Weights const& scale, nvinfer1::Weights const& bias)
     : _epsilon(epsilon)
     , _nchan(scale.count)
     , _initialized(false)
-    , _scale(scale)
-    , _bias(bias)
 {
     ASSERT(scale.count == bias.count);
     if (scale.type == nvinfer1::DataType::kFLOAT)
@@ -269,7 +279,7 @@ void InstanceNormalizationPlugin::destroy()
 
 IPluginV2DynamicExt* InstanceNormalizationPlugin::clone() const
 { 
-    return new InstanceNormalizationPlugin{_epsilon, _scale, _bias}; 
+    return new InstanceNormalizationPlugin{_epsilon, _h_scale, _h_bias};
 }
 
 // Set plugin namespace
@@ -385,7 +395,6 @@ IPluginV2DynamicExt* InstanceNormalizationPluginCreator::createPlugin(const char
     return obj;
 }
 
-// TO TEST:
 IPluginV2DynamicExt* InstanceNormalizationPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
 {
     InstanceNormalizationPlugin* obj = new InstanceNormalizationPlugin{serialData, serialLength}; 

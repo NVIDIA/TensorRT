@@ -24,14 +24,14 @@ This plugin generates one output tensor of shape `[N, num_det, 4]`.
 
 ## Parameters
 
-This plugin has the plugin creator class `SpecialSliceCreator` and the plugin class `SpecialSlice`.
+This plugin has the plugin creator class `FlattenConcatPluginCreator` and the plugin class `FlattenConcat`.
 
 This plugin has no parameter.
   
 
 ## Additional resources
 
-The following resources provide a deeper understanding of the `SpecialSlice` plugin:
+The following resources provide a deeper understanding of the `flattenConcat` plugin:
 
 - [MaskRCNN](https://github.com/matterport/Mask_RCNN)
 

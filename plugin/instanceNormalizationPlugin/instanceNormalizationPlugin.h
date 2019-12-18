@@ -33,6 +33,7 @@ class InstanceNormalizationPlugin final : public nvinfer1::IPluginV2DynamicExt
 
 public:
   InstanceNormalizationPlugin(float epsilon, nvinfer1::Weights const& scale, nvinfer1::Weights const& bias);
+  InstanceNormalizationPlugin(float epsilon, const std::vector<float>& scale, const std::vector<float>& bias);
   InstanceNormalizationPlugin(void const* serialData, size_t serialLength);
 
   InstanceNormalizationPlugin() = delete;
@@ -90,7 +91,6 @@ private:
     float* _d_scale;
     float* _d_bias;
     bool _initialized;
-    nvinfer1::Weights _scale, _bias;
     cudnnHandle_t _cudnn_handle;
     cudnnTensorDescriptor_t _x_desc, _y_desc, _b_desc;
     const char* mPluginNamespace;

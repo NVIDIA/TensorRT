@@ -286,12 +286,10 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
     }
     else
     {
-        if (!build.shapes.empty())
-        {
-            profile = builder.createOptimizationProfile();
-        }
+        profile = builder.createOptimizationProfile();
     }
 
+    bool hasDynamicShapes{false};
     for (unsigned int i = 0, n = network.getNbInputs(); i < n; i++)
     {
         // Set formats and data types of inputs
@@ -303,34 +301,79 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
         }
         else
         {
-            input->setType(DataType::kFLOAT);
+            switch (input->getType())
+            {
+            case DataType::kINT32:
+            case DataType::kBOOL:
+                // Leave these as is.
+                break;
+            case DataType::kFLOAT:
+            case DataType::kINT8:
+            case DataType::kHALF:
+                // User did not specify a floating-point format.  Default to kFLOAT.
+                input->setType(DataType::kFLOAT);
+                break;
+            }
             input->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
         }
 
         if (profile)
         {
-            if (input->isShapeTensor())
+            Dims dims = input->getDimensions();
+            const bool isDynamicInput = std::any_of(dims.d, dims.d + dims.nbDims, [](int dim){ return dim == -1; }) || input->isShapeTensor();
+            if (isDynamicInput)
             {
-                err << "Shape tensor inputs are unsupported" << std::endl;
-                return nullptr;
+                hasDynamicShapes = true;
+                auto shape = build.shapes.find(input->getName());
+                ShapeRange shapes{};
+
+                // If no shape is provided, set dynamic dimensions to 1.
+                if (shape == build.shapes.end())
+                {
+                    constexpr int DEFAULT_DIMENSION = 1;
+                    Dims staticDims{};
+                    if (input->isShapeTensor())
+                    {
+                        staticDims.nbDims = dims.d[0];
+                        std::fill(staticDims.d, staticDims.d + staticDims.nbDims, DEFAULT_DIMENSION);
+                    }
+                    else
+                    {
+                        staticDims.nbDims = dims.nbDims;
+                        std::transform(dims.d, dims.d + dims.nbDims, staticDims.d, [&DEFAULT_DIMENSION](int dim) { return dim > 0 ? dim : DEFAULT_DIMENSION; });
+                    }
+                    gLogWarning << "Dynamic dimensions required for input: " << input->getName() << ", but no shapes were provided. Automatically overriding shape to: " << staticDims << std::endl;
+                    std::fill(shapes.begin(), shapes.end(), staticDims);
+                }
+                else
+                {
+                    shapes = shape->second;
+                }
+
+                Dims profileDims{};
+                if (input->isShapeTensor())
+                {
+                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
+                    profile->setShapeValues(input->getName(), OptProfileSelector::kMIN, profileDims.d, profileDims.nbDims);
+                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
+                    profile->setShapeValues(input->getName(), OptProfileSelector::kOPT, profileDims.d, profileDims.nbDims);
+                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
+                    profile->setShapeValues(input->getName(), OptProfileSelector::kMAX, profileDims.d, profileDims.nbDims);
+                }
+                else
+                {
+                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
+                    profile->setDimensions(input->getName(), OptProfileSelector::kMIN, profileDims);
+                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
+                    profile->setDimensions(input->getName(), OptProfileSelector::kOPT, profileDims);
+                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
+                    profile->setDimensions(input->getName(), OptProfileSelector::kMAX, profileDims);
+                }
             }
-            Dims profileDims = input->getDimensions();;
-            auto shape = build.shapes.find(input->getName());
-            if (shape == build.shapes.end())
-            {
-                err << "Dynamic dimensions required for input " << input->getName() << std::endl;
-                return nullptr;
-            }
-            profileDims = shape->second[static_cast<size_t>(OptProfileSelector::kMIN)];
-            profile->setDimensions(input->getName(), OptProfileSelector::kMIN, profileDims);
-            profileDims = shape->second[static_cast<size_t>(OptProfileSelector::kOPT)];
-            profile->setDimensions(input->getName(), OptProfileSelector::kOPT, profileDims);
-            profileDims = shape->second[static_cast<size_t>(OptProfileSelector::kMAX)];
-            profile->setDimensions(input->getName(), OptProfileSelector::kMAX, profileDims);
         }
     }
 
-    if (profile)
+    if (profile && hasDynamicShapes)
     {
         if (!profile->isValid())
         {
@@ -351,7 +394,6 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
         }
         else
         {
-            output->setType(DataType::kFLOAT);
             output->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
         }
     }
@@ -424,7 +466,8 @@ ICudaEngine* modelToEngine(
         err << "Builder creation failed" << std::endl;
         return nullptr;
     }
-    auto batchFlag = build.maxBatch ? 0U : 1U
+    const bool isOnnxModel = model.baseModel.format == ModelFormat::kONNX;
+    auto batchFlag = (build.maxBatch && !isOnnxModel) ? 0U : 1U
         << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
     TrtUniquePtr<INetworkDefinition> network{builder->createNetworkV2(batchFlag)};
     if (!network)

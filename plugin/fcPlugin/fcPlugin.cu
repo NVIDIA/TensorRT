@@ -344,6 +344,7 @@ FCPluginDynamic::FCPluginDynamic(const std::string name, const DataType type, co
 {
     mB.count = 0;
     mB.values = nullptr;
+    memset(mAlgo.data, 0, sizeof(mAlgo.data));
 }
 
 FCPluginDynamic::FCPluginDynamic(const std::string name, const void* data, size_t length)
@@ -432,17 +433,20 @@ void FCPluginDynamic::configurePlugin(
     // max workspace size allowed for search
     size_t actualWorkspace = 0;
 
-    gLogVerbose << "Start cuBLAS GEMM search" << std::endl;
-    if (mType == DataType::kFLOAT)
+    if (mAlgo.data[0] == 0 && memcmp(mAlgo.data, mAlgo.data+1, sizeof(mAlgo.data)-sizeof(mAlgo.data[0])) == 0)
     {
-        mAlgo = gemmSearch<float>(mOutDim, mNmax, mK, maxWorkspaceBytes, actualWorkspace);
-    }
-    else
-    {
-        mAlgo = gemmSearch<half>(mOutDim, mNmax, mK, maxWorkspaceBytes, actualWorkspace);
+        gLogVerbose << "Start cuBLAS GEMM search" << std::endl;
+        if (mType == DataType::kFLOAT)
+        {
+            mAlgo = gemmSearch<float>(mOutDim, mNmax, mK, maxWorkspaceBytes, actualWorkspace);
+        }
+        else
+        {
+            mAlgo = gemmSearch<half>(mOutDim, mNmax, mK, maxWorkspaceBytes, actualWorkspace);
+        }
+        gLogVerbose << "Done cuBLAS GEMM search" << std::endl;
     }
 
-    gLogVerbose << "Done cuBLAS GEMM search" << std::endl;
     AlgoProps p;
     p.populate(mAlgo);
 

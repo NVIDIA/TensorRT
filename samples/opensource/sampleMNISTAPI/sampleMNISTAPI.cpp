@@ -185,24 +185,24 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     assert(scale_1);
 
     // Add convolution layer with 20 outputs and a 5x5 filter.
-    IConvolutionLayer* conv1 = network->addConvolution(
-        *scale_1->getOutput(0), 20, DimsHW{5, 5}, mWeightMap["conv1filter"], mWeightMap["conv1bias"]);
+    IConvolutionLayer* conv1 = network->addConvolutionNd(
+        *scale_1->getOutput(0), 20, Dims{2, {5, 5}, {}}, mWeightMap["conv1filter"], mWeightMap["conv1bias"]);
     assert(conv1);
     conv1->setStride(DimsHW{1, 1});
 
     // Add max pooling layer with stride of 2x2 and kernel size of 2x2.
-    IPoolingLayer* pool1 = network->addPooling(*conv1->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
+    IPoolingLayer* pool1 = network->addPoolingNd(*conv1->getOutput(0), PoolingType::kMAX, Dims{2, {2, 2}, {}});
     assert(pool1);
     pool1->setStride(DimsHW{2, 2});
 
     // Add second convolution layer with 50 outputs and a 5x5 filter.
-    IConvolutionLayer* conv2 = network->addConvolution(
-        *pool1->getOutput(0), 50, DimsHW{5, 5}, mWeightMap["conv2filter"], mWeightMap["conv2bias"]);
+    IConvolutionLayer* conv2 = network->addConvolutionNd(
+        *pool1->getOutput(0), 50, Dims{2, {5, 5}, {}}, mWeightMap["conv2filter"], mWeightMap["conv2bias"]);
     assert(conv2);
     conv2->setStride(DimsHW{1, 1});
 
     // Add second max pooling layer with stride of 2x2 and kernel size of 2x3>
-    IPoolingLayer* pool2 = network->addPooling(*conv2->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
+    IPoolingLayer* pool2 = network->addPoolingNd(*conv2->getOutput(0), PoolingType::kMAX, Dims{2, {2, 2}, {}});
     assert(pool2);
     pool2->setStride(DimsHW{2, 2});
 

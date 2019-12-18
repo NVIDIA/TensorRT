@@ -21,7 +21,7 @@
 #include <cstdint>
 #include "NvInferVersion.h"
 
-#if __cplusplus > 201103L
+#if __cplusplus >= 201103L
 #define _TENSORRT_FINAL final
 #define _TENSORRT_OVERRIDE override
 #else
@@ -131,13 +131,14 @@ enum class DataType : int
     kFLOAT = 0, //!< FP32 format.
     kHALF = 1,  //!< FP16 format.
     kINT8 = 2,  //!< quantized INT8 format.
-    kINT32 = 3  //!< INT32 format.
+    kINT32 = 3, //!< INT32 format.
+    kBOOL = 4   //!< BOOL format.
 };
 
 template <>
 constexpr inline int EnumMax<DataType>()
 {
-    return 4;
+    return 5;
 } //!< Maximum number of elements in DataType enum. \see DataType
 
 //!
@@ -243,7 +244,7 @@ enum class TensorFormat : int
     kCHW16 = 4,
 
     //! Thirty-two wide channel vectorized row major format. This format is
-    //! bound to INT8 or FP32. It is only available for dimensions >= 3.
+    //! only available for dimensions >= 3.
     //! For a tensor with dimensions {N, C, H, W},
     //! the memory layout is equivalent to a C array with dimensions
     //! [N][(C+31)/32][H][W][32], with the tensor coordinates (n, c, h, w)
@@ -995,7 +996,7 @@ enum class ErrorCode : int
     //!
     kSUCCESS = 0,
 
-    //! 
+    //!
     //! An error that does not fall into any other category. This error is included for forward compatibility
     //!
     kUNSPECIFIED_ERROR = 1,
@@ -1236,7 +1237,11 @@ public:
 
 } // namespace nvinfer1
 
-extern "C" TENSORRTAPI void* createSafeInferRuntime_INTERNAL(void* logger, int version); //!< Internal C entry point for creating safe::IRuntime.
+//!
+//! Internal C entry point for creating safe::IRuntime.
+//! @private
+//!
+extern "C" TENSORRTAPI void* createSafeInferRuntime_INTERNAL(void* logger, int version);
 
 //!
 //! \brief Return the logger object.

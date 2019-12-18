@@ -33,11 +33,11 @@ Specifically, this sample:
 ### Creating the preprocessing network
 
 First, create a network with full dims support:
-`auto preprocessorNetwork = this->makeUnique(builder->createNetworkV2(1U << static_cast<int32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)));`
+`auto preprocessorNetwork = makeUnique(builder->createNetworkV2(1U << static_cast<int32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)));`
 
 Next, add an input layer that accepts an input with a dynamic shape, followed by a resize layer that will reshape the input to the shape the model expects:
 ```
-auto input = preprocessorNetwork->addInput("input", nvinfer1::DataType::kFLOAT, Dims3{1, -1, -1});
+auto input = preprocessorNetwork->addInput("input", nvinfer1::DataType::kFLOAT, Dims4{1, 1, -1, -1});
 auto resizeLayer = preprocessorNetwork->addResize(*input);
 resizeLayer->setOutputDimensions(mPredictionInputDims);
 preprocessorNetwork->markOutput(*resizeLayer->getOutput(0));
@@ -47,9 +47,10 @@ The -1 dimensions denote dimensions that will be supplied at runtime.
 
 ### Parsing the ONNX MNIST model
 
-First, create an empty network, and parser:
+First, create an empty full-dims network, and parser:
 ```
-auto network = this->makeUnique(builder->createNetwork());
+const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+auto network = makeUnique(builder->createNetworkV2(explicitBatch));
 auto parser = nvonnxparser::createParser(*network, gLogger.getTRTLogger());
 ```
 
@@ -62,17 +63,17 @@ parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str()
 
 When building the preprocessor engine, also provide an optimization profile so that TensorRT knows which input shapes to optimize for:
 ```
-auto preprocessorConfig = this->makeUnique(builder->createNetworkConfig());
+auto preprocessorConfig = makeUnique(builder->createNetworkConfig());
 auto profile = builder->createOptimizationProfile();
 ```
 
 `OptProfileSelector::kOPT` specifies the dimensions that the profile will be optimized for, whereas `OptProfileSelector::kMIN` and `OptProfileSelector::kMAX` specify the minimum and maximum dimensions for which the profile will be valid:
 ```
-profile->setDimensions(input->getName(), OptProfileSelector::kMIN, Dims3{1, 1, 1});
-profile->setDimensions(input->getName(), OptProfileSelector::kOPT, Dims3{1, 28, 28});
-profile->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims3{1, 56, 56});
+profile->setDimensions(input->getName(), OptProfileSelector::kMIN, Dims4{1, 1, 1, 1});
+profile->setDimensions(input->getName(), OptProfileSelector::kOPT, Dims4{1, 1, 28, 28});
+profile->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims4{1, 1, 56, 56});
 preprocessorConfig->addOptimizationProfile(profile);
-mPreprocessorEngine = this->makeUnique(builder->buildEngineWithConfig(*preprocessorNetwork, *preprocessorConfig));
+mPreprocessorEngine = makeUnique(builder->buildEngineWithConfig(*preprocessorNetwork, *preprocessorConfig));
 ```
 
 For the MNIST model, attach a Softmax layer to the end of the network and replace the existing network output with the Softmax:
@@ -83,7 +84,7 @@ network->markOutput(*softmax->getOutput(0));
 ```
 
 Finally, build as normal:
-`mPredictionEngine = this->makeUnique(builder->buildEngineWithConfig(*network, *config));`
+`mPredictionEngine = makeUnique(builder->buildEngineWithConfig(*network, *config));`
 
 ### Running inference
 
@@ -104,7 +105,7 @@ bool status = mPreprocessorContext->executeV2(preprocessorBindings.data());
 Then, run the MNIST engine:
 ```
 std::vector<void*> predicitonBindings = {mPredictionInput.data(), mOutput.deviceBuffer.data()};
-status = mPredictionContext->execute(mParams.batchSize, predicitonBindings.data());
+status = mPredictionContext->executeV2(predicitonBindings.data());
 ```
 
 Finally, copy the output back to the host:

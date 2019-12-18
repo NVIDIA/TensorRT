@@ -77,7 +77,6 @@ else()
     set(ONNX_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/parsers${NVINTERNAL_SUFFIX}/onnx CACHE STRING "Onnx include directory")
 endif()
 
-add_compile_options("-fno-rtti")
 target_include_directories(${TARGET_NAME}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
     PUBLIC ${ONNX_INCLUDE_DIR}
@@ -86,7 +85,9 @@ target_include_directories(${TARGET_NAME}
     PRIVATE ${TARGET_DIR}
 )
 
-set(SAMPLE_DEP_LIBS  
+target_compile_options(${TARGET_NAME} PUBLIC "-fno-rtti")
+
+set(SAMPLE_DEP_LIBS
     ${CUDART_LIB}
     ${CUBLAS_LIB}
     ${CUDNN_LIB}

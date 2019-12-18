@@ -41,6 +41,7 @@ private:
     std::string mReferenceFilename;
     std::string mOutputFilename;
     std::string mCalibrationFilename;
+    int64_t mLabel{-1};
     int64_t mMaxBatchSize{32};
     int64_t mMaxWorkspaceSize{1 * 1024 * 1024 * 1024};
     int64_t mCalibBatchSize{0};
@@ -137,6 +138,14 @@ public:
     {
         mFullTextFilename = string(fullTextFilename);
     }
+    void setLabel(int64_t label)
+    {
+        mLabel = label;
+    }//!<  set the Label
+    int64_t getLabel() const
+    {
+        return mLabel;
+    }//!<  get the Label
     bool getPrintLayerInfo() const
     {
         return mPrintLayercInfo;

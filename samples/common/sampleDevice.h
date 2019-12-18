@@ -38,13 +38,21 @@ class TrtCudaEvent;
 namespace
 {
 
+#if CUDA_VERSION < 10000
+void cudaSleep(cudaStream_t stream, cudaError_t status, void* sleep)
+#else
 void cudaSleep(void* sleep)
+#endif
 {
     std::this_thread::sleep_for(std::chrono::duration<int, std::milli>(*static_cast<int*>(sleep)));
 }
 
 }
 
+//!
+//! \class TrtCudaStream
+//! \brief Managed CUDA stream
+//!
 class TrtCudaStream
 {
 public:
@@ -76,7 +84,11 @@ public:
 
     void sleep(int* ms)
     {
+#if CUDA_VERSION < 10000
+        cudaCheck(cudaStreamAddCallback(mStream, cudaSleep, ms, 0));
+#else
         cudaCheck(cudaLaunchHostFunc(mStream, cudaSleep, ms));
+#endif
     }
 
 private:
@@ -84,16 +96,19 @@ private:
     cudaStream_t mStream{};
 };
 
+//!
+//! \class TrtCudaEvent
+//! \brief Managed CUDA event
+//!
 class TrtCudaEvent
 {
 public:
 
-    TrtCudaEvent(unsigned int flags)
+    explicit TrtCudaEvent(bool blocking = true)
     {
+        const unsigned int flags = blocking ? cudaEventBlockingSync : cudaEventDefault;
         cudaCheck(cudaEventCreateWithFlags(&mEvent, flags));
     }
-
-    TrtCudaEvent() = default;
 
     TrtCudaEvent(const TrtCudaEvent&) = delete;
 
@@ -123,16 +138,11 @@ public:
         cudaCheck(cudaEventSynchronize(mEvent));
     }
 
-    void reset(unsigned int flags = cudaEventDefault)
-    {
-        cudaCheck(cudaEventDestroy(mEvent));
-        cudaCheck(cudaEventCreateWithFlags(&mEvent, flags));
-    }
-
+    // Returns time elapsed time in milliseconds
     float operator-(const TrtCudaEvent& e) const
     {
         float time{0};
-        cudaCheck(cudaEventElapsedTime(&time, e.get(), get())); 
+        cudaCheck(cudaEventElapsedTime(&time, e.get(), get()));
         return time;
     }
 
@@ -146,6 +156,10 @@ inline void TrtCudaStream::wait(TrtCudaEvent& event)
     cudaCheck(cudaStreamWaitEvent(mStream, event.get(), 0));
 }
 
+//!
+//! \class TrtCudaBuffer
+//! \brief Managed buffer for host and device
+//!
 template <typename A, typename D>
 class TrtCudaBuffer
 {
@@ -231,6 +245,47 @@ struct HostDeallocator
 using TrtDeviceBuffer = TrtCudaBuffer<DeviceAllocator, DeviceDeallocator>;
 
 using TrtHostBuffer = TrtCudaBuffer<HostAllocator, HostDeallocator>;
+
+//!
+//! \class MirroredBuffer
+//! \brief Coupled host and device buffers
+//!
+class MirroredBuffer
+{
+public:
+
+    void allocate(size_t size)
+    {
+        mSize = size;
+        mHostBuffer.allocate(size);
+        mDeviceBuffer.allocate(size);
+    }
+
+    void* getDeviceBuffer() const { return mDeviceBuffer.get(); }
+
+    void* getHostBuffer() const { return mHostBuffer.get(); }
+
+    void hostToDevice(TrtCudaStream& stream)
+    {
+        cudaCheck(cudaMemcpyAsync(mDeviceBuffer.get(), mHostBuffer.get(), mSize, cudaMemcpyHostToDevice, stream.get()));
+    }
+
+    void deviceToHost(TrtCudaStream& stream)
+    {
+        cudaCheck(cudaMemcpyAsync(mHostBuffer.get(), mDeviceBuffer.get(), mSize, cudaMemcpyDeviceToHost, stream.get()));
+    }
+
+    int getSize() const
+    {
+        return mSize;
+    }
+
+private:
+
+    int mSize{0};
+    TrtHostBuffer mHostBuffer;
+    TrtDeviceBuffer mDeviceBuffer;
+};
 
 } // namespace sample
 
