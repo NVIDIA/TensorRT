@@ -170,6 +170,10 @@ DimsExprs InstanceNormalizationPlugin::getOutputDimensions(
 int InstanceNormalizationPlugin::initialize()
 {
     _initialized = true;
+    CHECK_CUDNN(cudnnCreate(&_cudnn_handle));
+    CHECK_CUDNN(cudnnCreateTensorDescriptor(&_b_desc));
+    CHECK_CUDNN(cudnnCreateTensorDescriptor(&_x_desc));
+    CHECK_CUDNN(cudnnCreateTensorDescriptor(&_y_desc));
     return 0;
 }
 
@@ -182,8 +186,6 @@ void InstanceNormalizationPlugin::terminate()
     cudnnDestroyTensorDescriptor(_y_desc);
     cudnnDestroyTensorDescriptor(_x_desc);
     cudnnDestroyTensorDescriptor(_b_desc);
-    cudaFree(_d_bias);
-    cudaFree(_d_scale);
     cudnnDestroy(_cudnn_handle);
     _initialized = false;
 }
@@ -214,10 +216,6 @@ int InstanceNormalizationPlugin::enqueue(const nvinfer1::PluginTensorDesc* input
         CHECK_CUDA(cudaMemcpy(_d_scale + i * c, _h_scale.data(), nchan_bytes, cudaMemcpyHostToDevice));
         CHECK_CUDA(cudaMemcpy(_d_bias + i * c, _h_bias.data(), nchan_bytes, cudaMemcpyHostToDevice));
     }
-    CHECK_CUDNN(cudnnCreate(&_cudnn_handle));
-    CHECK_CUDNN(cudnnCreateTensorDescriptor(&_b_desc));
-    CHECK_CUDNN(cudnnCreateTensorDescriptor(&_x_desc));
-    CHECK_CUDNN(cudnnCreateTensorDescriptor(&_y_desc));
 
     CHECK_CUDNN(cudnnSetTensor4dDescriptor(_b_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, n * c, 1, 1));
     cudnnDataType_t cudnn_dtype;
@@ -235,6 +233,8 @@ int InstanceNormalizationPlugin::enqueue(const nvinfer1::PluginTensorDesc* input
     //       acceptable.
     CHECK_CUDNN(cudnnBatchNormalizationForwardTraining(_cudnn_handle, CUDNN_BATCHNORM_SPATIAL_PERSISTENT, &alpha, &beta,
         _x_desc, x_ptr, _y_desc, y_ptr, _b_desc, _d_scale, _d_bias, 1., nullptr, nullptr, _epsilon, nullptr, nullptr));
+    cudaFree(_d_bias);
+    cudaFree(_d_scale);
     return 0;
 }
 
