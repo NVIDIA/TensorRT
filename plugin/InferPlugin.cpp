@@ -19,6 +19,9 @@
 #include <array>
 #include <iostream>
 #include <memory>
+#include <mutex>
+#include <stack>
+#include <unordered_set>
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 
@@ -51,47 +54,93 @@ namespace plugin
 {
 ILogger* gLogger{};
 
-// Instances of this class are statically constructed in initializePlugin.
-// This ensures that each plugin is only registered a single time, as further calls to
-// initializePlugin will be no-ops.
-template <typename CreatorType>
-class InitializePlugin
+// This singleton ensures that each plugin is only registered once for a given
+// namespace and type, and attempts of duplicate registration are ignored.
+class PluginCreatorRegistry
 {
 public:
-    InitializePlugin(void* logger, const char* libNamespace)
-        : mCreator{new CreatorType{}}
+    static PluginCreatorRegistry& getInstance()
     {
-        mCreator->setPluginNamespace(libNamespace);
-        bool status = getPluginRegistry()->registerCreator(*mCreator, libNamespace);
-        if (logger)
+        static PluginCreatorRegistry instance;
+        return instance;
+    }
+
+    template <typename CreatorType>
+    void addPluginCreator(void* logger, const char* libNamespace)
+    {
+        // Make accesses to the plugin creator registry thread safe
+        std::lock_guard<std::mutex> lock(mRegistryLock);
+
+        std::string errorMsg;
+        std::string verboseMsg;
+
+        std::unique_ptr<CreatorType> pluginCreator{new CreatorType{}};
+        pluginCreator->setPluginNamespace(libNamespace);
+
+        nvinfer1::plugin::gLogger = static_cast<nvinfer1::ILogger*>(logger);
+        std::string pluginType
+            = std::string(pluginCreator->getPluginNamespace()) + "::" + std::string(pluginCreator->getPluginName());
+
+        if (mRegistryList.find(pluginType) == mRegistryList.end())
         {
-            nvinfer1::plugin::gLogger = static_cast<nvinfer1::ILogger*>(logger);
-            if (!status)
+            bool status = getPluginRegistry()->registerCreator(*pluginCreator, libNamespace);
+            if (status)
             {
-                std::string errorMsg{"Could not register plugin creator:  " + std::string(mCreator->getPluginName())
-                    + " in namespace: " + std::string{mCreator->getPluginNamespace()}};
-                nvinfer1::plugin::gLogger->log(ILogger::Severity::kERROR, errorMsg.c_str());
+                mRegistry.push(std::move(pluginCreator));
+                mRegistryList.insert(pluginType);
+                verboseMsg = "Plugin creator registration succeeded - " + pluginType;
             }
             else
             {
-                std::string verboseMsg{
-                    "Plugin Creator registration succeeded - " + std::string{mCreator->getPluginName()}};
+                errorMsg = "Could not register plugin creator:  " + pluginType;
+            }
+        }
+        else
+        {
+            verboseMsg = "Plugin creator already registered - " + pluginType;
+        }
+
+        if (logger)
+        {
+            if (!errorMsg.empty())
+            {
+                nvinfer1::plugin::gLogger->log(ILogger::Severity::kERROR, errorMsg.c_str());
+            }
+            if (!verboseMsg.empty())
+            {
                 nvinfer1::plugin::gLogger->log(ILogger::Severity::kVERBOSE, verboseMsg.c_str());
             }
         }
     }
 
-    InitializePlugin(const InitializePlugin&) = delete;
-    InitializePlugin(InitializePlugin&&) = delete;
+    ~PluginCreatorRegistry()
+    {
+        std::lock_guard<std::mutex> lock(mRegistryLock);
+
+        // Release pluginCreators in LIFO order of registration.
+        while (!mRegistry.empty())
+        {
+            mRegistry.pop();
+        }
+        mRegistryList.clear();
+    }
 
 private:
-    std::unique_ptr<CreatorType> mCreator;
+    PluginCreatorRegistry() {}
+
+    std::mutex mRegistryLock;
+    std::stack<std::unique_ptr<IPluginCreator>> mRegistry;
+    std::unordered_set<std::string> mRegistryList;
+
+public:
+    PluginCreatorRegistry(PluginCreatorRegistry const&) = delete;
+    void operator=(PluginCreatorRegistry const&) = delete;
 };
 
 template <typename CreatorType>
 void initializePlugin(void* logger, const char* libNamespace)
 {
-    static InitializePlugin<CreatorType> plugin{logger, libNamespace};
+    PluginCreatorRegistry::getInstance().addPluginCreator<CreatorType>(logger, libNamespace);
 }
 
 } // namespace plugin
