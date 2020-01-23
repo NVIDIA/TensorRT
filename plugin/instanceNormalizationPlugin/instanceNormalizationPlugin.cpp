@@ -259,7 +259,7 @@ bool InstanceNormalizationPlugin::supportsFormatCombination(
 {
     ASSERT(inOut && pos < (nbInputs + nbOutputs));
     return ((inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF)
-        && inOut[pos].format == nvinfer1::PluginFormat::kNCHW);
+        && inOut[pos].format == nvinfer1::PluginFormat::kNCHW && inOut[pos].type == inOut[0].type);
 }
 
 const char* InstanceNormalizationPlugin::getPluginType() const
