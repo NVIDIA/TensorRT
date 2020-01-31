@@ -89,6 +89,9 @@ FlattenConcat::FlattenConcat(const void* data, size_t length)
     std::for_each(mCopySize, mCopySize + mNumInputs, [&](size_t& inp) { inp = read<size_t>(d); });
 
     ASSERT(d == a + length);
+
+    // Create cublas context after deserialization
+    LOG_ERROR(cublasCreate(&mCublas));
 }
 
 FlattenConcat::~FlattenConcat()
