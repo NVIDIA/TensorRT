@@ -265,8 +265,10 @@ inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int inH, i
 {
     std::ifstream infile(fileName, std::ifstream::binary);
     assert(infile.is_open() && "Attempting to read from a file that is not open.");
-    std::string magic, h, w, max;
-    infile >> magic >> h >> w >> max;
+    std::string magic, w, h, max;
+    infile >> magic >> w >> h >> max;
+    assert(std::stoi(w) == inW && "Specified width must equal width recorded in PGM file!");
+    assert(std::stoi(h) == inH && "Specified height must equal height recorded in PGM file!");
     infile.seekg(1, infile.cur);
     infile.read(reinterpret_cast<char*>(buffer), inH * inW);
 }
