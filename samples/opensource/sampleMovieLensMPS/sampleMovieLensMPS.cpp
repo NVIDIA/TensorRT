@@ -724,7 +724,7 @@ int mainMovieLensMPS(Args& args, OutputArgs& pargs)
         if (!pass)
             args.failCount++;
 
-        exit(0);
+        exit(EXIT_SUCCESS);
     }
 
     // Let children processes continue
