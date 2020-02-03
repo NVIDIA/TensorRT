@@ -30,6 +30,7 @@
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
 #include "logger.h"
+#include <cstdlib>
 #include <algorithm>
 #include <cassert>
 #include <chrono>
