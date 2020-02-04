@@ -70,6 +70,7 @@ nvinfer1::ILayer* parseScale(nvinfer1::INetworkDefinition& network, const trtcaf
 nvinfer1::ILayer* parseSigmoid(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
 nvinfer1::ILayer* parseSoftMax(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
 nvinfer1::ILayer* parseTanH(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
+nvinfer1::ILayer* parseResize(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
 
 static std::unordered_map<std::string, LayerParseFn> gParseTable 
 {
@@ -96,7 +97,8 @@ static std::unordered_map<std::string, LayerParseFn> gParseTable
     {"BNLL", parseBNLL},
     {"Clip", parseClip},
     {"AbsVal", parseAbsVal},
-    {"PReLU", parsePReLU}
+    {"PReLU", parsePReLU},
+    {"Resize", parseResize}
 };
 } // namespace nvcaffeparser1
 #endif //TRT_CAFFE_PARSER_OP_PARSERS_H
