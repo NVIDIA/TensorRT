@@ -96,20 +96,29 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleOnnxMNIST` directory. The binary named `sample_onnx_mnist` will be created in the `<TensorRT root directory>/bin` directory.
+1.  Download the ONNX-Model and sample pgm files in the data directory:
+        ```
+        cd <TensorRT root directory>/data/mnist
+        python dowload_pgms.py
+	chmod +x download_model.sh
+	./download_model.sh
+        ```
+
+2.  Compile this sample by running `cmake CMakeLists.txt` followed by `make` in the `<TensorRT root directory>/samples/opensource/sampleOnnxMNIST` directory. The binary named `sample_onnx_mnist` will be created in the `<TensorRT root directory>/bin` directory.
 	```
-	cd <TensorRT root directory>/samples/sampleOnnxMNIST
+	cd <TensorRT root directory>/samples/opensource/sampleOnnxMNIST
+	cmake CMakeLists.txt
 	make
 	```
 
 	Where `<TensorRT root directory>` is where you installed TensorRT.
 
-2.  Run the sample to build and run the MNIST engine from the ONNX model.
+3. Run the sample to build and run the MNIST engine from the ONNX model.
 	```
 	./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
 	```
 
-3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
+4.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	```
 	&&&& RUNNING TensorRT.sample_onnx_mnist # ./sample_onnx_mnist
 	----------------------------------------------------------------
@@ -208,6 +217,8 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 March 2019
 This `README.md` file was recreated, updated and reviewed.
 
+February 2020
+The `README.md` was updated for using CMakeLists.txt files.
 
 # Known issues
 
