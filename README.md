@@ -54,7 +54,7 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 
 - [ONNX-TensorRT](https://github.com/onnx/onnx-tensorrt) v7.0
 - [CUB](http://nvlabs.github.io/cub/) v1.8.0
-- [Protobuf](https://github.com/protocolbuffers/protobuf.git) v3.8.x
+- [Protobuf](https://github.com/protocolbuffers/protobuf.git) v3.0.0
 
 
 ## Downloading The TensorRT Components
@@ -62,7 +62,7 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 1. #### Download TensorRT OSS sources.
 
 	```bash
-	git clone -b master https://github.com/nvidia/TensorRT TensorRT -b release/7.0
+	git clone -b release/7.0 https://github.com/nvidia/TensorRT TensorRT
 	cd TensorRT
 	git submodule update --init --recursive
 	export TRT_SOURCE=`pwd`
@@ -96,11 +96,11 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 
 3. #### Download JetPack packages for cross-compilation.[OPTIONAL]
 
-Using the SDK manager, download the host componets of the PDK version or Jetpack specified in the name of the Dockerfile. To do this:
+Using the SDK manager, download the host components of the PDK version or Jetpack specified in the name of the Dockerfile. To do this:
 
 1. [**SDK Manager Step 01**] Log into the SDK manager
-2. [**SDK Manager Step 01**] Select the correct platform and Target OS System  (should be corresponding to the name of the Dockerfile you are building (e.g. Jetson AGX Xavier, `Linux Jetpack 4.2.1`), then click `Continue`
-3. [**SDK Manager Step 02**] Under `Download & Install Options` make note of or change the download folder **and Select Download now. Install later.** then agree to the license terms and click `Continue`
+2. [**SDK Manager Step 02**] Select the correct platform and Target OS System  (should be corresponding to the name of the Dockerfile you are building (e.g. Jetson AGX Xavier, `Linux Jetpack 4.2.1`), then click `Continue`
+3. [**SDK Manager Step 03**] Under `Download & Install Options` make note of or change the download folder **and Select Download now. Install later.** then agree to the license terms and click `Continue`
 
 You should now have all expected files to build the container. Move these into the `docker/jetpack_files` folder.
 
@@ -129,7 +129,6 @@ You should now have all expected files to build the container. Move these into t
    **Example: Cross compile for JetPack 4.2.1 with cuda-10.0**
    ```bash
    docker build -f docker/ubuntu-cross-aarch64.Dockerfile --build-arg UBUNTU_VERSION=18.04 --build-arg CUDA_VERSION=10.0 --tag tensorrt-ubuntu-aarch64 .
-   `
    ```
 
 2. #### Launch the TensorRT build container.
@@ -138,7 +137,7 @@ You should now have all expected files to build the container. Move these into t
 	docker run -v $TRT_RELEASE:/tensorrt -v $TRT_SOURCE:/workspace/TensorRT -it tensorrt-ubuntu:latest
 	```
 
-	> NOTE: To run TensorRT/CUDA programs within the build container, install [nvidia-docker](#prerequisites). Replace the `docker run` command with `nvidia-docker run` or `docker run --runtime=nvidia`.
+	> NOTE: To run TensorRT/CUDA programs within the build container, install [nvidia-docker](#prerequisites). Replace the `docker run` command with `nvidia-docker run`, `docker run --runtime=nvidia`, or `docker run --gpus all`, depending on your Docker version.
 
 
 ## Building The TensorRT OSS Components
@@ -171,7 +170,7 @@ You should now have all expected files to build the container. Move these into t
 
 	- `CUDNN_VERSION`: The version of cuDNN to target, for example [`7.6`].
 
-	- `PROTOBUF_VERSION`:  The version of Protobuf to use, for example [`3.8.x`]. Note: Changing this will not configure CMake to use a system version of Protobuf, it will configure CMake to download and try building that version.
+	- `PROTOBUF_VERSION`:  The version of Protobuf to use, for example [`3.0.0`]. Note: Changing this will not configure CMake to use a system version of Protobuf, it will configure CMake to download and try building that version.
 
 	- `CMAKE_TOOLCHAIN_FILE`: The path to a toolchain file for cross compilation.
 
