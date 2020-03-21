@@ -190,9 +190,9 @@ void InstanceNormalizationPlugin::terminate()
     _initialized = false;
 }
 
-size_t InstanceNormalizationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs, const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const 
-{ 
-    return 0; 
+size_t InstanceNormalizationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs, const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const
+{
+    return 0;
 }
 
 
@@ -273,26 +273,26 @@ const char* InstanceNormalizationPlugin::getPluginVersion() const
 }
 
 void InstanceNormalizationPlugin::destroy()
-{ 
+{
     delete this;
 }
 
 IPluginV2DynamicExt* InstanceNormalizationPlugin::clone() const
-{ 
+{
     auto plugin = new InstanceNormalizationPlugin{_epsilon, _h_scale, _h_bias};
-    plugin->setPluginNamespace(mPluginNamespace);
+    plugin->setPluginNamespace(mNamespace.c_str());
     return plugin;
 }
 
 // Set plugin namespace
 void InstanceNormalizationPlugin::setPluginNamespace(const char* pluginNamespace)
 {
-    mPluginNamespace = pluginNamespace;
+    mNamespace = pluginNamespace;
 }
 
 const char* InstanceNormalizationPlugin::getPluginNamespace() const
 {
-    return mPluginNamespace;
+    return mNamespace.c_str();
 }
 
 nvinfer1::DataType InstanceNormalizationPlugin::getOutputDataType(
@@ -315,10 +315,10 @@ void InstanceNormalizationPlugin::configurePlugin(const nvinfer1::DynamicPluginT
 {
     for (int i = 0; i < nbInputs; i++)
     {
-      for (int j = 0; j < in[0].desc.dims.nbDims; j++)
+      for (int j = 0; j < in[i].desc.dims.nbDims; j++)
       {
         // Do not support dynamic dimensions
-        ASSERT(in[0].desc.dims.d[j] != -1);
+        ASSERT(in[i].desc.dims.d[j] != -1);
       }
     }
 }
@@ -399,7 +399,7 @@ IPluginV2DynamicExt* InstanceNormalizationPluginCreator::createPlugin(const char
 
 IPluginV2DynamicExt* InstanceNormalizationPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
 {
-    InstanceNormalizationPlugin* obj = new InstanceNormalizationPlugin{serialData, serialLength}; 
+    InstanceNormalizationPlugin* obj = new InstanceNormalizationPlugin{serialData, serialLength};
     obj->setPluginNamespace(mNamespace.c_str());
     return obj;
 }

@@ -24,9 +24,9 @@
 
 typedef unsigned short half_type;
 
-namespace nvinfer1 
+namespace nvinfer1
 {
-namespace plugin 
+namespace plugin
 {
 class InstanceNormalizationPlugin final : public nvinfer1::IPluginV2DynamicExt
 {
@@ -51,9 +51,9 @@ public:
 
   size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs, const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const override;
 
-  int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc, 
-              const void* const* inputs, void* const* outputs, 
-              void* workspace, 
+  int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+              const void* const* inputs, void* const* outputs,
+              void* workspace,
               cudaStream_t stream) override;
 
   size_t getSerializationSize() const override;
@@ -81,7 +81,7 @@ public:
 
   void detachFromContext() override;
 
-  void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs, 
+  void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
                        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) override;
 private:
     float _epsilon;
@@ -93,7 +93,6 @@ private:
     bool _initialized;
     cudnnHandle_t _cudnn_handle;
     cudnnTensorDescriptor_t _x_desc, _y_desc, _b_desc;
-    const char* mPluginNamespace;
     std::string mNamespace;
 };
 
@@ -117,7 +116,6 @@ public:
 private:
   static PluginFieldCollection mFC;
   static std::vector<PluginField> mPluginAttributes;
-  std::string mNamespace;
 };
 } //namespace plugin
 } //namespace nvinfer1
