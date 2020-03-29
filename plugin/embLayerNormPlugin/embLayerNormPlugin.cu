@@ -170,7 +170,7 @@ __global__ void embLayerNormKernel(int ld, const int* inputIds, const int* token
     }
 
     // 3. layer norm on the sum
-    layerNorm<T, T, TPB>(threadData, ld, outOffset, beta, gamma, output);
+    layerNorm<T, T,float, TPB>(threadData, ld, outOffset, beta, gamma, output);
 }
 
 template <typename T>
@@ -376,7 +376,7 @@ void EmbLayerNormPluginDynamic::configurePlugin(
     assert(inputs[0].desc.type == DataType::kINT32);
     assert(inputs[1].desc.type == DataType::kINT32);
     assert(inputs[2].desc.type == DataType::kINT32);
-    assert(outputs[0].desc.type == DataType::kFLOAT || outputs[0].desc.type == DataType::kHALF);
+    assert(outputs[0].desc.type == mType);
     assert(outputs[1].desc.type == DataType::kINT32);
 }
 

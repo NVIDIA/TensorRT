@@ -19,12 +19,12 @@
 
 #include "NvInfer.h"
 #include "NvInferRuntimeCommon.h"
+#include "common.h"
 #include "cublas_v2.h"
 #include "cuda_fp16.hpp"
-#include <cub/cub.cuh>
-#include "logging.h"
-#include "common.h"
 #include "half.h"
+#include "logging.h"
+#include <cub/cub.cuh>
 
 extern Logger gLogger;
 extern LogStreamConsumer gLogVerbose;
@@ -150,9 +150,9 @@ __device__ inline kv_half2 operator+(const kv_half2& a, const kv_half2& b)
 template <typename T>
 using kvp = cub::KeyValuePair<T, T>;
 
-template <typename T, typename R, int TPB>
+template <typename T, typename R, typename P, int TPB>
 __device__ inline void layerNorm(
-    const kvp<R>& threadData, const int ld, const int offset, const float* beta, const float* gamma, T* output)
+    const kvp<R>& threadData, const int ld, const int offset, const P* beta, const P* gamma, T* output)
 {
     // Assuming threadData is already divided by ld
 
@@ -180,9 +180,9 @@ __device__ inline void layerNorm(
     }
 }
 
-template <typename T, int TPB>
-__device__ inline void layerNormSmall(const T val, const kvp<T>& threadData, const int ld, const int idx,
-    const float* beta, const float* gamma, T* output)
+template <typename T, typename P, int TPB>
+__device__ inline void layerNormSmall(
+    const T val, const kvp<T>& threadData, const int ld, const int idx, const P* beta, const P* gamma, T* output)
 {
     // Assuming threadData is already divided by ld
     // Small settings: the block covers the leading dimension TPB >= ld. The input
@@ -320,6 +320,33 @@ cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa
 }
 
 template <typename T>
+cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
+    cublasOperation_t transb, int m, int n, int k, const T alpha, const T* A, int lda, long long int strideA,
+    const T* B, int ldb, long long int strideB, const T beta, T* C, int ldc, long long int strideC, int batchCount,
+    cublasGemmAlgo_t algo);
+
+template <>
+cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
+    cublasOperation_t transb, int m, int n, int k, const float alpha, const float* A, int lda, long long int strideA,
+    const float* B, int ldb, long long int strideB, const float beta, float* C, int ldc, long long int strideC,
+    int batchCount, cublasGemmAlgo_t algo)
+{
+
+    return cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_32F, lda, strideA, B,
+        CUDA_R_32F, ldb, strideB, &beta, C, CUDA_R_32F, ldc, strideC, batchCount, CUDA_R_32F, algo);
+}
+
+template <>
+cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
+    cublasOperation_t transb, int m, int n, int k, const half alpha, const half* A, int lda, long long int strideA,
+    const half* B, int ldb, long long int strideB, const half beta, half* C, int ldc, long long int strideC,
+    int batchCount, cublasGemmAlgo_t algo)
+{
+    return cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_16F, lda, strideA, B,
+        CUDA_R_16F, ldb, strideB, &beta, C, CUDA_R_16F, ldc, strideC, batchCount, CUDA_R_16F, algo);
+}
+
+template <typename T>
 cublasStatus_t inline cublasGemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
     cublasOperation_t transb, int m, int n, int k, const T alpha, const T* A, int lda, long long int strideA,
     const T* B, int ldb, long long int strideB, const T beta, T* C, int ldc, long long int strideC, int batchCount);
@@ -417,23 +444,19 @@ inline nvinfer1::DataType fieldTypeToDataType(const nvinfer1::PluginFieldType ft
 {
     switch (ftype)
     {
-    case nvinfer1::PluginFieldType::kFLOAT32:
-    {
+    case nvinfer1::PluginFieldType::kFLOAT32: {
         gLogVerbose << "PluginFieldType is Float32" << std::endl;
         return nvinfer1::DataType::kFLOAT;
     }
-    case nvinfer1::PluginFieldType::kFLOAT16:
-    {
+    case nvinfer1::PluginFieldType::kFLOAT16: {
         gLogVerbose << "PluginFieldType is Float16" << std::endl;
         return nvinfer1::DataType::kHALF;
     }
-    case nvinfer1::PluginFieldType::kINT32:
-    {
+    case nvinfer1::PluginFieldType::kINT32: {
         gLogVerbose << "PluginFieldType is Int32" << std::endl;
         return nvinfer1::DataType::kINT32;
     }
-    case nvinfer1::PluginFieldType::kINT8:
-    {
+    case nvinfer1::PluginFieldType::kINT8: {
         gLogVerbose << "PluginFieldType is Int8" << std::endl;
         return nvinfer1::DataType::kINT8;
     }
@@ -445,5 +468,54 @@ inline int64_t volume(const nvinfer1::Dims& d)
 {
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
 }
+
+template <int VPT>
+struct BytesToType;
+
+template <>
+struct BytesToType<2>
+{
+    using type = uint16_t;
+};
+template <>
+struct BytesToType<4>
+{
+    using type = uint32_t;
+};
+template <>
+struct BytesToType<8>
+{
+    using type = uint64_t;
+};
+template <>
+struct BytesToType<16>
+{
+    using type = float4;
+};
+
+template <int Bytes>
+__device__ inline void copy(const void* local, void* data)
+{
+    using T = typename BytesToType<Bytes>::type;
+
+    const T* in = static_cast<const T*>(local);
+    T* out = static_cast<T*>(data);
+    *out = *in;
 }
+
+template <typename T>
+__device__ inline T myExp(const T x);
+
+template <>
+__device__ inline half myExp<half>(const half x)
+{
+    return hexp(x);
+}
+template <>
+__device__ inline float myExp<float>(const float x)
+{
+    return __expf(x);
+}
+
+} // namespace bert
 #endif // TRT_PLUGIN_UTIL_H

@@ -74,8 +74,8 @@ private:
     const std::string mLayerName;
     std::string mNamespace;
 
-    float* mGammaDev;
-    float* mBetaDev;
+    void* mGammaDev;
+    void* mBetaDev;
     size_t mLd; // leading dim
     nvinfer1::Weights mBeta;
     nvinfer1::Weights mGamma;
