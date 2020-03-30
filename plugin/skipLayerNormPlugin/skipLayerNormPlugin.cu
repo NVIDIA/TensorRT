@@ -39,7 +39,6 @@ __global__ void skipln_vec(
     T in_local[VPT];
     T skip_local[VPT];
     T bias_local[VPT];
-    // T gamma_local[VPT];
     copy<sizeof(T) * VPT>(&input[idx], in_local);
     copy<sizeof(T) * VPT>(&skip[idx], skip_local);
     copy<sizeof(T) * VPT>(&bias[threadIdx.x * VPT], bias_local);
@@ -74,13 +73,11 @@ __global__ void skipln_vec(
         rsigma = rsqrt(sumKV.value - mu * mu + T(1e-5));
     }
     __syncthreads();
-    ///*
 #pragma unroll
     for (int it = 0; it < VPT; it++)
     {
         in_local[it] = skip_local[it] * (in_local[it] - mu) * rsigma + bias_local[it];
     }
-    /* */
 
     copy<sizeof(T) * VPT>(in_local, &output[idx]);
 }
