@@ -407,7 +407,6 @@ int QKVToContextPluginDynamic::qkvToCtx(cublasHandle_t& cublas, const int B, con
     // P: BxNxSxS (-> scratch2)
     // P * V: BxNxSxH (output)
 
-    // printf("Running Algos: %d %d\n", mAlgoBatchedEx1, mAlgoBatchedEx2);
     const int ldQKV = 3 * B * numHeads * headSize;
     const int strideQKV = 3 * headSize;
     
