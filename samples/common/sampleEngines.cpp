@@ -234,7 +234,10 @@ const void* RndInt8Calibrator::readCalibrationCache(size_t& length)
             std::istream_iterator<char>(input), std::istream_iterator<char>(), std::back_inserter(mCalibrationCache));
     }
 
-    return mCalibrationCache.size() ? mCalibrationCache.data() : nullptr;
+    // return size to the caller
+    length = mCalibrationCache.size();
+
+    return length ? mCalibrationCache.data() : nullptr;
 }
 
 void setTensorScales(const INetworkDefinition& network, float inScales = 2.0f, float outScales = 4.0f)
