@@ -476,8 +476,10 @@ QKVToContextPluginDynamic::QKVToContextPluginDynamic(
     , mNumHeads(numHeads)
     , mHasImask(hasImask)
     , mType(type)
-      , mAlgoBatchedEx1(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
-      , mAlgoBatchedEx2(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
+    , mAlgoBatchedEx1(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
+    , mAlgoBatchedEx2(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
+    , mB(0)
+    , mS(0)
 {
     assert(hiddenSize % numHeads == 0);
     mHeadSize = hiddenSize / numHeads;
@@ -486,6 +488,8 @@ QKVToContextPluginDynamic::QKVToContextPluginDynamic(
 
 QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, const void* data, size_t length)
     : mLayerName(name)
+    , mB(0)
+    , mS(0)
 {
     gLogVerbose << "QKV Deser Start" << std::endl;
     deserialize_value(&data, &length, &mType);
@@ -590,8 +594,12 @@ void QKVToContextPluginDynamic::configurePlugin(
 
     const int S = in->max.d[SDIM];
     const int B = in->max.d[BDIM];
-    std::tie(mAlgoBatchedEx1, mAlgoBatchedEx2) = tuneBatchedGemm(B, S, mNumHeads, mHeadSize);
-    gLogVerbose << "QKV Plugin - Selected Algos for batch gemms: " << mAlgoBatchedEx1 << ", " << mAlgoBatchedEx2 << "\n";
+    if ((S != mS) || (B != mB)) {
+        mS = S;
+        mB = B;
+        std::tie(mAlgoBatchedEx1, mAlgoBatchedEx2) = tuneBatchedGemm(B, S, mNumHeads, mHeadSize);
+        gLogVerbose << "QKV Plugin - Selected Algos for batch gemms: " << mAlgoBatchedEx1 << ", " << mAlgoBatchedEx2 << "\n";
+    }
 }
 
 size_t QKVToContextPluginDynamic::scratchSize(const int B, const int S) const
