@@ -56,7 +56,7 @@ namespace nvinfer1
 	void MishPlugin::forwardGPU(const float *const * inputs, float* output, cudaStream_t stream, int batchSize) {
 		int block_size = m_threadCount;
 		int grid_size = (m_inputSize * batchSize + block_size - 1) / block_size;
-		mish_kernel << <grid_size, block_size >> >(inputs[0], output, m_inputSize * batchSize);
+		mish_kernel << <grid_size, block_size, 0, stream >> >(inputs[0], output, m_inputSize * batchSize);
 	}
 
 
