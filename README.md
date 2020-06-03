@@ -59,7 +59,7 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 1. #### Download TensorRT OSS sources.
 
 	```bash
-	git clone -b master https://github.com/nvidia/TensorRT TensorRT
+	git clone -b release/6.0 https://github.com/nvidia/TensorRT TensorRT
 	cd TensorRT
 	git submodule update --init --recursive
 	export TRT_SOURCE=`pwd`
