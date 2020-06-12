@@ -88,7 +88,6 @@ private:
     int numPriors{};
     std::string mNamespace;
     bool mClipBoxes{};
-    const char* mPluginNamespace;
 };
 
 class BatchedNMSPluginCreator : public BaseCreator
