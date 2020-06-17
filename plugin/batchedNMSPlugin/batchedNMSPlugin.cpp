@@ -192,7 +192,7 @@ void BatchedNMSPlugin::setPluginNamespace(const char* pluginNamespace)
 
 const char* BatchedNMSPlugin::getPluginNamespace() const
 {
-    return mNamespace;
+    return mNamespace.c_str();
 }
 
 nvinfer1::DataType BatchedNMSPlugin::getOutputDataType(
