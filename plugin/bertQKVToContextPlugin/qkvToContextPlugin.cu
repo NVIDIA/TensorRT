@@ -16,8 +16,8 @@
 
 #include "NvInfer.h"
 #include "bertCommon.h"
-#include "qkvToContextPlugin.h"
 #include "common.h"
+#include "qkvToContextPlugin.h"
 #include "serialize.hpp"
 
 #include <cassert>
@@ -29,6 +29,117 @@ using namespace nvinfer1;
 
 namespace bert
 {
+
+template <typename T, int TPB, int VPT>
+__global__ void maskedSoftmax(const float rsqrtHeadSize, const T* input, T* output, const int* maskIdx)
+{
+    using BlockReduce = cub::BlockReduce<float, TPB>;
+    __shared__ union
+    {
+        T shm[VPT * TPB];
+        typename BlockReduce::TempStorage reduce;
+    } tmp;
+
+    // grid: (NxS, B)
+    const int b = blockIdx.y;
+    const int blockOffset = (b * gridDim.x + blockIdx.x) * TPB;
+    __shared__ int lastValid;
+    if (threadIdx.x == 0)
+    {
+        lastValid = min(TPB, maskIdx[b]);
+    }
+    __syncthreads();
+    float local[VPT];
+
+    __shared__ float rZ;
+
+    const int idx = (blockOffset + threadIdx.x) * VPT;
+    T* myshm = &tmp.shm[threadIdx.x * VPT];
+    copy<sizeof(T) * VPT>(&input[idx], myshm);
+
+    __syncthreads();
+
+#pragma unroll
+    for (int it = 0; it < VPT; it++)
+    {
+        local[it]
+            = (threadIdx.x < lastValid) ? myExp<float>((rsqrtHeadSize) * float(tmp.shm[it * TPB + threadIdx.x])) : 0.f;
+    }
+    __syncthreads();
+
+#pragma unroll
+    for (int it = 0; it < VPT; it++)
+    {
+
+        const auto Z = BlockReduce(tmp.reduce).Reduce(local[it], cub::Sum());
+
+        if (threadIdx.x == 0)
+        {
+            rZ = (1.f) / Z;
+        }
+        __syncthreads();
+        local[it] *= rZ;
+    }
+
+#pragma unroll
+    for (int it = 0; it < VPT; it++)
+    {
+        tmp.shm[it * TPB + threadIdx.x] = local[it];
+    }
+    __syncthreads();
+    copy<sizeof(T) * VPT>(myshm, &output[idx]);
+}
+
+template <typename T, int TPB, int VPT>
+__global__ void softmax(const float rsqrtHeadSize, const T* input, T* output)
+{
+    float local[VPT];
+
+    using BlockReduce = cub::BlockReduce<float, TPB>;
+
+    __shared__ union
+    {
+        T shm[VPT * TPB];
+        typename BlockReduce::TempStorage reduce;
+    } tmp;
+
+    __shared__ float rZ;
+
+    const int idx = (TPB * blockIdx.x + threadIdx.x) * VPT;
+    T* myshm = &tmp.shm[threadIdx.x * VPT];
+    copy<sizeof(T) * VPT>(&input[idx], myshm);
+
+    __syncthreads();
+
+#pragma unroll
+    for (int it = 0; it < VPT; it++)
+    {
+        local[it] = myExp<float>(rsqrtHeadSize * float(tmp.shm[it * TPB + threadIdx.x]));
+    }
+    __syncthreads();
+
+#pragma unroll
+    for (int it = 0; it < VPT; it++)
+    {
+
+        const auto Z = BlockReduce(tmp.reduce).Reduce(local[it], cub::Sum());
+
+        if (threadIdx.x == 0)
+        {
+            rZ = 1.f / Z;
+        }
+        __syncthreads();
+        local[it] *= rZ;
+    }
+
+#pragma unroll
+    for (int it = 0; it < VPT; it++)
+    {
+        tmp.shm[it * TPB + threadIdx.x] = local[it];
+    }
+    __syncthreads();
+    copy<sizeof(T) * VPT>(myshm, &output[idx]);
+}
 
 template <typename T, unsigned TPB>
 __global__ void scaledSoftmaxKernelSmall(const int ld, const float rsqrtHeadSize, const T* input, T* output)
@@ -47,6 +158,8 @@ int computeScaledSoftmax(
     cudaStream_t stream, const int ld, const int B, const int N, const float rsqrtHeadSize, const T* input, T* output)
 {
 
+    constexpr int VPT = 16 / sizeof(T);
+
     const dim3 grid(ld * N, B, 1);
 
     if (ld <= 32)
@@ -54,15 +167,22 @@ int computeScaledSoftmax(
         const int blockSize = 32;
         scaledSoftmaxKernelSmall<T, blockSize><<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, input, output);
     }
-    else if (ld <= 128)
+    else if (ld < 128)
     {
         const int blockSize = 128;
         scaledSoftmaxKernelSmall<T, blockSize><<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, input, output);
     }
+    else if (ld == 128)
+    {
+        const int grid = B * N * ld / (VPT);
+        softmax<T, 128, VPT><<<grid, 128, 0, stream>>>(rsqrtHeadSize, input, output);
+    }
+
     else if (ld == 384)
     {
-        const int blockSize = 384;
-        scaledSoftmaxKernelSmall<T, blockSize><<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, input, output);
+
+        const int grid = B * N * ld / (VPT);
+        softmax<T, 384, VPT><<<grid, 384, 0, stream>>>(rsqrtHeadSize, input, output);
     }
     else
     {
@@ -113,29 +233,56 @@ int computeMaskedScaledSoftmax(cudaStream_t stream, const int ld, const int B, c
     // from the beginning of the sequence
 
     const dim3 grid(ld * N, B, 1);
-
+    // for smaller problems, e.g. BERT base B=1, this is not optimal
     if (ld <= 32)
     {
-        const int blockSize = 32;
+        constexpr int blockSize = 32;
         maskedScaledSoftmaxKernelSmall<T, blockSize>
             <<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, maskIdx, input, output);
     }
-    else if (ld <= 128)
+    else if (ld < 128)
     {
-        const int blockSize = 128;
+        constexpr int blockSize = 128;
         maskedScaledSoftmaxKernelSmall<T, blockSize>
             <<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, maskIdx, input, output);
+    }
+    else if (ld == 128)
+    {
+        if (B == 1)
+        {
+            constexpr int VPT = 4 / sizeof(T);
+            constexpr int blockSize = 128;
+            const dim3 grid(ld * N / VPT, B, 1);
+            maskedSoftmax<T, blockSize, VPT><<<grid, blockSize, 0, stream>>>(rsqrtHeadSize, input, output, maskIdx);
+        }
+        else
+        {
+            constexpr int VPT = 16 / sizeof(T);
+            constexpr int blockSize = 128;
+            const dim3 grid(ld * N / VPT, B, 1);
+            maskedSoftmax<T, blockSize, VPT><<<grid, blockSize, 0, stream>>>(rsqrtHeadSize, input, output, maskIdx);
+        }
     }
     else if (ld == 384)
     {
-        const int blockSize = 384;
-        maskedScaledSoftmaxKernelSmall<T, blockSize>
-            <<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, maskIdx, input, output);
+        if (B == 1)
+        {
+            constexpr int VPT = 4 / sizeof(T);
+            constexpr int blockSize = 384;
+            const dim3 grid(ld * N / VPT, B, 1);
+            maskedSoftmax<T, blockSize, VPT><<<grid, blockSize, 0, stream>>>(rsqrtHeadSize, input, output, maskIdx);
+        }
+        else
+        {
+            constexpr int VPT = 16 / sizeof(T);
+            constexpr int blockSize = 384;
+            const dim3 grid(ld * N / VPT, B, 1);
+            maskedSoftmax<T, blockSize, VPT><<<grid, blockSize, 0, stream>>>(rsqrtHeadSize, input, output, maskIdx);
+        }
     }
     else
     {
-        const int blockSize = 256;
-
+        constexpr int blockSize = 256;
         maskedScaledSoftmaxKernel<T, blockSize>
             <<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, maskIdx, input, output);
     }
@@ -144,10 +291,106 @@ int computeMaskedScaledSoftmax(cudaStream_t stream, const int ld, const int B, c
     return 0;
 }
 
+std::pair<int, int> tuneBatchedGemm(const int B, const int S, const int numHeads, const int headSize)
+{
+    const int nruns = 500;
+    cublasHandle_t cublas;
+    cublasCreate(&cublas);
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cublasSetStream(cublas, stream);
+    cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH);
+
+    using T = half;
+    const int omatSize = S * S;
+    const int numMats = B * numHeads;
+    const int ldQKV = 3 * B * numHeads * headSize;
+    const int strideQKV = 3 * headSize;
+    const int ldOut = B * numHeads * headSize;
+    const int strideOut = headSize;
+
+    const size_t inBytes = S * B * 3 * numHeads * headSize * sizeof(T);
+    const size_t qkBytes = S * S * B * numHeads * sizeof(T);
+    const size_t outBytes = S * B * numHeads * headSize * sizeof(T);
+
+    T* input = nullptr;
+    T* qkptr = nullptr;
+    T* output = nullptr;
+    cudaMalloc(&input, inBytes);
+    cudaMalloc(&qkptr, qkBytes);
+    cudaMalloc(&output, outBytes);
+    cudaMemset(input, 1, inBytes);
+    cudaMemset(qkptr, 1, qkBytes);
+
+    // input: SxBx3xNxH
+    const T* qptr = input;
+    const T* kptr = qptr + headSize;
+    const T* vptr = kptr + headSize;
+
+    const int startAlgo = (int) CUBLAS_GEMM_DEFAULT_TENSOR_OP;
+    const int endAlgo = (int) CUBLAS_GEMM_ALGO15_TENSOR_OP;
+    int best1 = startAlgo;
+    int best2 = startAlgo;
+    float ms1 = 1000000;
+    float ms2 = 1000000;
+    for (int a = startAlgo; a <= endAlgo; a++)
+    {
+        cublasGemmAlgo_t algo = static_cast<cublasGemmAlgo_t>(a);
+        float ms1_, ms2_;
+        // qkptr: BxNxSxS
+        cudaEventRecord(start, stream);
+        for (int r = 0; r < nruns; r++)
+        {
+            CHECK(cublasGemmStridedBatchedEx<T>(cublas, CUBLAS_OP_T, CUBLAS_OP_N, S, S, headSize, T(1.f), kptr, ldQKV,
+                strideQKV, qptr, ldQKV, strideQKV, T(0.f), qkptr, S, omatSize, numMats, algo));
+        }
+
+        cudaEventRecord(stop, stream);
+        cudaStreamSynchronize(stream);
+        cudaEventElapsedTime(&ms1_, start, stop);
+        if (ms1_ < ms1)
+        {
+            best1 = algo;
+            ms1 = ms1_;
+        }
+
+        // pptr: BxNxSxS
+        // output: SxBxNxH
+        cudaEventRecord(start, stream);
+        for (int r = 0; r < nruns; r++)
+        {
+            CHECK(cublasGemmStridedBatchedEx<T>(cublas, CUBLAS_OP_N, CUBLAS_OP_N, headSize, S, S, 1.f, vptr, ldQKV,
+                strideQKV, qkptr, S, omatSize, 0.f, output, ldOut, strideOut, numMats, algo));
+        }
+
+        cudaEventRecord(stop, stream);
+        cudaStreamSynchronize(stream);
+        cudaEventElapsedTime(&ms2_, start, stop);
+
+        if (ms2_ < ms2)
+        {
+            best2 = algo;
+            ms2 = ms2_;
+        }
+    }
+
+    cudaFree(input);
+    cudaFree(qkptr);
+    cudaFree(output);
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+    cudaStreamDestroy(stream);
+    cublasDestroy(cublas);
+    return std::make_pair(best1, best2);
+}
+
 template <typename T>
-inline int qkvToCtx(cublasHandle_t& cublas, const int B, const int S, const int numHeads, const int headSize,
-    const float rsqrtHeadSize, const T* input, T* output, T* qkptr, T* pptr, cudaStream_t stream,
-    const int* maskIdx = nullptr)
+int QKVToContextPluginDynamic::qkvToCtx(cublasHandle_t& cublas, const int B, const int S, const int numHeads,
+    const int headSize, const float rsqrtHeadSize, const T* input, T* output, T* qkptr, T* pptr, cudaStream_t stream,
+    const int* maskIdx)
 {
 
     const int omatSize = S * S;
@@ -166,8 +409,19 @@ inline int qkvToCtx(cublasHandle_t& cublas, const int B, const int S, const int 
 
     const int ldQKV = 3 * B * numHeads * headSize;
     const int strideQKV = 3 * headSize;
-    CHECK(cublasGemmStridedBatched<T>(cublas, CUBLAS_OP_T, CUBLAS_OP_N, S, S, headSize, 1.f, kptr, ldQKV, strideQKV,
-        qptr, ldQKV, strideQKV, 0.f, qkptr, S, omatSize, numMats));
+    
+    if (mType == DataType::kHALF)
+    {
+        CHECK(cublasGemmStridedBatchedEx<T>(cublas, CUBLAS_OP_T, CUBLAS_OP_N, S, S, headSize, 1.f, kptr, ldQKV,
+            strideQKV, qptr, ldQKV, strideQKV, 0.f, qkptr, S, omatSize, numMats,
+            static_cast<cublasGemmAlgo_t>(mAlgoBatchedEx1)));
+    }
+    else 
+    {
+
+        CHECK(cublasGemmStridedBatched<T>(cublas, CUBLAS_OP_T, CUBLAS_OP_N, S, S, headSize, 1.f, kptr, ldQKV, strideQKV,
+            qptr, ldQKV, strideQKV, 0.f, qkptr, S, omatSize, numMats));
+    }
 
     // apply softmax
     if (maskIdx)
@@ -183,8 +437,19 @@ inline int qkvToCtx(cublasHandle_t& cublas, const int B, const int S, const int 
 
     const int ldOut = B * numHeads * headSize;
     const int strideOut = headSize;
-    CHECK(cublasGemmStridedBatched<T>(cublas, CUBLAS_OP_N, CUBLAS_OP_N, headSize, S, S, 1.f, vptr, ldQKV, strideQKV,
-        pptr, S, omatSize, 0.f, output, ldOut, strideOut, numMats));
+    if (mType == DataType::kHALF)
+    {
+
+        CHECK(cublasGemmStridedBatchedEx<T>(cublas, CUBLAS_OP_N, CUBLAS_OP_N, headSize, S, S, 1.f, vptr, ldQKV,
+            strideQKV, pptr, S, omatSize, 0.f, output, ldOut, strideOut, numMats,
+            static_cast<cublasGemmAlgo_t>(mAlgoBatchedEx2)));
+    }
+    else 
+    {
+
+        CHECK(cublasGemmStridedBatched<T>(cublas, CUBLAS_OP_N, CUBLAS_OP_N, headSize, S, S, 1.f, vptr, ldQKV, strideQKV,
+            pptr, S, omatSize, 0.f, output, ldOut, strideOut, numMats));
+    }
     return 0;
 }
 
@@ -211,6 +476,8 @@ QKVToContextPluginDynamic::QKVToContextPluginDynamic(
     , mNumHeads(numHeads)
     , mHasImask(hasImask)
     , mType(type)
+      , mAlgoBatchedEx1(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
+      , mAlgoBatchedEx2(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
 {
     assert(hiddenSize % numHeads == 0);
     mHeadSize = hiddenSize / numHeads;
@@ -227,6 +494,8 @@ QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, con
     deserialize_value(&data, &length, &mRsqrtHeadSize);
     deserialize_value(&data, &length, &mHasImask);
     deserialize_value(&data, &length, &mHiddenSize);
+    deserialize_value(&data, &length, &mAlgoBatchedEx1);
+    deserialize_value(&data, &length, &mAlgoBatchedEx2);
     gLogVerbose << "QKV Deser done" << std::endl;
 }
 
@@ -318,6 +587,11 @@ void QKVToContextPluginDynamic::configurePlugin(
         assert(maskDesc.type == DataType::kINT32);
         assert(maskDesc.dims.d[0] == inDesc.dims.d[BDIM]);
     }
+
+    const int S = in->max.d[SDIM];
+    const int B = in->max.d[BDIM];
+    std::tie(mAlgoBatchedEx1, mAlgoBatchedEx2) = tuneBatchedGemm(B, S, mNumHeads, mHeadSize);
+    gLogVerbose << "QKV Plugin - Selected Algos for batch gemms: " << mAlgoBatchedEx1 << ", " << mAlgoBatchedEx2 << "\n";
 }
 
 size_t QKVToContextPluginDynamic::scratchSize(const int B, const int S) const
@@ -380,7 +654,7 @@ void QKVToContextPluginDynamic::terminate()
 size_t QKVToContextPluginDynamic::getSerializationSize() const
 {
     return sizeof(mNumHeads) + sizeof(mHeadSize) + sizeof(DataType) + sizeof(mRsqrtHeadSize) + sizeof(mHasImask)
-        + sizeof(mHiddenSize);
+        + sizeof(mHiddenSize) + sizeof(mAlgoBatchedEx1) + sizeof(mAlgoBatchedEx2);
 }
 
 void QKVToContextPluginDynamic::serialize(void* buffer) const
@@ -391,6 +665,8 @@ void QKVToContextPluginDynamic::serialize(void* buffer) const
     serialize_value(&buffer, mRsqrtHeadSize);
     serialize_value(&buffer, mHasImask);
     serialize_value(&buffer, mHiddenSize);
+    serialize_value(&buffer, mAlgoBatchedEx1);
+    serialize_value(&buffer, mAlgoBatchedEx2);
 }
 
 void QKVToContextPluginDynamic::destroy()
@@ -543,4 +819,4 @@ const char* QKVToContextPluginDynamicCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
 }
-}
+} // namespace bert

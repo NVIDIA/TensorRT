@@ -152,7 +152,65 @@ struct ProposalWorkSpace
     size_t totalSize = 0;
 };
 
+struct MultilevelProposeROIWorkSpace
+{
+    MultilevelProposeROIWorkSpace(const int batchSize, const int inputCnt, const int sampleCount, const RefineNMSParameters& param,
+        const nvinfer1::DataType type);
+
+    MultilevelProposeROIWorkSpace() = default;
+
+    nvinfer1::DimsHW preRefineSortedScoreDims;
+    nvinfer1::DimsHW preRefineBboxDims;
+    nvinfer1::DimsHW argMaxScoreDims;
+    nvinfer1::DimsHW argMaxBboxDims;
+    nvinfer1::DimsHW argMaxLabelDims;
+    nvinfer1::DimsHW sortClassScoreDims;
+    nvinfer1::DimsHW sortClassLabelDims;
+    nvinfer1::DimsHW sortClassSampleIdxDims;
+    nvinfer1::Dims sortClassValidCountDims = {1, {1, 0}, {nvinfer1::DimensionType::kINDEX}};
+    nvinfer1::DimsHW sortClassPosDims;
+    nvinfer1::DimsHW sortNMSMarkDims;
+
+    size_t tempStorageOffset = 0;
+    size_t preRefineSortedScoreOffset = 0;
+    size_t preRefineBboxOffset = 0;
+    size_t argMaxScoreOffset = 0;
+    size_t argMaxBboxOffset = 0;
+    size_t argMaxLabelOffset = 0;
+    size_t sortClassScoreOffset = 0;
+    size_t sortClassLabelOffset = 0;
+    size_t sortClassSampleIdxOffset = 0;
+    size_t sortClassValidCountOffset = 0;
+    size_t sortClassPosOffset = 0;
+    size_t sortNMSMarkOffset = 0;
+    size_t totalSize = 0;
+};
+
+struct ConcatTopKWorkSpace
+{
+    ConcatTopKWorkSpace(const int batchSize, const int concatCnt, const int topK,const nvinfer1::DataType inType);
+
+    ConcatTopKWorkSpace() = default;
+
+    nvinfer1::DimsHW concatedScoreDims;
+    nvinfer1::DimsHW concatedBBoxDims;
+    nvinfer1::DimsHW sortedScoreDims;
+    nvinfer1::DimsHW sortedBBoxDims;
+
+    size_t tempStorageOffset = 0;
+    size_t concatedScoreOffset = 0;
+    size_t concatedBBoxOffset = 0;
+    size_t sortedScoreOffset = 0;
+    size_t sortedBBoxOffset = 0;
+    size_t totalSize = 0;
+};
+
 cudaError_t RefineBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer1::DataType dtype,
+    const RefineNMSParameters& param, const RefineDetectionWorkSpace& refineOffset, void* workspace,
+    const void* inScores, const void* inDelta, const void* inCountValid, const void* inROI, void* outDetections);
+
+cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const float* regWeight, 
+    const float inputHeight, const float inputWidth, nvinfer1::DataType dtype,
     const RefineNMSParameters& param, const RefineDetectionWorkSpace& refineOffset, void* workspace,
     const void* inScores, const void* inDelta, const void* inCountValid, const void* inROI, void* outDetections);
 
@@ -162,6 +220,44 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N,
     nvinfer1::DataType dtype, const RefineNMSParameters& param, const ProposalWorkSpace& proposalOffset,
     void* workspace, const void* inScores, const void* inDelta, const void* inCountValid, const void* inAnchors,
     void* outProposals);
+
+// inScores: [N, anchorsCnt, 1]
+// inDelta: [N, anchorsCnt, 4]
+// outScores: [N, topK, 1]
+// outBbox: [N, topK, 4]
+cudaError_t MultilevelPropose(cudaStream_t stream, int N, 
+    int inputCnt, // candidate anchors number among feature map
+    int samples, //pre nms cnt
+    const float* regWeight,
+    const float inputHeight,
+    const float inputWidth,
+    nvinfer1::DataType dtype, const RefineNMSParameters& param, const MultilevelProposeROIWorkSpace& proposalOffset,
+    void* workspace, const void* inScore, const void* inDelta, void* inCountValid, const void* inAnchors,
+    void* outScores, 
+    void* outBbox);
+
+//inScores: [N, topK, 1] * featureCnt
+//inBboxes: [N, topK, 4] * featureCnt
+//outProposals: [N, topK, 4]
+cudaError_t ConcatTopK(cudaStream_t stream, 
+    int N, 
+    int featureCnt, 
+    int topK, 
+    nvinfer1::DataType dtype, 
+    void* workspace, 
+    const ConcatTopKWorkSpace& spaceOffset,
+    void** inScores, 
+    void** inBBox,
+    void* outProposals); 
+
+cudaError_t DecodeBBoxes(cudaStream_t stream, int N,
+    int samples,         // number of anchors per image
+    const float* regWeight, 
+    const float inputHeight,
+    const float inputWidth,
+    const void* anchors, // [N, anchors, (y1, x1, y2, x2)]
+    const void* delta,   //[N, anchors, (dy, dx, log(dh), log(dw)]
+    void* outputBbox);
 
 cudaError_t ApplyDelta2Bboxes(cudaStream_t stream, int N,
     int samples,         // number of anchors per image
@@ -192,6 +288,12 @@ cudaError_t roiAlign(cudaStream_t stream, int batchSize, int featureCount, int r
 
     void* pooled, const xy_t poolDims);
 
+cudaError_t roiAlignHalfCenter(cudaStream_t stream, int batchSize, int featureCount, int roiCount, float firstThreshold,
+
+    int inputHeight, int inputWidth, const void* rois, const void* const layers[], const xy_t* layerDims,
+
+    void* pooled, const xy_t poolDims);
+    
 // RESIZE NEAREST
 void resizeNearest(dim3 grid, dim3 block, cudaStream_t stream, int nbatch, float scale, int2 osize, float const* idata,
     int istride, int ibatchstride, float* odata, int ostride, int obatchstride);

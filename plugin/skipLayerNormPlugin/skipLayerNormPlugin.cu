@@ -16,9 +16,9 @@
 
 #include "NvInfer.h"
 #include "bertCommon.h"
-#include "skipLayerNormPlugin.h"
 #include "common.h"
 #include "serialize.hpp"
+#include "skipLayerNormPlugin.h"
 
 #include <cassert>
 #include <cstring>
@@ -30,9 +30,61 @@ using bert::operator+;
 namespace bert
 {
 
+template <typename T, int TPB, int VPT, bool hasBias>
+__global__ void skipln_vec(
+    const int ld, const T* input, const T* skip, T* output, const T* beta, const T* gamma, const T* bias)
+{
+    const int idx = ld * blockIdx.x + threadIdx.x * VPT;
+    // 4 * 1024 * 4 * 2 Bytes = 16KB per block
+    T in_local[VPT];
+    T skip_local[VPT];
+    T bias_local[VPT];
+    copy<sizeof(T) * VPT>(&input[idx], in_local);
+    copy<sizeof(T) * VPT>(&skip[idx], skip_local);
+    copy<sizeof(T) * VPT>(&bias[threadIdx.x * VPT], bias_local);
+    T local = 0.f;
+    T local2 = 0.f;
+
+    const T rld = T(1) / T(ld);
+#pragma unroll
+    for (int it = 0; it < VPT; it++)
+    {
+        in_local[it] += skip_local[it];
+        if (hasBias)
+            in_local[it] += bias_local[it];
+        const T tmp = rld * in_local[it];
+        local += tmp;
+        local2 += tmp * in_local[it];
+    }
+
+    copy<sizeof(T) * VPT>(&beta[threadIdx.x * VPT], bias_local);
+    copy<sizeof(T) * VPT>(&gamma[threadIdx.x * VPT], skip_local);
+
+    using BlockReduce = cub::BlockReduce<kvp<T>, TPB>;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+    __shared__ T mu;     // mean
+    __shared__ T rsigma; // 1 / std.dev.
+
+    const auto sumKV = BlockReduce(temp_storage).Reduce(kvp<T>(local, local2), cub::Sum());
+
+    if (threadIdx.x == 0)
+    {
+        mu = sumKV.key;
+        rsigma = rsqrt(sumKV.value - mu * mu + T(1e-5));
+    }
+    __syncthreads();
+#pragma unroll
+    for (int it = 0; it < VPT; it++)
+    {
+        in_local[it] = skip_local[it] * (in_local[it] - mu) * rsigma + bias_local[it];
+    }
+
+    copy<sizeof(T) * VPT>(in_local, &output[idx]);
+}
+
 template <typename T, unsigned TPB, bool hasBias>
 __global__ void skipLayerNormKernelSmall(
-    const int ld, const T* input, const T* skip, const float* beta, const float* gamma, T* output, const T* bias)
+    const int ld, const T* input, const T* skip, const T* beta, const T* gamma, T* output, const T* bias)
 {
 
     const T rld = T(1) / T(ld);
@@ -57,12 +109,12 @@ __global__ void skipLayerNormKernelSmall(
         threadData = pairSum(threadData, kvp<T>(rldval, rldval * val));
     }
 
-    layerNormSmall<T, TPB>(val, threadData, ld, idx, beta, gamma, output);
+    layerNormSmall<T, T, TPB>(val, threadData, ld, idx, beta, gamma, output);
 }
 
 template <typename T, unsigned TPB, bool hasBias>
 __global__ void skipLayerNormKernel(
-    const int ld, const T* input, const T* skip, const float* beta, const float* gamma, T* output, const T* bias)
+    const int ld, const T* input, const T* skip, const T* beta, const T* gamma, T* output, const T* bias)
 {
     const T rld = T(1) / T(ld);
     const int offset = blockIdx.x * ld;
@@ -85,35 +137,33 @@ __global__ void skipLayerNormKernel(
         output[idx] = val;
     }
 
-    layerNorm<T, T, TPB>(threadData, ld, offset, beta, gamma, output);
+    layerNorm<T, T, T, TPB>(threadData, ld, offset, beta, gamma, output);
 }
 
 template <typename T, bool hasBias>
-int computeSkipLayerNorm(cudaStream_t stream, const int ld, const int n, const T* input, const T* skip,
-    const float* beta, const float* gamma, T* output, const T* bias)
+int computeSkipLayerNorm(cudaStream_t stream, const int ld, const int n, const T* input, const T* skip, const T* beta,
+    const T* gamma, T* output, const T* bias)
 {
 
     // this must be true because n is the total size of the tensor
     assert(n % ld == 0);
     const int gridSize = n / ld;
-
+    constexpr int VPT = 16 / sizeof(T);
     if (ld <= 32)
     {
         constexpr int blockSize = 32;
         skipLayerNormKernelSmall<T, blockSize, hasBias>
             <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output, bias);
     }
-    else if (ld <= 128)
+    else if (ld == 768)
     {
-        constexpr int blockSize = 128;
-        skipLayerNormKernelSmall<T, blockSize, hasBias>
-            <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output, bias);
+        constexpr int TPB = 768 / VPT;
+        skipln_vec<T, TPB, VPT, hasBias><<<gridSize, TPB, 0, stream>>>(ld, input, skip, output, beta, gamma, bias);
     }
-    else if (ld == 384)
+    else if (ld == 1024)
     {
-        constexpr int blockSize = 384;
-        skipLayerNormKernelSmall<T, blockSize, hasBias>
-            <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output, bias);
+        constexpr int TPB = 1024 / VPT;
+        skipln_vec<T, TPB, VPT, hasBias><<<gridSize, TPB, 0, stream>>>(ld, input, skip, output, beta, gamma, bias);
     }
     else
     {
@@ -174,11 +224,13 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
     deserialize_value(&data, &length, &mHasBias);
 
     const char* d = static_cast<const char*>(data);
-    mBetaDev = deserToDev<float>(d, mLd);
-    mGammaDev = deserToDev<float>(d, mLd);
+
+    const size_t wordSize = samplesCommon::getElementSize(mType);
+
+    mBetaDev = deserToDev<char>(d, mLd * wordSize);
+    mGammaDev = deserToDev<char>(d, mLd * wordSize);
     if (mHasBias)
     {
-        const size_t wordSize = samplesCommon::getElementSize(mType);
         mBiasDev = deserToDev<char>(d, mLd * wordSize);
     }
     // this signals init not to allocate/copy
@@ -220,7 +272,6 @@ bool SkipLayerNormPluginDynamic::supportsFormatCombination(
     const PluginTensorDesc& in = inOut[pos];
     if (pos == 0)
     {
-        // return (in.type == DataType::kFLOAT || in.type == DataType::kHALF) && (in.format == TensorFormat::kLINEAR);
         return (in.type == mType) && (in.format == TensorFormat::kLINEAR);
     }
     const PluginTensorDesc& prev = inOut[pos - 1];
@@ -275,15 +326,17 @@ int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const
         float* output = static_cast<float*>(outputs[0]);
 
         float* bias = reinterpret_cast<float*>(mBiasDev);
+        const float* beta = static_cast<const float*>(mBetaDev);
+        const float* gamma = static_cast<const float*>(mGammaDev);
         if (mHasBias)
         {
-            status = computeSkipLayerNorm<float, true>(
-                stream, mLd, inputVolume, input, skip, mBetaDev, mGammaDev, output, bias);
+            status
+                = computeSkipLayerNorm<float, true>(stream, mLd, inputVolume, input, skip, beta, gamma, output, bias);
         }
         else
         {
-            status = computeSkipLayerNorm<float, false>(
-                stream, mLd, inputVolume, input, skip, mBetaDev, mGammaDev, output, bias);
+            status
+                = computeSkipLayerNorm<float, false>(stream, mLd, inputVolume, input, skip, beta, gamma, output, bias);
         }
     }
     else if (mType == DataType::kHALF)
@@ -293,15 +346,16 @@ int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const
         half* output = static_cast<half*>(outputs[0]);
         half* bias = reinterpret_cast<half*>(mBiasDev);
 
+        const half* beta = static_cast<const half*>(mBetaDev);
+        const half* gamma = static_cast<const half*>(mGammaDev);
         if (mHasBias)
         {
-            status = computeSkipLayerNorm<half, true>(
-                stream, mLd, inputVolume, input, skip, mBetaDev, mGammaDev, output, bias);
+            status = computeSkipLayerNorm<half, true>(stream, mLd, inputVolume, input, skip, beta, gamma, output, bias);
         }
         else
         {
-            status = computeSkipLayerNorm<half, false>(
-                stream, mLd, inputVolume, input, skip, mBetaDev, mGammaDev, output, bias);
+            status
+                = computeSkipLayerNorm<half, false>(stream, mLd, inputVolume, input, skip, beta, gamma, output, bias);
         }
     }
     else
@@ -339,21 +393,43 @@ int SkipLayerNormPluginDynamic::getNbOutputs() const
 }
 int SkipLayerNormPluginDynamic::initialize()
 {
+    const size_t wordSize = samplesCommon::getElementSize(mType);
     if (mGamma.values)
     {
         CHECK(cudaMalloc(&mGammaDev, sizeof(float) * mGamma.count));
-        CHECK(cudaMemcpy(mGammaDev, mGamma.values, sizeof(float) * mGamma.count, cudaMemcpyHostToDevice));
+
+        // target size
+        const size_t nbBytes = mGamma.count * wordSize;
+        CHECK(cudaMalloc(&mGammaDev, nbBytes));
+
+        if (mType == DataType::kFLOAT)
+        {
+            convertAndCopyToDevice(mGamma, static_cast<float*>(mGammaDev));
+        }
+        else
+        {
+            convertAndCopyToDevice(mGamma, static_cast<half*>(mGammaDev));
+        }
     }
     if (mBeta.values)
     {
         CHECK(cudaMalloc(&mBetaDev, sizeof(float) * mBeta.count));
-        CHECK(cudaMemcpy(mBetaDev, mBeta.values, sizeof(float) * mGamma.count, cudaMemcpyHostToDevice));
+        const size_t nbBytes = mBeta.count * wordSize;
+        CHECK(cudaMalloc(&mBetaDev, nbBytes));
+
+        if (mType == DataType::kFLOAT)
+        {
+            convertAndCopyToDevice(mBeta, static_cast<float*>(mBetaDev));
+        }
+        else
+        {
+            convertAndCopyToDevice(mBeta, static_cast<half*>(mBetaDev));
+        }
     }
 
     if (mHasBias && mBias.values)
     {
         // target size
-        const size_t wordSize = samplesCommon::getElementSize(mType);
         const size_t nbBytes = mBias.count * wordSize;
         CHECK(cudaMalloc(&mBiasDev, nbBytes));
 
@@ -383,8 +459,9 @@ void SkipLayerNormPluginDynamic::terminate()
 
 size_t SkipLayerNormPluginDynamic::getSerializationSize() const
 {
-    size_t biasSize = mHasBias ? (mLd * samplesCommon::getElementSize(mType)) : 0;
-    return 2 * sizeof(float) * mLd + sizeof(DataType) + sizeof(mLd) + biasSize + sizeof(mHasBias);
+    const size_t wordSize = samplesCommon::getElementSize(mType);
+    const size_t biasSize = mHasBias ? (mLd * wordSize) : 0;
+    return 2 * wordSize * mLd + sizeof(DataType) + sizeof(mLd) + biasSize + sizeof(mHasBias);
 }
 
 void SkipLayerNormPluginDynamic::serialize(void* buffer) const
@@ -393,9 +470,10 @@ void SkipLayerNormPluginDynamic::serialize(void* buffer) const
     serialize_value(&buffer, mLd);
     serialize_value(&buffer, mHasBias);
 
+    const size_t wordSize = samplesCommon::getElementSize(mType);
     char* d = static_cast<char*>(buffer);
-    serFromDev(d, mBetaDev, mLd);
-    serFromDev(d, mGammaDev, mLd);
+    serFromDev(d, static_cast<char*>(mBetaDev), mLd * wordSize);
+    serFromDev(d, static_cast<char*>(mGammaDev), mLd * wordSize);
     if (mHasBias)
     {
         const size_t wordSize = samplesCommon::getElementSize(mType);
@@ -532,4 +610,4 @@ const char* SkipLayerNormPluginDynamicCreator::getPluginNamespace() const
 {
     return mNamespace.c_str();
 }
-}
+} // namespace bert

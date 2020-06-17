@@ -187,12 +187,12 @@ IPluginV2Ext* BatchedNMSPlugin::clone() const
 
 void BatchedNMSPlugin::setPluginNamespace(const char* pluginNamespace)
 {
-    mPluginNamespace = pluginNamespace;
+    mNamespace = pluginNamespace;
 }
 
 const char* BatchedNMSPlugin::getPluginNamespace() const
 {
-    return mPluginNamespace;
+    return mNamespace.c_str();
 }
 
 nvinfer1::DataType BatchedNMSPlugin::getOutputDataType(

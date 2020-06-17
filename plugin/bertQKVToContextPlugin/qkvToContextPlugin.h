@@ -80,9 +80,16 @@ private:
     bool mHasImask;
     const std::string mLayerName;
     std::string mNamespace;
+    int mAlgoBatchedEx1;
+    int mAlgoBatchedEx2;
 
     nvinfer1::DataType mType;
     cublasHandle_t cublas;
+
+    template <typename T>
+    int qkvToCtx(cublasHandle_t& cublas, const int B, const int S, const int numHeads, const int headSize,
+        const float rsqrtHeadSize, const T* input, T* output, T* qkptr, T* pptr, cudaStream_t stream,
+        const int* maskIdx = nullptr);
 
 protected:
     // To prevent compiler warnings.
