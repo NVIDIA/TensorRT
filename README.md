@@ -205,27 +205,31 @@ You should now have all expected files to build the container. Move these into t
   * Installation might require superuser privileges depending on the path and permissions of files being replaced.
   * Installation is not supported in cross compilation scenario. Please copy the result files from `build/out` folder into the target device.
 
-	```bash
-	sudo make install
-	```
+  To automatically install the built TensorRT OSS components to the default directories `$TRT_LIB_DIR/../bin/` (`$TRT_RELEASE/bin`) and `$TRT_LIB_DIR/../lib/` (`$TRT_RELEASE/lib`), please run the following command after the TensorRT OSS components were built.
+
+  ```bash
+  cd $TRT_SOURCE/build/
+  sudo make install
+  ```
+
 * Verify the TensorRT samples have been installed correctly.
 
-	```bash
-	cd $TRT_LIB_DIR/../bin/
-	./sample_googlenet
-	```
+  ```bash
+  cd $TRT_LIB_DIR/../bin/
+  ./sample_googlenet
+  ```
 
-	If the sample was installed correctly, the following information will be printed out in the terminal.
+  If the sample was installed correctly, the following information will be printed out in the terminal.
 
-	```bash
-	[08/23/2019-22:08:57] [I] Building and running a GPU inference engine for GoogleNet
-	[08/23/2019-22:08:59] [I] [TRT] Some tactics do not have sufficient workspace memory to run. Increasing workspace size may increase performance, please check verbose output.
-	[08/23/2019-22:09:05] [I] [TRT] Detected 1 inputs and 1 output network tensors.
-	[08/23/2019-22:09:05] [I] Ran /tensorrt/bin/sample_googlenet with: 
-	[08/23/2019-22:09:05] [I] Input(s): data 
-	[08/23/2019-22:09:05] [I] Output(s): prob 
-	&&&& PASSED TensorRT.sample_googlenet # /tensorrt/bin/sample_googlenet
-	```
+  ```bash
+  [08/23/2019-22:08:57] [I] Building and running a GPU inference engine for GoogleNet
+  [08/23/2019-22:08:59] [I] [TRT] Some tactics do not have sufficient workspace memory to run. Increasing workspace size may increase performance, please check verbose output.
+  [08/23/2019-22:09:05] [I] [TRT] Detected 1 inputs and 1 output network tensors.
+  [08/23/2019-22:09:05] [I] Ran /tensorrt/bin/sample_googlenet with: 
+  [08/23/2019-22:09:05] [I] Input(s): data 
+  [08/23/2019-22:09:05] [I] Output(s): prob 
+  &&&& PASSED TensorRT.sample_googlenet # /tensorrt/bin/sample_googlenet
+  ```
 
 ## Useful Resources
 
