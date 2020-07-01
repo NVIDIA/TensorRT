@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 
 // Enumerator for status
@@ -74,7 +75,7 @@ T read(const char*& buffer)
 } // namespace nvinfer1
 
 #ifndef DEBUG
-
+#ifndef CHECK_MACROS_PLUGIN_H
 #define ASSERT(assertion)                                                                                              \
     {                                                                                                                  \
         if (!(assertion))                                                                                              \
@@ -83,7 +84,11 @@ T read(const char*& buffer)
             abort();                                                                                                   \
         }                                                                                                              \
     }
-
+#define FAIL(msg)                                                                                                      \
+    {                                                                                                                  \
+        fprintf(stderr, "Failure - " #msg ", %s:%d\n", __FILE__, __LINE__);                                            \
+        abort();                                                                                                       \
+    }
 #define CUASSERT(status_)                                                                                              \
     {                                                                                                                  \
         auto s_ = status_;                                                                                             \
@@ -190,6 +195,7 @@ T read(const char*& buffer)
         printf(__VA_ARGS__);                                                                                           \
     } while (0)
 
+#endif // CHECK_MACROS_H
 #endif
 
 #endif // TRT_PLUGIN_H

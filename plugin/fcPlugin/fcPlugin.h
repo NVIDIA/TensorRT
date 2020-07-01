@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
+// cublasLT was introduced in CUDA 10.1
+#include <cuda.h>
+#if CUDA_VERSION >= 10010
+
 #ifndef TRT_FC_PLUGIN_H
 #define TRT_FC_PLUGIN_H
 
-#include "bertCommon.h"
 #include "NvInferPlugin.h"
 
+#include "bertCommon.h"
 #include <cublasLt.h>
 #include <string>
 #include <vector>
@@ -41,7 +45,11 @@ struct GemmTypes<half>
     using dataTypeO = half;
     static const cudaDataType_t cudaTypeS = CUDA_R_16F;
     using dataTypeS = half;
+#if CUBLAS_VER_MAJOR < 11
     static const cudaDataType_t cudaTypeCom = CUDA_R_16F;
+#else
+    static const cublasComputeType_t cudaTypeCom = CUBLAS_COMPUTE_16F;
+#endif
 };
 
 template <>
@@ -53,7 +61,11 @@ struct GemmTypes<float>
     using dataTypeO = float;
     static const cudaDataType_t cudaTypeS = CUDA_R_32F;
     using dataTypeS = float;
+#if CUBLAS_VER_MAJOR < 11
     static const cudaDataType_t cudaTypeCom = CUDA_R_32F;
+#else
+    static const cublasComputeType_t cudaTypeCom = CUBLAS_COMPUTE_32F;
+#endif
 };
 
 template <typename T>
@@ -195,39 +207,67 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, const Gemm<T>& g, void* workSpace, 
 
 struct LtContext
 {
-    cublasLtHandle_t cublas;
+    cublasLtHandle_t cublas{nullptr};
     cudaDataType_t typeA;
     cudaDataType_t typeB;
     cudaDataType_t typeC;
+#if CUBLAS_VER_MAJOR < 11
     cudaDataType_t typeComp;
+#else
+    cublasComputeType_t typeComp;
+#endif
+    cudaDataType_t typeS;
     cublasLtMatmulDesc_t operationDesc{nullptr};
     cublasLtMatrixLayout_t Adesc{nullptr};
     cublasLtMatrixLayout_t Bdesc{nullptr};
     cublasLtMatrixLayout_t Cdesc{nullptr};
     cublasLtMatmulHeuristicResult_t heuristicResult = {};
 
-    void destroy()
+    void attach()
     {
+        cublasLtCreate(&cublas);
+    }
 
-        cublasLtMatmulDescDestroy(operationDesc);
-
-        cublasLtMatrixLayoutDestroy(Adesc);
-        cublasLtMatrixLayoutDestroy(Bdesc);
-        cublasLtMatrixLayoutDestroy(Cdesc);
-
+    void detach()
+    {
         cublasLtDestroy(cublas);
     }
+
+    void destroy()
+    {
+        if (operationDesc)
+        {
+            cublasLtMatmulDescDestroy(operationDesc);
+        }
+        if (Adesc)
+        {
+            cublasLtMatrixLayoutDestroy(Adesc);
+        }
+        if (Bdesc)
+        {
+            cublasLtMatrixLayoutDestroy(Bdesc);
+        }
+        if (Cdesc)
+        {
+            cublasLtMatrixLayoutDestroy(Cdesc);
+        }
+    }
+
     template <typename T>
     void create(Gemm<T>& g, size_t workspaceSize)
     {
-        cublasLtCreate(&cublas);
         typeA = Gemm<T>::Types::cudaTypeI;
         typeB = Gemm<T>::Types::cudaTypeI;
         typeC = Gemm<T>::Types::cudaTypeO;
+        typeS = Gemm<T>::Types::cudaTypeS;
         typeComp = Gemm<T>::Types::cudaTypeCom; // compute
 
         // OPERATION
+#if CUBLAS_VER_MAJOR < 11
         cublasLtMatmulDescCreate(&operationDesc, typeComp);
+#else
+        cublasLtMatmulDescCreate(&operationDesc, typeComp, typeS);
+#endif
         cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &g.opA, sizeof(g.opA));
         cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &g.opB, sizeof(g.opB));
 
@@ -336,14 +376,14 @@ inline cublasLtMatmulAlgo_t gemmSearch(
     Gemm<T> g(m, n, k, false, false);
     std::vector<customMatmulPerf_t> perfResults(algoCombinations);
 
-    cudaMalloc(&g.A, g.bytesA);
-    cudaMalloc(&g.B, g.bytesB);
-    cudaMalloc(&g.C, g.bytesC);
+    cudaMalloc(reinterpret_cast<void**>(&g.A), g.bytesA);
+    cudaMalloc(reinterpret_cast<void**>(&g.B), g.bytesB);
+    cudaMalloc(reinterpret_cast<void**>(&g.C), g.bytesC);
 
     void* workspace;
     CHECK(cudaMalloc(&workspace, workspaceSize));
     cublasLtHandle_t lt;
-    CHECK(cublasLtCreate(&lt));
+    CUBLASASSERT(cublasLtCreate(&lt));
     LtGemmSearch(lt, g, workspace, workspaceSize, perfResults);
     cudaDeviceSynchronize();
     cublasLtDestroy(lt);
@@ -370,7 +410,7 @@ inline cublasLtMatmulAlgo_t gemmSearch(Gemm<T>& g, const size_t workspaceSize, s
     void* workspace;
     CHECK(cudaMalloc(&workspace, workspaceSize));
     cublasLtHandle_t lt;
-    CHECK(cublasLtCreate(&lt));
+    CUBLASASSERT(cublasLtCreate(&lt));
     LtGemmSearch(lt, g, workspace, workspaceSize, perfResults);
     cudaDeviceSynchronize();
     cublasLtDestroy(lt);
@@ -426,6 +466,9 @@ public:
     void serialize(void* buffer) const override;
     void destroy() override;
     void setPluginNamespace(const char* pluginNamespace) override;
+    void attachToContext(
+        cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) override;
+    void detachFromContext() override;
     const char* getPluginNamespace() const override;
 
 private:
@@ -440,22 +483,20 @@ private:
 
     cublasLtMatmulAlgo_t mAlgo;
 
-    nvinfer1::Weights mW;
-    nvinfer1::Weights mB;
-
-    char* mWdev; // store weights as bytes: depends on the compute type
+    bert::WeightsWithOwnership mW;
+    bert::cuda_unique_ptr<void> mWdev;
 
     LtContext mLtContext;
 
 protected:
     // To prevent compiler warnings.
-    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
-    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
     using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::supportsFormat;
     using nvinfer1::IPluginV2DynamicExt::configurePlugin;
-    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
     using nvinfer1::IPluginV2DynamicExt::enqueue;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
+    using nvinfer1::IPluginV2DynamicExt::supportsFormat;
 };
 
 class FCPluginDynamicCreator : public nvinfer1::IPluginCreator
@@ -482,5 +523,7 @@ private:
     static std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
 };
-}
+} // namespace bert
 #endif // TRT_FC_PLUGIN_H
+
+#endif // #if CUDA_VERSION >= 10010

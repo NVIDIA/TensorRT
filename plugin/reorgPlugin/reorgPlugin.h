@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,8 @@ class Reorg : public IPluginV2Ext
 {
 public:
     Reorg(int stride);
+
+    Reorg(int C, int H, int W, int stride);
 
     Reorg(const void* buffer, size_t length);
 
@@ -81,9 +83,9 @@ public:
     void detachFromContext() override;
 
 private:
-    int C, H, W;
-    int stride;
-    const char* mPluginNamespace;
+    int C{}, H{}, W{};
+    int stride{};
+    std::string mPluginNamespace;
 };
 
 class ReorgPluginCreator : public BaseCreator
@@ -105,7 +107,7 @@ public:
 
 private:
     static PluginFieldCollection mFC;
-    int stride;
+    int stride{};
     static std::vector<PluginField> mPluginAttributes;
 };
 } // namespace plugin

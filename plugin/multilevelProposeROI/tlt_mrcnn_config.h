@@ -18,8 +18,8 @@
 #define MASKRCNN_CONFIG_HEADER
 #include "NvInfer.h"
 #include <string>
-#include <vector>
 #include <utility>
+#include <vector>
 using namespace nvinfer1;
 
 namespace TLTMaskRCNNConfig
@@ -64,9 +64,8 @@ static const int MAX_LEVEL = 6;
 static const float RPN_ANCHOR_SCALE = 8;
 
 // Ratios of anchors at each cell (width,height)
-static const std::vector<std::pair<float, float>> ANCHOR_RATIOS= {std::make_pair(1.0f, 1.0f), 
-                                                                  std::make_pair(1.4f, 0.7f), 
-                                                                  std::make_pair(0.7f, 1.4f)};
+static const std::vector<std::pair<float, float>> ANCHOR_RATIOS
+    = {std::make_pair(1.0f, 1.0f), std::make_pair(1.4f, 0.7f), std::make_pair(0.7f, 1.4f)};
 
 // Anchor stride
 // If 1 then anchors are created for each cell in the backbone feature map.
@@ -174,5 +173,5 @@ static const Dims3 MODEL_INPUT_SHAPE = IMAGE_SHAPE;
 static const std::vector<std::string> MODEL_OUTPUTS = {"generate_detections", "mask_head/mask_fcn_logits/BiasAdd"};
 static const Dims2 MODEL_DETECTION_SHAPE{DETECTION_MAX_INSTANCES, 6};
 static const Dims4 MODEL_MASK_SHAPE{DETECTION_MAX_INSTANCES, NUM_CLASSES, 28, 28};
-} // namespace MaskRCNNConfig
+} // namespace TLTMaskRCNNConfig
 #endif

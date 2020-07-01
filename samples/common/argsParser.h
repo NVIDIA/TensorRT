@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,6 +83,8 @@ struct Args
     int useDLACore{-1};
     int batch{1};
     std::vector<std::string> dataDirs;
+    std::string saveEngine;
+    std::string loadEngine;
     bool useILoop{false};
 };
 
@@ -100,6 +102,7 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
         int arg;
         static struct option long_options[] = {{"help", no_argument, 0, 'h'}, {"datadir", required_argument, 0, 'd'},
             {"int8", no_argument, 0, 'i'}, {"fp16", no_argument, 0, 'f'}, {"useILoop", no_argument, 0, 'l'},
+            {"saveEngine", required_argument, 0, 's'}, {"loadEngine", no_argument, 0, 'o'},
             {"useDLACore", required_argument, 0, 'u'}, {"batch", required_argument, 0, 'b'}, {nullptr, 0, nullptr, 0}};
         int option_index = 0;
         arg = getopt_long(argc, argv, "hd:iu", long_options, &option_index);
@@ -120,6 +123,18 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
             {
                 std::cerr << "ERROR: --datadir requires option argument" << std::endl;
                 return false;
+            }
+            break;
+        case 's':
+            if (optarg)
+            {
+                args.saveEngine = optarg;
+            }
+            break;
+        case 'o':
+            if (optarg)
+            {
+                args.loadEngine = optarg;
             }
             break;
         case 'i': args.runInInt8 = true; break;

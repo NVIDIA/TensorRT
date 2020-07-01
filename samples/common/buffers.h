@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,6 @@
 #include <numeric>
 #include <string>
 #include <vector>
-
-using namespace std;
 
 namespace samplesCommon
 {
@@ -243,16 +241,18 @@ public:
     //!
     //! \brief Create a BufferManager for handling buffer interactions with engine.
     //!
-    BufferManager(std::shared_ptr<nvinfer1::ICudaEngine> engine, const int& batchSize,
+    BufferManager(std::shared_ptr<nvinfer1::ICudaEngine> engine, const int batchSize = 0,
         const nvinfer1::IExecutionContext* context = nullptr)
         : mEngine(engine)
         , mBatchSize(batchSize)
     {
+        // Full Dims implies no batch size.
+        assert(engine->hasImplicitBatchDimension() || mBatchSize == 0);
         // Create host and device buffers
         for (int i = 0; i < mEngine->getNbBindings(); i++)
         {
             auto dims = context ? context->getBindingDimensions(i) : mEngine->getBindingDimensions(i);
-            size_t vol = context ? 1 : static_cast<size_t>(mBatchSize);
+            size_t vol = context || !mBatchSize ? 1 : static_cast<size_t>(mBatchSize);
             nvinfer1::DataType type = mEngine->getBindingDataType(i);
             int vecDim = mEngine->getBindingVectorizedDim(i);
             if (-1 != vecDim) // i.e., 0 != lgScalarsPerVector
@@ -332,11 +332,22 @@ public:
         void* buf = mManagedBuffers[index]->hostBuffer.data();
         size_t bufSize = mManagedBuffers[index]->hostBuffer.nbBytes();
         nvinfer1::Dims bufDims = mEngine->getBindingDimensions(index);
-        size_t rowCount = static_cast<size_t>(bufDims.nbDims >= 1 ? bufDims.d[bufDims.nbDims - 1] : mBatchSize);
+        size_t rowCount = static_cast<size_t>(bufDims.nbDims > 0 ? bufDims.d[bufDims.nbDims - 1] : mBatchSize);
+        int leadDim = mBatchSize;
+        int* trailDims = bufDims.d;
+        int nbDims = bufDims.nbDims;
 
-        os << "[" << mBatchSize;
-        for (int i = 0; i < bufDims.nbDims; i++)
-            os << ", " << bufDims.d[i];
+        // Fix explicit Dimension networks
+        if (!leadDim && nbDims > 0)
+        {
+            leadDim = bufDims.d[0];
+            ++trailDims;
+            --nbDims;
+        }
+
+        os << "[" << leadDim;
+        for (int i = 0; i < nbDims; i++)
+            os << ", " << trailDims[i];
         os << "]" << std::endl;
         switch (mEngine->getBindingDataType(index))
         {
@@ -441,7 +452,7 @@ private:
     }
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine;              //!< The pointer to the engine
-    int mBatchSize;                                              //!< The batch size
+    int mBatchSize;                                              //!< The batch size for legacy networks, 0 otherwise.
     std::vector<std::unique_ptr<ManagedBuffer>> mManagedBuffers; //!< The vector of pointers to managed buffers
     std::vector<void*> mDeviceBindings; //!< The vector of device buffers needed for engine execution
 };

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,15 +22,15 @@
 #include <random>
 #include <string>
 
-#include "NvInfer.h"
 #include "NvCaffeParser.h"
+#include "NvInfer.h"
 #include "NvOnnxParser.h"
 #include "NvUffParser.h"
 
 #include "logger.h"
-#include "sampleUtils.h"
-#include "sampleOptions.h"
 #include "sampleEngines.h"
+#include "sampleOptions.h"
+#include "sampleUtils.h"
 
 using namespace nvinfer1;
 
@@ -57,6 +57,15 @@ struct UffBufferShutter
 };
 
 } // namespace
+
+#define SMP_RETVAL_IF_FALSE(condition, msg, retval, err)                                                               \
+    {                                                                                                                  \
+        if ((condition) == false)                                                                                      \
+        {                                                                                                              \
+            err << msg << std::endl;                                                                                   \
+            return retval;                                                                                             \
+        }                                                                                                              \
+    }
 
 Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& network, std::ostream& err)
 {
@@ -127,17 +136,16 @@ Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& n
     case ModelFormat::kONNX:
     {
         using namespace nvonnxparser;
-        parser.onnxParser.reset(createParser(network, gLogger.getTRTLogger()));
+        parser.onnxParser.reset(createParser(network, sample::gLogger.getTRTLogger()));
         if (!parser.onnxParser->parseFromFile(
-                model.baseModel.model.c_str(), static_cast<int>(gLogger.getReportableSeverity())))
+                model.baseModel.model.c_str(), static_cast<int>(sample::gLogger.getReportableSeverity())))
         {
             err << "Failed to parse onnx file" << std::endl;
             parser.onnxParser.reset();
         }
         break;
     }
-    case ModelFormat::kANY:
-        break;
+    case ModelFormat::kANY: break;
     }
 
     return parser;
@@ -149,8 +157,8 @@ namespace
 class RndInt8Calibrator : public nvinfer1::IInt8EntropyCalibrator2
 {
 public:
-    RndInt8Calibrator(
-        int batches, const std::string& cacheFile, const nvinfer1::INetworkDefinition& network, std::ostream& err);
+    RndInt8Calibrator(int batches, std::vector<int>& elemCount, const std::string& cacheFile,
+        const nvinfer1::INetworkDefinition& network, std::ostream& err);
 
     ~RndInt8Calibrator()
     {
@@ -180,13 +188,19 @@ private:
     std::ostream& mErr;
 };
 
-RndInt8Calibrator::RndInt8Calibrator(
-    int batches, const std::string& cacheFile, const INetworkDefinition& network, std::ostream& err)
+RndInt8Calibrator::RndInt8Calibrator(int batches, std::vector<int>& elemCount, const std::string& cacheFile,
+    const INetworkDefinition& network, std::ostream& err)
     : mBatches(batches)
     , mCurrentBatch(0)
     , mCacheFile(cacheFile)
     , mErr(err)
 {
+    std::ifstream tryCache(cacheFile, std::ios::binary);
+    if (tryCache.good())
+    {
+        return;
+    }
+
     std::default_random_engine generator;
     std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
     auto gen = [&generator, &distribution]() { return distribution(generator); };
@@ -194,13 +208,12 @@ RndInt8Calibrator::RndInt8Calibrator(
     for (int i = 0; i < network.getNbInputs(); i++)
     {
         auto input = network.getInput(i);
-        int elemCount = volume(input->getDimensions());
-        std::vector<float> rnd_data(elemCount);
-        std::generate_n(rnd_data.begin(), elemCount, gen);
+        std::vector<float> rnd_data(elemCount[i]);
+        std::generate_n(rnd_data.begin(), elemCount[i], gen);
 
         void* data;
-        cudaCheck(cudaMalloc(&data, elemCount * sizeof(float)), mErr);
-        cudaCheck(cudaMemcpy(data, rnd_data.data(), elemCount * sizeof(float), cudaMemcpyHostToDevice), mErr);
+        cudaCheck(cudaMalloc(&data, elemCount[i] * sizeof(float)), mErr);
+        cudaCheck(cudaMemcpy(data, rnd_data.data(), elemCount[i] * sizeof(float), cudaMemcpyHostToDevice), mErr);
 
         mInputDeviceBuffers.insert(std::make_pair(input->getName(), data));
     }
@@ -234,10 +247,11 @@ const void* RndInt8Calibrator::readCalibrationCache(size_t& length)
             std::istream_iterator<char>(input), std::istream_iterator<char>(), std::back_inserter(mCalibrationCache));
     }
 
+    length = mCalibrationCache.size();
     return mCalibrationCache.size() ? mCalibrationCache.data() : nullptr;
 }
 
-void setTensorScales(const INetworkDefinition& network, float inScales = 2.0f, float outScales = 4.0f)
+bool setTensorScales(const INetworkDefinition& network, float inScales = 2.0f, float outScales = 4.0f)
 {
     // Ensure that all layer inputs have a scale.
     for (int l = 0; l < network.getNbLayers(); l++)
@@ -249,7 +263,10 @@ void setTensorScales(const INetworkDefinition& network, float inScales = 2.0f, f
             // Optional inputs are nullptr here and are from RNN layers.
             if (input && !input->dynamicRangeIsSet())
             {
-                input->setDynamicRange(-inScales, inScales);
+                if (!input->setDynamicRange(-inScales, inScales))
+                {
+                    return false;
+                }
             }
         }
         for (int o = 0; o < layer->getNbOutputs(); o++)
@@ -261,15 +278,22 @@ void setTensorScales(const INetworkDefinition& network, float inScales = 2.0f, f
                 // Pooling must have the same input and output scales.
                 if (layer->getType() == LayerType::kPOOLING)
                 {
-                    output->setDynamicRange(-inScales, inScales);
+                    if (!output->setDynamicRange(-inScales, inScales))
+                    {
+                        return false;
+                    }
                 }
                 else
                 {
-                    output->setDynamicRange(-outScales, outScales);
+                    if (!output->setDynamicRange(-outScales, outScales))
+                    {
+                        return false;
+                    }
                 }
             }
         }
     }
+    return true;
 }
 
 } // namespace
@@ -290,6 +314,10 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
     }
 
     bool hasDynamicShapes{false};
+    if (!build.inputFormats.empty() && build.inputFormats.size() != static_cast<size_t>(network.getNbInputs()))
+    {
+        throw std::invalid_argument("The number of inputIOFormats must match network's inputs.");
+    }
     for (unsigned int i = 0, n = network.getNbInputs(); i < n; i++)
     {
         // Set formats and data types of inputs
@@ -305,11 +333,11 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
             {
             case DataType::kINT32:
             case DataType::kBOOL:
+            case DataType::kHALF:
                 // Leave these as is.
                 break;
             case DataType::kFLOAT:
             case DataType::kINT8:
-            case DataType::kHALF:
                 // User did not specify a floating-point format.  Default to kFLOAT.
                 input->setType(DataType::kFLOAT);
                 break;
@@ -320,7 +348,9 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
         if (profile)
         {
             Dims dims = input->getDimensions();
-            const bool isDynamicInput = std::any_of(dims.d, dims.d + dims.nbDims, [](int dim){ return dim == -1; }) || input->isShapeTensor();
+            const bool isScalar = dims.nbDims == 0;
+            const bool isDynamicInput = std::any_of(dims.d, dims.d + dims.nbDims, [](int dim) { return dim == -1; })
+                || input->isShapeTensor();
             if (isDynamicInput)
             {
                 hasDynamicShapes = true;
@@ -331,18 +361,28 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
                 if (shape == build.shapes.end())
                 {
                     constexpr int DEFAULT_DIMENSION = 1;
-                    Dims staticDims{};
+                    std::vector<int> staticDims;
                     if (input->isShapeTensor())
                     {
-                        staticDims.nbDims = dims.d[0];
-                        std::fill(staticDims.d, staticDims.d + staticDims.nbDims, DEFAULT_DIMENSION);
+                        if (isScalar)
+                        {
+                            staticDims.push_back(1);
+                        }
+                        else
+                        {
+                            staticDims.resize(dims.d[0]);
+                            std::fill(staticDims.begin(), staticDims.end(), DEFAULT_DIMENSION);
+                        }
                     }
                     else
                     {
-                        staticDims.nbDims = dims.nbDims;
-                        std::transform(dims.d, dims.d + dims.nbDims, staticDims.d, [&DEFAULT_DIMENSION](int dim) { return dim > 0 ? dim : DEFAULT_DIMENSION; });
+                        staticDims.resize(dims.nbDims);
+                        std::transform(dims.d, dims.d + dims.nbDims, staticDims.begin(),
+                            [&DEFAULT_DIMENSION](int dim) { return dim > 0 ? dim : DEFAULT_DIMENSION; });
                     }
-                    gLogWarning << "Dynamic dimensions required for input: " << input->getName() << ", but no shapes were provided. Automatically overriding shape to: " << staticDims << std::endl;
+                    sample::gLogWarning << "Dynamic dimensions required for input: " << input->getName()
+                                        << ", but no shapes were provided. Automatically overriding shape to: "
+                                        << staticDims << std::endl;
                     std::fill(shapes.begin(), shapes.end(), staticDims);
                 }
                 else
@@ -350,24 +390,36 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
                     shapes = shape->second;
                 }
 
-                Dims profileDims{};
+                std::vector<int> profileDims{};
                 if (input->isShapeTensor())
                 {
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
-                    profile->setShapeValues(input->getName(), OptProfileSelector::kMIN, profileDims.d, profileDims.nbDims);
+                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(input->getName(), OptProfileSelector::kMIN,
+                                            profileDims.data(), static_cast<int>(profileDims.size())),
+                        "Error in set shape values MIN", nullptr, err);
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
-                    profile->setShapeValues(input->getName(), OptProfileSelector::kOPT, profileDims.d, profileDims.nbDims);
+                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(input->getName(), OptProfileSelector::kOPT,
+                                            profileDims.data(), static_cast<int>(profileDims.size())),
+                        "Error in set shape values OPT", nullptr, err);
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
-                    profile->setShapeValues(input->getName(), OptProfileSelector::kMAX, profileDims.d, profileDims.nbDims);
+                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(input->getName(), OptProfileSelector::kMAX,
+                                            profileDims.data(), static_cast<int>(profileDims.size())),
+                        "Error in set shape values MAX", nullptr, err);
                 }
                 else
                 {
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
-                    profile->setDimensions(input->getName(), OptProfileSelector::kMIN, profileDims);
+                    SMP_RETVAL_IF_FALSE(
+                        profile->setDimensions(input->getName(), OptProfileSelector::kMIN, toDims(profileDims)),
+                        "Error in set dimensions to profile MIN", nullptr, err);
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
-                    profile->setDimensions(input->getName(), OptProfileSelector::kOPT, profileDims);
+                    SMP_RETVAL_IF_FALSE(
+                        profile->setDimensions(input->getName(), OptProfileSelector::kOPT, toDims(profileDims)),
+                        "Error in set dimensions to profile OPT", nullptr, err);
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
-                    profile->setDimensions(input->getName(), OptProfileSelector::kMAX, profileDims);
+                    SMP_RETVAL_IF_FALSE(
+                        profile->setDimensions(input->getName(), OptProfileSelector::kMAX, toDims(profileDims)),
+                        "Error in set dimensions to profile MAX", nullptr, err);
                 }
             }
         }
@@ -375,14 +427,15 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
 
     if (profile && hasDynamicShapes)
     {
-        if (!profile->isValid())
-        {
-            err << "Required optimization profile is invalid" << std::endl;
-            return nullptr;
-        }
-        config->addOptimizationProfile(profile);
+        SMP_RETVAL_IF_FALSE(profile->isValid(), "Required optimization profile is invalid", nullptr, err);
+        SMP_RETVAL_IF_FALSE(
+            config->addOptimizationProfile(profile) != -1, "Error in add optimization profile", nullptr, err);
     }
 
+    if (!build.outputFormats.empty() && build.outputFormats.size() != static_cast<size_t>(network.getNbOutputs()))
+    {
+        throw std::invalid_argument("The number of outputIOFormats must match network's outputs.");
+    }
     for (unsigned int i = 0, n = network.getNbOutputs(); i < n; i++)
     {
         // Set formats and data types of outputs
@@ -400,6 +453,20 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
 
     config->setMaxWorkspaceSize(static_cast<size_t>(build.workspace) << 20);
 
+    if (!build.builderCache)
+    {
+        config->setFlag(BuilderFlag::kDISABLE_TIMING_CACHE);
+    }
+
+    if (!build.tf32)
+    {
+        config->clearFlag(BuilderFlag::kTF32);
+    }
+
+    config->setProfilingVerbosity(build.nvtxMode);
+    config->setMinTimingIterations(build.minTiming);
+    config->setAvgTimingIterations(build.avgTiming);
+
     if (build.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
@@ -410,6 +477,14 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
         config->setFlag(BuilderFlag::kINT8);
     }
 
+    if (build.int8 && !build.fp16)
+    {
+        sample::gLogInfo
+            << "FP32 and INT8 precisions have been specified - more performance might be enabled by additionally "
+               "specifying --fp16 or --best"
+            << std::endl;
+    }
+
     auto isInt8 = [](const IOFormat& format) { return format.first == DataType::kINT8; };
     auto int8IO = std::count_if(build.inputFormats.begin(), build.inputFormats.end(), isInt8)
         + std::count_if(build.outputFormats.begin(), build.outputFormats.end(), isInt8);
@@ -418,11 +493,54 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
     {
         // Explicitly set int8 scales if no calibrator is provided and if I/O tensors use int8,
         // because auto calibration does not support this case.
-        setTensorScales(network);
+        SMP_RETVAL_IF_FALSE(setTensorScales(network), "Error in set tensor scales.", nullptr, err);
     }
     else if (build.int8)
     {
-        config->setInt8Calibrator(new RndInt8Calibrator(1, build.calibration, network, err));
+        IOptimizationProfile* profileCalib{nullptr};
+        if (!build.shapesCalib.empty())
+        {
+            profileCalib = builder.createOptimizationProfile();
+            for (unsigned int i = 0, n = network.getNbInputs(); i < n; i++)
+            {
+                auto input = network.getInput(i);
+                Dims profileDims{};
+                auto shape = build.shapesCalib.find(input->getName());
+                ShapeRange shapesCalib{};
+                shapesCalib = shape->second;
+
+                profileDims = toDims(shapesCalib[static_cast<size_t>(OptProfileSelector::kOPT)]);
+                // Here we check only kMIN as all profileDims are the same.
+                SMP_RETVAL_IF_FALSE(
+                    profileCalib->setDimensions(input->getName(), OptProfileSelector::kMIN, profileDims),
+                    "Error in set dimensions to calibration profile OPT", nullptr, err);
+                profileCalib->setDimensions(input->getName(), OptProfileSelector::kOPT, profileDims);
+                profileCalib->setDimensions(input->getName(), OptProfileSelector::kMAX, profileDims);
+            }
+            SMP_RETVAL_IF_FALSE(profileCalib->isValid(), "Calibration profile is invalid", nullptr, err);
+            SMP_RETVAL_IF_FALSE(
+                config->setCalibrationProfile(profileCalib), "Error in set calibration profile", nullptr, err);
+        }
+
+        std::vector<int> elemCount{};
+        for (int i = 0; i < network.getNbInputs(); i++)
+        {
+            auto input = network.getInput(i);
+            if (profileCalib)
+            {
+                elemCount.push_back(volume(profileCalib->getDimensions(input->getName(), OptProfileSelector::kOPT)));
+            }
+            else if (profile)
+            {
+                elemCount.push_back(volume(profile->getDimensions(input->getName(), OptProfileSelector::kOPT)));
+            }
+            else
+            {
+                elemCount.push_back(volume(input->getDimensions()));
+            }
+        }
+
+        config->setInt8Calibrator(new RndInt8Calibrator(1, elemCount, build.calibration, network, err));
     }
 
     if (build.safe)
@@ -460,15 +578,16 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
 ICudaEngine* modelToEngine(
     const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
 {
-    TrtUniquePtr<IBuilder> builder{createInferBuilder(gLogger.getTRTLogger())};
+    TrtUniquePtr<IBuilder> builder{createInferBuilder(sample::gLogger.getTRTLogger())};
     if (builder == nullptr)
     {
         err << "Builder creation failed" << std::endl;
         return nullptr;
     }
     const bool isOnnxModel = model.baseModel.format == ModelFormat::kONNX;
-    auto batchFlag = (build.maxBatch && !isOnnxModel) ? 0U : 1U
-        << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    auto batchFlag = (build.maxBatch && !isOnnxModel)
+        ? 0U
+        : 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
     TrtUniquePtr<INetworkDefinition> network{builder->createNetworkV2(batchFlag)};
     if (!network)
     {
@@ -506,7 +625,7 @@ ICudaEngine* loadEngine(const std::string& engine, int DLACore, std::ostream& er
         return nullptr;
     }
 
-    TrtUniquePtr<IRuntime> runtime{createInferRuntime(gLogger.getTRTLogger())};
+    TrtUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
     if (DLACore != -1)
     {
         runtime->setDLACore(DLACore);
@@ -535,7 +654,8 @@ bool saveEngine(const ICudaEngine& engine, const std::string& fileName, std::ost
     return !engineFile.fail();
 }
 
-TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
+TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(
+    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
 {
     TrtUniquePtr<nvinfer1::ICudaEngine> engine;
     if (build.load)

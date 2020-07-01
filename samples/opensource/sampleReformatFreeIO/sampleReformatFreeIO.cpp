@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -282,7 +282,7 @@ public:
 //!
 bool SampleReformatFreeIO::build(int dataWidth)
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -336,7 +336,9 @@ bool SampleReformatFreeIO::build(int dataWidth)
         builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
 
     if (!mEngine)
+    {
         return false;
+    }
 
     assert(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
@@ -450,12 +452,12 @@ bool SampleReformatFreeIO::readDigits(SampleBuffer& buffer, int groundTruthDigit
         locateFile(std::to_string(groundTruthDigit) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
 
     // Print ASCII representation of digit
-    gLogInfo << "Input:\n";
+    sample::gLogInfo << "Input:\n";
     for (int i = 0; i < inputH * inputW; i++)
     {
-        gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
+        sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     float* inputBuf = reinterpret_cast<float*>(buffer.buffer);
 
@@ -476,7 +478,7 @@ bool SampleReformatFreeIO::verifyOutput(SampleBuffer& outputBuf, int groundTruth
     const T* prob = reinterpret_cast<const T*>(outputBuf.buffer);
 
     // Print histogram of the output distribution
-    gLogInfo << "Output:\n";
+    sample::gLogInfo << "Output:\n";
     float val{0.0f};
     float elem{0.0f};
     int idx{0};
@@ -491,9 +493,9 @@ bool SampleReformatFreeIO::verifyOutput(SampleBuffer& outputBuf, int groundTruth
             idx = i;
         }
 
-        gLogInfo << i << ": " << std::string(int(std::floor(elem * 10 + 0.5f)), '*') << "\n";
+        sample::gLogInfo << i << ": " << std::string(int(std::floor(elem * 10 + 0.5f)), '*') << "\n";
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     return (idx == groundTruthDigit && val > 0.9f);
 }
@@ -632,24 +634,24 @@ void printHelpInfo()
 //! \brief Used to run the engine build and inference/reference functions
 //!
 template <typename T>
-int process(SampleReformatFreeIO& sample, const Logger::TestAtom& sampleTest, SampleBuffer& inputBuf,
+bool process(SampleReformatFreeIO& sample, const sample::Logger::TestAtom& sampleTest, SampleBuffer& inputBuf,
     SampleBuffer& outputBuf, SampleBuffer& goldenInput, SampleBuffer& goldenOutput)
 {
-    gLogInfo << "Building and running a GPU inference engine for reformat free I/O" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for reformat free I/O" << std::endl;
 
     inputBuf = SampleBuffer(sample.mInputDims, sizeof(T), sample.mTensorFormat);
     outputBuf = SampleBuffer(sample.mOutputDims, sizeof(T), sample.mTensorFormat);
 
     if (!sample.build(sizeof(T)))
     {
-        return gLogger.reportFail(sampleTest);
+        return false;
     }
 
     convertGoldenData<T>(goldenInput, inputBuf);
 
     if (!sample.infer(inputBuf, outputBuf))
     {
-        return gLogger.reportFail(sampleTest);
+        return false;
     }
 
     SampleBuffer linearOutputBuf(sample.mOutputDims, sizeof(T), TensorFormat::kLINEAR);
@@ -658,20 +660,20 @@ int process(SampleReformatFreeIO& sample, const Logger::TestAtom& sampleTest, Sa
 
     if (!sample.verifyOutput<T>(linearOutputBuf, sample.mDigit))
     {
-        return gLogger.reportFail(sampleTest);
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
-int runFP32Reference(SampleReformatFreeIO& sample, const Logger::TestAtom& sampleTest, SampleBuffer& goldenInput,
-    SampleBuffer& goldenOutput)
+bool runFP32Reference(SampleReformatFreeIO& sample, const sample::Logger::TestAtom& sampleTest,
+    SampleBuffer& goldenInput, SampleBuffer& goldenOutput)
 {
-    gLogInfo << "Building and running a FP32 GPU inference to get golden input/output" << std::endl;
+    sample::gLogInfo << "Building and running a FP32 GPU inference to get golden input/output" << std::endl;
 
     if (!sample.build(sizeof(float)))
     {
-        return gLogger.reportFail(sampleTest);
+        return false;
     }
 
     goldenInput = SampleBuffer(sample.mInputDims, sizeof(float), TensorFormat::kLINEAR);
@@ -682,15 +684,15 @@ int runFP32Reference(SampleReformatFreeIO& sample, const Logger::TestAtom& sampl
 
     if (!sample.infer(goldenInput, goldenOutput))
     {
-        return gLogger.reportFail(sampleTest);
+        return false;
     }
 
     if (!sample.verifyOutput<float>(goldenOutput, sample.mDigit))
     {
-        return gLogger.reportFail(sampleTest);
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
 int main(int argc, char** argv)
@@ -699,7 +701,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -709,9 +711,9 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     samplesCommon::CaffeSampleParams params = initializeSampleParams(args);
 
@@ -733,37 +735,47 @@ int main(int argc, char** argv)
     srand(unsigned(time(nullptr)));
     sample.mDigit = rand() % 10;
 
-    gLogInfo << "The test chooses MNIST as the network and recognizes a randomly generated digit" << std::endl;
-    gLogInfo << "Firstly it runs the FP32 as the golden data, then INT8/FP16 with different formats will be tested"
-             << std::endl
-             << std::endl;
+    sample::gLogInfo << "The test chooses MNIST as the network and recognizes a randomly generated digit" << std::endl;
+    sample::gLogInfo
+        << "Firstly it runs the FP32 as the golden data, then INT8/FP16 with different formats will be tested"
+        << std::endl
+        << std::endl;
 
-    runFP32Reference(sample, sampleTest, goldenInput, goldenOutput);
+    if (!runFP32Reference(sample, sampleTest, goldenInput, goldenOutput))
+    {
+        return sample::gLogger.reportFail(sampleTest);
+    }
 
     // Test INT8 formats
     for (auto elem : vecINT8TensorFmt)
     {
-        gLogInfo << "Testing datatype INT8 with format " << elem.second << std::endl;
+        sample::gLogInfo << "Testing datatype INT8 with format " << elem.second << std::endl;
         sample.mTensorFormat = elem.first;
         SampleBuffer inputBuf, outputBuf;
 
-        process<int8_t>(sample, sampleTest, inputBuf, outputBuf, goldenInput, goldenOutput);
+        if (!process<int8_t>(sample, sampleTest, inputBuf, outputBuf, goldenInput, goldenOutput))
+        {
+            return sample::gLogger.reportFail(sampleTest);
+        }
     }
 
     // Test FP16 formats
     for (auto elem : vecFP16TensorFmt)
     {
-        gLogInfo << "Testing datatype FP16 with format " << elem.second << std::endl;
+        sample::gLogInfo << "Testing datatype FP16 with format " << elem.second << std::endl;
         sample.mTensorFormat = elem.first;
         SampleBuffer inputBuf, outputBuf;
 
-        process<half_float::half>(sample, sampleTest, inputBuf, outputBuf, goldenInput, goldenOutput);
+        if (!process<half_float::half>(sample, sampleTest, inputBuf, outputBuf, goldenInput, goldenOutput))
+        {
+            return sample::gLogger.reportFail(sampleTest);
+        }
     }
 
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

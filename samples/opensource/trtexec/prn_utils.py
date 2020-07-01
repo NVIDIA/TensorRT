@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,20 +24,22 @@ Utils to print traces and profiles in CSV format
 
 from __future__ import print_function
 
-def combine_descriptions(prolog, features, descriptions):
+
+
+def combineDescriptions(prolog, features, descriptions):
     ''' Combine features with their descriptions '''
 
-    full_description = prolog
+    fullDescription = prolog
     sep = ' '
     for feature, description in zip(features, descriptions):
-        full_description += sep + feature + ' (' + description + ')'
+        fullDescription += sep + feature + ' (' + description + ')'
         sep = ', '
 
-    return full_description
+    return fullDescription
 
 
 
-def print_header(allFeatures, features, gp, count):
+def printHeader(allFeatures, selection, gp = False, count = False):
     ''' Print table header '''
 
     if gp:
@@ -48,7 +50,7 @@ def print_header(allFeatures, features, gp, count):
         sep = ''
 
     for feature in allFeatures:
-       if feature in features:
+       if feature in selection:
            print(sep + feature, end = '')
            sep = ', '
 
@@ -56,7 +58,7 @@ def print_header(allFeatures, features, gp, count):
 
 
 
-def print_csv(data, count):
+def printCsv(data, count = False):
     ''' Print trace in CSV format '''
 
     c = 0
@@ -68,22 +70,27 @@ def print_csv(data, count):
         else:
             sep = ''
         for r in row:
-            print('{}{:.6}'.format(sep, float(r)), end = '')
+            if isinstance(r, str):
+                print(sep + r, end = '')
+            else:
+                print('{}{:.6}'.format(sep, float(r)), end = '')
             sep = ', '
         print('')
 
 
 
-def filter_data(data, all_features, feature_set):
+def filterData(data, allFeatures, selection):
     ''' Drop features not in the given set '''
 
     filteredData = []
-
     for d in data:
         row = []
-        for f in all_features:
-            if f in feature_set:
-                row.append(d[f])
+        for f in allFeatures:
+            if f in selection:
+                if f in d:
+                    row.append(d[f])
+                else:
+                    row.append('')
         filteredData.append(row)
 
     return filteredData

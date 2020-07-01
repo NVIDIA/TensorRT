@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 #include "kernel.h"
-#include "reducedMath.h"
+#include "reducedMathPlugin.h"
 #include <iostream>
 
-using nvinfer1::rt::reduced_divisor;
+using nvinfer1::plugin::reduced_divisor;
 template <unsigned nthdsPerCTA>
         __launch_bounds__(nthdsPerCTA)
         __global__ void gridAnchorKernel(
@@ -81,36 +81,75 @@ template <unsigned nthdsPerCTA>
 
         }
 
-    pluginStatus_t anchorGridInference(
-            cudaStream_t stream,
-            const GridAnchorParameters param,
-            const int numAspectRatios,
-            const void* widths,
-            const void* heights,
-            void* outputData
-            )
+pluginStatus_t anchorGridInference(
+        cudaStream_t stream,
+        const GridAnchorParameters param,
+        const int numAspectRatios,
+        const void* widths,
+        const void* heights,
+        void* outputData
+        )
+{
+    const int dim = param.H * param.W * numAspectRatios;
+    reduced_divisor divObj(numAspectRatios);
+    if (dim > 5120)
     {
-        const int dim = param.H * param.W * numAspectRatios;
-        reduced_divisor divObj(numAspectRatios);
-        if (dim > 5120)
-        {
-            const int BS = 128;
-            const int GS = (dim + BS - 1) / BS;
-            gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(param, numAspectRatios, divObj,
-                    (const float*) widths, (const float*) heights,
-                    (float*) outputData);
-
-        }
-        else
-        {
-            const int BS = 32;
-            const int GS = (dim + BS - 1) / BS;
-            gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(param, numAspectRatios, divObj,
-                    (const float*) widths, (const float*) heights,
-                    (float*) outputData);
-
-        }
-        CSC(cudaGetLastError(), STATUS_FAILURE);
-        return STATUS_SUCCESS;
+        const int BS = 128;
+        const int GS = (dim + BS - 1) / BS;
+        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(param, numAspectRatios, divObj,
+                (const float*) widths, (const float*) heights,
+                (float*) outputData);
 
     }
+    else
+    {
+        const int BS = 32;
+        const int GS = (dim + BS - 1) / BS;
+        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(param, numAspectRatios, divObj,
+                (const float*) widths, (const float*) heights,
+                (float*) outputData);
+
+    }
+    CSC(cudaGetLastError(), STATUS_FAILURE);
+    return STATUS_SUCCESS;
+}
+
+namespace nvinfer1
+{
+namespace plugin
+{
+pluginStatus_t anchorGridInference(
+    cudaStream_t stream,
+    const GridAnchorParameters param,
+    const int numAspectRatios,
+    const void* widths,
+    const void* heights,
+    void* outputData
+    )
+{
+    const int dim = param.H * param.W * numAspectRatios;
+    reduced_divisor divObj(numAspectRatios);
+    if (dim > 5120)
+    {
+        const int BS = 128;
+        const int GS = (dim + BS - 1) / BS;
+        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(param, numAspectRatios, divObj,
+                (const float*) widths, (const float*) heights,
+                (float*) outputData);
+
+    }
+    else
+    {
+        const int BS = 32;
+        const int GS = (dim + BS - 1) / BS;
+        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(param, numAspectRatios, divObj,
+                (const float*) widths, (const float*) heights,
+                (float*) outputData);
+
+    }
+    CSC(cudaGetLastError(), STATUS_FAILURE);
+    return STATUS_SUCCESS;
+}
+
+}
+}

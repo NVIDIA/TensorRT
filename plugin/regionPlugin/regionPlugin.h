@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 #include "kernel.h"
 #include "plugin.h"
 #include <iostream>
+#include <memory>
 #include <vector>
 
 namespace nvinfer1
@@ -82,14 +83,19 @@ public:
 
     void detachFromContext() override;
 
+    void setSoftmaxTree(const std::shared_ptr<softmaxTree>& softmaxTree)
+    {
+        smTree = softmaxTree;
+    }
+
 private:
-    int C, H, W;
     int num;
     int coords;
     int classes;
-    softmaxTree* smTree;
+    std::shared_ptr<softmaxTree> smTree;
+    int C, H, W;
     bool hasSoftmaxTree;
-    const char* mPluginNamespace;
+    std::string mPluginNamespace;
 };
 
 class RegionPluginCreator : public BaseCreator

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,12 @@
 
 #include <iostream>
 
-#include "NvInfer.h"
 #include "NvCaffeParser.h"
+#include "NvInfer.h"
 #include "NvOnnxParser.h"
 #include "NvUffParser.h"
 
+#include "sampleOptions.h"
 #include "sampleUtils.h"
 
 namespace sample
@@ -86,7 +87,8 @@ bool saveEngine(const nvinfer1::ICudaEngine& engine, const std::string& fileName
 //!
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
-TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(
+    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
 
 } // namespace sample
 

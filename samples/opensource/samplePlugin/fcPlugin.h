@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -345,7 +345,7 @@ public:
         }
         catch (std::exception& e)
         {
-            gLogError << e.what() << std::endl;
+            sample::gLogError << e.what() << std::endl;
         }
 
         return nullptr;
@@ -357,13 +357,14 @@ public:
         try
         {
             assert(isPlugin(layerName));
-            // This plugin object is destroyed when engine is destroyed by calling
-            // IPluginExt::destroy()
-            return new FCPlugin(serialData, serialLength);
+            // IPlugin resource will not be released when engine destroy.
+            // Use this unique ptr in factory to release the data.
+            mPlugin = std::unique_ptr<FCPlugin>(new FCPlugin(serialData, serialLength));
+            return mPlugin.get();
         }
         catch (std::exception& e)
         {
-            gLogError << e.what() << std::endl;
+            sample::gLogError << e.what() << std::endl;
         }
 
         return nullptr;

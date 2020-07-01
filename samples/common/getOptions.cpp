@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -170,7 +170,7 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
         }
 
         // If only 1 hyphen, char after is the flag.
-        TRTOption opt;
+        TRTOption opt{' ', "", false, ""};
         std::string value;
         if (argStr[1] != '-')
         {
@@ -217,8 +217,8 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
             const std::string nextArg(argv[i + 1]);
             if (nextArg.size() >= 1 && nextArg[0] == '-')
             {
-                gLogWarning << "Warning: Using '" << nextArg << "' as a value for '" << argStr
-                            << "', Should this be its own flag?" << std::endl;
+                sample::gLogWarning << "Warning: Using '" << nextArg << "' as a value for '" << argStr
+                                    << "', Should this be its own flag?" << std::endl;
             }
 
             parsedArgs.values[idx].second.push_back(nextArg);

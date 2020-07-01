@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -125,7 +125,9 @@ const char* PyramidROIAlign::getPluginVersion() const
 
 IPluginV2Ext* PyramidROIAlign::clone() const
 {
-    return new PyramidROIAlign(*this);
+    auto plugin = new PyramidROIAlign(*this);
+    plugin->setPluginNamespace(mNameSpace.c_str());
+    return plugin;
 };
 
 void PyramidROIAlign::setPluginNamespace(const char* libNamespace)

@@ -3,21 +3,19 @@
 **Table Of Contents**
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
-	* [Defining the network](#defining-the-network)
-	* [Setup the calibrator](#setup-the-calibrator)
-		* [Calibration data](#calibration-data)
-		* [Calibrator interface](#calibrator-interface)
-		* [Calibration file](#calibration-file)
-	* [Configuring the builder](#configuring-the-builder)
-	* [Building the engine](#building-the-engine)
-	* [Running the engine](#running-the-engine)
-	* [Verifying the output](#verifying-the-output)
-	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
+    * [Defining the network](#defining-the-network)
+    * [Setup the calibrator](#setup-the-calibrator)
+        * [Calibration data](#calibration-data)
+        * [Calibrator interface](#calibrator-interface)
+        * [Calibration file](#calibration-file)
+    * [Configuring the builder](#configuring-the-builder)
+    * [Building the engine](#building-the-engine)
+    * [Running the engine](#running-the-engine)
+    * [Verifying the output](#verifying-the-output)
+    * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Batch files for calibration](#batch-files-for-calibration)
-	* [Generating batch files for Caffe users](#generating-batch-files-for-caffe-users)
-	* [Generating batch files for non-Caffe users](#generating-batch-files-for-non-caffe-users)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+    * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -34,9 +32,9 @@ Specifically, this sample demonstrates how to perform inference in 8-bit integer
 
 INT8 engines are build from 32-bit network definitions, similarly to 32-bit and 16-bit engines, but with more configuration steps. In particular, the builder and network must be configured to use INT8, which requires per-tensor dynamic ranges. The INT8 calibrator can determine how best to represent weights and activations as 8-bit integers and sets the per tensor dynamic ranges accordingly. Alternatively, you can set custom per tensor dynamic ranges; this is covered in sampleINT8API.
 
-This sample is accompanied by the [MNIST training set](https://github.com/BVLC/caffe/blob/master/data/mnist/get_mnist.sh) located in the `TensorRT-x.x.x.x/data/mnist` directory, where `x.x.x.x` is your installed version of TensorRT. The packaged MNIST model that is shipped with this sample is based on [lenet.prototxt](https://github.com/BVLC/caffe/edit/master/examples/mnist/lenet.prototxt). For more information, see the [MNIST BVLC Caffe example](https://github.com/BVLC/caffe/tree/master/examples/mnist).
+This sample requires the [MNIST training set](https://github.com/BVLC/caffe/blob/master/data/mnist/get_mnist.sh). Download this script into the `TensorRT-x.x.x.x/data/mnist` directory, where `x.x.x.x` is your installed version of TensorRT, and execute the script to download the required data. The packaged MNIST model that is shipped with this sample is based on [lenet.prototxt](https://github.com/BVLC/caffe/edit/master/examples/mnist/lenet.prototxt). For more information, see the [MNIST BVLC Caffe example](https://github.com/BVLC/caffe/tree/master/examples/mnist).
 
-The packaged data set file that is shipped with this sample is based on the [MNIST data set](https://github.com/BVLC/caffe/tree/master/data/mnist). However, the batch file generation from the above data set is described in [Batch files for calibration](#batch-files-for-calibration).
+The data set used by this sample is based on the [MNIST data set](https://github.com/BVLC/caffe/tree/master/data/mnist). The batch file generation from the above data set is described in [Batch files for calibration](#batch-files-for-calibration).
 
 Specifically, this sample performs the following steps:
 
@@ -52,11 +50,11 @@ Specifically, this sample performs the following steps:
 Defining a network for INT8 execution is exactly the same as for any other precision. Weights should be imported as FP32 values, and the builder will calibrate the network to find appropriate quantization factors to reduce the network to INT8 precision. This sample imports the network using the NvCaffeParser:
 
 ```
-const IBlobNameToTensor* blobNameToTensor =
-parser->parse(locateFile(deployFile).c_str(),
-locateFile(modelFile).c_str(),
+const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor =
+parser->parse(locateFile(mParams.prototxtFileName, mParams.dataDirs).c_str(),
+locateFile(mParams.weightsFileName, mParams.dataDirs).c_str(),
 *network,
-DataType::kFLOAT);
+dataType == DataType::kINT8 ? DataType::kFLOAT : dataType);
 ```
 
 ### Setup the calibrator
@@ -65,12 +63,14 @@ Calibration is an additional step required when building networks for INT8. The 
 
 #### Calibration data
 
-Calibration must be performed using images representative of those which will be used at runtime. Since the sample is based around Caffe, any image preprocessing that caffe would perform prior to running the network (such as scaling, cropping, or mean subtraction) will be done in Caffe and captured as a set of files. The sample uses a utility class (BatchStream) to read these files and create appropriate input for calibration. Generation of these files is discussed in [Batch files for calibration](#batch-files-for-calibration).
+Calibration must be performed using images representative of those which will be used at runtime. Since the sample is based around Caffe, any image preprocessing that caffe would perform prior to running the network (such as scaling, cropping, or mean subtraction) will be done in Caffe and captured as a set of files. The sample uses a utility class (MNISTBatchStream) to read these files and create appropriate input for calibration. Generation of these files is discussed in [Batch files for calibration](#batch-files-for-calibration).
 
 You can create calibration data stream (calibrationStream), for example:
-`BatchStream calibrationStream(CAL_BATCH_SIZE, NB_CAL_BATCHES);`
+```
+MNISTBatchStream calibrationStream(mParams.calBatchSize, mParams.nbCalBatches, "train-images-idx3-ubyte","train-labels-idx1-ubyte", mParams.dataDirs);
+```
 
-The BatchStream class provides helper methods used to retrieve batch data. Batch stream object is used by the calibrator in order to retrieve batch data while calibrating. In general, the BatchStream class should provide implementation for `getBatch()` and `getBatchSize()` which can be invoked by `IInt8Calibrator::getBatch()` and `IInt8Calibrator::getBatchSize()`. Ideally, you can write your own custom BatchStream class to serve calibration data. For more information, see `BatchStream.h`.
+The MNISTBatchStream class provides helper methods used to retrieve batch data. Batch stream object is used by the calibrator in order to retrieve batch data while calibrating. In general, the BatchStream class should provide implementation for `getBatch()` and `getBatchSize()` which can be invoked by `IInt8Calibrator::getBatch()` and `IInt8Calibrator::getBatchSize()`. Ideally, you can write your own custom BatchStream class to serve calibration data. For more information, see `BatchStream.h`.
 
 **Note:** The calibration data must be representative of the input provided to TensorRT at runtime; for example, for image classification networks, it should not consist of images from just a small subset of categories. For ImageNet networks, around 500 calibration images is adequate.
 
@@ -81,36 +81,31 @@ The application must implement the `IInt8Calibrator` interface to provide calibr
 We can create calibrator object (`calibrator`), for example:
 `std::unique_ptr<IInt8Calibrator> calibrator;`
 
-TensorRT provides 3 implementations for `IInt8Calibrator`:
+TensorRT provides 4 implementations for `IInt8Calibrator`:
 1.  IInt8EntropyCalibrator
 2.  IInt8EntropyCalibrator2
-3.  IInt8LegacyCalibrator
+3.  IInt8MinMaxCalibrator
+4.  IInt8LegacyCalibrator
 
 See `NvInfer.h` for more information on the `IInt8Calibrator` interface variants.
 
 This sample uses `IInt8EntropyCalibrator2` by default. We can set the calibrator interface to use `IInt8EntropyCalibrator2` as shown:
 
 ```
-calibrator.reset(new Int8EntropyCalibrator2(calibrationStream, FIRST_CAL_BATCH, gNetworkName, INPUT_BLOB_NAME));
+calibrator.reset(new Int8EntropyCalibrator2<MNISTBatchStream>(
+calibrationStream, 0, mParams.networkName.c_str(), mParams.inputTensorNames[0].c_str()));
 ```
 
-where `calibrationStream` is a BatchStream object. The calibrator object should be configured to use the calibration batch stream.
+where `calibrationStream` is a MNISTBatchStream object. The calibrator object should be configured to use the calibration batch stream.
 
 In order to perform calibration, the interface must provide implementation for `getBatchSize()` and `getBatch()` to retrieve data from the BatchStream object.
 
 The builder calls the `getBatchSize()` method once, at the start of calibration, to obtain the batch size for the calibration set. The method `getBatch()` is then called repeatedly to obtain batches from the application, until the method returns false. Every calibration batch must include exactly the number of images specified as the batch size.
 
 ```
-bool getBatch(void* bindings[], const char* names[], int nbBindings)
-override
+bool getBatch(void* bindings[], const char* names[], int nbBindings) override
 {
-	if (!mStream.next())
-		return false;
-
-	CHECK(cudaMemcpy(mDeviceInput, mStream.getBatch(), mInputCount * sizeof(float), cudaMemcpyHostToDevice));
-	assert(!strcmp(names[0], INPUT_BLOB_NAME));
-	bindings[0] = mDeviceInput;
-	return true;
+    return mImpl.getBatch(bindings, names, nbBindings);
 }
 ```
 
@@ -131,14 +126,14 @@ The calibration file is called `CalibrationTable<NetworkName>`, where `<NetworkN
 If the `CalibrationTable` file is not found, the builder will run the calibration algorithm again to create it. The `CalibrationTable` contents include:
 
 ```
-TRT-5100-EntropyCalibration2
-data: 3c000889
-conv1: 3c8954be
-pool1: 3c8954be
-conv2: 3dd33169
-pool2: 3dd33169
-ip1: 3daeff07
-ip2: 3e7d50ec
+TRT-7000-EntropyCalibration2
+data: 3c008912
+conv1: 3c88edfc
+pool1: 3c88edfc
+conv2: 3ddc858b
+pool2: 3ddc858b
+ip1: 3db6bd6e
+ip2: 3e691968
 prob: 3c010a14
 ```
 
@@ -148,48 +143,71 @@ Where:
 
 The `CalibrationTable` file is generated during the build phase while running the calibration algorithm. After the calibration file is created, it can be read for subsequent runs without running the calibration again. You can provide implementation for `readCalibrationCache()` to load calibration file from a desired location. If the read calibration file is compatible with calibrator type (which was used to generate the file) and TensorRT version, builder would skip the calibration step and use per tensor scales values from the calibration file instead.
 
-### Configuring the builder
+### Configuring for the builder
 
-1.  Ensure that INT8 inference is supported on the platform:
-	`if (!builder->platformHasFastInt8()) return false;`
+1.  Set minimum and average number of timing iterations.
+    `config->setAvgTimingIterations(1);`
+    `config->setMinTimingIterations(1);`
 
-2.  Enable INT8 mode. Setting this flag ensures that builder auto-tuner will consider INT8 implementation.
-	`builder->setInt8Mode(true);`
+2.  Set maximum workspace size.
+    `config->setMaxWorkspaceSize(1_GiB);`
 
-3.  Pass the calibrator object (calibrator) to the builder.
-    `builder->setInt8Calibrator(calibrator);`
+3.  Set allowed builder precision to INT8 in addition to FP32. Default builder precision is FP32.
+    `config->setFlag(BuilderFlag::kINT8);`
+
+4.  Set maximum batch size.
+    `builder->setMaxBatchSize(mParams.batchSize);`
+
+5.  Pass the calibrator object (calibrator) to the builder.
+    `config->setInt8Calibrator(calibrator.get());`
 
 ### Building the engine
 
-After we configure the builder with INT8 mode and calibrator, we can build the engine similar to any FP32 engine.
-`ICudaEngine* engine = builder->buildCudaEngine(*network);`
+After we configure the builder, we can build the engine similar to any FP32 engine.
+```
+mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+````
 
 ### Running the engine
 
 After the engine has been built, it can be used just like an FP32 engine. For example, inputs and outputs remain in 32-bit floating point.
 
-1.  Retrieve the names of the input and output tensors to bind the buffers.
-	```
-	inputIndex = engine.getBindingIndex(INPUT_BLOB_NAME), outputIndex = engine.getBindingIndex(OUTPUT_BLOB_NAME);
-	```
+1.  Allocate memory for input and output buffers.
+    ```
+    samplesCommon::BufferManager buffers(mEngine, mParams.batchSize);
+    ```
 
-2.  Allocate memory for input and output buffers.
-	```
-	CHECK(cudaMalloc(&buffers[inputIndex], inputSize));
-	CHECK(cudaMalloc(&buffers[outputIndex], outputSize));
-	CHECK(cudaMemcpy(buffers[inputIndex], input, inputSize,
-	cudaMemcpyHostToDevice));
-	```
+2.  Create execution context.
+    ```
+    auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    ```
 
-3.  Create a CUDA stream and run Inference.
-	```
-	cudaStream_t stream;
-	CHECK(cudaStreamCreate(&stream));
-	context.enqueue(batchSize, buffers, stream, nullptr);
-	```
+3.  Get data dimensions.
+    ```
+    Dims outputDims = context->getEngine().getBindingDimensions(
+    context->getEngine().getBindingIndex(mParams.outputTensorNames[0].c_str()));
+    ```
 
-4.  Copy the CUDA buffer output to CPU output buffers for post processing.
-    `CHECK(cudaMemcpy(output, buffers[outputIndex], outputSize, cudaMemcpyDeviceToHost));`
+4.  Read the input data into the managed buffers.
+    ```
+    processInput(buffers, batchStream.getBatch())
+    ```
+
+5.  Copy data from host input buffers to device input buffers
+    ```
+    buffers.copyInputToDevice();
+    ```
+
+6.  Run Inference.
+    ```
+    context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr);
+    ```
+
+7.  Copy the CUDA buffer output to CPU output buffers for post processing.
+    ```
+    buffers.copyOutputToHost();
+    ```
 
 ### Verifying the output
 
@@ -216,56 +234,66 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
 Download the [MNIST dataset](http://yann.lecun.com/exdb/mnist/)
     - This sample requires the [training set](http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz) and [training labels](http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz)
     - Unzip the files obtained above using the `gunzip` utility. For example, `gunzip t10k-labels-idx1-ubyte.gz`.
-	- Lastly, copy these files to the `<TensorRT root directory>/samples/data/int8/mnist/` directory
+    - Lastly, copy these files to the `<TensorRT root directory>/samples/data/int8/mnist/` directory
 
 ## Running the sample
 
 1.  Compile this sample by running make  in the `<TensorRT root directory>/samples/sampleINT8` directory. The binary named `sample_int8` will be created in the `<TensorRT root directory>/bin` directory.
 
-	```
-	cd <TensorRT root directory>/samples/sampleINT8
-	make
-	```
+    ```
+    cd <TensorRT root directory>/samples/sampleINT8
+    make
+    ```
 
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+    Where `<TensorRT root directory>` is where you installed TensorRT.
 
 2.  Run the sample on MNIST.
-    `./sample_int8 mnist`
+    `./sample_int8`
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 
-	```
-	&&&& RUNNING TensorRT.sample_int8 # ./sample_int8 mnist
-	[I] FP32 run:400 batches of size 100 starting at 100
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Top1: 0.9904, Top5: 1
-	[I] Processing 40000 images averaged 0.00170236 ms/image and 0.170236 ms/batch.
-	[I] FP16 run:400 batches of size 100 starting at 100
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Top1: 0.9904, Top5: 1
-	[I] Processing 40000 images averaged 0.00128872 ms/image and 0.128872 ms/batch.
-
-	INT8 run:400 batches of size 100 starting at 100
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Processing next set of max 100 batches
-	[I] Top1: 0.9908, Top5: 1
-	[I] Processing 40000 images averaged 0.000946117 ms/image and 0.0946117 ms/batch.
-	&&&& PASSED TensorRT.sample_int8 # ./sample_int8 mnist
-	```
+    ```
+    &&&& RUNNING TensorRT.sample_int8 # ./sample_int8
+    [I] Building and running a GPU inference engine for INT8 sample
+    [I] FP32 run:1800 batches of size 32 starting at 16
+    [I] [TRT] Detected 1 inputs and 1 output network tensors.
+    [I] Processing next set of max 100 batches
+    ...
+    [I] Processing next set of max 100 batches
+    [I] Top1: 0.998646, Top5: 1
+    [I] Processing 57600 images averaged 0.00262977 ms/image and 0.0834112 ms/batch.
+    [I] FP16 run:1800 batches of size 32 starting at 16
+    [I] [TRT] Detected 1 inputs and 1 output network tensors.
+    [I] Processing next set of max 100 batches
+    ...
+    [I] Processing next set of max 100 batches
+    [I] Top1: 0.998646, Top5: 1
+    [I] Processing 57600 images averaged 0.00298152 ms/image and 0.0945682 ms/batch.
+    [I] INT8 run:1800 batches of size 32 starting at 16
+    [I] [TRT] Detected 1 inputs and 1 output network tensors.
+    [I] [TRT] Starting Calibration with batch size 50.
+    [I] [TRT]   Calibrated batch 0 in 0.00211989 seconds.
+    ...
+    [I] [TRT]   Calibrated batch 9 in 0.00207574 seconds.
+    [I] [TRT]   Post Processing Calibration data in 0.180447 seconds.
+    [I] [TRT] Calibration completed in 0.317902 seconds.
+    [I] [TRT] Writing Calibration Cache for calibrator: TRT-7000-EntropyCalibration2
+    [I] [TRT] Detected 1 inputs and 1 output network tensors.
+    [I] Processing next set of max 100 batches
+    ...
+    [I] Processing next set of max 100 batches
+    [I] Top1: 0.998576, Top5: 1
+    [I] Processing 57600 images averaged 0.00227856 ms/image and 0.0722715 ms/batch.
+    &&&& PASSED TensorRT.sample_int8 # ./sample_int8
+    ```
 
 	This output shows that the sample ran successfully; `PASSED`.
+
 
 ### Sample `--help` options
 
 To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 # Additional resources
 
@@ -299,8 +327,8 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
-March 2019
-This is the first release of this `README.md` file.
+December 2019
+This is the second release of this `README.md` file.
 
 
 # Known issues

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <utility>
 #include <algorithm>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <numeric>
+#include <utility>
 
-#include "sampleOptions.h"
 #include "sampleInference.h"
+#include "sampleOptions.h"
 #include "sampleReporting.h"
 
 using namespace nvinfer1;
@@ -59,18 +59,19 @@ float findMedian(const std::vector<InferenceTime>& timings, const T& toFloat)
         return std::numeric_limits<float>::infinity();
     }
 
-    const int m = timings.size()/2;
+    const int m = timings.size() / 2;
     if (timings.size() % 2)
     {
         return toFloat(timings[m]);
     }
 
-    return (toFloat(timings[m-1]) + toFloat(timings[m])) / 2;
+    return (toFloat(timings[m - 1]) + toFloat(timings[m])) / 2;
 }
 
 inline InferenceTime traceToTiming(const InferenceTrace& a)
 {
-    return InferenceTime((a.inEnd - a.inStart), (a.computeEnd - a.computeStart), (a.outEnd - a.outStart), (a.outEnd - a.inStart));
+    return InferenceTime((a.enqEnd - a.enqStart), (a.inEnd - a.inStart), (a.computeEnd - a.computeStart),
+        (a.outEnd - a.outStart), (a.outEnd - a.inStart));
 };
 
 } // namespace
@@ -93,12 +94,13 @@ void printTiming(const std::vector<InferenceTime>& timings, int runsPerAvg, std:
 
         if (++count == runsPerAvg)
         {
-// clang off
+            // clang off
             os << "Average on " << runsPerAvg << " runs - GPU latency: " << sum.compute / runsPerAvg
-               << " ms - Host latency: " << sum.latency() / runsPerAvg << " ms (end to end "
-               << sum.e2e / runsPerAvg << " ms)" << std::endl;
-// clang on
+               << " ms - Host latency: " << sum.latency() / runsPerAvg << " ms (end to end " << sum.e2e / runsPerAvg
+               << " ms, enqueue " << sum.enq / runsPerAvg << " ms)" << std::endl;
+            // clang on
             count = 0;
+            sum.enq = 0;
             sum.in = 0;
             sum.compute = 0;
             sum.out = 0;
@@ -136,34 +138,62 @@ void printEpilog(std::vector<InferenceTime> timings, float walltimeMs, float per
     const float gpuMedian = findMedian(timings, getCompute);
     const float gpuPercentile = findPercentile(percentile, timings, getCompute);
 
-// clang off
-    os << "Host latency"                                                           << std::endl <<
-          "min: "                << latencyMin                           << " ms "
-          "(end to end "         << endToEndMin                          << " ms)" << std::endl <<
-          "max: "                << latencyMax                           << " ms "
-          "(end to end "         << endToEndMax                          << " ms)" << std::endl <<
-          "mean: "               << totalTime.latency() / timings.size() << " ms "
-          "(end to end "         << totalTime.e2e / timings.size()       << " ms)" << std::endl <<
-          "median: "             << latencyMedian                        << " ms "
-          "(end to end "         << endToEndMedian                       << " ms)" << std::endl <<
-          "percentile: "         << latencyPercentile                    << " ms "
-          "at "                  << percentile                           << "% "
-          "(end to end "         << endToEndPercentile                   << " ms "
-          "at "                  << percentile                           << "%)"   << std::endl <<
-          "throughput: "         << latencyThroughput                    << " qps" << std::endl <<
-          "walltime: "           << walltimeMs / 1000                    << " s"   << std::endl <<
-          "GPU Compute"                                                            << std::endl <<
-          "min: "                << gpuMin                               << " ms"  << std::endl <<
-          "max: "                << gpuMax                               << " ms"  << std::endl <<
-          "mean: "               << totalTime.compute / timings.size()   << " ms"  << std::endl <<
-          "median: "             << gpuMedian                            << " ms"  << std::endl <<
-          "percentile: "         << gpuPercentile                        << " ms "
-          "at "                  << percentile                           << "%"    << std::endl <<
-          "total compute time: " << totalTime.compute / 1000             << " s"   << std::endl;
-// clang on
+    const auto getEnqueue = [](const InferenceTime& t) { return t.enq; };
+    const auto cmpEnqueue = [](const InferenceTime& a, const InferenceTime& b) { return a.enq < b.enq; };
+    std::sort(timings.begin(), timings.end(), cmpEnqueue);
+    const float enqMin = timings.front().enq;
+    const float enqMax = timings.back().enq;
+    const float enqMedian = findMedian(timings, getEnqueue);
+
+    // clang off
+    os << "Host Latency" << std::endl
+       << "min: " << latencyMin
+       << " ms "
+          "(end to end "
+       << endToEndMin << " ms)" << std::endl
+       << "max: " << latencyMax
+       << " ms "
+          "(end to end "
+       << endToEndMax << " ms)" << std::endl
+       << "mean: " << totalTime.latency() / timings.size()
+       << " ms "
+          "(end to end "
+       << totalTime.e2e / timings.size() << " ms)" << std::endl
+       << "median: " << latencyMedian
+       << " ms "
+          "(end to end "
+       << endToEndMedian << " ms)" << std::endl
+       << "percentile: " << latencyPercentile
+       << " ms "
+          "at "
+       << percentile
+       << "% "
+          "(end to end "
+       << endToEndPercentile
+       << " ms "
+          "at "
+       << percentile << "%)" << std::endl
+       << "throughput: " << latencyThroughput << " qps" << std::endl
+       << "walltime: " << walltimeMs / 1000 << " s" << std::endl
+       << "Enqueue Time" << std::endl
+       << "min: " << enqMin << " ms" << std::endl
+       << "max: " << enqMax << " ms" << std::endl
+       << "median: " << enqMedian << " ms" << std::endl
+       << "GPU Compute" << std::endl
+       << "min: " << gpuMin << " ms" << std::endl
+       << "max: " << gpuMax << " ms" << std::endl
+       << "mean: " << totalTime.compute / timings.size() << " ms" << std::endl
+       << "median: " << gpuMedian << " ms" << std::endl
+       << "percentile: " << gpuPercentile
+       << " ms "
+          "at "
+       << percentile << "%" << std::endl
+       << "total compute time: " << totalTime.compute / 1000 << " s" << std::endl;
+    // clang on
 }
 
-void printPerformanceReport(const std::vector<InferenceTrace>& trace, const ReportingOptions& reporting, float warmupMs, int queries, std::ostream& os)
+void printPerformanceReport(const std::vector<InferenceTrace>& trace, const ReportingOptions& reporting, float warmupMs,
+    int queries, std::ostream& os)
 {
     const auto isNotWarmup = [&warmupMs](const InferenceTrace& a) { return a.computeStart >= warmupMs; };
     const auto noWarmup = std::find_if(trace.begin(), trace.end(), isNotWarmup);
@@ -179,8 +209,9 @@ void printPerformanceReport(const std::vector<InferenceTrace>& trace, const Repo
 
 //! Printed format:
 //! [ value, ...]
-//! value ::= { "start in" : time, "end in" : time, "start compute" : time, "end compute" : time, "start out" : time,
-//!             "in" : time, "compute" : time, "out" : time, "latency" : time, "end to end" : time}
+//! value ::= { "start enq : time, "end enq" : time, "start in" : time, "end in" : time, "start compute" : time, "end
+//! compute" : time,
+//!             "start out" : time, "in" : time, "compute" : time, "out" : time, "latency" : time, "end to end" : time}
 //!
 void exportJSONTrace(const std::vector<InferenceTrace>& trace, const std::string& fileName)
 {
@@ -192,14 +223,14 @@ void exportJSONTrace(const std::vector<InferenceTrace>& trace, const std::string
         const InferenceTime it(traceToTiming(t));
         os << sep << "{ ";
         sep = ", ";
-// clang off
-        os << "\"startInMs\" : "      << t.inStart      << sep << "\"endInMs\" : "      << t.inEnd      << sep
+        // clang off
+        os << "\"startEnqMs\" : " << t.inStart << sep << "\"endEnqMs\" : " << t.inEnd << sep
+           << "\"startInMs\" : " << t.enqStart << sep << "\"endInMs\" : " << t.enqEnd << sep
            << "\"startComputeMs\" : " << t.computeStart << sep << "\"endComputeMs\" : " << t.computeEnd << sep
-           << "\"startOutMs\" : "     << t.outStart     << sep << "\"endOutMs\" : "     << t.outEnd     << sep
-           << "\"inMs\" : "           << it.in          << sep << "\"computeMs\" : "    << it.compute   << sep
-           << "\"outMs\" : "          << it.out         << sep << "\"latencyMs\" : "    << it.latency() << sep
-           << "\"endToEndMs\" : "     << it.e2e         << " }"                                         << std::endl;
-// clang on
+           << "\"startOutMs\" : " << t.outStart << sep << "\"endOutMs\" : " << t.outEnd << sep << "\"inMs\" : " << it.in
+           << sep << "\"computeMs\" : " << it.compute << sep << "\"outMs\" : " << it.out << sep
+           << "\"latencyMs\" : " << it.latency() << sep << "\"endToEndMs\" : " << it.e2e << " }" << std::endl;
+        // clang on
     }
     os << "]" << std::endl;
 }
@@ -235,57 +266,51 @@ void Profiler::print(std::ostream& os) const
 
     const float totalTimeMs = getTotalTime();
 
-    const auto cmpLayer = [](const LayerProfile& a, const LayerProfile& b)
-    {
-        return a.name.size() < b.name.size();
-    };
+    const auto cmpLayer = [](const LayerProfile& a, const LayerProfile& b) { return a.name.size() < b.name.size(); };
     const auto longestName = std::max_element(mLayers.begin(), mLayers.end(), cmpLayer);
     const auto nameLength = std::max(longestName->name.size() + 1, nameHdr.size());
     const auto timeLength = timeHdr.size();
     const auto avgLength = avgHdr.size();
     const auto percentageLength = percentageHdr.size();
 
-    os << std::endl << "=== Profile (" << mUpdatesCount << " iterations ) ===" << std::endl
+    os << std::endl
+       << "=== Profile (" << mUpdatesCount << " iterations ) ===" << std::endl
        << std::setw(nameLength) << nameHdr << timeHdr << avgHdr << percentageHdr << std::endl;
 
     for (const auto& p : mLayers)
     {
-// clang off
-        os << std::setw(nameLength)                                             << p.name
-           << std::setw(timeLength)       << std::fixed << std::setprecision(2) << p.timeMs
-           << std::setw(avgLength)        << std::fixed << std::setprecision(2) << p.timeMs / mUpdatesCount
+        // clang off
+        os << std::setw(nameLength) << p.name << std::setw(timeLength) << std::fixed << std::setprecision(2) << p.timeMs
+           << std::setw(avgLength) << std::fixed << std::setprecision(2) << p.timeMs / mUpdatesCount
            << std::setw(percentageLength) << std::fixed << std::setprecision(1) << p.timeMs / totalTimeMs * 100
            << std::endl;
     }
     {
-        os << std::setw(nameLength)                                             << "Total"
-           << std::setw(timeLength)       << std::fixed << std::setprecision(2) << totalTimeMs
-           << std::setw(avgLength)        << std::fixed << std::setprecision(2) << totalTimeMs / mUpdatesCount
-           << std::setw(percentageLength) << std::fixed << std::setprecision(1) << 100.0
-           << std::endl;
-// clang on
+        os << std::setw(nameLength) << "Total" << std::setw(timeLength) << std::fixed << std::setprecision(2)
+           << totalTimeMs << std::setw(avgLength) << std::fixed << std::setprecision(2) << totalTimeMs / mUpdatesCount
+           << std::setw(percentageLength) << std::fixed << std::setprecision(1) << 100.0 << std::endl;
+        // clang on
     }
     os << std::endl;
-
 }
 
 void Profiler::exportJSONProfile(const std::string& fileName) const
 {
     std::ofstream os(fileName, std::ofstream::trunc);
-    os << "[" << std::endl
-       << "  { \"count\" : " << mUpdatesCount << " }" << std::endl;
+    os << "[" << std::endl << "  { \"count\" : " << mUpdatesCount << " }" << std::endl;
 
     const auto totalTimeMs = getTotalTime();
 
     for (const auto& l : mLayers)
     {
-// clang off
-        os << ", {" << " \"name\" : \""      << l.name << "\""
-                       ", \"timeMs\" : "     << l.timeMs
-           <<          ", \"averageMs\" : "  << l.timeMs / mUpdatesCount
-           <<          ", \"percentage\" : " << l.timeMs / totalTimeMs * 100
-           << " }"  << std::endl;
-// clang on
+        // clang off
+        os << ", {"
+           << " \"name\" : \"" << l.name
+           << "\""
+              ", \"timeMs\" : "
+           << l.timeMs << ", \"averageMs\" : " << l.timeMs / mUpdatesCount
+           << ", \"percentage\" : " << l.timeMs / totalTimeMs * 100 << " }" << std::endl;
+        // clang on
     }
     os << "]" << std::endl;
 }
@@ -305,12 +330,12 @@ void dumpOutputs(const nvinfer1::IExecutionContext& context, const Bindings& bin
 void exportJSONOutput(const nvinfer1::IExecutionContext& context, const Bindings& bindings, const std::string& fileName)
 {
     std::ofstream os(fileName, std::ofstream::trunc);
-    std::string sep ="  ";
+    std::string sep = "  ";
     const auto output = bindings.getOutputBindings();
     os << "[" << std::endl;
     for (const auto& binding : output)
     {
-// clang off
+        // clang off
         os << sep << "{ \"name\" : \"" << binding.first << "\"" << std::endl;
         sep = ", ";
         os << "  " << sep << "\"dimensions\" : \"";
@@ -318,8 +343,8 @@ void exportJSONOutput(const nvinfer1::IExecutionContext& context, const Bindings
         os << "\"" << std::endl;
         os << "  " << sep << "\"values\" : [ ";
         bindings.dumpBindingValues(binding.second, os, sep);
-        os << " ]" << std::endl << "  }"  << std::endl;
-// clang on
+        os << " ]" << std::endl << "  }" << std::endl;
+        // clang on
     }
     os << "]" << std::endl;
 }

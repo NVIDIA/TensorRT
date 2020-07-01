@@ -6,7 +6,7 @@
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Converting TensorFlow weights](#converting-tensorflow-weights)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -85,17 +85,7 @@ If you want to train your own model and not use the pre-trained model included i
 
 ### Sample --help options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. The following example output is printed when running the sample:
-```
-Usage: ./sample_char_rnn [-h or --help] [-d or --datadir=<path_to_data_directory>]
-
---help          Display help information
-
---useILoop      Use ILoop LSTM definition
-
---datadir       Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use data/samples/char-rnn/ and data/char-rnn/
-
-```
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
 
 
 # Additional resources

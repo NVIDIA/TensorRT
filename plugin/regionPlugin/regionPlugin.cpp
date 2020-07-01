@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,35 @@ void allocateChunk(T*& ptr, int count)
 {
     ptr = static_cast<T*>(malloc(count * sizeof(T)));
 }
+
+struct SoftmaxTreeDeleter
+{
+    void operator()(softmaxTree* smTree) const
+    {
+        if (smTree)
+        {
+            // free individual elements first
+            safeFree(smTree->leaf);
+            safeFree(smTree->parent);
+            safeFree(smTree->child);
+            safeFree(smTree->group);
+            if (smTree->name)
+            {
+                for (int i = 0; i < smTree->n; i++)
+                {
+                    safeFree(smTree->name[i]);
+                }
+                safeFree(smTree->name);
+            }
+            safeFree(smTree->groupSize);
+            safeFree(smTree->groupOffset);
+
+            // free softmax tree
+            safeFree(smTree);
+        }
+    }
+};
+
 } // namespace
 
 PluginFieldCollection RegionPluginCreator::mFC{};
@@ -50,7 +79,7 @@ Region::Region(RegionParameters params)
     : num(params.num)
     , coords(params.coords)
     , classes(params.classes)
-    , smTree(params.smTree)
+    , smTree(params.smTree, SoftmaxTreeDeleter())
 {
 }
 
@@ -58,7 +87,7 @@ Region::Region(RegionParameters params, int C, int H, int W)
     : num(params.num)
     , coords(params.coords)
     , classes(params.classes)
-    , smTree(params.smTree)
+    , smTree(params.smTree, SoftmaxTreeDeleter())
     , C(C)
     , H(H)
     , W(W)
@@ -84,117 +113,119 @@ Region::Region(const void* buffer, size_t length)
     bool groupOffsetPresent = read<bool>(d);
     if (softmaxTreePresent)
     {
+        softmaxTree* smTreeTemp;
         // need to read each element individually
-        allocateChunk(smTree, 1);
+        allocateChunk(smTreeTemp, 1);
 
-        smTree->n = read<int>(d);
+        smTreeTemp->n = read<int>(d);
 
         if (leafPresent)
         {
-            allocateChunk(smTree->leaf, smTree->n);
+            allocateChunk(smTreeTemp->leaf, smTreeTemp->n);
         }
         else
         {
-            smTree->leaf = nullptr;
+            smTreeTemp->leaf = nullptr;
         }
         if (parentPresent)
         {
-            allocateChunk(smTree->parent, smTree->n);
+            allocateChunk(smTreeTemp->parent, smTreeTemp->n);
         }
         else
         {
-            smTree->parent = nullptr;
+            smTreeTemp->parent = nullptr;
         }
         if (childPresent)
         {
-            allocateChunk(smTree->child, smTree->n);
+            allocateChunk(smTreeTemp->child, smTreeTemp->n);
         }
         else
         {
-            smTree->child = nullptr;
+            smTreeTemp->child = nullptr;
         }
         if (groupPresent)
         {
-            allocateChunk(smTree->group, smTree->n);
+            allocateChunk(smTreeTemp->group, smTreeTemp->n);
         }
         else
         {
-            smTree->group = nullptr;
+            smTreeTemp->group = nullptr;
         }
 
-        for (int i = 0; i < smTree->n; i++)
+        for (int i = 0; i < smTreeTemp->n; i++)
         {
             if (leafPresent)
             {
-                smTree->leaf[i] = read<int>(d);
+                smTreeTemp->leaf[i] = read<int>(d);
             }
             if (parentPresent)
             {
-                smTree->parent[i] = read<int>(d);
+                smTreeTemp->parent[i] = read<int>(d);
             }
             if (childPresent)
             {
-                smTree->child[i] = read<int>(d);
+                smTreeTemp->child[i] = read<int>(d);
             }
             if (groupPresent)
             {
-                smTree->group[i] = read<int>(d);
+                smTreeTemp->group[i] = read<int>(d);
             }
         }
 
         if (namePresent)
         {
-            allocateChunk(smTree->name, smTree->n);
+            allocateChunk(smTreeTemp->name, smTreeTemp->n);
         }
         else
         {
-            smTree->name = nullptr;
+            smTreeTemp->name = nullptr;
         }
 
         if (namePresent)
         {
-            for (int i = 0; i < smTree->n; i++)
+            for (int i = 0; i < smTreeTemp->n; i++)
             {
-                allocateChunk(smTree->name[i], 256);
+                allocateChunk(smTreeTemp->name[i], 256);
                 for (int j = 0; j < 256; j++)
                 {
-                    smTree->name[i][j] = read<char>(d);
+                    smTreeTemp->name[i][j] = read<char>(d);
                 }
             }
         }
 
-        smTree->groups = read<int>(d);
+        smTreeTemp->groups = read<int>(d);
         if (groupSizePresent)
         {
-            allocateChunk(smTree->groupSize, smTree->groups);
+            allocateChunk(smTreeTemp->groupSize, smTreeTemp->groups);
         }
         else
         {
-            smTree->groupSize = nullptr;
+            smTreeTemp->groupSize = nullptr;
         }
         if (groupOffsetPresent)
         {
-            allocateChunk(smTree->groupOffset, smTree->groups);
+            allocateChunk(smTreeTemp->groupOffset, smTreeTemp->groups);
         }
         else
         {
-            smTree->groupOffset = nullptr;
+            smTreeTemp->groupOffset = nullptr;
         }
-        for (int i = 0; i < smTree->groups; i++)
+        for (int i = 0; i < smTreeTemp->groups; i++)
         {
             if (groupSizePresent)
             {
-                smTree->groupSize[i] = read<int>(d);
+                smTreeTemp->groupSize[i] = read<int>(d);
             }
             if (groupOffsetPresent)
             {
-                smTree->groupOffset[i] = read<int>(d);
+                smTreeTemp->groupOffset[i] = read<int>(d);
             }
         }
+        smTree = std::shared_ptr<softmaxTree>(smTreeTemp, SoftmaxTreeDeleter());
     }
     else
     {
-        smTree = nullptr;
+        smTree.reset();
     }
     ASSERT(d == a + length);
 }
@@ -215,7 +246,7 @@ int Region::enqueue(int batchSize, const void* const* inputs, void** outputs, vo
 {
     const void* inputData = inputs[0];
     void* outputData = outputs[0];
-    if (smTree)
+    if (smTree.get())
     {
         hasSoftmaxTree = true;
     }
@@ -224,7 +255,7 @@ int Region::enqueue(int batchSize, const void* const* inputs, void** outputs, vo
         hasSoftmaxTree = false;
     }
     pluginStatus_t status = regionInference(
-        stream, batchSize, C, H, W, num, coords, classes, hasSoftmaxTree, smTree, inputData, outputData);
+        stream, batchSize, C, H, W, num, coords, classes, hasSoftmaxTree, smTree.get(), inputData, outputData);
     ASSERT(status == STATUS_SUCCESS);
     return status;
 }
@@ -233,7 +264,7 @@ size_t Region::getSerializationSize() const
 {
     // C, H, W, num, classes, coords, smTree !nullptr and other array members !nullptr, softmaxTree members
     size_t count = 6 * sizeof(int) + 8 * sizeof(bool);
-    if (smTree)
+    if (smTree.get())
     {
         count += 2 * sizeof(int);
 
@@ -278,14 +309,14 @@ void Region::serialize(void* buffer) const
     write(d, num);
     write(d, classes);
     write(d, coords);
-    write(d, smTree != nullptr);
-    write(d, smTree != nullptr && smTree->leaf != nullptr);
-    write(d, smTree != nullptr && smTree->parent != nullptr);
-    write(d, smTree != nullptr && smTree->child != nullptr);
-    write(d, smTree != nullptr && smTree->group != nullptr);
-    write(d, smTree != nullptr && smTree->name != nullptr);
-    write(d, smTree != nullptr && smTree->groupSize != nullptr);
-    write(d, smTree != nullptr && smTree->groupOffset != nullptr);
+    write(d, smTree.get() != nullptr);
+    write(d, smTree.get() != nullptr && smTree->leaf != nullptr);
+    write(d, smTree.get() != nullptr && smTree->parent != nullptr);
+    write(d, smTree.get() != nullptr && smTree->child != nullptr);
+    write(d, smTree.get() != nullptr && smTree->group != nullptr);
+    write(d, smTree.get() != nullptr && smTree->name != nullptr);
+    write(d, smTree.get() != nullptr && smTree->groupSize != nullptr);
+    write(d, smTree.get() != nullptr && smTree->groupOffset != nullptr);
     // need to do a deep copy
     if (smTree)
     {
@@ -346,31 +377,7 @@ int Region::initialize()
     return STATUS_SUCCESS;
 }
 
-void Region::terminate()
-{
-    // Do this carefully to guard against double frees
-    if (smTree)
-    {
-        // free individual elements first
-        safeFree(smTree->leaf);
-        safeFree(smTree->parent);
-        safeFree(smTree->child);
-        safeFree(smTree->group);
-        if (smTree->name)
-        {
-            for (int i = 0; i < smTree->n; i++)
-            {
-                safeFree(smTree->name[i]);
-            }
-            safeFree(smTree->name);
-        }
-        safeFree(smTree->groupSize);
-        safeFree(smTree->groupOffset);
-
-        // free softmax tree
-        safeFree(smTree);
-    }
-}
+void Region::terminate() {}
 
 const char* Region::getPluginType() const
 {
@@ -394,9 +401,11 @@ void Region::destroy()
 
 IPluginV2Ext* Region::clone() const
 {
-    RegionParameters params{num, coords, classes, smTree};
-    IPluginV2Ext* plugin = new Region(params, C, H, W);
-    plugin->setPluginNamespace(mPluginNamespace);
+    RegionParameters params{num, coords, classes, nullptr};
+    Region* plugin = new Region(params, C, H, W);
+    plugin->setPluginNamespace(mPluginNamespace.c_str());
+    plugin->setSoftmaxTree(smTree);
+
     return plugin;
 }
 
@@ -408,7 +417,7 @@ void Region::setPluginNamespace(const char* pluginNamespace)
 
 const char* Region::getPluginNamespace() const
 {
-    return mPluginNamespace;
+    return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index

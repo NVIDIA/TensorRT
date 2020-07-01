@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -292,7 +292,7 @@ bool parseArgs(Args& args, int argc, char* argv[])
         else if (argStr == "--verbose")
         {
             args.enableVerbose = true;
-            setReportableSeverity(Severity::kVERBOSE);
+            sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
         }
         else if (argStr.compare(0, 13, "--useDLACore=") == 0 && argStr.size() > 13)
         {
@@ -316,12 +316,15 @@ bool parseArgs(Args& args, int argc, char* argv[])
 
 void printOutputArgs(OutputArgs& pargs)
 {
-    gLogVerbose << "User Id                            :   " << pargs.userId << std::endl;
-    gLogVerbose << "Expected Predicted Max Rating Item :   " << pargs.expectedPredictedMaxRatingItem << std::endl;
-    gLogVerbose << "Expected Predicted Max Rating Prob :   " << pargs.expectedPredictedMaxRatingItemProb << std::endl;
-    gLogVerbose << "Total TopK Items : " << pargs.itemProbPairVec.size() << std::endl;
+    sample::gLogVerbose << "User Id                            :   " << pargs.userId << std::endl;
+    sample::gLogVerbose << "Expected Predicted Max Rating Item :   " << pargs.expectedPredictedMaxRatingItem
+                        << std::endl;
+    sample::gLogVerbose << "Expected Predicted Max Rating Prob :   " << pargs.expectedPredictedMaxRatingItemProb
+                        << std::endl;
+    sample::gLogVerbose << "Total TopK Items : " << pargs.itemProbPairVec.size() << std::endl;
     for (unsigned i = 0; i < pargs.itemProbPairVec.size(); ++i)
-        gLogVerbose << pargs.itemProbPairVec.at(i).first << " : " << pargs.itemProbPairVec.at(i).second << std::endl;
+        sample::gLogVerbose << pargs.itemProbPairVec.at(i).first << " : " << pargs.itemProbPairVec.at(i).second
+                            << std::endl;
 }
 
 std::string readNextLine(std::ifstream& file, char delim)
@@ -413,12 +416,12 @@ bool printInferenceOutput(
     T1* topKItemNumber{static_cast<T1*>(topKItemNumberPtr)};
     T2* topKItemProb{static_cast<T2*>(topKItemProbPtr)};
 
-    gLogInfo << "Num of users : " << args.numUsers << std::endl;
-    gLogInfo << "Num of Movies : " << args.numMoviesPerUser << std::endl;
+    sample::gLogInfo << "Num of users : " << args.numUsers << std::endl;
+    sample::gLogInfo << "Num of Movies : " << args.numMoviesPerUser << std::endl;
 
-    gLogVerbose << "|-----------|------------|-----------------|-----------------|" << std::endl;
-    gLogVerbose << "|   User    |   Item     |  Expected Prob  |  Predicted Prob |" << std::endl;
-    gLogVerbose << "|-----------|------------|-----------------|-----------------|" << std::endl;
+    sample::gLogVerbose << "|-----------|------------|-----------------|-----------------|" << std::endl;
+    sample::gLogVerbose << "|   User    |   Item     |  Expected Prob  |  Predicted Prob |" << std::endl;
+    sample::gLogVerbose << "|-----------|------------|-----------------|-----------------|" << std::endl;
 
     for (int i = 0; i < args.numUsers; ++i)
     {
@@ -434,9 +437,9 @@ bool printInferenceOutput(
             float predictedProb = topKItemProb[i * args.topKMovies + k];
             float expectedProb = args.userToExpectedItemProbMap.at(userIdx).at(k).second;
             int predictedItem = args.userToItemsMap.at(userIdx).at(predictedIdx);
-            gLogVerbose << "|" << std::setw(10) << userIdx << " | " << std::setw(10) << predictedItem << " | "
-                        << std::setw(15) << expectedProb << " | " << std::setw(15) << predictedProb << " | "
-                        << std::endl;
+            sample::gLogVerbose << "|" << std::setw(10) << userIdx << " | " << std::setw(10) << predictedItem << " | "
+                                << std::setw(15) << expectedProb << " | " << std::setw(15) << predictedProb << " | "
+                                << std::endl;
         }
     }
 
@@ -446,15 +449,15 @@ bool printInferenceOutput(
         int maxPredictedIdx = topKItemNumber[i * args.topKMovies];
         int maxExpectedItem = args.userToExpectedItemProbMap.at(userIdx).at(0).first;
         int maxPredictedItem = args.userToItemsMap.at(userIdx).at(maxPredictedIdx);
-        gLogInfo << "| PID : " << std::setw(4) << getpid() << " | User :" << std::setw(4) << userIdx
-                 << "  |  Expected Item :" << std::setw(5) << maxExpectedItem << "  |  Predicted Item :" << std::setw(5)
-                 << maxPredictedItem << " | " << std::endl;
+        sample::gLogInfo << "| PID : " << std::setw(4) << getpid() << " | User :" << std::setw(4) << userIdx
+                         << "  |  Expected Item :" << std::setw(5) << maxExpectedItem
+                         << "  |  Predicted Item :" << std::setw(5) << maxPredictedItem << " | " << std::endl;
     }
 
     return pass;
 }
 
-void submitWork(Batch& b, const Args& args)
+bool submitWork(Batch& b, const Args& args)
 {
     int userInputIndex = b.mEngine->getBindingIndex(USER_BLOB_NAME);
     int itemInputIndex = b.mEngine->getBindingIndex(ITEM_BLOB_NAME);
@@ -468,7 +471,10 @@ void submitWork(Batch& b, const Args& args)
     CHECK(cudaMemcpyAsync(b.mDeviceMemory[itemInputIndex], b.mHostMemory[itemInputIndex], b.mMemSizes[itemInputIndex],
         cudaMemcpyHostToDevice, b.mStream));
 
-    b.mContext->enqueue(args.numUsers, b.mDeviceMemory, b.mStream, nullptr);
+    if (!b.mContext->enqueue(args.numUsers, b.mDeviceMemory, b.mStream, nullptr))
+    {
+        return false;
+    }
 
     // copy output from device to host
     CHECK(cudaMemcpyAsync(b.mHostMemory[outputPredictionIndex], b.mDeviceMemory[outputPredictionIndex],
@@ -477,12 +483,14 @@ void submitWork(Batch& b, const Args& args)
         b.mMemSizes[outputItemProbIndex], cudaMemcpyDeviceToHost, b.mStream));
     CHECK(cudaMemcpyAsync(b.mHostMemory[outputItemNameIndex], b.mDeviceMemory[outputItemNameIndex],
         b.mMemSizes[outputItemNameIndex], cudaMemcpyDeviceToHost, b.mStream));
+
+    return true;
 }
 
 std::shared_ptr<ICudaEngine> loadModelAndCreateEngine(const char* uffFile, IUffParser* parser, const Args& args)
 {
     // Create the builder
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (builder == nullptr)
     {
         throw std::runtime_error("Could not create builder.");
@@ -500,18 +508,18 @@ std::shared_ptr<ICudaEngine> loadModelAndCreateEngine(const char* uffFile, IUffP
         throw std::runtime_error("Could not create network.");
     }
 
-    gLogInfo << "Begin parsing model..." << std::endl;
+    sample::gLogInfo << "Begin parsing model..." << std::endl;
 
     auto dType = args.enableFP16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT;
 
     // Parse the uff model to populate the network
     if (!parser->parse(uffFile, *network, dType))
     {
-        gLogError << "Failure while parsing UFF file" << std::endl;
+        sample::gLogError << "Failure while parsing UFF file" << std::endl;
         return nullptr;
     }
 
-    gLogInfo << "End parsing model..." << std::endl;
+    sample::gLogInfo << "End parsing model..." << std::endl;
 
     // Add postprocessing i.e. topk layer to the UFF Network
     // Retrieve last layer of UFF Network
@@ -561,17 +569,17 @@ std::shared_ptr<ICudaEngine> loadModelAndCreateEngine(const char* uffFile, IUffP
     auto engine = samplesCommon::infer_object(builder->buildEngineWithConfig(*network, *config));
     if (!engine)
     {
-        gLogError << "Unable to create engine" << std::endl;
+        sample::gLogError << "Unable to create engine" << std::endl;
         return nullptr;
     }
 
-    gLogInfo << "End building engine..." << std::endl;
+    sample::gLogInfo << "End building engine..." << std::endl;
     return engine;
 }
 
 bool doInference(void* modelStreamData, int modelStreamSize, void* userInputPtr, void* itemInputPtr, Args& args)
 {
-    auto runtime = SampleUniquePtr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(gLogger.getTRTLogger()));
+    auto runtime = SampleUniquePtr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
     if (args.useDLACore >= 0)
     {
         runtime->setDLACore(args.useDLACore);
@@ -586,11 +594,15 @@ bool doInference(void* modelStreamData, int modelStreamSize, void* userInputPtr,
         samplesCommon::GpuTimer timer{b.mStream};
         timer.start();
         // Run inference for all the nbProcesses
-        submitWork(b, args);
+        if (!submitWork(b, args))
+        {
+            sample::gLogError << "Error in submit work." << std::endl;
+            return false;
+        }
         cudaStreamSynchronize(b.mStream);
         timer.stop();
-        gLogInfo << "Done execution in process: " << getpid() << " . Duration : " << timer.microseconds()
-                 << " microseconds." << std::endl;
+        sample::gLogInfo << "Done execution in process: " << getpid() << " . Duration : " << timer.microseconds()
+                         << " microseconds." << std::endl;
     }
 
     int outputItemProbIndex = b.mEngine->getBindingIndex(TOPK_ITEM_PROB);
@@ -607,7 +619,7 @@ int mainMovieLensMPS(Args& args, OutputArgs& pargs)
 {
     // Parse the ratings file and populate ground truth data
     args.ratingInputFile = locateFile(args.ratingInputFile, directories);
-    gLogInfo << args.ratingInputFile << std::endl;
+    sample::gLogInfo << args.ratingInputFile << std::endl;
 
     // Parse ground truth data and inputs, common to all processes (if using MPS)
     parseMovieLensData(args);
@@ -732,8 +744,8 @@ int mainMovieLensMPS(Args& args, OutputArgs& pargs)
             wait(&status);
         }
         timer.stop();
-        gLogInfo << "Number of processes executed : " << args.nbProcesses
-                 << ". Total MPS Run Duration : " << timer.milliseconds() << " milliseconds." << std::endl;
+        sample::gLogInfo << "Number of processes executed : " << args.nbProcesses
+                         << ". Total MPS Run Duration : " << timer.milliseconds() << " milliseconds." << std::endl;
     }
 
     bool pass = !args.failCount;
@@ -758,12 +770,12 @@ int main(int argc, char* argv[])
     if (!argsOK)
     {
         printHelpInfo();
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         return EXIT_FAILURE;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
-    gLogger.reportTestStart(sampleTest);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
+    sample::gLogger.reportTestStart(sampleTest);
     bool pass = false;
 
     try
@@ -772,7 +784,7 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& e)
     {
-        gLogError << e.what() << std::endl;
+        sample::gLogError << e.what() << std::endl;
     }
-    return gLogger.reportTest(sampleTest, pass);
+    return sample::gLogger.reportTest(sampleTest, pass);
 }

@@ -84,8 +84,8 @@ MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size)
     // shape
     mInputHeight = TLTMaskRCNNConfig::IMAGE_SHAPE.d[1];
     mInputWidth = TLTMaskRCNNConfig::IMAGE_SHAPE.d[2];
-    //Threshold to P3: Smaller -> P2
-    mThresh = (224*224) / (4.0f);
+    // Threshold to P3: Smaller -> P2
+    mThresh = (224 * 224) / (4.0f);
 };
 
 int MultilevelCropAndResize::getNbOutputs() const
@@ -188,7 +188,7 @@ int MultilevelCropAndResize::enqueue(
 {
 
     void* pooled = outputs[0];
-    
+
     cudaError_t status = roiAlignHalfCenter(stream, batch_size, mFeatureLength, mROICount, mThresh,
 
         mInputHeight, mInputWidth, inputs[0], &inputs[1], mFeatureSpatialSize,
@@ -214,7 +214,7 @@ void MultilevelCropAndResize::serialize(void* buffer) const
     write(d, mInputHeight);
     write(d, mInputWidth);
     write(d, mThresh);
-    for(int i = 0; i < mFeatureMapCount; i++)
+    for (int i = 0; i < mFeatureMapCount; i++)
     {
         write(d, mFeatureSpatialSize[i].y);
         write(d, mFeatureSpatialSize[i].x);
@@ -231,7 +231,7 @@ MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length
     mInputHeight = read<int>(d);
     mInputWidth = read<int>(d);
     mThresh = read<float>(d);
-    for(int i = 0; i < mFeatureMapCount; i++)
+    for (int i = 0; i < mFeatureMapCount; i++)
     {
         mFeatureSpatialSize[i].y = read<int>(d);
         mFeatureSpatialSize[i].x = read<int>(d);
@@ -248,7 +248,8 @@ DataType MultilevelCropAndResize::getOutputDataType(int index, const nvinfer1::D
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool MultilevelCropAndResize::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool MultilevelCropAndResize::isOutputBroadcastAcrossBatch(
+    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
 {
     return false;
 }
@@ -260,8 +261,8 @@ bool MultilevelCropAndResize::canBroadcastInputAcrossBatch(int inputIndex) const
 }
 
 // Configure the layer with input and output data types.
-void MultilevelCropAndResize::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
+void MultilevelCropAndResize::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims,
+    int nbOutputs, const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
 {
     assert(supportsFormat(inputTypes[0], floatFormat));

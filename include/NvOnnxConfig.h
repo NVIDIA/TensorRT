@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef NV_ONNX_CONFIG_H
-#define NV_ONNX_CONFIG_H
+#ifndef NV_OnnxConfig_H
+#define NV_OnnxConfig_H
 
 #include "NvInfer.h"
 
@@ -185,4 +185,4 @@ TENSORRTAPI IOnnxConfig* createONNXConfig();
 
 } // namespace nvonnxparser
 
-#endif // NV_ONNX_CONFIG_H
+#endif

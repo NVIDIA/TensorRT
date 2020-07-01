@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 #include <algorithm>
+#include <array>
 #include <math.h>
 #include <stdio.h>
-#include <vector>
 #include "kernel.h"
 
 using std::max;
@@ -235,21 +235,10 @@ struct bd2pLaunchConfig
     }
 };
 
-static std::vector<bd2pLaunchConfig> bd2pFunVec;
 #define FLOAT32 nvinfer1::DataType::kFLOAT
-bool init()
-{
-    bd2pFunVec.push_back(bd2pLaunchConfig(FLOAT32, NC4HW,
-                                          FLOAT32, NC4HW,
-                                          FLOAT32, NCHW,
-                                          bboxDeltas2Proposals_gpu<float, NC4HW, float4, NC4HW, float, NCHW>));
-    bd2pFunVec.push_back(bd2pLaunchConfig(FLOAT32, NCHW,
-                                          FLOAT32, NC4HW,
-                                          FLOAT32, NCHW,
-                                          bboxDeltas2Proposals_gpu<float, NCHW, float4, NC4HW, float, NCHW>));
-    return true;
-}
-static bool initialized = init();
+static std::array<bd2pLaunchConfig, 2> bd2pLCOptions = {
+    bd2pLaunchConfig(FLOAT32, NC4HW, FLOAT32, NC4HW, FLOAT32, NCHW, bboxDeltas2Proposals_gpu<float, NC4HW, float4, NC4HW, float, NCHW>),
+    bd2pLaunchConfig(FLOAT32, NCHW, FLOAT32, NC4HW, FLOAT32, NCHW, bboxDeltas2Proposals_gpu<float, NCHW, float4, NC4HW, float, NCHW>)};
 
 // BBD2P 
 pluginStatus_t bboxDeltas2Proposals(cudaStream_t stream,
@@ -272,12 +261,12 @@ pluginStatus_t bboxDeltas2Proposals(cudaStream_t stream,
                                    void* scores)
 {
     bd2pLaunchConfig lc = bd2pLaunchConfig(t_deltas, l_deltas, t_proposals, l_proposals, t_scores, l_scores);
-    for (unsigned i = 0; i < bd2pFunVec.size(); i++)
+    for (unsigned i = 0; i < bd2pLCOptions.size(); i++)
     {
-        if (lc == bd2pFunVec[i])
+        if (lc == bd2pLCOptions[i])
         {
             DEBUG_PRINTF("BBD2P kernel %d\n", i);
-            return bd2pFunVec[i].function(stream,
+            return bd2pLCOptions[i].function(stream,
                                           N, A, H, W,
                                           imInfo,
                                           featureStride,

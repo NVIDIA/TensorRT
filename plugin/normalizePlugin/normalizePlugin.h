@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -90,17 +90,17 @@ private:
     void serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const;
     Weights deserializeToDevice(const char*& hostBuffer, size_t count);
 
-    cublasHandle_t mCublas{};
+    cublasHandle_t mCublas;
 
-    int C{};
-    int H{};
-    int W{};
+    Weights mWeights{};
     int mNbWeights{};
     bool acrossSpatial{};
     bool channelShared{};
     float eps{};
-    Weights mWeights{};
-    const char* mPluginNamespace;
+    int C{};
+    int H{};
+    int W{};
+    std::string mPluginNamespace;
 };
 
 class NormalizePluginCreator : public BaseCreator

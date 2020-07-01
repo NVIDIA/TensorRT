@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,7 +92,7 @@ private:
     std::vector<GridAnchorParameters> mParam;
     int* mNumPriors;
     Weights *mDeviceWidths, *mDeviceHeights;
-    const char* mPluginNamespace;
+    std::string mPluginNamespace;
 };
 
 class GridAnchorPluginCreator : public BaseCreator

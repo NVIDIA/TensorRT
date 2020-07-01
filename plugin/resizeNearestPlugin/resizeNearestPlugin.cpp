@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 #include "resizeNearestPlugin.h"
 #include "plugin.h"
+#include <algorithm>
 #include <cuda_runtime_api.h>
 #include <iostream>
 
@@ -45,17 +46,17 @@ ResizeNearestPluginCreator::ResizeNearestPluginCreator()
 const char* ResizeNearestPluginCreator::getPluginName() const
 {
     return RESIZE_PLUGIN_NAME;
-};
+}
 
 const char* ResizeNearestPluginCreator::getPluginVersion() const
 {
     return RESIZE_PLUGIN_VERSION;
-};
+}
 
 const PluginFieldCollection* ResizeNearestPluginCreator::getFieldNames()
 {
     return &mFC;
-};
+}
 
 IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
@@ -70,23 +71,23 @@ IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const P
         }
     }
     return new ResizeNearest(mScale);
-};
+}
 
 IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(const char* name, const void* data, size_t length)
 {
     return new ResizeNearest(data, length);
-};
+}
 
 ResizeNearest::ResizeNearest(float scale)
     : mScale(scale)
 {
     assert(mScale > 0);
-};
+}
 
 int ResizeNearest::getNbOutputs() const
 {
     return 1;
-};
+}
 
 Dims ResizeNearest::getOutputDimensions(int index, const Dims* inputDims, int nbInputs)
 {
@@ -107,20 +108,19 @@ Dims ResizeNearest::getOutputDimensions(int index, const Dims* inputDims, int nb
         }
     }
     return output;
-};
+}
 
 int ResizeNearest::initialize()
 {
     return 0;
-};
+}
 
-void ResizeNearest::terminate(){
+void ResizeNearest::terminate() {}
 
-};
-
-void ResizeNearest::destroy(){
-
-};
+void ResizeNearest::destroy()
+{
+    delete this;
+}
 
 size_t ResizeNearest::getWorkspaceSize(int) const
 {
@@ -131,7 +131,7 @@ size_t ResizeNearest::getSerializationSize() const
 {
     // scale, dimensions: 3 * 2
     return sizeof(float) + sizeof(int) * 3 * 2;
-};
+}
 
 void ResizeNearest::serialize(void* buffer) const
 {
@@ -144,7 +144,7 @@ void ResizeNearest::serialize(void* buffer) const
     write(d, mOutputDims.d[1]);
     write(d, mOutputDims.d[2]);
     ASSERT(d == a + getSerializationSize());
-};
+}
 
 ResizeNearest::ResizeNearest(const void* data, size_t length)
 {
@@ -159,27 +159,29 @@ ResizeNearest::ResizeNearest(const void* data, size_t length)
     mOutputDims.d[1] = read<int>(d);
     mOutputDims.d[2] = read<int>(d);
     ASSERT(d == a + length);
-};
+}
 
 const char* ResizeNearest::getPluginType() const
 {
     return "ResizeNearest_TRT";
-};
+}
 
 const char* ResizeNearest::getPluginVersion() const
 {
     return "1";
-};
+}
 
 IPluginV2Ext* ResizeNearest::clone() const
 {
-    return new ResizeNearest(*this);
-};
+    auto plugin = new ResizeNearest(*this);
+    plugin->setPluginNamespace(mNameSpace.c_str());
+    return plugin;
+}
 
 void ResizeNearest::setPluginNamespace(const char* libNamespace)
 {
     mNameSpace = libNamespace;
-};
+}
 
 const char* ResizeNearest::getPluginNamespace() const
 {
@@ -189,7 +191,7 @@ const char* ResizeNearest::getPluginNamespace() const
 bool ResizeNearest::supportsFormat(DataType type, PluginFormat format) const
 {
     return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
-};
+}
 
 int ResizeNearest::enqueue(
     int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
@@ -209,7 +211,7 @@ int ResizeNearest::enqueue(
         ibatchstride, static_cast<float*>(outputs[0]), ostride, obatchstride);
 
     return cudaGetLastError() != cudaSuccess;
-};
+}
 
 // Return the DataType of the plugin output at the requested index
 DataType ResizeNearest::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const

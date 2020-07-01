@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <vector>
+#include <array>
 #include "plugin.h"
 #include "kernel.h"
 
@@ -149,16 +149,8 @@ struct gtdLaunchConfig
 
 using nvinfer1::DataType;
 
-static std::vector<gtdLaunchConfig> gtdFuncVec;
-
-bool gtdInit()
-{
-    gtdFuncVec.push_back(gtdLaunchConfig(DataType::kFLOAT, DataType::kFLOAT,
-                                         gatherTopDetections_gpu<float, float>));
-    return true;
-}
-
-static bool initialized = gtdInit();
+static std::array<gtdLaunchConfig, 1> gtdLCOptions = {
+    gtdLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherTopDetections_gpu<float, float>)};
 
 pluginStatus_t gatherTopDetections(
     cudaStream_t stream,
@@ -177,12 +169,12 @@ pluginStatus_t gatherTopDetections(
     void* topDetections)
 {
     gtdLaunchConfig lc = gtdLaunchConfig(DT_BBOX, DT_SCORE);
-    for (unsigned i = 0; i < gtdFuncVec.size(); ++i)
+    for (unsigned i = 0; i < gtdLCOptions.size(); ++i)
     {
-        if (lc == gtdFuncVec[i])
+        if (lc == gtdLCOptions[i])
         {
             DEBUG_PRINTF("gatherTopDetections kernel %d\n", i);
-            return gtdFuncVec[i].function(stream,
+            return gtdLCOptions[i].function(stream,
                                           shareLocation,
                                           numImages,
                                           numPredsPerClass,

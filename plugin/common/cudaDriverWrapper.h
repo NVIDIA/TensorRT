@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,13 @@
 #ifndef CUDA_DRIVER_WRAPPER_H
 #define CUDA_DRIVER_WRAPPER_H
 
-#ifdef __linux__
-#ifdef __x86_64__
 #include <cstdio>
 #include <cuda.h>
-#include <dlfcn.h>
+
+#define cuErrCheck(stat, wrap)                                                                                         \
+    {                                                                                                                  \
+        nvinfer1::cuErrCheck_((stat), wrap, __FILE__, __LINE__);                                                       \
+    }
 
 namespace nvinfer1
 {
@@ -59,6 +61,10 @@ public:
         unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
         unsigned int sharedMemBytes, CUstream hStream, void** kernelParams) const;
 
+    CUresult cuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+        unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes,
+        CUstream hStream, void** kernelParams, void** extra) const;
+
 private:
     void* handle;
     CUresult (*_cuGetErrorName)(CUresult, const char**);
@@ -74,8 +80,21 @@ private:
         CUlinkState, CUjitInputType, void*, size_t, const char*, unsigned int, CUjit_option*, void**);
     CUresult (*_cuLaunchCooperativeKernel)(CUfunction, unsigned int, unsigned int, unsigned int, unsigned int,
         unsigned int, unsigned int, unsigned int, CUstream, void**);
+    CUresult (*_cuLaunchKernel)(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+        unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes,
+        CUstream hStream, void** kernelParams, void** extra);
 };
+
+inline void cuErrCheck_(CUresult stat, const CUDADriverWrapper& wrap, const char* file, int line)
+{
+    if (stat != CUDA_SUCCESS)
+    {
+        const char* msg = nullptr;
+        wrap.cuGetErrorName(stat, &msg);
+        fprintf(stderr, "CUDA Error: %s %s %d\n", msg, file, line);
+    }
+}
+
 } // namespace nvinfer1
-#endif // __x86_64__
-#endif //__linux__
+
 #endif // CUDA_DRIVER_WRAPPER_H

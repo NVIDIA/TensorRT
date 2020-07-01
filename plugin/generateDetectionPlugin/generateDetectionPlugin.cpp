@@ -126,7 +126,7 @@ int GenerateDetection::initialize()
     // Init the regWeight [10, 10, 5, 5]
     mRegWeightDevice = std::make_shared<CudaBind<float>>(4);
     CUASSERT(cudaMemcpy(static_cast<void*>(mRegWeightDevice->mPtr),
-    static_cast<const void*>(TLTMaskRCNNConfig::DETECTION_REG_WEIGHTS), sizeof(float) * 4, cudaMemcpyHostToDevice));
+        static_cast<const void*>(TLTMaskRCNNConfig::DETECTION_REG_WEIGHTS), sizeof(float) * 4, cudaMemcpyHostToDevice));
 
     //@Init the mValidCnt and mDecodedBboxes for max batch size
     std::vector<int> tempValidCnt(mMaxBatchSize, mAnchorsCnt);
@@ -264,17 +264,17 @@ int GenerateDetection::enqueue(
 
     // refine detection
     RefineDetectionWorkSpace refDetcWorkspace(batch_size, mAnchorsCnt, mParam, mType);
-    cudaError_t status = DetectionPostProcess(stream, batch_size, mAnchorsCnt,
-        static_cast<float*>(mRegWeightDevice->mPtr), 
-        static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[1]), // Image Height
-        static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[2]), // Image Width
-        DataType::kFLOAT, // mType,
-        mParam, refDetcWorkspace, workspace,
-        inputs[1],       // inputs[InScore]
-        inputs[0],       // inputs[InDelta],
-        mValidCnt->mPtr, // inputs[InCountValid],
-        inputs[2],       // inputs[ROI]
-        detections);
+    cudaError_t status
+        = DetectionPostProcess(stream, batch_size, mAnchorsCnt, static_cast<float*>(mRegWeightDevice->mPtr),
+            static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[1]), // Image Height
+            static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[2]), // Image Width
+            DataType::kFLOAT,                                        // mType,
+            mParam, refDetcWorkspace, workspace,
+            inputs[1],       // inputs[InScore]
+            inputs[0],       // inputs[InDelta],
+            mValidCnt->mPtr, // inputs[InCountValid],
+            inputs[2],       // inputs[ROI]
+            detections);
 
     assert(status == cudaSuccess);
     return status;
@@ -287,7 +287,8 @@ DataType GenerateDetection::getOutputDataType(int index, const nvinfer1::DataTyp
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool GenerateDetection::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool GenerateDetection::isOutputBroadcastAcrossBatch(
+    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
 {
     return false;
 }

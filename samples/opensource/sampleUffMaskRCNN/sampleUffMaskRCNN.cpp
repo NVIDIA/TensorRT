@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  */
 
 #ifndef _MSC_VER
-#include <unistd.h>
 #include <sys/time.h>
+#include <unistd.h>
 #endif
 
 #include <assert.h>
@@ -203,6 +203,7 @@ PPM<uint8_t> resizeMask(const BBoxInfo& box, const float mask_threshold)
     raw_mask.h = MaskRCNNConfig::MASK_POOL_SIZE * 2;
     raw_mask.w = MaskRCNNConfig::MASK_POOL_SIZE * 2;
     raw_mask.buffer.resize(raw_mask.h * raw_mask.w, 0);
+    raw_mask.max = std::numeric_limits<int>::lowest();
     for (int i = 0; i < raw_mask.h * raw_mask.w; i++)
         raw_mask.buffer[i] = box.mask->raw[i];
 
@@ -345,13 +346,13 @@ private:
 
     bool verifyOutput(const samplesCommon::BufferManager& buffers);
 
-    vector<MaskRCNNUtils::BBoxInfo> decodeOutput(const int imageIdx, void* detectionsHost, void* masksHost);
+    std::vector<MaskRCNNUtils::BBoxInfo> decodeOutput(const int imageIdx, void* detectionsHost, void* masksHost);
 };
 
 bool SampleMaskRCNN::build()
 {
-    initLibNvInferPlugins(&gLogger.getTRTLogger(), "");
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    initLibNvInferPlugins(&sample::gLogger.getTRTLogger(), "");
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -447,8 +448,9 @@ bool SampleMaskRCNN::infer()
     }
     auto tEnd = std::chrono::high_resolution_clock::now();
     float totalHost = std::chrono::duration<float, std::milli>(tEnd - tStart).count();
-    gLogInfo << "Run for 10 times with Batch Size " << mParams.batchSize << std::endl;
-    gLogInfo << "Average inference time is " << (totalHost / 10) / mParams.batchSize << " ms/frame" << std::endl;
+    sample::gLogInfo << "Run for 10 times with Batch Size " << mParams.batchSize << std::endl;
+    sample::gLogInfo << "Average inference time is " << (totalHost / 10) / mParams.batchSize << " ms/frame"
+                     << std::endl;
 
     if (!status)
     {
@@ -518,7 +520,8 @@ bool SampleMaskRCNN::processInput(const samplesCommon::BufferManager& buffers)
     return true;
 }
 
-vector<MaskRCNNUtils::BBoxInfo> SampleMaskRCNN::decodeOutput(const int imageIdx, void* detectionsHost, void* masksHost)
+std::vector<MaskRCNNUtils::BBoxInfo> SampleMaskRCNN::decodeOutput(
+    const int imageIdx, void* detectionsHost, void* masksHost)
 {
     int input_dim_h = MaskRCNNConfig::IMAGE_SHAPE.d[1], input_dim_w = MaskRCNNConfig::IMAGE_SHAPE.d[2];
     assert(input_dim_h == input_dim_w);
@@ -581,18 +584,18 @@ bool SampleMaskRCNN::verifyOutput(const samplesCommon::BufferManager& buffers)
 
     for (int p = 0; p < mParams.batchSize; ++p)
     {
-        vector<MaskRCNNUtils::BBoxInfo> binfo = decodeOutput(p, detectionsHost, masksHost);
+        std::vector<MaskRCNNUtils::BBoxInfo> binfo = decodeOutput(p, detectionsHost, masksHost);
         for (size_t roi_id = 0; roi_id < binfo.size(); roi_id++)
         {
             const auto resized_mask = MaskRCNNUtils::resizeMask(binfo[roi_id], mParams.maskThreshold); // mask threshold
             MaskRCNNUtils::addBBoxPPM(mOriginalPPMs[p], binfo[roi_id], resized_mask);
 
-            gLogInfo << "Detected " << MaskRCNNConfig::CLASS_NAMES[binfo[roi_id].label] << " in"
-                     << mOriginalPPMs[p].fileName << " with confidence " << binfo[roi_id].prob * 100.f
-                     << " and coordinates (" << binfo[roi_id].box.x1 << ", " << binfo[roi_id].box.y1 << ", "
-                     << binfo[roi_id].box.x2 << ", " << binfo[roi_id].box.y2 << ")" << std::endl;
+            sample::gLogInfo << "Detected " << MaskRCNNConfig::CLASS_NAMES[binfo[roi_id].label] << " in"
+                             << mOriginalPPMs[p].fileName << " with confidence " << binfo[roi_id].prob * 100.f
+                             << " and coordinates (" << binfo[roi_id].box.x1 << ", " << binfo[roi_id].box.y1 << ", "
+                             << binfo[roi_id].box.x2 << ", " << binfo[roi_id].box.y2 << ")" << std::endl;
         }
-        gLogInfo << "The results are stored in current directory: " << std::to_string(p) + ".ppm" << std::endl;
+        sample::gLogInfo << "The results are stored in current directory: " << std::to_string(p) + ".ppm" << std::endl;
         MaskRCNNUtils::writePPMFile(std::to_string(p) + ".ppm", mOriginalPPMs[p]);
     }
 
@@ -646,7 +649,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -656,26 +659,26 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     SampleMaskRCNN sample(initializeSampleParams(args));
 
-    gLogInfo << "Building and running a GPU inference engine for Mask RCNN" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for Mask RCNN" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

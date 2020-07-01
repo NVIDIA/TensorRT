@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-file(GLOB CU_SRCS *.cu)
-set(BERT_CU_SOURCES ${BERT_CU_SOURCES} ${CU_SRCS})
-set(BERT_CU_SOURCES ${BERT_CU_SOURCES} PARENT_SCOPE)
+file(GLOB SRCS *.cpp)
+set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
+set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)

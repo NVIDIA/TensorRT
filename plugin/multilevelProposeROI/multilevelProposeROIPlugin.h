@@ -103,10 +103,8 @@ private:
     std::vector<std::shared_ptr<CudaBind<float>>>
         mAnchorBoxesDevice; // [N, anchors(261888 for resnet101 + 1024*1024), (y1, x1, y2, x2)]
     std::vector<std::vector<float>> mAnchorBoxesHost;
-    std::vector<std::shared_ptr<CudaBind<float>>>
-        mTempScores;
-    std::vector<std::shared_ptr<CudaBind<float>>>
-        mTempBboxes;
+    std::vector<std::shared_ptr<CudaBind<float>>> mTempScores;
+    std::vector<std::shared_ptr<CudaBind<float>>> mTempBboxes;
     float** mDeviceScores;
     float** mDeviceBboxes;
     std::shared_ptr<CudaBind<float>> mRegWeightDevice;

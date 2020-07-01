@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -124,15 +124,25 @@ constexpr inline int EnumMax<ActivationType>()
 
 //!
 //! \enum DataType
+//!
 //! \brief The type of weights and tensors.
 //!
 enum class DataType : int
 {
-    kFLOAT = 0, //!< FP32 format.
-    kHALF = 1,  //!< FP16 format.
-    kINT8 = 2,  //!< quantized INT8 format.
-    kINT32 = 3, //!< INT32 format.
-    kBOOL = 4   //!< BOOL format.
+    //! 32-bit floating point format.
+    kFLOAT = 0,
+
+    //! IEEE 16-bit floating-point format.
+    kHALF = 1,
+
+    //! 8-bit integer representing a quantized floating-point value.
+    kINT8 = 2,
+
+    //! Signed 32-bit integer format.
+    kINT32 = 3,
+
+    //! 8-bit boolean. 0 = false, 1 = true, other values undefined.
+    kBOOL = 4
 };
 
 template <>
@@ -170,6 +180,9 @@ constexpr inline int EnumMax<DimensionType>()
 //! TensorRT can also return an invalid dims structure. This structure is represented by nbDims == -1
 //! and d[i] == 0 for all d.
 //!
+//! TensorRT can also return an "unknown rank" dims structure. This structure is represented by nbDims == -1
+//! and d[i] == -1 for all d.
+//!
 class Dims
 {
 public:
@@ -206,8 +219,11 @@ enum class TensorFormat : int
     //! For a tensor with dimensions {N, C, H, W} or {numbers, channels,
     //! columns, rows}, the dimensional index corresponds to {3, 2, 1, 0}
     //! and thus the order is W minor.
+    //!
+    //! For DLA usage, the tensor sizes are limited to C,H,W in the range [1,8192].
+    //!
     kLINEAR = 0,
-    kNCHW TRT_DEPRECATED_ENUM = kLINEAR, //! <-- Deprecated, used for backward compatibility
+    kNCHW TRT_DEPRECATED_ENUM = kLINEAR, //!< Deprecated name of kLINEAR, provided for backwards compatibility
 
     //! Two wide channel vectorized row major format. This format is bound to
     //! FP16. It is only available for dimensions >= 3.
@@ -216,7 +232,7 @@ enum class TensorFormat : int
     //! [N][(C+1)/2][H][W][2], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/2][h][w][c%2].
     kCHW2 = 1,
-    kNC2HW2 TRT_DEPRECATED_ENUM = kCHW2, //! <-- Deprecated, used for backward compatibility
+    kNC2HW2 TRT_DEPRECATED_ENUM = kCHW2, //!< Deprecated name of kCHW2, provided for backwards compatibility
 
     //! Eight channel format where C is padded to a multiple of 8. This format
     //! is bound to FP16. It is only available for dimensions >= 3.
@@ -225,14 +241,17 @@ enum class TensorFormat : int
     //! [N][H][W][(C+7)/8*8], with the tensor coordinates (n, h, w, c)
     //! mapping to array subscript [n][h][w][c].
     kHWC8 = 2,
-    kNHWC8 TRT_DEPRECATED_ENUM = kHWC8, //! <-- Deprecated, used for backward compatibility
+    kNHWC8 TRT_DEPRECATED_ENUM = kHWC8, //!< Deprecated name of kHWC8, provided for backwards compatibility
 
     //! Four wide channel vectorized row major format. This format is bound to
     //! INT8 or FP16. It is only available for dimensions >= 3.
+    //! For INT8, the C dimension must be a build-time constant.
     //! For a tensor with dimensions {N, C, H, W},
     //! the memory layout is equivalent to a C array with dimensions
     //! [N][(C+3)/4][H][W][4], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/4][h][w][c%4].
+    //! If running on the DLA, this format can be used for acceleration
+    //! with the caveat that C must equal 4.
     kCHW4 = 3,
 
     //! Sixteen wide channel vectorized row major format. This format is bound
@@ -241,6 +260,10 @@ enum class TensorFormat : int
     //! the memory layout is equivalent to a C array with dimensions
     //! [N][(C+15)/16][H][W][16], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/16][h][w][c%16].
+    //!
+    //! For DLA usage, this format maps to the native image format for FP16,
+    //! and the tensor sizes are limited to C,H,W in the range [1,8192].
+    //!
     kCHW16 = 4,
 
     //! Thirty-two wide channel vectorized row major format. This format is
@@ -249,6 +272,10 @@ enum class TensorFormat : int
     //! the memory layout is equivalent to a C array with dimensions
     //! [N][(C+31)/32][H][W][32], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/32][h][w][c%32].
+    //!
+    //! For DLA usage, this format maps to the native image format for INT8,
+    //! and the tensor sizes are limited to C,H,W in the range [1,8192].
+    //!
     kCHW32 = 5
 };
 
@@ -278,7 +305,7 @@ constexpr inline int EnumMax<TensorFormat>()
 struct PluginTensorDesc
 {
     Dims dims;
-    DataType type;
+    DataType type; //!< \warning DataType:kBOOL not supported.
     TensorFormat format;
     float scale;
 };
@@ -367,6 +394,8 @@ public:
     //! will not be passed in, this is to keep backward compatibility with TensorRT 5.x series.  Use PluginV2IOExt
     //! or PluginV2DynamicExt for other PluginFormats.
     //!
+    //! \warning DataType:kBOOL not supported.
+    //!
     virtual bool supportsFormat(DataType type, PluginFormat format) const TRTNOEXCEPT = 0;
 
     //!
@@ -388,6 +417,8 @@ public:
     //! \warning for the format field, the values PluginFormat::kCHW4, PluginFormat::kCHW16, and PluginFormat::kCHW32
     //! will not be passed in, this is to keep backward compatibility with TensorRT 5.x series.  Use PluginV2IOExt
     //! or PluginV2DynamicExt for other PluginFormats.
+    //!
+    //! \warning DataType:kBOOL not supported.
     //!
     virtual void configureWithFormat(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type, PluginFormat format, int maxBatchSize) TRTNOEXCEPT = 0;
 
@@ -486,6 +517,8 @@ public:
     //! The default behavior should be to return the type of the first input, or DataType::kFLOAT if the layer has no inputs.
     //! The returned data type must have a format that is supported by the plugin.
     //! \see supportsFormat()
+    //!
+    //! \warning DataType:kBOOL not supported.
     //!
     virtual nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const TRTNOEXCEPT = 0;
 
@@ -724,8 +757,9 @@ enum class PluginFieldType : int
 //! This information can be parsed to decode necessary plugin metadata
 //!
 //!
-struct PluginField
+class PluginField
 {
+public:
     //!
     //! \brief Plugin field attribute name
     //!
@@ -1083,7 +1117,6 @@ constexpr inline int EnumMax<ErrorCode>()
 {
     return 11;
 } //!< Maximum number of elements in ErrorCode enum. \see ErrorCode
-
 
 //!
 //! \class IErrorRecorder

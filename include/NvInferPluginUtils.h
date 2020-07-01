@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 #ifndef NV_INFER_PLUGIN_UTILS_H
 #define NV_INFER_PLUGIN_UTILS_H
 #include "NvInferRuntimeCommon.h"
+
 //!
-//! \file NvPluginUtils.h
+//! \file NvInferPluginUtils.h
 //!
 //! This is the API for the Nvidia provided TensorRT plugin utilities.
 //! It lists all the parameters utilized by the TensorRT plugins.

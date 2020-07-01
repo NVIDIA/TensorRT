@@ -91,7 +91,7 @@ private:
     void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims);
 
     xy_t mPooledSize;
-    static const int mFeatureMapCount = 5; //p2, p3, p4, p5, p6(Maxpooling)
+    static const int mFeatureMapCount = 5; // p2, p3, p4, p5, p6(Maxpooling)
     int mFeatureLength;
     int mROICount;
     float mThresh;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -168,7 +168,7 @@ IPluginV2Ext* DetectionOutput::clone() const
     IPluginV2Ext* plugin = new DetectionOutput(param, C1, C2, numPriors);
 
     // Set the namespace
-    plugin->setPluginNamespace(mPluginNamespace);
+    plugin->setPluginNamespace(mPluginNamespace.c_str());
     return plugin;
 }
 
@@ -180,7 +180,7 @@ void DetectionOutput::setPluginNamespace(const char* pluginNamespace)
 
 const char* DetectionOutput::getPluginNamespace() const
 {
-    return mPluginNamespace;
+    return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index.

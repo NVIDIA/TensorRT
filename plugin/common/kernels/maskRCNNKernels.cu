@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1444,7 +1444,10 @@ __global__ void extract_fg_kernel(int samples, const void* in_scores, void* outp
     for (int i = 0; i < totalItems; i++)
     {
         int cur_id = i * blockDim.x + threadIdx.x;
-        out[blockOffset + cur_id] = in[blockOffset + cur_id].fg;
+        if (cur_id < samples)
+        {
+            out[blockOffset + cur_id] = in[blockOffset + cur_id].fg;
+        }
     }
 }
 __global__ void set_offset_kernel(int stride, int size, int* output)
@@ -1855,46 +1858,48 @@ __global__ void apply_delta_kernel(int samples, const void* anchors, const void*
     for (int i = 0; i < totalItems; i++)
     {
         int cur_id = i * blockDim.x + threadIdx.x;
+        if (cur_id < samples)
+        {
+            BBOX cur_anchor_yxyx = anchors_in[blockOffset + cur_id];
+            // convert yxyx -> cyxhw
+            // cy, cx, h, w
+            BBOX cur_anchor_cyxhw;
 
-        BBOX cur_anchor_yxyx = anchors_in[blockOffset + cur_id];
-        // convert yxyx -> cyxhw
-        // cy, cx, h, w
-        BBOX cur_anchor_cyxhw;
+            cur_anchor_cyxhw.y1 = (cur_anchor_yxyx.y1 + cur_anchor_yxyx.y2) / 2;
+            cur_anchor_cyxhw.x1 = (cur_anchor_yxyx.x1 + cur_anchor_yxyx.x2) / 2;
+            cur_anchor_cyxhw.y2 = (cur_anchor_yxyx.y2 - cur_anchor_yxyx.y1);
+            cur_anchor_cyxhw.x2 = (cur_anchor_yxyx.x2 - cur_anchor_yxyx.x1);
 
-        cur_anchor_cyxhw.y1 = (cur_anchor_yxyx.y1 + cur_anchor_yxyx.y2) / 2;
-        cur_anchor_cyxhw.x1 = (cur_anchor_yxyx.x1 + cur_anchor_yxyx.x2) / 2;
-        cur_anchor_cyxhw.y2 = (cur_anchor_yxyx.y2 - cur_anchor_yxyx.y1);
-        cur_anchor_cyxhw.x2 = (cur_anchor_yxyx.x2 - cur_anchor_yxyx.x1);
+            DELTA cur_delta = delta_in[blockOffset + cur_id];
 
-        DELTA cur_delta = delta_in[blockOffset + cur_id];
+            // multiply std_dev
+            cur_delta.dy *= 0.1;
+            cur_delta.dx *= 0.1;
+            cur_delta.logdh *= 0.2;
+            cur_delta.logdw *= 0.2;
 
-        // multiply std_dev
-        cur_delta.dy *= 0.1;
-        cur_delta.dx *= 0.1;
-        cur_delta.logdh *= 0.2;
-        cur_delta.logdw *= 0.2;
+            // apply delta
+            cur_anchor_cyxhw.y1 += cur_delta.dy * cur_anchor_cyxhw.y2;
+            cur_anchor_cyxhw.x1 += cur_delta.dx * cur_anchor_cyxhw.x2;
+            cur_anchor_cyxhw.y2 *= expf(cur_delta.logdh);
+            cur_anchor_cyxhw.x2 *= expf(cur_delta.logdw);
 
-        // apply delta
-        cur_anchor_cyxhw.y1 += cur_delta.dy * cur_anchor_cyxhw.y2;
-        cur_anchor_cyxhw.x1 += cur_delta.dx * cur_anchor_cyxhw.x2;
-        cur_anchor_cyxhw.y2 *= expf(cur_delta.logdh);
-        cur_anchor_cyxhw.x2 *= expf(cur_delta.logdw);
+            cur_anchor_yxyx.y1 = cur_anchor_cyxhw.y1 - 0.5 * cur_anchor_cyxhw.y2;
+            cur_anchor_yxyx.x1 = cur_anchor_cyxhw.x1 - 0.5 * cur_anchor_cyxhw.x2;
+            cur_anchor_yxyx.y2 = cur_anchor_yxyx.y1 + cur_anchor_cyxhw.y2;
+            cur_anchor_yxyx.x2 = cur_anchor_yxyx.x1 + cur_anchor_cyxhw.x2;
 
-        cur_anchor_yxyx.y1 = cur_anchor_cyxhw.y1 - 0.5 * cur_anchor_cyxhw.y2;
-        cur_anchor_yxyx.x1 = cur_anchor_cyxhw.x1 - 0.5 * cur_anchor_cyxhw.x2;
-        cur_anchor_yxyx.y2 = cur_anchor_yxyx.y1 + cur_anchor_cyxhw.y2;
-        cur_anchor_yxyx.x2 = cur_anchor_yxyx.x1 + cur_anchor_cyxhw.x2;
+            // clip bbox: a more precision clip method based on real window could be implemented
+            cur_anchor_yxyx.y1 = dMAX(dMIN(cur_anchor_yxyx.y1, 1.0), 0.0);
+            cur_anchor_yxyx.x1 = dMAX(dMIN(cur_anchor_yxyx.x1, 1.0), 0.0);
+            cur_anchor_yxyx.y2 = dMAX(dMIN(cur_anchor_yxyx.y2, 1.0), 0.0);
+            cur_anchor_yxyx.x2 = dMAX(dMIN(cur_anchor_yxyx.x2, 1.0), 0.0);
 
-        // clip bbox: a more precision clip method based on real window could be implemented
-        cur_anchor_yxyx.y1 = dMAX(dMIN(cur_anchor_yxyx.y1, 1.0), 0.0);
-        cur_anchor_yxyx.x1 = dMAX(dMIN(cur_anchor_yxyx.x1, 1.0), 0.0);
-        cur_anchor_yxyx.y2 = dMAX(dMIN(cur_anchor_yxyx.y2, 1.0), 0.0);
-        cur_anchor_yxyx.x2 = dMAX(dMIN(cur_anchor_yxyx.x2, 1.0), 0.0);
-
-        bbox_out[blockOffset + cur_id].y1 = cur_anchor_yxyx.y1;
-        bbox_out[blockOffset + cur_id].x1 = cur_anchor_yxyx.x1;
-        bbox_out[blockOffset + cur_id].y2 = cur_anchor_yxyx.y2;
-        bbox_out[blockOffset + cur_id].x2 = cur_anchor_yxyx.x2;
+            bbox_out[blockOffset + cur_id].y1 = cur_anchor_yxyx.y1;
+            bbox_out[blockOffset + cur_id].x1 = cur_anchor_yxyx.x1;
+            bbox_out[blockOffset + cur_id].y2 = cur_anchor_yxyx.y2;
+            bbox_out[blockOffset + cur_id].x2 = cur_anchor_yxyx.x2;
+        }
     }
 }
 
@@ -2239,11 +2244,13 @@ __global__ void specialslice_kernel(int samples, const void* idata, void* odata)
     for (int i = 0; i < totalItems; i++)
     {
         int cur_id = i * blockDim.x + threadIdx.x;
-
-        out_bboxes[blockOffset + cur_id].y1 = in_detections[blockOffset + cur_id].y1;
-        out_bboxes[blockOffset + cur_id].x1 = in_detections[blockOffset + cur_id].x1;
-        out_bboxes[blockOffset + cur_id].y2 = in_detections[blockOffset + cur_id].y2;
-        out_bboxes[blockOffset + cur_id].x2 = in_detections[blockOffset + cur_id].x2;
+        if (cur_id < samples)
+        {
+            out_bboxes[blockOffset + cur_id].y1 = in_detections[blockOffset + cur_id].y1;
+            out_bboxes[blockOffset + cur_id].x1 = in_detections[blockOffset + cur_id].x1;
+            out_bboxes[blockOffset + cur_id].y2 = in_detections[blockOffset + cur_id].y2;
+            out_bboxes[blockOffset + cur_id].x2 = in_detections[blockOffset + cur_id].x2;
+        }
     }
 }
 

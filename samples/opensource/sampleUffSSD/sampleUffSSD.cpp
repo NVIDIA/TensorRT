@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -123,9 +123,9 @@ private:
 //!
 bool SampleUffSSD::build()
 {
-    initLibNvInferPlugins(&gLogger.getTRTLogger(), "");
+    initLibNvInferPlugins(&sample::gLogger.getTRTLogger(), "");
 
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -197,7 +197,7 @@ bool SampleUffSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder
 
     if (mParams.int8)
     {
-        gLogInfo << "Using Entropy Calibrator 2" << std::endl;
+        sample::gLogInfo << "Using Entropy Calibrator 2" << std::endl;
         const std::string listFileName = "list.txt";
         const int imageC = 3;
         const int imageH = 300;
@@ -337,7 +337,7 @@ bool SampleUffSSD::verifyOutput(const samplesCommon::BufferManager& buffers)
 
     // Gather class labels
     std::ifstream labelFile(locateFile(mParams.labelsFileName, mParams.dataDirs));
-    string line;
+    std::string line;
     int id = 0;
     while (getline(labelFile, line))
     {
@@ -373,13 +373,13 @@ bool SampleUffSSD::verifyOutput(const samplesCommon::BufferManager& buffers)
                 correctDetection = true;
             }
 
-            gLogInfo << "Detected " << classes[detection].c_str() << " in the image " << int(det[0]) << " ("
-                     << mPPMs[p].fileName.c_str() << ")"
-                     << " with confidence " << det[2] * 100.f << " and coordinates (" << det[3] * inputW << ","
-                     << det[4] * inputH << ")"
-                     << ",(" << det[5] * inputW << "," << det[6] * inputH << ")." << std::endl;
+            sample::gLogInfo << "Detected " << classes[detection].c_str() << " in the image " << int(det[0]) << " ("
+                             << mPPMs[p].fileName.c_str() << ")"
+                             << " with confidence " << det[2] * 100.f << " and coordinates (" << det[3] * inputW << ","
+                             << det[4] * inputH << ")"
+                             << ",(" << det[5] * inputW << "," << det[6] * inputH << ")." << std::endl;
 
-            gLogInfo << "Result stored in " << storeName.c_str() << "." << std::endl;
+            sample::gLogInfo << "Result stored in " << storeName.c_str() << "." << std::endl;
 
             samplesCommon::writePPMFileWithBBox(
                 storeName, mPPMs[p], {det[3] * inputW, det[4] * inputH, det[5] * inputW, det[6] * inputH});
@@ -455,7 +455,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -465,26 +465,26 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     SampleUffSSD sample(initializeSampleParams(args));
 
-    gLogInfo << "Building and running a GPU inference engine for SSD" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for SSD" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

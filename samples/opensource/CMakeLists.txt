@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 set(OPENSOURCE_SAMPLES_LIST
+    sampleAlgorithmSelector
     sampleCharRNN
     sampleDynamicReshape
     sampleFasterRCNN
@@ -35,6 +36,7 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleUffMNIST
     sampleUffPluginV2Ext
     sampleUffSSD
+    sampleOnnxMnistCoordConvAC
     trtexec
 )
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -141,7 +141,7 @@ bool SampleMLP::build()
 {
     mWeightMap = loadWeights(locateFile(mParams.weightsFile, mParams.dataDirs));
 
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -303,12 +303,12 @@ bool SampleMLP::processInput(const samplesCommon::BufferManager& buffers)
         mParams.inputW);
 
     // print the ascii representation of the file that was loaded.
-    gLogInfo << "Input:\n";
+    sample::gLogInfo << "Input:\n";
     for (int i = 0; i < (mParams.inputH * mParams.inputW); i++)
     {
-        gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % mParams.inputW) ? "" : "\n");
+        sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % mParams.inputW) ? "" : "\n");
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     // Normalize the data the same way TensorFlow does.
@@ -331,11 +331,11 @@ bool SampleMLP::verifyOutput(const samplesCommon::BufferManager& buffers)
     bool pass = (idx == mNumber);
     if (pass)
     {
-        gLogInfo << "Algorithm chose " << idx << std::endl;
+        sample::gLogInfo << "Algorithm chose " << idx << std::endl;
     }
     else
     {
-        gLogInfo << "Algorithm chose " << idx << " but expected " << mNumber << "." << std::endl;
+        sample::gLogInfo << "Algorithm chose " << idx << " but expected " << mNumber << "." << std::endl;
     }
 
     return pass;
@@ -565,7 +565,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -575,26 +575,26 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     SampleMLP sample(initializeSampleParams(args));
 
-    gLogInfo << "Building and running a GPU inference engine for MLP" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for MLP" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

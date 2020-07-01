@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,289 +14,100 @@
  * limitations under the License.
  */
 
-#ifndef TRT_PLUGIN_UTIL_H
-#define TRT_PLUGIN_UTIL_H
+#include <cuda.h>
+#if CUDA_VERSION >= 10010
+
+#ifndef BERT_COMMON_H
+#define BERT_COMMON_H
 
 #include "NvInfer.h"
 #include "NvInferRuntimeCommon.h"
-#include "common.h"
 #include "cublas_v2.h"
-#include "cuda_fp16.hpp"
-#include "half.h"
-#include "logging.h"
-#include <cub/cub.cuh>
+#include "cuda_fp16.h"
+#include "plugin.h"
+#include "pluginLogger.h"
 
-extern Logger gLogger;
-extern LogStreamConsumer gLogVerbose;
-extern LogStreamConsumer gLogInfo;
-extern LogStreamConsumer gLogWarning;
-extern LogStreamConsumer gLogError;
-extern LogStreamConsumer gLogFatal;
-
-void setReportableSeverity(Logger::Severity severity);
+#include <algorithm>
+#include <cuda_runtime_api.h>
+#include <memory>
+#include <numeric>
+#include <stdexcept>
+#include <vector>
 
 #define TRT_UNUSED (void)
 
-#include <numeric>
-#include <vector>
+using half = __half;
 
-typedef __half half;
-namespace bert
-{
 constexpr uint32_t BDIM = 1; // batch dimension
 constexpr uint32_t SDIM = 0; // seq len dimension
 constexpr uint32_t HDIM = 2; // hidden dimension
 
-#define HDI inline __host__ __device__
+inline unsigned int getElementSize(nvinfer1::DataType t)
+{
+    switch (t)
+    {
+    case nvinfer1::DataType::kINT32: return 4;
+    case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kHALF: return 2;
+    case nvinfer1::DataType::kBOOL:
+    case nvinfer1::DataType::kINT8: return 1;
+    }
+    throw std::runtime_error("Invalid DataType.");
+    return 0;
+}
+
+inline int64_t getWeightsSize(const nvinfer1::Weights& w, nvinfer1::DataType type)
+{
+    return w.count * getElementSize(type);
+}
+
+inline int64_t volume(const nvinfer1::Dims& d)
+{
+    return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
+}
+
+namespace bert
+{
+
+template <typename IntType>
+constexpr IntType ceildiv(IntType a, IntType b)
+{
+    return (a + b - 1) / b;
+}
+template <typename IntType>
+constexpr IntType alignTo(IntType a, IntType b)
+{
+    return ceildiv(a, b) * b;
+}
 
 template <typename T>
 inline T* deserToDev(const char*& buffer, size_t nbElem)
 {
-    T* dev = nullptr;
+    void* dev{nullptr};
     const size_t len = sizeof(T) * nbElem;
-    CHECK(cudaMalloc(&dev, len));
-    CHECK(cudaMemcpy(dev, buffer, len, cudaMemcpyHostToDevice));
+    CUASSERT(cudaMalloc(&dev, len));
+    CUASSERT(cudaMemcpy(dev, buffer, len, cudaMemcpyHostToDevice));
 
     buffer += len;
-    return dev;
+    return static_cast<T*>(dev);
 }
 
 template <typename T>
 inline void serFromDev(char*& buffer, const T* data, size_t nbElem)
 {
     const size_t len = sizeof(T) * nbElem;
-    CHECK(cudaMemcpy(buffer, data, len, cudaMemcpyDeviceToHost));
+    CUASSERT(cudaMemcpy(buffer, static_cast<const void*>(data), len, cudaMemcpyDeviceToHost));
     buffer += len;
 }
 
 template <typename T>
-__device__ inline T rsqrt(const T& x);
-
-template <>
-__device__ inline float rsqrt(const float& x)
+inline T* devToDev(const T* data, size_t nbElem)
 {
-    return rsqrtf(x);
-}
-
-template <>
-__device__ inline half rsqrt(const half& x)
-{
-    return hrsqrt(x);
-}
-
-template <typename T>
-__device__ inline T tanh(const T& x);
-
-template <>
-__device__ inline float tanh(const float& x)
-{
-    return tanhf(x);
-}
-
-template <>
-__device__ inline half tanh(const half& x)
-{
-    const float tmp = tanhf(__half2float(x));
-    return __float2half(tmp);
-}
-
-template <>
-__device__ inline half2 tanh(const half2& x)
-{
-    // at the moment, there is no half2 tanh builtin
-    float2 tmp = (__half22float2(x));
-    tmp.x = tanhf(tmp.x);
-    tmp.y = tanhf(tmp.y);
-    return __float22half2_rn(tmp);
-}
-
-template <typename T>
-__device__ inline T exp(const T x);
-
-template <>
-__device__ inline float exp(const float x)
-{
-    return expf(x);
-}
-
-template <>
-__device__ inline half exp(const half x)
-{
-    return hexp(x);
-}
-
-using kv_float = cub::KeyValuePair<float, float>;
-using kv_half = cub::KeyValuePair<half, half>;
-using kv_half2 = cub::KeyValuePair<half2, half2>;
-
-__device__ inline kv_float operator+(const kv_float& a, const kv_float& b)
-{
-    return kv_float(a.key + b.key, a.value + b.value);
-}
-
-__device__ inline kv_half operator+(const kv_half& a, const kv_half& b)
-{
-    const half2 a2 = __halves2half2(a.key, a.value);
-    const half2 b2 = __halves2half2(b.key, b.value);
-    const half2 res = __hadd2(a2, b2);
-    return kv_half(res.x, res.y);
-}
-
-__device__ inline kv_half2 operator+(const kv_half2& a, const kv_half2& b)
-{
-    return kv_half2(__hadd2(a.key, b.key), __hadd2(a.value, b.value));
-}
-
-template <typename T>
-using kvp = cub::KeyValuePair<T, T>;
-
-template <typename T, typename R, typename P, int TPB>
-__device__ inline void layerNorm(
-    const kvp<R>& threadData, const int ld, const int offset, const P* beta, const P* gamma, T* output)
-{
-    // Assuming threadData is already divided by ld
-
-    using BlockReduce = cub::BlockReduce<kvp<R>, TPB>;
-    __shared__ typename BlockReduce::TempStorage temp_storage;
-    __shared__ R mu;     // mean
-    __shared__ R rsigma; // 1 / std.dev.
-
-    const auto sumKV = BlockReduce(temp_storage).Reduce(threadData, cub::Sum());
-
-    if (threadIdx.x == 0)
-    {
-        mu = sumKV.key;
-        rsigma = rsqrt(sumKV.value - mu * mu);
-    }
-    __syncthreads();
-
-    for (int i = threadIdx.x; i < ld; i += TPB)
-    {
-        const int idx = offset + i;
-        const R val = output[idx];
-        const R g(gamma[i]);
-        const R b(beta[i]);
-        output[idx] = g * (val - mu) * rsigma + b;
-    }
-}
-
-template <typename T, typename P, int TPB>
-__device__ inline void layerNormSmall(
-    const T val, const kvp<T>& threadData, const int ld, const int idx, const P* beta, const P* gamma, T* output)
-{
-    // Assuming threadData is already divided by ld
-    // Small settings: the block covers the leading dimension TPB >= ld. The input
-    // value is available in a register
-
-    using BlockReduce = cub::BlockReduce<kvp<T>, TPB>;
-    __shared__ typename BlockReduce::TempStorage temp_storage;
-    __shared__ T mu;     // mean
-    __shared__ T rsigma; // 1 / std.dev.
-
-    const auto sumKV = BlockReduce(temp_storage).Reduce(threadData, cub::Sum());
-
-    if (threadIdx.x == 0)
-    {
-        mu = sumKV.key;
-        rsigma = rsqrt(sumKV.value - mu * mu);
-    }
-    __syncthreads();
-
-    if (threadIdx.x < ld)
-    {
-        const T g(gamma[threadIdx.x]);
-        const T b(beta[threadIdx.x]);
-        output[idx] = g * (val - mu) * rsigma + b;
-    }
-}
-
-template <typename T, unsigned TPB>
-__device__ inline void scaledSoftmaxSmall(
-    const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
-{
-
-    using BlockReduce = cub::BlockReduce<float, TPB>;
-
-    __shared__ typename BlockReduce::TempStorage tmpStorage;
-
-    __shared__ float rZ;
-
-    const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
-
-    const float w(rsqrtHeadSize);
-    cub::Sum sum;
-    float threadData(0);
-
-    const int idx = offset + threadIdx.x;
-    if (threadIdx.x < lastValid)
-    {
-        const float val = input[idx];
-        threadData = exp(val * w);
-    }
-
-    const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
-
-    if (threadIdx.x == 0)
-    {
-        rZ = (1.f) / Z;
-    }
-    __syncthreads();
-
-    if (threadIdx.x < ld)
-    {
-        // this will be 0 for threadIdx.x >= lastValid
-        output[idx] = T(threadData * rZ);
-    }
-}
-
-template <typename T, unsigned TPB>
-__device__ inline void scaledSoftmax(
-    const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
-{
-
-    using BlockReduce = cub::BlockReduce<float, TPB>;
-    __shared__ typename BlockReduce::TempStorage tmpStorage;
-
-    __shared__ float rZ;
-
-    const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
-
-    const float w(rsqrtHeadSize);
-    cub::Sum sum;
-    float threadData(0);
-
-    for (int i = threadIdx.x; i < lastValid; i += TPB)
-    {
-        const int idx = offset + i;
-        const float val = input[idx];
-        threadData += exp(val * w);
-    }
-
-    const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
-
-    if (threadIdx.x == 0)
-    {
-        rZ = 1.f / Z;
-    }
-    __syncthreads();
-
-    for (int i = threadIdx.x; i < ld; i += TPB)
-    {
-        const int idx = offset + i;
-        const float val = (i < lastValid) ? exp(float(input[idx]) * w) * rZ : 0.f;
-        output[idx] = T(val);
-    }
-}
-
-template <typename IntType>
-constexpr HDI IntType ceildiv(IntType a, IntType b)
-{
-    return (a + b - 1) / b;
-}
-template <typename IntType>
-constexpr HDI IntType alignTo(IntType a, IntType b)
-{
-    return ceildiv(a, b) * b;
+    void* dev{nullptr};
+    const size_t len = sizeof(T) * nbElem;
+    CUASSERT(cudaMalloc(&dev, len));
+    CUASSERT(cudaMemcpy(dev, static_cast<const void*>(data), len, cudaMemcpyDeviceToDevice));
+    return static_cast<T*>(dev);
 }
 
 template <typename T>
@@ -332,7 +143,7 @@ cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOp
     int batchCount, cublasGemmAlgo_t algo)
 {
 
-    return cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_32F, lda, strideA, B,
+    return ::cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_32F, lda, strideA, B,
         CUDA_R_32F, ldb, strideB, &beta, C, CUDA_R_32F, ldc, strideC, batchCount, CUDA_R_32F, algo);
 }
 
@@ -342,7 +153,7 @@ cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOp
     const half* B, int ldb, long long int strideB, const half beta, half* C, int ldc, long long int strideC,
     int batchCount, cublasGemmAlgo_t algo)
 {
-    return cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_16F, lda, strideA, B,
+    return ::cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_16F, lda, strideA, B,
         CUDA_R_16F, ldb, strideB, &beta, C, CUDA_R_16F, ldc, strideC, batchCount, CUDA_R_16F, algo);
 }
 
@@ -392,6 +203,128 @@ struct CublasConfigHelper
     }
 };
 
+template <typename T>
+struct CudaDeleter
+{
+    void operator()(T* buf)
+    {
+        CUASSERT(cudaFree(buf));
+    }
+};
+
+template <typename T>
+using cuda_unique_ptr = std::unique_ptr<T, bert::CudaDeleter<T>>;
+
+template <typename T>
+using cuda_shared_ptr = std::shared_ptr<T>;
+
+template <typename T>
+void make_cuda_shared(cuda_shared_ptr<T>& ptr, void* cudaMem)
+{
+    ptr.reset(static_cast<T*>(cudaMem), bert::CudaDeleter<T>());
+}
+
+struct WeightsWithOwnership : public nvinfer1::Weights
+{
+    WeightsWithOwnership()
+    {
+        values = nullptr;
+        count = 0;
+    }
+    ~WeightsWithOwnership()
+    {
+        operator delete[](const_cast<void*>(values));
+    }
+
+    WeightsWithOwnership(const WeightsWithOwnership&) = delete;
+    WeightsWithOwnership operator=(const WeightsWithOwnership&) = delete;
+    WeightsWithOwnership(const WeightsWithOwnership&&) = delete;
+    WeightsWithOwnership operator=(const WeightsWithOwnership&&) = delete;
+
+    void convertAndCopy(const nvinfer1::Weights& src, nvinfer1::DataType type)
+    {
+        this->type = type;
+        this->count = src.count;
+
+        if (type == nvinfer1::DataType::kFLOAT)
+        {
+            auto destBuf = new float[src.count];
+            this->values = destBuf;
+
+            if (src.type == nvinfer1::DataType::kFLOAT)
+            {
+                gLogVerbose << "Float Weights(Host) => Float Array(Host)\n";
+                std::copy_n(static_cast<const float*>(src.values), src.count, destBuf);
+            }
+            else
+            {
+                assert(src.type == nvinfer1::DataType::kHALF);
+
+                gLogVerbose << "Half Weights(Host) => Float Array(Host)\n";
+                const auto s = static_cast<const half*>(src.values);
+                auto d = static_cast<float*>(const_cast<void*>(this->values));
+
+                for (auto it = 0; it < src.count; it++)
+                {
+                    d[it] = __half2float(s[it]);
+                }
+            }
+        }
+        else if (type == nvinfer1::DataType::kHALF)
+        {
+            auto destBuf = new half[src.count];
+            this->values = destBuf;
+
+            if (src.type == nvinfer1::DataType::kHALF)
+            {
+                gLogVerbose << "Half Weights(Host) => Half Array(Host)\n";
+                std::copy_n(static_cast<const half*>(src.values), src.count, destBuf);
+            }
+            else
+            {
+                assert(src.type == nvinfer1::DataType::kFLOAT);
+
+                gLogVerbose << "Float Weights(Host) => Half Array(Host)\n";
+                const auto s = static_cast<const float*>(src.values);
+                auto d = static_cast<half*>(const_cast<void*>(this->values));
+
+                for (auto it = 0; it < src.count; it++)
+                {
+                    d[it] = __float2half(s[it]);
+                }
+            }
+        }
+        else
+        {
+            throw std::runtime_error("Unsupported DataType specified for plugin.");
+        }
+    }
+
+    void convertAndCopy(const char*& srcBuf, size_t count, nvinfer1::DataType type)
+    {
+        this->type = type;
+        this->count = count;
+        const auto nbBytes = getWeightsSize(*this, type);
+        auto destBuf = new char[nbBytes];
+        this->values = destBuf;
+
+        std::copy_n(srcBuf, nbBytes, destBuf);
+        srcBuf += nbBytes;
+    }
+};
+
+template <typename T>
+inline void copyToDevice(WeightsWithOwnership& hostWeights, size_t nbBytes, cuda_unique_ptr<T>& cudaWeights)
+{
+    if (hostWeights.values)
+    {
+        void* cudaMem{nullptr};
+        CUASSERT(cudaMalloc(&cudaMem, nbBytes));
+        CUASSERT(cudaMemcpy(cudaMem, hostWeights.values, nbBytes, cudaMemcpyHostToDevice));
+        cudaWeights.reset(static_cast<T*>(cudaMem));
+    }
+}
+
 inline void convertAndCopyToDevice(const nvinfer1::Weights& src, float* destDev)
 {
 
@@ -400,7 +333,7 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, float* destDev)
     if (src.type == nvinfer1::DataType::kFLOAT)
     {
         gLogVerbose << "Float Weights(Host) => Float Array(Device)" << std::endl;
-        CHECK(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
+        CUASSERT(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
     }
     else
     {
@@ -408,12 +341,12 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, float* destDev)
         std::vector<float> tmp(src.count);
         const half* values = reinterpret_cast<const half*>(src.values);
 
-        for (int it = 0; it < tmp.size(); it++)
+        for (size_t it = 0; it < tmp.size(); it++)
         {
             tmp[it] = __half2float(values[it]);
         }
 
-        CHECK(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
+        CUASSERT(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
     }
 }
 
@@ -424,7 +357,7 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, half* destDev)
     if (src.type == nvinfer1::DataType::kHALF)
     {
         gLogVerbose << "Half Weights(Host) => Half Array(Device)" << std::endl;
-        CHECK(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
+        CUASSERT(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
     }
     else
     {
@@ -432,11 +365,11 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, half* destDev)
         std::vector<half> tmp(src.count);
         const float* values = reinterpret_cast<const float*>(src.values);
 
-        for (int it = 0; it < tmp.size(); it++)
+        for (size_t it = 0; it < tmp.size(); it++)
         {
             tmp[it] = __float2half(values[it]);
         }
-        CHECK(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
+        CUASSERT(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
     }
 }
 
@@ -444,19 +377,23 @@ inline nvinfer1::DataType fieldTypeToDataType(const nvinfer1::PluginFieldType ft
 {
     switch (ftype)
     {
-    case nvinfer1::PluginFieldType::kFLOAT32: {
+    case nvinfer1::PluginFieldType::kFLOAT32:
+    {
         gLogVerbose << "PluginFieldType is Float32" << std::endl;
         return nvinfer1::DataType::kFLOAT;
     }
-    case nvinfer1::PluginFieldType::kFLOAT16: {
+    case nvinfer1::PluginFieldType::kFLOAT16:
+    {
         gLogVerbose << "PluginFieldType is Float16" << std::endl;
         return nvinfer1::DataType::kHALF;
     }
-    case nvinfer1::PluginFieldType::kINT32: {
+    case nvinfer1::PluginFieldType::kINT32:
+    {
         gLogVerbose << "PluginFieldType is Int32" << std::endl;
         return nvinfer1::DataType::kINT32;
     }
-    case nvinfer1::PluginFieldType::kINT8: {
+    case nvinfer1::PluginFieldType::kINT8:
+    {
         gLogVerbose << "PluginFieldType is Int8" << std::endl;
         return nvinfer1::DataType::kINT8;
     }
@@ -464,58 +401,26 @@ inline nvinfer1::DataType fieldTypeToDataType(const nvinfer1::PluginFieldType ft
     }
 }
 
+inline unsigned int getElementSize(nvinfer1::DataType t)
+{
+    switch (t)
+    {
+    case nvinfer1::DataType::kINT32: return 4;
+    case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kHALF: return 2;
+    case nvinfer1::DataType::kBOOL:
+    case nvinfer1::DataType::kINT8: return 1;
+    }
+    throw std::runtime_error("Invalid DataType.");
+    return 0;
+}
+
 inline int64_t volume(const nvinfer1::Dims& d)
 {
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
 }
 
-template <int VPT>
-struct BytesToType;
-
-template <>
-struct BytesToType<2>
-{
-    using type = uint16_t;
-};
-template <>
-struct BytesToType<4>
-{
-    using type = uint32_t;
-};
-template <>
-struct BytesToType<8>
-{
-    using type = uint64_t;
-};
-template <>
-struct BytesToType<16>
-{
-    using type = float4;
-};
-
-template <int Bytes>
-__device__ inline void copy(const void* local, void* data)
-{
-    using T = typename BytesToType<Bytes>::type;
-
-    const T* in = static_cast<const T*>(local);
-    T* out = static_cast<T*>(data);
-    *out = *in;
-}
-
-template <typename T>
-__device__ inline T myExp(const T x);
-
-template <>
-__device__ inline half myExp<half>(const half x)
-{
-    return hexp(x);
-}
-template <>
-__device__ inline float myExp<float>(const float x)
-{
-    return __expf(x);
-}
-
 } // namespace bert
-#endif // TRT_PLUGIN_UTIL_H
+#endif // BERT_COMMON_H
+
+#endif // CUDA_VERSION >= 10010

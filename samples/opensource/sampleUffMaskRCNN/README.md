@@ -6,7 +6,7 @@
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Prerequisites](#prerequisites)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+    * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -31,7 +31,7 @@ The main components of this network are the `ResizeNearest`, `ProposalLayer`, `P
 - `PyramidROIAlign` - Crop and resize the feature of ROIs (first stage's proposals) from the corresponding feature layer.
 
 - `DetectionLayer` - Refine the first stage's proposals to produce final detections.
-  
+
 - `SpecialSlice` - A workaround plugin to slice detection output [y1, x1, y2, x2, class_id, score] to [y1, x1, y2 , x2] for data with more than one index dimensions (batch_idx, proposal_idx, detections(y1, x1, y2, x2)).
 
 
@@ -61,98 +61,94 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
 ## Prerequisites
 
 1.  Install the dependent Python packages.
-	```
-	pip install -r $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/requirements.txt
-	```
+    ```
+    pip install -r $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/requirements.txt
+    ```
 
 2.  Install the UFF toolkit and graph surgeon; depending on your TensorRT installation method. To install the toolkit and graph surgeon, choose the method you used to install TensorRT for instructions. See [TensorRT Installation Guide: Installing TensorRT](https://docs.nvidia.com/deeplearning/sdk/tensorrt-install-guide/index.html#installing).
-  
+
 3.  Modify the `conv2d_transpose` conversion function in UFF, for example `/usr/local/lib/python3.5/dist-packages/uff/converters/tensorflow/converter_functions.py` or `/usr/lib/python3.6/dist-packages/uff/converters/tensorflow/converter_functions.py`.
-	```    
-	uff_graph.conv_transpose(
-	    inputs[0], inputs[2], inputs[1],
-	    strides, padding,
-	    dilation=None, number_groups=number_groups,
-	    left_format=lhs_fmt, right_format=rhs_fmt,
-	    name=name, fields=fields
-	    )
-	```
+    ```
+    uff_graph.conv_transpose(
+        inputs[0], inputs[2], inputs[1],
+        strides, padding,
+        dilation=None, number_groups=number_groups,
+        left_format=lhs_fmt, right_format=rhs_fmt,
+        name=name, fields=fields
+        )
+    ```
 
 4.  Download the Mask R-CNN repo and export to `PYTHONPATH`.
-	```
-	git clone https://github.com/matterport/Mask_RCNN.git
-	export PYTHONPATH=$PYTHONPATH:$PWD/Mask_RCNN
-	```
-  
+    ```
+    git clone https://github.com/matterport/Mask_RCNN.git
+    export PYTHONPATH=$PYTHONPATH:$PWD/Mask_RCNN
+    ```
+
 5.  Apply the patch into Mask R-CNN repo to update the model from NHWC to NCHW.
-	```    
-	cd Mask_RCNN
-	git checkout 3deaec5
-	git am $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/0001-Update-the-Mask_RCNN-model-from-NHWC-to-NCHW.patch
-	```
+    ```
+    cd Mask_RCNN
+    git checkout 3deaec5
+    git am $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/0001-Update-the-Mask_RCNN-model-from-NHWC-to-NCHW.patch
+    ```
 
 6.  Download the pre-trained Keras model and place it into your `/data` folder
-	```
-	wget https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5
-	```
+    ```
+    wget https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5
+    ```
 
-	**Note:** The md5sum of model file is e98aaff6f99e307b5e2a8a3ff741a518.
+    **Note:** The md5sum of model file is e98aaff6f99e307b5e2a8a3ff741a518.
 
 7.  Convert the h5 model to the UFF model and place it into your `/data` folder
-	```
-	cd $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/
-	python mrcnn_to_trt_single.py -w /path/to/data/mask_rcnn_coco.h5 -o /path/to/data/mrcnn_nchw.uff -p ./config.py
-	```
- 
+    ```
+    cd $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/
+    python mrcnn_to_trt_single.py -w /path/to/data/mask_rcnn_coco.h5 -o /path/to/data/mrcnn_nchw.uff -p ./config.py
+    ```
+
 8.  Populate your `/data` folder with the following test images.
-	```
-	/usr/src/tensorrt/data/faster-rcnn/001763.ppm
-	/usr/src/tensorrt/data/faster-rcnn/004545.ppm
-	```
+    ```
+    /usr/src/tensorrt/data/faster-rcnn/001763.ppm
+    /usr/src/tensorrt/data/faster-rcnn/004545.ppm
+    ```
 
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sample_uff_maskRCNN` directory. The binary named `sample_uff_maskRCNN` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sample_uff_maskRCNN
-	make
-	```
- 
-	Where `<TensorRT root directory>` is where you installed TensorRT.  
+1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleUffMaskRCNN` directory. The binary named `sample_uff_mask_rcnn` will be created in the `<TensorRT root directory>/bin` directory.
+    ```
+    cd <TensorRT root directory>/samples/sampleUffMaskRCNN
+    make
+    ```
+
+    Where `<TensorRT root directory>` is where you installed TensorRT.
 
 2.  Run the sample to perform object detection and object mask prediction.
 
-	To run the sample in FP32 mode:
-	```
-	./sample_uff_maskRCNN -d path/to/data
-	```
+    To run the sample in FP32 mode:
+    ```
+    ./sample_uff_mask_rcnn -d path/to/data
+    ```
 
-	To run the sample in FP16 mode:
-	```
-	./sample_uff_maskRCNN -d path/to/data --fp16
-	```
-	
+    To run the sample in FP16 mode:
+    ```
+    ./sample_uff_mask_rcnn -d path/to/data --fp16
+    ```
+
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
-	```
-	[I] Detected dog in../../data/001763.ppm with confidence 99.9064 and coordinates (257.351, 14.2238, 489.272, 364.817)
-	[I] Detected dog in../../data/001763.ppm with confidence 99.8484 and coordinates (14.3269, 52.0974, 320.913, 363.364)
-	[I] The results are stored in current directory: 0.ppm
-	[I] Detected horse in../../data/004545.ppm with confidence 99.9796 and coordinates (164.81, 22.6816, 386.512, 308.955)
-	[I] Detected bottle in../../data/004545.ppm with confidence 98.5529 and coordinates (218.719, 237.04, 229.382, 261.205)
-	[I] The results are stored in current directory: 1.ppm
-	&&&& PASSED TensorRT.sample_maskrcnn # ../build/cmake/out/sample_uff_maskRCNN -d ../../data/
-	```
-	This output shows that the sample ran successfully; `PASSED`.
+    ```
+    [I] Detected dog in../../data/001763.ppm with confidence 99.9064 and coordinates (257.351, 14.2238, 489.272, 364.817)
+    [I] Detected dog in../../data/001763.ppm with confidence 99.8484 and coordinates (14.3269, 52.0974, 320.913, 363.364)
+    [I] The results are stored in current directory: 0.ppm
+    [I] Detected horse in../../data/004545.ppm with confidence 99.9796 and coordinates (164.81, 22.6816, 386.512, 308.955)
+    [I] Detected bottle in../../data/004545.ppm with confidence 98.5529 and coordinates (218.719, 237.04, 229.382, 261.205)
+    [I] The results are stored in current directory: 1.ppm
+    &&&& PASSED TensorRT.sample_maskrcnn # ../build/cmake/out/sample_uff_mask_rcnn -d ../../data/
+    ```
+    This output shows that the sample ran successfully; `PASSED`.
+
 
 ### Sample `--help` options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.  
-```
-Usage: ./sample_maskRCNN [-h or --help] [-d or --datadir=<path to data directory>]
---help Display help information
---datadir Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use data/samples/maskrcnn/ and data/maskrcnn/
---fp16 Specify to run in fp16 mode.
-```
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 ## Additional resources
 

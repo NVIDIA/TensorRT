@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ if(DEFINED ENV{QNX_BASE})
   set(QNX_BASE $ENV{QNX_BASE})
   message(STATUS "Found QNX_BASE = ${QNX_BASE}")
 elseif(DEFINED ENV{TOOLS_BASE})
-  set(QNX_BASE $ENV{TOOLS_BASE}/embedded/qnx/qnx700-ga3)
+  set(QNX_BASE $ENV{TOOLS_BASE}/embedded/qnx/qnx700-ga4)
   message(STATUS "Found QNX_BASE = ${QNX_BASE}")
 else()
   message(FATAL_ERROR "QNX_BASE was not found")
