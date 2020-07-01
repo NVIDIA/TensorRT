@@ -279,7 +279,9 @@ void InstanceNormalizationPlugin::destroy()
 
 IPluginV2DynamicExt* InstanceNormalizationPlugin::clone() const
 { 
-    return new InstanceNormalizationPlugin{_epsilon, _h_scale, _h_bias};
+    auto plugin = new InstanceNormalizationPlugin{_epsilon, _h_scale, _h_bias};
+    plugin->setPluginNamespace(mPluginNamespace);
+    return plugin;
 }
 
 // Set plugin namespace

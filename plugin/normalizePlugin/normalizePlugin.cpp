@@ -71,8 +71,9 @@ Normalize::Normalize(const void* buffer, size_t length)
     channelShared = read<bool>(d);
     eps = read<float>(d);
 
-    int nbWeights = read<int>(d);
-    mWeights = deserializeToDevice(d, nbWeights);
+    mNbWeights = read<int>(d);
+    mWeights = deserializeToDevice(d, mNbWeights);
+    cublasCreate(&mCublas);
     ASSERT(d == a + length);
 }
 
