@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -215,7 +215,7 @@ nmtSample::DataWriter::ptr getDataWriter()
     }
     else
     {
-        gLogError << "Invalid data writer specified: " << gDataWriterStr << std::endl;
+        sample::gLogError << "Invalid data writer specified: " << gDataWriterStr << std::endl;
         assert(0);
         return nmtSample::DataWriter::ptr();
     }
@@ -228,7 +228,7 @@ bool parseString(const char* arg, const char* name, std::string& value)
     if (match)
     {
         value = arg + n + 3;
-        gLogInfo << name << ": " << value << std::endl;
+        sample::gLogInfo << name << ": " << value << std::endl;
     }
     return match;
 }
@@ -240,7 +240,7 @@ bool parseInt(const char* arg, const char* name, int& value)
     if (match)
     {
         value = atoi(arg + n + 3);
-        gLogInfo << name << ": " << value << std::endl;
+        sample::gLogInfo << name << ": " << value << std::endl;
     }
     return match;
 }
@@ -260,7 +260,7 @@ bool parseBool(const char* arg, const char* longName, bool& value, char shortNam
     }
     if (match)
     {
-        gLogInfo << longName << ": true" << std::endl;
+        sample::gLogInfo << longName << ": true" << std::endl;
         value = true;
     }
     return match;
@@ -365,7 +365,7 @@ bool parseNMTArgs(samplesCommon::Args& args, int argc, char* argv[])
 nvinfer1::ICudaEngine* getEncoderEngine(
     nmtSample::Embedder::ptr inputEmbedder, nmtSample::Encoder::ptr encoder, nmtSample::Alignment::ptr alignment)
 {
-    nvinfer1::IBuilder* encoderBuilder = nvinfer1::createInferBuilder(gLogger.getTRTLogger());
+    nvinfer1::IBuilder* encoderBuilder = nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger());
     assert(encoderBuilder != nullptr);
     nvinfer1::IBuilderConfig* encoderConfig = encoderBuilder->createBuilderConfig();
     encoderBuilder->setMaxBatchSize(gMaxBatchSize);
@@ -512,7 +512,7 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
     nmtSample::Alignment::ptr alignment, nmtSample::Context::ptr context, nmtSample::Attention::ptr attention,
     nmtSample::Projection::ptr projection, nmtSample::Likelihood::ptr likelihood)
 {
-    nvinfer1::IBuilder* generatorBuilder = nvinfer1::createInferBuilder(gLogger.getTRTLogger());
+    nvinfer1::IBuilder* generatorBuilder = nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger());
     assert(generatorBuilder != nullptr);
     nvinfer1::IBuilderConfig* generatorConfig = generatorBuilder->createBuilderConfig();
     generatorBuilder->setMaxBatchSize(gMaxBatchSize);
@@ -684,7 +684,7 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
 nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
     const std::vector<nvinfer1::Dims>& decoderStateSizes, int attentionSize)
 {
-    nvinfer1::IBuilder* shuffleBuilder = nvinfer1::createInferBuilder(gLogger.getTRTLogger());
+    nvinfer1::IBuilder* shuffleBuilder = nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger());
     assert(shuffleBuilder != nullptr);
     nvinfer1::IBuilderConfig* shuffleConfig = shuffleBuilder->createBuilderConfig();
     shuffleBuilder->setMaxBatchSize(gMaxBatchSize);
@@ -794,9 +794,9 @@ void processBindings(
 
 int main(int argc, char** argv)
 {
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     samplesCommon::Args args;
     bool argsOK = parseNMTArgs(args, argc, argv);
@@ -806,11 +806,11 @@ int main(int argc, char** argv)
     }
     if (!argsOK)
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (gVerbose)
     {
-        setReportableSeverity(Severity::kVERBOSE);
+        sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
     }
 
     // Set up output vocabulary
@@ -819,8 +819,8 @@ int main(int argc, char** argv)
         std::ifstream vocabStream(locateNMTFile(vocabularyFilePath));
         if (!vocabStream.good())
         {
-            gLogError << "Cannot open file " << vocabularyFilePath << std::endl;
-            return gLogger.reportFail(sampleTest);
+            sample::gLogError << "Cannot open file " << vocabularyFilePath << std::endl;
+            return sample::gLogger.reportFail(sampleTest);
         }
         vocabStream >> *gOutputVocabulary;
     }
@@ -845,20 +845,20 @@ int main(int argc, char** argv)
 
     if (gPrintComponentInfo)
     {
-        gLogInfo << "Component Info:" << std::endl;
-        gLogInfo << "- Data Reader: " << dataReader->getInfo() << std::endl;
-        gLogInfo << "- Input Embedder: " << inputEmbedder->getInfo() << std::endl;
-        gLogInfo << "- Output Embedder: " << outputEmbedder->getInfo() << std::endl;
-        gLogInfo << "- Encoder: " << encoder->getInfo() << std::endl;
-        gLogInfo << "- Decoder: " << decoder->getInfo() << std::endl;
-        gLogInfo << "- Alignment: " << alignment->getInfo() << std::endl;
-        gLogInfo << "- Context: " << context->getInfo() << std::endl;
-        gLogInfo << "- Attention: " << attention->getInfo() << std::endl;
-        gLogInfo << "- Projection: " << projection->getInfo() << std::endl;
-        gLogInfo << "- Likelihood: " << likelihood->getInfo() << std::endl;
-        gLogInfo << "- Search Policy: " << searchPolicy->getInfo() << std::endl;
-        gLogInfo << "- Data Writer: " << dataWriter->getInfo() << std::endl;
-        gLogInfo << "End of Component Info" << std::endl;
+        sample::gLogInfo << "Component Info:" << std::endl;
+        sample::gLogInfo << "- Data Reader: " << dataReader->getInfo() << std::endl;
+        sample::gLogInfo << "- Input Embedder: " << inputEmbedder->getInfo() << std::endl;
+        sample::gLogInfo << "- Output Embedder: " << outputEmbedder->getInfo() << std::endl;
+        sample::gLogInfo << "- Encoder: " << encoder->getInfo() << std::endl;
+        sample::gLogInfo << "- Decoder: " << decoder->getInfo() << std::endl;
+        sample::gLogInfo << "- Alignment: " << alignment->getInfo() << std::endl;
+        sample::gLogInfo << "- Context: " << context->getInfo() << std::endl;
+        sample::gLogInfo << "- Attention: " << attention->getInfo() << std::endl;
+        sample::gLogInfo << "- Projection: " << projection->getInfo() << std::endl;
+        sample::gLogInfo << "- Likelihood: " << likelihood->getInfo() << std::endl;
+        sample::gLogInfo << "- Search Policy: " << searchPolicy->getInfo() << std::endl;
+        sample::gLogInfo << "- Data Writer: " << dataWriter->getInfo() << std::endl;
+        sample::gLogInfo << "End of Component Info" << std::endl;
     }
 
     std::vector<nvinfer1::Dims> stateSizes = decoder->getStateSizes();
@@ -1172,7 +1172,11 @@ int main(int argc, char** argv)
                 *inputOriginalSequenceLengthsHostBuffer);
         });
 
-        encoderContext->enqueue(inputSamplesRead, &encoderBindings[0], stream, nullptr);
+        if (!encoderContext->enqueue(inputSamplesRead, &encoderBindings[0], stream, nullptr))
+        {
+            sample::gLogError << "Error in encoder context enqueue" << std::endl;
+            return sample::gLogger.reportTest(sampleTest, false);
+        }
 
         // Limit output sequences length to input_sequence_length * 2
         std::transform((const int*) *inputSequenceLengthsHostBuffer,
@@ -1196,12 +1200,25 @@ int main(int argc, char** argv)
             // Generator initialization and beam shuffling
             if (outputTimestep == 0)
             {
-                generatorContext->enqueue(validSampleCount, &generatorBindingsFirstStep[0], stream, nullptr);
+                if (!generatorContext->enqueue(validSampleCount, &generatorBindingsFirstStep[0], stream, nullptr))
+                {
+                    sample::gLogError << "Error in generator context enqueue step" << outputTimestep << std::endl;
+                    return sample::gLogger.reportTest(sampleTest, false);
+                }
             }
             else
             {
-                generatorShuffleContext->enqueue(validSampleCount, &generatorShuffleBindings[0], stream, nullptr);
-                generatorContext->enqueue(validSampleCount, &generatorBindings[0], stream, nullptr);
+                if (!generatorShuffleContext->enqueue(validSampleCount, &generatorShuffleBindings[0], stream, nullptr))
+                {
+                    sample::gLogError << "Error in generator shuffle context enqueue step " << outputTimestep
+                                      << std::endl;
+                    return sample::gLogger.reportTest(sampleTest, false);
+                }
+                if (!generatorContext->enqueue(validSampleCount, &generatorBindings[0], stream, nullptr))
+                {
+                    sample::gLogError << "Error in generator context enqueue step" << outputTimestep << std::endl;
+                    return sample::gLogger.reportTest(sampleTest, false);
+                }
             }
 
             CUDA_CHECK(cudaMemcpyAsync(*outputCombinedLikelihoodHostBuffer, *outputCombinedLikelihoodDeviceBuffer,
@@ -1268,8 +1285,8 @@ int main(int argc, char** argv)
 
     if (gDataWriterStr == "benchmark")
     {
-        gLogInfo << "Average latency (without data read) = " << totalLatency / static_cast<float>(batchCount) << " ms"
-                 << std::endl;
+        sample::gLogInfo << "Average latency (without data read) = " << totalLatency / static_cast<float>(batchCount)
+                         << " ms" << std::endl;
     }
 
     if (gEnableProfiling)
@@ -1277,12 +1294,12 @@ int main(int argc, char** argv)
         if (gAggregateProfiling)
         {
             SimpleProfiler aggregateProfiler("Aggregate", profilers);
-            gLogInfo << aggregateProfiler << std::endl;
+            sample::gLogInfo << aggregateProfiler << std::endl;
         }
         else
         {
             for (const auto& profiler : profilers)
-                gLogInfo << profiler << std::endl;
+                sample::gLogInfo << profiler << std::endl;
         }
     }
 
@@ -1298,5 +1315,5 @@ int main(int argc, char** argv)
 
     bool pass = gDataWriterStr != "bleu" || score >= 25.0f;
 
-    return gLogger.reportTest(sampleTest, pass);
+    return sample::gLogger.reportTest(sampleTest, pass);
 }

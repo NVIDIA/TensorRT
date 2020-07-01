@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 #include "kernel.h"
 #include "plugin.h"
 #include "gatherNMSOutputs.h"
-#include <vector>
+#include <array>
 
 template <typename T_BBOX, typename T_SCORE, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
@@ -158,18 +158,8 @@ struct nmsOutLaunchConfig
 
 using nvinfer1::DataType;
 
-static std::vector<nmsOutLaunchConfig> nmsOutFuncVec;
-
-bool nmsOutputInit()
-{
-    nmsOutFuncVec.push_back(nmsOutLaunchConfig(DataType::kFLOAT, DataType::kFLOAT,
-                                         gatherNMSOutputs_gpu<float, float>));
-    return true;
-}
-
-static bool initialized = nmsOutputInit();
-
-//}}}
+static std::array<nmsOutLaunchConfig, 1> nmsOutLCOptions = {
+  nmsOutLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherNMSOutputs_gpu<float, float>)};
 
 pluginStatus_t gatherNMSOutputs(
     cudaStream_t stream,
@@ -192,12 +182,12 @@ pluginStatus_t gatherNMSOutputs(
     )
 {
     nmsOutLaunchConfig lc = nmsOutLaunchConfig(DT_BBOX, DT_SCORE);
-    for (unsigned i = 0; i < nmsOutFuncVec.size(); ++i)
+    for (unsigned i = 0; i < nmsOutLCOptions.size(); ++i)
     {
-        if (lc == nmsOutFuncVec[i])
+        if (lc == nmsOutLCOptions[i])
         {
             DEBUG_PRINTF("gatherNMSOutputs kernel %d\n", i);
-            return nmsOutFuncVec[i].function(stream,
+            return nmsOutLCOptions[i].function(stream,
                                           shareLocation,
                                           numImages,
                                           numPredsPerClass,

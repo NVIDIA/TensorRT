@@ -11,7 +11,7 @@
     * [TensorRT plugin layers in SSD](#tensorrt-plugin-layers-in-ssd)
 - [Prerequisites](#prerequisites)
 - [Running the sample](#running-the-sample)
-    * [Sample `--help` options](#sample---help-options)
+    * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -39,20 +39,20 @@ The input to the SSD network in this sample is a RGB 300x300 image. The image fo
 
 The authors of SSD have trained the network such that the first Convolution layer sees the image data in `B`, `G`, and `R` order. Therefore, the channel order needs to be changed when the PPM image is being put into the network’s input buffer.
 
-```
+```c++
 float pixelMean[3]{ 104.0f, 117.0f, 123.0f }; // also in BGR order
 float* data = new float[N * kINPUT_C * kINPUT_H * kINPUT_W];
-     for (int i = 0, volImg = kINPUT_C * kINPUT_H * kINPUT_W; i < N; ++i)
+for (int i = 0, volImg = kINPUT_C * kINPUT_H * kINPUT_W; i < N; ++i)
+{
+    for (int c = 0; c < kINPUT_C; ++c)
     {
-           for (int c = 0; c < kINPUT_C; ++c)
-           {
-                  // the color image to input should be in BGR order
-                  for (unsigned j = 0, volChl = kINPUT_H * kINPUT_W; j < volChl; ++j)
-                  {
-                        data[i * volImg + c * volChl + j] = float(ppms[i].buffer[j * kINPUT_C + 2 - c]) - pixelMean[c];
-                  }
-           }
+        // the color image to input should be in BGR order
+        for (unsigned j = 0, volChl = kINPUT_H * kINPUT_W; j < volChl; ++j)
+        {
+            data[i * volImg + c * volChl + j] = float(ppms[i].buffer[j * kINPUT_C + 2 - c]) - pixelMean[c];
+        }
     }
+}
 ```
 
 The `readPPMFile` and `writePPMFileWithBBox` functions read a PPM image and produce output images with red colored bounding boxes respectively.
@@ -80,19 +80,19 @@ For details on how to build the TensorRT engine, see [Building An Engine In C++]
 After deserializing the engine, you can perform inference. To perform inference, see [Performing Inference In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#perform_inference_c).
 
 In sampleSSD, there is a single input:
--  `data`, namely the image input  
+-  `data`, namely the image input
 
 And 2 outputs:
 -  `detectionOut` is the detection array, containing the image ID, label, confidence, 4 coordinates
 -  `keepCount` is the number of valid detections
- 
+
 The outputs of the SSD network are directly human interpretable. The results are organized as tuples of 7. In each tuple, the 7 elements are:
 -   image ID
 -   object label
 -   confidence score
 -   (x,y) coordinates of the lower left corner of the bounding box
 -   (x,y) coordinates of the upper right corner of the bounding box
-  
+
 This information can be drawn in the output PPM image using the `writePPMFileWithBBox` function. The `kVISUAL_THRESHOLD` parameter can be used to control the visualization of objects in the image. It is currently set to 0.6, therefore, the output will display all objects with confidence score of 60% and above.
 
 ### TensorRT API layers and ops
@@ -100,7 +100,7 @@ This information can be drawn in the output PPM image using the `writePPMFileWit
 In this sample, the following layers are used.  For more information about these layers, see the [TensorRT Developer Guide: Layers](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#layers) documentation.
 
 [Activation layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#activation-layer)
-The Activation layer implements element-wise activation functions. Specifically, this sample uses the Activation layer with the type `kRELU`. 
+The Activation layer implements element-wise activation functions. Specifically, this sample uses the Activation layer with the type `kRELU`.
 
 [Concatenation layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#concatenation-layer)
 The Concatenation layer links together multiple tensors of the same non-channel sizes along the channel dimension.
@@ -226,18 +226,23 @@ message DetectionOutputParameter {
 
 Due to the size of the SSD Caffe model, it is not included in the product bundle. Before you can run the sample, you’ll need to download the model, perform some configuration, and generate INT8 calibration batches.
 
-1.  Download [models_VGGNet_VOC0712_SSD_300x300.tar.gz](https://drive.google.com/file/d/0BzKzrI_SkD1_WVVTSmQxU0dVRzA/view).
+1.  Install Pillow.
+        -   For Python 2 users, run: `python2 -m pip install Pillow`
+        -   For Python 3 users, run: `python3 -m pip install Pillow`
 
-2.  Extract the contents.
-    `tar xvf models_VGGNet_VOC0712_SSD_300x300.tar.gz`
-    
-    1. Generate MD5 hash and compare against the reference below:
-        `md5sum models_VGGNet_VOC0712_SSD_300x300.tar.gz`
-
-        If the model is correct, you should see the following MD5 hash output:
-        `9a795fc161fff2e8f3aed07f4d488faf models_VGGNet_VOC0712_SSD_300x300.tar.gz`
-
-    2. Edit the `deploy.prototxt` file and change all the Flatten layers to Reshape operations with the following parameters:
+2.  Preparing models:
+    1.  Download [models_VGGNet_VOC0712_SSD_300x300.tar.gz](https://drive.google.com/file/d/0BzKzrI_SkD1_WVVTSmQxU0dVRzA/view).
+    2.  Check the [MD5 hash](https://en.wikipedia.org/wiki/Md5sum) of it is `9a795fc161fff2e8f3aed07f4d488faf`.
+        ```sh
+        md5sum models_VGGNet_VOC0712_SSD_300x300.tar.gz
+        ```
+    3.  Extract the archive, and copy the model file to the TensorRT `data` directory.
+        ```sh
+        tar xvf models_VGGNet_VOC0712_SSD_300x300.tar.gz
+        cp models/VGGNet/VOC0712/SSD_300x300/VGG_VOC0712_SSD_300x300_iter_120000.caffemodel <TensorRT root directory>/data/ssd
+        cp models/VGGNet/VOC0712/SSD_300x300/deploy.prototxt <TensorRT root directory>/data/ssd/ssd.prototxt
+        ```
+    4.  In `ssd.prototxt`, change all `Flatten` layers to `Reshape` operations (e.g. `type:Reshape`) as TensorRT enables `Flatten` by `Reshape`, and add `reshape_param` (like below) to each of them:
         ```
         reshape_param {
             shape {
@@ -248,46 +253,28 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
             }
         }
         ```
+    5.  In `ssd.prototxt`, add `top: "keep_count"` in `detection_out` layer as TensorRT DetectionOutput Plugin requires this output.
 
-    3. Update the `detection_out` layer to add the `keep_count` output as expected by the TensorRT DetectionOutput Plugin.
-    `top: "keep_count"`
+4.  Generate the INT8 calibration batches. The script selects 500 random JPEG images from the PASCAL VOC dataset and converts them to PPM images. These 500 PPM images are used to generate INT8 calibration batches.
+    ```sh
+    <TensorRT root directory>/samples/sampleSSD/PrepareINT8CalibrationBatches.sh
+    ```
+    **Note:** Do not move the batch files from the `<TensorRT root directory>/data/ssd/batches` directory.
 
-    4. Rename the updated `deploy.prototxt` file to `ssd.prototxt` and move the file to the `data` directory.
-    `mv ssd.prototxt <TensorRT_Install_Directory>/data/ssd`
+    If you want to use a different dataset to generate INT8 batches, use the `batchPrepare.py` script and place the batch files in the `<TensorRT root directory>/data/ssd/batches` directory.
 
-    5. Move the `caffemodel` file to the `data` directory.
-        ```
-        mv VGG_VOC0712_SSD_300x300_iter_120000.caffemodel <TensorRT_Install_Directory>/data/ssd
-        ```
-
-3.  Generate the INT8 calibration batches.
-    1.  Install Pillow.
-        -   For Python 2 users, run:
-             `python2 -m pip install Pillow`
-
-        -   For Python 3 users, run:
-            `python3 -m pip install Pillow`
-
-    2.  Generate the INT8 batches.
-        `prepareINT8CalibrationBatches.sh`
-
-        The script selects 500 random JPEG images from the PASCAL VOC dataset and converts them to PPM images. These 500 PPM images are used to generate INT8 calibration batches.
-
-        **Note:** Do not move the batch files from the `<TensorRT_Install_Directory>/data/ssd/batches` directory.
-
-        If you want to use a different dataset to generate INT8 batches, use the `batchPrepare.py` script and place the batch files in the `<TensorRT_Install_Directory>/data/ssd/batches` directory.
 
 ## Running the sample
 
 1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleSSD` directory. The binary named `sample_ssd` will be created in the `<TensorRT root directory>/bin` directory.
-    ```
+    ```sh
     cd <TensorRT root directory>/samples/sampleSSD
     make
     ```
     Where `<TensorRT root directory>` is where you installed TensorRT.
-    
+
 2. Run the sample to perform inference on the digit:
-    ```
+    ```sh
     ./sample_ssd [-h] [--fp16] [--int8]
     ```
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
@@ -305,19 +292,12 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
     ```
 
     This output shows that the sample ran successfully; `PASSED`.
- 
 
-### Sample --help options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
-```
-Usage: ./build/x86_64-linux/sample_ssd
-Optional Parameters:
-    -h, --help      Display help information.
-    --useDLACore=N  Specify the DLA engine to run on.
-    --fp16          Specify to run in fp16 mode.
-    --int8          Specify to run in int8 mode.
-```
+### Sample `--help` options
+
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 # Additional resources
 

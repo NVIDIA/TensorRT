@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -113,12 +113,16 @@ def connect(dynamic_graph, connections_list):
         if node_a_name not in dynamic_graph.node_map[node_b_name].input:
             dynamic_graph.node_map[node_b_name].input.insert(0, node_a_name)
 
+def remove(dynamic_graph, remove_list):
+    for node_name in remove_list:
+        dynamic_graph.remove(dynamic_graph.node_map[node_name])
+
 def preprocess(dynamic_graph):
     # Now create a new graph by collapsing namespaces
     dynamic_graph.collapse_namespaces(namespace_plugin_map, unique_inputs=True)
-    dynamic_graph.remove(timedistributed_remove_list)
-    dynamic_graph.remove(dense_compatible_patch)
-    dynamic_graph.remove(['input_anchors', 'input_image_meta'])
+    remove(dynamic_graph, timedistributed_remove_list)
+    remove(dynamic_graph, dense_compatible_patch)
+    remove(dynamic_graph, ['input_anchors', 'input_image_meta'])
 
     connect(dynamic_graph, timedistributed_connect_pairs)
     connect(dynamic_graph, dense_compatible_connect_pairs)

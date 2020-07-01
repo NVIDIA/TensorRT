@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <vector>
+#include <array>
 #include "kernel.h"
 
 template <typename T_BBOX, unsigned nthds_per_cta>
@@ -278,16 +278,8 @@ struct dbbLaunchConfig
     }
 };
 
-static std::vector<dbbLaunchConfig> dbbFuncVec;
-
-bool decodeBBoxesInit()
-{
-    dbbFuncVec.push_back(dbbLaunchConfig(DataType::kFLOAT,
-                                         decodeBBoxes_gpu<float>));
-    return true;
-}
-
-static bool initialized = decodeBBoxesInit();
+static std::array<dbbLaunchConfig, 1> dbbLCOptions = {
+    dbbLaunchConfig(DataType::kFLOAT, decodeBBoxes_gpu<float>)};
 
 pluginStatus_t decodeBBoxes(
     cudaStream_t stream,
@@ -305,12 +297,12 @@ pluginStatus_t decodeBBoxes(
     void* bbox_data)
 {
     dbbLaunchConfig lc = dbbLaunchConfig(DT_BBOX);
-    for (unsigned i = 0; i < dbbFuncVec.size(); ++i)
+    for (unsigned i = 0; i < dbbLCOptions.size(); ++i)
     {
-        if (lc == dbbFuncVec[i])
+        if (lc == dbbLCOptions[i])
         {
             DEBUG_PRINTF("decodeBBox kernel %d\n", i);
-            return dbbFuncVec[i].function(stream,
+            return dbbLCOptions[i].function(stream,
                                           nthreads,
                                           code_type,
                                           variance_encoded_in_target,

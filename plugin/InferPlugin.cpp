@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
+#include "checkMacrosPlugin.h"
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -25,28 +26,28 @@
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 
-#include "batchedNMSPlugin/batchedNMSPlugin.h"
-#include "cropAndResizePlugin/cropAndResizePlugin.h"
-#include "flattenConcat/flattenConcat.h"
-#include "gridAnchorPlugin/gridAnchorPlugin.h"
-#include "nmsPlugin/nmsPlugin.h"
-#include "normalizePlugin/normalizePlugin.h"
-#include "nvFasterRCNN/nvFasterRCNNPlugin.h"
-#include "priorBoxPlugin/priorBoxPlugin.h"
-#include "proposalPlugin/proposalPlugin.h"
-#include "regionPlugin/regionPlugin.h"
-#include "reorgPlugin/reorgPlugin.h"
-
-#include "batchTilePlugin/batchTilePlugin.h"
-#include "detectionLayerPlugin/detectionLayerPlugin.h"
-#include "proposalLayerPlugin/proposalLayerPlugin.h"
-#include "pyramidROIAlignPlugin/pyramidROIAlignPlugin.h"
-#include "resizeNearestPlugin/resizeNearestPlugin.h"
-#include "specialSlicePlugin/specialSlicePlugin.h"
-#include "instanceNormalizationPlugin/instanceNormalizationPlugin.h"
-#include "generateDetectionPlugin/generateDetectionPlugin.h"
-#include "multilevelProposeROI/multilevelProposeROIPlugin.h"
-#include "multilevelCropAndResizePlugin/multilevelCropAndResizePlugin.h"
+#include "batchTilePlugin.h"
+#include "batchedNMSPlugin.h"
+#include "coordConvACPlugin.h"
+#include "cropAndResizePlugin.h"
+#include "detectionLayerPlugin.h"
+#include "flattenConcat.h"
+#include "generateDetectionPlugin.h"
+#include "gridAnchorPlugin.h"
+#include "instanceNormalizationPlugin.h"
+#include "multilevelCropAndResizePlugin.h"
+#include "multilevelProposeROIPlugin.h"
+#include "nmsPlugin.h"
+#include "normalizePlugin.h"
+#include "nvFasterRCNNPlugin.h"
+#include "priorBoxPlugin.h"
+#include "proposalLayerPlugin.h"
+#include "proposalPlugin.h"
+#include "pyramidROIAlignPlugin.h"
+#include "regionPlugin.h"
+#include "reorgPlugin.h"
+#include "resizeNearestPlugin.h"
+#include "specialSlicePlugin.h"
 
 using nvinfer1::plugin::RPROIParams;
 
@@ -55,7 +56,8 @@ namespace nvinfer1
 
 namespace plugin
 {
-ILogger* gLogger{};
+
+extern ILogger* gLogger;
 
 // This singleton ensures that each plugin is only registered once for a given
 // namespace and type, and attempts of duplicate registration are ignored.
@@ -81,8 +83,9 @@ public:
         pluginCreator->setPluginNamespace(libNamespace);
 
         nvinfer1::plugin::gLogger = static_cast<nvinfer1::ILogger*>(logger);
-        std::string pluginType
-            = std::string(pluginCreator->getPluginNamespace()) + "::" + std::string(pluginCreator->getPluginName());
+        std::string pluginType = std::string{pluginCreator->getPluginNamespace()}
+            + "::" + std::string{pluginCreator->getPluginName()} + " version "
+            + std::string{pluginCreator->getPluginVersion()};
 
         if (mRegistryList.find(pluginType) == mRegistryList.end())
         {
@@ -91,11 +94,11 @@ public:
             {
                 mRegistry.push(std::move(pluginCreator));
                 mRegistryList.insert(pluginType);
-                verboseMsg = "Plugin creator registration succeeded - " + pluginType;
+                verboseMsg = "Registered plugin creator - " + pluginType;
             }
             else
             {
-                errorMsg = "Could not register plugin creator:  " + pluginType;
+                errorMsg = "Could not register plugin creator -  " + pluginType;
             }
         }
         else
@@ -148,6 +151,7 @@ void initializePlugin(void* logger, const char* libNamespace)
 
 } // namespace plugin
 } // namespace nvinfer1
+// New Plugin APIs
 
 extern "C" {
 bool initLibNvInferPlugins(void* logger, const char* libNamespace)
@@ -162,9 +166,8 @@ bool initLibNvInferPlugins(void* logger, const char* libNamespace)
     initializePlugin<nvinfer1::plugin::BatchedNMSPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::FlattenConcatPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::CropAndResizePluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::BatchTilePluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::DetectionLayerPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::ProposalLayerPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::PyramidROIAlignPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::ResizeNearestPluginCreator>(logger, libNamespace);
@@ -173,6 +176,7 @@ bool initLibNvInferPlugins(void* logger, const char* libNamespace)
     initializePlugin<nvinfer1::plugin::GenerateDetectionPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::MultilevelProposeROIPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::MultilevelCropAndResizePluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::CoordConvACPluginCreator>(logger, libNamespace);
     return true;
 }
 } // extern "C"

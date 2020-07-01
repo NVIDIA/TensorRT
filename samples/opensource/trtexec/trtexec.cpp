@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <sstream>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <vector>
-#include <memory>
 
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
@@ -36,9 +36,10 @@
 #include "buffers.h"
 #include "common.h"
 #include "logger.h"
-#include "sampleOptions.h"
+#include "sampleDevice.h"
 #include "sampleEngines.h"
 #include "sampleInference.h"
+#include "sampleOptions.h"
 #include "sampleReporting.h"
 
 using namespace nvinfer1;
@@ -47,14 +48,19 @@ using namespace sample;
 int main(int argc, char** argv)
 {
     const std::string sampleName = "TensorRT.trtexec";
-    const std::string supportNote{"Note: CUDA graphs is not supported in this version."};
 
-    auto sampleTest = gLogger.defineTest(sampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(sampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     Arguments args = argsToArgumentsMap(argc, argv);
     AllOptions options;
+
+    if (parseHelp(args))
+    {
+        AllOptions::help(std::cout);
+        return EXIT_SUCCESS;
+    }
 
     if (!args.empty())
     {
@@ -67,22 +73,21 @@ int main(int argc, char** argv)
             {
                 for (const auto& arg : args)
                 {
-                    gLogError << "Unknown option: " << arg.first << " " << arg.second << std::endl;
+                    sample::gLogError << "Unknown option: " << arg.first << " " << arg.second << std::endl;
                 }
                 failed = true;
             }
         }
         catch (const std::invalid_argument& arg)
         {
-            gLogError << arg.what() << std::endl;
+            sample::gLogError << arg.what() << std::endl;
             failed = true;
         }
 
         if (failed)
         {
             AllOptions::help(std::cout);
-            std::cout << supportNote << std::endl;
-            return gLogger.reportFail(sampleTest);
+            return sample::gLogger.reportFail(sampleTest);
         }
     }
     else
@@ -93,44 +98,44 @@ int main(int argc, char** argv)
     if (options.helps)
     {
         AllOptions::help(std::cout);
-        std::cout << supportNote << std::endl;
-        return gLogger.reportPass(sampleTest);
+        return sample::gLogger.reportPass(sampleTest);
     }
 
-    gLogInfo << options;
+    sample::gLogInfo << options;
     if (options.reporting.verbose)
     {
-        setReportableSeverity(Severity::kVERBOSE);
+        sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
     }
 
-    cudaSetDevice(options.system.device);
+    cudaCheck(cudaSetDevice(options.system.device));
 
-    initLibNvInferPlugins(&gLogger.getTRTLogger(), "");
+    initLibNvInferPlugins(&sample::gLogger.getTRTLogger(), "");
 
     for (const auto& pluginPath : options.system.plugins)
     {
-        gLogInfo << "Loading supplied plugin library: " << pluginPath << std::endl;
+        sample::gLogInfo << "Loading supplied plugin library: " << pluginPath << std::endl;
         samplesCommon::loadLibrary(pluginPath);
     }
 
     InferenceEnvironment iEnv;
-    iEnv.engine = getEngine(options.model, options.build, options.system, gLogError);
+    iEnv.engine = getEngine(options.model, options.build, options.system, sample::gLogError);
     if (!iEnv.engine)
     {
-        gLogError << "Engine set up failed" << std::endl;
-        return gLogger.reportFail(sampleTest);
+        sample::gLogError << "Engine set up failed" << std::endl;
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (options.inference.skip)
     {
-        return gLogger.reportPass(sampleTest);
+        return sample::gLogger.reportPass(sampleTest);
     }
 
     if (options.build.safe && options.system.DLACore >= 0)
     {
-        gLogInfo << "Safe DLA capability is detected. Please save DLA loadable with --saveEngine option, "
-                    "then use dla_safety_runtime to run inference with saved DLA loadable, "
-                    "or alternatively run with your own application" << std::endl;
-        return gLogger.reportFail(sampleTest);
+        sample::gLogInfo << "Safe DLA capability is detected. Please save DLA loadable with --saveEngine option, "
+                            "then use dla_safety_runtime to run inference with saved DLA loadable, "
+                            "or alternatively run with your own application"
+                         << std::endl;
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (options.reporting.profile || !options.reporting.exportTimes.empty())
@@ -138,15 +143,21 @@ int main(int argc, char** argv)
         iEnv.profiler.reset(new Profiler);
     }
 
-    setUpInference(iEnv, options.inference);
+    if (!setUpInference(iEnv, options.inference))
+    {
+        sample::gLogError << "Inference set up failed" << std::endl;
+        return sample::gLogger.reportFail(sampleTest);
+    }
     std::vector<InferenceTrace> trace;
-    runInference(options.inference, iEnv, trace);
+    sample::gLogInfo << "Starting inference threads" << std::endl;
+    runInference(options.inference, iEnv, options.system.device, trace);
 
-    printPerformanceReport(trace, options.reporting, static_cast<float>(options.inference.warmup), options.inference.batch, gLogInfo);
+    printPerformanceReport(trace, options.reporting, static_cast<float>(options.inference.warmup),
+        options.inference.batch, sample::gLogInfo);
 
     if (options.reporting.output)
     {
-        dumpOutputs(*iEnv.context.front(), *iEnv.bindings.front(), gLogInfo);
+        dumpOutputs(*iEnv.context.front(), *iEnv.bindings.front(), sample::gLogInfo);
     }
     if (!options.reporting.exportOutput.empty())
     {
@@ -158,12 +169,12 @@ int main(int argc, char** argv)
     }
     if (options.reporting.profile)
     {
-        iEnv.profiler->print(gLogInfo);
+        iEnv.profiler->print(sample::gLogInfo);
     }
     if (!options.reporting.exportProfile.empty())
     {
         iEnv.profiler->exportJSONProfile(options.reporting.exportProfile);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

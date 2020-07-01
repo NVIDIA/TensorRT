@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 #include "kernel.h"
 #include "bboxUtils.h"
-#include <vector>
+#include <array>
 
 template <typename T_BBOX>
 __device__ T_BBOX bboxSize(
@@ -66,6 +66,19 @@ __device__ void intersectBbox(
     }
 }
 
+
+template <typename T_BBOX>
+__device__ Bbox<T_BBOX> getDiagonalMinMaxSortedBox(const Bbox<T_BBOX>& bbox1)
+{
+    Bbox<T_BBOX> result;
+    result.xmin = min(bbox1.xmin, bbox1.xmax);
+    result.xmax = max(bbox1.xmin, bbox1.xmax);
+
+    result.ymin = min(bbox1.ymin, bbox1.ymax);
+    result.ymax = max(bbox1.ymin, bbox1.ymax);
+    return result;
+}
+
 template <typename T_BBOX>
 __device__ float jaccardOverlap(
     const Bbox<T_BBOX>& bbox1,
@@ -73,7 +86,11 @@ __device__ float jaccardOverlap(
     const bool normalized)
 {
     Bbox<T_BBOX> intersect_bbox;
-    intersectBbox(bbox1, bbox2, &intersect_bbox);
+
+    Bbox<T_BBOX> localbbox1 = getDiagonalMinMaxSortedBox(bbox1);
+    Bbox<T_BBOX> localbbox2 = getDiagonalMinMaxSortedBox(bbox2);
+
+    intersectBbox(localbbox1, localbbox2, &intersect_bbox);
     float intersect_width, intersect_height;
     if (normalized)
     {
@@ -88,8 +105,8 @@ __device__ float jaccardOverlap(
     if (intersect_width > 0 && intersect_height > 0)
     {
         float intersect_size = intersect_width * intersect_height;
-        float bbox1_size = bboxSize(bbox1, normalized);
-        float bbox2_size = bboxSize(bbox2, normalized);
+        float bbox1_size = bboxSize(localbbox1, normalized);
+        float bbox2_size = bboxSize(localbbox2, normalized);
         return intersect_size / (bbox1_size + bbox2_size - intersect_size);
     }
     else
@@ -139,7 +156,7 @@ __global__ void allClassNMS_kernel(
         Bbox<T_BBOX> loc_bbox[TSIZE];
 
 // initialize Bbox, Bboxinfo, kept_bboxinfo_flag
-        // Eliminate shared memory RAW hazard  
+        // Eliminate shared memory RAW hazard
         __syncthreads();
 #pragma unroll
         for (int t = 0; t < TSIZE; t++)
@@ -155,11 +172,11 @@ __global__ void allClassNMS_kernel(
                 {
                     const int bbox_data_idx = share_location ? (loc_bboxIndex[t] % num_preds_per_class + bbox_idx_offset) : loc_bboxIndex[t];
 
-                    loc_bbox[t].xmin = flipXY ? bbox_data[bbox_data_idx * 4 + 1] 
+                    loc_bbox[t].xmin = flipXY ? bbox_data[bbox_data_idx * 4 + 1]
                       : bbox_data[bbox_data_idx * 4 + 0];
-                    loc_bbox[t].ymin = flipXY ? bbox_data[bbox_data_idx * 4 + 0] 
+                    loc_bbox[t].ymin = flipXY ? bbox_data[bbox_data_idx * 4 + 0]
                       : bbox_data[bbox_data_idx * 4 + 1];
-                    loc_bbox[t].xmax = flipXY ? bbox_data[bbox_data_idx * 4 + 3] 
+                    loc_bbox[t].xmax = flipXY ? bbox_data[bbox_data_idx * 4 + 3]
                       : bbox_data[bbox_data_idx * 4 + 2];
                     loc_bbox[t].ymax = flipXY ? bbox_data[bbox_data_idx * 4 + 2]
                       : bbox_data[bbox_data_idx * 4 + 3];
@@ -188,7 +205,7 @@ __global__ void allClassNMS_kernel(
             ref_bbox.xmax = flipXY ? bbox_data[ref_bbox_idx * 4 + 3] : bbox_data[ref_bbox_idx * 4 + 2];
             ref_bbox.ymax = flipXY ? bbox_data[ref_bbox_idx * 4 + 2] : bbox_data[ref_bbox_idx * 4 + 3];
 
-            // Eliminate shared memory RAW hazard  
+            // Eliminate shared memory RAW hazard
             __syncthreads();
 
             for (int t = 0; t < TSIZE; t++)
@@ -268,7 +285,7 @@ pluginStatus_t allClassNMS_gpu(
     kernel[t_size - 1]<<<GS, BS, BS * t_size * sizeof(bool), stream>>>(num, num_classes, num_preds_per_class,
                                                                        top_k, nms_threshold, share_location, isNormalized,
                                                                        (T_BBOX*) bbox_data,
-                                                                       (T_SCORE*) beforeNMS_scores, 
+                                                                       (T_SCORE*) beforeNMS_scores,
                                                                        (int*) beforeNMS_index_array,
                                                                        (T_SCORE*) afterNMS_scores,
                                                                        (int*) afterNMS_index_array,
@@ -278,7 +295,7 @@ pluginStatus_t allClassNMS_gpu(
     return STATUS_SUCCESS;
 }
 
-// allClassNMS LAUNCH CONFIG 
+// allClassNMS LAUNCH CONFIG
 typedef pluginStatus_t (*nmsFunc)(cudaStream_t,
                                const int,
                                const int,
@@ -317,17 +334,8 @@ struct nmsLaunchConfigSSD
     }
 };
 
-static std::vector<nmsLaunchConfigSSD> nmsFuncVec;
-
-bool nmsInit()
-{
-    nmsFuncVec.push_back(nmsLaunchConfigSSD(DataType::kFLOAT, DataType::kFLOAT,
-                                            allClassNMS_gpu<float, float>));
-    return true;
-}
-
-static bool initialized = nmsInit();
-
+static std::array<nmsLaunchConfigSSD, 1> nmsSsdLCOptions = {
+    nmsLaunchConfigSSD(DataType::kFLOAT, DataType::kFLOAT, allClassNMS_gpu<float, float>)};
 
 pluginStatus_t allClassNMS(cudaStream_t stream,
                         const int num,
@@ -347,12 +355,12 @@ pluginStatus_t allClassNMS(cudaStream_t stream,
                         bool flipXY)
 {
     nmsLaunchConfigSSD lc = nmsLaunchConfigSSD(DT_SCORE, DT_BBOX, allClassNMS_gpu<float, float>);
-    for (unsigned i = 0; i < nmsFuncVec.size(); ++i)
+    for (unsigned i = 0; i < nmsSsdLCOptions.size(); ++i)
     {
-        if (lc == nmsFuncVec[i])
+        if (lc == nmsSsdLCOptions[i])
         {
             DEBUG_PRINTF("all class nms kernel %d\n", i);
-            return nmsFuncVec[i].function(stream,
+            return nmsSsdLCOptions[i].function(stream,
                                           num,
                                           num_classes,
                                           num_preds_per_class,

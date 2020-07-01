@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -119,12 +119,12 @@ void* createMnistCudaBuffer(int64_t eltCount, DataType dtype, int num)
     readPGMFile(std::to_string(num) + ".pgm", fileData);
 
     // display the number in an ascii representation
-    gLogInfo << "Input:\n";
+    sample::gLogInfo << "Input:\n";
     for (int i = 0; i < eltCount; i++)
     {
-        gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % INPUT_W) ? "" : "\n");
+        sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % INPUT_W) ? "" : "\n");
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     // initialize the inputs buffer
     for (int i = 0; i < eltCount; i++)
@@ -150,22 +150,22 @@ bool verifyOutput(int64_t eltCount, DataType dtype, void* buffer, int num)
 
     int maxIdx = std::distance(outputs.begin(), std::max_element(outputs.begin(), outputs.end()));
 
-    std::ios::fmtflags prevSettings = gLogInfo.flags();
-    gLogInfo.setf(std::ios::fixed, std::ios::floatfield);
-    gLogInfo.precision(6);
-    gLogInfo << "Output:\n";
+    std::ios::fmtflags prevSettings = sample::gLogInfo.flags();
+    sample::gLogInfo.setf(std::ios::fixed, std::ios::floatfield);
+    sample::gLogInfo.precision(6);
+    sample::gLogInfo << "Output:\n";
     for (int64_t eltIdx = 0; eltIdx < eltCount; ++eltIdx)
     {
-        gLogInfo << eltIdx << " => " << std::setw(10) << outputs[eltIdx] << "\t : ";
+        sample::gLogInfo << eltIdx << " => " << std::setw(10) << outputs[eltIdx] << "\t : ";
         if (eltIdx == maxIdx)
         {
-            gLogInfo << "***";
+            sample::gLogInfo << "***";
             pass = eltIdx == num ? true : false;
         }
-        gLogInfo << "\n";
+        sample::gLogInfo << "\n";
     }
-    gLogInfo.flags(prevSettings);
-    gLogInfo << std::endl;
+    sample::gLogInfo.flags(prevSettings);
+    sample::gLogInfo << std::endl;
     return pass;
 }
 
@@ -205,29 +205,29 @@ public:
         parser->registerInput("in", Dims3(1, 28, 28), UffInputOrder::kNCHW);
         parser->registerOutput("out");
 
-        SampleUniquePtr<IBuilder> builder{createInferBuilder(gLogger.getTRTLogger())};
+        SampleUniquePtr<IBuilder> builder{createInferBuilder(sample::gLogger.getTRTLogger())};
         if (!builder.get())
         {
-            gLogError << "Failed to create infer builder. " << std::endl;
+            sample::gLogError << "Failed to create infer builder. " << std::endl;
             return false;
         }
 
         SampleUniquePtr<INetworkDefinition> network{builder->createNetwork()};
         if (!network.get())
         {
-            gLogError << "Failed to create network. " << std::endl;
+            sample::gLogError << "Failed to create network. " << std::endl;
             return false;
         }
 
         if (!parser->parse(mParams.uffFileName.data(), *network, nvinfer1::DataType::kFLOAT))
         {
-            gLogError << "Failure while parsing UFF file" << std::endl;
+            sample::gLogError << "Failure while parsing UFF file" << std::endl;
             return false;
         }
 
         if (gArgs.runInInt8)
         {
-            samplesCommon::setAllTensorScales(network.get(), 5.0f, 5.0f);
+            samplesCommon::setAllTensorScales(network.get(), 25.0f, 25.0f);
         }
 
         SampleUniquePtr<IBuilderConfig> networkConfig{builder->createBuilderConfig()};
@@ -253,7 +253,7 @@ public:
         mEngine.reset(builder->buildEngineWithConfig(*network, *networkConfig));
         if (!mEngine.get())
         {
-            gLogError << "Unable to create engine. " << std::endl;
+            sample::gLogError << "Unable to create engine. " << std::endl;
             return false;
         }
         return true;
@@ -290,7 +290,7 @@ public:
             {
                 buffers[bindingIdxInput] = createMnistCudaBuffer(bufferSizesInput.first, bufferSizesInput.second, num);
                 auto t_start = std::chrono::high_resolution_clock::now();
-                context->execute(batchSize, &buffers[0]);
+                ASSERT(context->execute(batchSize, &buffers[0]));
                 auto t_end = std::chrono::high_resolution_clock::now();
                 ms = std::chrono::duration<float, std::milli>(t_end - t_start).count();
                 total += ms;
@@ -307,7 +307,7 @@ public:
                 CHECK(cudaFree(buffers[bindingIdxInput]));
             }
             total /= numberRun;
-            gLogInfo << "Average over " << numberRun << " runs is " << total << " ms." << std::endl;
+            sample::gLogInfo << "Average over " << numberRun << " runs is " << total << " ms." << std::endl;
         }
 
         for (int bindingIdx = 0; bindingIdx < nbBindings; ++bindingIdx)
@@ -720,7 +720,7 @@ int main(int argc, char** argv)
     }
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -728,30 +728,29 @@ int main(int argc, char** argv)
     {
         gArgs.dataDirs = std::vector<std::string>{"data/samples/mnist/", "data/mnist/"};
     }
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
-
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     samplesCommon::UffSampleParams params;
     params.uffFileName = locateFile("lenet5_custom_pool.uff", gArgs.dataDirs);
-    gLogInfo << params.uffFileName << std::endl;
+    sample::gLogInfo << params.uffFileName << std::endl;
     SampleUffPluginV2Ext sample(params);
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

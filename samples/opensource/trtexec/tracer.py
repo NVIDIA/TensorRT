@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,49 +31,47 @@ GNUPlot.
 import sys
 import json
 import argparse
-import prn_utils
+import prn_utils as pu
 
 
 timestamps = ['startInMs', 'endInMs', 'startComputeMs', 'endComputeMs', 'startOutMs', 'endOutMs']
 
 intervals = ['inMs', 'computeMs', 'outMs', 'latencyMs', 'endToEndMs']
 
-all_metrics = timestamps + intervals
+allMetrics = timestamps + intervals
 
-default_metrics = ",".join(all_metrics)
+defaultMetrics = ",".join(allMetrics)
 
 descriptions = ['start input', 'end input', 'start compute', 'end compute', 'start output',
                 'end output', 'input', 'compute', 'output', 'latency', 'end to end latency']
 
-metrics_description = prn_utils.combine_descriptions('Possible metrics (all in ms) are:',
-                                                     all_metrics, descriptions)
+metricsDescription = pu.combine_descriptions('Possible metrics (all in ms) are:',
+                                             allMetrics, descriptions)
 
 
 
-def skip_trace(trace, start):
+def skipTrace(trace, start):
     ''' Skip trace entries until start time '''
 
-    trailing = []
+    for t in range(len(trace)):
+        if trace[t]['startComputeMs'] >= start:
+            return trace[t:]
 
-    for t in trace:
-        if t['start compute'] >= start:
-            trailing.append(t)
-
-    return trailing
+    return []
 
 
 
-def hasTimestamp(metric_set):
+def hasTimestamp(metrics):
     ''' Check if features have at least one timestamp '''
 
     for timestamp in timestamps:
-        if timestamp in metric_set:
+        if timestamp in metrics:
             return True
     return False;
 
 
 
-def avg_data(data, avg, times):
+def avgData(data, avg, times):
     ''' Average trace entries (every avg entries) '''
 
     averaged = []
@@ -82,11 +80,11 @@ def avg_data(data, avg, times):
 
     for row in data:
         if r == 0:
-            for t in range(len(row)):
-                accumulator.append(row[t])
+            for m in row:
+                accumulator.append(m)
         else:
-            for t in range(times, len(row)):
-                accumulator[t] += row[t]
+            for m in row[times:]:
+                accumulator[t] += m
 
         r += 1
         if r == avg:
@@ -102,33 +100,35 @@ def avg_data(data, avg, times):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--metrics', metavar='M[,M]*', default=default_metrics,
-                        help='Comma separated list of metrics to print. ' + metrics_description)
-    parser.add_argument('--avg', metavar='N', type=int, default=1, help='Print average every N records.')
-    parser.add_argument('--start', metavar='T', type=float, default=0, help='Start trace at time T (drop records with compute start before T).')
+    parser.add_argument('--metrics', metavar='M[,M]*', default=defaultMetrics,
+                        help='Comma separated list of metrics to print. ' + metricsDescription)
+    parser.add_argument('--avg', metavar='N', type=int, default=1,
+                        help='Print average every N records.')
+    parser.add_argument('--start', metavar='T', type=float, default=0,
+                        help='Start trace at time T (drop records with compute start before T ms).')
     parser.add_argument('--gp', action='store_true', help='Print GNUPlot format.')
     parser.add_argument('--no-header', action='store_true', help='Omit the header row.')
     parser.add_argument('name', metavar='filename', help='Trace file.')
     args = parser.parse_args()
 
-    metric_set = args.metrics.split(',')
-    count = args.gp and ( not hasTimestamp(metric_set) or len(metric_set) == 1)
+    metrics = args.metrics.split(',')
+    count = args.gp and (not hasTimestamp(metricts) or len(metrics) == 1)
 
     if not args.no_header:
-        prn_utils.print_header(all_metrics, metric_set, args.gp, count)
+        pu.printHeader(allMetrics, metrics, args.gp, count)
 
     with open(args.name) as f:
         trace = json.load(f)
 
-        if args.start > 0:
-            trace = skip_trace(trace, args.start)
+    if args.start > 0:
+        trace = skipTrace(trace, args.start)
 
-        data = prn_utils.filter_data(trace, all_metrics, metric_set)
+    trace = pu.filterData(trace, allMetrics, metrics)
 
-        if args.avg > 1:
-            data = avg_data(data, args.avg, hasTimestamp(metric_set))
+    if args.avg > 1:
+        trace = avgData(trace, args.avg, hasTimestamp(metrics))
 
-        prn_utils.print_csv(data, count)
+    pu.printCsv(trace, count)
 
 
 if __name__ == '__main__':

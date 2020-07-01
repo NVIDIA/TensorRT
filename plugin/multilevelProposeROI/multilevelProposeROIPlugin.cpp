@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 #include "multilevelProposeROIPlugin.h"
-#include "tlt_mrcnn_config.h"
 #include "plugin.h"
+#include "tlt_mrcnn_config.h"
 #include <cuda_runtime_api.h>
 #include <iostream>
 #include <math.h>
@@ -134,8 +134,8 @@ int MultilevelProposeROI::initialize()
     // Init the regWeight [1, 1, 1, 1]
     mRegWeightDevice = std::make_shared<CudaBind<float>>(4);
     std::vector<float> reg_weight(4, 1);
-    CUASSERT(cudaMemcpy(static_cast<void*>(mRegWeightDevice->mPtr),
-    static_cast<void*>(reg_weight.data()), sizeof(float) * 4, cudaMemcpyHostToDevice));
+    CUASSERT(cudaMemcpy(static_cast<void*>(mRegWeightDevice->mPtr), static_cast<void*>(reg_weight.data()),
+        sizeof(float) * 4, cudaMemcpyHostToDevice));
 
     // Init the mValidCnt of max batch size
     std::vector<int> tempValidCnt(mMaxBatchSize, mPreNMSTopK);
@@ -146,7 +146,7 @@ int MultilevelProposeROI::initialize()
         mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()), sizeof(int) * mMaxBatchSize, cudaMemcpyHostToDevice));
 
     // Init the anchors for batch size:
-    for(int i = 0; i < mFeatureCnt; i++)
+    for (int i = 0; i < mFeatureCnt; i++)
     {
         int i_anchors_cnt = mAnchorsCnt[i];
         auto i_anchors_host = mAnchorBoxesHost[i].data();
@@ -155,8 +155,8 @@ int MultilevelProposeROI::initialize()
         uint8_t* device_ptr = static_cast<uint8_t*>(i_anchors_device->mPtr);
         for (int i = 0; i < mMaxBatchSize; i++)
         {
-            CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset),
-                static_cast<void*>(i_anchors_host), batch_offset, cudaMemcpyHostToDevice));
+            CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset), static_cast<void*>(i_anchors_host),
+                batch_offset, cudaMemcpyHostToDevice));
         }
         mAnchorBoxesDevice.push_back(i_anchors_device);
     }
@@ -164,7 +164,7 @@ int MultilevelProposeROI::initialize()
     // Init the temp storage for proposals from feature maps before concat
     std::vector<float*> score_tp;
     std::vector<float*> box_tp;
-    for(int i = 0; i < mFeatureCnt; i++)
+    for (int i = 0; i < mFeatureCnt; i++)
     {
         auto i_scores_device = std::make_shared<CudaBind<float>>(mKeepTopK * mMaxBatchSize);
         mTempScores.push_back(i_scores_device);
@@ -176,11 +176,11 @@ int MultilevelProposeROI::initialize()
     }
 
     // Init the temp storage for pointer arrays of score and box:
-    CUASSERT(cudaMalloc(&mDeviceScores, sizeof(float*)*mFeatureCnt));
-    CUASSERT(cudaMalloc(&mDeviceBboxes, sizeof(float*)*mFeatureCnt));
+    CUASSERT(cudaMalloc(&mDeviceScores, sizeof(float*) * mFeatureCnt));
+    CUASSERT(cudaMalloc(&mDeviceBboxes, sizeof(float*) * mFeatureCnt));
 
-    CUASSERT(cudaMemcpy(mDeviceScores, score_tp.data(), sizeof(float*)*mFeatureCnt, cudaMemcpyHostToDevice));
-    CUASSERT(cudaMemcpy(mDeviceBboxes, box_tp.data(), sizeof(float*)*mFeatureCnt, cudaMemcpyHostToDevice));
+    CUASSERT(cudaMemcpy(mDeviceScores, score_tp.data(), sizeof(float*) * mFeatureCnt, cudaMemcpyHostToDevice));
+    CUASSERT(cudaMemcpy(mDeviceBboxes, box_tp.data(), sizeof(float*) * mFeatureCnt, cudaMemcpyHostToDevice));
 
     return 0;
 };
@@ -235,7 +235,7 @@ void MultilevelProposeROI::serialize(void* buffer) const
     write(d, mFGThreshold);
     write(d, mIOUThreshold);
     write(d, mMaxBatchSize);
-    for(int i = 0; i < mFeatureCnt; i++)
+    for (int i = 0; i < mFeatureCnt; i++)
     {
         write(d, mAnchorsCnt[i]);
     }
@@ -253,7 +253,7 @@ MultilevelProposeROI::MultilevelProposeROI(const void* data, size_t length)
     float iou_threshold = read<float>(d);
     mMaxBatchSize = read<int>(d);
     assert(mAnchorsCnt.size() == 0);
-    for(int i = 0; i < mFeatureCnt; i++)
+    for (int i = 0; i < mFeatureCnt; i++)
     {
         mAnchorsCnt.push_back(read<int>(d));
     }
@@ -283,29 +283,29 @@ void MultilevelProposeROI::check_valid_inputs(const nvinfer1::Dims* inputs, int 
     // foreground_score_px [N, h_x * w_x * anchors_per_location, 1, 1],
     // anchors should be generated inside
     assert(nbInputDims == 2 * mFeatureCnt);
-    for(int i = 0; i < 2 * mFeatureCnt; i += 2)
+    for (int i = 0; i < 2 * mFeatureCnt; i += 2)
     {
         // foreground_delta
         assert(inputs[i].nbDims == 3 && inputs[i].d[1] == 4);
         // foreground_score
-        assert(inputs[i+1].nbDims == 3 && inputs[i+1].d[1] == 1);
+        assert(inputs[i + 1].nbDims == 3 && inputs[i + 1].d[1] == 1);
     }
 };
 
 size_t MultilevelProposeROI::getWorkspaceSize(int batch_size) const
 {
-    size_t total_size = 0; 
+    size_t total_size = 0;
     assert(mAnchorsCnt.size() == mFeatureCnt);
 
-    //workspace for propose on each feature map 
-    for(int i = 0; i < mFeatureCnt; i++)
+    // workspace for propose on each feature map
+    for (int i = 0; i < mFeatureCnt; i++)
     {
-        
+
         MultilevelProposeROIWorkSpace proposal(batch_size, mAnchorsCnt[i], mPreNMSTopK, mParam, mType);
         total_size += proposal.totalSize;
     }
-    
-    //workspace for Concat and TopK
+
+    // workspace for Concat and TopK
     ConcatTopKWorkSpace ct(batch_size, mFeatureCnt, mKeepTopK, mType);
     total_size += ct.totalSize;
 
@@ -335,17 +335,17 @@ void MultilevelProposeROI::generate_pyramid_anchors()
 
     const auto& anchor_scale = TLTMaskRCNNConfig::RPN_ANCHOR_SCALE;
     const auto& min_level = TLTMaskRCNNConfig::MIN_LEVEL;
-    const auto& max_level = TLTMaskRCNNConfig::MAX_LEVEL; 
+    const auto& max_level = TLTMaskRCNNConfig::MAX_LEVEL;
     const auto& aspect_ratios = TLTMaskRCNNConfig::ANCHOR_RATIOS;
-    
-    //Generate anchors strides and scales
+
+    // Generate anchors strides and scales
     std::vector<float> anchor_scales;
     std::vector<int> anchor_strides;
-    for(int i = min_level; i < max_level + 1; i++)
+    for (int i = min_level; i < max_level + 1; i++)
     {
         int stride = static_cast<int>(pow(2.0, i));
         anchor_strides.push_back(stride);
-        anchor_scales.push_back(stride*anchor_scale);
+        anchor_scales.push_back(stride * anchor_scale);
     }
 
     auto& anchors = mAnchorBoxesHost;
@@ -358,16 +358,15 @@ void MultilevelProposeROI::generate_pyramid_anchors()
         int stride = anchor_strides[s];
 
         std::vector<float> s_anchors;
-        for (int y = stride / 2 ; y < image_dims.d[1]; y += stride)
+        for (int y = stride / 2; y < image_dims.d[1]; y += stride)
             for (int x = stride / 2; x < image_dims.d[2]; x += stride)
                 for (auto r : aspect_ratios)
                 {
                     float h = scale * r.second;
                     float w = scale * r.first;
-                    
+
                     // Using y+h/2 instead of y+h/2-1 for alignment with TLT implementation
-                    s_anchors.insert(s_anchors.end(),
-                        {(y - h / 2), (x - w / 2), (y + h / 2 ), (x + w / 2 )});
+                    s_anchors.insert(s_anchors.end(), {(y - h / 2), (x - w / 2), (y + h / 2), (x + w / 2)});
                 }
 
         anchors.push_back(s_anchors);
@@ -381,45 +380,33 @@ int MultilevelProposeROI::enqueue(
 {
 
     void* final_proposals = outputs[0];
-    size_t kernel_workspace_offset = 0; 
+    size_t kernel_workspace_offset = 0;
     cudaError_t status;
 
-    for(int i = 0; i < mFeatureCnt; i++)
+    for (int i = 0; i < mFeatureCnt; i++)
     {
 
         MultilevelProposeROIWorkSpace proposal_ws(batch_size, mAnchorsCnt[i], mPreNMSTopK, mParam, mType);
-        status = MultilevelPropose(stream, 
-                    batch_size, 
-                    mAnchorsCnt[i], 
-                    mPreNMSTopK,
-                    static_cast<float*>(mRegWeightDevice->mPtr), 
-                    static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[1]), //Input Height
-                    static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[2]),
-                    DataType::kFLOAT, // mType,
-                    mParam, 
-                    proposal_ws, 
-                    workspace + kernel_workspace_offset,
-                    inputs[2*i + 1], // inputs[object_score],
-                    inputs[2*i], // inputs[bbox_delta]
-                    mValidCnt->mPtr,
-                    mAnchorBoxesDevice[i]->mPtr, // inputs[anchors]
-                    mTempScores[i]->mPtr, //temp scores [batch_size, topk, 1]
-                    mTempBboxes[i]->mPtr); //temp
+        status = MultilevelPropose(stream, batch_size, mAnchorsCnt[i], mPreNMSTopK,
+            static_cast<float*>(mRegWeightDevice->mPtr),
+            static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[1]), // Input Height
+            static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[2]),
+            DataType::kFLOAT, // mType,
+            mParam, proposal_ws, workspace + kernel_workspace_offset,
+            inputs[2 * i + 1], // inputs[object_score],
+            inputs[2 * i],     // inputs[bbox_delta]
+            mValidCnt->mPtr,
+            mAnchorBoxesDevice[i]->mPtr, // inputs[anchors]
+            mTempScores[i]->mPtr,        // temp scores [batch_size, topk, 1]
+            mTempBboxes[i]->mPtr);       // temp
         assert(status == cudaSuccess);
         kernel_workspace_offset += proposal_ws.totalSize;
     }
 
     ConcatTopKWorkSpace ctopk_ws(batch_size, mFeatureCnt, mKeepTopK, mType);
-    status = ConcatTopK(stream, 
-                batch_size, 
-                mFeatureCnt, 
-                mKeepTopK, 
-                DataType::kFLOAT,
-                workspace + kernel_workspace_offset,
-                ctopk_ws, 
-                reinterpret_cast<void**>(mDeviceScores),
-                reinterpret_cast<void**>(mDeviceBboxes), 
-                final_proposals);
+    status = ConcatTopK(stream, batch_size, mFeatureCnt, mKeepTopK, DataType::kFLOAT,
+        workspace + kernel_workspace_offset, ctopk_ws, reinterpret_cast<void**>(mDeviceScores),
+        reinterpret_cast<void**>(mDeviceBboxes), final_proposals);
 
     assert(status == cudaSuccess);
     return status;
@@ -433,7 +420,8 @@ DataType MultilevelProposeROI::getOutputDataType(int index, const nvinfer1::Data
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool MultilevelProposeROI::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool MultilevelProposeROI::isOutputBroadcastAcrossBatch(
+    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
 {
     return false;
 }
@@ -452,9 +440,9 @@ void MultilevelProposeROI::configurePlugin(const Dims* inputDims, int nbInputs, 
     check_valid_inputs(inputDims, nbInputs);
 
     mAnchorsCnt.clear();
-    for(int i = 0; i < mFeatureCnt; i++)
+    for (int i = 0; i < mFeatureCnt; i++)
     {
-        mAnchorsCnt.push_back(inputDims[2*i].d[0]);
+        mAnchorsCnt.push_back(inputDims[2 * i].d[0]);
         assert(mAnchorsCnt[i] == (int) (mAnchorBoxesHost[i].size() / 4));
     }
 

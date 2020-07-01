@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,12 @@
 #include "NvInfer.h"
 #include <stddef.h>
 #include <vector>
+
+//!
+//! \file NvOnnxParser.h
+//!
+//! This is the API for the ONNX Parser
+//!
 
 #define NV_ONNX_PARSER_MAJOR 0
 #define NV_ONNX_PARSER_MINOR 1
@@ -116,7 +122,7 @@ public:
      *         This method has very limited diagnostic. If parsing the serialized model
      *         fails for any reason (e.g. unsupported IR version, unsupported opset, etc.)
      *         it the user responsibility to intercept and report the error.
-     *         To obtain a better diagnostic, use the parseFromFile method below. 
+     *         To obtain a better diagnostic, use the parseFromFile method below.
      *
      * \param serialized_onnx_model Pointer to the serialized ONNX model
      * \param serialized_onnx_model_size Size of the serialized ONNX model
@@ -128,14 +134,14 @@ public:
                        size_t serialized_onnx_model_size)
         = 0;
 
-    /** \brief Parse an onnx model file, can be a binary protobuf or a text onnx model 
-     *         calls parse method inside.  
+    /** \brief Parse an onnx model file, can be a binary protobuf or a text onnx model
+     *         calls parse method inside.
      *
      * \param File name
      * \param Verbosity Level
-     *        
+     *
      * \return true if the model was parsed successfully
-     * 
+     *
      */
     virtual bool parseFromFile(const char* onnxModelFile, int verbosity) = 0;
 

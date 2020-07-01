@@ -1,0 +1,4 @@
+pytest
+onnx
+onnxruntime
+numpy

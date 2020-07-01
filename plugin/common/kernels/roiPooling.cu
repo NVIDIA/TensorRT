@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,12 @@
  */
 #include "kernel.h"
 #include <algorithm>
+#include <array>
 #include <assert.h>
 #include <cfloat>
 #include <cstdio>
 #include <math.h>
 #include <stdio.h>
-#include <vector>
 
 // ROI POOLING FORWARD KERNEL 
 template <typename DATA_T, typename ROI_T, bool INFER_ONLY>
@@ -230,33 +230,9 @@ struct roiFwdLaunchConfig
 };
 
 #define FLOAT32 nvinfer1::DataType::kFLOAT
-bool roiFwdLCVecInit(std::vector<roiFwdLaunchConfig>& roiFwdLCVec)
-{
-    roiFwdLCVec.push_back(roiFwdLaunchConfig(FLOAT32,
-                                             FLOAT32,
-                                             NCHW,
-                                             FLOAT32,
-                                             NCHW,
-                                             true,
-                                             ROIPoolingForwardKernelAlignedLauncher<float, float, true>));
-    roiFwdLCVec.push_back(roiFwdLaunchConfig(FLOAT32,
-                                             FLOAT32,
-                                             NCHW,
-                                             FLOAT32,
-                                             NCHW,
-                                             false,
-                                             ROIPoolingForwardKernelAlignedLauncher<float, float, false>));
-    return true;
-}
-
-const std::vector<roiFwdLaunchConfig>& getRoiFwdLCVec()
-{
-    static std::vector<roiFwdLaunchConfig> roiFwdLCVec;
-    static bool roiFwdLCVecI = roiFwdLCVecInit(roiFwdLCVec);
-
-    return roiFwdLCVec;
-}
-
+static std::array<roiFwdLaunchConfig, 2> roiFwdLCOptions = {
+    roiFwdLaunchConfig(FLOAT32, FLOAT32, NCHW, FLOAT32, NCHW, true, ROIPoolingForwardKernelAlignedLauncher<float, float, true>),
+    roiFwdLaunchConfig(FLOAT32, FLOAT32, NCHW, FLOAT32, NCHW, false, ROIPoolingForwardKernelAlignedLauncher<float, float, false>)};
 
 // ROI INFERENCE 
 pluginStatus_t roiInference(cudaStream_t stream,
@@ -288,12 +264,12 @@ pluginStatus_t roiInference(cudaStream_t stream,
     roiFwdLaunchConfig rflc = roiFwdLaunchConfig(t_rois, t_featureMap, l_featureMap, t_top, l_top, true);
     ASSERT_PARAM(R > 0);
 
-    for (unsigned i = 0; i < getRoiFwdLCVec().size(); i++)
+    for (unsigned i = 0; i < roiFwdLCOptions.size(); i++)
     {
-        if (rflc == getRoiFwdLCVec()[i])
+        if (rflc == roiFwdLCOptions[i])
         {
             DEBUG_PRINTF("$$$$ ROI KERNEL %d\n", i);
-            return getRoiFwdLCVec()[i].function(stream,
+            return roiFwdLCOptions[i].function(stream,
                                                 R, N, C, H, W, poolingH, poolingW,
                                                 spatialScale, rois, featureMap, top, NULL);
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -98,7 +98,7 @@ public:
 
 private:
     const std::string mLayerName;
-    size_t mInputWidth, mInputHeight, mNumboxes, mCropHeight, mCropWidth, mDepth;
+    size_t mCropWidth, mCropHeight, mDepth, mInputWidth, mInputHeight, mNumboxes;
     std::string mNamespace;
 };
 

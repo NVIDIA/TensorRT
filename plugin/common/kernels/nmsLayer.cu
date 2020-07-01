@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 #include <algorithm>
+#include <array>
 #include "cuda_runtime_api.h"
 #include <cub/cub.cuh>
 #include <functional>
 #include <stdint.h>
 #include <stdio.h>
-#include <vector>
 #include "kernel.h"
 #include "bboxUtils.h"
 
@@ -390,20 +390,9 @@ struct nmsLaunchConfig
     }
 };
 
-static std::vector<nmsLaunchConfig> nmsLCVec;
 #define FLOAT32 nvinfer1::DataType::kFLOAT
-bool initNmsLC()
-{
-    nmsLCVec.reserve(1);
-    nmsLCVec.push_back(nmsLaunchConfig(FLOAT32, NCHW,
-                                       FLOAT32, NC4HW,
-                                       FLOAT32,
-                                       nmsGpu<float, float>));
-    return true;
-}
-
-static bool initializedNmsLC = initNmsLC();
-
+static std::array<nmsLaunchConfig, 1> nmsLCOptions = {
+    nmsLaunchConfig(FLOAT32, NCHW, FLOAT32, NC4HW, FLOAT32, nmsGpu<float, float>)};
 
 // NMS 
 pluginStatus_t nms(cudaStream_t stream,
@@ -422,15 +411,14 @@ pluginStatus_t nms(cudaStream_t stream,
                   const DataType t_rois,
                   void* rois)
 {
-    if (!initializedNmsLC)
-        return STATUS_NOT_INITIALIZED;
+
     nmsLaunchConfig lc(t_fgScores, l_fgScores, t_proposals, l_proposals, t_rois);
-    for (unsigned i = 0; i < nmsLCVec.size(); i++)
+    for (unsigned i = 0; i < nmsLCOptions.size(); i++)
     {
-        if (nmsLCVec[i] == lc)
+        if (nmsLCOptions[i] == lc)
         {
             DEBUG_PRINTF("NMS KERNEL %d\n", i);
-            return nmsLCVec[i].function(stream,
+            return nmsLCOptions[i].function(stream,
                                         N, R,
                                         preNmsTop,
                                         nmsMaxOut,

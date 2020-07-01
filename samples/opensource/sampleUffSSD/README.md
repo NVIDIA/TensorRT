@@ -11,7 +11,7 @@
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Prerequisites](#prerequisites)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -267,17 +267,11 @@ calibration can be performed. Currently, we require a file called `list.txt`, wi
 
 	This output shows that the sample ran successfully; `PASSED`.
 
-### Sample --help options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
-```
-Usage: ./sample_uff_ssd
-Optional Parameters:
-  -h, --help Display help information.
-  --useDLACore=N    Specify the DLA engine to run on.
-  --fp16            Specify to run in fp16 mode.
-  --int8            Specify to run in int8 mode.
-```  
+### Sample `--help` options
+
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 # Additional resources
 

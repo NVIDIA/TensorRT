@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -163,7 +163,7 @@ private:
 //!
 bool SampleMovieLens::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -227,16 +227,16 @@ void SampleMovieLens::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     parser->registerOutput(mParams.outputTensorNames[0].c_str());
 
     auto dType = mParams.fp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT;
-    gLogInfo << "Begin parsing model..." << std::endl;
+    sample::gLogInfo << "Begin parsing model..." << std::endl;
 
     // Parse the uff model to populate the network
     if (!parser->parse(mParams.uffFileName.c_str(), *network, dType))
     {
-        gLogError << "Failure while parsing UFF file" << std::endl;
+        sample::gLogError << "Failure while parsing UFF file" << std::endl;
         return;
     }
 
-    gLogInfo << "End parsing model..." << std::endl;
+    sample::gLogInfo << "End parsing model..." << std::endl;
 
     // Add postprocessing i.e. topk layer to the UFF Network
     // Retrieve last layer of UFF Network
@@ -262,7 +262,7 @@ void SampleMovieLens::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     // Set the topK indices tensor as INT32 type
     topK->getOutput(1)->setType(nvinfer1::DataType::kINT32);
 
-    gLogInfo << "Done constructing network..." << std::endl;
+    sample::gLogInfo << "Done constructing network..." << std::endl;
 
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
         builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
@@ -313,7 +313,7 @@ bool SampleMovieLens::infer()
     // Wait for the work in the stream to complete
     cudaStreamSynchronize(stream);
     timer.stop();
-    gLogInfo << "Done execution. Duration : " << timer.microseconds() << " microseconds." << std::endl;
+    sample::gLogInfo << "Done execution. Duration : " << timer.microseconds() << " microseconds." << std::endl;
 
     // Release stream
     cudaStreamDestroy(stream);
@@ -423,7 +423,7 @@ void SampleMovieLens::readInputSample(std::ifstream& file, OutputParams& outPara
 void SampleMovieLens::parseMovieLensData()
 {
     std::ifstream file;
-    file.open(mParams.ratingInputFile, ios::binary);
+    file.open(mParams.ratingInputFile, std::ios::binary);
     std::string line;
     int userIdx = 0;
     while (std::getline(file, line) && userIdx < mParams.batchSize)
@@ -457,15 +457,16 @@ bool SampleMovieLens::teardown()
 //!
 void SampleMovieLens::printOutputParams(OutputParams& outParams)
 {
-    gLogVerbose << "User Id                            :   " << outParams.userId << std::endl;
-    gLogVerbose << "Expected Predicted Max Rating Item :   " << outParams.expectedPredictedMaxRatingItem << std::endl;
-    gLogVerbose << "Expected Predicted Max Rating Prob :   " << outParams.expectedPredictedMaxRatingItemProb
-                << std::endl;
-    gLogVerbose << "Total TopK Items : " << outParams.itemProbPairVec.size() << std::endl;
+    sample::gLogVerbose << "User Id                            :   " << outParams.userId << std::endl;
+    sample::gLogVerbose << "Expected Predicted Max Rating Item :   " << outParams.expectedPredictedMaxRatingItem
+                        << std::endl;
+    sample::gLogVerbose << "Expected Predicted Max Rating Prob :   " << outParams.expectedPredictedMaxRatingItemProb
+                        << std::endl;
+    sample::gLogVerbose << "Total TopK Items : " << outParams.itemProbPairVec.size() << std::endl;
     for (unsigned int i = 0; i < outParams.itemProbPairVec.size(); ++i)
     {
-        gLogVerbose << outParams.itemProbPairVec.at(i).first << " : " << outParams.itemProbPairVec.at(i).second
-                    << std::endl;
+        sample::gLogVerbose << outParams.itemProbPairVec.at(i).first << " : " << outParams.itemProbPairVec.at(i).second
+                            << std::endl;
     }
 }
 
@@ -477,12 +478,12 @@ bool SampleMovieLens::verifyOutput(
 {
     bool pass{true};
 
-    gLogInfo << "Num of users : " << mParams.batchSize << std::endl;
-    gLogInfo << "Num of Movies : " << mParams.numMoviesPerUser << std::endl;
+    sample::gLogInfo << "Num of users : " << mParams.batchSize << std::endl;
+    sample::gLogInfo << "Num of Movies : " << mParams.numMoviesPerUser << std::endl;
 
-    gLogVerbose << "|-----------|------------|-----------------|-----------------|" << std::endl;
-    gLogVerbose << "|   User    |   Item     |  Expected Prob  |  Predicted Prob |" << std::endl;
-    gLogVerbose << "|-----------|------------|-----------------|-----------------|" << std::endl;
+    sample::gLogVerbose << "|-----------|------------|-----------------|-----------------|" << std::endl;
+    sample::gLogVerbose << "|   User    |   Item     |  Expected Prob  |  Predicted Prob |" << std::endl;
+    sample::gLogVerbose << "|-----------|------------|-----------------|-----------------|" << std::endl;
 
     for (int i = 0; i < mParams.batchSize; ++i)
     {
@@ -498,9 +499,9 @@ bool SampleMovieLens::verifyOutput(
             float predictedProb = topKItemProb[i * mParams.topKMovies + k];
             float expectedProb = mParams.userToExpectedItemProbMap.at(userIdx).at(k).second;
             int predictedItem = mParams.userToItemsMap.at(userIdx).at(predictedIdx);
-            gLogVerbose << "|" << std::setw(10) << userIdx << " | " << std::setw(10) << predictedItem << " | "
-                        << std::setw(15) << expectedProb << " | " << std::setw(15) << predictedProb << " | "
-                        << std::endl;
+            sample::gLogVerbose << "|" << std::setw(10) << userIdx << " | " << std::setw(10) << predictedItem << " | "
+                                << std::setw(15) << expectedProb << " | " << std::setw(15) << predictedProb << " | "
+                                << std::endl;
         }
     }
 
@@ -510,8 +511,9 @@ bool SampleMovieLens::verifyOutput(
         int maxPredictedIdx = topKItemNumber[i * mParams.topKMovies];
         int maxExpectedItem = mParams.userToExpectedItemProbMap.at(userIdx).at(0).first;
         int maxPredictedItem = mParams.userToItemsMap.at(userIdx).at(maxPredictedIdx);
-        gLogInfo << "| User :" << std::setw(4) << userIdx << "  |  Expected Item :" << std::setw(5) << maxExpectedItem
-                 << "  |  Predicted Item :" << std::setw(5) << maxPredictedItem << " | " << std::endl;
+        sample::gLogInfo << "| User :" << std::setw(4) << userIdx << "  |  Expected Item :" << std::setw(5)
+                         << maxExpectedItem << "  |  Predicted Item :" << std::setw(5) << maxPredictedItem << " | "
+                         << std::endl;
     }
 
     return pass;
@@ -558,7 +560,7 @@ bool parseSampleMovieLensArgs(SampleMovieLensArgs& args, int argc, char* argv[])
         else if (argStr == "--verbose")
         {
             args.verbose = true;
-            setReportableSeverity(Logger::Severity::kVERBOSE);
+            sample::setReportableSeverity(sample::Logger::Severity::kVERBOSE);
         }
         else if (argStr.substr(0, 13) == "--useDLACore=" && argStr.size() > 13)
         {
@@ -626,7 +628,7 @@ int main(int argc, char** argv)
     bool argsOK = parseSampleMovieLensArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -636,27 +638,27 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     SampleMovieLensParams params = initializeSampleParams(args);
     SampleMovieLens sample(params);
 
-    gLogInfo << "Building and running a GPU inference engine for MLP NCF model..." << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for MLP NCF model..." << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

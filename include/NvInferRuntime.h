@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,14 +37,20 @@ class IPluginFactory; //!< Forward declaration of IPluginFactory for use by othe
 //!
 //! \brief List of supported engine capability flows.
 //!
-//! \note at present, kSAFE_DLA flow doesn't strictly limit execution to DLA devices - it simply
-//! restricts the engine capabilities to DLA support levels anticipated in future releases.
+//! The EngineCapability determines the restrictions of a network during build time for what can be executed
+//! at runtime. EngineCapability::kDEFAULT does not provide any restrictions on functionality and the
+//! resulting serialized engine can be executed with TensorRT's standard runtime APIs in the nvinfer1 namespace.
+//! EngineCapabiltiy::kSAFE_GPU provides a restricted subset of network operations that are safety certified and
+//! the resulting serialized engine can be executed with TensorRT's safe runtime APIs in the nvinfer1::safe namespace.
+//! EngineCapability::kSAFE_DLA provides a restricted subset of network operations that are DLA compatible and
+//! the resulting serialized engine can be executed using NvMediaDLA's runtime APIs. See sampleNvmedia for an
+//! example of integrating NvMediaDLA APIs with TensorRT APIs.
 //!
 enum class EngineCapability : int
 {
-    kDEFAULT = 0,  //!< Full capability, TensorRT mode without any restrictions.
-    kSAFE_GPU = 1, //!< Safety restricted capability, TensorRT flow that can only run on GPU devices.
-    kSAFE_DLA = 2, //!< Safety restricted capability, TensorRT flow that can only run on DLA devices.
+    kDEFAULT = 0,  //!< Full capability, TensorRT mode without any restrictions using TensorRT nvinfer1 APIs.
+    kSAFE_GPU = 1, //!< Safety restricted capability, TensorRT flow that can only run on GPU devices via TensorRT nvinfer1::safe APIs.
+    kSAFE_DLA = 2, //!< Safety restricted capability, TensorRT flow that can only run on DLA devices via NvMediaDLA APIs.
 };
 
 template <>
@@ -53,11 +59,14 @@ constexpr inline int EnumMax<EngineCapability>()
     return 3;
 } //!< Maximum number of elements in EngineCapability enum. \see EngineCapability
 
-
 //!
 //! \class Weights
 //!
 //! \brief An array of weights used as a layer parameter.
+//!
+//! When using the DLA, the cumulative size of all Weights used in a network
+//! must be less than 512MB in size. If the build option kGPU_FALLBACK is specified,
+//! then multiple DLA sub-networks may be generated from the single original network.
 //!
 //! The weights are held by reference until the engine has been built. Therefore the data referenced
 //! by \p values field should be preserved until the build is complete.
@@ -225,6 +234,8 @@ public:
     //! This function is called by the implementations of INetworkDefinition, IBuilder, and ICudaEngine.
     //! In particular, it is called when creating an engine and when deserializing an engine.
     //!
+    //! \warning DataType:kBOOL not supported.
+    //!
     virtual bool supportsFormat(DataType type, PluginFormat format) const TRTNOEXCEPT = 0;
 
     //!
@@ -242,6 +253,8 @@ public:
     //! \param maxBatchSize The maximum batch size.
     //!
     //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be 3-dimensional CHW dimensions).
+    //!
+    //! \warning DataType:kBOOL not supported.
     //!
     virtual void configureWithFormat(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type, PluginFormat format, int maxBatchSize) TRTNOEXCEPT = 0;
 
@@ -677,11 +690,15 @@ public:
     //! \param dlaCore The DLA core to execute the engine on (0 to N-1, where N is the maximum number of DLA's present on the device). Default value is 0.
     //! \see getDLACore()
     //!
+    //! \warning Starting with TensorRT 8, the default value will be -1 if the DLA is not specified or unused.
+    //!
     virtual void setDLACore(int dlaCore) noexcept = 0;
 
     //!
     //! \brief Get the DLA core that the engine executes on.
     //! \return If setDLACore is called, returns DLA core from 0 to N-1, else returns 0.
+    //!
+    //! \warning Starting with TensorRT 8, the default value will be -1 if the DLA is not specified or unused.
     //!
     virtual int getDLACore() const noexcept = 0;
 
@@ -973,7 +990,7 @@ public:
     //! then the following conditions must all hold:
     //!
     //! (1) minDims.nbDims == optDims.nbDims == maxDims.nbDims == networkDims.nbDims
-    //! (2) 1 <= minDims.d[i] <= optDims.d[i] <= maxDims.d[i] for i = 0, ..., networkDims.nbDims-1
+    //! (2) 0 <= minDims.d[i] <= optDims.d[i] <= maxDims.d[i] for i = 0, ..., networkDims.nbDims-1
     //! (3) if networkDims.d[i] != -1, then minDims.d[i] == optDims.d[i] == maxDims.d[i] == networkDims.d[i]
     //!
     //! This function may (but need not be) called for an input tensor that does not have dynamic dimensions. In this
@@ -986,6 +1003,8 @@ public:
     //! \return false if an inconsistency was detected (e.g. the rank does not match another dimension that was
     //!         previously set for the same input), true if no inconsistency was detected. Note that inputs can be
     //!         validated only partially; a full validation is performed at engine build time.
+    //!
+    //! \warning If run on DLA, minimum, optimum, and maximum dimensions must to be the same.
     //!
     virtual bool setDimensions(const char* inputName, OptProfileSelector select, Dims dims) noexcept = 0;
 
@@ -1016,6 +1035,8 @@ public:
     //! \return false if an inconsistency was detected (e.g. nbValues does not match a previous call for the same
     //!         tensor), else true. As for setDimensions(), a full validation can only be performed at engine build
     //!         time.
+    //!
+    //! \warning If run on DLA, minimum, optimum, and maximum shape values must to be the same.
     //!
     virtual bool setShapeValues(
         const char* inputName, OptProfileSelector select, const int32_t* values, int nbValues) noexcept = 0;
@@ -1085,6 +1106,8 @@ public:
     //!
     //! \brief Get the number of binding indices.
     //!
+    //! There are separate binding indices for each optimization profile.
+    //! This method returns the total over all profiles.
     //! If the engine has been built for K profiles, the first getNbBindings() / K bindings are used by profile
     //! number 0, the following getNbBindings() / K bindings are used by profile number 1 etc.
     //!
@@ -1100,10 +1123,13 @@ public:
     //! Engine bindings map from tensor names to indices in this array.
     //! Binding indices are assigned at engine build time, and take values in the range [0 ... n-1] where n is the total number of inputs and outputs.
     //!
+    //! To get the binding index of the name in an optimization profile with index k > 0,
+    //! mangle the name by appending " [profile k]", as described for method getBindingName().
+    //!
     //! \param name The tensor name.
     //! \return The binding index for the named tensor, or -1 if the name is not found.
     //!
-    //! see getNbBindings() getBindingIndex()
+    //! \see getNbBindings() getBindingName()
     //!
     virtual int getBindingIndex(const char* name) const noexcept = 0;
 
@@ -1111,6 +1137,11 @@ public:
     //! \brief Retrieve the name corresponding to a binding index.
     //!
     //! This is the reverse mapping to that provided by getBindingIndex().
+    //!
+    //! For optimization profiles with an index k > 0, the name is mangled by appending
+    //! " [profile k]", with k written in decimal.  For example, if the tensor in the
+    //! INetworkDefinition had the name "foo", and bindingIndex refers to that tensor in the
+    //! optimization profile with index 3, getBindingName returns "foo [profile 3]".
     //!
     //! \param bindingIndex The binding index.
     //! \return The name corresponding to the index, or nullptr if the index is out of range.
@@ -1133,8 +1164,19 @@ public:
     //! \brief Get the dimensions of a binding.
     //!
     //! \param bindingIndex The binding index.
-    //! \return The dimensions of the binding if the index is in range, otherwise Dims()
-    //!         Has -1 for any dimension with a dynamic value.
+    //! \return The dimensions of the binding if the index is in range, otherwise Dims().
+    //!         Has -1 for any dimension that varies within the optimization profile.
+    //!
+    //! For example, suppose an INetworkDefinition has an input with shape [-1,-1]
+    //! that becomes a binding b in the engine.  If the associated optimization profile
+    //! specifies that b has minimum dimensions as [6,9] and maximum dimensions [7,9],
+    //! getBindingDimensions(b) returns [-1,9], despite the second dimension being
+    //! dynamic in the INetworkDefinition.
+    //!
+    //! Because each optimization profile has separate bindings, the returned value can
+    //! differ across profiles. Consider another binding b' for the same network input,
+    //! but for another optimization profile.  If that other profile specifies minimum
+    //! dimensions [5,8] and maximum dimensions [5,9], getBindingDimensions(b') returns [5,-1].
     //!
     //! \see getBindingIndex()
     //!
@@ -1192,7 +1234,12 @@ public:
     //!
     //! \brief Create an execution context.
     //!
+    //! If the engine supports dynamic shapes, each execution context in concurrent use must use a separate optimization
+    //! profile. The first execution context created will call setOptimizationProfile(0) implicitly. For other execution
+    //! contexts, setOptimizationProfile() must be called with unique profile index before calling execute or enqueue.
+    //!
     //! \see IExecutionContext.
+    //! \see IExecutionContext::setOptimizationProfile()
     //!
     virtual IExecutionContext* createExecutionContext() noexcept = 0;
 
@@ -1316,13 +1363,25 @@ public:
     //!
     //! \brief Get the minimum / optimum / maximum dimensions for a particular binding under an optimization profile.
     //!
-    //! \param bindingIndex The binding index (must be between 0 and getNbBindings() - 1)
+    //! \param bindingIndex The binding index, which must belong to the given profile,
+    //!        or be between 0 and bindingsPerProfile-1 as described below.
     //!
-    //! \param profileIndex The profile index (must be between 0 and getNbOptimizationProfiles()-1)
+    //! \param profileIndex The profile index, which must be between 0 and getNbOptimizationProfiles()-1.
     //!
     //! \param select Whether to query the minimum, optimum, or maximum dimensions for this binding.
     //!
     //! \return The minimum / optimum / maximum dimensions for this binding in this profile.
+    //!         If the profileIndex or bindingIndex are invalid, return Dims with nbDims=-1.
+    //!
+    //! For backwards compatibility with earlier versions of TensorRT, if the bindingIndex
+    //! does not belong to the current optimization profile, but is between 0 and bindingsPerProfile-1,
+    //! where bindingsPerProfile = getNbBindings()/getNbOptimizationProfiles,
+    //! then a corrected bindingIndex is used instead, computed by:
+    //!
+    //!     profileIndex * bindingsPerProfile + bindingIndex % bindingsPerProfile
+    //!
+    //! Otherwise the bindingIndex is considered invalid.
+    //!
     virtual Dims getProfileDimensions(int bindingIndex, int profileIndex, OptProfileSelector select) const noexcept = 0;
 
     //!
@@ -1340,6 +1399,12 @@ public:
     //!         the elementwise minimum / optimum / maximum values for this shape binding under the profile.
     //!         If either of the indices is out of range, or if the binding is not an input shape binding, return
     //!         nullptr.
+    //!
+    //! For backwards compatibility with earlier versions of TensorRT, a bindingIndex that does not belong
+    //! to the profile is corrected as described for getProfileDimensions.
+    //!
+    //! \see ICudaEngine::getProfileDimensions
+    //!
     virtual const int32_t* getProfileShapeValues(int profileIndex, int inputIndex, OptProfileSelector select) const
         noexcept
         = 0;
@@ -1545,13 +1610,13 @@ public:
     virtual const char* getName() const noexcept = 0;
 
     //!
-    //! \brief set the device memory for use by this execution context.
+    //! \brief Set the device memory for use by this execution context.
     //!
-    //! The memory must be aligned with cuda memory alignment property (using cudaGetDeviceProperties()), and its size must be at least that
-    //! returned by getDeviceMemorySize(). If using enqueue() to run the network, The memory is in
-    //! use from the invocation of enqueue() until network execution is complete. If using execute(),
-    //! it is in use until execute() returns. Releasing or otherwise using the memory for other
-    //! purposes during this time will result in undefined behavior.
+    //! The memory must be aligned with cuda memory alignment property (using cudaGetDeviceProperties()), and its size
+    //! must be at least that returned by getDeviceMemorySize(). Setting memory to nullptr is acceptable if
+    //! getDeviceMemorySize() returns 0. If using enqueue() to run the network, the memory is in use from the invocation
+    //! of enqueue() until network execution is complete. If using execute(), it is in use until execute() returns.
+    //! Releasing or otherwise using the memory for other purposes during this time will result in undefined behavior.
     //!
     //! \see ICudaEngine::getDeviceMemorySize() ICudaEngine::createExecutionContextWithoutDeviceMemory()
     //!
@@ -1560,10 +1625,18 @@ public:
     //!
     //! \brief Return the strides of the buffer for the given binding.
     //!
+    //! The strides are in units of elements, not components or bytes.
+    //! For example, for TensorFormat::kHWC8, a stride of one spans 8 scalars.
+    //!
     //! Note that strides can be different for different execution contexts
     //! with dynamic shapes.
     //!
+    //! If the bindingIndex is invalid or there are dynamic dimensions that have not been
+    //! set yet, returns Dims with Dims::nbDims = -1.
+    //!
     //! \param bindingIndex The binding index.
+    //!
+    //! \see getBindingComponentsPerElement
     //!
     virtual Dims getStrides(int bindingIndex) const noexcept = 0;
 
@@ -1613,6 +1686,7 @@ public:
     //! new dimension > 0). Furthermore, the dimensions must be in the valid range for the
     //! currently selected optimization profile, and the corresponding engine must not be
     //! safety-certified.
+    //!
     //! This method will fail unless a valid optimization profile is defined for the current
     //! execution context (getOptimizationProfile() must not be -1).
     //!
@@ -1621,6 +1695,8 @@ public:
     //! This can be checked using the method allInputDimensionsSpecified().
     //!
     //! \return false if an error occurs (e.g. index out of range), else true
+    //!
+    //! \see ICudaEngine::getBindingIndex
     //!
     virtual bool setBindingDimensions(int bindingIndex, Dims dimensions) noexcept = 0;
 
@@ -1643,6 +1719,11 @@ public:
     //! before calling this method.
     //!
     //! \return Currently selected binding dimensions
+    //!
+    //! For backwards compatibility with earlier versions of TensorRT, a bindingIndex that does not belong
+    //! to the current profile is corrected as described for ICudaEngine::getProfileDimensions.
+    //!
+    //! \see ICudaEngine::getProfileDimensions
     //!
     virtual Dims getBindingDimensions(int bindingIndex) const noexcept = 0;
 
@@ -1758,6 +1839,10 @@ public:
     //! \return True if the kernels were enqueued successfully.
     //!
     //! \see ICudaEngine::getBindingIndex() ICudaEngine::getMaxBatchSize()
+    //!
+    //! \note Calling enqueueV2() with a stream in CUDA graph capture mode has a known issue. If dynamic shapes are
+    //!       used, the first enqueueV2() call after a setInputShapeBinding() call will cause failure in stream capture
+    //!       due to resource allocation. Please call enqueueV2() once before capturing the graph.
     //!
     virtual bool enqueueV2(void** bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept = 0;
 };

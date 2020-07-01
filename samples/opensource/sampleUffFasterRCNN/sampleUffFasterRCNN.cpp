@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -162,7 +162,7 @@ private:
 
 bool SampleUffFasterRcnn::build()
 {
-    initLibNvInferPlugins(&gLogger.getTRTLogger(), "");
+    initLibNvInferPlugins(&sample::gLogger.getTRTLogger(), "");
 
     if (mParams.loadEngine.size() > 0)
     {
@@ -179,7 +179,7 @@ bool SampleUffFasterRcnn::build()
             file.close();
         }
 
-        IRuntime* infer = nvinfer1::createInferRuntime(gLogger);
+        IRuntime* infer = nvinfer1::createInferRuntime(sample::gLogger);
         if (mParams.dlaCore >= 0)
         {
             infer->setDLACore(mParams.dlaCore);
@@ -188,7 +188,7 @@ bool SampleUffFasterRcnn::build()
             infer->deserializeCudaEngine(trtModelStream.data(), size, nullptr), samplesCommon::InferDeleter());
 
         infer->destroy();
-        gLogInfo << "TRT Engine loaded from: " << mParams.loadEngine << endl;
+        sample::gLogInfo << "TRT Engine loaded from: " << mParams.loadEngine << std::endl;
         if (!mEngine)
         {
             return false;
@@ -199,7 +199,7 @@ bool SampleUffFasterRcnn::build()
         }
     }
 
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
 
     if (mParams.dlaCore >= 0)
     {
@@ -266,12 +266,18 @@ bool SampleUffFasterRcnn::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& 
 
     if (mParams.int8)
     {
-        gLogInfo << "Using Entropy Calibrator 2" << std::endl;
+        sample::gLogInfo << "Using Entropy Calibrator 2" << std::endl;
         const std::string listFileName = "list.txt";
         const int imageC = 3;
         const int imageH = mParams.inputHeight;
         const int imageW = mParams.inputWidth;
-        const nvinfer1::DimsNCHW imageDims{mParams.calBatchSize, imageC, imageH, imageW};
+        nvinfer1::DimsNCHW imageDims{mParams.calBatchSize, imageC, imageH, imageW};
+        // To prevent compiler initialization warning with some versions of gcc
+        for (int i = imageDims.nbDims; i < Dims::MAX_DIMS; ++i)
+        {
+            imageDims.d[i] = 0;
+            imageDims.type[i] = DimensionType::kSPATIAL;
+        }
         BatchStream calibrationStream(
             mParams.calBatchSize, mParams.nbCalBatches, imageDims, listFileName, mParams.dataDirs);
         calibrator.reset(
@@ -301,7 +307,7 @@ bool SampleUffFasterRcnn::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& 
         p.write(reinterpret_cast<const char*>(ptr->data()), ptr->size());
         ptr->destroy();
         p.close();
-        gLogInfo << "TRT Engine file saved to: " << mParams.saveEngine << endl;
+        sample::gLogInfo << "TRT Engine file saved to: " << mParams.saveEngine << std::endl;
     }
 
     return true;
@@ -337,11 +343,10 @@ bool SampleUffFasterRcnn::infer()
     for (int i = 0; i < mParams.repeat; ++i)
     {
         status = context->execute(mParams.batchSize, buffers.getDeviceBindings().data());
-    }
-
-    if (!status)
-    {
-        return false;
+        if (!status)
+        {
+            return false;
+        }
     }
 
     if (mParams.profile)
@@ -738,7 +743,7 @@ int main(int argc, char** argv)
 
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -749,25 +754,25 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, const_cast<const char**>(argv));
-    gLogger.reportTestStart(sampleTest);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, const_cast<const char**>(argv));
+    sample::gLogger.reportTestStart(sampleTest);
     SampleUffFasterRcnn sample(initializeSampleParams(args));
-    gLogInfo << "Building and running a GPU inference engine for FasterRCNN" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for FasterRCNN" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

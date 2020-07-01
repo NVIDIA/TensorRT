@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 
 #include "cublas_v2.h"
 #include "plugin.h"
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 
@@ -25,6 +26,7 @@ using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 #define DEBUG_ENABLE 0
 
+#ifndef TRT_RPNLAYER_H
 typedef enum
 {
     NCHW = 0,
@@ -43,6 +45,12 @@ pluginStatus_t detectionInference(cudaStream_t stream, int N, int C1, int C2, bo
     void* workspace, bool isNormalized = true, bool confSigmoid = false
 
 );
+
+pluginStatus_t nmsInference(cudaStream_t stream, int N, int boxesSize, int scoresSize, bool shareLocation,
+    int backgroundLabelId, int numPredsPerClass, int numClasses, int topK, int keepTopK, float scoreThreshold,
+    float iouThreshold, DataType DT_BBOX, const void* locData, DataType DT_SCORE, const void* confData, void* keepCount,
+    void* nmsedBoxes, void* nmsedScores, void* nmsedClasses, void* workspace, bool isNormalized = true,
+    bool confSigmoid = false, bool clipBoxes = true);
 
 pluginStatus_t gatherTopDetections(cudaStream_t stream, bool shareLocation, int numImages, int numPredsPerClass,
     int numClasses, int topK, int keepTopK, DataType DT_BBOX, DataType DT_SCORE, const void* indices,
@@ -210,4 +218,5 @@ int proposalInference_gpu(cudaStream_t stream, const void* rpn_prob, const void*
 
 size_t _get_workspace_size(int N, int anc_size_num, int anc_ratio_num, int H, int W, int nmsMaxOut);
 
+#endif // TRT_RPNLAYER_H
 #endif

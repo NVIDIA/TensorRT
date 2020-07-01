@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,17 +25,6 @@
 #include <string>
 #include <vector>
 
-#define LOG_ERROR(status)                                                                                              \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        auto ret = (status);                                                                                           \
-        if (ret != 0)                                                                                                  \
-        {                                                                                                              \
-            std::cout << "Cuda failure: " << ret << std::endl;                                                         \
-            abort();                                                                                                   \
-        }                                                                                                              \
-    } while (0)
-
 namespace nvinfer1
 {
 namespace plugin
@@ -46,7 +35,7 @@ public:
     FlattenConcat(int concatAxis, bool ignoreBatch);
 
     FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, int outputConcatAxis, const int* inputConcatAxis,
-        size_t* copySize);
+        const size_t* copySize);
 
     FlattenConcat(const void* data, size_t length);
 
@@ -106,13 +95,13 @@ private:
 
     Weights deserializeToDevice(const char*& hostBuffer, size_t count);
 
-    size_t* mCopySize = nullptr;
+    std::vector<size_t> mCopySize;
+    std::vector<int> mInputConcatAxis;
     bool mIgnoreBatch{false};
     int mConcatAxisID{0}, mOutputConcatAxis{0}, mNumInputs{0};
-    int* mInputConcatAxis = nullptr;
     nvinfer1::Dims mCHW;
-    const char* mPluginNamespace;
-    cublasHandle_t mCublas;
+    std::string mPluginNamespace;
+    cublasHandle_t mCublas{nullptr};
 };
 
 class FlattenConcatPluginCreator : public BaseCreator

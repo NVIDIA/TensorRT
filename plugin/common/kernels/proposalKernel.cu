@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,7 +75,6 @@ typedef pluginStatus_t frcnnStatus_t;
 unsigned int hash(const void* array_, size_t size);
 int8_t* alignPtr(int8_t* ptr, uintptr_t to);
 __global__ void setOffset(int stride, int size, int* output);
-bool initNmsLC();
 frcnnStatus_t nms(cudaStream_t stream,
     const int N,
     const int R,
@@ -437,12 +436,6 @@ struct nmsLaunchConfig
 
 static std::vector<nmsLaunchConfig> nmsLCVec;
 #define FLOAT32 nvinfer1::DataType::kFLOAT
-
-
-static bool initializedNmsLC = initNmsLC();
-
-// }}}
-
 
 __global__ void _inverse_transform_gpu(const float* RPN_prob, const float* RPN_regr, int N,
                                        int INPUT_H, int INPUT_W, int RPN_H, int RPN_W, float RPN_STD_SCALING, int RPN_STRIDE,

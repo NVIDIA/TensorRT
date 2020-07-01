@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,10 @@
 #ifndef TRT_SAMPLE_DEVICE_H
 #define TRT_SAMPLE_DEVICE_H
 
+#include <cuda.h>
+#include <cuda_runtime.h>
 #include <iostream>
 #include <thread>
-#include <cuda_runtime.h>
 
 namespace sample
 {
@@ -47,7 +48,7 @@ void cudaSleep(void* sleep)
     std::this_thread::sleep_for(std::chrono::duration<int, std::milli>(*static_cast<int*>(sleep)));
 }
 
-}
+} // namespace
 
 //!
 //! \class TrtCudaStream
@@ -56,7 +57,6 @@ void cudaSleep(void* sleep)
 class TrtCudaStream
 {
 public:
-
     TrtCudaStream()
     {
         cudaCheck(cudaStreamCreate(&mStream));
@@ -80,6 +80,11 @@ public:
         return mStream;
     }
 
+    void synchronize()
+    {
+        cudaCheck(cudaStreamSynchronize(mStream));
+    }
+
     void wait(TrtCudaEvent& event);
 
     void sleep(int* ms)
@@ -92,7 +97,6 @@ public:
     }
 
 private:
-
     cudaStream_t mStream{};
 };
 
@@ -103,7 +107,6 @@ private:
 class TrtCudaEvent
 {
 public:
-
     explicit TrtCudaEvent(bool blocking = true)
     {
         const unsigned int flags = blocking ? cudaEventBlockingSync : cudaEventDefault;
@@ -147,7 +150,6 @@ public:
     }
 
 private:
-
     cudaEvent_t mEvent{};
 };
 
@@ -157,6 +159,54 @@ inline void TrtCudaStream::wait(TrtCudaEvent& event)
 }
 
 //!
+//! \class TrtCudaGraph
+//! \brief Managed CUDA graph
+//!
+class TrtCudaGraph
+{
+public:
+    explicit TrtCudaGraph() = default;
+
+    TrtCudaGraph(const TrtCudaGraph&) = delete;
+
+    TrtCudaGraph& operator=(const TrtCudaGraph&) = delete;
+
+    TrtCudaGraph(TrtCudaGraph&&) = delete;
+
+    TrtCudaGraph& operator=(TrtCudaGraph&&) = delete;
+
+    ~TrtCudaGraph()
+    {
+        if (mGraphExec)
+        {
+            cudaGraphExecDestroy(mGraphExec);
+        }
+    }
+
+    void beginCapture(TrtCudaStream& stream)
+    {
+        cudaCheck(cudaGraphCreate(&mGraph, 0));
+        cudaCheck(cudaStreamBeginCapture(stream.get(), cudaStreamCaptureModeGlobal));
+    }
+
+    void launch(TrtCudaStream& stream)
+    {
+        cudaCheck(cudaGraphLaunch(mGraphExec, stream.get()));
+    }
+
+    void endCapture(TrtCudaStream& stream)
+    {
+        cudaCheck(cudaStreamEndCapture(stream.get(), &mGraph));
+        cudaCheck(cudaGraphInstantiate(&mGraphExec, mGraph, nullptr, nullptr, 0));
+        cudaCheck(cudaGraphDestroy(mGraph));
+    }
+
+private:
+    cudaGraph_t mGraph{};
+    cudaGraphExec_t mGraphExec{};
+};
+
+//!
 //! \class TrtCudaBuffer
 //! \brief Managed buffer for host and device
 //!
@@ -164,7 +214,6 @@ template <typename A, typename D>
 class TrtCudaBuffer
 {
 public:
-
     TrtCudaBuffer() = default;
 
     TrtCudaBuffer(const TrtCudaBuffer&) = delete;
@@ -218,28 +267,39 @@ public:
     }
 
 private:
-
     void* mPtr{nullptr};
 };
 
 struct DeviceAllocator
 {
-    void operator()(void** ptr, size_t size) { cudaCheck(cudaMalloc(ptr, size)); }
+    void operator()(void** ptr, size_t size)
+    {
+        cudaCheck(cudaMalloc(ptr, size));
+    }
 };
 
 struct DeviceDeallocator
 {
-    void operator()(void* ptr) { cudaCheck(cudaFree(ptr)); }
+    void operator()(void* ptr)
+    {
+        cudaCheck(cudaFree(ptr));
+    }
 };
 
 struct HostAllocator
 {
-    void operator()(void** ptr, size_t size) { cudaCheck(cudaMallocHost(ptr, size)); }
+    void operator()(void** ptr, size_t size)
+    {
+        cudaCheck(cudaMallocHost(ptr, size));
+    }
 };
 
 struct HostDeallocator
 {
-    void operator()(void* ptr) { cudaCheck(cudaFreeHost(ptr)); }
+    void operator()(void* ptr)
+    {
+        cudaCheck(cudaFreeHost(ptr));
+    }
 };
 
 using TrtDeviceBuffer = TrtCudaBuffer<DeviceAllocator, DeviceDeallocator>;
@@ -253,7 +313,6 @@ using TrtHostBuffer = TrtCudaBuffer<HostAllocator, HostDeallocator>;
 class MirroredBuffer
 {
 public:
-
     void allocate(size_t size)
     {
         mSize = size;
@@ -261,9 +320,15 @@ public:
         mDeviceBuffer.allocate(size);
     }
 
-    void* getDeviceBuffer() const { return mDeviceBuffer.get(); }
+    void* getDeviceBuffer() const
+    {
+        return mDeviceBuffer.get();
+    }
 
-    void* getHostBuffer() const { return mHostBuffer.get(); }
+    void* getHostBuffer() const
+    {
+        return mHostBuffer.get();
+    }
 
     void hostToDevice(TrtCudaStream& stream)
     {
@@ -275,14 +340,13 @@ public:
         cudaCheck(cudaMemcpyAsync(mHostBuffer.get(), mDeviceBuffer.get(), mSize, cudaMemcpyDeviceToHost, stream.get()));
     }
 
-    int getSize() const
+    size_t getSize() const
     {
         return mSize;
     }
 
 private:
-
-    int mSize{0};
+    size_t mSize{0};
     TrtHostBuffer mHostBuffer;
     TrtDeviceBuffer mDeviceBuffer;
 };

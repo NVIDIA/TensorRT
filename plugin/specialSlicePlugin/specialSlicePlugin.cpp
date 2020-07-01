@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,7 +85,9 @@ const char* SpecialSlice::getPluginVersion() const
 
 IPluginV2Ext* SpecialSlice::clone() const
 {
-    return new SpecialSlice(*this);
+    auto plugin = new SpecialSlice(*this);
+    plugin->setPluginNamespace(mNameSpace.c_str());
+    return plugin;
 };
 
 void SpecialSlice::setPluginNamespace(const char* libNamespace)

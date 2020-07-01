@@ -10,7 +10,7 @@
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Training an NCF network](#training-an-ncf-network)
 - [Running the sample](#running-the-sample)
-    * [Sample `--help` options](#sample---help-options)
+    * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -144,18 +144,10 @@ This sample comes with a pre-trained model. However, if you want to train your o
     This output shows that the sample ran successfully; `PASSED`.
 
 
-### Sample --help options
+### Sample `--help` options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
-```
-Usage: ./sample_movielens [-h or --help] [-b NUM_USERS] [--useDLACore=<int>] [--verbose]
---help          Display help information.
---verbose       Enable verbose prints.
--b NUM_USERS    Number of Users i.e. Batch Size (default numUsers==32).
---useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, where n is the number of DLA engines on the platform.
---fp16          Run in FP16 mode.
---strict        Run with strict type constraints.
-```
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 # Additional resources
 

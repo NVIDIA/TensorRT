@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "cub/cub.cuh"
-#include <vector>
+#include <array>
 #include "kernel.h"
 #include "bboxUtils.h"
 #include "cub_helper.h"
@@ -78,15 +78,8 @@ struct sspiLaunchConfig
     }
 };
 
-static std::vector<sspiLaunchConfig> sspiFuncVec;
-bool sspiInit()
-{
-    sspiFuncVec.push_back(sspiLaunchConfig(DataType::kFLOAT,
-                                           sortScoresPerImage_gpu<float>));
-    return true;
-}
-
-static bool initialized = sspiInit();
+static std::array<sspiLaunchConfig, 1> sspiLCOptions = {
+    sspiLaunchConfig(DataType::kFLOAT, sortScoresPerImage_gpu<float>)};
 
 pluginStatus_t sortScoresPerImage(
     cudaStream_t stream,
@@ -100,12 +93,12 @@ pluginStatus_t sortScoresPerImage(
     void* workspace)
 {
     sspiLaunchConfig lc = sspiLaunchConfig(DT_SCORE);
-    for (unsigned i = 0; i < sspiFuncVec.size(); ++i)
+    for (unsigned i = 0; i < sspiLCOptions.size(); ++i)
     {
-        if (lc == sspiFuncVec[i])
+        if (lc == sspiLCOptions[i])
         {
             DEBUG_PRINTF("sortScoresPerImage kernel %d\n", i);
-            return sspiFuncVec[i].function(stream,
+            return sspiLCOptions[i].function(stream,
                                            num_images,
                                            num_items_per_image,
                                            unsorted_scores,

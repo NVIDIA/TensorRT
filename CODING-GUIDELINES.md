@@ -419,7 +419,7 @@ char const * const errStr = getErrorStr(status);
 1. All TensorRT Open Source Software code should contain an NVIDIA copyright header that includes the current year.  The following block of text should be prepended to the top of all OSS files.  This includes .cpp, .h, .cu, .py, and any other source files which are compiled or interpreted.
 ```cpp
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.

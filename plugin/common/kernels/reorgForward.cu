@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "reducedMath.h"
+#include "reducedMathPlugin.h"
 #include "kernel.h"
 
-using namespace nvinfer1::rt; // for reduced_divisor
+using namespace nvinfer1::plugin; // for reduced_divisor
 
 template <unsigned nthdsPerCTA>
 __launch_bounds__(nthdsPerCTA)

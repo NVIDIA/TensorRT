@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -99,6 +99,10 @@ public:
 
     void detachFromContext() override;
 
+    // ProposalPlugin(const std::string name, int input_height, int input_width, int rpn_height, int rpn_width,
+    //     float rpn_std_scaling, int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n,
+    //     int max_box_num, const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num);
+
 private:
     const std::string mLayerName;
     std::string mNamespace;
@@ -110,11 +114,12 @@ private:
     size_t mRpnStride;
     float mBboxMinSize;
     float mNmsIouThreshold;
-    size_t mMaxBoxNum;
     size_t mPreNmsTopN;
-    size_t mAnchorSizeNum, mAnchorRatioNum;
+    size_t mMaxBoxNum;
     std::vector<float> mAnchorSizes;
+    size_t mAnchorSizeNum;
     std::vector<float> mAnchorRatios;
+    size_t mAnchorRatioNum;
 };
 
 class ProposalPluginCreator : public BaseCreator

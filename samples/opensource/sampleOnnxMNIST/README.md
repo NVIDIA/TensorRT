@@ -9,7 +9,7 @@
 	* [Running inference](#running-inference)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -17,7 +17,7 @@
 
 ## Description
 
-This sample, sampleOnnxMNIST, converts a model trained on the [MNIST dataset](https://github.com/onnx/models/tree/master/mnist) in Open Neural Network Exchange (ONNX) format to a TensorRT network and runs inference on the network.
+This sample, sampleOnnxMNIST, converts a model trained on the [MNIST dataset](https://github.com/onnx/models/tree/master/vision/classification/mnist) in Open Neural Network Exchange (ONNX) format to a TensorRT network and runs inference on the network.
 
 ONNX is a standard for representing deep learning models that enables models to be transferred between frameworks.
 
@@ -35,15 +35,15 @@ Specifically, this sample:
 The model file can be converted to a TensorRT network using the ONNX parser. The parser can be initialized with the
 network definition that the parser will write to and the logger object.
 
-`auto parser = nvonnxparser::createParser(*network, gLogger.getTRTLogger());`
+`auto parser = nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger());`
 
 The ONNX model file is then passed onto the parser along with the logging level
 
 ```
-if (!parser->parseFromFile(model_file, static_cast<int>(gLogger.getReportableSeverity())))
+if (!parser->parseFromFile(model_file, static_cast<int>(sample::gLogger.getReportableSeverity())))
 {
 	  string msg("failed to parse onnx file");
-	  gLogger->log(nvinfer1::ILogger::Severity::kERROR, msg.c_str());
+	  sample::gLogger->log(nvinfer1::ILogger::Severity::kERROR, msg.c_str());
 	  exit(EXIT_FAILURE);
 }
 ```
@@ -58,7 +58,7 @@ After the TensorRT network is constructed by parsing the model, the TensorRT eng
 ### Building the engine
 
 To build the engine, create the builder and pass a logger created for TensorRT which is used for reporting errors, warnings and informational messages in the network:
-`IBuilder* builder = createInferBuilder(gLogger);`
+`IBuilder* builder = createInferBuilder(sample::gLogger);`
 
 To build the engine from the generated TensorRT network, issue the following call:
 `nvinfer1::ICudaEngine* engine = builder->buildCudaEngine(*network);`
@@ -169,17 +169,11 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 
 	This output shows that the sample ran successfully; PASSED.
 
-### Sample --help options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
-```
-Usage: ./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]
---help Display help information
---datadir Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use (data/samples/mnist/, data/mnist/)
---useDLACore=N Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, where n is the number of DLA engines on the platform.
---int8 Run in Int8 mode.
---fp16 Run in FP16 mode.
-```
+### Sample `--help` options
+
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 # Additional resources
 

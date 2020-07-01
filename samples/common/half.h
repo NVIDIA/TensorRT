@@ -16,7 +16,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -226,7 +226,7 @@
 /// By default this is set to `-1` (`std::round_indeterminate`), which uses truncation (round toward zero, but with
 /// overflows set to infinity) and is the fastest rounding mode possible. It can even be set to
 /// `std::numeric_limits<float>::round_style` to synchronize the rounding mode with that of the underlying
-/// single-precision implementation. For GIE-1275, changing it to 1 (to nearest)
+/// single-precision implementation.
 #ifndef HALF_ROUND_STYLE
 #define HALF_ROUND_STYLE 1 // = std::round_to_nearest
 #endif

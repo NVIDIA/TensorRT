@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -102,13 +102,13 @@ private:
 //!
 bool SampleOnnxMNIST::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
     }
 
-    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);     
+    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
     auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
     if (!network)
     {
@@ -121,7 +121,8 @@ bool SampleOnnxMNIST::build()
         return false;
     }
 
-    auto parser = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, gLogger.getTRTLogger()));
+    auto parser
+        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
     if (!parser)
     {
         return false;
@@ -163,14 +164,13 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
     SampleUniquePtr<nvonnxparser::IParser>& parser)
 {
-    auto parsed = parser->parseFromFile(
-        locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(), static_cast<int>(gLogger.getReportableSeverity()));
+    auto parsed = parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
+        static_cast<int>(sample::gLogger.getReportableSeverity()));
     if (!parsed)
     {
         return false;
     }
 
-    builder->setMaxBatchSize(mParams.batchSize);
     config->setMaxWorkspaceSize(16_MiB);
     if (mParams.fp16)
     {
@@ -196,7 +196,7 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
 bool SampleOnnxMNIST::infer()
 {
     // Create RAII buffer manager object
-    samplesCommon::BufferManager buffers(mEngine, mParams.batchSize);
+    samplesCommon::BufferManager buffers(mEngine);
 
     auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
@@ -247,12 +247,12 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
     readPGMFile(locateFile(std::to_string(mNumber) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
 
     // Print an ascii representation
-    gLogInfo << "Input:" << std::endl;
+    sample::gLogInfo << "Input:" << std::endl;
     for (int i = 0; i < inputH * inputW; i++)
     {
-        gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
+        sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     for (int i = 0; i < inputH * inputW; i++)
@@ -283,7 +283,7 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
         sum += output[i];
     }
 
-    gLogInfo << "Output:" << std::endl;
+    sample::gLogInfo << "Output:" << std::endl;
     for (int i = 0; i < outputSize; i++)
     {
         output[i] /= sum;
@@ -293,10 +293,12 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
             idx = i;
         }
 
-        gLogInfo << " Prob " << i << "  " << std::fixed << std::setw(5) << std::setprecision(4) << output[i] << " "
-                 << "Class " << i << ": " << std::string(int(std::floor(output[i] * 10 + 0.5f)), '*') << std::endl;
+        sample::gLogInfo << " Prob " << i << "  " << std::fixed << std::setw(5) << std::setprecision(4) << output[i]
+                         << " "
+                         << "Class " << i << ": " << std::string(int(std::floor(output[i] * 10 + 0.5f)), '*')
+                         << std::endl;
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     return idx == mNumber && val > 0.9f;
 }
@@ -318,7 +320,6 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     }
     params.onnxFileName = "mnist.onnx";
     params.inputTensorNames.push_back("Input3");
-    params.batchSize = 1;
     params.outputTensorNames.push_back("Plus214_Output_0");
     params.dlaCore = args.useDLACore;
     params.int8 = args.runInInt8;
@@ -353,7 +354,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -363,22 +364,22 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     SampleOnnxMNIST sample(initializeSampleParams(args));
 
-    gLogInfo << "Building and running a GPU inference engine for Onnx MNIST" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for Onnx MNIST" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

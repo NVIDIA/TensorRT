@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "normalizePlugin.h"
+#include "half.h"
 #include <cstring>
 #include <cublas_v2.h>
 #include <cudnn.h>
@@ -42,7 +43,6 @@ Normalize::Normalize(const Weights* weights, int nbWeights, bool acrossSpatial, 
     ASSERT(nbWeights == 1);
     ASSERT(weights[0].count >= 1);
     mWeights = copyToDevice(weights[0].values, weights[0].count);
-    cublasCreate(&mCublas);
 }
 
 Normalize::Normalize(
@@ -58,12 +58,12 @@ Normalize::Normalize(
     ASSERT(nbWeights == 1);
     ASSERT(weights[0].count >= 1);
     mWeights = copyToDevice(weights[0].values, weights[0].count);
-    cublasCreate(&mCublas);
 }
 
 Normalize::Normalize(const void* buffer, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(buffer), *a = d;
+    const char* d = static_cast<const char*>(buffer);
+    const char* a = d;
     C = read<int>(d);
     H = read<int>(d);
     W = read<int>(d);
@@ -72,8 +72,8 @@ Normalize::Normalize(const void* buffer, size_t length)
     eps = read<float>(d);
 
     mNbWeights = read<int>(d);
-    mWeights = deserializeToDevice(d, mNbWeights);
-    cublasCreate(&mCublas);
+    int count = read<int>(d);
+    mWeights = deserializeToDevice(d, count);
     ASSERT(d == a + length);
 }
 
@@ -96,10 +96,7 @@ int Normalize::initialize()
     return 0;
 }
 
-void Normalize::terminate()
-{
-    CUBLASASSERT(cublasDestroy(mCublas));
-}
+void Normalize::terminate() {}
 
 size_t Normalize::getWorkspaceSize(int maxBatchSize) const
 {
@@ -111,7 +108,7 @@ int Normalize::enqueue(int batchSize, const void* const* inputs, void** outputs,
     const void* inputData = inputs[0];
     void* outputData = outputs[0];
     pluginStatus_t status = normalizeInference(stream, mCublas, acrossSpatial, channelShared, batchSize, C, H, W, eps,
-        reinterpret_cast<const float*>(mWeights.values), inputData, outputData, workspace);
+        static_cast<const float*>(mWeights.values), inputData, outputData, workspace);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
@@ -119,18 +116,19 @@ int Normalize::enqueue(int batchSize, const void* const* inputs, void** outputs,
 size_t Normalize::getSerializationSize() const
 {
     // C,H,W, acrossSpatial,channelShared, eps, mWeights.count,mWeights.values
-    return sizeof(int) * 3 + sizeof(bool) * 2 + sizeof(float) + sizeof(int) + mWeights.count * sizeof(float);
+    return sizeof(int) * 3 + sizeof(bool) * 2 + sizeof(float) + sizeof(int) * 2 + mWeights.count * sizeof(float);
 }
 
 void Normalize::serialize(void* buffer) const
 {
-    char *d = reinterpret_cast<char*>(buffer), *a = d;
+    char *d = static_cast<char*>(buffer), *a = d;
     write(d, C);
     write(d, H);
     write(d, W);
     write(d, acrossSpatial);
     write(d, channelShared);
     write(d, eps);
+    write(d, (int) mNbWeights);
     write(d, (int) mWeights.count);
     serializeFromDevice(d, mWeights);
 
@@ -171,7 +169,7 @@ void Normalize::setPluginNamespace(const char* pluginNamespace)
 
 const char* Normalize::getPluginNamespace() const
 {
-    return mPluginNamespace;
+    return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index
@@ -219,8 +217,9 @@ void Normalize::configurePlugin(const Dims* inputDims, int nbInputs, const Dims*
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void Normalize::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator)
+void Normalize::attachToContext(cudnnContext* cudnn, cublasContext* cublas, IGpuAllocator* gpuAllocator)
 {
+    mCublas = cublas;
 }
 
 // Detach the plugin object from its execution context.
@@ -248,7 +247,7 @@ IPluginV2Ext* Normalize::clone() const
     IPluginV2Ext* plugin = new Normalize(&mWeights, mNbWeights, acrossSpatial, channelShared, eps, C, H, W);
 
     // Set the namespace
-    plugin->setPluginNamespace(mPluginNamespace);
+    plugin->setPluginNamespace(mPluginNamespace.c_str());
     return plugin;
 }
 

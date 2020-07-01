@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -121,9 +121,9 @@ private:
 //!
 bool SampleSSD::build()
 {
-    initLibNvInferPlugins(&gLogger.getTRTLogger(), "");
+    initLibNvInferPlugins(&sample::gLogger.getTRTLogger(), "");
 
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -193,7 +193,7 @@ bool SampleSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
 
     if (mParams.int8)
     {
-        gLogInfo << "Using Entropy Calibrator 2" << std::endl;
+        sample::gLogInfo << "Using Entropy Calibrator 2" << std::endl;
         BatchStream calibrationStream(
             mParams.batchSize, mParams.nbCalBatches, mParams.calibrationBatches, mParams.dataDirs);
         calibrator.reset(
@@ -352,11 +352,11 @@ bool SampleSSD::verifyOutput(const samplesCommon::BufferManager& buffers)
                 correctDetection = true;
             }
 
-            gLogInfo << " Image name:" << mPPMs[p].fileName.c_str() << ", Label: " << classes[(int) det[1]].c_str()
-                     << ","
-                     << " confidence: " << det[2] * 100.f << " xmin: " << det[3] * inputW
-                     << " ymin: " << det[4] * inputH << " xmax: " << det[5] * inputW << " ymax: " << det[6] * inputH
-                     << std::endl;
+            sample::gLogInfo << " Image name:" << mPPMs[p].fileName.c_str()
+                             << ", Label: " << classes[(int) det[1]].c_str() << ","
+                             << " confidence: " << det[2] * 100.f << " xmin: " << det[3] * inputW
+                             << " ymin: " << det[4] * inputH << " xmax: " << det[5] * inputW
+                             << " ymax: " << det[6] * inputH << std::endl;
 
             samplesCommon::writePPMFileWithBBox(
                 storeName, mPPMs[p], {det[3] * inputW, det[4] * inputH, det[5] * inputW, det[6] * inputH});
@@ -430,7 +430,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -440,26 +440,26 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     SampleSSD sample(initializeSampleParams(args));
 
-    gLogInfo << "Building and running a GPU inference engine for SSD" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for SSD" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

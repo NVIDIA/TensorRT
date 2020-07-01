@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,10 +45,10 @@ void BenchmarkWriter::finalize()
 {
     std::chrono::duration<float> sec = std::chrono::high_resolution_clock::now() - mStartTS;
     int totalTokenCount = mInputTokenCount + mOutputTokenCount;
-    gLogInfo << mSampleCount << " sequences generated in " << sec.count() << " seconds, "
-             << (mSampleCount / sec.count()) << " samples/sec" << std::endl;
-    gLogInfo << totalTokenCount << " tokens processed (source and destination), " << (totalTokenCount / sec.count())
-             << " tokens/sec" << std::endl;
+    sample::gLogInfo << mSampleCount << " sequences generated in " << sec.count() << " seconds, "
+                     << (mSampleCount / sec.count()) << " samples/sec" << std::endl;
+    sample::gLogInfo << totalTokenCount << " tokens processed (source and destination), "
+                     << (totalTokenCount / sec.count()) << " tokens/sec" << std::endl;
 }
 
 std::string BenchmarkWriter::getInfo()

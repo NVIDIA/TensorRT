@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,15 +55,15 @@ T readFromBuffer(const char*& buffer)
 
 CropAndResizePlugin::CropAndResizePlugin(const std::string name)
     : mLayerName(name)
-    , mCropHeight(7)
     , mCropWidth(7)
+    , mCropHeight(7)
 {
 }
 
 CropAndResizePlugin::CropAndResizePlugin(const std::string name, int crop_width, int crop_height)
     : mLayerName(name)
-    , mCropHeight(crop_height)
     , mCropWidth(crop_width)
+    , mCropHeight(crop_height)
 {
 }
 
@@ -84,11 +84,11 @@ CropAndResizePlugin::CropAndResizePlugin(const std::string name, const void* ser
 CropAndResizePlugin::CropAndResizePlugin(const std::string name, int crop_width, int crop_height, int depth,
     int input_width, int input_height, int max_box_num)
     : mLayerName(name)
-    , mCropHeight(crop_height)
     , mCropWidth(crop_width)
+    , mCropHeight(crop_height)
     , mDepth(depth)
-    , mInputHeight(input_height)
     , mInputWidth(input_width)
+    , mInputHeight(input_height)
     , mNumboxes(max_box_num)
 {
 }

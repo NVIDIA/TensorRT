@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,7 @@
  */
 #ifndef TRT_BATCHED_NMS_PLUGIN_H
 #define TRT_BATCHED_NMS_PLUGIN_H
-#include "batchedNMSPlugin/batchedNMSInference.h"
-#include "batchedNMSPlugin/gatherNMSOutputs.h"
+#include "gatherNMSOutputs.h"
 #include "kernel.h"
 #include "nmsUtils.h"
 #include "plugin.h"
