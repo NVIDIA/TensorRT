@@ -227,6 +227,15 @@ You should now have all expected files to build the container. Move these into t
         - Titan V, Tesla V100: `-DGPU_ARCHS="70"`
         - Multiple SMs: `-DGPU_ARCHS="80 75"`
 
+### (Optional - recommended) installing the tensorrt python API
+
+whl files for the TensorRT python API are in the `python` directory of the TensorRT release
+
+*Example* install for python 3.6:
+
+```
+pip install $TRT_RELEASE/python/tensorrt-7.1.3.4-cp36-none-linux_x86_64.whl
+```
 
 ## Useful Resources
 
