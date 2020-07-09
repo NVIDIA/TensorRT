@@ -128,19 +128,10 @@ Dims FlattenConcat::getOutputDimensions(int index, const Dims* inputs, int nbInp
 
 int FlattenConcat::initialize()
 {
-    // Create cublas context
-    CUBLASASSERT(cublasCreate(&mCublas));
-    return 0;
+    return STATUS_SUCCESS;
 }
 
-void FlattenConcat::terminate()
-{
-    if (mCublas)
-    {
-        CUBLASASSERT(cublasDestroy(mCublas));
-        mCublas = nullptr;
-    }
-}
+void FlattenConcat::terminate() {}
 
 size_t FlattenConcat::getWorkspaceSize(int) const
 {
@@ -152,8 +143,6 @@ int FlattenConcat::enqueue(int batchSize, const void* const* inputs, void** outp
     ASSERT(mConcatAxisID != 0);
     // mCHW is the first input tensor
     int numConcats = std::accumulate(mCHW.d, mCHW.d + mConcatAxisID - 1, 1, std::multiplies<int>());
-
-    CUBLASASSERT(cublasSetStream(mCublas, stream));
 
     // Num concats will be proportional to number of samples in a batch
     if (!mIgnoreBatch)
@@ -174,7 +163,7 @@ int FlattenConcat::enqueue(int batchSize, const void* const* inputs, void** outp
         offset += mInputConcatAxis[i];
     }
 
-    return 0;
+    return STATUS_SUCCESS;
 }
 
 size_t FlattenConcat::getSerializationSize() const
@@ -207,6 +196,7 @@ void FlattenConcat::serialize(void* buffer) const
 void FlattenConcat::attachToContext(
     cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator)
 {
+    mCublas = cublasContext;
 }
 
 // Detach the plugin object from its execution context.
@@ -304,7 +294,6 @@ IPluginV2Ext* FlattenConcat::clone() const
     auto* plugin = new FlattenConcat(
         mConcatAxisID, mIgnoreBatch, mNumInputs, mOutputConcatAxis, mInputConcatAxis.data(), mCopySize.data());
     plugin->setPluginNamespace(mPluginNamespace.c_str());
-    plugin->mCublas = mCublas;
     return plugin;
 }
 
