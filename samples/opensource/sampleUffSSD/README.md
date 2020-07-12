@@ -217,7 +217,7 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 	2.  Run the following command for the conversion.
 	`convert-to-uff frozen_inference_graph.pb -O NMS -p config.py`
 
-		This saves the converted `.uff` file in the same directory as the input with the name `frozen_inference_graph.pb.uff`.
+		This saves the converted `.uff` file in the same directory as the input with the name `frozen_inference_graph.uff`.
 
 		The `config.py` script specifies the preprocessing operations necessary for the SSD TensorFlow graph. The plugin nodes and plugin parameters used in the `config.py` script should match the registered plugins in TensorRT.
 
