@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-pip3 install numba==0.48 torch==1.5.1
+pip3 install numba==0.48 torch==1.4.0
 pip3 install -r requirements.txt
 sudo apt-get install -y libsndfile1
 
