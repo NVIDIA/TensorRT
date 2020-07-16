@@ -17,6 +17,7 @@
 #include "mrcnn_config.h"
 #include "plugin.h"
 #include <cuda_runtime_api.h>
+#include <algorithm>
 #include <iostream>
 #include <math.h>
 
@@ -40,6 +41,7 @@ ProposalLayerPluginCreator::ProposalLayerPluginCreator()
     mPluginAttributes.emplace_back(PluginField("prenms_topk", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("keep_topk", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
+    mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 3));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -62,6 +64,7 @@ const PluginFieldCollection* ProposalLayerPluginCreator::getFieldNames()
 
 IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
+    auto image_size = MaskRCNNConfig::IMAGE_SHAPE;
     const PluginField* fields = fc->fields;
     for (int i = 0; i < fc->nbFields; ++i)
     {
@@ -81,8 +84,14 @@ IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const P
             assert(fields[i].type == PluginFieldType::kFLOAT32);
             mIOUThreshold = *(static_cast<const float*>(fields[i].data));
         }
+        if (!strcmp(attrName, "image_size"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            const auto dims = static_cast<const int32_t*>(fields[i].data);
+            std::copy_n(dims, 3, image_size.d);
+        }
     }
-    return new ProposalLayer(mPreNMSTopK, mKeepTopK, mIOUThreshold);
+    return new ProposalLayer(mPreNMSTopK, mKeepTopK, mIOUThreshold, image_size);
 };
 
 IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(const char* name, const void* data, size_t length)
@@ -90,10 +99,11 @@ IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(const char* name, co
     return new ProposalLayer(data, length);
 };
 
-ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold)
+ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold, const nvinfer1::Dims& image_size)
     : mPreNMSTopK(prenms_topk)
     , mKeepTopK(keep_topk)
     , mIOUThreshold(iou_threshold)
+    , mImageSize(image_size)
 {
     mBackgroundLabel = -1;
     assert(mPreNMSTopK > 0);
@@ -108,7 +118,7 @@ ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold
 
     mType = DataType::kFLOAT;
 
-    generate_pyramid_anchors();
+    generate_pyramid_anchors(image_size);
 };
 
 int ProposalLayer::getNbOutputs() const
@@ -153,12 +163,12 @@ bool ProposalLayer::supportsFormat(DataType type, PluginFormat format) const
 
 const char* ProposalLayer::getPluginType() const
 {
-    return "ProposalLayer_TRT";
+    return PROPOSALLAYER_PLUGIN_NAME;
 };
 
 const char* ProposalLayer::getPluginVersion() const
 {
-    return "1";
+    return PROPOSALLAYER_PLUGIN_VERSION;
 };
 
 IPluginV2Ext* ProposalLayer::clone() const
@@ -180,7 +190,7 @@ const char* ProposalLayer::getPluginNamespace() const
 
 size_t ProposalLayer::getSerializationSize() const
 {
-    return sizeof(int) * 2 + sizeof(float) + sizeof(int) * 2;
+    return sizeof(int) * 2 + sizeof(float) + sizeof(int) * 2 + sizeof(nvinfer1::Dims);
 };
 
 void ProposalLayer::serialize(void* buffer) const
@@ -191,6 +201,7 @@ void ProposalLayer::serialize(void* buffer) const
     write(d, mIOUThreshold);
     write(d, mMaxBatchSize);
     write(d, mAnchorsCnt);
+    write(d, mImageSize);
     ASSERT(d == a + getSerializationSize());
 };
 
@@ -202,6 +213,7 @@ ProposalLayer::ProposalLayer(const void* data, size_t length)
     float iou_threshold = read<float>(d);
     mMaxBatchSize = read<int>(d);
     mAnchorsCnt = read<int>(d);
+    mImageSize = read<nvinfer1::Dims3>(d);
     ASSERT(d == a + length);
 
     mBackgroundLabel = -1;
@@ -218,7 +230,7 @@ ProposalLayer::ProposalLayer(const void* data, size_t length)
 
     mType = DataType::kFLOAT;
 
-    generate_pyramid_anchors();
+    generate_pyramid_anchors(mImageSize);
 };
 
 void ProposalLayer::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims)
@@ -257,10 +269,9 @@ Dims ProposalLayer::getOutputDimensions(int index, const Dims* inputs, int nbInp
     return proposals;
 }
 
-void ProposalLayer::generate_pyramid_anchors()
+void ProposalLayer::generate_pyramid_anchors(const nvinfer1::Dims& image_dims)
 {
-    const auto image_dims = MaskRCNNConfig::IMAGE_SHAPE;
-
+    assert(image_dims.nbDims == 3 && image_dims.d[0] == 3);
     const auto& scales = MaskRCNNConfig::RPN_ANCHOR_SCALES;
     const auto& ratios = MaskRCNNConfig::RPN_ANCHOR_RATIOS;
     const auto& strides = MaskRCNNConfig::BACKBONE_STRIDES;
