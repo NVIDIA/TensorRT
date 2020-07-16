@@ -45,6 +45,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pv \
     bzip2 \
     unzip \
+    devscripts \
+    lintian \
+    fakeroot \
+    dh-make \
     build-essential
 
 RUN cd /usr/local/bin &&\
