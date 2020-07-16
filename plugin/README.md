@@ -16,6 +16,7 @@
 | [geluPlugin](geluPlugin) | CustomGeluPluginDynamic | 1 |
 | [generateDetectionPlugin](generateDetectionPlugin) | GenerateDetection_TRT | 1 |
 | [gridAnchorPlugin](gridAnchorPlugin) | GridAnchor_TRT | 1 |
+| [gridAnchorRectPlugin](gridAnchorPlugin) | GridAnchorRect_TRT | 1 |
 | [groupNormalizationPlugin](groupNormalizationPlugin) | GroupNormalizationPlugin | 1 |
 | [instanceNormalizationPlugin](instanceNormalizationPlugin) | InstanceNormalization_TRT | 1 |
 | [multilevelCropAndResizePlugin](multilevelCropAndResizePlugin) | MultilevelCropAndResize_TRT | 1 |

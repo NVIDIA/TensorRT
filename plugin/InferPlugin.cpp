@@ -156,27 +156,29 @@ void initializePlugin(void* logger, const char* libNamespace)
 extern "C" {
 bool initLibNvInferPlugins(void* logger, const char* libNamespace)
 {
-    initializePlugin<nvinfer1::plugin::GridAnchorPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::NMSPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::ReorgPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::RegionPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::PriorBoxPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::NormalizePluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::RPROIPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::BatchTilePluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::BatchedNMSPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::FlattenConcatPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::CoordConvACPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::CropAndResizePluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::DetectionLayerPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::ProposalLayerPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::PyramidROIAlignPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::ResizeNearestPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::InstanceNormalizationPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::FlattenConcatPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::GenerateDetectionPluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::MultilevelProposeROIPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::GridAnchorPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::GridAnchorRectPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::InstanceNormalizationPluginCreator>(logger, libNamespace);
     initializePlugin<nvinfer1::plugin::MultilevelCropAndResizePluginCreator>(logger, libNamespace);
-    initializePlugin<nvinfer1::plugin::CoordConvACPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::MultilevelProposeROIPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::NMSPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::NormalizePluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::PriorBoxPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::ProposalLayerPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::PyramidROIAlignPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::RegionPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::ReorgPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::ResizeNearestPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::RPROIPluginCreator>(logger, libNamespace);
+    initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
     return true;
 }
 } // extern "C"
