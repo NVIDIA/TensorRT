@@ -22,10 +22,7 @@ To build the TensorRT OSS components, ensure you meet the following package requ
 
 * [CMake](https://github.com/Kitware/CMake/releases) >= v3.13
 
-* [Python](<https://www.python.org/downloads/>)
-  * Recommended versions:
-  * [Python2](https://www.python.org/downloads/release/python-2715/) >= v2.7.15
-  * [Python3](https://www.python.org/downloads/release/python-365/) >= v3.6.5
+* [Python](<https://www.python.org/downloads/>) >= v3.6.5
 
 * [PIP](https://pypi.org/project/pip/#history) >= v19.0
   * PyPI packages
