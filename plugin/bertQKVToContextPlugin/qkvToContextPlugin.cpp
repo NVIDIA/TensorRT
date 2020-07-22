@@ -202,16 +202,15 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
             const auto* inMask = &inOut[1];
             // detect full mask and check that it was produced
             const bool useFullMask = (mType == DataType::kHALF || mType == DataType::kINT8)
-                && (in->dims.d[SDIM] == 128 || in->dims.d[SDIM] == 384);
+                && (in->dims.d[SDIM] == 128 || in->dims.d[SDIM] == 384)
+                && (mSM == kSM_TURING || mSM == kSM_AMPERE);
 
             if (useFullMask)
             {
-                // return inOut[pos].type == DataType::kHALF && inOut[pos].format == TensorFormat::kLINEAR;
                 return (inMask->type == DataType::kHALF) &&      // precision
                     (inMask->format == TensorFormat::kLINEAR) && // format
                     (inMask->dims.nbDims == 2) &&                // Bx2*maskSize
                     ((inMask->dims.d[0]) == in->dims.d[BDIM])
-                    // TODO && ((inMask->dims.d[0]) == 2*mask size)
                     ;
             }
             return (inMask->type == DataType::kINT32) &&     // precision
