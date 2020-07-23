@@ -45,7 +45,7 @@ defaultMetrics = ",".join(allMetrics)
 descriptions = ['start input', 'end input', 'start compute', 'end compute', 'start output',
                 'end output', 'input', 'compute', 'output', 'latency', 'end to end latency']
 
-metricsDescription = pu.combine_descriptions('Possible metrics (all in ms) are:',
+metricsDescription = pu.combineDescriptions('Possible metrics (all in ms) are:',
                                              allMetrics, descriptions)
 
 
