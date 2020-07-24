@@ -19,9 +19,9 @@ This plugin supports the NCHW format. It takes two input tenosrs: `object_score`
 
 `object_score` is the objectness score from RPN. `object_score`'s shape is `[N, anchors, 2, 1]` where `N` is the batch_size, `anchors` is the total number of anchors and `2` means 2 classes of objectness - foreground and background.
 
-`object_delta` is the refinement info from RPN of shape `[N, anchors, 4, 1]`. `4` refer to the 4 elements of refinement information - `[dy, dx, dh, dw]`
+`object_delta` is the refinement info from RPN of shape `[N, anchors, 4, 1]`. `4` refers to the 4 elements of refinement information - `[dy, dx, dh, dw]`
 
-This plugin generates one output tensor of shape `[N, keep_topk, 4]` where `keep_topk` is the maximum number of detections left after NMS and `4` means coordinates of ROI
+This plugin generates one output tensor of shape `[N, keep_topk, 4]` where `keep_topk` is the maximum number of detections left after NMS and `4` refers to coordinates of ROI
 candidates `[y1, x1, y2, x2]`
 
 The default anchors are generated in this plugin during `initialization` method.
