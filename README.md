@@ -36,6 +36,9 @@ To build the TensorRT OSS components, ensure you meet the following package requ
 
 * Cross compilation for Jetson platforms requires JetPack's host component installation
   * [JetPack](https://developer.nvidia.com/embedded/jetpack) >= 4.4
+ 
+* Windows requires Visual Studio 2017 either Community or Enterprise Version
+  * [Visual Studio](https://visualstudio.microsoft.com/vs/older-downloads/)
 
 * Cross compilation for QNX requires the qnx developer toolchain
   * [QNX](https://blackberry.qnx.com/en)
@@ -69,11 +72,22 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 
 1. #### Download TensorRT OSS sources.
 
+	**Example: Bash**
+
 	```bash
 	git clone -b master https://github.com/nvidia/TensorRT TensorRT
 	cd TensorRT
 	git submodule update --init --recursive
 	export TRT_SOURCE=`pwd`
+	```
+
+	**Example: Powershell**
+
+	```powershell
+	git clone -b master https://github.com/nvidia/TensorRT TensorRT
+	cd TensorRT
+	git submodule update --init --recursive
+	$Env:TRT_RELEASE_PATH = $(Get-Location)
 	```
 
 2. #### Download the TensorRT binary release.
@@ -127,8 +141,17 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	export QNX_HOST=/path/to/qnx/toolchain/host/linux/x86_64
 	export QNX_TARGET=/path/to/qnx/toolchain/target/qnx7
 	```
+	**Example: Windows with cuda-11.0**
 
-3. #### Download toolchain for cross-compilation. [OPTIONAL]
+	Download and extract the *TensorRT 7.1 GA for Windows and CUDA 11.0 zip package* and add *msbuild* to *PATH*
+	```powershell
+	cd ~\Downloads
+	Expand-Archive .\TensorRT-7.1.3.4.Windows10.x86_64.cuda-11.0.cudnn8.0.zip
+	$Env:TRT_RELEASE_PATH = '$(Get-Location)\TensorRT-7.1.3.4'
+	$Env:PATH += 'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\MSBuild\15.0\Bin\'
+	```
+
+3. #### Download JetPack toolchain for cross-compilation.[OPTIONAL]
 
     **JetPack example**
 
@@ -189,6 +212,8 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 
 * Generate Makefiles and build.
 
+   **Example: Linux**
+
 	```bash
 	cd $TRT_SOURCE
 	mkdir -p build && cd build
@@ -212,6 +237,15 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	mkdir -p build && cd build
 	cmake .. -DTRT_LIB_DIR=$TRT_RELEASE/lib -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_SOURCE/cmake/toolchains/cmake_qnx.toolchain
 	make -j$(nproc)
+	```
+
+    **Example: Powershell**
+
+	```powershell
+	cd $Env:TRT_SOURCE
+	mkdir -p build ; cd build
+	cmake .. -DTRT_LIB_DIR=$Env:TRT_RELEASE\lib -DTRT_OUT_DIR='$(Get-Location)\out' -DCMAKE_TOOLCHAIN_FILE=..\cmake\toolchains\cmake_x64_win.toolchain
+	msbuild ALL_BUILD.vcxproj
 	```
 
 	> NOTE:
