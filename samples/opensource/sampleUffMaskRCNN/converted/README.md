@@ -22,10 +22,7 @@ This is the general guideline to convert a keras model to .uff.
     ```
     transpose_NCHW2NHWC -> Convolution_NHWC -> transpose_NHWC2NCHW
     ```
-    So Try to install tensorflow like:
-    ```
-    pip install tensorflow-gpu==1.9.0
-    ```
+    Therefore we recommend installing tensorflow-gpu.
     - The UFF Parser cannot handle the inputs with more than one index dimension for convolution, deconvolution and softmax correctly. So a patched lib is needed to parse .uff with
       nodes whose input tensor has more than one index dimension (this will be the next TensorRT release).
 
@@ -104,25 +101,7 @@ shape=[config.IMAGE_SHAPE[2], 1024, 1024 ], name="input_image")
         self.keras_model.predict([molded_input_images, image_metas, anchors], verbose=0)
     mrcnn_mask = np.transpose(mrcnn_mask, (0, 1, 3, 4, 2))
     ```
-- Download the pretrained Keras model:
-```
-wget https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5
-```
-- change the conv2d_transpose conversion function in uff (*/usr/local/lib/python3.5/dist-packages/uff/converters/tensorflow/converter_functions.py*) as follows:
-```python
-uff_graph.conv_transpose(
-    inputs[0], inputs[2], inputs[1],
-    strides, padding,
-    dilation=None, number_groups=number_groups,
-    left_format=lhs_fmt, right_format=rhs_fmt,
-    name=name, fields=fields
-    )
-
-```
-- use the script as:
-```
-python mrcnn_to_trt_single.py -w /path/to/weights_file.h5 -o /path/to/output_model.uff -p ./config.py
-```
+- For conversion to UFF, please refer to [these instructions](https://github.com/NVIDIA/TensorRT/tree/master/samples/opensource/sampleUffMaskRCNN#generating-uff-model).
 
 >  NOTE: For reference, the successful converted model should contain 3049 nodes.
 
