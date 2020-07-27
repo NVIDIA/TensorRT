@@ -29,9 +29,9 @@ namespace plugin
 class GridAnchorGenerator : public IPluginV2Ext
 {
 public:
-    GridAnchorGenerator(const GridAnchorParameters* param, int numLayers, const char *version);
+    GridAnchorGenerator(const GridAnchorParameters* param, int numLayers, const char* version);
 
-    GridAnchorGenerator(const void* data, size_t length, const char *version);
+    GridAnchorGenerator(const void* data, size_t length, const char* version);
 
     ~GridAnchorGenerator() override;
 

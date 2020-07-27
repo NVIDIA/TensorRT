@@ -17,9 +17,9 @@
 #pragma once
 #include "cudaDriverWrapper.h"
 #include "cuda_runtime_api.h"
-#include <mutex>
-#include <memory>
 #include <assert.h>
+#include <memory>
+#include <mutex>
 #include <stdint.h>
 #include <unordered_map>
 #include <vector>
@@ -237,7 +237,6 @@ struct FusedMultiHeadAttentionXMMAKernel
     std::unordered_map<uint64_t, FusedMultiHeadAttentionKernelInfo> mFunctions;
 };
 
-
 class FusedMHAKernelFactory
 {
 public:
@@ -271,7 +270,7 @@ private:
         return (uint64_t) type << 32 | sm;
     }
 
-    std::unordered_map<uint64_t, const std::unique_ptr<FusedMultiHeadAttentionXMMAKernel> > mKernels;
+    std::unordered_map<uint64_t, const std::unique_ptr<FusedMultiHeadAttentionXMMAKernel>> mKernels;
 };
 
 } // namespace bert
