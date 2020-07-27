@@ -16,8 +16,8 @@
 #include "proposalLayerPlugin.h"
 #include "mrcnn_config.h"
 #include "plugin.h"
-#include <cuda_runtime_api.h>
 #include <algorithm>
+#include <cuda_runtime_api.h>
 #include <iostream>
 #include <math.h>
 

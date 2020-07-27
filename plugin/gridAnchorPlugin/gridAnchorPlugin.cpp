@@ -32,8 +32,9 @@ const char* GRID_ANCHOR_PLUGIN_VERSION = "1";
 PluginFieldCollection GridAnchorBasePluginCreator::mFC{};
 std::vector<PluginField> GridAnchorBasePluginCreator::mPluginAttributes;
 
-GridAnchorGenerator::GridAnchorGenerator(const GridAnchorParameters* paramIn, int numLayers, const char *name)
-    : mNumLayers(numLayers), mPluginName(name)
+GridAnchorGenerator::GridAnchorGenerator(const GridAnchorParameters* paramIn, int numLayers, const char* name)
+    : mNumLayers(numLayers)
+    , mPluginName(name)
 {
     CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
     CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
@@ -120,8 +121,8 @@ GridAnchorGenerator::GridAnchorGenerator(const GridAnchorParameters* paramIn, in
     }
 }
 
-GridAnchorGenerator::GridAnchorGenerator(const void* data, size_t length, const char *name) :
-    mPluginName(name)
+GridAnchorGenerator::GridAnchorGenerator(const void* data, size_t length, const char* name)
+    : mPluginName(name)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mNumLayers = read<int>(d);
@@ -283,7 +284,6 @@ const char* GridAnchorGenerator::getPluginVersion() const
 {
     return GRID_ANCHOR_PLUGIN_VERSION;
 }
-
 
 // Set plugin namespace
 void GridAnchorGenerator::setPluginNamespace(const char* pluginNamespace)
@@ -483,7 +483,8 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
     return obj;
 }
 
-IPluginV2Ext* GridAnchorBasePluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2Ext* GridAnchorBasePluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength)
 {
     // This object will be deleted when the network is destroyed, which will
     // call GridAnchor::destroy()
