@@ -288,8 +288,17 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
         - Titan V, Tesla V100: `-DGPU_ARCHS="70"`
         - Multiple SMs: `-DGPU_ARCHS="80 75"`
 
-    - `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation) on non Linux/x86 platforms must explicitly specify the target platform. Currently supported options: `x86_64` (default), `aarch64`
+	- `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation) on non Linux/x86 platforms must explicitly specify the target platform. Currently supported options: `x86_64` (default), `aarch64`
 
+### (Optional - recommended) installing the tensorrt python API bindings
+
+whl files for the TensorRT python API are in the `python` directory of the TensorRT release
+
+*Example* install for python 3.6:
+
+```
+pip install $TRT_RELEASE/python/tensorrt-7.1.3.4-cp36-none-linux_x86_64.whl
+```
 
 ## Useful Resources
 
