@@ -21,7 +21,7 @@ fpn_p5upsampled = gs.create_plugin_node("fpn_p5upsampled", op="ResizeNearest_TRT
 fpn_p4upsampled = gs.create_plugin_node("fpn_p4upsampled", op="ResizeNearest_TRT", dtype=tf.float32, scale=2.0)
 fpn_p3upsampled = gs.create_plugin_node("fpn_p3upsampled", op="ResizeNearest_TRT", dtype=tf.float32, scale=2.0)
 
-roi = gs.create_plugin_node("ROI", op="ProposalLayer_TRT", prenms_topk=1024, keep_topk=1000, iou_threshold=0.7)
+roi = gs.create_plugin_node("ROI", op="ProposalLayer_TRT", prenms_topk=1024, keep_topk=1000, iou_threshold=0.7, image_size=[3, 1024, 1024])
 roi_align_classifier = gs.create_plugin_node("roi_align_classifier", op="PyramidROIAlign_TRT", pooled_size=7)
 mrcnn_detection = gs.create_plugin_node("mrcnn_detection", op="DetectionLayer_TRT", num_classes=81, keep_topk=100, score_threshold=0.7, iou_threshold=0.3)
 roi_align_mask = gs.create_plugin_node("roi_align_mask_trt", op="PyramidROIAlign_TRT", pooled_size=14)

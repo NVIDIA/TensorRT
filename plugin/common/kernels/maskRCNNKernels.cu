@@ -1732,7 +1732,7 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
 
     CUASSERT(cudaGetLastError());
 
-    status = KeepTopKGatherBoxScore<1024>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr, sortClassScorePtr,
+    status = KeepTopKGatherBoxScore<512>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr, sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outScore, outBbox, 1);
 
     CUASSERT(cudaGetLastError());

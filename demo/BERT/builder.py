@@ -24,6 +24,7 @@ import re
 import sys
 import time
 import onnx
+import pycuda.autoinit
 
 # TensorRT
 import tensorrt as trt
@@ -551,7 +552,14 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     wposemb = trt.PluginField("bert_embeddings_position_embeddings", weights_dict["bert_embeddings_position_embeddings"].numpy(), trt.PluginFieldType.FLOAT32)
 
     output_fp16 = trt.PluginField("output_fp16", np.array([1 if config.use_fp16 else 0]).astype(np.int32), trt.PluginFieldType.INT32)
-    full_mask = trt.PluginField("full_mask", np.array([1 if config.use_fp16 else 0]).astype(np.int32), trt.PluginFieldType.INT32)
+
+    use_full_mask = 0
+    # use full_mask for XMMA kernels (use fp16/int8 precision and SM version >= 72)
+    if not config.is_calib_mode and (config.use_fp16 or config.use_int8):
+        cc = pycuda.autoinit.device.compute_capability()
+        if cc[0] * 10 + cc[1] >= 72:
+            use_full_mask = 1
+    full_mask = trt.PluginField("full_mask", np.array([use_full_mask]).astype(np.int32), trt.PluginFieldType.INT32)
 
     pfc = trt.PluginFieldCollection([wbeta, wgamma, wwordemb, wtokemb, wposemb, output_fp16, full_mask])
     fn = emln_plg_creator.create_plugin("embeddings", pfc)

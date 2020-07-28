@@ -27,7 +27,7 @@ wget -O $PASCAL_VOC2007_DATASET http://host.robots.ox.ac.uk/pascal/VOC/voc2007/V
 tar -xf $PASCAL_VOC2007_DATASET -C $TEMP_DIR
 
 if ! type "convert" > /dev/null; then
-    echo "Install convert utility using apt-get to proceed"
+    echo "Install convert utility using \"apt-get install imagemagick\" to proceed"
     exit 1
 fi
 

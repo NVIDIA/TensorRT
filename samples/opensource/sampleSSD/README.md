@@ -9,7 +9,7 @@
     * [Verifying the output](#verifying-the-output)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
     * [TensorRT plugin layers in SSD](#tensorrt-plugin-layers-in-ssd)
-- [Prerequisites](#prerequisites)
+- [Generate Caffe model](#generate-caffe-model)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -222,28 +222,29 @@ message DetectionOutputParameter {
 }
 ```
 
-## Prerequisites
+## Generate Caffe model
 
 Due to the size of the SSD Caffe model, it is not included in the product bundle. Before you can run the sample, you’ll need to download the model, perform some configuration, and generate INT8 calibration batches.
 
-1.  Install Pillow.
-        -   For Python 2 users, run: `python2 -m pip install Pillow`
-        -   For Python 3 users, run: `python3 -m pip install Pillow`
+1.  Install require packages.
+    ```bash
+    pip3 install -r $TRT_SOURCE/samples/opensource/sampleSSD/requirements.txt
+    ```
 
 2.  Preparing models:
     1.  Download [models_VGGNet_VOC0712_SSD_300x300.tar.gz](https://drive.google.com/file/d/0BzKzrI_SkD1_WVVTSmQxU0dVRzA/view).
     2.  Check the [MD5 hash](https://en.wikipedia.org/wiki/Md5sum) of it is `9a795fc161fff2e8f3aed07f4d488faf`.
-        ```sh
+        ```bash
         md5sum models_VGGNet_VOC0712_SSD_300x300.tar.gz
         ```
     3.  Extract the archive, and copy the model file to the TensorRT `data` directory.
-        ```sh
+        ```bash
         tar xvf models_VGGNet_VOC0712_SSD_300x300.tar.gz
         cp models/VGGNet/VOC0712/SSD_300x300/VGG_VOC0712_SSD_300x300_iter_120000.caffemodel <TensorRT root directory>/data/ssd
         cp models/VGGNet/VOC0712/SSD_300x300/deploy.prototxt <TensorRT root directory>/data/ssd/ssd.prototxt
         ```
     4.  In `ssd.prototxt`, change all `Flatten` layers to `Reshape` operations (e.g. `type:Reshape`) as TensorRT enables `Flatten` by `Reshape`, and add `reshape_param` (like below) to each of them:
-        ```
+        ```bash
         reshape_param {
             shape {
                 dim: 0
@@ -256,8 +257,8 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
     5.  In `ssd.prototxt`, add `top: "keep_count"` in `detection_out` layer as TensorRT DetectionOutput Plugin requires this output.
 
 4.  Generate the INT8 calibration batches. The script selects 500 random JPEG images from the PASCAL VOC dataset and converts them to PPM images. These 500 PPM images are used to generate INT8 calibration batches.
-    ```sh
-    <TensorRT root directory>/samples/sampleSSD/PrepareINT8CalibrationBatches.sh
+    ```bash
+    $TRT_SOURCE/samples/opensource/sampleSSD/PrepareINT8CalibrationBatches.sh
     ```
     **Note:** Do not move the batch files from the `<TensorRT root directory>/data/ssd/batches` directory.
 
@@ -267,14 +268,14 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
 ## Running the sample
 
 1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleSSD` directory. The binary named `sample_ssd` will be created in the `<TensorRT root directory>/bin` directory.
-    ```sh
+    ```bash
     cd <TensorRT root directory>/samples/sampleSSD
     make
     ```
     Where `<TensorRT root directory>` is where you installed TensorRT.
 
 2. Run the sample to perform inference on the digit:
-    ```sh
+    ```bash
     ./sample_ssd [-h] [--fp16] [--int8]
     ```
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

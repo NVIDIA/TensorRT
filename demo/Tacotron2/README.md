@@ -48,13 +48,13 @@ Software version configuration tested for the instructions that follow:
 
 	```bash
 	mkdir -p output
-    python exports/export_tacotron2_onnx.py --tacotron2 ./checkpoints/tacotron2pyt_fp16_v3/tacotron2_1032590_6000_amp -o output/ --fp16
+    python3 exports/export_tacotron2_onnx.py --tacotron2 ./checkpoints/tacotron2pyt_fp16_v3/tacotron2_1032590_6000_amp -o output/ --fp16
 	```
 
     Export WaveGlow to ONNX IR:
 
 	```bash
-    python exports/export_waveglow_onnx.py --waveglow checkpoints/waveglow256pyt_fp16_v2/waveglow_1076430_14000_amp --wn-channels 256 -o output/ --fp16
+    python3 exports/export_waveglow_onnx.py --waveglow checkpoints/waveglow256pyt_fp16_v2/waveglow_1076430_14000_amp --wn-channels 256 -o output/ --fp16
 	```
 
 	After running the above commands, there should be four new ONNX files in `./output/` directory:
@@ -63,7 +63,7 @@ Software version configuration tested for the instructions that follow:
 5. Export the ONNX IRs to TensorRT engines with fp16 mode enabled:
 
 	```bash
-	python trt/export_onnx2trt.py --encoder output/encoder.onnx --decoder output/decoder_iter.onnx --postnet output/postnet.onnx --waveglow output/waveglow.onnx -o output/ --fp16
+	python3 trt/export_onnx2trt.py --encoder output/encoder.onnx --decoder output/decoder_iter.onnx --postnet output/postnet.onnx --waveglow output/waveglow.onnx -o output/ --fp16
 	```
 
 	After running the command, there should be four new engine files in `./output/` directory:
@@ -72,7 +72,7 @@ Software version configuration tested for the instructions that follow:
 6. Run TTS inference pipeline with fp16:
 
 	```bash
-	python trt/inference_trt.py -i phrases/phrase.txt --encoder output/encoder_fp16.engine --decoder output/decoder_iter_fp16.engine --postnet output/postnet_fp16.engine --waveglow output/waveglow_fp16.engine -o output/ --fp16
+	python3 trt/inference_trt.py -i phrases/phrase.txt --encoder output/encoder_fp16.engine --decoder output/decoder_iter_fp16.engine --postnet output/postnet_fp16.engine --waveglow output/waveglow_fp16.engine -o output/ --fp16
 	```
 
 ## Performance

@@ -4,7 +4,7 @@
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
-- [Prerequisites](#prerequisites)
+- [Generating UFF Model](#generating-uff-model)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -15,8 +15,6 @@
 ## Description
 
 This sample, sampleUffMaskRCNN, performs inference on the Mask R-CNN network in TensorRT. Mask R-CNN is based on the [Mask R-CNN](https://arxiv.org/abs/1703.06870) paper which performs the task of object detection and object mask predictions on a target image. This sample’s model is based on the Keras implementation of Mask R-CNN and its training framework can be found in the [Mask R-CNN Github repository](https://github.com/matterport/Mask_RCNN). We have verified that the pre-trained Keras model (with backbone ResNet101 + FPN and dataset coco) provided in the [v2.0](https://github.com/matterport/Mask_RCNN/releases/tag/v2.0) release can be converted to UFF and consumed by this sample. And, it is also feasible to deploy your customized Mask R-CNN model trained with specific backbone and datasets.
-
-**Note:** This sample is available only in GitHub and is not packaged with the product.
 
 ## How does this sample work?
 
@@ -58,17 +56,25 @@ Plugin layers are user-defined and provide the ability to extend the functionali
 The Pooling layer implements pooling within a channel. Supported pooling types are `maximum`, `average` and `maximum-average blend`.
 
 
-## Prerequisites
+## Generating UFF model
 
-1.  Install the dependent Python packages.
-    ```
-    pip install -r $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/requirements.txt
+We use the Tensorflow 19.10-py3 container for generating the UFF model for MaskRCNN.
+
+1.  Launch the 19.10-py3 tensorflow container.
+    ```bash
+    docker run --rm -it --gpus all -v $TRT_SOURCE:/workspace/TensorRT -v $TRT_RELEASE:/tensorrt nvcr.io/nvidia/tensorflow:19.10-py3 /bin/bash
     ```
 
-2.  Install the UFF toolkit and graph surgeon; depending on your TensorRT installation method. To install the toolkit and graph surgeon, choose the method you used to install TensorRT for instructions. See [TensorRT Installation Guide: Installing TensorRT](https://docs.nvidia.com/deeplearning/sdk/tensorrt-install-guide/index.html#installing).
-
-3.  Modify the `conv2d_transpose` conversion function in UFF, for example `/usr/local/lib/python3.5/dist-packages/uff/converters/tensorflow/converter_functions.py` or `/usr/lib/python3.6/dist-packages/uff/converters/tensorflow/converter_functions.py`.
+2.  Inside the container, install required packages alongwith UFF toolkit and graph surgeon.
+    ```bash
+    cd /workspace/TensorRT/samples/opensource/sampleUffMaskRCNN/converted/
+    pip3 install -r requirements.txt
+    pip3 install /tensorrt/uff/uff-*-py2.py3-none-any.whl
+    pip3 install /tensorrt/graphsurgeon/graphsurgeon-*-py2.py3-none-any.whl
     ```
+
+3.  Modify the `conv2d_transpose` conversion function in UFF, for example `/usr/lib/python3.6/dist-packages/uff/converters/tensorflow/converter_functions.py`.
+    ```bash
     uff_graph.conv_transpose(
         inputs[0], inputs[2], inputs[1],
         strides, padding,
@@ -79,29 +85,29 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
     ```
 
 4.  Download the Mask R-CNN repo and export to `PYTHONPATH`.
-    ```
+    ```bash
     git clone https://github.com/matterport/Mask_RCNN.git
     export PYTHONPATH=$PYTHONPATH:$PWD/Mask_RCNN
     ```
 
 5.  Apply the patch into Mask R-CNN repo to update the model from NHWC to NCHW.
-    ```
+    ```bash
     cd Mask_RCNN
     git checkout 3deaec5
-    git am $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/0001-Update-the-Mask_RCNN-model-from-NHWC-to-NCHW.patch
+    patch -p1 < ../0001-Update-the-Mask_RCNN-model-from-NHWC-to-NCHW.patch
+    cd -
     ```
 
-6.  Download the pre-trained Keras model and place it into your `/data` folder
-    ```
+6.  Download the pre-trained Keras model
+    ```bash
     wget https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5
     ```
 
     **Note:** The md5sum of model file is e98aaff6f99e307b5e2a8a3ff741a518.
 
-7.  Convert the h5 model to the UFF model and place it into your `/data` folder
+7.  Convert the h5 model to the UFF model and copy it to your data folder
     ```
-    cd $TRT_SOURCE/samples/opensource/sampleUffMaskRCNN/converted/
-    python mrcnn_to_trt_single.py -w /path/to/data/mask_rcnn_coco.h5 -o /path/to/data/mrcnn_nchw.uff -p ./config.py
+    python3 mrcnn_to_trt_single.py -w mask_rcnn_coco.h5 -o mrcnn_nchw.uff -p ./config.py
     ```
 
 8.  Populate your `/data` folder with the following test images.
@@ -111,6 +117,8 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
     ```
 
 ## Running the sample
+
+Switch back to the TensorRT container/environment for running the sample.
 
 1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleUffMaskRCNN` directory. The binary named `sample_uff_mask_rcnn` will be created in the `<TensorRT root directory>/bin` directory.
     ```
@@ -172,4 +180,4 @@ This is the first release of the `README.md` file and sample.
 
 ## Known issues
 
-1. Tensorflow installed from PyPI (`pip install tensorflow-gpu`) requires CUDA 10.0 and is incompatible with CUDA 10.1. To generate the UFF model required for this sample, use a container built with `CUDA_VERSION=10.0`.
+1. Tensorflow installed from PyPI (`pip install tensorflow-gpu`) requires CUDA 10.1 and is incompatible with CUDA 11.x. To generate the UFF model required for this sample, use a container built with `CUDA_VERSION=10.1`.
