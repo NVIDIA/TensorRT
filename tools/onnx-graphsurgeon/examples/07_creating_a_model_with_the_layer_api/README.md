@@ -22,16 +22,11 @@ def add(self, a, b):
 and invoke it like so:
 
 ```python
-X = gs.Variable(name="X", shape=(64, 64), dtype=np.float32)
-
-[Y] = graph.add(graph.add(X, B), C)
-
-graph.inputs = [X]
-graph.outputs = [Y]
+[Y] = graph.add(*graph.add(X, B), C)
 ```
 
-This would generate a graph which computes `Y = (X + B) + C` (here B and C are assumed to be constants),
-without requiring you to manually create the intermediate tensors involved.
+This would add a set of nodes which compute `Y = (X + B) + C` (assuming X, B, C are some tensors in the graph)
+to the graph without requiring you to manually create the intermediate tensors involved.
 
 ## Running the example
 
