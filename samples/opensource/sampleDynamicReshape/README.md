@@ -10,7 +10,7 @@
     * [Running inference](#running-inference)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -27,7 +27,7 @@ This sample creates an engine for resizing an input with dynamic dimensions to a
 Specifically, this sample:
 -   Creates a network with dynamic input dimensions to act as a preprocessor for the model
 -   Parses an ONNX MNIST model to create a second network
--   Builds engines for both networks
+-   Builds engines for both networks and does calibration if running in int8
 -   Runs inference using both engines
 
 ### Creating the preprocessing network
@@ -37,7 +37,7 @@ First, create a network with full dims support:
 
 Next, add an input layer that accepts an input with a dynamic shape, followed by a resize layer that will reshape the input to the shape the model expects:
 ```
-auto input = preprocessorNetwork->addInput("input", nvinfer1::DataType::kFLOAT, Dims4{1, 1, -1, -1});
+auto input = preprocessorNetwork->addInput("input", nvinfer1::DataType::kFLOAT, Dims4{-1, 1, -1, -1});
 auto resizeLayer = preprocessorNetwork->addResize(*input);
 resizeLayer->setOutputDimensions(mPredictionInputDims);
 preprocessorNetwork->markOutput(*resizeLayer->getOutput(0));
@@ -51,12 +51,12 @@ First, create an empty full-dims network, and parser:
 ```
 const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
 auto network = makeUnique(builder->createNetworkV2(explicitBatch));
-auto parser = nvonnxparser::createParser(*network, gLogger.getTRTLogger());
+auto parser = nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger());
 ```
 
 Next, parse the model file to populate the network:
 ```
-parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(), static_cast<int>(gLogger.getReportableSeverity()));
+parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(), static_cast<int>(sample::gLogger.getReportableSeverity()));
 ```
 
 ### Building engines
@@ -73,15 +73,47 @@ profile->setDimensions(input->getName(), OptProfileSelector::kMIN, Dims4{1, 1, 1
 profile->setDimensions(input->getName(), OptProfileSelector::kOPT, Dims4{1, 1, 28, 28});
 profile->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims4{1, 1, 56, 56});
 preprocessorConfig->addOptimizationProfile(profile);
+```
+
+Create an optimization profile for calibration:
+```
+auto profileCalib = builder->createOptimizationProfile();
+const int calibBatchSize{256};
+profileCalib->setDimensions(input->getName(), OptProfileSelector::kMIN, Dims4{calibBatchSize, 1, 28, 28});
+profileCalib->setDimensions(input->getName(), OptProfileSelector::kOPT, Dims4{calibBatchSize, 1, 28, 28});
+profileCalib->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims4{calibBatchSize, 1, 28, 28});
+preprocessorConfig->setCalibrationProfile(profileCalib);
+```
+
+Prepare and set int8 calibrator if running in int8 mode:
+```
+std::unique_ptr<IInt8Calibrator> calibrator;
+if (mParams.int8)
+{
+    preprocessorConfig->setFlag(BuilderFlag::kINT8);    
+    const int nCalibBatches{10}; 
+    MNISTBatchStream calibrationStream(calibBatchSize, nCalibBatches, "train-images-idx3-ubyte",
+        "train-labels-idx1-ubyte", mParams.dataDirs);
+    calibrator.reset(new Int8EntropyCalibrator2<MNISTBatchStream>(
+        calibrationStream, 0, "MNISTPreprocessor", "input"));
+    preprocessorConfig->setInt8Calibrator(calibrator.get());
+}
+```
+
+Run engine build with config: 
+```
 mPreprocessorEngine = makeUnique(builder->buildEngineWithConfig(*preprocessorNetwork, *preprocessorConfig));
 ```
 
-For the MNIST model, attach a Softmax layer to the end of the network and replace the existing network output with the Softmax:
+For the MNIST model, attach a Softmax layer to the end of the network, set softmax axis to 1 since network output has shape [1, 10] in full dims mode and replace the existing network output with the Softmax:
 ```
 auto softmax = network->addSoftMax(*network->getOutput(0));
+softmax->setAxes(1 << 1);
 network->unmarkOutput(*network->getOutput(0));
 network->markOutput(*softmax->getOutput(0));
 ```
+
+A calibrator and a calibration profile are set the same way as above for the preprocessor engine config. `calibBatchSize` is set to 1 for the prediction engine as ONNX model has an explicit batch.
 
 Finally, build as normal:
 `mPredictionEngine = makeUnique(builder->buildEngineWithConfig(*network, *config));`
@@ -123,77 +155,84 @@ The IResizeLayer implements the resize operation on an input tensor.
 ## Running the sample
 
 1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleDynamicReshape` directory. The binary named `sample_dynamic_reshape` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleDynamicReshape
-	make
-	```
+    ```
+    cd <TensorRT root directory>/samples/sampleDynamicReshape
+    make
+    ```
 
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+    Where `<TensorRT root directory>` is where you installed TensorRT.
 
 2.  Run the sample.
-	```
-	./sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
-	```
+    ```
+    ./sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+    ```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
-	```
-	&&&& RUNNING TensorRT.sample_dynamic_reshape # ./sample_dynamic_reshape
-	----------------------------------------------------------------
-	Input filename: ../../../../../../data/samples/mnist/mnist.onnx
-	ONNX IR version: 0.0.3
-	Opset version: 1
-	Producer name: CNTK
-	Producer version: 2.4
-	Domain:
-	Model version: 1
-	Doc string:
-	----------------------------------------------------------------
-	[I] Input:
-	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	@@@@@@@@@@@*. .*@@@@@@@@@@@
-	@@@@@@@@@@*. +@@@@@@@@@@
-	@@@@@@@@@@. :#+ %@@@@@@@@@
-	@@@@@@@@@@.:@@@+ +@@@@@@@@@
-	@@@@@@@@@@.:@@@@: +@@@@@@@@
-	@@@@@@@@@@=%@@@@: +@@@@@@@@
-	@@@@@@@@@@@@@@@@# +@@@@@@@@
-	@@@@@@@@@@@@@@@@* +@@@@@@@@
-	@@@@@@@@@@@@@@@@: +@@@@@@@@
-	@@@@@@@@@@@@@@@@: +@@@@@@@@
-	@@@@@@@@@@@@@@@* .@@@@@@@@@
-	@@@@@@@@@@%**%@. *@@@@@@@@@
-	@@@@@@@@%+. .: .@@@@@@@@@@
-	@@@@@@@@= .. :@@@@@@@@@@
-	@@@@@@@@: *@@: :@@@@@@@@@@
-	@@@@@@@% %@* *@@@@@@@@@
-	@@@@@@@% ++ ++ .%@@@@@@@@
-	@@@@@@@@- +@@- +@@@@@@@@
-	@@@@@@@@= :*@@@# .%@@@@@@@
-	@@@@@@@@@+*@@@@@%. %@@@@@@
-	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    ```
+  	&&&& RUNNING TensorRT.sample_dynamic_reshape # ./sample_dynamic_reshape
+    ----------------------------------------------------------------
+    Input filename:   ../../../../../data/samples/mnist/mnist.onnx
+    ONNX IR version:  0.0.3
+    Opset version:    8
+    Producer name:    CNTK
+    Producer version: 2.5.1
+    Domain:           ai.cntk
+    Model version:    1
+    Doc string:  
+    ----------------------------------------------------------------
+    [W] [TRT] onnx2trt_utils.cpp:214: Your ONNX model has been generated with INT64 weights, while TensorRT does not natively support INT64. Attempting to cast down to INT32.
+    [W] [TRT] onnx2trt_utils.cpp:214: Your ONNX model has been generated with INT64 weights, while TensorRT does not natively support INT64. Attempting to cast down to INT32.
+    [I] [TRT] Detected 1 inputs and 1 output network tensors.
+    [I] [TRT] Detected 1 inputs and 1 output network tensors.
+    [I] Profile dimensions in preprocessor engine:
+    [I]     Minimum = (1, 1, 1, 1)
+    [I]     Optimum = (1, 1, 28, 28)
+    [I]     Maximum = (1, 1, 56, 56)
+    [I] Input:
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @@@@@@@@@@@*.  .*@@@@@@@@@@@
+    @@@@@@@@@@*.     +@@@@@@@@@@
+    @@@@@@@@@@. :#+   %@@@@@@@@@
+    @@@@@@@@@@.:@@@+  +@@@@@@@@@
+    @@@@@@@@@@.:@@@@: +@@@@@@@@@
+    @@@@@@@@@@=%@@@@: +@@@@@@@@@
+    @@@@@@@@@@@@@@@@# +@@@@@@@@@
+    @@@@@@@@@@@@@@@@* +@@@@@@@@@
+    @@@@@@@@@@@@@@@@: +@@@@@@@@@
+    @@@@@@@@@@@@@@@@: +@@@@@@@@@
+    @@@@@@@@@@@@@@@* .@@@@@@@@@@
+    @@@@@@@@@@%**%@. *@@@@@@@@@@
+    @@@@@@@@%+.  .: .@@@@@@@@@@@
+    @@@@@@@@=  ..   :@@@@@@@@@@@
+    @@@@@@@@: *@@:  :@@@@@@@@@@@
+    @@@@@@@%  %@*    *@@@@@@@@@@
+    @@@@@@@%  ++  ++ .%@@@@@@@@@
+    @@@@@@@@-    +@@- +@@@@@@@@@
+    @@@@@@@@=  :*@@@# .%@@@@@@@@
+    @@@@@@@@@+*@@@@@%.  %@@@@@@@
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
-	[I] Output:
-	Prob 0 0.0000 Class 0:
-	Prob 1 0.0000 Class 1:
-	Prob 2 1.0000 Class 2: **********
-	Prob 3 0.0000 Class 3:
-	Prob 4 0.0000 Class 4:
-	Prob 5 0.0000 Class 5:
-	Prob 6 0.0000 Class 6:
-	Prob 7 0.0000 Class 7:
-	Prob 8 0.0000 Class 8:
-	Prob 9 0.0000 Class 9:
+    [I] Output:
+    [I]  Prob 0  0.0000 Class 0: 
+    [I]  Prob 1  0.0000 Class 1: 
+    [I]  Prob 2  1.0000 Class 2: **********
+    [I]  Prob 3  0.0000 Class 3: 
+    [I]  Prob 4  0.0000 Class 4: 
+    [I]  Prob 5  0.0000 Class 5: 
+    [I]  Prob 6  0.0000 Class 6: 
+    [I]  Prob 7  0.0000 Class 7: 
+    [I]  Prob 8  0.0000 Class 8: 
+    [I]  Prob 9  0.0000 Class 9: 
+    &&&& PASSED TensorRT.sample_dynamic_reshape # ./sample_dynamic_reshape
+    ```
 
-	&&&& PASSED TensorRT.sample_dynamic_reshape # ./sample_dynamic_reshape
-	```
-
-	This output shows that the sample ran successfully; `PASSED`.
+    This output shows that the sample ran successfully; `PASSED`.
 
 
 ### Sample `--help` options
@@ -225,8 +264,8 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
-June 2019
-This is the first release of the `README.md` file and sample.
+February 2020
+This is the second release of the `README.md` file and sample.
 
 
 # Known issues

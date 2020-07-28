@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,16 @@
 
 #include "NvInfer.h"
 
+//!
+//! \file NvUffParser.h
+//!
+//! This is the API for the UFF Parser
+//!
+
 // Current supported Universal Framework Format (UFF) version for the parser.
 #define UFF_REQUIRED_VERSION_MAJOR 0
 #define UFF_REQUIRED_VERSION_MINOR 6
-#define UFF_REQUIRED_VERSION_PATCH 5
+#define UFF_REQUIRED_VERSION_PATCH 9
 
 //!
 //! \namespace nvuffparser

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,15 @@
 #include <utility>
 #include <vector>
 
+#define ASSERT(assertion)                                                                                              \
+    {                                                                                                                  \
+        if (!(assertion))                                                                                              \
+        {                                                                                                              \
+            std::cerr << "#assertion" << __FILE__ << "," << __LINE__ << std::endl;                                     \
+            abort();                                                                                                   \
+        }                                                                                                              \
+    }
+
 using namespace nvinfer1;
 using nvinfer1::plugin::FlattenConcat;
 using nvinfer1::plugin::FlattenConcatPluginCreator;
@@ -40,68 +49,43 @@ FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch)
     ASSERT(mConcatAxisID == 1 || mConcatAxisID == 2 || mConcatAxisID == 3);
 }
 
-FlattenConcat::FlattenConcat(
-    int concatAxis, bool ignoreBatch, int numInputs, int outputConcatAxis, const int* inputConcatAxis, size_t* copySize)
-    : mIgnoreBatch(ignoreBatch)
+FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, int outputConcatAxis,
+    const int* inputConcatAxis, const size_t* copySize)
+    : mCopySize(numInputs)
+    , mInputConcatAxis(numInputs)
+    , mIgnoreBatch(ignoreBatch)
     , mConcatAxisID(concatAxis)
     , mOutputConcatAxis(outputConcatAxis)
     , mNumInputs(numInputs)
 {
-    ASSERT(mConcatAxisID == 1 || mConcatAxisID == 2 || mConcatAxisID == 3);
+    ASSERT(mConcatAxisID >= 1 && mConcatAxisID <= 3);
 
-    // Allocate memory for mInputConcatAxis, mCopySize members
-    LOG_ERROR(cudaMallocHost((void**) &mInputConcatAxis, mNumInputs * sizeof(int)));
-    LOG_ERROR(cudaMallocHost((void**) &mCopySize, mNumInputs * sizeof(size_t)));
-
-    // Perform deep copy
-    if (copySize != nullptr)
-    {
-        for (int i = 0; i < mNumInputs; i++)
-        {
-            mCopySize[i] = static_cast<size_t>(copySize[i]);
-        }
-    }
-
-    for (int i = 0; i < mNumInputs; ++i)
-    {
-        mInputConcatAxis[i] = inputConcatAxis[i];
-    }
-
-    // Create cublas context
-    LOG_ERROR(cublasCreate(&mCublas));
+    std::copy(copySize, copySize + mNumInputs, mCopySize.begin());
+    std::copy(inputConcatAxis, inputConcatAxis + mNumInputs, mInputConcatAxis.begin());
 }
 
 FlattenConcat::FlattenConcat(const void* data, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    const char* d = static_cast<const char*>(data);
+    const char* const a = d;
     mIgnoreBatch = read<bool>(d);
     mConcatAxisID = read<int>(d);
-    ASSERT(mConcatAxisID == 1 || mConcatAxisID == 2 || mConcatAxisID == 3);
+    ASSERT(mConcatAxisID >= 1 && mConcatAxisID <= 3);
     mOutputConcatAxis = read<int>(d);
     mNumInputs = read<int>(d);
-    LOG_ERROR(cudaMallocHost((void**) &mInputConcatAxis, mNumInputs * sizeof(int)));
-    LOG_ERROR(cudaMallocHost((void**) &mCopySize, mNumInputs * sizeof(int)));
 
-    std::for_each(mInputConcatAxis, mInputConcatAxis + mNumInputs, [&](int& inp) { inp = read<int>(d); });
+    mInputConcatAxis.resize(mNumInputs);
+    std::for_each(mInputConcatAxis.begin(), mInputConcatAxis.end(), [&](int& inp) { inp = read<int>(d); });
 
     mCHW = read<nvinfer1::DimsCHW>(d);
 
-    std::for_each(mCopySize, mCopySize + mNumInputs, [&](size_t& inp) { inp = read<size_t>(d); });
+    mCopySize.resize(mNumInputs);
+    std::for_each(mCopySize.begin(), mCopySize.end(), [&](size_t& inp) { inp = read<size_t>(d); });
 
     ASSERT(d == a + length);
 }
 
-FlattenConcat::~FlattenConcat()
-{
-    if (mInputConcatAxis)
-    {
-        LOG_ERROR(cudaFreeHost(mInputConcatAxis));
-    }
-    if (mCopySize)
-    {
-        LOG_ERROR(cudaFreeHost(mCopySize));
-    }
-}
+FlattenConcat::~FlattenConcat() {}
 
 int FlattenConcat::getNbOutputs() const
 {
@@ -114,7 +98,8 @@ Dims FlattenConcat::getOutputDimensions(int index, const Dims* inputs, int nbInp
     ASSERT(index == 0);
 
     mNumInputs = nbInputDims;
-    LOG_ERROR(cudaMallocHost((void**) &mInputConcatAxis, nbInputDims * sizeof(int)));
+    mCopySize.resize(mNumInputs);
+    mInputConcatAxis.resize(mNumInputs);
     int outputConcatAxis = 0;
 
     for (int i = 0; i < nbInputDims; ++i)
@@ -146,10 +131,7 @@ int FlattenConcat::initialize()
     return STATUS_SUCCESS;
 }
 
-void FlattenConcat::terminate()
-{
-    LOG_ERROR(cublasDestroy(mCublas));
-}
+void FlattenConcat::terminate() {}
 
 size_t FlattenConcat::getWorkspaceSize(int) const
 {
@@ -158,12 +140,9 @@ size_t FlattenConcat::getWorkspaceSize(int) const
 
 int FlattenConcat::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream)
 {
-    int numConcats = 1;
     ASSERT(mConcatAxisID != 0);
     // mCHW is the first input tensor
-    numConcats = std::accumulate(mCHW.d, mCHW.d + mConcatAxisID - 1, 1, std::multiplies<int>());
-
-    LOG_ERROR(cublasSetStream(mCublas, stream));
+    int numConcats = std::accumulate(mCHW.d, mCHW.d + mConcatAxisID - 1, 1, std::multiplies<int>());
 
     // Num concats will be proportional to number of samples in a batch
     if (!mIgnoreBatch)
@@ -171,35 +150,32 @@ int FlattenConcat::enqueue(int batchSize, const void* const* inputs, void** outp
         numConcats *= batchSize;
     }
 
-    auto* output = reinterpret_cast<float*>(outputs[0]);
+    auto* output = static_cast<float*>(outputs[0]);
     int offset = 0;
     for (int i = 0; i < mNumInputs; ++i)
     {
-        const auto* input = reinterpret_cast<const float*>(inputs[i]);
-        float* inputTemp;
-        LOG_ERROR(cudaMalloc(&inputTemp, mCopySize[i] * batchSize));
-        LOG_ERROR(cudaMemcpyAsync(inputTemp, input, mCopySize[i] * batchSize, cudaMemcpyDeviceToDevice, stream));
-
+        const auto* input = static_cast<const float*>(inputs[i]);
         for (int n = 0; n < numConcats; ++n)
         {
-            LOG_ERROR(cublasScopy(mCublas, mInputConcatAxis[i], inputTemp + n * mInputConcatAxis[i], 1,
+            CUBLASASSERT(cublasScopy(mCublas, mInputConcatAxis[i], input + n * mInputConcatAxis[i], 1,
                 output + (n * mOutputConcatAxis + offset), 1));
         }
-        LOG_ERROR(cudaFree(inputTemp));
         offset += mInputConcatAxis[i];
     }
 
-    return 0;
+    return STATUS_SUCCESS;
 }
 
 size_t FlattenConcat::getSerializationSize() const
 {
-    return sizeof(bool) + sizeof(int) * (3 + mNumInputs) + sizeof(nvinfer1::Dims) + (sizeof(mCopySize) * mNumInputs);
+    return sizeof(bool) + sizeof(int) * (3 + mNumInputs) + sizeof(nvinfer1::Dims)
+        + (sizeof(decltype(mCopySize)::value_type) * mNumInputs);
 }
 
 void FlattenConcat::serialize(void* buffer) const
 {
-    char *d = reinterpret_cast<char*>(buffer), *a = d;
+    char* d = static_cast<char*>(buffer);
+    const char* const a = d;
     write(d, mIgnoreBatch);
     write(d, mConcatAxisID);
     write(d, mOutputConcatAxis);
@@ -220,6 +196,7 @@ void FlattenConcat::serialize(void* buffer) const
 void FlattenConcat::attachToContext(
     cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator)
 {
+    mCublas = cublasContext;
 }
 
 // Detach the plugin object from its execution context.
@@ -245,7 +222,7 @@ void FlattenConcat::setPluginNamespace(const char* pluginNamespace)
 
 const char* FlattenConcat::getPluginNamespace() const
 {
-    return mPluginNamespace;
+    return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index
@@ -264,11 +241,7 @@ void FlattenConcat::configurePlugin(const Dims* inputDims, int nbInputs, const D
     mNumInputs = nbInputs;
     ASSERT(inputDims[0].nbDims == 3);
 
-    if (mInputConcatAxis == nullptr)
-    {
-        LOG_ERROR(cudaMallocHost((void**) &mInputConcatAxis, mNumInputs * sizeof(int)));
-    }
-
+    mInputConcatAxis.resize(mNumInputs);
     for (int i = 0; i < nbInputs; ++i)
     {
         int flattenInput = 0;
@@ -290,6 +263,7 @@ void FlattenConcat::configurePlugin(const Dims* inputDims, int nbInputs, const D
         mOutputConcatAxis += mInputConcatAxis[i];
     }
 
+    mCopySize.resize(mNumInputs);
     for (int i = 0; i < nbInputs; ++i)
     {
         mCopySize[i] = inputDims[i].d[0] * inputDims[i].d[1] * inputDims[i].d[2] * sizeof(float);
@@ -317,9 +291,9 @@ void FlattenConcat::destroy()
 
 IPluginV2Ext* FlattenConcat::clone() const
 {
-    auto* plugin
-        = new FlattenConcat(mConcatAxisID, mIgnoreBatch, mNumInputs, mOutputConcatAxis, mInputConcatAxis, mCopySize);
-    plugin->setPluginNamespace(mPluginNamespace);
+    auto* plugin = new FlattenConcat(
+        mConcatAxisID, mIgnoreBatch, mNumInputs, mOutputConcatAxis, mInputConcatAxis.data(), mCopySize.data());
+    plugin->setPluginNamespace(mPluginNamespace.c_str());
     return plugin;
 }
 

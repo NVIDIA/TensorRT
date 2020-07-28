@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,12 @@
 #define NV_UTILS_H
 
 #include "NvInfer.h"
+
+//!
+//! \file NvUtils.h
+//!
+//! This file includes various utility functions
+//!
 
 namespace nvinfer1
 {

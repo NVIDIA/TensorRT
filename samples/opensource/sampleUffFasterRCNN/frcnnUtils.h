@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -191,8 +191,8 @@ void resizePPM(vPPM& ppm, int target_width, int target_height)
 class BatchStream
 {
 public:
-    BatchStream(
-        int batchSize, int maxBatches, std::string prefix, std::string suffix, std::vector<std::string> directories)
+    BatchStream(int batchSize, int maxBatches, const std::string& prefix, const std::string& suffix,
+        const std::vector<std::string>& directories)
         : mBatchSize(batchSize)
         , mMaxBatches(maxBatches)
         , mPrefix(prefix)
@@ -219,13 +219,13 @@ public:
         reset(0);
     }
 
-    BatchStream(int batchSize, int maxBatches, std::string prefix, std::vector<std::string> directories)
+    BatchStream(int batchSize, int maxBatches, const std::string& prefix, const std::vector<std::string>& directories)
         : BatchStream(batchSize, maxBatches, prefix, ".batch", directories)
     {
     }
 
-    BatchStream(
-        int batchSize, int maxBatches, nvinfer1::Dims dims, std::string listFile, std::vector<std::string> directories)
+    BatchStream(int batchSize, int maxBatches, const nvinfer1::Dims& dims, const std::string& listFile,
+        const std::vector<std::string>& directories)
         : mBatchSize(batchSize)
         , mMaxBatches(maxBatches)
         , mDims(dims)
@@ -364,7 +364,7 @@ private:
                 return false;
             }
 
-            gLogInfo << "Batch #" << mFileCount << std::endl;
+            sample::gLogInfo << "Batch #" << mFileCount << std::endl;
             file.seekg(((mBatchCount * mBatchSize)) * 7);
 
             for (int i = 1; i <= mBatchSize; i++)
@@ -372,7 +372,7 @@ private:
                 std::string sName;
                 std::getline(file, sName);
                 sName = sName + ".ppm";
-                gLogInfo << "Calibrating with file " << sName << std::endl;
+                sample::gLogInfo << "Calibrating with file " << sName << std::endl;
                 fNames.emplace_back(sName);
             }
 
@@ -431,8 +431,8 @@ private:
 class EntropyCalibratorImpl
 {
 public:
-    EntropyCalibratorImpl(
-        BatchStream& stream, int firstBatch, std::string networkName, const char* inputBlobName, bool readCache = true)
+    EntropyCalibratorImpl(BatchStream& stream, int firstBatch, const std::string& networkName,
+        const char* inputBlobName, bool readCache = true)
         : mStream(stream)
         , mCalibrationTableName("CalibrationTable" + networkName)
         , mInputBlobName(inputBlobName)

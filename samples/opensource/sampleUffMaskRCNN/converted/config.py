@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ fpn_p5upsampled = gs.create_plugin_node("fpn_p5upsampled", op="ResizeNearest_TRT
 fpn_p4upsampled = gs.create_plugin_node("fpn_p4upsampled", op="ResizeNearest_TRT", dtype=tf.float32, scale=2.0)
 fpn_p3upsampled = gs.create_plugin_node("fpn_p3upsampled", op="ResizeNearest_TRT", dtype=tf.float32, scale=2.0)
 
-roi = gs.create_plugin_node("ROI", op="ProposalLayer_TRT", prenms_topk=1024, keep_topk=1000, iou_threshold=0.7)
+roi = gs.create_plugin_node("ROI", op="ProposalLayer_TRT", prenms_topk=1024, keep_topk=1000, iou_threshold=0.7, image_size=[3, 1024, 1024])
 roi_align_classifier = gs.create_plugin_node("roi_align_classifier", op="PyramidROIAlign_TRT", pooled_size=7)
 mrcnn_detection = gs.create_plugin_node("mrcnn_detection", op="DetectionLayer_TRT", num_classes=81, keep_topk=100, score_threshold=0.7, iou_threshold=0.3)
 roi_align_mask = gs.create_plugin_node("roi_align_mask_trt", op="PyramidROIAlign_TRT", pooled_size=14)
@@ -113,12 +113,16 @@ def connect(dynamic_graph, connections_list):
         if node_a_name not in dynamic_graph.node_map[node_b_name].input:
             dynamic_graph.node_map[node_b_name].input.insert(0, node_a_name)
 
+def remove(dynamic_graph, remove_list):
+    for node_name in remove_list:
+        dynamic_graph.remove(dynamic_graph.node_map[node_name])
+
 def preprocess(dynamic_graph):
     # Now create a new graph by collapsing namespaces
     dynamic_graph.collapse_namespaces(namespace_plugin_map, unique_inputs=True)
-    dynamic_graph.remove(timedistributed_remove_list)
-    dynamic_graph.remove(dense_compatible_patch)
-    dynamic_graph.remove(['input_anchors', 'input_image_meta'])
+    remove(dynamic_graph, timedistributed_remove_list)
+    remove(dynamic_graph, dense_compatible_patch)
+    remove(dynamic_graph, ['input_anchors', 'input_image_meta'])
 
     connect(dynamic_graph, timedistributed_connect_pairs)
     connect(dynamic_graph, dense_compatible_connect_pairs)

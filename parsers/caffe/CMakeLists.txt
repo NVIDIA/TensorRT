@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,9 +55,9 @@ set_target_properties(${SHARED_TARGET}
     CXX_STANDARD 11
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
-    ARCHIVE_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
 target_link_libraries(${SHARED_TARGET} 
@@ -105,9 +105,9 @@ set_target_properties(${STATIC_TARGET}
     CXX_STANDARD 11
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
-    ARCHIVE_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
 target_link_libraries(${STATIC_TARGET} 

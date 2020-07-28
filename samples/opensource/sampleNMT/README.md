@@ -10,7 +10,7 @@
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Prerequisites](#prerequisites)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -122,25 +122,8 @@ Now that you have trained weights, downloaded the text and vocabulary data, and 
 
 ### Sample `--help` options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.  For example:
-```
-data_dir: /workspace/tensorrt/samples/sampleNMT/data/deen
-data_writer: text
-Component Info:
-– Data Reader: Text Reader, vocabulary size = 36548
-– Input Embedder: SLP Embedder, num inputs = 36548, num outputs = 512
-– Output Embedder: SLP Embedder, num inputs = 36548, num outputs = 512
-– Encoder: LSTM Encoder, num layers = 2, num units = 512
-– Decoder: LSTM Decoder, num layers = 2, num units = 512
-– Alignment: Multiplicative Alignment, source states size = 512, attention keys size = 512
-– Context: Ragged softmax + Batch GEMM
-– Attention: SLP Attention, num inputs = 1024, num outputs = 512
-– Projection: SLP Projection, num inputs = 512, num outputs = 36548
-– Likelihood: Softmax Likelihood
-– Search Policy: Beam Search Policy, beam = 5
-– Data Writer: Text Writer, vocabulary size = 36548
-End of Component Info
-```
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 ## Additional resources
 
@@ -156,7 +139,7 @@ The following resources provide a deeper understanding about Neural Machine Tran
 - [NMT (seq2seq) Tutorial](https://github.com/tensorflow/nmt)
 
 **Blogs**
-- [Neural Machine Translation Inference in TensorRT](https://devblogs.nvidia.com/neural-machine-translation-inference-tensorrt-4/)
+- [Neural Machine Translation Inference in TensorRT](https://news.developer.nvidia.com/neural-machine-translation-now-available-with-tensorrt/)
 - [Introduction to NMT](https://devblogs.nvidia.com/introduction-neural-machine-translation-with-gpus/)
 
 **Videos**

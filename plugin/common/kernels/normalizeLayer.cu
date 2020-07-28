@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,19 @@
             printf("%s %d CUBLAS FAIL %s\n", __FILE__, __LINE__, cublasGetErrorString(status)); \
         }                                                                                       \
     } while (0)
+namespace nvinfer1
+{
+namespace plugin
+{
+size_t normalizePluginWorkspaceSize(bool acrossSpatial, int C, int H, int W)
+{
+    if (acrossSpatial)
+        return sizeof(float) * C * H * W;
+    else
+        return (size_t) 0;
+}
+} // namespace plugin
+} // namespace nvinfer1
 
 size_t normalizePluginWorkspaceSize(bool acrossSpatial, int C, int H, int W)
 {
@@ -157,6 +170,71 @@ __global__ void scalChannelKernel(
         outputData[i] = inputData[i] / scale[i / spatialDim];
     }
 }
+namespace nvinfer1
+{
+namespace plugin
+{
+pluginStatus_t normalizeInference(
+    cudaStream_t stream,
+    cublasHandle_t handle,
+    const bool acrossSpatial,
+    const bool channelShared,
+    const int N,
+    const int C,
+    const int H,
+    const int W,
+    const float eps,
+    const void* scale,
+    const void* inputData,
+    void* outputData,
+    void* workspace)
+{
+    const int dim = C * H * W;
+    // Normalization is conducted for each sample from the batch indepdently
+    if (acrossSpatial)
+    {
+        float* input = (float*) const_cast<void*>(inputData);
+        float* output = (float*) outputData;
+        float* buffer = (float*) workspace;
+        for (int n = 0; n < N; ++n)
+        {
+            // Take the square of each element in the input
+            squareKernel<<<(dim + 511) / 512, 512, 0, stream>>>(dim, input, buffer);
+            float normsqr = 0.0F;
+            // Sum up all the squared elements
+            CUBLAS_CHECK(cublasSasum(handle, dim, buffer, 1, &normsqr));
+            // Make a copy of the input to the output
+            CUBLAS_CHECK(cublasScopy(handle, dim, input, 1, output, 1));
+            // Calculate the inverse of the square root of the sum
+            // Use eps to prevent being divided by zero
+            normsqr = 1 / sqrt(normsqr + eps);
+            // Scale all the outputs by normsqr
+            CUBLAS_CHECK(cublasSscal(handle, dim, &normsqr, output, 1));
+            // If channel shared is true, scale all the outputs
+            if (channelShared)
+            {
+                CUBLAS_CHECK(cublasSscal(handle, dim, (float*) scale, output, 1));
+            }
+            // Use different scale factors for different channels
+            else
+            {
+                // scale the output according to channels
+                scalChannelKernel<<<(dim + 511) / 512, 512, 0, stream>>>(dim, H * W, output, (float*) scale, output);
+            }
+            // Move cursors
+            input += dim;
+            output += dim;
+        }
+        return STATUS_SUCCESS;
+    }
+    // Normalization ignoring the batch
+    else
+    {
+        return normalizeNotAcrossSpatialGpu(stream, channelShared, N, C, H, W, eps, scale, inputData, outputData);
+    }
+}
+} // namespace plugin
+} // namespace nvinfer1
 
 pluginStatus_t normalizeInference(
     cudaStream_t stream,

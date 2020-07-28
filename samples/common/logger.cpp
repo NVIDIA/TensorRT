@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 #include "logger.h"
 #include "logging.h"
 
+namespace sample
+{
 Logger gLogger{Logger::Severity::kINFO};
 LogStreamConsumer gLogVerbose{LOG_VERBOSE(gLogger)};
 LogStreamConsumer gLogInfo{LOG_INFO(gLogger)};
@@ -33,3 +35,4 @@ void setReportableSeverity(Logger::Severity severity)
     gLogError.setReportableSeverity(severity);
     gLogFatal.setReportableSeverity(severity);
 }
+} // namespace sample

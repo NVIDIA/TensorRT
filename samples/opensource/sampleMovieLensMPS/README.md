@@ -10,7 +10,7 @@
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Training an NCF network](#training-an-ncf-network)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -65,22 +65,6 @@ The Scale layer implements a per-tensor, per-channel, or per-element affine tran
 [Shuffle layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#shuffle-layer)
 The Shuffle layer implements a reshape and transpose operator for tensors.
 
-### TensorRT API layers and ops
-
-In this sample, the following layers are used.  For more information about these layers, see the [TensorRT Developer Guide: Layers](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#layers) documentation.
-
-[Activation layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#activation-layer)
-The Activation layer implements element-wise activation functions.
-
-[MatrixMultiply layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#matrixmultiply-layer)
-The MatrixMultiply layer implements matrix multiplication for a collection of matrices.
-
-[Scale layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#scale-layer)
-The Scale layer implements a per-tensor, per-channel, or per-element affine transformation and/or exponentiation by constant values.
-
-[Shuffle layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#shuffle-layer)
-The Shuffle layer implements a reshape and transpose operator for tensors.
-
 [TopK layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#topk-layer)
 The TopK layer finds the top `K` maximum (or minimum) elements along a dimension, returning a reduced tensor and a tensor of index positions.
 
@@ -101,7 +85,8 @@ This sample comes with a pre-trained model. However, if you want to train your o
 2. Set-up an MPS server.
 	```
 	export CUDA_VISIBLE_DEVICES=<GPU_ID>
-	nvidia-smi -i <GPU_ID> -c EXCLUSIVE_PROCESSexport CUDA_VISIBLE_DEVICES=0
+	nvidia-smi -i <GPU_ID> -c EXCLUSIVE_PROCESS
+	export CUDA_VISIBLE_DEVICES=0
 	export CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps # Select a location that's accessible to the given $UID
 	export CUDA_MPS_LOG_DIRECTORY=/tmp/nvidia-log # Select a location that's accessible to the given $UID
 	nvidia-cuda-mps-control -d # Start the daemon.
@@ -149,20 +134,11 @@ This sample comes with a pre-trained model. However, if you want to train your o
 6. To restore the system to its original state, shutdown MPS, if needed.
 	`echo quit | nvidia-cuda-mps-control`
 
-### Sample --help options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
-```
-Usage:
-         ./sample_movielens_mps [-h] [-b NUM_USERS] [-p NUM_PROCESSES] [--useDLACore=<int>] [--verbose]
-        -h             Display help information. All single dash options enable perf mode.
-        -b             Number of Users i.e. Batch Size (default numUsers=32).
-        -p             Number of child processes to launch (default nbProcesses=1. Using MPS with this option is strongly recommended).
-        --useDLACore=N Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, where n is the number of DLA engines on the platform.
-        --verbose      Enable verbose prints.
-        --int8         Run in Int8 mode.
-        --fp16         Run in FP16 mode.
-```
+### Sample `--help` options
+
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 # Additional resources
 

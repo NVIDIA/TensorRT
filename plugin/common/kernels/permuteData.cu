@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <vector>
+#include <array>
 #include "kernel.h"
 
 template <typename Dtype, unsigned nthds_per_cta>
@@ -95,17 +95,8 @@ struct pdLaunchConfig
     }
 };
 
-static std::vector<pdLaunchConfig> pdFuncVec;
-
-bool permuteDataInit()
-{
-    pdFuncVec.push_back(pdLaunchConfig(DataType::kFLOAT,
-                                       permuteData_gpu<float>));
-    return true;
-}
-
-static bool initialized = permuteDataInit();
-
+static std::array<pdLaunchConfig, 1> pdLCOptions = {
+  pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>)};
 
 pluginStatus_t permuteData(cudaStream_t stream,
                         const int nthreads,
@@ -118,12 +109,12 @@ pluginStatus_t permuteData(cudaStream_t stream,
                         void* new_data)
 {
     pdLaunchConfig lc = pdLaunchConfig(DT_DATA);
-    for (unsigned i = 0; i < pdFuncVec.size(); ++i)
+    for (unsigned i = 0; i < pdLCOptions.size(); ++i)
     {
-        if (lc == pdFuncVec[i])
+        if (lc == pdLCOptions[i])
         {
             DEBUG_PRINTF("permuteData kernel %d\n", i);
-            return pdFuncVec[i].function(stream,
+            return pdLCOptions[i].function(stream,
                                          nthreads,
                                          num_classes,
                                          num_data,

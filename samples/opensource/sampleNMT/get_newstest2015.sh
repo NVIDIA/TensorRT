@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright 2017 Google Inc.
-# Modifications copyright (C) 2019 Nvidia
+# Modifications Copyright (c) 2020 Nvidia
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

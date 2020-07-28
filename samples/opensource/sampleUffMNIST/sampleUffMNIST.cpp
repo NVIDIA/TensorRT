@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -114,7 +114,7 @@ private:
 //!
 bool SampleUffMNIST::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -203,12 +203,12 @@ bool SampleUffMNIST::processInput(
     readPGMFile(locateFile(std::to_string(inputFileIdx) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
 
     // Print ASCII representation of digit
-    gLogInfo << "Input:\n";
+    sample::gLogInfo << "Input:\n";
     for (int i = 0; i < inputH * inputW; i++)
     {
-        gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
+        sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     float* hostInputBuffer = static_cast<float*>(buffers.getHostBuffer(inputTensorName));
 
@@ -227,7 +227,7 @@ bool SampleUffMNIST::verifyOutput(
 {
     const float* prob = static_cast<const float*>(buffers.getHostBuffer(outputTensorName));
 
-    gLogInfo << "Output:\n";
+    sample::gLogInfo << "Output:\n";
 
     float val{0.0f};
     int idx{0};
@@ -245,17 +245,17 @@ bool SampleUffMNIST::verifyOutput(
     // Print output values for each index
     for (int j = 0; j < kDIGITS; j++)
     {
-        gLogInfo << j << "=> " << setw(10) << prob[j] << "\t : ";
+        sample::gLogInfo << j << "=> " << std::setw(10) << prob[j] << "\t : ";
 
         // Emphasize index with highest output value
         if (j == idx)
         {
-            gLogInfo << "***";
+            sample::gLogInfo << "***";
         }
-        gLogInfo << "\n";
+        sample::gLogInfo << "\n";
     }
 
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
     return (idx == groundTruthDigit);
 }
 
@@ -310,7 +310,7 @@ bool SampleUffMNIST::infer()
 
     total /= kDIGITS;
 
-    gLogInfo << "Average over " << kDIGITS << " runs is " << total << " ms." << std::endl;
+    sample::gLogInfo << "Average over " << kDIGITS << " runs is " << total << " ms." << std::endl;
 
     return outputCorrect;
 }
@@ -379,7 +379,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -388,27 +388,27 @@ int main(int argc, char** argv)
         printHelpInfo();
         return EXIT_SUCCESS;
     }
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     samplesCommon::UffSampleParams params = initializeSampleParams(args);
 
     SampleUffMNIST sample(params);
-    gLogInfo << "Building and running a GPU inference engine for Uff MNIST" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for Uff MNIST" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

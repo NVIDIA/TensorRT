@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "cub/cub.cuh"
-#include <vector>
+#include <array>
 #include "kernel.h"
 #include "bboxUtils.h"
 #include "cub_helper.h"
@@ -157,15 +157,8 @@ struct sspcLaunchConfig
     }
 };
 
-static std::vector<sspcLaunchConfig> sspcFuncVec;
-bool sspcInit()
-{
-    sspcFuncVec.push_back(sspcLaunchConfig(DataType::kFLOAT,
-                                           sortScoresPerClass_gpu<float>));
-    return true;
-}
-
-static bool initialized = sspcInit();
+static std::array<sspcLaunchConfig, 1> sspcLCOptions = {
+    sspcLaunchConfig(DataType::kFLOAT, sortScoresPerClass_gpu<float>)};
 
 pluginStatus_t sortScoresPerClass(
     cudaStream_t stream,
@@ -180,12 +173,12 @@ pluginStatus_t sortScoresPerClass(
     void* workspace)
 {
     sspcLaunchConfig lc = sspcLaunchConfig(DT_SCORE);
-    for (unsigned i = 0; i < sspcFuncVec.size(); ++i)
+    for (unsigned i = 0; i < sspcLCOptions.size(); ++i)
     {
-        if (lc == sspcFuncVec[i])
+        if (lc == sspcLCOptions[i])
         {
             DEBUG_PRINTF("sortScoresPerClass kernel %d\n", i);
-            return sspcFuncVec[i].function(stream,
+            return sspcLCOptions[i].function(stream,
                                            num,
                                            num_classes,
                                            num_preds_per_class,

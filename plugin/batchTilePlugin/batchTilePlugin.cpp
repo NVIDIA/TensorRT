@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -95,7 +95,7 @@ DataType BatchTilePlugin::getOutputDataType(int index, const nvinfer1::DataType*
 
 int BatchTilePlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream)
 {
-    float* output = reinterpret_cast<float*>(outputs[0]);
+    char* output = reinterpret_cast<char*>(outputs[0]);
     // expand to batch size
     for (int i = 0; i < batchSize; i++)
     {

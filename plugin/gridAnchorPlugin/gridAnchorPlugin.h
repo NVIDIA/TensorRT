@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,9 +29,9 @@ namespace plugin
 class GridAnchorGenerator : public IPluginV2Ext
 {
 public:
-    GridAnchorGenerator(const GridAnchorParameters* param, int numLayers);
+    GridAnchorGenerator(const GridAnchorParameters* param, int numLayers, const char* version);
 
-    GridAnchorGenerator(const void* data, size_t length);
+    GridAnchorGenerator(const void* data, size_t length, const char* version);
 
     ~GridAnchorGenerator() override;
 
@@ -81,6 +81,9 @@ public:
 
     void detachFromContext() override;
 
+protected:
+    std::string mPluginName;
+
 private:
     Weights copyToDevice(const void* hostData, size_t count);
 
@@ -92,15 +95,15 @@ private:
     std::vector<GridAnchorParameters> mParam;
     int* mNumPriors;
     Weights *mDeviceWidths, *mDeviceHeights;
-    const char* mPluginNamespace;
+    std::string mPluginNamespace;
 };
 
-class GridAnchorPluginCreator : public BaseCreator
+class GridAnchorBasePluginCreator : public BaseCreator
 {
 public:
-    GridAnchorPluginCreator();
+    GridAnchorBasePluginCreator();
 
-    ~GridAnchorPluginCreator() override = default;
+    ~GridAnchorBasePluginCreator() override = default;
 
     const char* getPluginName() const override;
 
@@ -112,10 +115,28 @@ public:
 
     IPluginV2Ext* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
 
+protected:
+    std::string mPluginName;
+
 private:
     static PluginFieldCollection mFC;
     static std::vector<PluginField> mPluginAttributes;
 };
+
+class GridAnchorPluginCreator : public GridAnchorBasePluginCreator
+{
+public:
+    GridAnchorPluginCreator();
+    ~GridAnchorPluginCreator() override = default;
+};
+
+class GridAnchorRectPluginCreator : public GridAnchorBasePluginCreator
+{
+public:
+    GridAnchorRectPluginCreator();
+    ~GridAnchorRectPluginCreator() override = default;
+};
+
 } // namespace plugin
 } // namespace nvinfer1
 

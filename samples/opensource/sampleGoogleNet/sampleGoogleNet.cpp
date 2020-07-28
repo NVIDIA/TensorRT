@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,7 +91,7 @@ private:
 //!
 bool SampleGoogleNet::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -171,7 +171,7 @@ bool SampleGoogleNet::infer()
         const auto bufferSize = buffers.size(input);
         if (bufferSize == samplesCommon::BufferManager::kINVALID_SIZE_VALUE)
         {
-            gLogError << "input tensor missing: " << input << "\n";
+            sample::gLogError << "input tensor missing: " << input << "\n";
             return EXIT_FAILURE;
         }
         memset(buffers.getHostBuffer(input), 0, bufferSize);
@@ -252,7 +252,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -263,31 +263,31 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     samplesCommon::CaffeSampleParams params = initializeSampleParams(args);
     SampleGoogleNet sample(params);
 
-    gLogInfo << "Building and running a GPU inference engine for GoogleNet" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for GoogleNet" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    gLogInfo << "Ran " << argv[0] << " with: " << std::endl;
+    sample::gLogInfo << "Ran " << argv[0] << " with: " << std::endl;
 
     std::stringstream ss;
 
@@ -297,7 +297,7 @@ int main(int argc, char** argv)
         ss << input << " ";
     }
 
-    gLogInfo << ss.str() << std::endl;
+    sample::gLogInfo << ss.str() << std::endl;
 
     ss.str(std::string());
 
@@ -307,7 +307,7 @@ int main(int argc, char** argv)
         ss << output << " ";
     }
 
-    gLogInfo << ss.str() << std::endl;
+    sample::gLogInfo << ss.str() << std::endl;
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,36 @@
  * limitations under the License.
  */
 
+#include <cuda.h>
+#if CUDA_VERSION >= 10010
+
 #ifndef TRT_EMB_LAYER_NORM_PLUGIN_H
 #define TRT_EMB_LAYER_NORM_PLUGIN_H
 
 #include "NvInferPlugin.h"
 #include "NvInferRuntime.h"
 
+#include "bertCommon.h"
 #include <string>
 #include <vector>
 namespace bert
 {
 
-// One of the preferred ways of making TensorRT to be able to see
-// our custom layer requires extending IPluginV2 and IPluginCreator classes.
-// For requirements for overriden functions, check TensorRT API docs.
+int computeMaskIdx(cudaStream_t stream, const int S, const int B, const int* mask, int* maskIdx);
+
+template <typename T>
+int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* inputIds, const int* token_ids,
+    const float* beta, const float* gamma, const T* wordEmb, const T* posEmb, const T* tokEmb, T* output);
+
+void convertMask(const uint32_t S, const uint32_t B, const uint32_t warps_m, const uint32_t warps_n,
+    const uint32_t warps_k, const int* inputMaskSB, uint32_t* inputMaskX, cudaStream_t stream);
 
 class EmbLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    EmbLayerNormPluginDynamic(const std::string& name, const bool use_fp16, const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma,
-        const nvinfer1::Weights& word_emb, const nvinfer1::Weights& pos_emb, const nvinfer1::Weights& tok_emb);
+    EmbLayerNormPluginDynamic(const std::string& name, const nvinfer1::DataType type, const nvinfer1::Weights& beta,
+        const nvinfer1::Weights& gamma, const nvinfer1::Weights& word_emb, const nvinfer1::Weights& pos_emb,
+        const nvinfer1::Weights& tok_emb, const bool useFullMask);
 
     EmbLayerNormPluginDynamic(const std::string& name, const void* data, size_t length);
 
@@ -73,33 +83,34 @@ private:
     const std::string mLayerName;
     std::string mNamespace;
 
-    float* mGammaDev;
-    float* mBetaDev;
-    void* mWordEmbDev;
-    void* mTokEmbDev;
-    void* mPosEmbDev;
+    bert::cuda_unique_ptr<float> mGammaDev;
+    bert::cuda_unique_ptr<float> mBetaDev;
+    bert::cuda_unique_ptr<void> mWordEmbDev;
+    bert::cuda_unique_ptr<void> mTokEmbDev;
+    bert::cuda_unique_ptr<void> mPosEmbDev;
     size_t mLd; // leading dim = hidden size
     size_t mB;  // batch size
     size_t mS;  // sequence length
     size_t mWordVocabSize;
     size_t mPosVocabSize;
     size_t mTokVocabSize;
-    nvinfer1::Weights mBeta;
-    nvinfer1::Weights mGamma;
-    nvinfer1::Weights mWordEmb;
-    nvinfer1::Weights mTokEmb;
-    nvinfer1::Weights mPosEmb;
+    bert::WeightsWithOwnership mBeta;
+    bert::WeightsWithOwnership mGamma;
+    bert::WeightsWithOwnership mWordEmb;
+    bert::WeightsWithOwnership mTokEmb;
+    bert::WeightsWithOwnership mPosEmb;
     nvinfer1::DataType mType;
+    bool mUseFullMask;
 
 protected:
     // To prevent compiler warnings.
-    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
-    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
     using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::supportsFormat;
     using nvinfer1::IPluginV2DynamicExt::configurePlugin;
-    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
     using nvinfer1::IPluginV2DynamicExt::enqueue;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
+    using nvinfer1::IPluginV2DynamicExt::supportsFormat;
 };
 
 class EmbLayerNormPluginDynamicCreator : public nvinfer1::IPluginCreator
@@ -126,5 +137,7 @@ private:
     static std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
 };
-}
+} // namespace bert
 #endif // TRT_EMB_LAYER_NORM_PLUGIN_H
+
+#endif // CUDA_VERSION >= 10010

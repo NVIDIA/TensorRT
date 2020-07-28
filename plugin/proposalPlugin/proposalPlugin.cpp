@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,9 +73,9 @@ ProposalPlugin::ProposalPlugin(const std::string name, int input_height, int inp
     , mBboxMinSize(bbox_min_size)
     , mNmsIouThreshold(nms_iou_threshold)
     , mPreNmsTopN(pre_nms_top_n)
+    , mMaxBoxNum(max_box_num)
     , mAnchorSizeNum(anc_size_num)
     , mAnchorRatioNum(anc_ratio_num)
-    , mMaxBoxNum(max_box_num)
 {
     for (int i = 0; i < anc_size_num; ++i)
     {
@@ -99,9 +99,9 @@ ProposalPlugin::ProposalPlugin(const std::string name, int input_height, int inp
     , mBboxMinSize(bbox_min_size)
     , mNmsIouThreshold(nms_iou_threshold)
     , mPreNmsTopN(pre_nms_top_n)
+    , mMaxBoxNum(max_box_num)
     , mAnchorSizeNum(anc_size_num)
     , mAnchorRatioNum(anc_ratio_num)
-    , mMaxBoxNum(max_box_num)
 {
     for (int i = 0; i < anc_size_num; ++i)
     {
@@ -132,12 +132,12 @@ ProposalPlugin::ProposalPlugin(const std::string name, const void* serial_buf, s
     mBboxMinSize = readFromBuffer<float>(a);
     mNmsIouThreshold = readFromBuffer<float>(a);
 
-    for (int i = 0; i < mAnchorSizeNum; ++i)
+    for (size_t i = 0; i < mAnchorSizeNum; ++i)
     {
         mAnchorSizes.push_back(readFromBuffer<float>(a));
     }
 
-    for (int i = 0; i < mAnchorRatioNum; ++i)
+    for (size_t i = 0; i < mAnchorRatioNum; ++i)
     {
         mAnchorRatios.push_back(readFromBuffer<float>(a));
     }
@@ -219,12 +219,12 @@ void ProposalPlugin::serialize(void* buffer) const
     writeToBuffer<float>(a, mBboxMinSize);
     writeToBuffer<float>(a, mNmsIouThreshold);
 
-    for (int i = 0; i < mAnchorSizeNum; ++i)
+    for (size_t i = 0; i < mAnchorSizeNum; ++i)
     {
         writeToBuffer<float>(a, mAnchorSizes[i]);
     }
 
-    for (int i = 0; i < mAnchorRatioNum; ++i)
+    for (size_t i = 0; i < mAnchorRatioNum; ++i)
     {
         writeToBuffer<float>(a, mAnchorRatios[i]);
     }

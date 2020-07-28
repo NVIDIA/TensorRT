@@ -11,7 +11,7 @@
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Prerequisites](#prerequisites)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -217,7 +217,7 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 	2.  Run the following command for the conversion.
 	`convert-to-uff frozen_inference_graph.pb -O NMS -p config.py`
 
-		This saves the converted `.uff` file in the same directory as the input with the name `frozen_inference_graph.pb.uff`.
+		This saves the converted `.uff` file in the same directory as the input with the name `frozen_inference_graph.uff`.
 
 		The `config.py` script specifies the preprocessing operations necessary for the SSD TensorFlow graph. The plugin nodes and plugin parameters used in the `config.py` script should match the registered plugins in TensorRT.
 
@@ -267,17 +267,11 @@ calibration can be performed. Currently, we require a file called `list.txt`, wi
 
 	This output shows that the sample ran successfully; `PASSED`.
 
-### Sample --help options
 
-To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
-```
-Usage: ./sample_uff_ssd
-Optional Parameters:
-  -h, --help Display help information.
-  --useDLACore=N    Specify the DLA engine to run on.
-  --fp16            Specify to run in fp16 mode.
-  --int8            Specify to run in int8 mode.
-```  
+### Sample `--help` options
+
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
+
 
 # Additional resources
 

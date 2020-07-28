@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,7 +76,7 @@ private:
     //! \brief uses a Caffe parser to create the MNIST Network and marks the
     //!        output layers
     //!
-    void constructNetwork(
+    bool constructNetwork(
         SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
 
     //!
@@ -111,7 +111,7 @@ private:
 //!
 bool SampleMNIST::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
@@ -135,7 +135,11 @@ bool SampleMNIST::build()
         return false;
     }
 
-    constructNetwork(parser, network);
+    if (!constructNetwork(parser, network))
+    {
+        return false;
+    }
+
     builder->setMaxBatchSize(mParams.batchSize);
     config->setMaxWorkspaceSize(16_MiB);
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
@@ -179,12 +183,12 @@ bool SampleMNIST::processInput(
     readPGMFile(locateFile(std::to_string(inputFileIdx) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
 
     // Print ASCII representation of digit
-    gLogInfo << "Input:\n";
+    sample::gLogInfo << "Input:\n";
     for (int i = 0; i < inputH * inputW; i++)
     {
-        gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
+        sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     float* hostInputBuffer = static_cast<float*>(buffers.getHostBuffer(inputTensorName));
 
@@ -205,7 +209,7 @@ bool SampleMNIST::verifyOutput(
     const float* prob = static_cast<const float*>(buffers.getHostBuffer(outputTensorName));
 
     // Print histogram of the output distribution
-    gLogInfo << "Output:\n";
+    sample::gLogInfo << "Output:\n";
     float val{0.0f};
     int idx{0};
     const int kDIGITS = 10;
@@ -218,9 +222,9 @@ bool SampleMNIST::verifyOutput(
             idx = i;
         }
 
-        gLogInfo << i << ": " << std::string(int(std::floor(prob[i] * 10 + 0.5f)), '*') << "\n";
+        sample::gLogInfo << i << ": " << std::string(int(std::floor(prob[i] * 10 + 0.5f)), '*') << "\n";
     }
-    gLogInfo << std::endl;
+    sample::gLogInfo << std::endl;
 
     return (idx == groundTruthDigit && val > 0.9f);
 }
@@ -233,7 +237,7 @@ bool SampleMNIST::verifyOutput(
 //!
 //! \param builder Pointer to the engine builder
 //!
-void SampleMNIST::constructNetwork(
+bool SampleMNIST::constructNetwork(
     SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
 {
     const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor = parser->parse(
@@ -259,12 +263,23 @@ void SampleMNIST::constructNetwork(
         = samplesCommon::getMaxValue(static_cast<const float*>(meanWeights.values), samplesCommon::volume(inputDims));
 
     auto mean = network->addConstant(nvinfer1::Dims3(1, inputDims.d[1], inputDims.d[2]), meanWeights);
-    mean->getOutput(0)->setDynamicRange(-maxMean, maxMean);
-    network->getInput(0)->setDynamicRange(-maxMean, maxMean);
+    if (!mean->getOutput(0)->setDynamicRange(-maxMean, maxMean))
+    {
+        return false;
+    }
+    if (!network->getInput(0)->setDynamicRange(-maxMean, maxMean))
+    {
+        return false;
+    }
     auto meanSub = network->addElementWise(*network->getInput(0), *mean->getOutput(0), ElementWiseOperation::kSUB);
-    meanSub->getOutput(0)->setDynamicRange(-maxMean, maxMean);
+    if (!meanSub->getOutput(0)->setDynamicRange(-maxMean, maxMean))
+    {
+        return false;
+    }
     network->getLayer(0)->setInput(0, *meanSub->getOutput(0));
     samplesCommon::setAllTensorScales(network.get(), 127.0f, 127.0f);
+
+    return true;
 }
 
 //!
@@ -390,7 +405,7 @@ int main(int argc, char** argv)
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
     if (!argsOK)
     {
-        gLogError << "Invalid arguments" << std::endl;
+        sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
@@ -400,29 +415,29 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
-    gLogger.reportTestStart(sampleTest);
+    sample::gLogger.reportTestStart(sampleTest);
 
     samplesCommon::CaffeSampleParams params = initializeSampleParams(args);
 
     SampleMNIST sample(params);
-    gLogInfo << "Building and running a GPU inference engine for MNIST" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for MNIST" << std::endl;
 
     if (!sample.build())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (!sample.infer())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
     if (!sample.teardown())
     {
-        return gLogger.reportFail(sampleTest);
+        return sample::gLogger.reportFail(sampleTest);
     }
 
-    return gLogger.reportPass(sampleTest);
+    return sample::gLogger.reportPass(sampleTest);
 }

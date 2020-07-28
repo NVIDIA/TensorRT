@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,7 +39,6 @@ string(REGEX REPLACE "(.)([A-Z][a-z]+)" "\\1_\\2" SAMPLE_NAME_SNAKE_MIXED ${SAMP
 string(REGEX REPLACE "([a-z0-9])([A-Z])" "\\1_\\2" SAMPLE_NAME_SNAKE_MIXED ${SAMPLE_NAME_SNAKE_MIXED})
 string(TOLOWER ${SAMPLE_NAME_SNAKE_MIXED} SAMPLE_NAME_SNAKE)
 
-# WAR bug http://nvbugs/2518092
 # fix a few sample names
 string(REGEX REPLACE "movie_lens" "movielens" SAMPLE_NAME_FIXED ${SAMPLE_NAME_SNAKE})
 string(REGEX REPLACE "google_net" "googlenet" SAMPLE_NAME_FIXED ${SAMPLE_NAME_FIXED})
@@ -70,12 +69,7 @@ if(BUILD_PLUGINS OR BUILD_PARSERS)
     )
 endif()
 
-# TODO: Remove the NVINTERNAL branch once the CMake system is fully integrated into P4
-if (NVINTERNAL)
-    set(ONNX_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/parsers${NVINTERNAL_SUFFIX}/onnx CACHE STRING "Onnx include directory")
-else()
-    set(ONNX_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/parsers${NVINTERNAL_SUFFIX}/onnx CACHE STRING "Onnx include directory")
-endif()
+set(ONNX_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/parsers/onnx CACHE STRING "ONNX include directory")
 
 target_include_directories(${TARGET_NAME}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
@@ -125,9 +119,9 @@ set_target_properties(${TARGET_NAME} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFI
 
 set_target_properties(${TARGET_NAME}
     PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${TRT_BIN_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
 add_dependencies(samples ${TARGET_NAME})
