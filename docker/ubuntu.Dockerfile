@@ -35,21 +35,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     git \
     pkg-config \
-    python3 \
-    python3-pip \
-    python3-dev \
-    python3-wheel \
     sudo \
     ssh \
+    libssl-dev \
     pbzip2 \
     pv \
     bzip2 \
     unzip \
+    devscripts \
+    lintian \
+    fakeroot \
+    dh-make \
     build-essential
 
-RUN cd /usr/local/bin &&\
+RUN . /etc/os-release &&\
+    if [ "$VERSION_ID" = "16.04" ]; then \
+    add-apt-repository ppa:deadsnakes/ppa && apt-get update &&\
+    apt-get remove -y python3 python && apt-get autoremove -y &&\
+    apt-get install -y python3.6 python3.6-dev &&\
+    cd /tmp && wget https://bootstrap.pypa.io/get-pip.py && python3.6 get-pip.py &&\
+    python3.6 -m pip install wheel &&\
+    ln -s /usr/bin/python3.6 /usr/bin/python3 &&\
+    ln -s /usr/bin/python3.6 /usr/bin/python; \
+    else \
+    apt-get update &&\
+    apt-get install -y --no-install-recommends \
+      python3 \
+      python3-pip \
+      python3-dev \
+      python3-wheel &&\
+    cd /usr/local/bin &&\
     ln -s /usr/bin/python3 python &&\
-    ln -s /usr/bin/pip3 pip
+    ln -s /usr/bin/pip3 pip; \
+    fi
+
 RUN pip3 install --upgrade pip
 RUN pip3 install setuptools>=41.0.0
 
@@ -65,7 +84,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
 
 # Download NGC client
-RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_bat_linux.zip && unzip ngccli_bat_linux.zip && chmod u+x ngc && rm ngccli_bat_linux.zip ngc.md5 && echo "no-apikey\nascii\nno-org\nno-team\nno-ace\n" | ngc config set
+RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip && unzip ngccli_cat_linux.zip && chmod u+x ngc && rm ngccli_cat_linux.zip ngc.md5 && echo "no-apikey\nascii\n" | ngc config set
 
 # Set environment and working directory
 ENV TRT_RELEASE /tensorrt
