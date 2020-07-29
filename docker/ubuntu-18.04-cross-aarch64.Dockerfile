@@ -50,8 +50,8 @@ RUN dpkg -i /pdk_files/cuda-repo-cross-aarch64-10-0-local-10.0.326_1.0-1_all.deb
     && rm -rf /var/lib/apt/lists/*
 
 # Unpack cudnn
-RUN dpkg -x /pdk_files/libcudnn7_7.5.0.56-1+cuda10.0_arm64.deb /pdk_files/cudnn  \
-    && dpkg -x /pdk_files/libcudnn7-dev_7.5.0.56-1+cuda10.0_arm64.deb /pdk_files/cudnn \
+RUN dpkg -x /pdk_files/libcudnn7_7.6.3.28-1+cuda10.0_arm64.deb /pdk_files/cudnn  \
+    && dpkg -x /pdk_files/libcudnn7-dev_7.6.3.28-1+cuda10.0_arm64.deb /pdk_files/cudnn \
     && cd /pdk_files/cudnn/usr/include/aarch64-linux-gnu \
     && cd /pdk_files/cudnn/usr/lib/aarch64-linux-gnu \
     && ln -s libcudnn.so.7 libcudnn.so \
