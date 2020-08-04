@@ -253,7 +253,6 @@ def infer_tacotron2_trt(encoder, decoder_iter, postnet,
 
     return mel_outputs_postnet, mel_lengths
 
-
 def infer_waveglow_trt(waveglow, waveglow_context, mel, measurements, fp16):
 
     mel_size = mel.size(2)
@@ -263,6 +262,8 @@ def infer_waveglow_trt(waveglow, waveglow_context, mel, measurements, fp16):
     z_size = mel_size*stride
     z_size = z_size//n_group
     z = torch.randn(batch_size, n_group, z_size).cuda()
+    mel = mel.unsqueeze(3)
+    z = z.unsqueeze(3)
     audios = torch.zeros(batch_size, mel_size*stride).cuda()
 
     if fp16:
@@ -303,8 +304,7 @@ def main():
         waveglow_ckpt = load_and_setup_model('WaveGlow', parser, args.waveglow_ckpt,
                                              True, forward_is_infer=True)
         denoiser = Denoiser(waveglow_ckpt).cuda()
-        # after initialization, we don't need WaveGlow PyTorch checkpoint
-        # anymore - deleting
+        # after initialization, we don't need WaveGlow PyTorch checkpoint anymore - deleting
         del waveglow_ckpt
         torch.cuda.empty_cache()
 
