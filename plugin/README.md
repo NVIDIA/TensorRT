@@ -6,6 +6,7 @@
 |---|---|---|
 | [batchTilePlugin](batchTilePlugin) | BatchTilePlugin_TRT | 1 |
 | [batchedNMSPlugin](batchedNMSPlugin) | BatchedNMS_TRT | 1 |
+| [batchedNMSDynamicPlugin](batchedNMSPlugin) | BatchedNMSDynamic_TRT | 1 |
 | [bertQKVToContextPlugin](bertQKVToContextPlugin) | CustomQKVToContextPluginDynamic | 1 |
 | [coordConvACPlugin](coordConvACPlugin) | CoordConvAC | 1 |
 | [cropAndResizePlugin](cropAndResizePlugin) | CropAndResize | 1 |
