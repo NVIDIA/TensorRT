@@ -45,10 +45,8 @@ def encoder_infer(self, x, input_lengths):
 
     x = x.transpose(1, 2)
 
-    input_lengths_cpu = input_lengths[:]
-    input_lengths_cpu = input_lengths_cpu.cpu().numpy()
     x = nn.utils.rnn.pack_padded_sequence(
-        x, input_lengths_cpu, batch_first=True)
+        x, input_lengths, batch_first=True)
 
     outputs, _ = self.lstm(x)
 
