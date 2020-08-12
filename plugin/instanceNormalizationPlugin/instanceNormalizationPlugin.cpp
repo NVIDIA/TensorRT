@@ -176,7 +176,7 @@ int InstanceNormalizationPlugin::enqueue(const nvinfer1::PluginTensorDesc* input
     int n = input_dims.d[0];
     int c = input_dims.d[1];
     int h = input_dims.d[2];
-    int w = input_dims.d[3];
+    int w = input_dims.d[3] > 0 ? input_dims.d[3] : 1;
     size_t nchan_bytes = c * sizeof(float);
 
     // Note: We repeat the data for each batch entry so that we can do the full
