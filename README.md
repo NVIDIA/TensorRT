@@ -113,12 +113,12 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
 	export TRT_RELEASE=`pwd`/TensorRT-7.1.3.4
 	```
 
-	**Example: CentOS/RedHat 7 with cuda-10.2**
+	**Example: CentOS/RedHat 7 with cuda-11.0**
 
-	Download and extract the *TensorRT 7.1 GA for CentOS/RedHat 7 and CUDA 10.2 tar package*
+	Download and extract the *TensorRT 7.1 GA for CentOS/RedHat 7 and CUDA 11.0 tar package*
 	```bash
 	cd ~/Downloads
-	tar -xvzf TensorRT-7.1.3.4.CentOS-8.0.x86_64-gnu.cuda-10.2.cudnn8.0.tar.gz
+	tar -xvzf TensorRT-7.1.3.4.CentOS-8.0.x86_64-gnu.cuda-11.0.cudnn8.0.tar.gz
 	export TRT_RELEASE=`pwd`/TensorRT-7.1.3.4
 	```
 
@@ -183,10 +183,10 @@ NOTE: Along with the TensorRT OSS components, the following source packages will
     ./docker/build.sh --file docker/ubuntu.Dockerfile --tag tensorrt-ubuntu1604 --os 16.04 --cuda 11.0
     ```
 
-    **Example: CentOS/RedHat 7 with cuda-10.2**
+    **Example: CentOS/RedHat 7 with cuda-11.0**
 
     ```bash
-    ./docker/build.sh --file docker/centos.Dockerfile --tag tensorrt-centos --os 7 --cuda 10.2
+    ./docker/build.sh --file docker/centos.Dockerfile --tag tensorrt-centos --os 7 --cuda 11.0
     ```
 
     **Example: Cross compile for JetPack 4.4 with cuda-10.2**
