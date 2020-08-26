@@ -15,6 +15,25 @@
  */
 #include <array>
 #include "kernel.h"
+#include "cuda_fp16.h"
+
+using half = __half;
+
+// overloading exp for half type
+static __device__ half exp(half a) {
+    return hexp(a);
+}
+
+// overloading min for half type
+static __device__ half min(half a, half b) {
+    return __hle(a, b) ? a : b;
+}
+
+// overloading max for half type
+static __device__ half max(half a, half b) {
+    return __hle(a, b) ? b : a;
+}
+
 
 template <typename T_BBOX, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
@@ -82,8 +101,8 @@ __launch_bounds__(nthds_per_cta)
             // Calculate prior box center, height, and width
             const T_BBOX prior_width = p_xmax - p_xmin;
             const T_BBOX prior_height = p_ymax - p_ymin;
-            const T_BBOX prior_center_x = (p_xmin + p_xmax) / 2.;
-            const T_BBOX prior_center_y = (p_ymin + p_ymax) / 2.;
+            const T_BBOX prior_center_x = (p_xmin + p_xmax) / T_BBOX(2.);
+            const T_BBOX prior_center_y = (p_ymin + p_ymax) / T_BBOX(2.);
 
             // Get the current bounding box coordinates
             const T_BBOX xmin = loc_data[index - i];
@@ -117,16 +136,16 @@ __launch_bounds__(nthds_per_cta)
             switch (i)
             {
             case 0:
-                bbox_data[index] = decode_bbox_center_x - decode_bbox_width / 2.;
+                bbox_data[index] = decode_bbox_center_x - decode_bbox_width / T_BBOX(2.);
                 break;
             case 1:
-                bbox_data[index] = decode_bbox_center_y - decode_bbox_height / 2.;
+                bbox_data[index] = decode_bbox_center_y - decode_bbox_height / T_BBOX(2.);
                 break;
             case 2:
-                bbox_data[index] = decode_bbox_center_x + decode_bbox_width / 2.;
+                bbox_data[index] = decode_bbox_center_x + decode_bbox_width / T_BBOX(2.);
                 break;
             case 3:
-                bbox_data[index] = decode_bbox_center_y + decode_bbox_height / 2.;
+                bbox_data[index] = decode_bbox_center_y + decode_bbox_height / T_BBOX(2.);
                 break;
             }
             //} else if (code_type == PriorBoxParameter_CodeType_CORNER_SIZE) {
@@ -173,8 +192,8 @@ __launch_bounds__(nthds_per_cta)
             const T_BBOX pYmax = prior_data[pi + 3];
             const T_BBOX priorWidth = pXmax - pXmin;
             const T_BBOX priorHeight = pYmax - pYmin;
-            const T_BBOX priorCenterX = (pXmin + pXmax) / 2.;
-            const T_BBOX priorCenterY = (pYmin + pYmax) / 2.;
+            const T_BBOX priorCenterX = (pXmin + pXmax) / T_BBOX(2.);
+            const T_BBOX priorCenterY = (pYmin + pYmax) / T_BBOX(2.);
 
             const T_BBOX ymin = loc_data[index - i];
             const T_BBOX xmin = loc_data[index - i + 1];
@@ -192,16 +211,16 @@ __launch_bounds__(nthds_per_cta)
             switch (i)
             {
             case 0:
-                bbox_data[index] = bboxCenterX - bboxWidth / 2.;
+                bbox_data[index] = bboxCenterX - bboxWidth / T_BBOX(2.);
                 break;
             case 1:
-                bbox_data[index] = bboxCenterY - bboxHeight / 2.;
+                bbox_data[index] = bboxCenterY - bboxHeight / T_BBOX(2.);
                 break;
             case 2:
-                bbox_data[index] = bboxCenterX + bboxWidth / 2.;
+                bbox_data[index] = bboxCenterX + bboxWidth / T_BBOX(2.);
                 break;
             case 3:
-                bbox_data[index] = bboxCenterY + bboxHeight / 2.;
+                bbox_data[index] = bboxCenterY + bboxHeight / T_BBOX(2.);
                 break;
             }
         }
@@ -278,8 +297,10 @@ struct dbbLaunchConfig
     }
 };
 
-static std::array<dbbLaunchConfig, 1> dbbLCOptions = {
-    dbbLaunchConfig(DataType::kFLOAT, decodeBBoxes_gpu<float>)};
+static std::array<dbbLaunchConfig, 2> dbbLCOptions = {
+    dbbLaunchConfig(DataType::kFLOAT, decodeBBoxes_gpu<float>),
+    dbbLaunchConfig(DataType::kHALF, decodeBBoxes_gpu<half>)
+};
 
 pluginStatus_t decodeBBoxes(
     cudaStream_t stream,

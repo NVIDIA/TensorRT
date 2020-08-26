@@ -79,9 +79,9 @@ const char* cublasGetErrorString(cublasStatus_t error);
 pluginStatus_t permuteData(cudaStream_t stream, int nthreads, int num_classes, int num_data, int num_dim,
     DataType DT_DATA, bool confSigmoid, const void* data, void* new_data);
 
-size_t detectionForwardPreNMSSize(int N, int C2);
+size_t detectionForwardPreNMSSize(int N, int C2, DataType dtype=DataType::kFLOAT);
 
-size_t detectionForwardPostNMSSize(int N, int numClasses, int topK);
+size_t detectionForwardPostNMSSize(int N, int numClasses, int topK, DataType dtype=DataType::kFLOAT);
 
 pluginStatus_t decodeBBoxes(cudaStream_t stream, int nthreads, CodeTypeSSD code_type, bool variance_encoded_in_target,
     int num_priors, bool share_location, int num_loc_classes, int background_label_id, bool clip_bbox, DataType DT_BBOX,

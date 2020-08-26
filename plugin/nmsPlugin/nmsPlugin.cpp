@@ -39,11 +39,12 @@ DetectionOutput::DetectionOutput(DetectionOutputParameters params)
 {
 }
 
-DetectionOutput::DetectionOutput(DetectionOutputParameters params, int C1, int C2, int numPriors)
+DetectionOutput::DetectionOutput(DetectionOutputParameters params, int C1, int C2, int numPriors, DataType dtype)
     : param(params)
     , C1(C1)
     , C2(C2)
     , numPriors(numPriors)
+    , mType(dtype)
 {
 }
 
@@ -60,6 +61,8 @@ DetectionOutput::DetectionOutput(const void* data, size_t length)
     C2 = read<int>(d);
     // Number of bounding boxes per sample
     numPriors = read<int>(d);
+    // data type of this plugin
+    mType = read<DataType>(d);
     ASSERT(d == a + length);
 }
 
@@ -95,7 +98,7 @@ Dims DetectionOutput::getOutputDimensions(int index, const Dims* inputs, int nbI
 size_t DetectionOutput::getWorkspaceSize(int maxBatchSize) const
 {
     return detectionInferenceWorkspaceSize(param.shareLocation, maxBatchSize, C1, C2, param.numClasses, numPriors,
-        param.topK, DataType::kFLOAT, DataType::kFLOAT);
+        param.topK, mType, mType);
 }
 
 // Plugin layer implementation
@@ -113,8 +116,8 @@ int DetectionOutput::enqueue(
 
     pluginStatus_t status = detectionInference(stream, batchSize, C1, C2, param.shareLocation,
         param.varianceEncodedInTarget, param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK,
-        param.confidenceThreshold, param.nmsThreshold, param.codeType, DataType::kFLOAT, locData, priorData,
-        DataType::kFLOAT, confData, keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid);
+        param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData, priorData,
+        mType, confData, keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
@@ -123,7 +126,7 @@ int DetectionOutput::enqueue(
 size_t DetectionOutput::getSerializationSize() const
 {
     // DetectionOutputParameters, C1,C2,numPriors
-    return sizeof(DetectionOutputParameters) + sizeof(int) * 3;
+    return sizeof(DetectionOutputParameters) + sizeof(int) * 3 + sizeof(DataType);
 }
 
 // Serialization of plugin parameters
@@ -134,13 +137,17 @@ void DetectionOutput::serialize(void* buffer) const
     write(d, C1);
     write(d, C2);
     write(d, numPriors);
+    write(d, mType);
     ASSERT(d == a + getSerializationSize());
 }
 
 // Check if the DataType and Plugin format is supported
 bool DetectionOutput::supportsFormat(DataType type, PluginFormat format) const
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (
+        (type == DataType::kHALF || type == DataType::kFLOAT) &&
+        format == PluginFormat::kNCHW
+    );
 }
 
 // Get the plugin type
@@ -165,7 +172,7 @@ void DetectionOutput::destroy()
 IPluginV2Ext* DetectionOutput::clone() const
 {
     // Create a new instance
-    IPluginV2Ext* plugin = new DetectionOutput(param, C1, C2, numPriors);
+    IPluginV2Ext* plugin = new DetectionOutput(param, C1, C2, numPriors, mType);
 
     // Set the namespace
     plugin->setPluginNamespace(mPluginNamespace.c_str());
@@ -188,7 +195,19 @@ DataType DetectionOutput::getOutputDataType(int index, const nvinfer1::DataType*
 {
     // Two outputs
     ASSERT(index == 0 || index == 1);
+    ASSERT(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
+    ASSERT(inputTypes[1] == DataType::kFLOAT || inputTypes[1] == DataType::kHALF);
+    ASSERT(inputTypes[2] == DataType::kFLOAT || inputTypes[2] == DataType::kHALF);
+    ASSERT(inputTypes[0] == inputTypes[1]);
+    ASSERT(inputTypes[2] == inputTypes[1]);
+    // topDetections
+    if (index == 0) {
+        return inputTypes[0];
+    }
+    // keepCount: plugin does not support kINT32 as output, use kFLOAT instead as they have same sizeof(type)
+    ASSERT(sizeof(int) == sizeof(float));
     return DataType::kFLOAT;
+
 }
 
 // Return true if output tensor is broadcast across a batch.
@@ -247,6 +266,9 @@ void DetectionOutput::configurePlugin(const Dims* inputDims, int nbInputs, const
 
     // Verify C2
     ASSERT(numPriors * param.numClasses == inputDims[param.inputOrder[1]].d[0]);
+
+    // initialize mType
+    mType = inputTypes[0];
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.

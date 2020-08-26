@@ -13,11 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "cuda_fp16.h"
 #include "cub/cub.cuh"
 #include <array>
 #include "kernel.h"
 #include "bboxUtils.h"
 #include "cub_helper.h"
+
+using half = __half;
 
 template <typename T_SCORE>
 pluginStatus_t sortScoresPerImage_gpu(
@@ -78,8 +81,10 @@ struct sspiLaunchConfig
     }
 };
 
-static std::array<sspiLaunchConfig, 1> sspiLCOptions = {
-    sspiLaunchConfig(DataType::kFLOAT, sortScoresPerImage_gpu<float>)};
+static std::array<sspiLaunchConfig, 2> sspiLCOptions = {
+    sspiLaunchConfig(DataType::kFLOAT, sortScoresPerImage_gpu<float>),
+    sspiLaunchConfig(DataType::kHALF, sortScoresPerImage_gpu<half>)
+};
 
 pluginStatus_t sortScoresPerImage(
     cudaStream_t stream,
@@ -122,6 +127,10 @@ size_t sortScoresPerImageWorkspaceSize(
     if (DT_SCORE == DataType::kFLOAT)
     {
         wss[1] = cubSortPairsWorkspaceSize<float, int>(arrayLen, num_images); // cub workspace
+    }
+    else if (DT_SCORE == DataType::kHALF)
+    {
+        wss[1] = cubSortPairsWorkspaceSize<half, int>(arrayLen, num_images); // cub workspace
     }
     else
     {

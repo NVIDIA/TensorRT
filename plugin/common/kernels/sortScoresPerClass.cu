@@ -13,12 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+ #include "cuda_fp16.h"
 #include "cub/cub.cuh"
 #include <array>
 #include "kernel.h"
 #include "bboxUtils.h"
 #include "cub_helper.h"
 
+using half = __half;
 
 template <typename T_SCORE, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
@@ -27,7 +29,7 @@ __launch_bounds__(nthds_per_cta)
         const int num_classes,
         const int num_preds_per_class,
         const int background_label_id,
-        const float confidence_threshold,
+        const T_SCORE confidence_threshold,
         T_SCORE* conf_scores_gpu,
         T_SCORE* temp_scores,
         int* temp_idx,
@@ -104,11 +106,11 @@ pluginStatus_t sortScoresPerClass_gpu(
     void* d_offsets = nextWorkspacePtr((int8_t*) temp_idx, arrayLen * sizeof(int));
     size_t cubOffsetSize = (num_segments + 1) * sizeof(int);
     void* cubWorkspace = nextWorkspacePtr((int8_t*) d_offsets, cubOffsetSize);
-
+    T_SCORE conf_thres = static_cast<T_SCORE>(confidence_threshold);
     const int BS = 512;
     const int GS = (num_classes * num_preds_per_class + BS - 1) / BS;
     prepareSortData<T_SCORE, BS><<<GS, BS, 0, stream>>>(num, num_classes, num_preds_per_class,
-                                                        background_label_id, confidence_threshold,
+                                                        background_label_id, conf_thres,
                                                         (T_SCORE*) conf_scores_gpu,
                                                         (T_SCORE*) temp_scores,
                                                         (int*) temp_idx,
@@ -157,8 +159,10 @@ struct sspcLaunchConfig
     }
 };
 
-static std::array<sspcLaunchConfig, 1> sspcLCOptions = {
-    sspcLaunchConfig(DataType::kFLOAT, sortScoresPerClass_gpu<float>)};
+static std::array<sspcLaunchConfig, 2> sspcLCOptions = {
+    sspcLaunchConfig(DataType::kFLOAT, sortScoresPerClass_gpu<float>),
+    sspcLaunchConfig(DataType::kHALF, sortScoresPerClass_gpu<half>)
+};
 
 pluginStatus_t sortScoresPerClass(
     cudaStream_t stream,
@@ -206,6 +210,10 @@ size_t sortScoresPerClassWorkspaceSize(
     if (DT_CONF == DataType::kFLOAT)
     {
         wss[3] = cubSortPairsWorkspaceSize<float, int>(arrayLen, num * num_classes); // cub workspace
+    }
+    else if (DT_CONF == DataType::kHALF)
+    {
+        wss[3] = cubSortPairsWorkspaceSize<half, int>(arrayLen, num * num_classes); // cub workspace
     }
     else
     {

@@ -14,8 +14,22 @@
  * limitations under the License.
  */
 #include <array>
+#include "cuda_fp16.h"
 #include "plugin.h"
 #include "kernel.h"
+
+using half = __half;
+
+// overloading min for half type
+static __device__ half min(half a, half b) {
+    return __hle(a, b) ? a : b;
+}
+
+// overloading max for half type
+static __device__ half max(half a, half b) {
+    return __hle(a, b) ? b : a;
+}
+
 
 template <typename T_BBOX, typename T_SCORE, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
@@ -149,8 +163,10 @@ struct gtdLaunchConfig
 
 using nvinfer1::DataType;
 
-static std::array<gtdLaunchConfig, 1> gtdLCOptions = {
-    gtdLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherTopDetections_gpu<float, float>)};
+static std::array<gtdLaunchConfig, 2> gtdLCOptions = {
+    gtdLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherTopDetections_gpu<float, float>),
+    gtdLaunchConfig(DataType::kHALF, DataType::kHALF, gatherTopDetections_gpu<half, half>)
+};
 
 pluginStatus_t gatherTopDetections(
     cudaStream_t stream,

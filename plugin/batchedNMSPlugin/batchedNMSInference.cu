@@ -88,11 +88,11 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
         stream, numScores, numClasses, numPredsPerClass, 1, DataType::kFLOAT, confSigmoid, confData, scores);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
-    size_t indicesSize = detectionForwardPreNMSSize(N, perBatchScoresSize);
+    size_t indicesSize = detectionForwardPreNMSSize(N, perBatchScoresSize, DataType::kINT32);
     void* indices = nextWorkspacePtr((int8_t*) scores, totalScoresSize);
 
     size_t postNMSScoresSize = detectionForwardPostNMSSize(N, numClasses, topK);
-    size_t postNMSIndicesSize = detectionForwardPostNMSSize(N, numClasses, topK);
+    size_t postNMSIndicesSize = detectionForwardPostNMSSize(N, numClasses, topK, DataType::kINT32);
     void* postNMSScores = nextWorkspacePtr((int8_t*) indices, indicesSize);
     void* postNMSIndices = nextWorkspacePtr((int8_t*) postNMSScores, postNMSScoresSize);
 

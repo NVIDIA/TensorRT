@@ -15,6 +15,9 @@
  */
 #include <array>
 #include "kernel.h"
+#include "cuda_fp16.h"
+
+using half = __half;
 
 template <typename Dtype, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
@@ -95,8 +98,10 @@ struct pdLaunchConfig
     }
 };
 
-static std::array<pdLaunchConfig, 1> pdLCOptions = {
-  pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>)};
+static std::array<pdLaunchConfig, 2> pdLCOptions = {
+  pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>),
+  pdLaunchConfig(DataType::kHALF, permuteData_gpu<half>)
+};
 
 pluginStatus_t permuteData(cudaStream_t stream,
                         const int nthreads,

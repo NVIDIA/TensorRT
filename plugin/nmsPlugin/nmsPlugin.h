@@ -32,7 +32,7 @@ class DetectionOutput : public IPluginV2Ext
 public:
     DetectionOutput(DetectionOutputParameters param);
 
-    DetectionOutput(DetectionOutputParameters param, int C1, int C2, int numPriors);
+    DetectionOutput(DetectionOutputParameters param, int C1, int C2, int numPriors, DataType dtype);
 
     DetectionOutput(const void* data, size_t length);
 
@@ -87,6 +87,7 @@ public:
 private:
     DetectionOutputParameters param;
     int C1, C2, numPriors;
+    DataType mType;
     std::string mPluginNamespace;
 };
 
