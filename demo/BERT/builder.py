@@ -554,10 +554,10 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     output_fp16 = trt.PluginField("output_fp16", np.array([1 if config.use_fp16 else 0]).astype(np.int32), trt.PluginFieldType.INT32)
 
     use_full_mask = 0
-    # use full_mask for XMMA kernels (use fp16/int8 precision and SM version >= 72)
-    if not config.is_calib_mode and (config.use_fp16 or config.use_int8):
+    # use full_mask for XMMA kernels (use fp16/int8 precision and SM version >= 75)
+    if not config.is_calib_mode and (config.use_fp16 or config.use_int8) and (sequence_length == 128 or sequence_length == 384):
         cc = pycuda.autoinit.device.compute_capability()
-        if cc[0] * 10 + cc[1] >= 72:
+        if cc[0] * 10 + cc[1] >= 75:
             use_full_mask = 1
     full_mask = trt.PluginField("full_mask", np.array([use_full_mask]).astype(np.int32), trt.PluginFieldType.INT32)
 
