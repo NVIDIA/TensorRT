@@ -37,13 +37,13 @@ parser.add_argument('-1', '--wtsv1', required=False, default=False, type=bool, h
 opt = parser.parse_args()
 
 if opt.wtsv1:
-    print "Outputting the trained weights in TensorRT's wts v1 format. This format is documented as:"
-    print "Line 0: <number of buffers in the file>"
-    print "Line 1-Num: [buffer name] [buffer type] [buffer size] <hex values>"
+    print("Outputting the trained weights in TensorRT's wts v1 format. This format is documented as:")
+    print("Line 0: <number of buffers in the file>")
+    print("Line 1-Num: [buffer name] [buffer type] [buffer size] <hex values>")
 else:
-    print "Outputting the trained weights in TensorRT's wts v2 format. This format is documented as:"
-    print "Line 0: <number of buffers in the file>"
-    print "Line 1-Num: [buffer name] [buffer type] [(buffer shape{e.g. (1, 2, 3)}] <buffer shaped size bytes of data>"
+    print("Outputting the trained weights in TensorRT's wts v2 format. This format is documented as:")
+    print("Line 0: <number of buffers in the file>")
+    print("Line 1-Num: [buffer name] [buffer type] [(buffer shape{e.g. (1, 2, 3)}] <buffer shaped size bytes of data>")
 
 inputbase = opt.model
 outputbase = opt.output
