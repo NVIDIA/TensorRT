@@ -23,7 +23,7 @@ assignees: ''
 **Python Version (if applicable)**: 
 **TensorFlow Version (if applicable)**: 
 **PyTorch Version (if applicable)**: 
-**Baremetal or Container (if container which image + tag)**: 
+**Baremetal or Container (which commit + image + tag)**: 
 
 
 ## Relevant Files
