@@ -37,6 +37,16 @@ namespace nvinfer1
 namespace plugin
 {
 
+class BasePlugin : public IPluginV2
+{
+protected:
+    void setPluginNamespace(const char* libNamespace) override { mNamespace = libNamespace; }
+
+    const char* getPluginNamespace() const override { return mNamespace.c_str(); }
+
+    std::string mNamespace;
+};
+
 class BaseCreator : public IPluginCreator
 {
 public:

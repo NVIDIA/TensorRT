@@ -95,6 +95,9 @@ pluginStatus_t normalizeInference(cudaStream_t stream, cublasHandle_t handle, bo
 pluginStatus_t priorBoxInference(cudaStream_t stream, PriorBoxParameters param, int H, int W, int numPriors,
     int numAspectRatios, const void* minSize, const void* maxSize, const void* aspectRatios, void* outputData);
 
+pluginStatus_t lReLUInference(
+    cudaStream_t stream, int n, float negativeSlope, const void* input, void* output);
+
 pluginStatus_t reorgInference(
     cudaStream_t stream, int batch, int C, int H, int W, int stride, const void* input, void* output);
 

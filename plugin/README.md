@@ -20,6 +20,7 @@
 | [gridAnchorRectPlugin](gridAnchorPlugin) | GridAnchorRect_TRT | 1 |
 | [groupNormalizationPlugin](groupNormalizationPlugin) | GroupNormalizationPlugin | 1 |
 | [instanceNormalizationPlugin](instanceNormalizationPlugin) | InstanceNormalization_TRT | 1 |
+| [leakyReluPlugin](leakyReluPlugin) | LReLU_TRT | 1 |
 | [multilevelCropAndResizePlugin](multilevelCropAndResizePlugin) | MultilevelCropAndResize_TRT | 1 |
 | [multilevelProposeROI](multilevelProposeROI) | MultilevelProposeROI_TRT | 1 |
 | [nmsPlugin](nmsPlugin) | NMS_TRT | 1 |
