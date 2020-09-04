@@ -53,6 +53,7 @@ set(PLUGIN_LISTS
     instanceNormalizationPlugin
     groupNormalizationPlugin
     coordConvACPlugin
+    leakyReluPlugin
     )
 
 # Add BERT sources if ${BERT_GENCODES} was populated
