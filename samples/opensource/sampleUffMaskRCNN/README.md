@@ -67,6 +67,7 @@ We use the Tensorflow 19.10-py3 container for generating the UFF model for MaskR
 
 2.  Inside the container, install required packages alongwith UFF toolkit and graph surgeon.
     ```bash
+    git clone https://github.com/NVIDIA/TensorRT.git
     cd /workspace/TensorRT/samples/opensource/sampleUffMaskRCNN/converted/
     pip3 install -r requirements.txt
     pip3 install /tensorrt/uff/uff-*-py2.py3-none-any.whl
