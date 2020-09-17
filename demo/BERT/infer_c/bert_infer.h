@@ -128,7 +128,7 @@ struct BertInference
 
         for (int i = 0; i < kBERT_INPUT_NUM; i++)
         {
-            mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(mSeqLength, batchSize));
+            mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(batchSize, mSeqLength));
         }
 
         if (!mContext->allInputDimensionsSpecified())
