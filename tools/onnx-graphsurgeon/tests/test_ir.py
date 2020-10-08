@@ -14,16 +14,16 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
-from onnx_graphsurgeon.ir.tensor import Constant, Variable
-from onnx_graphsurgeon.logger.logger import G_LOGGER
-from onnx_graphsurgeon.ir.graph import Graph
-from onnx_graphsurgeon.ir.node import Node
+import copy
 
 import numpy as np
 import pytest
-import onnx
-import copy
+from onnx_graphsurgeon.ir.graph import Graph
+from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.tensor import Constant, Variable
+from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
+from onnx_graphsurgeon.util.misc import SynchronizedList
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
@@ -68,11 +68,14 @@ class TensorBaseTests(object):
         tensor = Variable(name="other_test_tensor")
         tensor.inputs = self.tensor.inputs
         assert tensor.inputs == self.tensor.inputs
+        # Contents should be the same, but it should not just be a reference to the existing SynchronizedList
+        assert tensor.inputs is not self.tensor.inputs
 
     def test_can_copy_outputs_from_other_node(self):
         tensor = Variable(name="other_test_tensor")
         tensor.outputs = self.tensor.outputs
         assert tensor.outputs == self.tensor.outputs
+        assert tensor.outputs is not self.tensor.outputs
 
     def test_i(self):
         x = Variable(name="x")
@@ -93,7 +96,6 @@ class TensorBaseTests(object):
         y = Variable(name="y")
         node = Node(op="Add", name="Input", inputs=[x], outputs=[y])
         assert x.o() == y
-
 
     def test_o_multiple_outputs(self):
         x = Variable(name="x")
@@ -176,11 +178,14 @@ class TestNode(object):
         node = Node(op="Subtract")
         node.inputs = self.node.inputs
         assert node.inputs == self.node.inputs
+        # Contents should be the same, but it should not just be a reference to the existing SynchronizedList
+        assert node.inputs is not self.node.inputs
 
     def test_can_copy_outputs_from_other_node(self):
         node = Node(op="Subtract")
         node.outputs = self.node.outputs
         assert node.outputs == self.node.outputs
+        assert node.outputs is not self.node.outputs
 
     def test_i(self):
         intermediate_tensor = Variable(name="intermediate")
@@ -751,3 +756,32 @@ class TestGraph(object):
 
         assert len(graph.nodes) == 1
         assert graph.nodes[0].inputs == [inp0, inp1]
+
+
+    def test_io_cannot_be_sync_list_on_init(self):
+        inp = Variable("input0", shape=(1, 3), dtype=np.float32)
+        out = Variable("input1", shape=(1, 3), dtype=np.float32)
+
+        node = Node("Add", inputs=[inp], outputs=[out])
+        assert isinstance(node.inputs, SynchronizedList)
+        assert isinstance(node.outputs, SynchronizedList)
+
+        graph = Graph(nodes=[node], inputs=node.inputs, outputs=node.outputs)
+        assert not isinstance(graph.inputs, SynchronizedList)
+        assert not isinstance(graph.outputs, SynchronizedList)
+
+
+    def test_io_cannot_be_sync_list_on_assign(self):
+        inp = Variable("input0", shape=(1, 3), dtype=np.float32)
+        out = Variable("input1", shape=(1, 3), dtype=np.float32)
+
+        node = Node("Add", inputs=[inp], outputs=[out])
+        assert isinstance(node.inputs, SynchronizedList)
+        assert isinstance(node.outputs, SynchronizedList)
+
+        graph = Graph(nodes=[node], inputs=[], outputs=[])
+        graph.inputs = node.inputs
+        graph.outputs = node.outputs
+
+        assert not isinstance(graph.inputs, SynchronizedList)
+        assert not isinstance(graph.outputs, SynchronizedList)

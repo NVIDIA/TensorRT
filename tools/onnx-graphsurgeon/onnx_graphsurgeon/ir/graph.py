@@ -99,8 +99,8 @@ class Graph(object):
             doc_string (str): A doc_string for the graph. Defaults to "".
         """
         self.nodes = misc.default_value(nodes, [])
-        self.inputs = misc.default_value(inputs, [])
-        self.outputs = misc.default_value(outputs, [])
+        self.inputs = list(misc.default_value(inputs, []))
+        self.outputs = list(misc.default_value(outputs, []))
 
         self.name = misc.default_value(name, "onnx_graphsurgeon")
         self.__name__ = self.name
@@ -121,6 +121,13 @@ class Graph(object):
                 G_LOGGER.error("No function: {:} registered for opset: {:}".format(name, self.opset))
                 raise err
             return lambda *args, **kwargs: Graph.OPSET_FUNC_MAP[self.opset][name](self, *args, **kwargs)
+
+
+    def __setattr__(self, name, value):
+        # We don't want graph inputs/outputs to be SynchronizedLists
+        if name in ["inputs", "outputs"]:
+            value = list(value)
+        return super().__setattr__(name, value)
 
 
     def __eq__(self, other: "Graph"):
