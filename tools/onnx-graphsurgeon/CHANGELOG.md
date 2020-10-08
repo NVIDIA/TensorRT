@@ -3,6 +3,11 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.2.8 (2020-10-08)
+### Fixed
+- Fixed a bug where graph inputs and outputs could be assigned `SynchronizedList` instances, and would therefore be modified if nodes in the graph were.
+
+
 ## v0.2.7 (2020-09-29)
 ### Changed
 - Changed the default value of `remove_unused_node_outputs` in `cleanup()` to `False`, as a value of `True` can lead to unintuitive behavior,
@@ -14,7 +19,7 @@ Dates are in YYYY-MM-DD format.
 - Fixed a bug where calling `graph.tensors()` would cause the inputs or outputs of some tensors to be modified.
 
 ### Changed
-- Changed `SynchronizedList.__add__()` no longer modifies the left operand.
+- `SynchronizedList.__add__()` no longer modifies the left operand.
 
 
 ## v0.2.5 (2020-09-21)
