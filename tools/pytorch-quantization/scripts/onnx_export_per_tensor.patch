@@ -1,0 +1,8 @@
+@parse_args('v', 't', 'i', 'i', 'i')
+def fake_quantize_per_tensor_affine(g, inputs, scale, zero_point, quant_min=-128, quant_max=127):
+    if quant_min not in [0, -128] or quant_max not in [127, 255]:
+        raise TypeError("ONNX defines [0, 255] for quint8 and [-128, 127] for int8, got [{}, {}]".format(
+            quant_min, quant_max))
+    scale = scale.float()  # Avoid exportor generating double type
+    zero_point = torch.tensor(zero_point, dtype=torch.int8)  # ONNX requires zero_point to be tensor
+    return g.op("DequantizeLinear", g.op("QuantizeLinear", inputs, scale, zero_point), scale, zero_point)

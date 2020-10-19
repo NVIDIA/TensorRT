@@ -18,9 +18,8 @@
 arg_dockerfile=docker/ubuntu.Dockerfile
 arg_imagename=tensorrt-ubuntu
 arg_osversion=18.04
-arg_cudaversion=11.0
+arg_cudaversion=11.1
 arg_cudnnversion=8.0
-arg_trtversion=7.1.3
 arg_help=0
 
 while [[ "$#" -gt 0 ]]; do case $1 in
@@ -42,12 +41,7 @@ if [ "$arg_help" -eq "1" ]; then
     exit;
 fi
 
-extra_args=""
-# Use RC builds for CUDA 11.0
-if [ "$arg_cudaversion" = "11.0" ]; then
-    extra_args="$extra_args --build-arg NVCR_SUFFIX=-rc"
-fi
-docker_args="-f $arg_dockerfile --build-arg OS_VERSION=$arg_osversion --build-arg CUDA_VERSION=$arg_cudaversion $extra_args --build-arg uid=$(id -u) --build-arg gid=$(id -g) --tag=$arg_imagename ."
+docker_args="-f $arg_dockerfile --build-arg OS_VERSION=$arg_osversion --build-arg CUDA_VERSION=$arg_cudaversion --build-arg uid=$(id -u) --build-arg gid=$(id -g) --tag=$arg_imagename ."
 
 echo "Building container:"
 echo "> docker build $docker_args"

@@ -102,7 +102,8 @@ public:
     //! \param weights Weights used for the layer.
     //! \param nbWeights Number of weights.
     //!
-    virtual nvinfer1::IPlugin* createPlugin(const char* layerName, const nvinfer1::Weights* weights, int nbWeights) TRTNOEXCEPT = 0;
+    virtual nvinfer1::IPlugin* createPlugin(
+        const char* layerName, const nvinfer1::Weights* weights, int32_t nbWeights) TRTNOEXCEPT = 0;
 
     virtual ~IPluginFactory() {}
 };
@@ -115,7 +116,7 @@ public:
 class IPluginFactoryExt : public IPluginFactory
 {
 public:
-    virtual int getVersion() const TRTNOEXCEPT
+    virtual int32_t getVersion() const TRTNOEXCEPT
     {
         return NV_TENSORRT_VERSION;
     }
@@ -151,7 +152,8 @@ public:
     //! \param nbWeights Number of weights.
     //! \param libNamespace Library Namespace associated with the plugin object
     //!
-    virtual nvinfer1::IPluginV2* createPlugin(const char* layerName, const nvinfer1::Weights* weights, int nbWeights, const char* libNamespace = "") TRTNOEXCEPT = 0;
+    virtual nvinfer1::IPluginV2* createPlugin(const char* layerName, const nvinfer1::Weights* weights,
+        int32_t nbWeights, const char* libNamespace = "") TRTNOEXCEPT = 0;
 
     virtual ~IPluginFactoryV2() {}
 };

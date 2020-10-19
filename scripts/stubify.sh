@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 # This short shell script will extract all the strong "text" symbols from the
 # shared library and create a new "stub" shared library with the same symbols.
 # The body of these functions will be empty and therefore have no dependencies.

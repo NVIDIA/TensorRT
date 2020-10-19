@@ -26,17 +26,18 @@
 #endif
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-WINGETOPT_API extern int optind; /* index of first non-option in argv      */
-WINGETOPT_API extern int optopt; /* single option character, as parsed     */
-WINGETOPT_API extern int opterr; /* flag to enable built-in diagnostics... */
-/* (user may set to zero, to suppress)    */
+    WINGETOPT_API extern int optind; /* index of first non-option in argv      */
+    WINGETOPT_API extern int optopt; /* single option character, as parsed     */
+    WINGETOPT_API extern int opterr; /* flag to enable built-in diagnostics... */
+    /* (user may set to zero, to suppress)    */
 
-WINGETOPT_API extern char* optarg; /* pointer to argument of current option  */
+    WINGETOPT_API extern char* optarg; /* pointer to argument of current option  */
 
-extern int getopt(int nargc, char* const* nargv, const char* options);
+    extern int getopt(int nargc, char* const* nargv, const char* options);
 
 #ifdef _BSD_SOURCE
 /*
@@ -46,7 +47,7 @@ extern int getopt(int nargc, char* const* nargv, const char* options);
  * to maintain portability, developers are advised to avoid it.
  */
 #define optreset __mingw_optreset
-extern int optreset;
+    extern int optreset;
 #endif
 #ifdef __cplusplus
 }
@@ -66,27 +67,29 @@ extern int optreset;
 #define __GETOPT_LONG_H__
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-struct option /* specification for a long form option...	*/
-{
-    const char* name; /* option name, without leading hyphens */
-    int has_arg;      /* does it take an argument?		*/
-    int* flag;        /* where to save its status, or NULL	*/
-    int val;          /* its associated status value		*/
-};
+    struct option /* specification for a long form option...	*/
+    {
+        const char* name; /* option name, without leading hyphens */
+        int has_arg;      /* does it take an argument?		*/
+        int* flag;        /* where to save its status, or NULL	*/
+        int val;          /* its associated status value		*/
+    };
 
-enum /* permitted values for its `has_arg' field...	*/
-{
-    no_argument = 0,   /* option never takes an argument	*/
-    required_argument, /* option always requires an argument	*/
-    optional_argument  /* option may take an argument		*/
-};
+    enum /* permitted values for its `has_arg' field...	*/
+    {
+        no_argument = 0,   /* option never takes an argument	*/
+        required_argument, /* option always requires an argument	*/
+        optional_argument  /* option may take an argument		*/
+    };
 
-extern int getopt_long(int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx);
-extern int getopt_long_only(
-    int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx);
+    extern int getopt_long(
+        int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx);
+    extern int getopt_long_only(
+        int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx);
 /*
  * Previous MinGW implementation had...
  */

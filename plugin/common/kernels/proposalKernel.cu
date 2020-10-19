@@ -31,7 +31,8 @@
 // CUB's bug workaround:
 // To work properly for large batch size CUB segmented sort needs ridiculous
 // workspace alignment.
-const uintptr_t ALIGNMENT = 1 << 20;
+constexpr uintptr_t ALIGNMENT = 1 << 20;
+
 template <typename TFloat>
 struct Bbox
 {
@@ -470,18 +471,18 @@ __global__ void _inverse_transform_gpu(const float* RPN_prob, const float* RPN_r
         int as = a / anc_ratio_num;
         float anchor_w = ANCHOR_SIZES[as] * ANCHOR_RATIOS[ar];
         float anchor_h = ANCHOR_SIZES[as] / ANCHOR_RATIOS[ar];
-        float anchor_cx = (w + 0.5f) * RPN_STRIDE; 
-        float anchor_cy = (h + 0.5f) * RPN_STRIDE; 
-        float cx1 = anchor_cx + anchor_w * tx; 
-        float cy1 = anchor_cy + anchor_h * ty; 
-        float w1 = __expf(tw) * anchor_w; 
-        float h1 = __expf(th) * anchor_h; 
-        tx = cx1 - w1 / 2.0f; 
-        ty = cy1 - h1 / 2.0f; 
-        tw = w1; 
-        th = h1; 
-        tw += tx; 
-        th += ty; 
+        float anchor_cx = (w + 0.5f) * RPN_STRIDE;
+        float anchor_cy = (h + 0.5f) * RPN_STRIDE;
+        float cx1 = anchor_cx + anchor_w * tx;
+        float cy1 = anchor_cy + anchor_h * ty;
+        float w1 = __expf(tw) * anchor_w;
+        float h1 = __expf(th) * anchor_h;
+        tx = cx1 - w1 / 2.0f;
+        ty = cy1 - h1 / 2.0f;
+        tw = w1;
+        th = h1;
+        tw += tx;
+        th += ty;
         // clip to min
         tx = (tx >= 0.0f) ? tx : 0.0f;
         ty = (ty >= 0.0f) ? ty : 0.0f;
@@ -704,4 +705,3 @@ int proposalInference_gpu(
                     stream);
     return 0;
 }
-

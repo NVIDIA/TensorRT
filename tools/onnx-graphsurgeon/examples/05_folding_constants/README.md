@@ -1,5 +1,7 @@
 # Folding Constants
 
+## Introduction
+
 This example first generates a a model with several operations that can be evaluated
 prior to inference time, then folds these operations and exports a new model.
 

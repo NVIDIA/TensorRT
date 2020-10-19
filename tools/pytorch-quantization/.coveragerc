@@ -1,0 +1,10 @@
+[run]
+omit = pytorch_quantization/utils/amp_wrapper.py, pytorch_quantization/utils/quant_logging.py, *__init__.py
+
+[report]
+exclude_lines =
+    def backward
+    RNNReLUCell
+    RNNTanhCell
+    GRU
+    

@@ -90,6 +90,8 @@ private:
 
     std::map<std::string, nvinfer1::Weights> mWeightMap; //!< The weight name to weight value map
 
+    std::vector<SampleUniquePtr<nvinfer1::IHostMemory>> weightsMemory; //!< Host weights memory holder
+
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
     //!
@@ -375,20 +377,6 @@ bool SampleMNISTAPI::verifyOutput(const samplesCommon::BufferManager& buffers)
 //!
 bool SampleMNISTAPI::teardown()
 {
-    // Release weights host memory
-    for (auto& mem : mWeightMap)
-    {
-        auto weight = mem.second;
-        if (weight.type == DataType::kFLOAT)
-        {
-            delete[] static_cast<const uint32_t*>(weight.values);
-        }
-        else
-        {
-            delete[] static_cast<const uint16_t*>(weight.values);
-        }
-    }
-
     return true;
 }
 
@@ -426,7 +414,10 @@ std::map<std::string, nvinfer1::Weights> SampleMNISTAPI::loadWeights(const std::
         // Load blob
         if (wt.type == DataType::kFLOAT)
         {
-            uint32_t* val = new uint32_t[size];
+            // Use uint32_t to create host memory to avoid additional conversion.
+            auto mem = new samplesCommon::TypedHostMemory<uint32_t, nvinfer1::DataType::kFLOAT>(size);
+            weightsMemory.emplace_back(mem);
+            uint32_t* val = mem->raw();
             for (uint32_t x = 0; x < size; ++x)
             {
                 input >> std::hex >> val[x];
@@ -435,7 +426,10 @@ std::map<std::string, nvinfer1::Weights> SampleMNISTAPI::loadWeights(const std::
         }
         else if (wt.type == DataType::kHALF)
         {
-            uint16_t* val = new uint16_t[size];
+            // HalfMemory's raw type is uint16_t
+            auto mem = new samplesCommon::HalfMemory(size);
+            weightsMemory.emplace_back(mem);
+            auto val = mem->raw();
             for (uint32_t x = 0; x < size; ++x)
             {
                 input >> std::hex >> val[x];

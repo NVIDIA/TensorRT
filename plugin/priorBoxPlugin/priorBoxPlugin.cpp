@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include "priorBoxPlugin.h"
 #include <cmath>
 #include <cstring>
@@ -36,9 +37,10 @@ PluginFieldCollection PriorBoxPluginCreator::mFC{};
 std::vector<PluginField> PriorBoxPluginCreator::mPluginAttributes;
 
 // Constructor
-PriorBox::PriorBox(PriorBoxParameters param)
+PriorBox::PriorBox(PriorBoxParameters param, int H, int W)
     : mParam(param)
-    , mOwnsParamMemory(true)
+    , mH(H)
+    , mW(W)
 {
     // minSize is required and needs to be non-negative
     ASSERT(param.numMinSize > 0 && param.minSize != nullptr);
@@ -80,11 +82,11 @@ PriorBox::PriorBox(PriorBoxParameters param)
     aspectRatios = copyToDevice(&tmpAR[0], tmpAR.size());
     // Number of prior boxes per grid cell on the feature map
     // tmpAR already included an aspect ratio of 1.0
-    numPriors = tmpAR.size() * param.numMinSize;
+    mNumPriors = tmpAR.size() * param.numMinSize;
     /*
      * If we have maxSizes, as long as all the maxSizes meets assertion requirement, we add one bounding box per maxSize
      * The final number of prior boxes per grid cell on feature map
-     * numPriors =
+     * mNumPriors =
      * tmpAR.size() * param.numMinSize If numMaxSize == 0
      * (tmpAR.size() + 1) * param.numMinSize If param.numMinSize == param.numMaxSize
      */
@@ -95,29 +97,13 @@ PriorBox::PriorBox(PriorBoxParameters param)
         {
             // maxSize should be greater than minSize
             ASSERT(param.maxSize[i] > param.minSize[i] && "maxSize must be greater than minSize");
-            numPriors++;
+            mNumPriors++;
         }
         maxSize = copyToDevice(param.maxSize, param.numMaxSize);
     }
 }
 
-// Constructor used in `clone()`.
-// This constructor does not modify parameters, unlike the previous one.
-PriorBox::PriorBox(
-    PriorBoxParameters param, int numPriors, int H, int W, Weights minSize, Weights maxSize, Weights aspectRatios)
-    : mParam(param)
-    , mOwnsParamMemory(false)
-    , numPriors(numPriors)
-    , H(H)
-    , W(W)
-    , minSize(minSize)
-    , maxSize(maxSize)
-    , aspectRatios(aspectRatios)
-{
-}
-
 PriorBox::PriorBox(const void* data, size_t length)
-    : mOwnsParamMemory(true)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mParam = read<PriorBoxParameters>(d);
@@ -125,9 +111,9 @@ PriorBox::PriorBox(const void* data, size_t length)
     mParam.maxSize = new float[mParam.numMaxSize];
     mParam.aspectRatios = new float[mParam.numAspectRatios];
 
-    numPriors = read<int>(d);
-    H = read<int>(d);
-    W = read<int>(d);
+    mNumPriors = read<int>(d);
+    mH = read<int>(d);
+    mW = read<int>(d);
     for (auto i = 0; i < mParam.numMinSize; i++)
     {
         mParam.minSize[i] = reinterpret_cast<const float*>(d)[i];
@@ -167,35 +153,16 @@ Dims PriorBox::getOutputDimensions(int index, const Dims* inputs, int nbInputDim
     // Only one output from the plugin layer
     ASSERT(index == 0);
     // Particularity of the PriorBox layer: no batchSize dimension needed
-    H = inputs[0].d[1], W = inputs[0].d[2];
+    mH = inputs[0].d[1], mW = inputs[0].d[2];
     // workaround for TRT
     // The first channel is for prior box coordinates.
     // The second channel is for prior box scaling factors, which is simply a copy of the variance provided.
-    return DimsCHW(2, H * W * numPriors * 4, 1);
+    return DimsCHW(2, mH * mW * mNumPriors * 4, 1);
 }
 
 int PriorBox::initialize()
 {
     return STATUS_SUCCESS;
-}
-
-void PriorBox::terminate()
-{
-    if (mOwnsParamMemory)
-    {
-        CUASSERT(cudaFree(const_cast<void*>(minSize.values)));
-        if (mParam.numMaxSize > 0)
-        {
-            CUASSERT(cudaFree(const_cast<void*>(maxSize.values)));
-        }
-        if (mParam.numAspectRatios > 0)
-        {
-            CUASSERT(cudaFree(const_cast<void*>(aspectRatios.values)));
-        }
-        delete[] mParam.minSize;
-        delete[] mParam.maxSize;
-        delete[] mParam.aspectRatios;
-    }
 }
 
 size_t PriorBox::getWorkspaceSize(int /*maxBatchSize*/) const
@@ -207,7 +174,7 @@ int PriorBox::enqueue(
     int /*batchSize*/, const void* const* /*inputs*/, void** outputs, void* /*workspace*/, cudaStream_t stream)
 {
     void* outputData = outputs[0];
-    pluginStatus_t status = priorBoxInference(stream, mParam, H, W, numPriors, aspectRatios.count, minSize.values,
+    pluginStatus_t status = priorBoxInference(stream, mParam, mH, mW, mNumPriors, aspectRatios.count, minSize.values,
         maxSize.values, aspectRatios.values, outputData);
     ASSERT(status == STATUS_SUCCESS);
 
@@ -217,7 +184,7 @@ int PriorBox::enqueue(
 // Returns the size of serialized parameters
 size_t PriorBox::getSerializationSize() const
 {
-    // PriorBoxParameters, numPriors,H,W, minSize, maxSize, numAspectRatios, aspectRatios
+    // PriorBoxParameters, mNumPriors,mH,mW, minSize, maxSize, numAspectRatios, aspectRatios
     return sizeof(PriorBoxParameters) + sizeof(int) * 3 + sizeof(float) * (mParam.numMinSize + mParam.numMaxSize)
         + sizeof(int) + sizeof(float) * aspectRatios.count;
 }
@@ -226,9 +193,9 @@ void PriorBox::serialize(void* buffer) const
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mParam);
-    write(d, numPriors);
-    write(d, H);
-    write(d, W);
+    write(d, mNumPriors);
+    write(d, mH);
+    write(d, mW);
     serializeFromDevice(d, minSize);
     if (mParam.numMaxSize > 0)
     {
@@ -276,14 +243,40 @@ const char* PriorBox::getPluginVersion() const
 
 void PriorBox::destroy()
 {
+    CUASSERT(cudaFree(const_cast<void*>(minSize.values)));
+    if (mParam.numMaxSize > 0)
+    {
+        CUASSERT(cudaFree(const_cast<void*>(maxSize.values)));
+    }
+    if (mParam.numAspectRatios > 0)
+    {
+        CUASSERT(cudaFree(const_cast<void*>(aspectRatios.values)));
+    }
+    delete[] mParam.minSize;
+    delete[] mParam.maxSize;
+    delete[] mParam.aspectRatios;
+
     delete this;
 }
 
 IPluginV2Ext* PriorBox::clone() const
 {
-    IPluginV2Ext* plugin = new PriorBox(mParam, numPriors, H, W, minSize, maxSize, aspectRatios);
-    plugin->setPluginNamespace(mPluginNamespace.c_str());
-    return plugin;
+    // each obj should manage its copy of param
+    PriorBoxParameters params = mParam;
+    auto copyParamData = [](float*& dest, const float* src, const size_t size) {
+        if (size > 0)
+        {
+            dest = new float[size];
+            memcpy(dest, src, size * sizeof(float));
+        }
+    };
+    copyParamData(params.minSize, mParam.minSize, mParam.numMinSize);
+    copyParamData(params.maxSize, mParam.maxSize, mParam.numMaxSize);
+    copyParamData(params.aspectRatios, mParam.aspectRatios, mParam.numAspectRatios);
+
+    PriorBox* obj = new PriorBox(params, mH, mW);
+    obj->setPluginNamespace(mPluginNamespace.c_str());
+    return obj;
 }
 
 // Set plugin namespace
@@ -328,8 +321,8 @@ void PriorBox::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* 
     ASSERT(inputDims[0].nbDims == 3);
     ASSERT(inputDims[1].nbDims == 3);
     ASSERT(outputDims[0].nbDims == 3);
-    H = inputDims[0].d[1];
-    W = inputDims[0].d[2];
+    mH = inputDims[0].d[1];
+    mW = inputDims[0].d[2];
     // prepare for the inference function
     if (mParam.imgH == 0 || mParam.imgW == 0)
     {
@@ -338,8 +331,8 @@ void PriorBox::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* 
     }
     if (mParam.stepH == 0 || mParam.stepW == 0)
     {
-        mParam.stepH = static_cast<float>(mParam.imgH) / H;
-        mParam.stepW = static_cast<float>(mParam.imgW) / W;
+        mParam.stepH = static_cast<float>(mParam.imgH) / mH;
+        mParam.stepW = static_cast<float>(mParam.imgW) / mW;
     }
 }
 

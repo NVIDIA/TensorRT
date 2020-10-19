@@ -494,7 +494,7 @@ inline LogStreamConsumer LOG_ERROR(const Logger& logger)
 
 //!
 //! \brief produces a LogStreamConsumer object that can be used to log messages of severity kINTERNAL_ERROR
-//         ("fatal" severity)
+//!         ("fatal" severity)
 //!
 //! Example usage:
 //!

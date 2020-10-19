@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef SAMPLE_NMT_DATA_WRITER_
 #define SAMPLE_NMT_DATA_WRITER_
 

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef SAMPLE_NMT_LIMITED_SAMPLES_DATA_READER_
 #define SAMPLE_NMT_LIMITED_SAMPLES_DATA_READER_
 

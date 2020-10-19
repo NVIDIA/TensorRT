@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include "pyramidROIAlignPlugin.h"
 #include "plugin.h"
 #include <cuda_runtime_api.h>

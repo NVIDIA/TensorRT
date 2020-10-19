@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef TRT_MULTILEVEL_PROPOSE_ROI_PLUGIN_H
 #define TRT_MULTILEVEL_PROPOSE_ROI_PLUGIN_H
 #include <cassert>

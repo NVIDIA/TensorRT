@@ -1,0 +1,5 @@
+numpy
+absl-py>=0.7.0
+scipy
+sphinx_glpi_theme
+prettytable

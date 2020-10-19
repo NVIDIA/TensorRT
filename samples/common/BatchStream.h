@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef BATCH_STREAM_H
 #define BATCH_STREAM_H
 
@@ -43,7 +44,7 @@ public:
         const std::vector<std::string>& directories)
         : mBatchSize{batchSize}
         , mMaxBatches{maxBatches}
-        , mDims{3, 1, 28, 28} //!< We already know the dimensions of MNIST images.
+        , mDims{3, {1, 28, 28}} //!< We already know the dimensions of MNIST images.
     {
         readDataFile(locateFile(dataFile, directories));
         readLabelsFile(locateFile(labelsFile, directories));

@@ -91,6 +91,8 @@ private:
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
+    std::vector<SampleUniquePtr<nvinfer1::IHostMemory>> weightsMemory; //!< Host weights memory holder
+
     //!
     //! \brief Uses the API to create the MLP Network
     //!
@@ -346,15 +348,6 @@ bool SampleMLP::verifyOutput(const samplesCommon::BufferManager& buffers)
 //!
 bool SampleMLP::teardown()
 {
-    // Release weights host memory
-    for (auto& mem : mWeightMap)
-    {
-        auto weight = mem.second.second;
-        {
-            delete[] static_cast<const float*>(weight.values);
-        }
-    }
-
     return true;
 }
 
@@ -385,8 +378,9 @@ std::map<std::string, std::pair<nvinfer1::Dims, nvinfer1::Weights>> SampleMLP::l
         wt.second.count = std::accumulate(wt.first.d, wt.first.d + wt.first.nbDims, 1, std::multiplies<int32_t>());
         assert(wt.second.type == nvinfer1::DataType::kFLOAT);
 
-        float* value = new float[wt.second.count];
-        input.read(reinterpret_cast<char*>(value), wt.second.count * sizeof(float));
+        weightsMemory.emplace_back(new samplesCommon::FloatMemory(wt.second.count));
+        auto value = weightsMemory.back()->data();
+        input.read(static_cast<char*>(value), wt.second.count * sizeof(float));
         assert(input.peek() == '\n');
         // Consume the newline at the end of the data blob.
         input.get();

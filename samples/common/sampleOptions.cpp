@@ -93,7 +93,7 @@ nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
     const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
         {"fp16", nvinfer1::DataType::kHALF}, {"int8", nvinfer1::DataType::kINT8},
         {"int32", nvinfer1::DataType::kINT32}};
-    auto dt = strToDT.find(option);
+    const auto dt = strToDT.find(option);
     if (dt == strToDT.end())
     {
         throw std::invalid_argument("Invalid DataType " + option);
@@ -108,11 +108,12 @@ nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(const std::string
     const std::unordered_map<std::string, nvinfer1::TensorFormat> strToFmt{{"chw", nvinfer1::TensorFormat::kLINEAR},
         {"chw2", nvinfer1::TensorFormat::kCHW2}, {"chw4", nvinfer1::TensorFormat::kCHW4},
         {"hwc8", nvinfer1::TensorFormat::kHWC8}, {"chw16", nvinfer1::TensorFormat::kCHW16},
-        {"chw32", nvinfer1::TensorFormat::kCHW32}};
+        {"chw32", nvinfer1::TensorFormat::kCHW32}, {"dhwc8", nvinfer1::TensorFormat::kDHWC8},
+        {"hwc", nvinfer1::TensorFormat::kHWC}};
     nvinfer1::TensorFormats formats{};
     for (auto f : optionStrings)
     {
-        auto tf = strToFmt.find(f);
+        const auto tf = strToFmt.find(f);
         if (tf == strToFmt.end())
         {
             throw std::invalid_argument(std::string("Invalid TensorFormat ") + f);
@@ -127,12 +128,13 @@ template <>
 IOFormat stringToValue<IOFormat>(const std::string& option)
 {
     IOFormat ioFormat{};
-    size_t colon = option.find(':');
+    const size_t colon = option.find(':');
 
     if (colon == std::string::npos)
     {
         throw std::invalid_argument(std::string("Invalid IOFormat ") + option);
     }
+
     ioFormat.first = stringToValue<nvinfer1::DataType>(option.substr(0, colon));
     ioFormat.second = stringToValue<nvinfer1::TensorFormats>(option.substr(colon + 1));
 
@@ -335,6 +337,38 @@ std::ostream& printBatch(std::ostream& os, int maxBatch)
     return os;
 }
 
+std::ostream& printTacticSources(
+    std::ostream& os, nvinfer1::TacticSources enabledSources, nvinfer1::TacticSources disabledSources)
+{
+    if (!enabledSources && !disabledSources)
+    {
+        os << "Using default tactic sources";
+    }
+    else
+    {
+        uint32_t cublas = 1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUBLAS);
+        uint32_t cublasLt = 1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUBLAS_LT);
+
+        if (enabledSources & cublas)
+        {
+            os << " +cublas";
+        }
+        if (disabledSources & cublas)
+        {
+            os << " -cublas";
+        }
+        if (enabledSources & cublasLt)
+        {
+            os << " +cublasLt";
+        }
+        if (disabledSources & cublasLt)
+        {
+            os << " -cublasLt";
+        }
+    }
+    return os;
+}
+
 std::ostream& printPrecision(std::ostream& os, const BuildOptions& options)
 {
     os << "FP32";
@@ -462,7 +496,7 @@ void BuildOptions::parse(Arguments& arguments)
     auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
         std::string list;
         checkEraseOption(arguments, argument, list);
-        std::vector<std::string> formats{splitToStringVec(list, ',')};
+        const std::vector<std::string> formats{splitToStringVec(list, ',')};
         for (const auto& f : formats)
         {
             formatsVector.push_back(stringToValue<IOFormat>(f));
@@ -519,6 +553,7 @@ void BuildOptions::parse(Arguments& arguments)
         fp16 = true;
     }
 
+    checkEraseOption(arguments, "--refit", refittable);
     checkEraseNegativeOption(arguments, "--noTF32", tf32);
     checkEraseOption(arguments, "--fp16", fp16);
     checkEraseOption(arguments, "--int8", int8);
@@ -561,6 +596,55 @@ void BuildOptions::parse(Arguments& arguments)
     {
         throw std::invalid_argument("Incompatible load and save engine options selected");
     }
+
+    std::string tacticSourceArgs;
+    if (checkEraseOption(arguments, "--tacticSources", tacticSourceArgs))
+    {
+        std::vector<std::string> tacticList = splitToStringVec(tacticSourceArgs, ',');
+        for (auto& t : tacticList)
+        {
+            bool enable{false};
+            if (t.front() == '+')
+            {
+                enable = true;
+            }
+            else if (t.front() != '-')
+            {
+                throw std::invalid_argument("Tactic conditional (+|-) is missing");
+            }
+            t.erase(0, 1);
+
+            nvinfer1::TacticSource source{};
+            if (t == "cublas")
+            {
+                source = nvinfer1::TacticSource::kCUBLAS;
+            }
+            else if (t == "cublasLt")
+            {
+                source = nvinfer1::TacticSource::kCUBLAS_LT;
+            }
+            else
+            {
+                throw std::invalid_argument(std::string("Unknown tactic source: ") + t);
+            }
+
+            uint32_t sourceBit = 1U << static_cast<uint32_t>(source);
+
+            if (enable)
+            {
+                enabledTactics |= sourceBit;
+            }
+            else
+            {
+                disabledTactics |= sourceBit;
+            }
+
+            if (enabledTactics & disabledTactics)
+            {
+                throw std::invalid_argument(std::string("Cannot enable and disable ") + t);
+            }
+        }
+    }
 }
 
 void SystemOptions::parse(Arguments& arguments)
@@ -587,9 +671,11 @@ void InferenceOptions::parse(Arguments& arguments)
     {
         overlap = !exposeDMA;
     }
+    checkEraseOption(arguments, "--noDataTransfers", skipTransfers);
     checkEraseOption(arguments, "--useSpinWait", spin);
     checkEraseOption(arguments, "--threads", threads);
     checkEraseOption(arguments, "--useCudaGraph", graph);
+    checkEraseOption(arguments, "--separateProfileRun", rerun);
     checkEraseOption(arguments, "--buildOnly", skip);
 
     std::string list;
@@ -624,6 +710,7 @@ void ReportingOptions::parse(Arguments& arguments)
     checkEraseOption(arguments, "--percentile", percentile);
     checkEraseOption(arguments, "--avgRuns", avgs);
     checkEraseOption(arguments, "--verbose", verbose);
+    checkEraseOption(arguments, "--dumpRefit", refit);
     checkEraseOption(arguments, "--dumpOutput", output);
     checkEraseOption(arguments, "--dumpProfile", profile);
     checkEraseOption(arguments, "--exportTimes", exportTimes);
@@ -650,6 +737,11 @@ void AllOptions::parse(Arguments& arguments)
     build.parse(arguments);
     system.parse(arguments);
     inference.parse(arguments);
+
+    if (model.baseModel.format == ModelFormat::kONNX)
+    {
+        build.maxBatch = 0; // ONNX only supports explicit batch mode.
+    }
 
     if ((!build.maxBatch && inference.batch && inference.batch != defaultBatch && !build.shapes.empty())
         || (build.maxBatch && build.maxBatch != defaultMaxBatch && !inference.batch))
@@ -881,6 +973,21 @@ std::ostream& operator<<(std::ostream& os, const IOFormat& format)
                 os << "chw32";
                 break;
             }
+            case nvinfer1::TensorFormat::kDHWC8:
+            {
+                os << "dhwc8";
+                break;
+            }
+            case nvinfer1::TensorFormat::kCDHW32:
+            {
+                os << "cdhw32";
+                break;
+            }
+            case nvinfer1::TensorFormat::kHWC:
+            {
+                os << "hwc";
+                break;
+            }
             }
         }
     }
@@ -908,16 +1015,18 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
     os << "=== Build Options ==="                                                                                       << std::endl <<
 
           "Max batch: ";        printBatch(os, options.maxBatch)                                                        << std::endl <<
-          "Workspace: "      << options.workspace << " MB"                                                              << std::endl <<
+          "Workspace: "      << options.workspace << " MiB"                                                             << std::endl <<
           "minTiming: "      << options.minTiming                                                                       << std::endl <<
           "avgTiming: "      << options.avgTiming                                                                       << std::endl <<
           "Precision: ";        printPrecision(os, options)                                                             << std::endl <<
           "Calibration: "    << (options.int8 && options.calibration.empty() ? "Dynamic" : options.calibration.c_str()) << std::endl <<
+          "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
           "Safe mode: "      << boolToEnabled(options.safe)                                                             << std::endl <<
           "Save engine: "    << (options.save ? options.engine : "")                                                    << std::endl <<
           "Load engine: "    << (options.load ? options.engine : "")                                                    << std::endl <<
           "Builder Cache: "  << boolToEnabled(options.builderCache)                                                     << std::endl <<
-          "NVTX verbosity: " << static_cast<int>(options.nvtxMode)                                                      << std::endl;
+          "NVTX verbosity: " << static_cast<int>(options.nvtxMode)                                                      << std::endl <<
+          "Tactic sources: ";   printTacticSources(os, options.enabledTactics, options.disabledTactics)                 << std::endl;
     // clang-format on
 
     auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats) {
@@ -934,8 +1043,8 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
         }
     };
 
-    printIOFormats(os, "Input", options.inputFormats);
-    printIOFormats(os, "Output", options.outputFormats);
+    printIOFormats(os, "Input(s)", options.inputFormats);
+    printIOFormats(os, "Output(s)", options.outputFormats);
     printShapes(os, "build", options.shapes);
     printShapes(os, "calibration", options.shapesCalib);
 
@@ -964,28 +1073,30 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
 std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
 {
     // clang-format off
-    os << "=== Inference Options ==="                                << std::endl <<
+    os << "=== Inference Options ==="                               << std::endl <<
 
           "Batch: ";
     if (options.batch && options.shapes.empty())
     {
-                          os << options.batch                        << std::endl;
+                          os << options.batch                       << std::endl;
     }
     else
     {
-                          os << "Explicit"                           << std::endl;
+                          os << "Explicit"                          << std::endl;
     }
     printShapes(os, "inference", options.shapes);
-    os << "Iterations: "     << options.iterations                   << std::endl <<
-          "Duration: "       << options.duration   << "s (+ "
-                             << options.warmup     << "ms warm up)"  << std::endl <<
-          "Sleep time: "     << options.sleep      << "ms"           << std::endl <<
-          "Streams: "        << options.streams                      << std::endl <<
-          "ExposeDMA: "      << boolToEnabled(!options.overlap)      << std::endl <<
-          "Spin-wait: "      << boolToEnabled(options.spin)          << std::endl <<
-          "Multithreading: " << boolToEnabled(options.threads)       << std::endl <<
-          "CUDA Graph: "     << boolToEnabled(options.graph)         << std::endl <<
-          "Skip inference: " << boolToEnabled(options.skip)          << std::endl;
+    os << "Iterations: "          << options.iterations                    << std::endl <<
+          "Duration: "            << options.duration   << "s (+ "
+                                  << options.warmup     << "ms warm up)"   << std::endl <<
+          "Sleep time: "          << options.sleep      << "ms"            << std::endl <<
+          "Streams: "             << options.streams                       << std::endl <<
+          "ExposeDMA: "           << boolToEnabled(!options.overlap)       << std::endl <<
+          "Data transfers: "      << boolToEnabled(!options.skipTransfers) << std::endl <<
+          "Spin-wait: "           << boolToEnabled(options.spin)           << std::endl <<
+          "Multithreading: "      << boolToEnabled(options.threads)        << std::endl <<
+          "CUDA Graph: "          << boolToEnabled(options.graph)          << std::endl <<
+          "Separate profiling: "  << boolToEnabled(options.rerun)          << std::endl <<
+          "Skip inference: "      << boolToEnabled(options.skip)           << std::endl;
 
     // clang-format on
     os << "Inputs:" << std::endl;
@@ -1000,16 +1111,17 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
 std::ostream& operator<<(std::ostream& os, const ReportingOptions& options)
 {
     // clang-format off
-    os << "=== Reporting Options ==="                                       << std::endl <<
+    os << "=== Reporting Options ==="                                               << std::endl <<
 
-          "Verbose: "                     << boolToEnabled(options.verbose) << std::endl <<
-          "Averages: "                    << options.avgs << " inferences"  << std::endl <<
-          "Percentile: "                  << options.percentile             << std::endl <<
-          "Dump output: "                 << boolToEnabled(options.output)  << std::endl <<
-          "Profile: "                     << boolToEnabled(options.profile) << std::endl <<
-          "Export timing to JSON file: "  << options.exportTimes            << std::endl <<
-          "Export output to JSON file: "  << options.exportOutput           << std::endl <<
-          "Export profile to JSON file: " << options.exportProfile          << std::endl;
+          "Verbose: "                          << boolToEnabled(options.verbose)    << std::endl <<
+          "Averages: "                         << options.avgs << " inferences"     << std::endl <<
+          "Percentile: "                       << options.percentile                << std::endl <<
+          "Dump refittable layers:"            << boolToEnabled(options.refit)      << std::endl <<
+          "Dump output: "                      << boolToEnabled(options.output)     << std::endl <<
+          "Profile: "                          << boolToEnabled(options.profile)    << std::endl <<
+          "Export timing to JSON file: "       << options.exportTimes               << std::endl <<
+          "Export output to JSON file: "       << options.exportOutput              << std::endl <<
+          "Export profile to JSON file: "      << options.exportProfile             << std::endl;
     // clang-format on
 
     return os;
@@ -1055,51 +1167,62 @@ void ModelOptions::help(std::ostream& os)
 void BuildOptions::help(std::ostream& os)
 {
     // clang-format off
-    os << "=== Build Options ==="                                                                                                     << std::endl <<
+    os << "=== Build Options ==="                                                                                                            << std::endl <<
 
-          "  --maxBatch                  Set max batch size and build an implicit batch engine (default = " << defaultMaxBatch << ")" << std::endl <<
-          "  --explicitBatch             Use explicit batch sizes when building the engine (default = implicit)"                      << std::endl <<
-          "  --minShapes=spec            Build with dynamic shapes using a profile with the min shapes provided"                      << std::endl <<
-          "  --optShapes=spec            Build with dynamic shapes using a profile with the opt shapes provided"                      << std::endl <<
-          "  --maxShapes=spec            Build with dynamic shapes using a profile with the max shapes provided"                      << std::endl <<
-          "  --minShapesCalib=spec       Calibrate with dynamic shapes using a profile with the min shapes provided"                  << std::endl <<
-          "  --optShapesCalib=spec       Calibrate with dynamic shapes using a profile with the opt shapes provided"                  << std::endl <<
-          "  --maxShapesCalib=spec       Calibrate with dynamic shapes using a profile with the max shapes provided"                  << std::endl <<
-          "                              Note: All three of min, opt and max shapes must be supplied."                                << std::endl <<
-          "                                    However, if only opt shapes is supplied then it will be expanded so"                   << std::endl <<
-          "                                    that min shapes and max shapes are set to the same values as opt shapes."              << std::endl <<
-          "                                    In addition, use of dynamic shapes implies explicit batch."                            << std::endl <<
-          "                                    Input names can be wrapped with escaped single quotes (ex: \\\'Input:0\\\')."          << std::endl <<
-          "                              Example input shapes spec: input0:1x3x256x256,input1:1x3x128x128"                            << std::endl <<
-          "                              Each input shape is supplied as a key-value pair where key is the input name and"            << std::endl <<
-          "                              value is the dimensions (including the batch dimension) to be used for that input."          << std::endl <<
-          "                              Each key-value pair has the key and value separated using a colon (:)."                      << std::endl <<
-          "                              Multiple input shapes can be provided via comma-separated key-value pairs."                  << std::endl <<
-          "  --inputIOFormats=spec       Type and formats of the input tensors (default = all inputs in fp32:chw)"                    << std::endl <<
-          "                              Note: If this option is specified, please make sure that all inputs are in the same order "  << std::endl <<
-          "                                     as network inputs ID."                                                                << std::endl <<
-          "  --outputIOFormats=spec      Type and formats of the output tensors (default = all outputs in fp32:chw)"                  << std::endl <<
-          "                              Note: If this option is specified, please make sure that all outputs are in the same order " << std::endl <<
-          "                                     as network outputs ID."                                                               << std::endl <<
-          "                              IO Formats: spec  ::= IOfmt[\",\"spec]"                                                      << std::endl <<
-          "                                          IOfmt ::= type:fmt"                                                              << std::endl <<
-          "                                          type  ::= \"fp32\"|\"fp16\"|\"int32\"|\"int8\""                                  << std::endl <<
-          "                                          fmt   ::= (\"chw\"|\"chw2\"|\"chw4\"|\"hwc8\"|\"chw16\"|\"chw32\")[\"+\"fmt]"    << std::endl <<
-          "  --workspace=N               Set workspace size in megabytes (default = "                      << defaultWorkspace << ")" << std::endl <<
-          "  --noBuilderCache            Disable timing cache in builder (default is to enable timing cache)"                         << std::endl <<
-          "  --nvtxMode=[default|verbose|none] Specify NVTX annotation verbosity"                                                     << std::endl <<
+          "  --maxBatch                  Set max batch size and build an implicit batch engine (default = " << defaultMaxBatch << ")"        << std::endl <<
+          "  --explicitBatch             Use explicit batch sizes when building the engine (default = implicit)"                             << std::endl <<
+          "  --minShapes=spec            Build with dynamic shapes using a profile with the min shapes provided"                             << std::endl <<
+          "  --optShapes=spec            Build with dynamic shapes using a profile with the opt shapes provided"                             << std::endl <<
+          "  --maxShapes=spec            Build with dynamic shapes using a profile with the max shapes provided"                             << std::endl <<
+          "  --minShapesCalib=spec       Calibrate with dynamic shapes using a profile with the min shapes provided"                         << std::endl <<
+          "  --optShapesCalib=spec       Calibrate with dynamic shapes using a profile with the opt shapes provided"                         << std::endl <<
+          "  --maxShapesCalib=spec       Calibrate with dynamic shapes using a profile with the max shapes provided"                         << std::endl <<
+          "                              Note: All three of min, opt and max shapes must be supplied."                                       << std::endl <<
+          "                                    However, if only opt shapes is supplied then it will be expanded so"                          << std::endl <<
+          "                                    that min shapes and max shapes are set to the same values as opt shapes."                     << std::endl <<
+          "                                    In addition, use of dynamic shapes implies explicit batch."                                   << std::endl <<
+          "                                    Input names can be wrapped with escaped single quotes (ex: \\\'Input:0\\\')."                 << std::endl <<
+          "                              Example input shapes spec: input0:1x3x256x256,input1:1x3x128x128"                                   << std::endl <<
+          "                              Each input shape is supplied as a key-value pair where key is the input name and"                   << std::endl <<
+          "                              value is the dimensions (including the batch dimension) to be used for that input."                 << std::endl <<
+          "                              Each key-value pair has the key and value separated using a colon (:)."                             << std::endl <<
+          "                              Multiple input shapes can be provided via comma-separated key-value pairs."                         << std::endl <<
+          "  --inputIOFormats=spec       Type and format of each of the input tensors (default = all inputs in fp32:chw)"                    << std::endl <<
+          "                              See --outputIOFormats help for the grammar of type and format list."                                << std::endl <<
+          "                              Note: If this option is specified, please set comma-separated types and formats for all"            << std::endl <<
+          "                                    inputs following the same order as network inputs ID (even if only one input"                 << std::endl <<
+          "                                    needs specifying IO format) or set the type and format once for broadcasting."                << std::endl <<
+          "  --outputIOFormats=spec      Type and format of each of the output tensors (default = all outputs in fp32:chw)"                  << std::endl <<
+          "                              Note: If this option is specified, please set comma-separated types and formats for all"            << std::endl <<
+          "                                    outputs following the same order as network outputs ID (even if only one output"              << std::endl <<
+          "                                    needs specifying IO format) or set the type and format once for broadcasting."                << std::endl <<
+          "                              IO Formats: spec  ::= IOfmt[\",\"spec]"                                                             << std::endl <<
+          "                                          IOfmt ::= type:fmt"                                                                     << std::endl <<
+          "                                          type  ::= \"fp32\"|\"fp16\"|\"int32\"|\"int8\""                                         << std::endl <<
+          "                                          fmt   ::= (\"chw\"|\"chw2\"|\"chw4\"|\"hwc8\"|\"chw16\"|\"chw32\"|\"dhwc8\")[\"+\"fmt]" << std::endl <<
+          "  --workspace=N               Set workspace size in megabytes (default = "                      << defaultWorkspace << ")"        << std::endl <<
+          "  --noBuilderCache            Disable timing cache in builder (default is to enable timing cache)"                                << std::endl <<
+          "  --nvtxMode=mode             Specify NVTX annotation verbosity. mode ::= default|verbose|none"                                   << std::endl <<
           "  --minTiming=M               Set the minimum number of iterations used in kernel selection (default = "
-                                                                                                           << defaultMinTiming << ")" << std::endl <<
+                                                                                                           << defaultMinTiming << ")"        << std::endl <<
           "  --avgTiming=M               Set the number of times averaged in each iteration for kernel selection (default = "
-                                                                                                           << defaultAvgTiming << ")" << std::endl <<
-          "  --noTF32                    Disable tf32 precision (default is to enable tf32, in addition to fp32)"                     << std::endl <<
-          "  --fp16                      Enable fp16 precision, in addition to fp32 (default = disabled)"                             << std::endl <<
-          "  --int8                      Enable int8 precision, in addition to fp32 (default = disabled)"                             << std::endl <<
-          "  --best                      Enable all precisions to achieve the best performance (default = disabled)"                  << std::endl <<
-          "  --calib=<file>              Read INT8 calibration cache file"                                                            << std::endl <<
-          "  --safe                      Only test the functionality available in safety restricted flows"                            << std::endl <<
-          "  --saveEngine=<file>         Save the serialized engine"                                                                  << std::endl <<
-          "  --loadEngine=<file>         Load a serialized engine"                                                                    << std::endl;
+                                                                                                           << defaultAvgTiming << ")"        << std::endl <<
+          "  --noTF32                    Disable tf32 precision (default is to enable tf32, in addition to fp32)"                            << std::endl <<
+          "  --refit                     Mark the engine as refittable. This will allow the inspection of refittable layers "                << std::endl <<
+          "                              and weights within the engine."                                                                     << std::endl <<
+          "  --fp16                      Enable fp16 precision, in addition to fp32 (default = disabled)"                                    << std::endl <<
+          "  --int8                      Enable int8 precision, in addition to fp32 (default = disabled)"                                    << std::endl <<
+          "  --best                      Enable all precisions to achieve the best performance (default = disabled)"                         << std::endl <<
+          "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<
+          "  --safe                      Only test the functionality available in safety restricted flows"                                   << std::endl <<
+          "  --saveEngine=<file>         Save the serialized engine"                                                                         << std::endl <<
+          "  --loadEngine=<file>         Load a serialized engine"                                                                           << std::endl <<
+          "  --tacticSources=tactics     Specify the tactics to be used by adding (+) or removing (-) tactics from the default "             << std::endl <<
+          "                              tactic sources (default = all available tactics)."                                                  << std::endl <<
+          "                              Note: Currently only cuBLAS and cuBLAS LT are listed as optional tactics."                          << std::endl <<
+          "                              Tactic Sources: tactics ::= [\",\"tactic]"                                                          << std::endl <<
+          "                                              tactic  ::= (+|-)lib"                                                               << std::endl <<
+          "                                              lib     ::= \"cublas\"|\"cublasLt\""                                                << std::endl;
     // clang-format on
 }
 
@@ -1141,10 +1264,13 @@ void InferenceOptions::help(std::ostream& os)
                                                                                                "(default = " << defaultSleep << ")" << std::endl <<
           "  --streams=N                 Instantiate N engines to use concurrently (default = "            << defaultStreams << ")" << std::endl <<
           "  --exposeDMA                 Serialize DMA transfers to and from device. (default = disabled)"                          << std::endl <<
+          "  --noDataTransfers           Do not transfer data to and from the device during inference. (default = disabled)"        << std::endl <<
           "  --useSpinWait               Actively synchronize on GPU events. This option may decrease synchronization time but "
                                                                              "increase CPU usage and power (default = disabled)"    << std::endl <<
           "  --threads                   Enable multithreading to drive engines with independent threads (default = disabled)"      << std::endl <<
           "  --useCudaGraph              Use cuda graph to capture engine execution and then launch inference (default = disabled)" << std::endl <<
+          "  --separateProfileRun        Do not attach the profiler in the benchmark run; if profiling is enabled, a second "
+                                                                                "profile run will be executed (default = disabled)" << std::endl <<
           "  --buildOnly                 Skip inference perf measurement (default = disabled)"                                      << std::endl;
     // clang-format on
 }
@@ -1159,6 +1285,8 @@ void ReportingOptions::help(std::ostream& os)
           "  --percentile=P              Report performance for the P percentage (0<=P<=100, 0 "
                                         "representing max perf, and 100 representing min perf; (default"
                                                                       " = " << defaultPercentile << "%)" << std::endl <<
+          "  --dumpRefit                 Print the refittable layers and weights from a refittable "
+                                        "engine"                                                         << std::endl <<
           "  --dumpOutput                Print the output tensor(s) of the last inference iteration "
                                                                                   "(default = disabled)" << std::endl <<
           "  --dumpProfile               Print profile information per layer (default = disabled)"       << std::endl <<

@@ -110,6 +110,7 @@ struct BuildOptions : public Options
     int minTiming{defaultMinTiming};
     int avgTiming{defaultAvgTiming};
     bool tf32{true};
+    bool refittable{false};
     bool fp16{false};
     bool int8{false};
     bool safe{false};
@@ -123,7 +124,8 @@ struct BuildOptions : public Options
     std::unordered_map<std::string, ShapeRange> shapesCalib;
     std::vector<IOFormat> inputFormats;
     std::vector<IOFormat> outputFormats;
-
+    nvinfer1::TacticSources enabledTactics{0};
+    nvinfer1::TacticSources disabledTactics{0};
     void parse(Arguments& arguments) override;
 
     static void help(std::ostream& out);
@@ -150,10 +152,12 @@ struct InferenceOptions : public Options
     int sleep{defaultSleep};
     int streams{defaultStreams};
     bool overlap{true};
+    bool skipTransfers{false};
     bool spin{false};
     bool threads{false};
     bool graph{false};
     bool skip{false};
+    bool rerun{false};
     std::unordered_map<std::string, std::string> inputs;
     std::unordered_map<std::string, std::vector<int>> shapes;
 
@@ -167,6 +171,7 @@ struct ReportingOptions : public Options
     bool verbose{false};
     int avgs{defaultAvgRuns};
     float percentile{defaultPercentile};
+    bool refit{false};
     bool output{false};
     bool profile{false};
     std::string exportTimes;

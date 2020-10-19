@@ -392,31 +392,6 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
         }
     }
 
-    // set dynamic range for layer output tensors
-    for (int i = 0; i < network->getNbLayers(); ++i)
-    {
-        for (int j = 0; j < network->getLayer(i)->getNbOutputs(); ++j)
-        {
-            std::string tName = network->getLayer(i)->getOutput(j)->getName();
-            if (mPerTensorDynamicRangeMap.find(tName) != mPerTensorDynamicRangeMap.end())
-            {
-                // Calibrator generated dynamic range for network tensor can be overriden or set using below API
-                if (!network->getLayer(i)->getOutput(j)->setDynamicRange(
-                        -mPerTensorDynamicRangeMap.at(tName), mPerTensorDynamicRangeMap.at(tName)))
-                {
-                    return false;
-                }
-            }
-            else
-            {
-                if (mParams.verbose)
-                {
-                    sample::gLogWarning << "Missing dynamic range for tensor: " << tName << std::endl;
-                }
-            }
-        }
-    }
-
     if (mParams.verbose)
     {
         sample::gLogInfo << "Per Tensor Dynamic Range Values for the Network:" << std::endl;
@@ -445,9 +420,6 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
     std::string magic{""};
 
     std::vector<uint8_t> fileData(channels * height * width);
-    // Prepardde PPM Buffer to read the input image
-    // samplesCommon::PPM<channels, height, width> ppm;
-    // samplesCommon::readPPMFile(mParams.imageFileName, ppm);
 
     std::ifstream infile(mParams.imageFileName, std::ifstream::binary);
     assert(infile.is_open() && "Attempting to read from a file that is not open.");
@@ -486,7 +458,7 @@ bool SampleINT8API::verifyOutput(const samplesCommon::BufferManager& buffers) co
     const float* probPtr = static_cast<const float*>(buffers.getHostBuffer(mInOut.at("output")));
     std::vector<float> output(probPtr, probPtr + mOutputDims.d[1]);
 
-    auto inds = samplesCommon::argsort(output.cbegin(), output.cend(), true);
+    auto inds = samplesCommon::argMagnitudeSort(output.cbegin(), output.cend());
 
     // read reference lables to generate prediction lables
     std::vector<std::string> referenceVector;
@@ -578,8 +550,6 @@ sample::Logger::TestResult SampleINT8API::build()
     config->setInt8Calibrator(nullptr);
 
     // force layer to execute with required precision
-    // NVBUG: http://nvbugs/2725746
-    // config->setFlag(BuilderFlag::kSTRICT_TYPES);
     setLayerPrecision(network);
 
     // set INT8 Per Tensor Dynamic range

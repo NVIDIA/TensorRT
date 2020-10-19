@@ -560,7 +560,6 @@ void SampleUffFasterRcnn::batch_inverse_transform_classifier(const float* roi_af
 
             // inverse transform
             float tx, ty, tw, th;
-            //(i, 20, 4)
             tx = classifier_regr[n * roi_num_per_img * mParams.outputBboxSize + i * mParams.outputBboxSize
                      + max_idx * 4]
                 / mParams.classifierRegressorStd[0];

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,12 +38,13 @@ int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* input
 void convertMask(const uint32_t S, const uint32_t B, const uint32_t warps_m, const uint32_t warps_n,
     const uint32_t warps_k, const int* inputMaskSB, uint32_t* inputMaskX, cudaStream_t stream);
 
+
 class EmbLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    EmbLayerNormPluginDynamic(const std::string& name, const nvinfer1::DataType type, const nvinfer1::Weights& beta,
-        const nvinfer1::Weights& gamma, const nvinfer1::Weights& word_emb, const nvinfer1::Weights& pos_emb,
-        const nvinfer1::Weights& tok_emb, const bool useFullMask);
+    EmbLayerNormPluginDynamic(const std::string& name, const nvinfer1::DataType type, const nvinfer1::DataType mhaType,
+        const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma, const nvinfer1::Weights& word_emb,
+        const nvinfer1::Weights& pos_emb, const nvinfer1::Weights& tok_emb, const bool useFullMask);
 
     EmbLayerNormPluginDynamic(const std::string& name, const void* data, size_t length);
 
@@ -89,7 +90,6 @@ private:
     bert::cuda_unique_ptr<void> mTokEmbDev;
     bert::cuda_unique_ptr<void> mPosEmbDev;
     size_t mLd; // leading dim = hidden size
-    size_t mB;  // batch size
     size_t mS;  // sequence length
     size_t mWordVocabSize;
     size_t mPosVocabSize;
@@ -101,16 +101,18 @@ private:
     bert::WeightsWithOwnership mPosEmb;
     nvinfer1::DataType mType;
     bool mUseFullMask;
+    nvinfer1::DataType mMhaType;
+    int mSM;
 
 protected:
     // To prevent compiler warnings.
-    using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
-    using nvinfer1::IPluginV2DynamicExt::enqueue;
     using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
-    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
     using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
+    using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
     using nvinfer1::IPluginV2DynamicExt::supportsFormat;
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
 };
 
 class EmbLayerNormPluginDynamicCreator : public nvinfer1::IPluginCreator

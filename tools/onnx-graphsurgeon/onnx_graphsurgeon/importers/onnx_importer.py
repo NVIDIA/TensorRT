@@ -86,7 +86,7 @@ class OnnxImporter(BaseImporter):
 
 
     @staticmethod
-    def import_node(onnx_node: onnx.NodeProto, tensor_map: "OrderedDict[str, Tensor]") -> Node:
+    def import_node(onnx_node: onnx.NodeProto, tensor_map: "OrderedDict[str, Tensor]", subgraph_tensor_map: "OrderedDict[str, Tensor]") -> Node:
         def attrs_to_dict(attrs):
             attr_dict = OrderedDict()
             for attr in attrs:
@@ -97,10 +97,9 @@ class OnnxImporter(BaseImporter):
                     elif attr_str == "TENSOR":
                         processed = OnnxImporter.import_tensor(processed)
                     elif attr_str == "GRAPH":
-                        processed = OnnxImporter.import_graph(processed, tensor_map)
+                        processed = OnnxImporter.import_graph(processed, misc.combine_dicts(tensor_map, subgraph_tensor_map))
                     elif attr_str == "FLOATS" or attr_str == "INTS":
-                        # Proto hacky list to normal Python list
-                        processed = [p for p in processed]
+                        processed = list(processed)
                     elif attr_str == "STRINGS":
                         processed = [p.decode() for p in processed]
                     return processed
@@ -116,31 +115,40 @@ class OnnxImporter(BaseImporter):
             return attr_dict
 
         # Optional inputs/outputs are represented by empty tensors. All other tensors should already have been populated during shape inference.
-        def check_tensor(name: str):
-            if name not in tensor_map:
-                if name:
-                    G_LOGGER.debug("Tensor: {:} was not generated during shape inference, or shape inference was not run on this model. Creating a new Tensor.".format(name))
-                    tensor_map[name] = Variable(name)
-                else:
-                    # Empty tensors are not tracked by the graph, as these represent optional inputs/outputs that have been omitted.
-                    G_LOGGER.verbose("Generating empty tensor")
-                    return Variable.empty()
-            return tensor_map[name]
+        def get_tensor(name: str, check_outer_graph=True):
+            # Prioritize the subgraph even if check_outer_graph is set
+            if name in subgraph_tensor_map:
+                return subgraph_tensor_map[name]
+
+            if check_outer_graph and name in tensor_map:
+                return tensor_map[name]
+
+            if not name:
+                # Empty tensors are not tracked by the graph, as these represent optional inputs/outputs that have been omitted.
+                G_LOGGER.verbose("Generating empty tensor")
+                return Variable.empty()
+
+            G_LOGGER.verbose("Tensor: {:} was not generated during shape inference, or shape inference was not run on this model. Creating a new Tensor.".format(name))
+            subgraph_tensor_map[name] = Variable(name)
+            return subgraph_tensor_map[name]
+
 
         # Retrieve Tensors for node inputs/outputs. Only empty tensors should need to be newly added.
         def retrieve_node_inputs() -> List[Tensor]:
             inputs = [] # List[Tensor]
             for input_name in onnx_node.input:
-                inputs.append(check_tensor(input_name))
+                inputs.append(get_tensor(input_name))
             return inputs
 
         def retrieve_node_outputs() -> List[Tensor]:
             outputs = [] # List[Tensor]
             for output_name in onnx_node.output:
-                outputs.append(check_tensor(output_name))
+                # Node outputs cannot come from the outer graph, they must be created within the inner graph.
+                outputs.append(get_tensor(output_name, check_outer_graph=False))
             return outputs
 
         return Node(op=onnx_node.op_type, name=onnx_node.name, attrs=attrs_to_dict(onnx_node.attribute), inputs=retrieve_node_inputs(), outputs=retrieve_node_outputs())
+
 
 
     @staticmethod
@@ -155,21 +163,28 @@ class OnnxImporter(BaseImporter):
             tensor_map (OrderedDict[str, Tensor]): A mapping of tensor names to Tensors. This is generally only useful for subgraph import.
             opset (int): The ONNX opset to use for this graph.
         """
-        # Tensor map should not be modified - may be from outer graph
-        tensor_map = copy.copy(misc.default_value(tensor_map, OrderedDict()))
+        tensor_map = copy.copy(misc.default_value(tensor_map, OrderedDict())) # Outer graph tensors, read-only
+        subgraph_tensor_map = OrderedDict() # Tensors in this subgraph
 
-        # Retrieves a Tensor from tensor_map if present, otherwise imports the tensor
+        # Retrieves a Tensor from subgraph_tensor_map or the outer graph (tensor_map) if present, otherwise imports the tensor
         # If overwrite=True, this function will overwrite previously imported tensors
         # if the new tensor has more information available.
-        def get_tensor(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto], overwrite=False) -> Tensor:
-            if onnx_tensor.name not in tensor_map:
-                tensor_map[onnx_tensor.name] = OnnxImporter.import_tensor(onnx_tensor)
-            elif overwrite:
-                tensor = OnnxImporter.import_tensor(onnx_tensor)
-                if isinstance(tensor_map[onnx_tensor.name], Variable):
-                    tensor_map[onnx_tensor.name].dtype = tensor_map[onnx_tensor.name].dtype or tensor.dtype
-                    tensor_map[onnx_tensor.name].shape = tensor_map[onnx_tensor.name].shape or tensor.shape
-            return tensor_map[onnx_tensor.name]
+        def get_tensor(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto], overwrite=False, check_outer_graph=True) -> Tensor:
+            # Prioritize the subgraph even if check_outer_graph is set
+            if onnx_tensor.name in subgraph_tensor_map:
+                if overwrite:
+                    tensor = OnnxImporter.import_tensor(onnx_tensor)
+                    if isinstance(subgraph_tensor_map[onnx_tensor.name], Variable):
+                        subgraph_tensor_map[onnx_tensor.name].dtype = subgraph_tensor_map[onnx_tensor.name].dtype or tensor.dtype
+                        subgraph_tensor_map[onnx_tensor.name].shape = subgraph_tensor_map[onnx_tensor.name].shape or tensor.shape
+                return subgraph_tensor_map[onnx_tensor.name]
+
+            if check_outer_graph and onnx_tensor.name in tensor_map:
+                return tensor_map[onnx_tensor.name]
+
+            subgraph_tensor_map[onnx_tensor.name] = OnnxImporter.import_tensor(onnx_tensor)
+            return subgraph_tensor_map[onnx_tensor.name]
+
 
         # Import initializers contents into Constants.
         G_LOGGER.debug("Importing initializers")
@@ -184,24 +199,25 @@ class OnnxImporter(BaseImporter):
             get_tensor(tensor, overwrite=True)
 
         # Import graph inputs and outputs. Initializers are not considered to be inputs.
+        # Graph inputs and outputs can never come from the outer graph!
         initializer_names = set([tensor.name for tensor in onnx_graph.initializer])
         G_LOGGER.debug("Importing graph inputs")
         graph_inputs = [] # List[Tensor]
         for inp in onnx_graph.input:
             if inp.name not in initializer_names:
-                tensor = get_tensor(inp)
+                tensor = get_tensor(inp, check_outer_graph=False)
                 graph_inputs.append(tensor)
 
         G_LOGGER.debug("Importing graph outputs")
         graph_outputs = [] # List[Tensor]
         for out in onnx_graph.output:
-            tensor = get_tensor(out)
+            tensor = get_tensor(out, check_outer_graph=False)
             graph_outputs.append(tensor)
 
         G_LOGGER.debug("Importing nodes")
         nodes = [] # List[Node]
         for onnx_node in onnx_graph.node:
-            node = OnnxImporter.import_node(onnx_node, tensor_map)
+            node = OnnxImporter.import_node(onnx_node, tensor_map, subgraph_tensor_map)
             nodes.append(node)
 
         return Graph(nodes=nodes, inputs=graph_inputs, outputs=graph_outputs, name=onnx_graph.name, doc_string=onnx_graph.doc_string, opset=opset)

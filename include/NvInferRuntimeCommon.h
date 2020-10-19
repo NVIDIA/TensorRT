@@ -64,6 +64,9 @@
 #else
 #define TENSORRTAPI
 #endif
+
+//! Defined for use with legacy APIs that have not been updated to noexcept yet.
+//! Do not use with new APIs, use noexcept instead.
 #define TRTNOEXCEPT
 //!
 //! \file NvInferRuntimeCommon.h
@@ -79,7 +82,8 @@ struct cudnnContext;
 typedef struct CUstream_st* cudaStream_t; //!< Forward declaration of cudaStream_t.
 typedef struct CUevent_st* cudaEvent_t;   //!< Forward declaration of cudaEvent_t.
 
-static const int NV_TENSORRT_VERSION = (NV_TENSORRT_MAJOR * 1000) + (NV_TENSORRT_MINOR * 100) + NV_TENSORRT_PATCH; // major, minor, patch
+static const int32_t NV_TENSORRT_VERSION
+    = (NV_TENSORRT_MAJOR * 1000) + (NV_TENSORRT_MINOR * 100) + NV_TENSORRT_PATCH; // major, minor, patch
 
 //!
 //! \namespace nvinfer1
@@ -90,14 +94,18 @@ namespace nvinfer1
 {
 
 class IErrorRecorder; //!< Forward declare IErrorRecorder for use in other interfaces.
-class IGpuAllocator; //!< Forward declare IGpuAllocator for use in other interfaces.
+class IGpuAllocator;  //!< Forward declare IGpuAllocator for use in other interfaces.
+
+//! Maximum number of elements in an enumeration type.
+template <typename T>
+constexpr inline int32_t EnumMax();
 
 //!
 //! \enum ActivationType
 //!
 //! \brief Enumerates the types of activation to perform in an activation layer.
 //!
-enum class ActivationType : int
+enum class ActivationType : int32_t
 {
     kRELU = 0,             //!< Rectified linear activation.
     kSIGMOID = 1,          //!< Sigmoid activation.
@@ -113,21 +121,19 @@ enum class ActivationType : int
     kTHRESHOLDED_RELU = 11 //!< Thresholded ReLU activation: x>alpha ? x : 0
 };
 
-template <typename T>
-constexpr inline int EnumMax(); //!< Maximum number of elements in an enumeration type.
-
+//! Maximum number of elements in ActivationType enum. \see ActivationType
 template <>
-constexpr inline int EnumMax<ActivationType>()
+constexpr inline int32_t EnumMax<ActivationType>()
 {
     return 12;
-} //!< Maximum number of elements in ActivationType enum. \see ActivationType
+}
 
 //!
 //! \enum DataType
 //!
 //! \brief The type of weights and tensors.
 //!
-enum class DataType : int
+enum class DataType : int32_t
 {
     //! 32-bit floating point format.
     kFLOAT = 0,
@@ -145,17 +151,18 @@ enum class DataType : int
     kBOOL = 4
 };
 
+//! Maximum number of elements in DataType enum. \see DataType
 template <>
-constexpr inline int EnumMax<DataType>()
+constexpr inline int32_t EnumMax<DataType>()
 {
     return 5;
-} //!< Maximum number of elements in DataType enum. \see DataType
+}
 
 //!
 //! \enum DimensionType
 //! \brief The type of data encoded across this dimension.
 //!
-enum class DimensionType : int
+enum class DimensionType : int32_t
 {
     kSPATIAL = 0, //!< Elements correspond to different spatial data.
     kCHANNEL = 1, //!< Elements correspond to different channels.
@@ -163,11 +170,12 @@ enum class DimensionType : int
     kSEQUENCE = 3 //!< Elements correspond to different sequence values.
 };
 
+//! Maximum number of elements in DimensionType enum. \see DimensionType
 template <>
-constexpr inline int EnumMax<DimensionType>()
+constexpr inline int32_t EnumMax<DimensionType>()
 {
     return 4;
-} //!< Maximum number of elements in DimensionType enum. \see DimensionType
+}
 
 //!
 //! \class Dims
@@ -186,10 +194,11 @@ constexpr inline int EnumMax<DimensionType>()
 class Dims
 {
 public:
-    static const int MAX_DIMS = 8; //!< The maximum number of dimensions supported for a tensor.
-    int nbDims;                    //!< The number of dimensions.
-    int d[MAX_DIMS];               //!< The extent of each dimension.
-    TRT_DEPRECATED DimensionType type[MAX_DIMS];  //!< The type of each dimension.
+    static const int32_t MAX_DIMS = 8;           //!< The maximum number of dimensions supported for a tensor.
+    int32_t nbDims;                              //!< The number of dimensions.
+    int32_t d[MAX_DIMS];                         //!< The extent of each dimension.
+    TRT_DEPRECATED DimensionType type[MAX_DIMS]; //!< The type of each dimension, provided for backwards compatibility
+                                                 //!< and will be removed in TensorRT 8.0.
 };
 
 //!
@@ -213,17 +222,15 @@ typedef uint32_t TensorFormats;
 //! For more information about data formats, see the topic "Data Format Description" located in the
 //! TensorRT Developer Guide (https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html).
 //!
-enum class TensorFormat : int
+enum class TensorFormat : int32_t
 {
     //! Row major linear format.
     //! For a tensor with dimensions {N, C, H, W} or {numbers, channels,
     //! columns, rows}, the dimensional index corresponds to {3, 2, 1, 0}
     //! and thus the order is W minor.
-    //!
-    //! For DLA usage, the tensor sizes are limited to C,H,W in the range [1,8192].
-    //!
     kLINEAR = 0,
-    kNCHW TRT_DEPRECATED_ENUM = kLINEAR, //!< Deprecated name of kLINEAR, provided for backwards compatibility
+    kNCHW TRT_DEPRECATED_ENUM = kLINEAR, //!< Deprecated name of kLINEAR, provided for backwards compatibility and will
+                                         //!< be removed in TensorRT 8.0.
 
     //! Two wide channel vectorized row major format. This format is bound to
     //! FP16. It is only available for dimensions >= 3.
@@ -232,7 +239,8 @@ enum class TensorFormat : int
     //! [N][(C+1)/2][H][W][2], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/2][h][w][c%2].
     kCHW2 = 1,
-    kNC2HW2 TRT_DEPRECATED_ENUM = kCHW2, //!< Deprecated name of kCHW2, provided for backwards compatibility
+    kNC2HW2 TRT_DEPRECATED_ENUM = kCHW2, //!< Deprecated name of kCHW2, provided for backwards compatibility and will
+                                         //!< be removed in TensorRT 8.0.
 
     //! Eight channel format where C is padded to a multiple of 8. This format
     //! is bound to FP16. It is only available for dimensions >= 3.
@@ -241,7 +249,8 @@ enum class TensorFormat : int
     //! [N][H][W][(C+7)/8*8], with the tensor coordinates (n, h, w, c)
     //! mapping to array subscript [n][h][w][c].
     kHWC8 = 2,
-    kNHWC8 TRT_DEPRECATED_ENUM = kHWC8, //!< Deprecated name of kHWC8, provided for backwards compatibility
+    kNHWC8 TRT_DEPRECATED_ENUM = kHWC8, //!< Deprecated name of kHWC8, provided for backwards compatibility and will
+                                        //!< be removed in TensorRT 8.0.
 
     //! Four wide channel vectorized row major format. This format is bound to
     //! INT8 or FP16. It is only available for dimensions >= 3.
@@ -251,7 +260,10 @@ enum class TensorFormat : int
     //! [N][(C+3)/4][H][W][4], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/4][h][w][c%4].
     //! If running on the DLA, this format can be used for acceleration
-    //! with the caveat that C must equal 4.
+    //! with the caveat that C must be equal or lesser than 4.
+    //! If used as DLA input with allowGPUFallback disable, it needs to meet
+    //! line stride requirement of DLA format. Column stride in bytes should
+    //! be multiple of 32.
     kCHW4 = 3,
 
     //! Sixteen wide channel vectorized row major format. This format is bound
@@ -261,9 +273,8 @@ enum class TensorFormat : int
     //! [N][(C+15)/16][H][W][16], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/16][h][w][c%16].
     //!
-    //! For DLA usage, this format maps to the native image format for FP16,
+    //! For DLA usage, this format maps to the native format for FP16,
     //! and the tensor sizes are limited to C,H,W in the range [1,8192].
-    //!
     kCHW16 = 4,
 
     //! Thirty-two wide channel vectorized row major format. This format is
@@ -273,10 +284,29 @@ enum class TensorFormat : int
     //! [N][(C+31)/32][H][W][32], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/32][h][w][c%32].
     //!
-    //! For DLA usage, this format maps to the native image format for INT8,
+    //! For DLA usage, this format maps to the native format for INT8,
     //! and the tensor sizes are limited to C,H,W in the range [1,8192].
-    //!
-    kCHW32 = 5
+    kCHW32 = 5,
+
+    //! Eight channel format where C is padded to a multiple of 8. This format
+    //! is bound to FP16, and it is only available for dimensions >= 4.
+    //! For a tensor with dimensions {N, D, H, W, C},
+    //! the memory layout is equivalent to an array with dimensions
+    //! [N][D][H][W][(C+7)/8*8], with the tensor coordinates (n, d, h, w, c)
+    //! mapping to array subscript [n][d][h][w][c].
+    kDHWC8 = 6,
+
+    //! Thirty-two wide channel vectorized row major format. This format is
+    //! bound to FP16 and INT8 and is only available for dimensions >= 4.
+    //! For a tensor with dimensions {N, C, D, H, W},
+    //! the memory layout is equivalent to a C array with dimensions
+    //! [N][(C+31)/32][D][H][W][32], with the tensor coordinates (n, c, d, h, w)
+    //! mapping to array subscript [n][c/32][d][h][w][c%32].
+    kCDHW32 = 7,
+
+    //! Non-vectorized channel-last format. This format is bound to FP32
+    //! and is only available for dimensions >= 3.
+    kHWC = 8
 };
 
 //!
@@ -286,11 +316,12 @@ enum class TensorFormat : int
 //!
 using PluginFormat = TensorFormat;
 
+//! Maximum number of elements in TensorFormat enum. \see TensorFormat
 template <>
-constexpr inline int EnumMax<TensorFormat>()
+constexpr inline int32_t EnumMax<TensorFormat>()
 {
-    return 6;
-} //!< Maximum number of elements in TensorFormat enum. \see TensorFormat
+    return 9;
+}
 
 //! \struct PluginTensorDesc
 //!
@@ -341,9 +372,10 @@ public:
     //!
     //! \brief Return the API version with which this plugin was built.
     //!
-    //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with plugins.
+    //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with
+    //! plugins.
     //!
-    virtual int getTensorRTVersion() const TRTNOEXCEPT
+    virtual int32_t getTensorRTVersion() const TRTNOEXCEPT
     {
         return NV_TENSORRT_VERSION;
     }
@@ -365,9 +397,10 @@ public:
     //!
     //! \return The number of outputs.
     //!
-    //! This function is called by the implementations of INetworkDefinition and IBuilder. In particular, it is called prior to any call to initialize().
+    //! This function is called by the implementations of INetworkDefinition and IBuilder. In particular, it is called
+    //! prior to any call to initialize().
     //!
-    virtual int getNbOutputs() const TRTNOEXCEPT = 0;
+    virtual int32_t getNbOutputs() const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Get the dimension of an output tensor.
@@ -376,9 +409,10 @@ public:
     //! \param inputs The input tensors.
     //! \param nbInputDims The number of input tensors.
     //!
-    //! This function is called by the implementations of INetworkDefinition and IBuilder. In particular, it is called prior to any call to initialize().
+    //! This function is called by the implementations of INetworkDefinition and IBuilder. In particular, it is called
+    //! prior to any call to initialize().
     //!
-    virtual Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) TRTNOEXCEPT = 0;
+    virtual Dims getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Check format support.
@@ -387,8 +421,9 @@ public:
     //! \param format PluginFormat requested.
     //! \return true if the plugin supports the type-format combination.
     //!
-    //! This function is called by the implementations of INetworkDefinition, IBuilder, and safe::ICudaEngine/ICudaEngine.
-    //! In particular, it is called when creating an engine and when deserializing an engine.
+    //! This function is called by the implementations of INetworkDefinition, IBuilder, and
+    //! safe::ICudaEngine/ICudaEngine. In particular, it is called when creating an engine and when deserializing an
+    //! engine.
     //!
     //! \warning for the format field, the values PluginFormat::kCHW4, PluginFormat::kCHW16, and PluginFormat::kCHW32
     //! will not be passed in, this is to keep backward compatibility with TensorRT 5.x series.  Use PluginV2IOExt
@@ -401,8 +436,8 @@ public:
     //!
     //! \brief Configure the layer.
     //!
-    //! This function is called by the builder prior to initialize(). It provides an opportunity for the layer to make algorithm choices on the basis
-    //! of its weights, dimensions, and maximum batch size.
+    //! This function is called by the builder prior to initialize(). It provides an opportunity for the layer to make
+    //! algorithm choices on the basis of its weights, dimensions, and maximum batch size.
     //!
     //! \param inputDims The input tensor dimensions.
     //! \param nbInputs The number of inputs.
@@ -412,7 +447,8 @@ public:
     //! \param format The format selected for the engine.
     //! \param maxBatchSize The maximum batch size.
     //!
-    //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be 3-dimensional CHW dimensions).
+    //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be
+    //! 3-dimensional CHW dimensions).
     //!
     //! \warning for the format field, the values PluginFormat::kCHW4, PluginFormat::kCHW16, and PluginFormat::kCHW32
     //! will not be passed in, this is to keep backward compatibility with TensorRT 5.x series.  Use PluginV2IOExt
@@ -420,30 +456,31 @@ public:
     //!
     //! \warning DataType:kBOOL not supported.
     //!
-    virtual void configureWithFormat(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type, PluginFormat format, int maxBatchSize) TRTNOEXCEPT = 0;
+    virtual void configureWithFormat(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
+        DataType type, PluginFormat format, int32_t maxBatchSize) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Initialize the layer for execution. This is called when the engine is created.
     //!
     //! \return 0 for success, else non-zero (which will cause engine termination).
     //!
-    virtual int initialize() TRTNOEXCEPT = 0;
+    virtual int32_t initialize() TRTNOEXCEPT = 0;
 
     //!
-    //! \brief Release resources acquired during plugin layer initialization. This is called when the engine is destroyed.
-    //! \see initialize()
+    //! \brief Release resources acquired during plugin layer initialization. This is called when the engine is
+    //! destroyed. \see initialize()
     //!
     virtual void terminate() TRTNOEXCEPT = 0;
 
     //!
     //! \brief Find the workspace size required by the layer.
     //!
-    //! This function is called during engine startup, after initialize(). The workspace size returned should be sufficient for any
-    //! batch size up to the maximum.
+    //! This function is called during engine startup, after initialize(). The workspace size returned should be
+    //! sufficient for any batch size up to the maximum.
     //!
     //! \return The workspace size.
     //!
-    virtual size_t getWorkspaceSize(int maxBatchSize) const TRTNOEXCEPT = 0;
+    virtual size_t getWorkspaceSize(int32_t maxBatchSize) const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Execute the layer.
@@ -456,7 +493,8 @@ public:
     //!
     //! \return 0 for success, else non-zero (which will cause engine termination).
     //!
-    virtual int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) TRTNOEXCEPT = 0;
+    virtual int32_t enqueue(int32_t batchSize, const void* const* inputs, void** outputs, void* workspace,
+        cudaStream_t stream) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Find the size of the serialization buffer required.
@@ -514,13 +552,13 @@ class IPluginV2Ext : public IPluginV2
 public:
     //!
     //! \brief Return the DataType of the plugin output at the requested index.
-    //! The default behavior should be to return the type of the first input, or DataType::kFLOAT if the layer has no inputs.
-    //! The returned data type must have a format that is supported by the plugin.
-    //! \see supportsFormat()
+    //! The default behavior should be to return the type of the first input, or DataType::kFLOAT if the layer has no
+    //! inputs. The returned data type must have a format that is supported by the plugin. \see supportsFormat()
     //!
     //! \warning DataType:kBOOL not supported.
     //!
-    virtual nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const TRTNOEXCEPT = 0;
+    virtual nvinfer1::DataType getOutputDataType(
+        int32_t index, const nvinfer1::DataType* inputTypes, int32_t nbInputs) const TRTNOEXCEPT = 0;
 
     //! \brief Return true if output tensor is broadcast across a batch.
     //!
@@ -532,7 +570,8 @@ public:
     //! i.e. are unaffected by whether method canBroadcastInputAcrossBatch requests
     //! physical replication of the values.
     //!
-    virtual bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const TRTNOEXCEPT = 0;
+    virtual bool isOutputBroadcastAcrossBatch(
+        int32_t outputIndex, const bool* inputIsBroadcasted, int32_t nbInputs) const TRTNOEXCEPT = 0;
 
     //! \brief Return true if plugin can use input that is broadcast across batch without replication.
     //!
@@ -547,13 +586,13 @@ public:
     //!
     //! This method is called only for inputs that can be broadcast.
     //!
-    virtual bool canBroadcastInputAcrossBatch(int inputIndex) const TRTNOEXCEPT = 0;
+    virtual bool canBroadcastInputAcrossBatch(int32_t inputIndex) const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Configure the layer with input and output data types.
     //!
-    //! This function is called by the builder prior to initialize(). It provides an opportunity for the layer to make algorithm choices on the basis
-    //! of its weights, dimensions, data types and maximum batch size.
+    //! This function is called by the builder prior to initialize(). It provides an opportunity for the layer to make
+    //! algorithm choices on the basis of its weights, dimensions, data types and maximum batch size.
     //!
     //! \param inputDims The input tensor dimensions.
     //! \param nbInputs The number of inputs.
@@ -566,19 +605,20 @@ public:
     //! \param floatFormat The format selected for the engine for the floating point inputs/outputs.
     //! \param maxBatchSize The maximum batch size.
     //!
-    //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be 3-dimensional CHW dimensions).
-    //! When inputIsBroadcast or outputIsBroadcast is true, the outermost batch size for that input or output should be treated as if it is one.
-    //! \ref inputIsBroadcast[i] is true only if the input is semantically broadcast across the batch and \ref canBroadcastInputAcrossBatch(i) returned true.
-    //! \ref outputIsBroadcast[i] is true only if \ref isOutputBroadcastAcrossBatch(i) returned true.
+    //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be
+    //! 3-dimensional CHW dimensions). When inputIsBroadcast or outputIsBroadcast is true, the outermost batch size for
+    //! that input or output should be treated as if it is one. \ref inputIsBroadcast[i] is true only if the input is
+    //! semantically broadcast across the batch and \ref canBroadcastInputAcrossBatch(i) returned true. \ref
+    //! outputIsBroadcast[i] is true only if \ref isOutputBroadcastAcrossBatch(i) returned true.
     //!
-    //! \warning for the floatFormat field, the values PluginFormat::kCHW4, PluginFormat::kCHW16, and PluginFormat::kCHW32
-    //! will not be passed in, this is to keep backward compatibility with TensorRT 5.x series.  Use PluginV2IOExt
-    //! or PluginV2DynamicExt for other PluginFormats.
+    //! \warning for the floatFormat field, the values PluginFormat::kCHW4, PluginFormat::kCHW16, and
+    //! PluginFormat::kCHW32 will not be passed in, this is to keep backward compatibility with TensorRT 5.x series. Use
+    //! PluginV2IOExt or PluginV2DynamicExt for other PluginFormats.
     //!
 
-    virtual void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims,
-                                 int nbOutputs, const DataType* inputTypes, const DataType* outputTypes,
-                                 const bool* inputIsBroadcast, const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) TRTNOEXCEPT = 0;
+    virtual void configurePlugin(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
+        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
+        const bool* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) TRTNOEXCEPT = 0;
 
     virtual ~IPluginV2Ext() {}
 
@@ -615,18 +655,22 @@ protected:
     //! \brief Return the API version with which this plugin was built. The
     //!  upper byte reserved by TensorRT and is used to differentiate this from IPlguinV2.
     //!
-    //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with plugins.
+    //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with
+    //! plugins.
     //!
-    int getTensorRTVersion() const _TENSORRT_OVERRIDE TRTNOEXCEPT
+    int32_t getTensorRTVersion() const _TENSORRT_OVERRIDE TRTNOEXCEPT
     {
-        return (static_cast<int>(PluginVersion::kV2_EXT) << 24 | (NV_TENSORRT_VERSION & 0xFFFFFF));
+        return (static_cast<int32_t>(PluginVersion::kV2_EXT) << 24 | (NV_TENSORRT_VERSION & 0xFFFFFF));
     }
 
     //!
     //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
     //!
-    void configureWithFormat(const Dims* /*inputDims*/, int /*nbInputs*/, const Dims* /*outputDims*/,
-                             int /*nbOutputs*/, DataType /*type*/, PluginFormat /*format*/, int /*maxBatchSize*/) _TENSORRT_OVERRIDE TRTNOEXCEPT {}
+    void configureWithFormat(const Dims* /*inputDims*/, int32_t /*nbInputs*/, const Dims* /*outputDims*/,
+        int32_t /*nbOutputs*/, DataType /*type*/, PluginFormat /*format*/,
+        int32_t /*maxBatchSize*/) _TENSORRT_OVERRIDE TRTNOEXCEPT
+    {
+    }
 };
 
 //! \class IPluginV2IOExt
@@ -652,7 +696,8 @@ public:
     //! \param out The output tensors attributes that are used for configuration.
     //! \param nbOutput Number of output tensors.
     //!
-    virtual void configurePlugin(const PluginTensorDesc* in, int nbInput, const PluginTensorDesc* out, int nbOutput) TRTNOEXCEPT = 0;
+    virtual void configurePlugin(
+        const PluginTensorDesc* in, int32_t nbInput, const PluginTensorDesc* out, int32_t nbOutput) TRTNOEXCEPT = 0;
 
     //!
     //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
@@ -676,7 +721,8 @@ public:
     //! * A definition for a plugin that supports only FP16 NCHW for its two inputs,
     //!   and FP32 NCHW for its single output:
     //!
-    //!         return inOut.format[pos] == TensorFormat::kLINEAR && (inOut.type[pos] == pos < 2 ?  DataType::kHALF : DataType::kFLOAT);
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && (inOut.type[pos] == pos < 2 ?  DataType::kHALF :
+    //!         DataType::kFLOAT);
     //!
     //! * A definition for a "polymorphic" plugin with two inputs and one output that supports
     //!   any format or type, but the inputs and output must have the same format and type:
@@ -685,7 +731,8 @@ public:
     //!
     //! Warning: TensorRT will stop asking for formats once it finds kFORMAT_COMBINATION_LIMIT on combinations.
     //!
-    virtual bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const TRTNOEXCEPT = 0;
+    virtual bool supportsFormatCombination(
+        int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) const TRTNOEXCEPT = 0;
 
 protected:
     //!
@@ -695,35 +742,43 @@ protected:
     //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with
     //! plugins.
     //!
+    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
+    //!
     TRT_DEPRECATED
-    int getTensorRTVersion() const _TENSORRT_OVERRIDE
+    int32_t getTensorRTVersion() const _TENSORRT_OVERRIDE
     {
-        return (static_cast<int>(PluginVersion::kV2_IOEXT) << 24 | (NV_TENSORRT_VERSION & 0xFFFFFF));
+        return (static_cast<int32_t>(PluginVersion::kV2_IOEXT) << 24 | (NV_TENSORRT_VERSION & 0xFFFFFF));
     }
 
     //!
     //! \brief Deprecated interface inheriting from base class. Derived classes should not implement this. In a C++11
     //! API it would be override final.
+    //!
+    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
     //!
     TRT_DEPRECATED
     void configureWithFormat(
-        const Dims*, int, const Dims*, int, DataType, PluginFormat, int) _TENSORRT_OVERRIDE _TENSORRT_FINAL
+        const Dims*, int32_t, const Dims*, int32_t, DataType, PluginFormat, int32_t) _TENSORRT_OVERRIDE _TENSORRT_FINAL
     {
     }
 
     //!
     //! \brief Deprecated interface inheriting from base class. Derived classes should not implement this. In a C++11
     //! API it would be override final.
+    //!
+    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
     //!
     TRT_DEPRECATED
-    void configurePlugin(const Dims*, int, const Dims*, int, const DataType*, const DataType*, const bool*, const bool*,
-        PluginFormat, int) _TENSORRT_OVERRIDE _TENSORRT_FINAL
+    void configurePlugin(const Dims*, int32_t, const Dims*, int32_t, const DataType*, const DataType*, const bool*,
+        const bool*, PluginFormat, int32_t) _TENSORRT_OVERRIDE _TENSORRT_FINAL
     {
     }
 
     //!
     //! \brief Deprecated interface inheriting from base class. Derived classes should not implement this. In a C++11
     //! API it would be override final.
+    //!
+    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
     //!
     TRT_DEPRECATED
     bool supportsFormat(DataType, PluginFormat) const _TENSORRT_OVERRIDE _TENSORRT_FINAL
@@ -737,7 +792,7 @@ protected:
 //! \brief The possible field types for custom layer.
 //!
 
-enum class PluginFieldType : int
+enum class PluginFieldType : int32_t
 {
     kFLOAT16 = 0, //!< FP16 field type.
     kFLOAT32 = 1, //!< FP32 field type.
@@ -789,7 +844,7 @@ public:
 
 struct PluginFieldCollection
 {
-    int nbFields;              //!< Number of PluginField entries
+    int32_t nbFields;          //!< Number of PluginField entries
     const PluginField* fields; //!< Pointer to PluginField entries
 };
 
@@ -807,7 +862,10 @@ public:
     //!
     //! \brief Return the version of the API the plugin creator was compiled with.
     //!
-    virtual int getTensorRTVersion() const TRTNOEXCEPT { return NV_TENSORRT_VERSION; }
+    virtual int32_t getTensorRTVersion() const TRTNOEXCEPT
+    {
+        return NV_TENSORRT_VERSION;
+    }
 
     //!
     //! \brief Return the plugin name.
@@ -879,7 +937,7 @@ public:
     //! \brief Return all the registered plugin creators and the number of
     //! registered plugin creators. Returns nullptr if none found.
     //!
-    virtual IPluginCreator* const* getPluginCreatorList(int* numCreators) const noexcept = 0;
+    virtual IPluginCreator* const* getPluginCreatorList(int32_t* numCreators) const noexcept = 0;
 
     //!
     //! \brief Return plugin creator based on plugin type, version and
@@ -919,22 +977,22 @@ public:
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
 };
 
-
 //!
 //! \enum TensorLocation
 //! \brief The location for tensor data storage, device or host.
 //!
-enum class TensorLocation : int
+enum class TensorLocation : int32_t
 {
     kDEVICE = 0, //!< Data stored on device.
     kHOST = 1,   //!< Data stored on host.
 };
 
+//! Maximum number of elements in TensorLocation enum. \see TensorLocation
 template <>
-constexpr inline int EnumMax<TensorLocation>()
+constexpr inline int32_t EnumMax<TensorLocation>()
 {
     return 2;
-} //!< Maximum number of elements in TensorLocation enum. \see TensorLocation
+}
 
 //!
 //! \class IGpuAllocator
@@ -992,13 +1050,13 @@ public:
     //!
     //! The severity corresponding to a log message.
     //!
-    enum class Severity : int
+    enum class Severity : int32_t
     {
-        kINTERNAL_ERROR = 0, //!< An internal error has occurred. Execution is unrecoverable.
-        kERROR = 1,          //!< An application error has occurred.
-        kWARNING = 2,        //!< An application error has been discovered, but TensorRT has recovered or fallen back to a default.
-        kINFO = 3,           //!< Informational messages with instructional information.
-        kVERBOSE = 4,        //!< Verbose messages with debugging information.
+        kINTERNAL_ERROR = 0, //!< Internal error has occurred. Execution is unrecoverable.
+        kERROR = 1,          //!< Application error has occurred.
+        kWARNING = 2, //!< Application error has been discovered. TensorRT has recovered or fallen back to a default.
+        kINFO = 3,    //!< Informational messages with instructional information.
+        kVERBOSE = 4, //!< Verbose messages with debugging information.
     };
 
     //!
@@ -1012,18 +1070,19 @@ public:
     virtual ~ILogger() {}
 };
 
+//! Maximum number of elements in ILogger::Severity enum. \see ILogger::Severity
 template <>
-constexpr inline int EnumMax<ILogger::Severity>()
+constexpr inline int32_t EnumMax<ILogger::Severity>()
 {
     return 5;
-} //!< Maximum number of elements in ILogger::Severity enum. \see ILogger::Severity
+}
 
 //!
 //! \enum ErrorCode
 //!
 //! \brief Error codes that can be returned by TensorRT during execution.
 //!
-enum class ErrorCode : int
+enum class ErrorCode : int32_t
 {
     //!
     //! Execution completed successfully.
@@ -1112,11 +1171,12 @@ enum class ErrorCode : int
 
 };
 
+//! Maximum number of elements in ErrorCode enum. \see ErrorCode
 template <>
-constexpr inline int EnumMax<ErrorCode>()
+constexpr inline int32_t EnumMax<ErrorCode>()
 {
     return 11;
-} //!< Maximum number of elements in ErrorCode enum. \see ErrorCode
+}
 
 //!
 //! \class IErrorRecorder
@@ -1274,7 +1334,7 @@ public:
 //! Internal C entry point for creating safe::IRuntime.
 //! @private
 //!
-extern "C" TENSORRTAPI void* createSafeInferRuntime_INTERNAL(void* logger, int version);
+extern "C" TENSORRTAPI void* createSafeInferRuntime_INTERNAL(void* logger, int32_t version);
 
 //!
 //! \brief Return the logger object.
@@ -1286,7 +1346,7 @@ extern "C" TENSORRTAPI nvinfer1::ILogger* getLogger();
 //!
 //! The format is as for TENSORRT_VERSION: (TENSORRT_MAJOR * 1000) + (TENSORRT_MINOR * 100) + TENSOR_PATCH.
 //!
-extern "C" TENSORRTAPI int getInferLibVersion();
+extern "C" TENSORRTAPI int32_t getInferLibVersion();
 
 //!
 //! \brief Return the plugin registry

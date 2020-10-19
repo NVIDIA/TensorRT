@@ -400,7 +400,7 @@ bool SampleMaskRCNN::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(2_GiB);
+    builder->setMaxWorkspaceSize(1_GiB);
     builder->setFp16Mode(mParams.fp16);
 
     // Only for speed test

@@ -18,7 +18,7 @@ from onnx_graphsurgeon.exporters.onnx_exporter import OnnxExporter
 from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 
-from onnx_models import identity_model, lstm_model, scan_model, dim_param_model
+from onnx_models import identity_model, lstm_model, scan_model, dim_param_model, initializer_is_output_model
 
 from onnx_graphsurgeon.ir.tensor import Tensor, Constant, Variable
 from onnx_graphsurgeon.ir.graph import Graph
@@ -123,7 +123,7 @@ class TestOnnxExporter(object):
     # See test_importers for import correctness checks
     # This function first imports an ONNX graph, and then re-exports it with no changes.
     # The exported ONNX graph should exactly match the original.
-    @pytest.mark.parametrize("model", [identity_model(), lstm_model(), scan_model(), dim_param_model()])
+    @pytest.mark.parametrize("model", [identity_model(), lstm_model(), scan_model(), dim_param_model(), initializer_is_output_model()])
     def test_export_graph(self, model):
         onnx_graph = model.load().graph
         graph = OnnxImporter.import_graph(onnx_graph)

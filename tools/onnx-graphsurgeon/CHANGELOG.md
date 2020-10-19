@@ -1,14 +1,35 @@
-# ONNX GraphSurgeon changelog history
+# ONNX GraphSurgeon Change Log
 
 Dates are in YYYY-MM-DD format.
 
-## vNext
 
+## v0.2.7 (2020-09-29)
+### Changed
+- Changed the default value of `remove_unused_node_outputs` in `cleanup()` to `False`, as a value of `True` can lead to unintuitive behavior,
+    especially with looping constructs like `Scan` and `Loop`.
+
+
+## v0.2.6 (2020-09-25)
+### Fixed
+- Fixed a bug where calling `graph.tensors()` would cause the inputs or outputs of some tensors to be modified.
+
+### Changed
+- Changed `SynchronizedList.__add__()` no longer modifies the left operand.
+
+
+## v0.2.5 (2020-09-21)
+### Fixed
+- Fixed a bug where nodes including subgraphs whose inputs/outputs had the same names as the node's inputs/outputs would not be imported correctly.
+
+
+## v0.2.4 (2020-09-14)
 ### Fixed
 - `fold_constants()` will no longer fail if there is nothing to fold in the graph
+- `cleanup()` will now properly remove the producer nodes of graph inputs.
+- Fixed a bug where graph input/output tensors not attached to nodes would not be correctly exported.
 
 
-## v0.2.3
+## v0.2.3 (2020-06-17)
 ### Added
 - `Graph.register()` now accepts an `opsets` argument so that functions can be registered for specific opsets.
 

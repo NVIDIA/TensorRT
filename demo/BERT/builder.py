@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
 
 import argparse
 import ctypes
@@ -111,6 +112,15 @@ def set_output_name(layer, prefix, name, out_idx = 0):
 def set_output_range(layer, maxval, out_idx = 0):
     layer.get_output(out_idx).set_dynamic_range(-maxval, maxval)
 
+def get_mha_dtype(config):
+    dtype = trt.float32
+    if config.use_fp16:
+        dtype = trt.float16
+    # Multi-head attention doesn't use INT8 inputs and output by default unless it is specified.
+    if config.use_int8 and config.use_int8_multihead and not config.is_calib_mode:
+        dtype = trt.int8
+    return int(dtype)
+
 def attention_layer_opt(prefix, config, init_dict, network, input_tensor, imask):
     """
     Add the attention layer
@@ -141,14 +151,7 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, imask)
     has_mask = imask is not None
 
     # QKV2CTX
-    dtype = trt.float32
-    if config.use_fp16:
-        dtype = trt.float16
-    # Multi-head attention doesn't use INT8 inputs and output by default unless it is specified.
-    if config.use_int8 and config.use_int8_multihead and not config.is_calib_mode:
-        dtype = trt.int8
-
-    pf_type = trt.PluginField("type_id", np.array([int(dtype)], np.int32), trt.PluginFieldType.INT32)
+    pf_type = trt.PluginField("type_id", np.array([get_mha_dtype(config)], np.int32), trt.PluginFieldType.INT32)
     pf_hidden_size = trt.PluginField("hidden_size", np.array([hidden_size], np.int32), trt.PluginFieldType.INT32)
     pf_num_heads = trt.PluginField("num_heads", np.array([num_heads], np.int32), trt.PluginFieldType.INT32)
     pf_has_mask = trt.PluginField("has_mask", np.array([has_mask], np.int32), trt.PluginFieldType.INT32)
@@ -522,28 +525,41 @@ def load_onnx_weights_and_quant(path, config):
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Found {:} entries in weight map".format(len(weights_dict)))
     return weights_dict
 
-def emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_length, batch_sizes):
-    if len(batch_sizes) > 1:
-        input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1, sequence_length))
-        segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1, sequence_length))
-        input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1, sequence_length))
+def emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_lengths, batch_sizes):
+    if len(batch_sizes) > 1 or len(sequence_lengths) > 1:
+        # int8 only support some of the sequence length, we dynamic on sequence length is not allowed.
+        input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1 if len(sequence_lengths) > 1 else sequence_lengths[0], -1 if len(batch_sizes) > 1 else batch_sizes[0]))
+        segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1 if len(sequence_lengths) > 1 else sequence_lengths[0], -1 if len(batch_sizes) > 1 else batch_sizes[0]))
+        input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1 if len(sequence_lengths) > 1 else sequence_lengths[0], -1 if len(batch_sizes) > 1 else batch_sizes[0]))
 
         # Specify profiles for the batch sizes we're interested in.
         # Make sure the profile also works for all sizes not covered by the previous profile.
-        prev_size = 0
+        prev_batch_size = 0
         for batch_size in sorted(batch_sizes):
-            profile = builder.create_optimization_profile()
-            min_shape = (prev_size + 1, sequence_length)
-            shape = (batch_size, sequence_length)
-            profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
-            profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
-            profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
-            builder_config.add_optimization_profile(profile)
-            prev_size = batch_size
+            if len(sequence_lengths) == 1:
+                min_shape = (sequence_lengths[0], prev_batch_size + 1)
+                shape = (sequence_lengths[0], batch_size)
+                profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
+                profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
+                profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
+                builder_config.add_optimization_profile(profile)
+            else:
+                prev_sequence_length = 0
+                for sequence_length in sorted(sequence_lengths):
+                    profile = builder.create_optimization_profile()
+                    min_shape = (prev_sequence_length + 1, prev_batch_size + 1)
+                    shape = (sequence_length, batch_size)
+                    profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
+                    profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
+                    profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
+                    builder_config.add_optimization_profile(profile)
+                    prev_sequence_length = sequence_length
+            prev_batch_size = batch_size
     else:
-        input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(batch_sizes[0], sequence_length))
-        segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(batch_sizes[0], sequence_length))
-        input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(batch_sizes[0], sequence_length))
+        input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(sequence_lengths[0], batch_sizes[0]))
+        segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(sequence_lengths[0], batch_sizes[0]))
+        input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(sequence_lengths[0], batch_sizes[0]))
+
     wbeta = trt.PluginField("bert_embeddings_layernorm_beta", weights_dict["bert_embeddings_layernorm_beta"].numpy(), trt.PluginFieldType.FLOAT32)
     wgamma = trt.PluginField("bert_embeddings_layernorm_gamma", weights_dict["bert_embeddings_layernorm_gamma"].numpy(), trt.PluginFieldType.FLOAT32)
     wwordemb = trt.PluginField("bert_embeddings_word_embeddings", weights_dict["bert_embeddings_word_embeddings"].numpy(), trt.PluginFieldType.FLOAT32)
@@ -551,27 +567,12 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     wposemb = trt.PluginField("bert_embeddings_position_embeddings", weights_dict["bert_embeddings_position_embeddings"].numpy(), trt.PluginFieldType.FLOAT32)
 
     output_fp16 = trt.PluginField("output_fp16", np.array([1 if config.use_fp16 else 0]).astype(np.int32), trt.PluginFieldType.INT32)
+    mha_type = trt.PluginField("mha_type_id", np.array([get_mha_dtype(config)], np.int32), trt.PluginFieldType.INT32)
 
-    use_full_mask = 0
-    # use full_mask for XMMA kernels (use fp16/int8 precision and SM version >= 72)
-    if not config.is_calib_mode and (config.use_fp16 or config.use_int8):
-        cc = pycuda.autoinit.device.compute_capability()
-        if cc[0] * 10 + cc[1] >= 72:
-            use_full_mask = 1
-    full_mask = trt.PluginField("full_mask", np.array([use_full_mask]).astype(np.int32), trt.PluginFieldType.INT32)
-
-    pfc = trt.PluginFieldCollection([wbeta, wgamma, wwordemb, wtokemb, wposemb, output_fp16, full_mask])
+    pfc = trt.PluginFieldCollection([wbeta, wgamma, wwordemb, wtokemb, wposemb, output_fp16, mha_type])
     fn = emln_plg_creator.create_plugin("embeddings", pfc)
 
-    input_ids = network.add_shuffle(input_ids)
-    input_ids.second_transpose = (1, 0)
-    segment_ids = network.add_shuffle(segment_ids)
-    segment_ids.second_transpose = (1, 0)
-    input_mask = network.add_shuffle(input_mask)
-    input_mask.second_transpose = (1, 0)
-    inputs = [input_ids.get_output(0),
-              segment_ids.get_output(0),
-              input_mask.get_output(0)]
+    inputs = [input_ids, segment_ids, input_mask]
     emb_layer = network.add_plugin_v2(inputs, fn)
 
     if config.use_qat:
@@ -579,7 +580,7 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     set_output_name(emb_layer, "embeddings_", "output")
     return emb_layer
 
-def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num):
+def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num):
     explicit_batch_flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network(explicit_batch_flag) as network, builder.create_builder_config() as builder_config:
@@ -589,14 +590,18 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
         if config.use_int8:
             builder_config.set_flag(trt.BuilderFlag.INT8)
             if not config.use_qat:
-                calibrator = BertCalibrator(squad_json, vocab_file, calibrationCacheFile, 1, sequence_length, calib_num)
+                calibrator = BertCalibrator(squad_json, vocab_file, calibrationCacheFile, 1, sequence_lengths[-1], calib_num)
                 builder_config.set_quantization_flag(trt.QuantizationFlag.CALIBRATE_BEFORE_FUSION)
                 builder_config.int8_calibrator = calibrator
         if config.use_strict:
             builder_config.set_flag(trt.BuilderFlag.STRICT_TYPES)
 
+        # only use the largest sequence when in calibration mode
+        if config.is_calib_mode:
+            sequence_lengths = sequence_lengths[-1:]
+
         # Create the network
-        emb_layer = emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_length, batch_sizes)
+        emb_layer = emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_lengths, batch_sizes)
         embeddings = emb_layer.get_output(0)
         mask_idx = emb_layer.get_output(1)
 
@@ -615,7 +620,7 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
             calibrator.free()
         return engine
 
-def generate_calibration_cache(sequence_length, workspace_size, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num):
+def generate_calibration_cache(sequence_lengths, workspace_size, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num):
     """
     BERT demo needs a separate engine building path to generate calibration cache.
     This is because we need to configure SLN and MHA plugins in FP32 mode when
@@ -632,7 +637,7 @@ def generate_calibration_cache(sequence_length, workspace_size, config, weights_
     config.use_fp16 = False
     config.is_calib_mode = True
 
-    with build_engine([1], workspace_size, sequence_length, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num) as engine:
+    with build_engine([1], workspace_size, sequence_lengths, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num) as engine:
         TRT_LOGGER.log(TRT_LOGGER.INFO, "calibration cache generated in {:}".format(calibrationCacheFile))
 
     config.use_fp16 = saved_use_fp16
@@ -645,7 +650,7 @@ def main():
     parser.add_argument("-x", "--onnx", required=False, help="The ONNX model file path.")
     parser.add_argument("-o", "--output", required=True, default="bert_base_384.engine", help="The bert engine file, ex bert.engine")
     parser.add_argument("-b", "--batch-size", default=[], action="append", help="Batch size(s) to optimize for. The engine will be usable with any batch size below this, but may not be optimal for smaller sizes. Can be specified multiple times to optimize for more than one batch size.", type=int)
-    parser.add_argument("-s", "--sequence-length", default=128, help="Sequence length of the BERT model", type=int)
+    parser.add_argument("-s", "--sequence-length", default=[], action="append", help="Sequence length of the BERT model", type=int)
     parser.add_argument("-c", "--config-dir", required=True,
                         help="The folder containing the bert_config.json, which can be downloaded e.g. from https://github.com/google-research/bert#pre-trained-models or by running download_models.py in dle/TensorFlow/LanguageModeling/BERT/data/pretrained_models_google")
     parser.add_argument("-f", "--fp16", action="store_true", help="Indicates that inference should be run in FP16 precision", required=False)
@@ -662,6 +667,13 @@ def main():
 
     args, _ = parser.parse_known_args()
     args.batch_size = args.batch_size or [1]
+    args.sequence_length = args.sequence_length or [128]
+
+    cc = pycuda.autoinit.device.compute_capability()
+    if cc[0] * 10 + cc[1] < 75 and args.force_int8_multihead:
+        raise RuntimeError("--force-int8-multihead option is only supported on Turing+ GPU.")
+    if cc[0] * 10 + cc[1] < 72 and args.force_int8_skipln:
+        raise RuntimeError("--force-int8-skipln option is only supported on Xavier+ GPU.")
 
     bert_config_path = os.path.join(args.config_dir, "bert_config.json")
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Using configuration file: {:}".format(bert_config_path))
@@ -671,7 +683,7 @@ def main():
     if args.calib_path != None:
         calib_cache = args.calib_path
     else:
-        calib_cache = "BertSquadL{}H{}A{}S{}CalibCache".format(config.num_hidden_layers, config.head_size, config.num_attention_heads, args.sequence_length)
+        calib_cache = "BertSquadL{}H{}A{}S{}CalibCache".format(config.num_hidden_layers, config.head_size, config.num_attention_heads, "-".join(str(len) for len in args.sequence_length))
 
     if args.onnx != None:
         weights_dict = load_onnx_weights_and_quant(args.onnx, config)

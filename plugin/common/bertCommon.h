@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,13 @@
 
 #include "NvInfer.h"
 #include "NvInferRuntimeCommon.h"
+#include "checkMacrosPlugin.h"
 #include "cublas_v2.h"
 #include "cuda_fp16.h"
 #include "plugin.h"
-#include "pluginLogger.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cuda_runtime_api.h>
 #include <memory>
 #include <numeric>
@@ -37,10 +38,73 @@
 #define TRT_UNUSED (void)
 
 using half = __half;
+using namespace nvinfer1::plugin;
 
 constexpr uint32_t BDIM = 1; // batch dimension
 constexpr uint32_t SDIM = 0; // seq len dimension
 constexpr uint32_t HDIM = 2; // hidden dimension
+
+constexpr int32_t kSM_72 = 72;
+constexpr int32_t kSM_75 = 75;
+constexpr int32_t kSM_80 = 80;
+constexpr int32_t kSM_86 = 86;
+
+// For full mask mode, we must produce the compressed mask format expected by the fused attention path. Currently, only
+// two sequence lengths are supported. We hard code the sizes here.
+// The number of threads per CTA: warps_m * warps_n * warps_k * 32;
+constexpr size_t threadsPerCta128 = 2 * 2 * 32;
+constexpr size_t threadsPerCta384 = 1 * 8 * 32;
+
+// The number of xmmas in the M dimension. We use one uint32_t per XMMA in the M dimension: (s + 16*warps_m - 1)
+// / (16*warps_m);
+constexpr size_t xmmasM128 = 4;
+constexpr size_t xmmasM384 = 24;
+
+// Packed mask size per batch. Layout is XMMAS_M * THREADS_PER_CTA.
+constexpr size_t unfusedMaskSize = 1;
+constexpr size_t packedMaskSize64 = xmmasM128 * threadsPerCta128;
+constexpr size_t packedMaskSize96 = xmmasM128 * threadsPerCta128;
+constexpr size_t packedMaskSize128 = xmmasM128 * threadsPerCta128;
+constexpr size_t packedMaskSize384 = xmmasM384 * threadsPerCta384;
+
+namespace bert
+{
+
+inline int getSMVersion()
+{
+    int device{-1};
+    CHECK(cudaGetDevice(&device));
+    cudaDeviceProp props;
+    CHECK(cudaGetDeviceProperties(&props, device));
+    return props.major * 10 + props.minor;
+}
+
+inline int getMHAMaskPackedSize(int smVersion, nvinfer1::DataType dataType, int sequenceLength)
+{
+    // this code must match EmbLayerNormPluginDynamic::getOutputDimensions in embLayerNormPlugin.cpp
+    int packedSize = unfusedMaskSize;
+    if ((smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86)
+        && (dataType == nvinfer1::DataType::kINT8 || dataType == nvinfer1::DataType::kHALF))
+    {
+        if (sequenceLength == 64)
+        {
+            packedSize = (dataType == nvinfer1::DataType::kHALF ? packedMaskSize64 : packedSize);
+        }
+        else if (sequenceLength == 96)
+        {
+            packedSize = (dataType == nvinfer1::DataType::kHALF ? packedMaskSize96 : packedSize);
+        }
+        else if (sequenceLength == 128)
+        {
+            packedSize = packedMaskSize128;
+        }
+        else if (sequenceLength == 384)
+        {
+            packedSize = packedMaskSize384;
+        }
+    }
+    return packedSize;
+}
 
 inline unsigned int getElementSize(nvinfer1::DataType t)
 {
@@ -65,9 +129,6 @@ inline int64_t volume(const nvinfer1::Dims& d)
 {
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
 }
-
-namespace bert
-{
 
 template <typename IntType>
 constexpr IntType ceildiv(IntType a, IntType b)
@@ -399,25 +460,6 @@ inline nvinfer1::DataType fieldTypeToDataType(const nvinfer1::PluginFieldType ft
     }
     default: throw std::invalid_argument("No corresponding datatype for plugin field type");
     }
-}
-
-inline unsigned int getElementSize(nvinfer1::DataType t)
-{
-    switch (t)
-    {
-    case nvinfer1::DataType::kINT32: return 4;
-    case nvinfer1::DataType::kFLOAT: return 4;
-    case nvinfer1::DataType::kHALF: return 2;
-    case nvinfer1::DataType::kBOOL:
-    case nvinfer1::DataType::kINT8: return 1;
-    }
-    throw std::runtime_error("Invalid DataType.");
-    return 0;
-}
-
-inline int64_t volume(const nvinfer1::Dims& d)
-{
-    return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
 }
 
 } // namespace bert

@@ -277,18 +277,34 @@ __device__ inline void scaledSoftmaxSmall(
     __shared__ typename BlockReduce::TempStorage tmpStorage;
 
     __shared__ float rZ;
+    __shared__ float fMax;
 
     const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
 
     const float w(rsqrtHeadSize);
     cub::Sum sum;
-    float threadData(0);
+    float threadData(-FLT_MAX);
 
     const int idx = offset + threadIdx.x;
     if (threadIdx.x < lastValid)
     {
-        const float val = input[idx];
-        threadData = exp(val * w);
+        threadData = input[idx];
+    }
+
+    const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
+    if (threadIdx.x == 0)
+    {
+        fMax = maxElem;
+    }
+    __syncthreads();
+
+    if (threadIdx.x < lastValid)
+    {
+        threadData = exp((threadData - fMax) * w);
+    }
+    else
+    {
+        threadData = 0;
     }
 
     const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
@@ -315,18 +331,41 @@ __device__ inline void scaledSoftmax(
     __shared__ typename BlockReduce::TempStorage tmpStorage;
 
     __shared__ float rZ;
+    __shared__ float fMax;
 
     const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
 
     const float w(rsqrtHeadSize);
     cub::Sum sum;
-    float threadData(0);
+    float threadData(-FLT_MAX);
 
+    if (lastValid >= blockDim.x)
+    {
+        threadData = 0;
+    }
     for (int i = threadIdx.x; i < lastValid; i += TPB)
     {
         const int idx = offset + i;
-        const float val = input[idx];
-        threadData += exp(val * w);
+        threadData = input[idx];
+    }
+
+    const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
+    if (threadIdx.x == 0)
+    {
+        fMax = maxElem;
+    }
+    __syncthreads();
+
+    if (lastValid < blockDim.x)
+    {
+        if (threadIdx.x >= lastValid)
+        {
+            threadData = 0;
+        }
+    }
+    for (int i = threadIdx.x; i < lastValid; i += TPB)
+    {
+        threadData += exp((threadData - fMax) * w);
     }
 
     const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);

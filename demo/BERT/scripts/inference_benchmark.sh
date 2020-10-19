@@ -1,6 +1,6 @@
 #!/bin/bash
-
-# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+#
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
 
 # Usage: run_benchmark(batch_sizes, model_variant: (base/large), precision: (int8/int8-qat/fp16/fp32), sequence_length, max_batch_size, gpu_arch)
 run_benchmark() {

@@ -222,8 +222,8 @@ private:
     std::map<std::string, Record> mProfile;
 };
 
-// Locate path to file, given its filename or filepath suffix and possible dirs it might lie in
-// Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path
+//! Locate path to file, given its filename or filepath suffix and possible dirs it might lie in.
+//! Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path.
 inline std::string locateFile(const std::string& filepathSuffix, const std::vector<std::string>& directories)
 {
     const int MAX_DEPTH{10};
@@ -241,14 +241,19 @@ inline std::string locateFile(const std::string& filepathSuffix, const std::vect
 #endif
         }
         else
+        {
             filepath = dir + filepathSuffix;
+        }
 
         for (int i = 0; i < MAX_DEPTH && !found; i++)
         {
-            std::ifstream checkFile(filepath);
+            const std::ifstream checkFile(filepath);
             found = checkFile.is_open();
             if (found)
+            {
                 break;
+            }
+
             filepath = "../" + filepath; // Try again in parent dir
         }
 
@@ -260,14 +265,16 @@ inline std::string locateFile(const std::string& filepathSuffix, const std::vect
         filepath.clear();
     }
 
+    // Could not find the file
     if (filepath.empty())
     {
-        std::string directoryList = std::accumulate(directories.begin() + 1, directories.end(), directories.front(),
+        const std::string dirList = std::accumulate(directories.begin() + 1, directories.end(), directories.front(),
             [](const std::string& a, const std::string& b) { return a + "\n\t" + b; });
-        std::cout << "Could not find " << filepathSuffix << " in data directories:\n\t" << directoryList << std::endl;
+        std::cout << "Could not find " << filepathSuffix << " in data directories:\n\t" << dirList << std::endl;
         std::cout << "&&&& FAILED" << std::endl;
         exit(EXIT_FAILURE);
     }
+
     return filepath;
 }
 
@@ -378,7 +385,7 @@ struct InferDeleter
 };
 
 template <typename T>
-inline std::shared_ptr<T> infer_object(T* obj)
+std::shared_ptr<T> infer_object(T* obj)
 {
     if (!obj)
     {
@@ -387,20 +394,15 @@ inline std::shared_ptr<T> infer_object(T* obj)
     return std::shared_ptr<T>(obj, InferDeleter());
 }
 
+//! Return vector of indices that puts magnitudes of sequence in descending order.
 template <class Iter>
-inline std::vector<size_t> argsort(Iter begin, Iter end, bool reverse = false)
+std::vector<size_t> argMagnitudeSort(Iter begin, Iter end)
 {
-    std::vector<size_t> inds(end - begin);
-    std::iota(inds.begin(), inds.end(), 0);
-    if (reverse)
-    {
-        std::sort(inds.begin(), inds.end(), [&begin](size_t i1, size_t i2) { return begin[i2] < begin[i1]; });
-    }
-    else
-    {
-        std::sort(inds.begin(), inds.end(), [&begin](size_t i1, size_t i2) { return begin[i1] < begin[i2]; });
-    }
-    return inds;
+    std::vector<size_t> indices(end - begin);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::sort(indices.begin(), indices.end(),
+        [&begin](size_t i, size_t j) { return std::abs(begin[j]) < std::abs(begin[i]); });
+    return indices;
 }
 
 inline bool readReferenceFile(const std::string& fileName, std::vector<std::string>& refVector)
@@ -422,12 +424,13 @@ inline bool readReferenceFile(const std::string& fileName, std::vector<std::stri
     return true;
 }
 
-template <typename result_vector_t>
-inline std::vector<std::string> classify(
-    const std::vector<std::string>& refVector, const result_vector_t& output, const size_t topK)
+template <typename T>
+std::vector<std::string> classify(
+    const std::vector<std::string>& refVector, const std::vector<T>& output, const size_t topK)
 {
-    auto inds = samplesCommon::argsort(output.cbegin(), output.cend(), true);
+    const auto inds = samplesCommon::argMagnitudeSort(output.cbegin(), output.cend());
     std::vector<std::string> result;
+    result.reserve(topK);
     for (size_t k = 0; k < topK; ++k)
     {
         result.push_back(refVector[inds[k]]);
@@ -435,18 +438,17 @@ inline std::vector<std::string> classify(
     return result;
 }
 
-// Returns top K indices, not values.
+// Returns indices of highest K magnitudes in v.
 template <typename T>
-inline std::vector<size_t> topK(const std::vector<T> inp, const size_t k)
+std::vector<size_t> topKMagnitudes(const std::vector<T>& v, const size_t k)
 {
-    std::vector<size_t> result;
-    std::vector<size_t> inds = samplesCommon::argsort(inp.cbegin(), inp.cend(), true);
-    result.assign(inds.begin(), inds.begin() + k);
-    return result;
+    std::vector<size_t> indices = samplesCommon::argMagnitudeSort(v.cbegin(), v.cend());
+    indices.resize(k);
+    return indices;
 }
 
 template <typename T>
-inline bool readASCIIFile(const std::string& fileName, const size_t size, std::vector<T>& out)
+bool readASCIIFile(const std::string& fileName, const size_t size, std::vector<T>& out)
 {
     std::ifstream infile(fileName);
     if (!infile.is_open())
@@ -462,7 +464,7 @@ inline bool readASCIIFile(const std::string& fileName, const size_t size, std::v
 }
 
 template <typename T>
-inline bool writeASCIIFile(const std::string& fileName, const std::vector<T>& in)
+bool writeASCIIFile(const std::string& fileName, const std::vector<T>& in)
 {
     std::ofstream outfile(fileName);
     if (!outfile.is_open())
@@ -668,7 +670,7 @@ struct BBox
 };
 
 template <int C, int H, int W>
-inline void readPPMFile(const std::string& filename, samplesCommon::PPM<C, H, W>& ppm)
+void readPPMFile(const std::string& filename, samplesCommon::PPM<C, H, W>& ppm)
 {
     ppm.fileName = filename;
     std::ifstream infile(filename, std::ifstream::binary);
@@ -694,7 +696,7 @@ inline void readPPMFile(const std::string& filename, vPPM& ppm, std::vector<std:
 }
 
 template <int C, int H, int W>
-inline void writePPMFileWithBBox(const std::string& filename, PPM<C, H, W>& ppm, const BBox& bbox)
+void writePPMFileWithBBox(const std::string& filename, PPM<C, H, W>& ppm, const BBox& bbox)
 {
     std::ofstream outfile("./" + filename, std::ofstream::binary);
     assert(!outfile.fail());
@@ -702,11 +704,13 @@ inline void writePPMFileWithBBox(const std::string& filename, PPM<C, H, W>& ppm,
             << "\n"
             << ppm.w << " " << ppm.h << "\n"
             << ppm.max << "\n";
+
     auto round = [](float x) -> int { return int(std::floor(x + 0.5f)); };
     const int x1 = std::min(std::max(0, round(int(bbox.x1))), W - 1);
     const int x2 = std::min(std::max(0, round(int(bbox.x2))), W - 1);
     const int y1 = std::min(std::max(0, round(int(bbox.y1))), H - 1);
     const int y2 = std::min(std::max(0, round(int(bbox.y2))), H - 1);
+
     for (int x = x1; x <= x2; ++x)
     {
         // bbox top border
@@ -718,6 +722,7 @@ inline void writePPMFileWithBBox(const std::string& filename, PPM<C, H, W>& ppm,
         ppm.buffer[(y2 * ppm.w + x) * 3 + 1] = 0;
         ppm.buffer[(y2 * ppm.w + x) * 3 + 2] = 0;
     }
+
     for (int y = y1; y <= y2; ++y)
     {
         // bbox left border
@@ -729,6 +734,7 @@ inline void writePPMFileWithBBox(const std::string& filename, PPM<C, H, W>& ppm,
         ppm.buffer[(y * ppm.w + x2) * 3 + 1] = 0;
         ppm.buffer[(y * ppm.w + x2) * 3 + 2] = 0;
     }
+
     outfile.write(reinterpret_cast<char*>(ppm.buffer), ppm.w * ppm.h * 3);
 }
 

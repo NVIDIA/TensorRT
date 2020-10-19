@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,9 +35,17 @@ class MHARunner
 public:
     MHARunner(const nvinfer1::DataType type, const int numHeads, const int headSize)
         : mType(type)
+        , mS(0)
+        , mB(0)
+        , mOmatSize(0)
+        , mNumMats(0)
         , mNumHeads(numHeads)
         , mHeadSize(headSize)
         , mWordSize(getElementSize(type))
+        , mLdQKV(0)
+        , mStrideQKV(0)
+        , mLdOut(0)
+        , mStrideOut(0)
         , mRsqrtHeadSize(1.f / sqrtf(headSize))
     {
     }
@@ -64,13 +72,17 @@ public:
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream)
         = 0;
 
+    virtual void run(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+        = 0;
+
     virtual size_t getSerializationSize() const;
     virtual void serialize(void* buffer) const;
     virtual void deserialize(const void* data, size_t length);
 
     virtual size_t getWorkspaceSize() const = 0;
 
-    virtual bool isValid() const = 0;
+    virtual bool isValid(int s) const = 0;
 
 protected:
     nvinfer1::DataType mType;
@@ -146,13 +158,16 @@ public:
 
 protected:
     void createMHARunner();
-    int getSMVersion() const;
 
 private:
     const std::string mLayerName;
     std::string mNamespace;
 
-    std::unique_ptr<MHARunner> dispatcher;
+    // used for sequence len 128, 384, precision int8
+    // used for sequence len 64, 96, 128, 384, precision fp16
+    std::unique_ptr<MHARunner> fusedDispatcher;
+    // used for other sequence, precision fp32 and fp16
+    std::unique_ptr<MHARunner> unfusedDispatcher;
 
     int mS;
     int mB;
@@ -201,6 +216,105 @@ private:
     std::string mNamespace;
 };
 
+class QKVToContextVarSeqlenPlugin : public nvinfer1::IPluginV2DynamicExt
+{
+public:
+    QKVToContextVarSeqlenPlugin(const std::string name, const nvinfer1::DataType type, const int hiddenSize,
+        const int numHeads, const float dqProbs, bool hasImask = false, bool varSeqlen = false);
+
+    QKVToContextVarSeqlenPlugin(const std::string name, const void* data, size_t length);
+
+    // It doesn't make sense to make QKVToContextVarSeqlenPlugin without arguments, so we
+    // delete default constructor.
+    QKVToContextVarSeqlenPlugin() = delete;
+
+    // IPluginV2DynamicExt Methods
+    nvinfer1::IPluginV2DynamicExt* clone() const override;
+    nvinfer1::DimsExprs getOutputDimensions(
+        int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) override;
+    bool supportsFormatCombination(
+        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) override;
+    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
+        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) override;
+    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
+        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const override;
+    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+
+    // IPluginV2Ext Methods
+    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
+
+    // IPluginV2 Methods
+    const char* getPluginType() const override;
+    const char* getPluginVersion() const override;
+    int getNbOutputs() const override;
+    int initialize() override;
+    void terminate() override;
+    size_t getSerializationSize() const override;
+    void serialize(void* buffer) const override;
+    void destroy() override;
+    void setPluginNamespace(const char* pluginNamespace) override;
+    const char* getPluginNamespace() const override;
+
+protected:
+    void createMHARunner();
+
+private:
+    const std::string mLayerName;
+    std::string mNamespace;
+
+    std::unique_ptr<MHARunner> dispatcher;
+
+    int mS;
+    int mB;
+    int mSM;
+    int mHeadSize;
+    int mHiddenSize;
+    int mNumHeads;
+    bool mHasImask;
+    nvinfer1::DataType mType;
+
+    float mDqProbs;
+
+    int mHdim;
+    bool mUseVarSeqlen;
+
+protected:
+    // To prevent compiler warnings.
+    using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
+    using nvinfer1::IPluginV2DynamicExt::supportsFormat;
+};
+
+class QKVToContextVarSeqlenPluginCreator : public nvinfer1::IPluginCreator
+{
+public:
+    QKVToContextVarSeqlenPluginCreator();
+
+    const char* getPluginName() const override;
+
+    const char* getPluginVersion() const override;
+
+    const nvinfer1::PluginFieldCollection* getFieldNames() override;
+
+    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) override;
+
+    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
+
+    void setPluginNamespace(const char* pluginNamespace) override;
+
+    const char* getPluginNamespace() const override;
+
+private:
+    static nvinfer1::PluginFieldCollection mFC;
+    static std::vector<nvinfer1::PluginField> mPluginAttributes;
+    std::string mNamespace;
+};
+
 class UnfusedMHARunner : public MHARunner
 {
 public:
@@ -212,14 +326,18 @@ public:
     void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
 
+    void run(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+
     size_t getWorkspaceSize() const override;
 
     size_t getSerializationSize() const override;
     void serialize(void* buffer) const override;
     void deserialize(const void* data, size_t length) override;
-    bool isValid() const override;
+    bool isValid(int s) const override;
 
 private:
+    bool mIsBestAlgoFound;
     int mAlgoBatchedEx1;
     int mAlgoBatchedEx2;
     cublasHandle_t mCublas;
@@ -236,11 +354,14 @@ public:
     void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
 
+    void run(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+
     size_t getWorkspaceSize() const override;
 
     void deserialize(const void* data, size_t length) override;
 
-    bool isValid() const override;
+    bool isValid(int s) const override;
 
 private:
     int mSm;
@@ -259,11 +380,67 @@ public:
     void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
 
+    void run(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+
     size_t getWorkspaceSize() const override;
 
     void deserialize(const void* data, size_t length) override;
 
-    bool isValid() const override;
+    bool isValid(int s) const override;
+
+private:
+    float mDqProbs;
+    int mSm;
+    class mhaImpl;
+    std::unique_ptr<mhaImpl> pimpl;
+};
+
+class FusedMHARunnerFP16v2 : public MHARunner
+{
+public:
+    FusedMHARunnerFP16v2(const int numHeads, const int headSize, const int sm);
+    ~FusedMHARunnerFP16v2() = default; // for pimpl
+
+    virtual void setup(const int S, const int B) override;
+
+    void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
+        const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
+
+    void run(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+
+    size_t getWorkspaceSize() const override;
+
+    void deserialize(const void* data, size_t length) override;
+
+    bool isValid(int s) const override;
+
+private:
+    int mSm;
+    class mhaImpl;
+    std::unique_ptr<mhaImpl> pimpl;
+};
+
+class FusedMHARunnerInt8v2 : public MHARunner
+{
+public:
+    FusedMHARunnerInt8v2(const int numHeads, const int headSize, const int sm, const float dqProbs);
+    ~FusedMHARunnerInt8v2() = default; // for pimpl
+
+    virtual void setup(const int S, const int B) override;
+
+    void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
+        const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
+
+    void run(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+
+    size_t getWorkspaceSize() const override;
+
+    void deserialize(const void* data, size_t length) override;
+
+    bool isValid(int s) const override;
 
 private:
     float mDqProbs;

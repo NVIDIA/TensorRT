@@ -18,7 +18,6 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
-#include <cuda_runtime_api.h>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -44,6 +43,33 @@
 
 using namespace nvinfer1;
 using namespace sample;
+
+using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
+using duration = std::chrono::duration<float>;
+
+void printPerformanceProfile(const ReportingOptions& reporting, const InferenceEnvironment& iEnv, std::ostream& os)
+{
+    if (reporting.profile)
+    {
+        iEnv.profiler->print(sample::gLogInfo);
+    }
+    if (!reporting.exportProfile.empty())
+    {
+        iEnv.profiler->exportJSONProfile(reporting.exportProfile);
+    }
+}
+
+void printOutput(const ReportingOptions& reporting, const InferenceEnvironment& iEnv, std::ostream& os)
+{
+    if (reporting.output)
+    {
+        dumpOutputs(*iEnv.context.front(), *iEnv.bindings.front(), sample::gLogInfo);
+    }
+    if (!reporting.exportOutput.empty())
+    {
+        exportJSONOutput(*iEnv.context.front(), *iEnv.bindings.front(), reporting.exportOutput);
+    }
+}
 
 int main(int argc, char** argv)
 {
@@ -107,7 +133,8 @@ int main(int argc, char** argv)
         sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
     }
 
-    cudaCheck(cudaSetDevice(options.system.device));
+    setCudaDevice(options.system.device, sample::gLogInfo);
+    sample::gLogInfo << std::endl;
 
     initLibNvInferPlugins(&sample::gLogger.getTRTLogger(), "");
 
@@ -118,12 +145,25 @@ int main(int argc, char** argv)
     }
 
     InferenceEnvironment iEnv;
+    time_point buildStartTime{std::chrono::high_resolution_clock::now()};
     iEnv.engine = getEngine(options.model, options.build, options.system, sample::gLogError);
-    if (!iEnv.engine)
+    time_point buildEndTime{std::chrono::high_resolution_clock::now()};
+    if (iEnv.engine)
+    {
+        sample::gLogInfo << "Engine " << (options.build.load ? "loaded" : "built") << " in "
+                         << duration(buildEndTime - buildStartTime).count() << " sec." << std::endl;
+    }
+    else
     {
         sample::gLogError << "Engine set up failed" << std::endl;
         return sample::gLogger.reportFail(sampleTest);
     }
+
+    if (iEnv.engine.get()->isRefittable() && options.reporting.refit)
+    {
+        dumpRefittable(*iEnv.engine.get());
+    }
+
     if (options.inference.skip)
     {
         return sample::gLogger.reportPass(sampleTest);
@@ -138,7 +178,7 @@ int main(int argc, char** argv)
         return sample::gLogger.reportFail(sampleTest);
     }
 
-    if (options.reporting.profile || !options.reporting.exportTimes.empty())
+    if ((options.reporting.profile || !options.reporting.exportProfile.empty()) && !options.inference.rerun)
     {
         iEnv.profiler.reset(new Profiler);
     }
@@ -149,32 +189,21 @@ int main(int argc, char** argv)
         return sample::gLogger.reportFail(sampleTest);
     }
     std::vector<InferenceTrace> trace;
-    sample::gLogInfo << "Starting inference threads" << std::endl;
+    sample::gLogInfo << "Starting inference" << std::endl;
     runInference(options.inference, iEnv, options.system.device, trace);
 
     printPerformanceReport(trace, options.reporting, static_cast<float>(options.inference.warmup),
         options.inference.batch, sample::gLogInfo);
+    printOutput(options.reporting, iEnv, sample::gLogInfo);
 
-    if (options.reporting.output)
+    if ((options.reporting.profile || !options.reporting.exportProfile.empty()) && options.inference.rerun)
     {
-        dumpOutputs(*iEnv.context.front(), *iEnv.bindings.front(), sample::gLogInfo);
+        auto* profiler = new Profiler;
+        iEnv.profiler.reset(profiler);
+        iEnv.context.front()->setProfiler(profiler);
+        runInference(options.inference, iEnv, options.system.device, trace);
     }
-    if (!options.reporting.exportOutput.empty())
-    {
-        exportJSONOutput(*iEnv.context.front(), *iEnv.bindings.front(), options.reporting.exportOutput);
-    }
-    if (!options.reporting.exportTimes.empty())
-    {
-        exportJSONTrace(trace, options.reporting.exportTimes);
-    }
-    if (options.reporting.profile)
-    {
-        iEnv.profiler->print(sample::gLogInfo);
-    }
-    if (!options.reporting.exportProfile.empty())
-    {
-        iEnv.profiler->exportJSONProfile(options.reporting.exportProfile);
-    }
+    printPerformanceProfile(options.reporting, iEnv, sample::gLogInfo);
 
     return sample::gLogger.reportPass(sampleTest);
 }

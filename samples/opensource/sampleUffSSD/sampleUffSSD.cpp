@@ -39,6 +39,7 @@
 #include <sstream>
 
 const std::string gSampleName = "TensorRT.sample_uff_ssd";
+const std::vector<std::string> gImgFnames = {"dog.ppm", "bus.ppm"};
 
 //!
 //! \brief The SampleUffSSDParams structure groups the additional parameters required by
@@ -48,10 +49,10 @@ struct SampleUffSSDParams : public samplesCommon::SampleParams
 {
     std::string uffFileName;    //!< The file name of the UFF model to use
     std::string labelsFileName; //!< The file namefo the class labels
-    int outputClsSize;          //!< The number of output classes
-    int calBatchSize;           //!< The size of calibration batch
-    int nbCalBatches;           //!< The number of batches for calibration
-    int keepTopK;               //!< The maximum number of detection post-NMS
+    int32_t outputClsSize;      //!< The number of output classes
+    int32_t calBatchSize;       //!< The size of calibration batch
+    int32_t nbCalBatches;       //!< The number of batches for calibration
+    int32_t keepTopK;           //!< The maximum number of detection post-NMS
     float visualThreshold;      //!< The minimum score threshold to consider a detection
 };
 
@@ -199,9 +200,9 @@ bool SampleUffSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder
     {
         sample::gLogInfo << "Using Entropy Calibrator 2" << std::endl;
         const std::string listFileName = "list.txt";
-        const int imageC = 3;
-        const int imageH = 300;
-        const int imageW = 300;
+        const int32_t imageC = 3;
+        const int32_t imageH = 300;
+        const int32_t imageW = 300;
         nvinfer1::DimsNCHW imageDims{};
         imageDims = nvinfer1::DimsNCHW{mParams.calBatchSize, imageC, imageH, imageW};
         BatchStream calibrationStream(
@@ -226,7 +227,7 @@ bool SampleUffSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder
 //! \brief Runs the TensorRT inference engine for this sample
 //!
 //! \details This function is the main execution function of the sample. It allocates the buffer,
-//!          sets inputs and executes the engine.
+//!          sets inputs, executes the engine and verifies the detection outputs.
 //!
 bool SampleUffSSD::infer()
 {
@@ -249,7 +250,7 @@ bool SampleUffSSD::infer()
     // Memcpy from host input buffers to device input buffers
     buffers.copyInputToDevice();
 
-    bool status = context->execute(mParams.batchSize, buffers.getDeviceBindings().data());
+    const bool status = context->execute(mParams.batchSize, buffers.getDeviceBindings().data());
     if (!status)
     {
         return false;
@@ -284,28 +285,26 @@ bool SampleUffSSD::teardown()
 //!
 bool SampleUffSSD::processInput(const samplesCommon::BufferManager& buffers)
 {
-    const int inputC = mInputDims.d[0];
-    const int inputH = mInputDims.d[1];
-    const int inputW = mInputDims.d[2];
-    const int batchSize = mParams.batchSize;
+    const int32_t inputC = mInputDims.d[0];
+    const int32_t inputH = mInputDims.d[1];
+    const int32_t inputW = mInputDims.d[2];
+    const int32_t batchSize = mParams.batchSize;
 
-    // Available images
-    std::vector<std::string> imageList = {"dog.ppm", "bus.ppm"};
     mPPMs.resize(batchSize);
-    assert(mPPMs.size() <= imageList.size());
-    for (int i = 0; i < batchSize; ++i)
+    assert(mPPMs.size() == gImgFnames.size());
+    for (int32_t i = 0; i < batchSize; ++i)
     {
-        readPPMFile(locateFile(imageList[i], mParams.dataDirs), mPPMs[i]);
+        readPPMFile(locateFile(gImgFnames[i], mParams.dataDirs), mPPMs[i]);
     }
 
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     // Host memory for input buffer
-    for (int i = 0, volImg = inputC * inputH * inputW; i < mParams.batchSize; ++i)
+    for (int32_t i = 0, volImg = inputC * inputH * inputW; i < mParams.batchSize; ++i)
     {
-        for (int c = 0; c < inputC; ++c)
+        for (int32_t c = 0; c < inputC; ++c)
         {
             // The color image to input should be in BGR order
-            for (unsigned j = 0, volChl = inputH * inputW; j < volChl; ++j)
+            for (uint32_t j = 0, volChl = inputH * inputW; j < volChl; ++j)
             {
                 hostDataBuffer[i * volImg + c * volChl + j]
                     = (2.0 / 255.0) * float(mPPMs[i].buffer[j * inputC + c]) - 1.0;
@@ -323,38 +322,38 @@ bool SampleUffSSD::processInput(const samplesCommon::BufferManager& buffers)
 //!
 bool SampleUffSSD::verifyOutput(const samplesCommon::BufferManager& buffers)
 {
-    const int inputH = mInputDims.d[1];
-    const int inputW = mInputDims.d[2];
-    const int batchSize = mParams.batchSize;
-    const int keepTopK = mParams.keepTopK;
+    const int32_t inputH = mInputDims.d[1];
+    const int32_t inputW = mInputDims.d[2];
+    const int32_t batchSize = mParams.batchSize;
+    const int32_t keepTopK = mParams.keepTopK;
     const float visualThreshold = mParams.visualThreshold;
-    const int outputClsSize = mParams.outputClsSize;
+    const int32_t outputClsSize = mParams.outputClsSize;
 
     const float* detectionOut = static_cast<const float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
-    const int* keepCount = static_cast<const int*>(buffers.getHostBuffer(mParams.outputTensorNames[1]));
+    const int32_t* keepCount = static_cast<const int32_t*>(buffers.getHostBuffer(mParams.outputTensorNames[1]));
 
+    // Read COCO class labels from file
     std::vector<std::string> classes(outputClsSize);
-
-    // Gather class labels
-    std::ifstream labelFile(locateFile(mParams.labelsFileName, mParams.dataDirs));
-    std::string line;
-    int id = 0;
-    while (getline(labelFile, line))
     {
-        classes[id++] = line;
+        std::ifstream labelFile(locateFile(mParams.labelsFileName, mParams.dataDirs));
+        std::string line;
+        int32_t id = 0;
+        while (getline(labelFile, line))
+        {
+            classes[id++] = line;
+        }
     }
 
     bool pass = true;
 
-    for (int p = 0; p < batchSize; ++p)
+    for (int32_t bi = 0; bi < batchSize; ++bi)
     {
-        int numDetections = 0;
-        // at least one correct detection
+        int32_t numDetections = 0;
         bool correctDetection = false;
 
-        for (int i = 0; i < keepCount[p]; ++i)
+        for (int32_t i = 0; i < keepCount[bi]; ++i)
         {
-            const float* det = &detectionOut[0] + (p * keepTopK + i) * 7;
+            const float* det = &detectionOut[0] + (bi * keepTopK + i) * 7;
             if (det[2] < visualThreshold)
             {
                 continue;
@@ -362,28 +361,30 @@ bool SampleUffSSD::verifyOutput(const samplesCommon::BufferManager& buffers)
 
             // Output format for each detection is stored in the below order
             // [image_id, label, confidence, xmin, ymin, xmax, ymax]
-            int detection = det[1];
+            const int32_t detection = det[1];
             assert(detection < outputClsSize);
-            std::string storeName = classes[detection] + "-" + std::to_string(det[2]) + ".ppm";
+            const std::string outFname = classes[detection] + "-" + std::to_string(det[2]) + ".ppm";
 
             numDetections++;
-            if ((p == 0 && classes[detection] == "dog")
-                || (p == 1 && (classes[detection] == "truck" || classes[detection] == "car")))
+
+            if ((bi == 0 && classes[detection] == "dog")
+                || (bi == 1 && (classes[detection] == "truck" || classes[detection] == "car")))
             {
                 correctDetection = true;
             }
 
-            sample::gLogInfo << "Detected " << classes[detection].c_str() << " in the image " << int(det[0]) << " ("
-                             << mPPMs[p].fileName.c_str() << ")"
-                             << " with confidence " << det[2] * 100.f << " and coordinates (" << det[3] * inputW << ","
+            sample::gLogInfo << "Detected " << classes[detection].c_str() << " in image "
+                             << static_cast<int32_t>(det[0]) << " (" << mPPMs[bi].fileName.c_str() << ")"
+                             << " with confidence " << det[2] * 100.f << " and coordinates (" << det[3] * inputW << ", "
                              << det[4] * inputH << ")"
-                             << ",(" << det[5] * inputW << "," << det[6] * inputH << ")." << std::endl;
+                             << ", (" << det[5] * inputW << ", " << det[6] * inputH << ")." << std::endl;
 
-            sample::gLogInfo << "Result stored in " << storeName.c_str() << "." << std::endl;
+            sample::gLogInfo << "Result stored in: " << outFname.c_str() << std::endl;
 
             samplesCommon::writePPMFileWithBBox(
-                storeName, mPPMs[p], {det[3] * inputW, det[4] * inputH, det[5] * inputW, det[6] * inputH});
+                outFname, mPPMs[bi], {det[3] * inputW, det[4] * inputH, det[5] * inputW, det[6] * inputH});
         }
+
         pass &= correctDetection;
         pass &= numDetections >= 1;
     }
@@ -410,10 +411,11 @@ SampleUffSSDParams initializeSampleParams(const samplesCommon::Args& args)
     {
         params.dataDirs = args.dataDirs;
     }
+
     params.uffFileName = "sample_ssd_relu6.uff";
     params.labelsFileName = "ssd_coco_labels.txt";
     params.inputTensorNames.push_back("Input");
-    params.batchSize = 2;
+    params.batchSize = gImgFnames.size();
     params.outputTensorNames.push_back("NMS");
     params.outputTensorNames.push_back("NMS_1");
     params.dlaCore = args.useDLACore;
@@ -434,31 +436,32 @@ SampleUffSSDParams initializeSampleParams(const samplesCommon::Args& args)
 //!
 void printHelpInfo()
 {
-    std::cout
-        << "Usage: ./sample_uff_ssd [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]"
-        << std::endl;
+    std::cout << "Usage: ./sample_uff_ssd [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<N>]"
+              << std::endl;
     std::cout << "--help          Display help information" << std::endl;
     std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
                  "data/samples/ssd/ and data/ssd/"
               << std::endl;
-    std::cout << "--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
-                 "where n is the number of DLA engines on the platform."
+    std::cout << "--useDLACore    Specify a DLA engine for layers that support DLA. Value can range from 0 to N-1, "
+                 "where N is the number of DLA engines on the platform."
               << std::endl;
     std::cout << "--fp16          Specify to run in fp16 mode." << std::endl;
     std::cout << "--int8          Specify to run in int8 mode." << std::endl;
 }
 
-int main(int argc, char** argv)
+int32_t main(int32_t argc, char** argv)
 {
     samplesCommon::Args args;
-    bool argsOK = samplesCommon::parseArgs(args, argc, argv);
+    const bool argsOK = samplesCommon::parseArgs(args, argc, argv);
+
     if (!argsOK)
     {
         sample::gLogError << "Invalid arguments" << std::endl;
         printHelpInfo();
         return EXIT_FAILURE;
     }
+
     if (args.help)
     {
         printHelpInfo();
@@ -471,16 +474,18 @@ int main(int argc, char** argv)
 
     SampleUffSSD sample(initializeSampleParams(args));
 
-    sample::gLogInfo << "Building and running a GPU inference engine for SSD" << std::endl;
-
+    sample::gLogInfo << "Building inference engine for SSD" << std::endl;
     if (!sample.build())
     {
         return sample::gLogger.reportFail(sampleTest);
     }
+
+    sample::gLogInfo << "Running inference engine for SSD" << std::endl;
     if (!sample.infer())
     {
         return sample::gLogger.reportFail(sampleTest);
     }
+
     if (!sample.teardown())
     {
         return sample::gLogger.reportFail(sampleTest);

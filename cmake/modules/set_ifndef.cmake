@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 function (set_ifndef variable value)
   if(NOT DEFINED ${variable})
     set(${variable} ${value} PARENT_SCOPE)

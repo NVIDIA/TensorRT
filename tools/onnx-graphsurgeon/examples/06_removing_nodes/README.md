@@ -1,10 +1,14 @@
 # Removing A Node
 
-This example first generates a very basic model, and then removes a node in the
+## Introduction
+
+This example first generates a basic model, and then removes a node in the
 middle of the model, and reconnects the remaining nodes in the graph.
 
 In order to remove a node, we replace the output tensors of its input node
 with its own outputs, and then remove its own connection to its outputs.
+
+## Node Removal Basics
 
 For example, for a graph with the following structure:
 
@@ -26,8 +30,8 @@ In order to remove `Node1`,
 
 The resulting graph looks like this:
 
-     Node0     
-       |    
+     Node0
+       |
     Tensor1       Tensor0
        |             |
      Node2         Node1

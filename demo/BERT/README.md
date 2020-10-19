@@ -33,6 +33,9 @@ This subfolder of the BERT TensorFlow repository, tested and maintained by NVIDI
     * [Inference performance: NVIDIA V100](#inference-performance-nvidia-v100-16gb)
       * [BERT Base](#bert-base-2)
       * [BERT Large](#bert-large-2)
+- [Experimental](#experimental)
+  * [Variable sequence length](#variable-sequence-length)
+      * [Run command lines](#run-command-lines)
 
 
 ## Model overview
@@ -76,7 +79,7 @@ The following software version configuration has been tested:
 |Software|Version|
 |--------|-------|
 |Python|3.6.9|
-|TensorRT|7.1.3.4|
+|TensorRT|7.2.0.13|
 |CUDA|11.0.171|
 
 
@@ -115,7 +118,7 @@ This demo BERT application can be run within the TensorRT Open Source build cont
     cmake .. -DTRT_LIB_DIR=$TRT_RELEASE/lib -DTRT_OUT_DIR=`pwd`/out
     make -j$(nproc)
 
-    pip3 install /tensorrt/python/tensorrt-7.1*-cp36-none-linux_x86_64.whl
+    pip3 install /tensorrt/python/tensorrt-7.2*-cp36-none-linux_x86_64.whl
     ```
     **Note:** While the workflow and Performance Data presented here are based on plugin library built from source, the BERT sample is also expected to work with pre-compiled libraries shipped with TensorRT releases.
 
@@ -499,3 +502,61 @@ Our results were obtained by running the `scripts/inference_benchmark.sh --gpu V
 | 384 | 24 | 94.22 | 94.39 | 94.04 | 92.08 | 92.2 | 91.86 |
 | 384 | 32 | 148.96 | 149.11 | 148.59 | 147.7 | 147.84 | 147.23 |
 | 384 | 64 | 245.91 | 246.09 | 244.67 | 240.16 | 240.43 | 239.07 |
+
+## Experimental
+### Variable sequence length
+In our prior implementation, we used inputs padded to max length along with corresponding input masks to handle variable sequence length inputs in a batch. The padding results in some wasted computations which can be avoided by handling variable sequence length inputs natively. Now we have a new approach called the variable sequence length method. By concatenating each input id into a single long input id, and concatenating each input segment id into a single long segment id, TensorRT can know the exact starts and ends by providing an extra sequence length buffer that contains the start and end positions of each sequence. Now we can eliminate the wasted computation in the input paddings.
+
+Note this is an experimental feature because we only support Xavier+ GPUs, also there is neither FP32 support nor INT8 PTQ calibration.
+
+#### Run command lines
+
+1.  Download checkpoint for BERT Large FP16 SQuAD v1.1 model with sequence length of 384:
+    ```bash
+    bash scripts/download_model.sh pyt v1_1
+    ```
+
+2. Build an engine:
+
+    **FP16 engine**
+    ```bash
+    mkdir -p /workspace/TensorRT/demo/BERT/engines && python3 builder_varseqlen.py -x /workspace/TensorRT/demo/BERT/models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx -o /workspace/TensorRT/demo/BERT/engines/bert_varseq_fp16.engine -b 1 -s 64 --fp16 -c /workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_v2_large_fp16_384_v2 -v /workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_v2_large_fp16_384_v2/vocab.txt
+    ```
+
+    This will build and engine with a maximum batch size of 1 (`-b 1`) and sequence length of 64 (`-s 64`) using FP16 precision computation where possible (`--fp16`).
+
+
+    **INT8 engine**
+    ```bash
+    mkdir -p /workspace/TensorRT/demo/BERT/engines && python3 builder_varseqlen.py -x /workspace/TensorRT/demo/BERT/models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx -o /workspace/TensorRT/demo/BERT/engines/bert_varseq_int8.engine -b 1 -s 256 --int8 --fp16 -c /workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_v2_large_fp16_384_v2 -v /workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_v2_large_fp16_384_v2/vocab.txt
+    ```
+
+    This will build and engine with a maximum batch size of 1 (`-b 1`) and sequence length of 256 (`-s 256`) using INT8 precision computation where possible (`--int8`).
+
+3. Run inference 
+
+    Evaluate the F1 score and exact match score using the squad dataset:
+    
+    ```bash
+    python3 inference_varseqlen.py -e /workspace/TensorRT/demo/BERT/engines/bert_varseq_int8.engine -s 256 -sq ./squad/dev-v1.1.json -v /workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_v2_large_fp16_384_v2/vocab.txt -o ./predictions.json
+    python3 squad/evaluate-v1.1.py  squad/dev-v1.1.json  ./predictions.json 90
+    ```
+
+    Run the quesion and answer mode:
+
+    ```bash
+    python3 inference_varseqlen.py -e /workspace/TensorRT/demo/BERT/engines/bert_varseq_int8.engine -p "TensorRT is a high performance deep learning inference platform that delivers low latency and high throughput for apps such as recommenders, speech and image/video on NVIDIA GPUs. It includes parsers to import models, and plugins to support novel ops and layers before applying optimizations for inference. Today NVIDIA is open-sourcing parsers and plugins in TensorRT so that the deep learning community can customize and extend these components to take advantage of powerful TensorRT optimizations for your apps." -q "What is TensorRT?" -v /workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_v2_large_fp16_128_v2/vocab.txt -s 256
+    ```
+
+3. Collect performance data
+
+    ```bash
+    python3 perf_varseqlen.py -e /workspace/TensorRT/demo/BERT/engines/bert_varseq_int8.engine -b 1 -s 256
+    ```
+
+    This will collect performance data run use batch size 1 (`-b 1`) and sequence length of 256 (`-s 256`). 
+
+4. Collect performance data with CUDA graph enabled
+
+    We can use the same `inference_c.py` and `build/perf` to collect performance data with cuda graph enabled. The command line is the same as run without variable sequence length. 
+
