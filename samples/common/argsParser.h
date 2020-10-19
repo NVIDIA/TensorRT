@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef TENSORRT_ARGS_PARSER_H
 #define TENSORRT_ARGS_PARSER_H
 
@@ -34,8 +35,8 @@ namespace samplesCommon
 //!
 struct SampleParams
 {
-    int batchSize{1};                  //!< Number of inputs in a batch
-    int dlaCore{-1};                   //!< Specify the DLA core to run network on.
+    int32_t batchSize{1};              //!< Number of inputs in a batch
+    int32_t dlaCore{-1};               //!< Specify the DLA core to run network on.
     bool int8{false};                  //!< Allow runnning the network in Int8 mode.
     bool fp16{false};                  //!< Allow running the network in FP16 mode.
     std::vector<std::string> dataDirs; //!< Directory paths where sample data files are stored
@@ -80,8 +81,8 @@ struct Args
     bool runInInt8{false};
     bool runInFp16{false};
     bool help{false};
-    int useDLACore{-1};
-    int batch{1};
+    int32_t useDLACore{-1};
+    int32_t batch{1};
     std::vector<std::string> dataDirs;
     std::string saveEngine;
     std::string loadEngine;
@@ -95,16 +96,16 @@ struct Args
 //!
 //! \return boolean If return value is true, execution can continue, otherwise program should exit
 //!
-inline bool parseArgs(Args& args, int argc, char* argv[])
+inline bool parseArgs(Args& args, int32_t argc, char* argv[])
 {
     while (1)
     {
-        int arg;
+        int32_t arg;
         static struct option long_options[] = {{"help", no_argument, 0, 'h'}, {"datadir", required_argument, 0, 'd'},
             {"int8", no_argument, 0, 'i'}, {"fp16", no_argument, 0, 'f'}, {"useILoop", no_argument, 0, 'l'},
             {"saveEngine", required_argument, 0, 's'}, {"loadEngine", no_argument, 0, 'o'},
             {"useDLACore", required_argument, 0, 'u'}, {"batch", required_argument, 0, 'b'}, {nullptr, 0, nullptr, 0}};
-        int option_index = 0;
+        int32_t option_index = 0;
         arg = getopt_long(argc, argv, "hd:iu", long_options, &option_index);
         if (arg == -1)
         {

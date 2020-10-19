@@ -43,26 +43,50 @@ class Model(object):
         return onnx.load(self.path)
 
     def assert_equal(self, graph: Graph):
-
-
         assert graph.inputs == self.inputs
         G_LOGGER.debug("Graph inputs matched")
 
+        # Break down fields to make debugging failures easier.
         for actual, expected in zip(graph.nodes, self.nodes):
-            G_LOGGER.debug("Actual Node: {:}.\n\nExpected Node: {:}".format(actual, expected))
-            # Break down fields to make debugging failures easier.
+            def check_tensor_io(actensor, extensor):
+                def check_list(aclist, exlist):
+                    G_LOGGER.debug("Actual node list: {:}\n\nExpected node list: {:}".format(aclist, exlist))
+                    assert len(aclist) == len(exlist)
+                    for acnode, exnode in zip(aclist, exlist):
+                        assert acnode == exnode
+
+                G_LOGGER.debug("Checking tensor: {:} inputs".format(actensor.name))
+                check_list(actensor.inputs, extensor.inputs)
+                G_LOGGER.debug("Checking tensor: {:} outputs".format(actensor.name))
+                check_list(actensor.outputs, extensor.outputs)
+
+
+            G_LOGGER.debug("Actual Node: {:}\n\nExpected Node: {:}".format(actual, expected))
             assert actual.op == expected.op
             assert actual.inputs == expected.inputs
+            # Check I/O of input tensors
+            for acinp, exinp in zip(actual.inputs, expected.inputs):
+                check_tensor_io(acinp, exinp)
+
             assert actual.outputs == expected.outputs
+            # Check I/O of output tensors
+            for acout, exout in zip(actual.outputs, expected.outputs):
+                check_tensor_io(acout, exout)
+
             assert actual.name == expected.name
-            for (akey, aval), (ekey, eval) in zip(actual.attrs.items(), expected.attrs.items()):
-                assert akey == ekey
-                assert aval == eval
+            assert len(actual.attrs) == len(expected.attrs)
+            for (ackey, acval), (exkey, exval) in zip(actual.attrs.items(), expected.attrs.items()):
+                assert ackey == exkey
+                assert acval == exval
             assert actual == expected
         G_LOGGER.debug("Graph nodes matched")
 
         assert graph.outputs == self.outputs
         G_LOGGER.debug("Graph outputs matched")
+
+
+    def __str__(self):
+        return os.path.basename(self.path)
 
 
 def identity_model():
@@ -146,3 +170,32 @@ def scan_model():
     attrs["num_scan_inputs"] = 1
     scan_node = Node(op="Scan", inputs=inputs, outputs=outputs, attrs=attrs)
     return Model(path, inputs=inputs, outputs=outputs, nodes=[scan_node], opset=OnnxImporter.get_opset(model))
+
+
+def initializer_is_output_model():
+    path = os.path.join(TEST_ROOT, "models", "initializer_is_output.onnx")
+    model = onnx.load(path)
+
+    X = Constant(name="X", values=np.ones((64, 64), dtype=np.float32))
+
+    return Model(path, inputs=[], outputs=[X], nodes=[], opset=OnnxImporter.get_opset(model))
+
+
+# Node includes a subgraph whose I/O names are the same as that of the node.
+def nested_dup_names():
+    path = os.path.join(TEST_ROOT, "models", "nested_dup_names.onnx")
+    model = onnx.load(path)
+
+    # Inner
+    subgraph_inputs = [Variable("X", shape=(2, 2), dtype=np.float32)]
+    subgraph_outputs = [Variable("Y", shape=(2, 2), dtype=np.float32)]
+
+    subgraph_node = Node(op="Identity", inputs=subgraph_inputs, outputs=subgraph_outputs)
+    subgraph = Graph(nodes=[subgraph_node], inputs=subgraph_inputs, outputs=subgraph_outputs)
+
+    # Outer - problem happens if outer node has same I/O names as subgraph
+    inputs = [Variable("X", shape=(2, 2), dtype=np.float32)]
+    outputs = [Variable("Y", shape=(2, 2), dtype=np.float32)]
+
+    node = Node(op="Nested", inputs=inputs, outputs=outputs, attrs={"body": subgraph})
+    return Model(path, inputs=inputs, outputs=outputs, nodes=[node], opset=11)

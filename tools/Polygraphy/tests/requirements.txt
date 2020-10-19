@@ -1,0 +1,10 @@
+onnx
+tensorflow-gpu < 2.0
+onnx-tf
+pytest
+tf2onnx
+onnxruntime==1.0.0
+colored
+numpy
+pytest-xdist
+onnx_graphsurgeon

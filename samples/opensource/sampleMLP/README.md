@@ -173,4 +173,4 @@ This `README.md` file was recreated, updated and reviewed.
 
 # Known issues
 
-There are no known issues in this sample.
+- Fake INT8 dynamic ranges are used in this sample. So there might be an accuracy loss when running the sample under INT8 mode, which would consequently lead a wrong classification result.

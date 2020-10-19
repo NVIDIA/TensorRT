@@ -595,36 +595,36 @@ private:
     {
         assert(mDataType == DataType::kINT8);
         size_t inCount = getC(mInputDims) * getH(mInputDims) * getW(mInputDims);
-        std::unique_ptr<char> inputTmp{new char[inCount * elementSize(mDataType)]};
-        CHECK(cudaMemcpy(inputTmp.get(), src, inCount * elementSize(mDataType), cudaMemcpyDeviceToHost));
-        std::unique_ptr<float> inputFP32{new float[inCount]};
-        transform<DataType::kINT8, DataType::kFLOAT>(inputTmp.get(), inputFP32.get(), inCount);
+        std::vector<char> inputTmp(inCount * elementSize(mDataType));
+        CHECK(cudaMemcpy(inputTmp.data(), src, inCount * elementSize(mDataType), cudaMemcpyDeviceToHost));
+        std::vector<float> inputFP32(inCount);
+        transform<DataType::kINT8, DataType::kFLOAT>(inputTmp.data(), inputFP32.data(), inCount);
         // int8 scale
         int hw = mInputDims.d[1] * mInputDims.d[2];
         for (int j = 0; j < mInputDims.d[0]; ++j)
         {
-            std::transform(inputFP32.get() + hw * j, inputFP32.get() + hw * (j + 1), inputFP32.get() + hw * j,
+            std::transform(inputFP32.data() + hw * j, inputFP32.data() + hw * (j + 1), inputFP32.data() + hw * j,
                 [&](float in) -> float { return in * mInHostScale; });
         }
         CHECK(cudaMalloc(&dst, inCount * elementSize(DataType::kFLOAT)));
-        CHECK(cudaMemcpy(dst, inputFP32.get(), inCount * elementSize(DataType::kFLOAT), cudaMemcpyHostToDevice));
+        CHECK(cudaMemcpy(dst, inputFP32.data(), inCount * elementSize(DataType::kFLOAT), cudaMemcpyHostToDevice));
     }
 
     void copyDeviceToInt8Output(const void* src, void* dst)
     {
         size_t outCount = getC(mOutputDims) * getH(mOutputDims) * getW(mOutputDims);
-        std::unique_ptr<float> outTmp{new float[outCount]};
-        CHECK(cudaMemcpy(outTmp.get(), src, outCount * elementSize(DataType::kFLOAT), cudaMemcpyDeviceToHost));
-        std::unique_ptr<char> outInt8{new char[outCount * elementSize(DataType::kINT8)]};
+        std::vector<float> outTmp(outCount);
+        CHECK(cudaMemcpy(outTmp.data(), src, outCount * elementSize(DataType::kFLOAT), cudaMemcpyDeviceToHost));
+        std::vector<char> outInt8(outCount * elementSize(DataType::kINT8));
         // int8 + scale
         int hw = mOutputDims.d[1] * mOutputDims.d[2];
         for (int j = 0; j < mInputDims.d[0]; ++j)
         {
-            std::transform(outTmp.get() + hw * j, outTmp.get() + hw * (j + 1), outTmp.get() + hw * j,
+            std::transform(outTmp.data() + hw * j, outTmp.data() + hw * (j + 1), outTmp.data() + hw * j,
                 [&](float in) -> float { return in / mOutHostScale; });
         }
-        transform<DataType::kFLOAT, DataType::kINT8>(outTmp.get(), outInt8.get(), outCount);
-        CHECK(cudaMemcpy(dst, outInt8.get(), outCount, cudaMemcpyHostToDevice));
+        transform<DataType::kFLOAT, DataType::kINT8>(outTmp.data(), outInt8.data(), outCount);
+        CHECK(cudaMemcpy(dst, outInt8.data(), outCount, cudaMemcpyHostToDevice));
     }
 
 private:

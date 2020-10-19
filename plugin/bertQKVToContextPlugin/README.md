@@ -44,12 +44,14 @@ output is a tensor with shape `[S, B, E]` where `B` is the batch size.
 
 The parameters are defined below and consists of the following attributes:
 
-| Type     | Parameter                               | Description
-|----------|-----------------------------------------|-------------------------------------------------------------------
-|`int`     |`type_id`                                |Integer encoding the DataType (0: FP32, 1: FP16)
-|`int`     |`hidden_size`                            |The hidden size, denoted by `E` above.
-|`int`     |`num_heads`                              |The number of self-attention heads.
-|`bool`    |`has_mask`                               |Whether to use the input_mask input.
+| Type     | Parameter                               |  Version                          | Description
+|----------|-----------------------------------------|-----------------------------------|-------------------------------------------------------------------
+|`int`     |`type_id`                                |  1, 2                             |Integer encoding the DataType (0: FP32, 1: FP16)
+|`int`     |`hidden_size`                            |  1, 2, 3                          |The hidden size, denoted by `E` above.
+|`int`     |`num_heads`                              |  1, 2, 3                          |The number of self-attention heads.
+|`bool`    |`has_mask`                               |  1, 2                             |Whether to use the input_mask input.
+|`float`   |`dq_probs`                               |  1, 2, 3                          |inner layer scale factor when run in int8 precision, default 1.f/127.f.
+|`int`     |`var_seqlen`                             |  2                                |Whether to use variable sequence length (0: disable, 1: enable), default 0.
 
 
 ## Additional resources
@@ -66,7 +68,11 @@ documentation.
 
 ## Changelog
 
-November 2019
+October 2020  
+Add v2 plugin that supports variable sequence length.  
+Add v3 plugin that supports int8 interleaved variable sequence length.
+
+November 2019  
 This is the first release of this `README.md` file.
 
 

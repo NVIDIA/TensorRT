@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@
 #ifndef TRT_GELU_PLUGIN_H
 #define TRT_GELU_PLUGIN_H
 
-#include "NvInferPlugin.h"
 #include "bertCommon.h"
+#include "NvInferPlugin.h"
 #include <string>
 #include <vector>
 

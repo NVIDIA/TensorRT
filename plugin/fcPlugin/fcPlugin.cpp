@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,11 +59,7 @@ static void printPerfStructure(const customMatmulPerf_t& perf, int const& m, int
     double timeAvg = (perf.time * 1e-3) / kernelRepeats; // Convert to seconds, then divide by loops
     double gflop = (2 * static_cast<unsigned long long int>(m * n) * k) * 1e-9; // Real
 
-    gLogVerbose << "Algo=" << p.algoId << " Tile=" << p.tile << " (" << matmulTileName[p.tile] << ") K=" << p.numSplitsK
-                << " Red.Sch.=" << p.reductionScheme << " Swiz=" << p.swizzle << " Cust=" << p.customOption
-                << " Stat=" << perf.status << " Time=" << perf.time << " WSbytes=" << perf.workspaceSize
-                << " math=" << p.mathMode << " waves=" << perf.wavesCount << "GFlops=" << (gflop / timeAvg)
-                << std::endl;
+    gLogVerbose << "Algo=" << p.algoId << " Tile=" << p.tile << " (" << matmulTileName[p.tile] << ") K=" << p.numSplitsK << " Red.Sch.=" << p.reductionScheme << " Swiz=" << p.swizzle << " Cust=" << p.customOption << " Stat=" << perf.status << " Time=" << perf.time << " WSbytes=" << perf.workspaceSize << " math=" << p.mathMode << " waves=" << perf.wavesCount << "GFlops=" << (gflop / timeAvg) << std::endl;
 }
 
 static inline bool time_compare(const customMatmulPerf_t& perf_a, const customMatmulPerf_t& perf_b)
@@ -193,7 +189,7 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     CUBLASASSERT(cublasLtMatmulAlgoGetIds(
         ltHandle, computeType, scaleType, Atype, Btype, Ctype, Ctype, algoIds, algoIdA, &nbAlgoIds));
 
-    gLogVerbose << "Number of algos" << nbAlgoIds << std::endl;
+    gLogVerbose << "Number of algos" <<  nbAlgoIds << std::endl;
 
     // Create CUDA event to time the execution time of each algo
     CHECK(cudaEventCreate(&startEvent, cudaEventBlockingSync));
@@ -474,15 +470,14 @@ void FCPluginDynamic::configurePlugin(
     }
     else
     {
-        gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType)
-                  << std::endl;
+        gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType) << std::endl;
         assert(false);
     }
 
     gLogVerbose << "FCPluginDynamic configurePlugin m=" << mOutDim << ", n=" << mNmax << ", k=" << mK << std::endl;
 
     size_t actualWorkspace = 0;
-    if (mAlgo.data[0] == 0 && memcmp(mAlgo.data, mAlgo.data + 1, sizeof(mAlgo.data) - sizeof(mAlgo.data[0])) == 0)
+    if (mAlgo.data[0] == 0 && memcmp(mAlgo.data, mAlgo.data+1, sizeof(mAlgo.data)-sizeof(mAlgo.data[0])) == 0)
     {
         gLogVerbose << "FCPluginDynamic gemmSearch\n";
         if (mType == DataType::kFLOAT)
@@ -508,10 +503,7 @@ void FCPluginDynamic::configurePlugin(
         gLogWarning << "TensorCore support was not selected" << std::endl;
     }
 
-    gLogVerbose << "FCPluginDynamic configuration Algo=" << p.algoId << " Tile=" << p.tile << " ("
-                << matmulTileName[p.tile] << ") K=" << p.numSplitsK << " Red.Sch.=" << p.reductionScheme
-                << " Swiz=" << p.swizzle << " Cust=" << p.customOption << " mathMode=" << p.mathMode
-                << " ws=" << actualWorkspace << std::endl;
+    gLogVerbose << "FCPluginDynamic configuration Algo=" << p.algoId << " Tile=" << p.tile << " (" << matmulTileName[p.tile] << ") K=" << p.numSplitsK << " Red.Sch.=" << p.reductionScheme << " Swiz=" << p.swizzle << " Cust=" << p.customOption << " mathMode=" << p.mathMode << " ws=" << actualWorkspace << std::endl;
 }
 
 size_t FCPluginDynamic::getWorkspaceSize(
@@ -559,8 +551,7 @@ int FCPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTens
     }
     else
     {
-        gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType)
-                  << std::endl;
+        gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType) << std::endl;
         assert(false);
     }
 
@@ -700,6 +691,7 @@ IPluginV2* FCPluginDynamicCreator::createPlugin(const char* name, const PluginFi
             W.type = fieldTypeToDataType(fc->fields[i].type);
             gLogVerbose << "Is W float32: " << (W.type == DataType::kFLOAT) << std::endl;
         }
+
     }
 
     if (outDims <= 0)

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef TRT_PROPOSAL_LAYER_PLUGIN_H
 #define TRT_PROPOSAL_LAYER_PLUGIN_H
 #include <cassert>
@@ -134,7 +135,6 @@ private:
     static PluginFieldCollection mFC;
     int mPreNMSTopK;
     int mKeepTopK;
-    float mScoreThreshold;
     float mIOUThreshold;
     static std::vector<PluginField> mPluginAttributes;
 };

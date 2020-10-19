@@ -44,6 +44,7 @@ EXAMPLES = [
     ("05_folding_constants", [Artifact("model.onnx"), Artifact("folded.onnx")]),
     ("06_removing_nodes", [Artifact("model.onnx", infer=False), Artifact("removed.onnx")]),
     ("07_creating_a_model_with_the_layer_api", [Artifact("model.onnx")]),
+    ("08_replacing_a_subgraph", [Artifact("model.onnx"), Artifact("replaced.onnx")]),
 ]
 
 # Extract any ``` blocks from the README

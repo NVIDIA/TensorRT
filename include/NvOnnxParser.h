@@ -38,14 +38,14 @@ static const int NV_ONNX_PARSER_VERSION = ((NV_ONNX_PARSER_MAJOR * 10000) + (NV_
 //! \brief The data structure containing the parsing capability of
 //! a set of nodes in an ONNX graph.
 //!
-typedef std::pair<std::vector<size_t>, bool> SubGraph_t;
+using SubGraph_t = std::pair<std::vector<size_t>, bool>;
 
 //! \typedef SubGraphCollection_t
 //!
 //! \brief The data structure containing all SubGraph_t partitioned
 //! out of an ONNX graph.
 //!
-typedef std::vector<SubGraph_t> SubGraphCollection_t;
+using SubGraphCollection_t = std::vector<SubGraph_t>;
 
 class onnxTensorDescriptorV1;
 //!
@@ -57,7 +57,7 @@ namespace nvonnxparser
 {
 
 template <typename T>
-inline int EnumMax();
+inline int32_t EnumMax();
 
 /** \enum ErrorCode
  *
@@ -75,8 +75,9 @@ enum class ErrorCode : int
     kUNSUPPORTED_GRAPH = 7,
     kUNSUPPORTED_NODE = 8
 };
+
 template <>
-inline int EnumMax<ErrorCode>()
+inline int32_t EnumMax<ErrorCode>()
 {
     return 9;
 }
@@ -203,6 +204,23 @@ public:
      * \see getNbErrors() getError() IParserError
      */
     virtual void clearErrors() = 0;
+
+    /** \brief Get description of all ONNX weights that can be refitted.
+     * 
+     * \param weightsNames Where to write the weight names to
+     * \param layerNames Where to write the layer names to
+     * \param roles Where to write the roles to
+     *
+     * \return The number of weights from the ONNX model that can be refitted
+     *
+     * If weightNames or layerNames != nullptr, each written pointer points to a string owned by
+     * the parser, and becomes invalid when the parser is destroyed
+     *
+     * If the same weight is used in multiple TRT layers it will be represented as a new
+     * entry in weightNames with name <weightName>_x, with x being the number of times the weight
+     * has been used before the current layer
+     */
+    virtual int getRefitMap(const char** weightNames, const char** layerNames, nvinfer1::WeightsRole* roles) = 0;
 
 protected:
     virtual ~IParser() {}

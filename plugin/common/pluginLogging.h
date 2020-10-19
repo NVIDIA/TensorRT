@@ -22,6 +22,7 @@
 #include <ctime>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -112,6 +113,7 @@ public:
     }
 
 protected:
+    std::mutex mLogMutex;
     LogStreamConsumerBuffer mBuffer;
 };
 
@@ -151,6 +153,11 @@ public:
         mBuffer.setShouldLog(mShouldLog);
     }
 
+    std::mutex& getMutex()
+    {
+        return mLogMutex;
+    }
+
 private:
     static std::ostream& severityOstream(Severity severity)
     {
@@ -173,6 +180,25 @@ private:
     bool mShouldLog;
     Severity mSeverity;
 };
+
+// Use mutex to protect multi-stream write to buffer
+template <typename T>
+LogStreamConsumer& operator<<(LogStreamConsumer& logger, const T& obj)
+{
+    std::lock_guard<std::mutex> guard(logger.getMutex());
+    auto& os = static_cast<std::ostream&>(logger);
+    os << obj;
+    return logger;
+}
+
+// Special handling std::endl
+inline LogStreamConsumer& operator<<(LogStreamConsumer& logger, std::ostream& (*f)(std::ostream&) )
+{
+    std::lock_guard<std::mutex> guard(logger.getMutex());
+    auto& os = static_cast<std::ostream&>(logger);
+    os << f;
+    return logger;
+}
 
 //! \class Logger
 //!

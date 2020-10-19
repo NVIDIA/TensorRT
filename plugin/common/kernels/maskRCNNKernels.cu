@@ -95,8 +95,8 @@ __global__ void resetMemValue_kernel(void* outPtr, int samples, float val)
 // outLabel : int[ N * sample * 1 ]
 // outBbox : int[ N * sample * 4 ]
 template <typename DType, typename BoxType, int Threads = 32>
-__global__ void argMaxGroup_kernel(int samples, int start_class_id, int NClass, const void* inScorePtr, const void* inBboxPtr,
-    const void* validSampleCountPtr, void* outScorePtr, void* outLabelPtr, void* outBboxPtr)
+__global__ void argMaxGroup_kernel(int samples, int start_class_id, int NClass, const void* inScorePtr,
+    const void* inBboxPtr, const void* validSampleCountPtr, void* outScorePtr, void* outLabelPtr, void* outBboxPtr)
 {
     const DType* inScore = static_cast<const DType*>(inScorePtr);
     const BoxType* inBbox = static_cast<const BoxType*>(inBboxPtr);
@@ -876,8 +876,8 @@ ProposalWorkSpace::ProposalWorkSpace(const int batchSize, const int inputCnt, co
     totalSize = sumSize;
 }
 
-MultilevelProposeROIWorkSpace::MultilevelProposeROIWorkSpace(const int batchSize, const int inputCnt, const int sampleCount,
-    const RefineNMSParameters& param, const nvinfer1::DataType inType)
+MultilevelProposeROIWorkSpace::MultilevelProposeROIWorkSpace(const int batchSize, const int inputCnt,
+    const int sampleCount, const RefineNMSParameters& param, const nvinfer1::DataType inType)
     : preRefineSortedScoreDims(inputCnt, 1)
     , preRefineBboxDims(inputCnt, 4)
     , argMaxScoreDims(sampleCount, 1)
@@ -885,7 +885,7 @@ MultilevelProposeROIWorkSpace::MultilevelProposeROIWorkSpace(const int batchSize
     , argMaxLabelDims(sampleCount, 1)
     , sortClassScoreDims(sampleCount, 1)
     , sortClassLabelDims(sampleCount, 1)
-    , sortClassSampleIdxDims(sampleCount+1, 1)
+    , sortClassSampleIdxDims(sampleCount + 1, 1)
     , sortClassPosDims(param.numClasses + 1, 1)
     , sortNMSMarkDims(sampleCount, 1)
 {
@@ -945,11 +945,12 @@ MultilevelProposeROIWorkSpace::MultilevelProposeROIWorkSpace(const int batchSize
     totalSize = sumSize;
 }
 
-ConcatTopKWorkSpace::ConcatTopKWorkSpace(const int batchSize, const int concatCnt, const int topK,const nvinfer1::DataType inType)
-    : concatedScoreDims(concatCnt*topK, 1)
-    , concatedBBoxDims(concatCnt*topK, 4)
-    , sortedScoreDims(concatCnt*topK, 1)
-    , sortedBBoxDims(concatCnt*topK, 4) 
+ConcatTopKWorkSpace::ConcatTopKWorkSpace(
+    const int batchSize, const int concatCnt, const int topK, const nvinfer1::DataType inType)
+    : concatedScoreDims(concatCnt * topK, 1)
+    , concatedBBoxDims(concatCnt * topK, 4)
+    , sortedScoreDims(concatCnt * topK, 1)
+    , sortedBBoxDims(concatCnt * topK, 4)
 {
     size_t sumSize = 0;
 
@@ -960,7 +961,7 @@ ConcatTopKWorkSpace::ConcatTopKWorkSpace(const int batchSize, const int concatCn
     tempStorageOffset = sumSize;
     sumSize += (1 << 23) * batchSize;
 
-    // concatedScoreOffset: [N, concatCnt*topK, 1] 
+    // concatedScoreOffset: [N, concatCnt*topK, 1]
     concatedScoreOffset = sumSize;
     sumSize += AlignMem(dimVolume(concatedScoreDims) * typeSize(type) * batchSize);
 
@@ -1114,8 +1115,7 @@ __global__ void TopKGatherBoxScore_kernel(int samples, int keepTopK, const void*
     typedef cub::BlockRadixSort<DType, Threads, 6, int> BlockRadixSort6;
     typedef cub::BlockRadixSort<DType, Threads, 7, int> BlockRadixSort7;
     typedef cub::BlockRadixSort<DType, Threads, 8, int> BlockRadixSort8;
-    __shared__ union
-    {
+    __shared__ union {
         typename BlockRadixSort8::TempStorage sort8;
         typename BlockRadixSort7::TempStorage sort7;
         typename BlockRadixSort6::TempStorage sort6;
@@ -1144,7 +1144,7 @@ __global__ void TopKGatherBoxScore_kernel(int samples, int keepTopK, const void*
     int idx[MaxItemsPerThreads];
     DType score[MaxItemsPerThreads];
     int totalItems = (validSamples + (blockDim.x - 1)) / blockDim.x;
-    
+
     for (int ite = 0; ite < totalItems; ++ite)
     {
         int curIdx = ite * blockDim.x + threadIdx.x;
@@ -1159,7 +1159,6 @@ __global__ void TopKGatherBoxScore_kernel(int samples, int keepTopK, const void*
             score[ite] = 0.0f;
         }
     }
-
 
     switch (totalItems)
     {
@@ -1226,8 +1225,8 @@ cudaError_t KeepTopKGatherBoxScore(cudaStream_t stream, int N, nvinfer1::DataTyp
         if (proposal)
         {
             TopKGatherBoxScore_kernel<float, float, Threads><<<blocks, threads, 0, stream>>>(samples, keepTopK,
-                validSampleCountPtr, inScorePtr, inLabelPtr, inBboxPtr, inBboxRefIdxPtr, inFlagSamplesPtr,
-                outScores, outDetections);
+                validSampleCountPtr, inScorePtr, inLabelPtr, inBboxPtr, inBboxRefIdxPtr, inFlagSamplesPtr, outScores,
+                outDetections);
         }
         else
         {
@@ -1332,10 +1331,10 @@ cudaError_t RefineBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer
     return status;
 }
 
-cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const float* regWeight, 
-    const float inputHeight, const float inputWidth, nvinfer1::DataType dtype,
-    const RefineNMSParameters& param, const RefineDetectionWorkSpace& refineOffset, void* workspace,
-    const void* inScores, const void* inDelta, const void* inCountValid, const void* inROI, void* outDetections)
+cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const float* regWeight,
+    const float inputHeight, const float inputWidth, nvinfer1::DataType dtype, const RefineNMSParameters& param,
+    const RefineDetectionWorkSpace& refineOffset, void* workspace, const void* inScores, const void* inDelta,
+    const void* inCountValid, const void* inROI, void* outDetections)
 {
     int NClass = param.numClasses;
     int8_t* wsPtr = static_cast<int8_t*>(workspace);
@@ -1352,15 +1351,15 @@ cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const 
 
     cudaError_t status = cudaSuccess;
     CUASSERT(cudaMemsetAsync(argMaxScorePtr, 0, N * samples * sizeof(float), stream));
-    CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4* sizeof(float), stream));
+    CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4 * sizeof(float), stream));
     CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
-    CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass+1) * sizeof(int), stream));
+    CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass + 1) * sizeof(int), stream));
     CUASSERT(cudaMemsetAsync(sortClassSampleIdxPtr, 0, N * (samples + 1) * sizeof(int), stream));
 
     if (NClass > 1)
     { // multiple classes
-        status = argMaxWOBackground<32>(stream, N, dtype, samples, NClass, inScores, inDelta, inCountValid, argMaxScorePtr,
-            argMaxLabelPtr, argMaxBBoxPtr); // argMaxBBoxPtr means delta of bboxes
+        status = argMaxWOBackground<32>(stream, N, dtype, samples, NClass, inScores, inDelta, inCountValid,
+            argMaxScorePtr, argMaxLabelPtr, argMaxBBoxPtr); // argMaxBBoxPtr means delta of bboxes
         assert(status == cudaSuccess);
         CUASSERT(status);
     }
@@ -1384,10 +1383,9 @@ cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const 
         }
     }
 
-    status = DecodeBBoxes(stream, N, samples, regWeight, inputHeight, inputWidth, 
-        inROI, argMaxBBoxPtr, argMaxBBoxPtr);
+    status = DecodeBBoxes(stream, N, samples, regWeight, inputHeight, inputWidth, inROI, argMaxBBoxPtr, argMaxBBoxPtr);
     assert(status == cudaSuccess);
-    
+
     if (samples <= 1024)
     {
         status = sortPerClass<256, 4>(stream, N, dtype, samples, NClass, param.backgroundLabelId, param.scoreThreshold,
@@ -1538,7 +1536,7 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
         (float*) preRefineSortedScorePtr, (BBoxT<float>*) inDelta, (BBoxT<float>*) preRefineBboxPtr, N * inputCnt, N,
         offsets, offsets + 1, 0, 8 * sizeof(float), stream);
 
-    assert((1 << 23) * (size_t)N > temp_storage_bytes);
+    assert((1 << 23) * (size_t) N > temp_storage_bytes);
 
     cub::DeviceSegmentedRadixSort::SortPairsDescending(tempStoragePtr, temp_storage_bytes, (float*) preRefineScorePtr,
         (float*) preRefineSortedScorePtr, (BBoxT<float>*) inDelta, (BBoxT<float>*) preRefineBboxPtr, N * inputCnt, N,
@@ -1561,8 +1559,7 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
             resetMemValue_kernel<float><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
             break;
         }
-        case nvinfer1::DataType::kHALF: { 
-            break;
+        case nvinfer1::DataType::kHALF: { break;
         }
         default: assert(false);
         }
@@ -1605,15 +1602,14 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
     return status;
 }
 
-cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samples, const float* regWeight, 
-    const float inputHeight, const float inputWidth, nvinfer1::DataType dtype, const RefineNMSParameters& param, 
+cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samples, const float* regWeight,
+    const float inputHeight, const float inputWidth, nvinfer1::DataType dtype, const RefineNMSParameters& param,
     const MultilevelProposeROIWorkSpace& proposalOffset, void* workspace,
     const void* inScore, //[N, inputcnt, 1]
-    const void* inDelta,  //[N, inputcnt, 4]
+    const void* inDelta, //[N, inputcnt, 4]
     void* inCountValid,
     const void* inAnchors, //[N, inputcnt, 4]
-    void* outScore, 
-    void* outBbox)
+    void* outScore, void* outBbox)
 {
     int8_t* wsPtr = static_cast<int8_t*>(workspace);
     void* tempStoragePtr = wsPtr + proposalOffset.tempStorageOffset;
@@ -1635,16 +1631,16 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
     int NClass = param.numClasses;
     assert(NClass == 1);
     CUASSERT(cudaMemsetAsync(argMaxScorePtr, 0, N * samples * sizeof(float), stream));
-    CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4* sizeof(float), stream));
+    CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4 * sizeof(float), stream));
     CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
-    CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass+1) * sizeof(int), stream));
+    CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass + 1) * sizeof(int), stream));
     CUASSERT(cudaMemsetAsync(sortClassSampleIdxPtr, 0, N * (samples + 1) * sizeof(int), stream));
 
     CUASSERT(cudaGetLastError());
 
     // Here, inDelta are converted to normalize coordinates based on anchors
-    status = DecodeBBoxes(stream, N, inputCnt, regWeight, inputHeight, inputWidth, 
-                                  inAnchors, inDelta, const_cast<void*>(inDelta));
+    status = DecodeBBoxes(
+        stream, N, inputCnt, regWeight, inputHeight, inputWidth, inAnchors, inDelta, const_cast<void*>(inDelta));
     CUASSERT(cudaGetLastError());
 
     // sort the score
@@ -1655,7 +1651,7 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
     // num_items: inputCnt*N
     // num_segments: N
     // offsets: [0, inputCnt, inputCnt*2, ..., ]
-    
+
     int* offsets = static_cast<int*>(tempStoragePtr);
     set_offset_kernel<<<1, 1024, 0, stream>>>(inputCnt, N + 1, offsets);
     CUASSERT(cudaGetLastError());
@@ -1667,7 +1663,7 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
         offsets, offsets + 1, 0, 8 * sizeof(float), stream);
     CUASSERT(cudaGetLastError());
 
-    assert((1 << 23) * N > temp_storage_bytes);
+    assert((1 << 23) * N > (int) temp_storage_bytes);
 
     cub::DeviceSegmentedRadixSort::SortPairsDescending(tempStoragePtr, temp_storage_bytes, (float*) inScore,
         (float*) preRefineSortedScorePtr, (BBoxT<float>*) inDelta, (BBoxT<float>*) preRefineBboxPtr, N * inputCnt, N,
@@ -1684,7 +1680,7 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
         int threads = 512;
         int blocks = (N * samples + threads - 1) / threads;
         blocks = dMIN(blocks, 8);
-       
+
         switch (dtype)
         {
         case nvinfer1::DataType::kFLOAT:
@@ -1693,13 +1689,11 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
             CUASSERT(cudaGetLastError());
             break;
         }
-        case nvinfer1::DataType::kHALF: { 
-            break;
+        case nvinfer1::DataType::kHALF: { break;
         }
         default: assert(false);
         }
     }
-    
 
     if (samples <= 1024)
     {
@@ -1732,8 +1726,9 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
 
     CUASSERT(cudaGetLastError());
 
-    status = KeepTopKGatherBoxScore<512>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr, sortClassScorePtr,
-        sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outScore, outBbox, 1);
+    status = KeepTopKGatherBoxScore<512>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr,
+        sortClassScorePtr, sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outScore, outBbox,
+        1);
 
     CUASSERT(cudaGetLastError());
 
@@ -1750,9 +1745,8 @@ struct DELTA
     float dy, dx, logdh, logdw;
 };
 
-__global__ void decode_bboxes_kernel(int samples, const void* anchors, const void* delta, 
-                const float* regWeight, const float inputHeight, const float inputWidth, 
-                void* outputBbox, float bboxClipThresh)
+__global__ void decode_bboxes_kernel(int samples, const void* anchors, const void* delta, const float* regWeight,
+    const float inputHeight, const float inputWidth, void* outputBbox, float bboxClipThresh)
 {
 
     const BBOX* anchors_in = static_cast<const BBOX*>(anchors);
@@ -1769,61 +1763,59 @@ __global__ void decode_bboxes_kernel(int samples, const void* anchors, const voi
 
         if (cur_id < samples)
         {
-          BBOX cur_anchor_yxyx = anchors_in[blockOffset + cur_id];
-          // convert yxyx -> cyxhw
-          // cy, cx, h, w
-          /*BBOX cur_anchor_cyxhw;*/
+            BBOX cur_anchor_yxyx = anchors_in[blockOffset + cur_id];
+            // convert yxyx -> cyxhw
+            // cy, cx, h, w
+            /*BBOX cur_anchor_cyxhw;*/
 
-          float cur_anchor_h = (cur_anchor_yxyx.y2 - cur_anchor_yxyx.y1 + 1.0);
-          float cur_anchor_w = (cur_anchor_yxyx.x2 - cur_anchor_yxyx.x1 + 1.0); //w
-          float cur_anchor_yc = cur_anchor_yxyx.y1 + cur_anchor_h * 0.5; //cy
-          float cur_anchor_xc = cur_anchor_yxyx.x1 + cur_anchor_w * 0.5; //cx
+            float cur_anchor_h = (cur_anchor_yxyx.y2 - cur_anchor_yxyx.y1 + 1.0);
+            float cur_anchor_w = (cur_anchor_yxyx.x2 - cur_anchor_yxyx.x1 + 1.0); // w
+            float cur_anchor_yc = cur_anchor_yxyx.y1 + cur_anchor_h * 0.5;        // cy
+            float cur_anchor_xc = cur_anchor_yxyx.x1 + cur_anchor_w * 0.5;        // cx
 
-          DELTA cur_delta = delta_in[blockOffset + cur_id];
+            DELTA cur_delta = delta_in[blockOffset + cur_id];
 
-          // divided by regWeight
-          cur_delta.dy /= regWeight[0];
-          cur_delta.dx /= regWeight[1];
-          cur_delta.logdh /= regWeight[2];
-          cur_delta.logdw /= regWeight[3];
+            // divided by regWeight
+            cur_delta.dy /= regWeight[0];
+            cur_delta.dx /= regWeight[1];
+            cur_delta.logdh /= regWeight[2];
+            cur_delta.logdw /= regWeight[3];
 
-          cur_delta.logdh = dMIN(cur_delta.logdh, bboxClipThresh);
-          cur_delta.logdw = dMIN(cur_delta.logdw, bboxClipThresh);
+            cur_delta.logdh = dMIN(cur_delta.logdh, bboxClipThresh);
+            cur_delta.logdw = dMIN(cur_delta.logdw, bboxClipThresh);
 
-          // apply delta
-          float decoded_box_yc = cur_anchor_yc + cur_delta.dy * cur_anchor_h;
-          float decoded_box_xc = cur_anchor_xc + cur_delta.dx * cur_anchor_w; 
-          float decoded_box_h = expf(cur_delta.logdh) * cur_anchor_h;
-          float decoded_box_w = expf(cur_delta.logdw) * cur_anchor_w;
+            // apply delta
+            float decoded_box_yc = cur_anchor_yc + cur_delta.dy * cur_anchor_h;
+            float decoded_box_xc = cur_anchor_xc + cur_delta.dx * cur_anchor_w;
+            float decoded_box_h = expf(cur_delta.logdh) * cur_anchor_h;
+            float decoded_box_w = expf(cur_delta.logdw) * cur_anchor_w;
 
-          float decoded_box_ymin = decoded_box_yc - 0.5 * decoded_box_h;
-          float decoded_box_xmin = decoded_box_xc - 0.5 * decoded_box_w;
-          float decoded_box_ymax = decoded_box_ymin + decoded_box_h - 1.0;
-          float decoded_box_xmax = decoded_box_xmin + decoded_box_w - 1.0;
+            float decoded_box_ymin = decoded_box_yc - 0.5 * decoded_box_h;
+            float decoded_box_xmin = decoded_box_xc - 0.5 * decoded_box_w;
+            float decoded_box_ymax = decoded_box_ymin + decoded_box_h - 1.0;
+            float decoded_box_xmax = decoded_box_xmin + decoded_box_w - 1.0;
 
-          // clip bbox: a more precision clip method based on real window could be implemented
-          decoded_box_ymin = dMAX(dMIN(decoded_box_ymin, inputHeight - 1.0), 0.0);
-          decoded_box_xmin = dMAX(dMIN(decoded_box_xmin, inputWidth - 1.0), 0.0);
-          decoded_box_ymax = dMAX(dMIN(decoded_box_ymax, inputHeight - 1.0), 0.0);
-          decoded_box_xmax = dMAX(dMIN(decoded_box_xmax, inputWidth - 1.0), 0.0);
+            // clip bbox: a more precision clip method based on real window could be implemented
+            decoded_box_ymin = dMAX(dMIN(decoded_box_ymin, inputHeight - 1.0), 0.0);
+            decoded_box_xmin = dMAX(dMIN(decoded_box_xmin, inputWidth - 1.0), 0.0);
+            decoded_box_ymax = dMAX(dMIN(decoded_box_ymax, inputHeight - 1.0), 0.0);
+            decoded_box_xmax = dMAX(dMIN(decoded_box_xmax, inputWidth - 1.0), 0.0);
 
-          bbox_out[blockOffset + cur_id].y1 = decoded_box_ymin;
-          bbox_out[blockOffset + cur_id].x1 = decoded_box_xmin;
-          bbox_out[blockOffset + cur_id].y2 = decoded_box_ymax;
-          bbox_out[blockOffset + cur_id].x2 = decoded_box_xmax;
+            bbox_out[blockOffset + cur_id].y1 = decoded_box_ymin;
+            bbox_out[blockOffset + cur_id].x1 = decoded_box_xmin;
+            bbox_out[blockOffset + cur_id].y2 = decoded_box_ymax;
+            bbox_out[blockOffset + cur_id].x2 = decoded_box_xmax;
         }
     }
 }
 
 cudaError_t DecodeBBoxes(cudaStream_t stream, int N,
-    int samples,         // number of anchors per image
-    const float* regWeight, 
-    const float inputHeight,
-    const float inputWidth,
+    int samples, // number of anchors per image
+    const float* regWeight, const float inputHeight, const float inputWidth,
     const void* anchors, // [N, anchors, (y1, x1, y2, x2)]
     const void* delta,   //[N, anchors, (dy, dx, log(dh), log(dw)])
     void* outputBbox     //[N, anchors, (y1, x1, y2, x2)]
-    )
+)
 {
 
     int blocks = N;
@@ -1836,10 +1828,10 @@ cudaError_t DecodeBBoxes(cudaStream_t stream, int N,
     //  h = exp(dh)*anchor_h
     //  w = exp(dw)*anchor_w
     // clip the bbox in absolute coordinates
-    float bboxClipThresh = log(1000.0f/16.0f);
+    float bboxClipThresh = log(1000.0f / 16.0f);
 
-    decode_bboxes_kernel<<<blocks, threads, 0, stream>>>(samples, anchors, 
-          delta, regWeight, inputHeight, inputWidth,  outputBbox, bboxClipThresh);
+    decode_bboxes_kernel<<<blocks, threads, 0, stream>>>(
+        samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
 
     return cudaGetLastError();
 }
@@ -2066,14 +2058,13 @@ cudaError_t roiAlign(cudaStream_t stream, int batchSize, int featureCount, int r
     return cudaGetLastError();
 }
 
-
 template <typename Trois, typename Tfeat>
 __global__ void roiAlignHalfCenter_kernel(int featureCount, int roiCount,
 
     float threshold, int inputHeight, int inputWidth, const Trois* rois,
 
     const Tfeat* P2, const xy_t P2dims, const Tfeat* P3, const xy_t P3dims, const Tfeat* P4, const xy_t P4dims,
-    const Tfeat* P5, const xy_t P5dims, const Tfeat* P6, const xy_t P6dims, 
+    const Tfeat* P5, const xy_t P5dims, const Tfeat* P6, const xy_t P6dims,
 
     Tfeat* pooled, const xy_t poolDims)
 {
@@ -2089,8 +2080,8 @@ __global__ void roiAlignHalfCenter_kernel(int featureCount, int roiCount,
         const float y2 = roi[2];
         const float x2 = roi[3];
 
-        if (!(0 <= y1 && y1 <= inputHeight && 0 <= x1 && x1 <= inputWidth && 0 <= y2 && y2 <= inputHeight && 0 <= x2 && x2 <= inputWidth && y1 < y2
-                && x1 < x2))
+        if (!(0 <= y1 && y1 <= inputHeight && 0 <= x1 && x1 <= inputWidth && 0 <= y2 && y2 <= inputHeight && 0 <= x2
+                && x2 <= inputWidth && y1 < y2 && x1 < x2))
         {
 
             continue;
@@ -2133,9 +2124,8 @@ __global__ void roiAlignHalfCenter_kernel(int featureCount, int roiCount,
         {
             src = P6;
             srcDims = P6dims;
-            ++iP; 
+            ++iP;
         }
-    
 
         src += srcDims.x * srcDims.y * (batch * featureCount + feature);
 
@@ -2143,9 +2133,9 @@ __global__ void roiAlignHalfCenter_kernel(int featureCount, int roiCount,
             = pooled + poolDims.x * poolDims.y * (batch * roiCount * featureCount + roiIdx * featureCount + feature);
 
         float scale_to_level = 1.0f;
-        for(int i = 0; i < iP; i++)
+        for (int i = 0; i < iP; i++)
         {
-          scale_to_level *= 2.0f;
+            scale_to_level *= 2.0f;
         }
 
         const float yStart = y1 / scale_to_level;
@@ -2183,11 +2173,10 @@ cudaError_t roiAlignHalfCenter(cudaStream_t stream, int batchSize, int featureCo
     const dim3 blocks(batchSize, featureCount);
     const int threads(256);
 
-    roiAlignHalfCenter_kernel<<<blocks, threads, 0, stream>>>(featureCount, roiCount, firstThreshold, inputHeight, inputWidth,
-        static_cast<const float*>(rois),
-        static_cast<const float*>(layers[0]), layerDims[0], static_cast<const float*>(layers[1]), layerDims[1],
-        static_cast<const float*>(layers[2]), layerDims[2], static_cast<const float*>(layers[3]), layerDims[3],
-        static_cast<const float*>(layers[4]), layerDims[4], 
+    roiAlignHalfCenter_kernel<<<blocks, threads, 0, stream>>>(featureCount, roiCount, firstThreshold, inputHeight,
+        inputWidth, static_cast<const float*>(rois), static_cast<const float*>(layers[0]), layerDims[0],
+        static_cast<const float*>(layers[1]), layerDims[1], static_cast<const float*>(layers[2]), layerDims[2],
+        static_cast<const float*>(layers[3]), layerDims[3], static_cast<const float*>(layers[4]), layerDims[4],
         static_cast<float*>(pooled), poolDims);
 
     return cudaGetLastError();
@@ -2263,28 +2252,28 @@ void specialSlice(cudaStream_t stream, int batch_size, int boxes_cnt, const void
 }
 
 template <typename Dtype>
-__global__ void concatenate(int featureCnt, int sampleCnt, const void* const* inScores, const void* const* inBBox, 
-                            void* outScore, void* outBBox)
+__global__ void concatenate(int featureCnt, int sampleCnt, const void* const* inScores, const void* const* inBBox,
+    void* outScore, void* outBBox)
 {
     int N = blockIdx.x;
-    int outBlockOffset = N * sampleCnt * featureCnt; 
-    int inBlockOffset = N * sampleCnt; 
+    int outBlockOffset = N * sampleCnt * featureCnt;
+    int inBlockOffset = N * sampleCnt;
     int itemsPerThread = (sampleCnt + blockDim.x - 1) / blockDim.x;
     Dtype* outScorePtr = static_cast<Dtype*>(outScore);
-    BOX* outBBoxPtr = static_cast<BOX*>(outBBox); 
+    BOX* outBBoxPtr = static_cast<BOX*>(outBBox);
 
-    for(int fId = 0; fId < featureCnt; fId++)
+    for (int fId = 0; fId < featureCnt; fId++)
     {
         const Dtype* fInScorePtr = static_cast<const Dtype*>(inScores[fId]);
         const BOX* fInBBoxPtr = static_cast<const BOX*>(inBBox[fId]);
         int featureOffset = fId * sampleCnt;
-        for(int i = 0; i < itemsPerThread; i++)
+        for (int i = 0; i < itemsPerThread; i++)
         {
             int curId = i * blockDim.x + threadIdx.x;
             if (curId < sampleCnt)
             {
-              outScorePtr[outBlockOffset + featureOffset + curId] = fInScorePtr[inBlockOffset + curId];
-              outBBoxPtr[outBlockOffset + featureOffset + curId] = fInBBoxPtr[inBlockOffset + curId];
+                outScorePtr[outBlockOffset + featureOffset + curId] = fInScorePtr[inBlockOffset + curId];
+                outBBoxPtr[outBlockOffset + featureOffset + curId] = fInBBoxPtr[inBlockOffset + curId];
             }
         }
     }
@@ -2305,23 +2294,15 @@ __global__ void resampleBBox_kernel(int orig_size, int sample_size, const void* 
         int cur_id = i * blockDim.x + threadIdx.x;
         if (cur_id < sample_size)
         {
-          out_bbox[blockOffset_out + cur_id] = in_bbox[blockOffset_in + cur_id];
+            out_bbox[blockOffset_out + cur_id] = in_bbox[blockOffset_in + cur_id];
         }
     }
 }
 
-cudaError_t ConcatTopK(cudaStream_t stream, 
-    int N, 
-    int featureCnt, 
-    int topK, 
-    nvinfer1::DataType dtype, 
-    void* workspace, 
-    const ConcatTopKWorkSpace& spaceOffset,
-    void** inScores, 
-    void** inBBox,
-    void* outProposals)
+cudaError_t ConcatTopK(cudaStream_t stream, int N, int featureCnt, int topK, nvinfer1::DataType dtype, void* workspace,
+    const ConcatTopKWorkSpace& spaceOffset, void** inScores, void** inBBox, void* outProposals)
 {
-    //Prepare Offset
+    // Prepare Offset
     int8_t* wsPtr = static_cast<int8_t*>(workspace);
     void* tempStoragePtr = wsPtr + spaceOffset.tempStorageOffset;
     void* concatedScorePtr = wsPtr + spaceOffset.concatedScoreOffset;
@@ -2329,14 +2310,14 @@ cudaError_t ConcatTopK(cudaStream_t stream,
     void* sortedScorePtr = wsPtr + spaceOffset.sortedScoreOffset;
     void* sortedBBoxPtr = wsPtr + spaceOffset.sortedBBoxOffset;
 
-    int blocks = N; //batch_size
+    int blocks = N; // batch_size
     int threads = dMIN(topK, 2048);
-    //Concat Scores and inBBox 
+    // Concat Scores and inBBox
     switch (dtype)
     {
     case nvinfer1::DataType::kFLOAT:
-        concatenate<float><<<blocks, threads, 0, stream>>>(featureCnt, topK, inScores, inBBox,
-                                                          concatedScorePtr, concatedBBoxPtr);
+        concatenate<float>
+            <<<blocks, threads, 0, stream>>>(featureCnt, topK, inScores, inBBox, concatedScorePtr, concatedBBoxPtr);
 
         CUASSERT(cudaGetLastError());
         break;
@@ -2344,21 +2325,20 @@ cudaError_t ConcatTopK(cudaStream_t stream,
     default: assert(false);
     }
 
-
-    //Sort and sample topK
+    // Sort and sample topK
     int itemCnt = topK * featureCnt;
     int* offsets = static_cast<int*>(tempStoragePtr);
     set_offset_kernel<<<1, 1024, 0, stream>>>(itemCnt, N + 1, offsets);
     assert(cudaGetLastError() == cudaSuccess);
     tempStoragePtr = static_cast<void*>(static_cast<int*>(tempStoragePtr) + (N + 1));
 
-    //Sort
+    // Sort
     size_t temp_storage_bytes = 0;
     cub::DeviceSegmentedRadixSort::SortPairsDescending(NULL, temp_storage_bytes, (float*) concatedScorePtr,
         (float*) sortedScorePtr, (BBoxT<float>*) concatedBBoxPtr, (BBoxT<float>*) sortedBBoxPtr, N * itemCnt, N,
         offsets, offsets + 1, 0, 8 * sizeof(float), stream);
 
-    assert((1 << 23) * N > temp_storage_bytes);
+    assert((1 << 23) * N > (int) temp_storage_bytes);
 
     cub::DeviceSegmentedRadixSort::SortPairsDescending(tempStoragePtr, temp_storage_bytes, (float*) concatedScorePtr,
         (float*) sortedScorePtr, (BBoxT<float>*) concatedBBoxPtr, (BBoxT<float>*) sortedBBoxPtr, N * itemCnt, N,
@@ -2366,9 +2346,9 @@ cudaError_t ConcatTopK(cudaStream_t stream,
 
     assert(cudaGetLastError() == cudaSuccess);
 
-    //Sample
-    resampleBBox_kernel<<<N, dMIN(topK, 1024), 0, stream>>>(itemCnt, topK, sortedBBoxPtr, outProposals);   
-    
+    // Sample
+    resampleBBox_kernel<<<N, dMIN(topK, 1024), 0, stream>>>(itemCnt, topK, sortedBBoxPtr, outProposals);
+
     assert(cudaGetLastError() == cudaSuccess);
     return cudaGetLastError();
-} 
+}

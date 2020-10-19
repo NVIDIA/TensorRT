@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef TRT_NV_PLUGIN_FASTER_RCNN_H
 #define TRT_NV_PLUGIN_FASTER_RCNN_H
 

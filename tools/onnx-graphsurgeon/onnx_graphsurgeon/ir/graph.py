@@ -168,21 +168,27 @@ class Graph(object):
         return used_node_ids, used_tensors
 
 
-    def cleanup(self, remove_unused_node_outputs=True):
+    def cleanup(self, remove_unused_node_outputs=False):
         """
         Removes unused nodes and tensors from the graph.
         A node or tensor is considered unused if it does not contribute to any of the graph outputs.
+
+        Additionally, any producer nodes of graph input tensors are removed from the graph.
 
         Note: This function will never modify graph output tensors.
 
         Optional Args:
             remove_unused_node_outputs (bool): Whether to remove unused output tensors of nodes. This will never remove
-                empty tensor outputs. If this is set to False, outputs of nodes kept in the graph will not be modified.
+                empty tensor outputs. Defaults to False.
 
         Returns:
             self
         """
         with self.node_ids():
+            # Graph inputs cannot have producers
+            for inp in self.inputs:
+                inp.inputs.clear()
+
             used_node_ids, used_tensors = self._get_used_node_ids()
 
             inputs = []
@@ -209,7 +215,10 @@ class Graph(object):
                     def is_hanging_tensor(tensor):
                         return not tensor.is_empty() and len(tensor.outputs) == 0 and tensor.name not in graph_output_names
 
-                    [node.outputs.remove(out) for out in node.outputs if is_hanging_tensor(out)]
+                    to_remove = [out for out in node.outputs if is_hanging_tensor(out)]
+                    for out in to_remove:
+                        if out in node.outputs:
+                            node.outputs.remove(out)
 
             self.nodes = nodes
             return self
@@ -284,11 +293,21 @@ class Graph(object):
                 if check_duplicates and tensor.name in tensor_map and not (tensor_map[tensor.name] is tensor):
                     G_LOGGER.critical("Found distinct tensors that share the same name:\n[id: {:}] {:}\n[id: {:}] {:}"
                         .format(id(tensor_map[tensor.name]), tensor_map[tensor.name], id(tensor), tensor))
+
                 tensor_map[tensor.name] = tensor
+
+
+        # I/O tensors may not be attached to nodes.
+        for io_tensor in self.inputs:
+            add_to_tensor_map(io_tensor)
 
         for node in self.nodes:
             for tensor in node.inputs + node.outputs:
                 add_to_tensor_map(tensor)
+
+        for io_tensor in self.outputs:
+            add_to_tensor_map(io_tensor)
+
         return tensor_map
 
 

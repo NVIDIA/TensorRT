@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+
+"""
+The Polygraphy CLI Toolkit
+
+Includes various subtools that can assist with prototyping and
+debugging inference with deep learning models. See the help output
+for details.
+"""
+import argparse
+import os
+import sys
+
+G_SCRIPT_FILE = os.path.realpath(__file__)
+G_ROOT_DIR = os.path.join(os.path.dirname(G_SCRIPT_FILE), os.pardir)
+sys.path.insert(0, G_ROOT_DIR)
+
+
+import polygraphy
+from polygraphy.logger import G_LOGGER
+from polygraphy.tools import TOOL_REGISTRY
+from polygraphy.tools.util import args as args_util
+from polygraphy.util import misc
+
+
+# All CLI tools should exit on errors rather than re-raising
+G_LOGGER.exit_on_errors = True
+
+def main():
+    parser = argparse.ArgumentParser(description="Polygraphy: A Deep Learning Debugging Toolkit")
+    parser.add_argument("-v", "--version", action="version", version=misc.str_from_module_info(polygraphy, name="Polygraphy"))
+
+    subparsers = parser.add_subparsers(title="Tools", dest="tools")
+    subparsers.required = True
+
+    for tool in TOOL_REGISTRY:
+        tool.setup_parser(subparsers)
+
+    args, unknown = parser.parse_known_args()
+    args = args_util.setup(args, unknown)
+
+    G_LOGGER.verbose("Running Command: {:}".format(" ".join(sys.argv)))
+    sys.exit(args.subcommand(args))
+
+
+if __name__ == "__main__":
+    main()

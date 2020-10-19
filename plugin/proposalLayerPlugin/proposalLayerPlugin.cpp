@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include "proposalLayerPlugin.h"
 #include "mrcnn_config.h"
 #include "plugin.h"

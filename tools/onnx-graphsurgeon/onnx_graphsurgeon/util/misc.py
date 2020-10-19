@@ -52,6 +52,16 @@ def default_value(value, default):
     return value if value is not None else default
 
 
+def combine_dicts(dict0, dict1):
+    """
+    Combine two dictionaries. Values in the second will overwrite values in the first.
+    """
+    combined = OrderedDict()
+    combined.update(dict0)
+    combined.update(dict1)
+    return combined
+
+
 # Special type of list that synchronizes contents with another list.
 # Concrete example: Assume some node, n, contains an input tensor, t. If we remove t from n.inputs,
 # we also need to remove n from t.outputs. To avoid having to do this manually, we use SynchronizedList,
@@ -119,9 +129,7 @@ class SynchronizedList(list):
 
 
     def __add__(self, other_list: List[object]):
-        new_list = SynchronizedList(self.parent_obj, self.field_name, self)
-        new_list += other_list
-        return new_list
+        return list(self) + list(other_list)
 
 
     def __iadd__(self, other_list: List[object]):

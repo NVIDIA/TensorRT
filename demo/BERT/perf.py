@@ -52,8 +52,8 @@ def main():
 
     with open(args.engine, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.deserialize_cuda_engine(f.read()) as engine, engine.create_execution_context() as context:
         # Allocate buffers large enough to store the largest batch size
-        max_input_shape = (max(args.batch_size), args.sequence_length)
-        max_output_shape = (max(args.batch_size), args.sequence_length, 2, 1, 1)
+        max_input_shape = (args.sequence_length, max(args.batch_size))
+        max_output_shape = (args.sequence_length, max(args.batch_size), 2, 1, 1)
         buffers = [
             DeviceBuffer(max_input_shape),
             DeviceBuffer(max_input_shape),
@@ -65,9 +65,9 @@ def main():
         pseudo_vocab_size = 30522
         pseudo_type_vocab_size = 2
         np.random.seed(args.random_seed)
-        test_word_ids = np.random.randint(0, pseudo_vocab_size, (max(args.batch_size), args.sequence_length), dtype=np.int32)
-        test_segment_ids = np.random.randint(0, pseudo_type_vocab_size, (max(args.batch_size), args.sequence_length), dtype=np.int32)
-        test_input_mask = np.ones((max(args.batch_size), args.sequence_length), dtype=np.int32)
+        test_word_ids = np.random.randint(0, pseudo_vocab_size, (args.sequence_length, max(args.batch_size)), dtype=np.int32)
+        test_segment_ids = np.random.randint(0, pseudo_type_vocab_size, (args.sequence_length, max(args.batch_size)), dtype=np.int32)
+        test_input_mask = np.ones((args.sequence_length, max(args.batch_size)), dtype=np.int32)
 
         # Copy input h2d
         cuda.memcpy_htod(buffers[0].buf, test_word_ids.ravel())
@@ -86,9 +86,9 @@ def main():
             bindings = [0] * binding_idx_offset + [buf.binding() for buf in buffers]
 
             shapes = {
-                "input_ids": (batch_size, args.sequence_length),
-                "segment_ids": (batch_size, args.sequence_length),
-                "input_mask": (batch_size, args.sequence_length),
+                "input_ids": (args.sequence_length, batch_size),
+                "segment_ids": (args.sequence_length, batch_size),
+                "input_mask": (args.sequence_length, batch_size),
             }
 
             for binding, shape in shapes.items():

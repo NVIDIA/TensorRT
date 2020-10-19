@@ -205,6 +205,11 @@ void printPerformanceReport(const std::vector<InferenceTrace>& trace, const Repo
     std::transform(noWarmup, trace.end(), timings.begin(), traceToTiming);
     printTiming(timings, reporting.avgs, os);
     printEpilog(timings, benchTime, reporting.percentile, queries, os);
+
+    if (!reporting.exportTimes.empty())
+    {
+        exportJSONTrace(trace, reporting.exportTimes);
+    }
 }
 
 //! Printed format:
@@ -281,13 +286,13 @@ void Profiler::print(std::ostream& os) const
     {
         // clang off
         os << std::setw(nameLength) << p.name << std::setw(timeLength) << std::fixed << std::setprecision(2) << p.timeMs
-           << std::setw(avgLength) << std::fixed << std::setprecision(2) << p.timeMs / mUpdatesCount
+           << std::setw(avgLength) << std::fixed << std::setprecision(4) << p.timeMs / mUpdatesCount
            << std::setw(percentageLength) << std::fixed << std::setprecision(1) << p.timeMs / totalTimeMs * 100
            << std::endl;
     }
     {
         os << std::setw(nameLength) << "Total" << std::setw(timeLength) << std::fixed << std::setprecision(2)
-           << totalTimeMs << std::setw(avgLength) << std::fixed << std::setprecision(2) << totalTimeMs / mUpdatesCount
+           << totalTimeMs << std::setw(avgLength) << std::fixed << std::setprecision(4) << totalTimeMs / mUpdatesCount
            << std::setw(percentageLength) << std::fixed << std::setprecision(1) << 100.0 << std::endl;
         // clang on
     }

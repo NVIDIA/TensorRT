@@ -18,7 +18,7 @@ from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 from onnx_graphsurgeon.ir.tensor import Tensor, Variable, Constant
 
-from onnx_models import identity_model, lstm_model, scan_model, dim_param_model
+from onnx_models import identity_model, lstm_model, scan_model, dim_param_model, initializer_is_output_model, nested_dup_names
 
 from collections import OrderedDict
 import onnx.shape_inference
@@ -74,7 +74,7 @@ class TestOnnxImporter(object):
         strings_attr = ["constant", "and", "variable"]
 
         onnx_node = onnx.helper.make_node(op, inputs, outputs, float_attr=float_attr, int_attr=int_attr, str_attr=str_attr, tensor_attr=tensor_attr, floats_attr=floats_attr, ints_attr=ints_attr, strings_attr=strings_attr)
-        node = OnnxImporter.import_node(onnx_node, OrderedDict())
+        node = OnnxImporter.import_node(onnx_node, OrderedDict(), OrderedDict())
         assert node.op == op
         assert node.attrs["float_attr"] == float_attr
         assert node.attrs["int_attr"] == int_attr
@@ -86,7 +86,10 @@ class TestOnnxImporter(object):
         assert node.attrs["strings_attr"] == strings_attr
 
 
-    @pytest.mark.parametrize("model", [identity_model(), lstm_model(), scan_model()])
+    @pytest.mark.parametrize("model",
+        [identity_model(), lstm_model(), scan_model(), dim_param_model(), initializer_is_output_model(), nested_dup_names()],
+        ids=lambda model: str(model)
+    )
     def test_import_graph(self, model):
         graph = OnnxImporter.import_graph(model.load().graph)
         model.assert_equal(graph)

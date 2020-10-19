@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #define CUDA_LIB_NAME "cuda"
 
 #if defined(_WIN32)

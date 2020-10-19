@@ -186,7 +186,7 @@ public:
     void beginCapture(TrtCudaStream& stream)
     {
         cudaCheck(cudaGraphCreate(&mGraph, 0));
-        cudaCheck(cudaStreamBeginCapture(stream.get(), cudaStreamCaptureModeGlobal));
+        cudaCheck(cudaStreamBeginCapture(stream.get(), cudaStreamCaptureModeThreadLocal));
     }
 
     void launch(TrtCudaStream& stream)
@@ -350,6 +350,27 @@ private:
     TrtHostBuffer mHostBuffer;
     TrtDeviceBuffer mDeviceBuffer;
 };
+
+inline void setCudaDevice(int device, std::ostream& os)
+{
+    cudaCheck(cudaSetDevice(device));
+
+    cudaDeviceProp properties;
+    cudaCheck(cudaGetDeviceProperties(&properties, device));
+
+    // clang-format off
+    os << "=== Device Information ===" << std::endl;
+    os << "Selected Device: "      << properties.name                                               << std::endl;
+    os << "Compute Capability: "   << properties.major << "." << properties.minor                   << std::endl;
+    os << "SMs: "                  << properties.multiProcessorCount                                << std::endl;
+    os << "Compute Clock Rate: "   << properties.clockRate / 1000000.0F << " GHz"                   << std::endl;
+    os << "Device Global Memory: " << (properties.totalGlobalMem >> 20) << " MiB"                   << std::endl;
+    os << "Shared Memory per SM: " << (properties.sharedMemPerMultiprocessor >> 10) << " KiB"       << std::endl;
+    os << "Memory Bus Width: "     << properties.memoryBusWidth << " bits"
+                        << " (ECC " << (properties.ECCEnabled != 0 ? "enabled" : "disabled") << ")" << std::endl;
+    os << "Memory Clock Rate: "    << properties.memoryClockRate / 1000000.0F << " GHz"             << std::endl;
+    // clang-format on
+}
 
 } // namespace sample
 

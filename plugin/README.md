@@ -2,16 +2,16 @@
 
 ## Plugins shipped in this release
 
-| Plugin | Name | Version |
+| Plugin | Name | Versions |
 |---|---|---|
 | [batchTilePlugin](batchTilePlugin) | BatchTilePlugin_TRT | 1 |
 | [batchedNMSPlugin](batchedNMSPlugin) | BatchedNMS_TRT | 1 |
 | [batchedNMSDynamicPlugin](batchedNMSPlugin) | BatchedNMSDynamic_TRT | 1 |
-| [bertQKVToContextPlugin](bertQKVToContextPlugin) | CustomQKVToContextPluginDynamic | 1 |
+| [bertQKVToContextPlugin](bertQKVToContextPlugin) | CustomQKVToContextPluginDynamic | 1, 2, 3 |
 | [coordConvACPlugin](coordConvACPlugin) | CoordConvAC | 1 |
 | [cropAndResizePlugin](cropAndResizePlugin) | CropAndResize | 1 |
 | [detectionLayerPlugin](detectionLayerPlugin) | DetectionLayer_TRT | 1 |
-| [embLayerNormPlugin](embLayerNormPlugin) | CustomEmbLayerNormPluginDynamic | 1 |
+| [embLayerNormPlugin](embLayerNormPlugin) | CustomEmbLayerNormPluginDynamic | 1, 2 |
 | [fcPlugin](fcPlugin) | CustomFCPluginDynamic | 1 |
 | [flattenConcat](flattenConcat) | FlattenConcat_TRT | 1 |
 | [geluPlugin](geluPlugin) | CustomGeluPluginDynamic | 1 |
@@ -33,5 +33,6 @@
 | [regionPlugin](regionPlugin) | Region_TRT | 1 |
 | [reorgPlugin](reorgPlugin) | Reorg_TRT | 1 |
 | [resizeNearestPlugin](resizeNearestPlugin) | ResizeNearest_TRT | 1 |
-| [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 1 |
+| [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 1, 2, 3 |
 | [specialSlicePlugin](specialSlicePlugin) | SpecialSlice_TRT | 1 |
+| [splitPlugin](splitPlugin) | Split | 1 |

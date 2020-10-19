@@ -17,12 +17,8 @@
 #include "kernel.h"
 
 template <unsigned nthdsPerCTA>
-__launch_bounds__(nthdsPerCTA)
-    __global__ void pReLUKernel(
-        const int n,
-        const float negativeSlope,
-        const float* input,
-        float* output)
+__launch_bounds__(nthdsPerCTA) __global__
+    void pReLUKernel(const int n, const float negativeSlope, const float* input, float* output)
 {
     for (int i = blockIdx.x * nthdsPerCTA + threadIdx.x; i < n; i += gridDim.x * nthdsPerCTA)
     {
@@ -30,12 +26,7 @@ __launch_bounds__(nthdsPerCTA)
     }
 }
 
-pluginStatus_t lReLUGPU(
-    cudaStream_t stream,
-    const int n,
-    const float negativeSlope,
-    const void* input,
-    void* output)
+pluginStatus_t lReLUGPU(cudaStream_t stream, const int n, const float negativeSlope, const void* input, void* output)
 {
     const int BS = 512;
     const int GS = (n + BS - 1) / BS;
@@ -46,11 +37,7 @@ pluginStatus_t lReLUGPU(
 }
 
 pluginStatus_t lReLUInference(
-    cudaStream_t stream,
-    const int n,
-    const float negativeSlope,
-    const void* input,
-    void* output)
+    cudaStream_t stream, const int n, const float negativeSlope, const void* input, void* output)
 {
     return lReLUGPU(stream, n, negativeSlope, (const float*) input, (float*) output);
 }

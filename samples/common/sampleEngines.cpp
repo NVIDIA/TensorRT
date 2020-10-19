@@ -314,18 +314,18 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
     }
 
     bool hasDynamicShapes{false};
-    if (!build.inputFormats.empty() && build.inputFormats.size() != static_cast<size_t>(network.getNbInputs()))
-    {
-        throw std::invalid_argument("The number of inputIOFormats must match network's inputs.");
-    }
+
+    bool broadcastInputFormats = broadcastIOFormats(build.inputFormats, network.getNbInputs());
+
     for (unsigned int i = 0, n = network.getNbInputs(); i < n; i++)
     {
         // Set formats and data types of inputs
         auto input = network.getInput(i);
         if (!build.inputFormats.empty())
         {
-            input->setType(build.inputFormats[i].first);
-            input->setAllowedFormats(build.inputFormats[i].second);
+            int inputFormatIndex = broadcastInputFormats ? 0 : i;
+            input->setType(build.inputFormats[inputFormatIndex].first);
+            input->setAllowedFormats(build.inputFormats[inputFormatIndex].second);
         }
         else
         {
@@ -378,7 +378,7 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
                     {
                         staticDims.resize(dims.nbDims);
                         std::transform(dims.d, dims.d + dims.nbDims, staticDims.begin(),
-                            [&DEFAULT_DIMENSION](int dim) { return dim > 0 ? dim : DEFAULT_DIMENSION; });
+                            [&](int dimension) { return dimension > 0 ? dimension : DEFAULT_DIMENSION; });
                     }
                     sample::gLogWarning << "Dynamic dimensions required for input: " << input->getName()
                                         << ", but no shapes were provided. Automatically overriding shape to: "
@@ -432,18 +432,17 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
             config->addOptimizationProfile(profile) != -1, "Error in add optimization profile", nullptr, err);
     }
 
-    if (!build.outputFormats.empty() && build.outputFormats.size() != static_cast<size_t>(network.getNbOutputs()))
-    {
-        throw std::invalid_argument("The number of outputIOFormats must match network's outputs.");
-    }
+    bool broadcastOutputFormats = broadcastIOFormats(build.outputFormats, network.getNbOutputs(), false);
+
     for (unsigned int i = 0, n = network.getNbOutputs(); i < n; i++)
     {
         // Set formats and data types of outputs
         auto output = network.getOutput(i);
         if (!build.outputFormats.empty())
         {
-            output->setType(build.outputFormats[i].first);
-            output->setAllowedFormats(build.outputFormats[i].second);
+            int outputFormatIndex = broadcastOutputFormats ? 0 : i;
+            output->setType(build.outputFormats[outputFormatIndex].first);
+            output->setAllowedFormats(build.outputFormats[outputFormatIndex].second);
         }
         else
         {
@@ -475,6 +474,11 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
     if (build.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
+    }
+
+    if (build.refittable)
+    {
+        config->setFlag(BuilderFlag::kREFIT);
     }
 
     if (build.int8 && !build.fp16)
@@ -572,6 +576,14 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
         }
     }
 
+    if (build.enabledTactics || build.disabledTactics)
+    {
+        TacticSources tacticSources = config->getTacticSources();
+        tacticSources |= build.enabledTactics;
+        tacticSources &= ~build.disabledTactics;
+        config->setTacticSources(tacticSources);
+    }
+
     return builder.buildEngineWithConfig(network, *config);
 }
 
@@ -584,10 +596,8 @@ ICudaEngine* modelToEngine(
         err << "Builder creation failed" << std::endl;
         return nullptr;
     }
-    const bool isOnnxModel = model.baseModel.format == ModelFormat::kONNX;
-    auto batchFlag = (build.maxBatch && !isOnnxModel)
-        ? 0U
-        : 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    auto batchFlag
+        = (build.maxBatch) ? 0U : 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
     TrtUniquePtr<INetworkDefinition> network{builder->createNetworkV2(batchFlag)};
     if (!network)
     {
@@ -602,6 +612,21 @@ ICudaEngine* modelToEngine(
     }
 
     return networkToEngine(build, sys, *builder, *network, err);
+}
+
+void dumpRefittable(nvinfer1::ICudaEngine& engine)
+{
+    TrtUniquePtr<IRefitter> refitter{createInferRefitter(engine, sample::gLogger.getTRTLogger())};
+    // Get number of refittable items.
+    const int nbAll = refitter->getAll(0, nullptr, nullptr);
+    std::vector<const char*> layerNames(nbAll);
+    // Allocate buffers for the items and get them.
+    std::vector<nvinfer1::WeightsRole> weightsRoles(nbAll);
+    refitter->getAll(nbAll, layerNames.data(), weightsRoles.data());
+    for (int i = 0; i < nbAll; ++i)
+    {
+        sample::gLogInfo << layerNames[i] << " " << weightsRoles[i] << std::endl;
+    }
 }
 
 ICudaEngine* loadEngine(const std::string& engine, int DLACore, std::ostream& err)

@@ -19,40 +19,27 @@
 
 using nvinfer1::plugin::reduced_divisor;
 template <unsigned nthdsPerCTA>
-__launch_bounds__(nthdsPerCTA)
-__global__ void gridAnchorKernel(
-    const GridAnchorParameters param,
-    const int numAspectRatios,
-    reduced_divisor divObj,
-    const float* widths,
-    const float* heights,
-    float* outputData
-    )
+__launch_bounds__(nthdsPerCTA) __global__ void gridAnchorKernel(const GridAnchorParameters param,
+    const int numAspectRatios, reduced_divisor divObj, const float* widths, const float* heights, float* outputData)
 {
     // output dims: (H, W, param.numMinSize, (1+haveMaxSize+numAR-1), 4)
     const int dim = param.H * param.W * numAspectRatios;
-
     /*
      * Parameters used to calculate the bounding box coordinates back to input image scale
      * Normally we calculate the anchorStride = image_input_size (in pixel) / feature_map_size
      * Here we do not use image_input_size for the moment
      * Instead we use 1.0
      * The coordinates calculated are scaled by the input image size.
-     * Most of the coordinates will be in a range of [0, 1], except for the bounding box coordinates going outside of the image
-     * Every coordinate will go back to the pixel coordinates in the input image if being multiplied by image_input_size
-     * Here we implicitly assumes the image input and feature map are square
+     * Most of the coordinates will be in a range of [0, 1], except for the bounding box coordinates going outside of
+     * the image Every coordinate will go back to the pixel coordinates in the input image if being multiplied by
+     * image_input_size Here we implicitly assumes the image input and feature map are square
      */
-    float anchorStrideH = (1.0 / param.H);
-    float anchorStrideW = (1.0 / param.W);
-    float anchorOffsetH = 0.5 * anchorStrideH;
-    float anchorOffsetW = 0.5 * anchorStrideW;
+    float anchorStride = (1.0 / param.H);
+    float anchorOffset = 0.5 * anchorStride;
 
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= dim)
-    {
         return;
-    }
-
     int arId, currIndex;
     divObj.divmod(tid, currIndex, arId);
 
@@ -60,8 +47,8 @@ __global__ void gridAnchorKernel(
     const int h = currIndex / param.W;
 
     // Center coordinates
-    float yC = h * anchorStrideH + anchorOffsetH;
-    float xC = w * anchorStrideW + anchorOffsetW;
+    float yC = h * anchorStride + anchorOffset;
+    float xC = w * anchorStride + anchorOffset;
 
     // x_min, y_min
     float xMin = xC - 0.5 * widths[arId];
@@ -86,14 +73,8 @@ __global__ void gridAnchorKernel(
     output[tid * 4 + 3] = param.variance[3];
 }
 
-pluginStatus_t anchorGridInference(
-    cudaStream_t stream,
-    const GridAnchorParameters param,
-    const int numAspectRatios,
-    const void* widths,
-    const void* heights,
-    void* outputData
-    )
+pluginStatus_t anchorGridInference(cudaStream_t stream, const GridAnchorParameters param, const int numAspectRatios,
+    const void* widths, const void* heights, void* outputData)
 {
     const int dim = param.H * param.W * numAspectRatios;
     reduced_divisor divObj(numAspectRatios);
@@ -101,20 +82,46 @@ pluginStatus_t anchorGridInference(
     {
         const int BS = 128;
         const int GS = (dim + BS - 1) / BS;
-        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(param, numAspectRatios, divObj,
-            (const float*) widths, (const float*) heights,
-            (float*) outputData);
-
+        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(
+            param, numAspectRatios, divObj, (const float*) widths, (const float*) heights, (float*) outputData);
     }
     else
     {
         const int BS = 32;
         const int GS = (dim + BS - 1) / BS;
-        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(param, numAspectRatios, divObj,
-            (const float*) widths, (const float*) heights,
-            (float*) outputData);
+        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(
+            param, numAspectRatios, divObj, (const float*) widths, (const float*) heights, (float*) outputData);
     }
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
 }
 
+namespace nvinfer1
+{
+namespace plugin
+{
+pluginStatus_t anchorGridInference(cudaStream_t stream, const GridAnchorParameters param, const int numAspectRatios,
+    const void* widths, const void* heights, void* outputData)
+{
+    const int dim = param.H * param.W * numAspectRatios;
+    reduced_divisor divObj(numAspectRatios);
+    if (dim > 5120)
+    {
+        const int BS = 128;
+        const int GS = (dim + BS - 1) / BS;
+        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(
+            param, numAspectRatios, divObj, (const float*) widths, (const float*) heights, (float*) outputData);
+    }
+    else
+    {
+        const int BS = 32;
+        const int GS = (dim + BS - 1) / BS;
+        gridAnchorKernel<BS><<<GS, BS, 0, stream>>>(
+            param, numAspectRatios, divObj, (const float*) widths, (const float*) heights, (float*) outputData);
+    }
+    CSC(cudaGetLastError(), STATUS_FAILURE);
+    return STATUS_SUCCESS;
+}
+
+} // namespace plugin
+} // namespace nvinfer1

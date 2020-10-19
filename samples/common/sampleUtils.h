@@ -34,11 +34,26 @@
 
 #include "NvInfer.h"
 
+#include "common.h"
 #include "logger.h"
 #include "sampleDevice.h"
+#include "sampleOptions.h"
 
 namespace sample
 {
+
+inline int dataTypeSize(nvinfer1::DataType dataType)
+{
+    switch (dataType)
+    {
+    case nvinfer1::DataType::kINT32:
+    case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kHALF: return 2;
+    case nvinfer1::DataType::kBOOL:
+    case nvinfer1::DataType::kINT8: return 1;
+    }
+    return 0;
+}
 
 template <typename T>
 inline T roundUp(T m, T n)
@@ -49,6 +64,27 @@ inline T roundUp(T m, T n)
 inline int volume(const nvinfer1::Dims& d)
 {
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int>());
+}
+
+inline int volume(const nvinfer1::Dims& dims, const nvinfer1::Dims& strides, int vecDim, int comps, int batch)
+{
+    int maxNbElems = 1;
+    for (int i = 0; i < dims.nbDims; ++i)
+    {
+        // Get effective length of axis.
+        int d = dims.d[i];
+        // Any dimension is 0, it is an empty tensor.
+        if (d == 0)
+        {
+            return 0;
+        }
+        if (i == vecDim)
+        {
+            d = samplesCommon::divUp(d, comps);
+        }
+        maxNbElems = std::max(maxNbElems, d * strides.d[i]);
+    }
+    return maxNbElems * batch * (vecDim < 0 ? 1 : comps);
 }
 
 inline int volume(nvinfer1::Dims dims, int vecDim, int comps, int batch)
@@ -78,6 +114,40 @@ inline std::ostream& operator<<(std::ostream& os, const std::vector<int>& vec)
     return os;
 }
 
+inline std::ostream& operator<<(std::ostream& os, const nvinfer1::WeightsRole role)
+{
+    switch (role)
+    {
+    case nvinfer1::WeightsRole::kKERNEL:
+    {
+        os << "Kernel";
+        break;
+    }
+    case nvinfer1::WeightsRole::kBIAS:
+    {
+        os << "Bias";
+        break;
+    }
+    case nvinfer1::WeightsRole::kSHIFT:
+    {
+        os << "Shift";
+        break;
+    }
+    case nvinfer1::WeightsRole::kSCALE:
+    {
+        os << "Scale";
+        break;
+    }
+    case nvinfer1::WeightsRole::kCONSTANT:
+    {
+        os << "Constant";
+        break;
+    }
+    }
+
+    return os;
+}
+
 inline nvinfer1::Dims toDims(const std::vector<int>& vec)
 {
     int limit = static_cast<int>(nvinfer1::Dims::MAX_DIMS);
@@ -89,19 +159,6 @@ inline nvinfer1::Dims toDims(const std::vector<int>& vec)
     nvinfer1::Dims dims{std::min(static_cast<int>(vec.size()), limit), {}, {}};
     std::copy_n(vec.begin(), dims.nbDims, std::begin(dims.d));
     return dims;
-}
-
-inline int dataTypeSize(nvinfer1::DataType dataType)
-{
-    switch (dataType)
-    {
-    case nvinfer1::DataType::kINT32:
-    case nvinfer1::DataType::kFLOAT: return 4;
-    case nvinfer1::DataType::kHALF: return 2;
-    case nvinfer1::DataType::kBOOL:
-    case nvinfer1::DataType::kINT8: return 1;
-    }
-    return 0;
 }
 
 template <typename T>
@@ -407,6 +464,26 @@ struct TrtDestroyer
 
 template <typename T>
 using TrtUniquePtr = std::unique_ptr<T, TrtDestroyer<T>>;
+
+inline bool broadcastIOFormats(const std::vector<IOFormat>& formats, size_t nbBindings, bool isInput = true)
+{
+    bool broadcast = formats.size() == 1;
+    bool validFormatsCount = broadcast || (formats.size() == nbBindings);
+    if (!formats.empty() && !validFormatsCount)
+    {
+        if (isInput)
+        {
+            throw std::invalid_argument(
+                "The number of inputIOFormats must match network's inputs or be one for broadcasting.");
+        }
+        else
+        {
+            throw std::invalid_argument(
+                "The number of outputIOFormats must match network's outputs or be one for broadcasting.");
+        }
+    }
+    return broadcast;
+}
 
 } // namespace sample
 

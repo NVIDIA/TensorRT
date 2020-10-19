@@ -48,7 +48,6 @@ __global__ void fillSBSMaskKernel(
     const uint32_t tidx = threadIdx.x;
 
     const size_t warp = tidx / 32;
-    const size_t warp_m = warp % warps_m;
     const size_t warp_n = warp / warps_m;
     const size_t lane = tidx % 32;
     const size_t col = warp_n * 16 + lane % 4 * 2;

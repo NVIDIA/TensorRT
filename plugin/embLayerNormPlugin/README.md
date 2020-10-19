@@ -60,14 +60,16 @@ The maskIdx is a more compact representation of the input mask, consisting of th
 
 The parameters are defined below and consists of the following attributes:
 
-| Type     | Parameter                               | Description
-|----------|-----------------------------------------|--------------------------------------------------------
-|`int`     |`output_fp16`                            |Integer encoding the DataType (0: FP32, 1: FP16)
-|`Weights` |`bert_embeddings_layernorm_beta`         |Beta parameter for layer norm. Shape: `[E,]` where `E` is hidden size
-|`Weights` |`bert_embeddings_layernorm_gamma`        |Gamma parameter for layer norm. Shape: `[E,]` where `E` is hidden size
-|`Weights` |`bert_embeddings_word_embeddings`        |Token embedding matrix. Shape: `[word_vocab_size, E]` where `E` is hidden size
-|`Weights` |`bert_embeddings_token_type_embeddings`  |Token type embedding matrix. Shape: `[type_vocab_size, E]` where `E` is hidden size
-|`Weights` |`bert_embeddings_position_embeddings`    |Positional embedding matrix. Shape: `[S, E]` where `S` is the maximum sequence length and `E` is hidden size
+| Type     | Parameter                              |  Version | Description
+|----------|----------------------------------------|----------|--------------------------------------------------------
+|`int`     |`output_fp16`                           |  1, 2    |Integer encoding the DataType (0: FP32, 1: FP16)
+|`int`     |`full_mask`                             |  1       |Whether to output the full mask that works with the specialized multi-head-attention plugin kernels (this is deprecated, please use mha_type_id)
+|`int`     |`mha_type_id`                           |  1       |Integer encoding the multi-head-attention plugin DataType (0: FP32, 1: FP16, 2: INT8)
+|`Weights` |`bert_embeddings_layernorm_beta`        |  1, 2    |Beta parameter for layer norm. Shape: `[E,]` where `E` is hidden size
+|`Weights` |`bert_embeddings_layernorm_gamma`       |  1, 2    |Gamma parameter for layer norm. Shape: `[E,]` where `E` is hidden size
+|`Weights` |`bert_embeddings_word_embeddings`       |  1, 2    |Token embedding matrix. Shape: `[word_vocab_size, E]` where `E` is hidden size
+|`Weights` |`bert_embeddings_token_type_embeddings` |  1, 2    |Token type embedding matrix. Shape: `[type_vocab_size, E]` where `E` is hidden size
+|`Weights` |`bert_embeddings_position_embeddings`   |  1, 2    |Positional embedding matrix. Shape: `[S, E]` where `S` is the maximum sequence length and `E` is hidden size
 
 
 ## Additional resources
@@ -86,7 +88,10 @@ documentation.
 
 ## Changelog
 
-November 2019
+October 2020  
+Add V2 plugin that supports variable sequence length.
+
+November 2019  
 This is the first release of this `README.md` file.
 
 

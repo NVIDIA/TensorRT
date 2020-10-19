@@ -30,30 +30,31 @@ set(PLUGIN_SOURCES)
 set(PLUGIN_CU_SOURCES)
 
 set(PLUGIN_LISTS
+    batchedNMSPlugin
+    batchTilePlugin
+    coordConvACPlugin
+    cropAndResizePlugin
+    detectionLayerPlugin
+    flattenConcat
+    generateDetectionPlugin
+    gridAnchorPlugin
+    groupNormalizationPlugin
+    instanceNormalizationPlugin
+    leakyReluPlugin
+    multilevelCropAndResizePlugin
+    multilevelProposeROI
     nmsPlugin
     normalizePlugin
-    priorBoxPlugin
-    reorgPlugin
-    gridAnchorPlugin
-    regionPlugin
     nvFasterRCNN
-    batchedNMSPlugin
-    flattenConcat
-    cropAndResizePlugin
-    proposalPlugin
-    batchTilePlugin
-    detectionLayerPlugin
+    priorBoxPlugin
     proposalLayerPlugin
+    proposalPlugin
     pyramidROIAlignPlugin
-    generateDetectionPlugin
-    multilevelProposeROI
-    multilevelCropAndResizePlugin
+    regionPlugin
+    reorgPlugin
     resizeNearestPlugin
     specialSlicePlugin
-    instanceNormalizationPlugin
-    groupNormalizationPlugin
-    coordConvACPlugin
-    leakyReluPlugin
+    splitPlugin
     )
 
 # Add BERT sources if ${BERT_GENCODES} was populated
@@ -61,10 +62,10 @@ if(BERT_GENCODES)
     set(BERT_CU_SOURCES)
     set(PLUGIN_LISTS
         ${PLUGIN_LISTS}
+        bertQKVToContextPlugin
         embLayerNormPlugin
         fcPlugin
         geluPlugin
-        bertQKVToContextPlugin
         skipLayerNormPlugin
         )
 endif()

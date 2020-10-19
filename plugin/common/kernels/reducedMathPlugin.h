@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _REDUCED_MATH_PLUGIN_H
 #define _REDUCED_MATH_PLUGIN_H
 // Dynamically strength-reduced div and mod

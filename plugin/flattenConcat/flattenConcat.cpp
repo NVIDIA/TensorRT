@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include "flattenConcat.h"
 #include <algorithm>
 #include <cstring>
@@ -22,15 +23,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#define ASSERT(assertion)                                                                                              \
-    {                                                                                                                  \
-        if (!(assertion))                                                                                              \
-        {                                                                                                              \
-            std::cerr << "#assertion" << __FILE__ << "," << __LINE__ << std::endl;                                     \
-            abort();                                                                                                   \
-        }                                                                                                              \
-    }
 
 using namespace nvinfer1;
 using nvinfer1::plugin::FlattenConcat;

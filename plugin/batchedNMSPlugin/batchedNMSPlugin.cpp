@@ -22,11 +22,11 @@
 #include <vector>
 
 using namespace nvinfer1;
-using nvinfer1::plugin::BatchedNMSPlugin;
-using nvinfer1::plugin::BatchedNMSDynamicPlugin;
 using nvinfer1::plugin::BatchedNMSBasePluginCreator;
-using nvinfer1::plugin::BatchedNMSPluginCreator;
+using nvinfer1::plugin::BatchedNMSDynamicPlugin;
 using nvinfer1::plugin::BatchedNMSDynamicPluginCreator;
+using nvinfer1::plugin::BatchedNMSPlugin;
+using nvinfer1::plugin::BatchedNMSPluginCreator;
 using nvinfer1::plugin::NMSParameters;
 
 namespace

@@ -25,6 +25,7 @@
 #include <cuda_runtime.h>
 #include <fstream>
 #include <numeric>
+#include <string.h>
 #include <vector>
 
 using namespace nvinfer1;
@@ -80,6 +81,18 @@ struct BertInference
             exit(-1);
         }
         gLogInfo << "Done\n";
+
+        const int numBindingPerProfile = mEngine->getNbBindings() / mEngine->getNbOptimizationProfiles();
+        mEnableVariableLen = numBindingPerProfile == kBERT_INPUT_NUM + 1 ? false : true;
+        if (mEnableVariableLen)
+        {
+            gLogInfo << "Variable length is enabled\n";
+        }
+        else
+        {
+            gLogInfo << "Variable length is disabled\n";
+        }
+
         mContext = TrtUniquePtr<IExecutionContext>(mEngine->createExecutionContext());
         if (!mContext)
         {
@@ -97,18 +110,42 @@ struct BertInference
         const size_t allocationSize = mSeqLength * maxBatchSize * sizeof(int32_t);
 
         // Static sizes with implicit batch size: allocation sizes known to engine
-        for (int i = 0; i < kBERT_INPUT_NUM; i++)
+        if (mEnableVariableLen)
         {
-            void* devBuf;
-            gpuErrChk(cudaMalloc(&devBuf, allocationSize));
-            gpuErrChk(cudaMemset(devBuf, 0, allocationSize));
-            mDeviceBuffers.emplace_back(devBuf);
-            mInputSizes.emplace_back(allocationSize);
+            const size_t allocationSizes[] = {allocationSize, allocationSize,
+                                              sizeof(int32_t) * (maxBatchSize + 1),
+                                              sizeof(int32_t) * (mSeqLength)};
+            for (int i = 0; i < sizeof(allocationSizes) / sizeof(allocationSizes[0]); i++)
+            {
+                void* devBuf;
+                gpuErrChk(cudaMalloc(&devBuf, allocationSizes[i]));
+                gpuErrChk(cudaMemset(devBuf, 0, allocationSizes[i]));
+                mDeviceBuffers.emplace_back(devBuf);
+                mInputSizes.emplace_back(allocationSizes[i]);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < kBERT_INPUT_NUM; i++)
+            {
+                void* devBuf;
+                gpuErrChk(cudaMalloc(&devBuf, allocationSize));
+                gpuErrChk(cudaMemset(devBuf, 0, allocationSize));
+                mDeviceBuffers.emplace_back(devBuf);
+                mInputSizes.emplace_back(allocationSize);
+            }
         }
 
         const size_t numOutputItems = maxBatchSize * mSeqLength * 2;
         mOutputSize = numOutputItems * sizeof(float);
-        mOutputDims = {maxBatchSize, mSeqLength, 2, 1, 1};
+        if (mEnableVariableLen)
+        {
+            mOutputDims = {maxBatchSize * mSeqLength * 2};
+        }
+        else
+        {
+            mOutputDims = {maxBatchSize, mSeqLength, 2, 1, 1};
+        }
         void* devBuf;
         gpuErrChk(cudaMalloc(&devBuf, mOutputSize));
         gpuErrChk(cudaMemset(devBuf, 0, mOutputSize));
@@ -126,9 +163,20 @@ struct BertInference
         const int bindingIdxOffset = profIdx * numBindingPerProfile;
         std::copy(mDeviceBuffers.begin(), mDeviceBuffers.end(), mBindings.begin() + bindingIdxOffset);
 
-        for (int i = 0; i < kBERT_INPUT_NUM; i++)
+        if (mEnableVariableLen)
         {
-            mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(batchSize, mSeqLength));
+            const int allocationSizes[] = {mSeqLength * batchSize, mSeqLength * batchSize, batchSize + 1, mSeqLength};
+            for (int i = 0; i < sizeof(allocationSizes)/sizeof(allocationSizes[0]); i++)
+            {
+                mContext->setBindingDimensions(i + bindingIdxOffset, Dims{1, {allocationSizes[i]}});
+            }
+        }
+        else
+        {
+            for (int i = 0; i < kBERT_INPUT_NUM; i++)
+            {
+                mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(mSeqLength, batchSize));
+            }
         }
 
         if (!mContext->allInputDimensionsSpecified())
@@ -164,13 +212,12 @@ struct BertInference
             gpuErrChk(cudaGraphInstantiate(&exec, graph, NULL, NULL, 0));
             mExecGraph = exec;
         }
+        mCuSeqlens.resize(batchSize + 1);
+        std::generate(mCuSeqlens.begin(), mCuSeqlens.end(), [pos = -mSeqLength, this]() mutable{ pos += mSeqLength; return pos; });
     }
 
-    void run(const void* inputIds, const void* segmentIds, const void* inputMask, int warmUps, int iterations)
+    void run(const void* const* inputBuffers, int warmUps, int iterations)
     {
-
-        const std::vector<const void*> inputBuffers = {inputIds, segmentIds, inputMask};
-
         for (int i = 0; i < kBERT_INPUT_NUM; i++)
         {
             gpuErrChk(
@@ -226,11 +273,25 @@ struct BertInference
         }
 
         gpuErrChk(cudaMemcpyAsync(
-            mHostOutput.data(), mDeviceBuffers[kBERT_INPUT_NUM], mOutputSize, cudaMemcpyDeviceToHost, mStream));
+            mHostOutput.data(), mDeviceBuffers[mEnableVariableLen ? kBERT_INPUT_NUM + 1 : kBERT_INPUT_NUM], mOutputSize, cudaMemcpyDeviceToHost, mStream));
 
         gpuErrChk(cudaStreamSynchronize(mStream));
 
         mTimes.push_back(times);
+    }
+
+    void run(const void* inputIds, const void* segmentIds, const void* inputMask, int warmUps, int iterations)
+    {
+        if (mEnableVariableLen)
+        {
+            const std::vector<const void*> inputBuffers = {inputIds, segmentIds, mCuSeqlens.data()};
+            run(inputBuffers.data(), warmUps, iterations);
+        }
+        else 
+        {
+            const std::vector<const void*> inputBuffers = {inputIds, segmentIds, inputMask};
+            run(inputBuffers.data(), warmUps, iterations);
+        }
     }
 
     void run(int profIdx, int batchSize, const void* inputIds, const void* segmentIds, const void* inputMask,
@@ -279,6 +340,8 @@ struct BertInference
     TrtUniquePtr<ICudaEngine> mEngine{nullptr};
     TrtUniquePtr<IExecutionContext> mContext{nullptr};
     std::vector<void*> mBindings;
+    bool mEnableVariableLen;
+    std::vector<int> mCuSeqlens;
 
     cudaStream_t mStream{NULL};
     std::vector<void*> mDeviceBuffers;

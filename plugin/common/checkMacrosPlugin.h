@@ -13,11 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef CHECK_MACROS_PLUGIN_H
 #define CHECK_MACROS_PLUGIN_H
 
 #include "NvInfer.h"
 #include <sstream>
+
+#ifndef TRT_CHECK_MACROS_H
+#ifndef TRT_TUT_HELPERS_H
 
 #ifdef _MSC_VER
 #define FN_NAME __FUNCTION__
@@ -31,6 +35,9 @@
 #define OVERRIDE override
 #define NORETURN [[noreturn]]
 #endif
+
+#endif // TRT_TUT_HELPERS_H
+#endif // TRT_CHECK_MACROS_H
 
 namespace nvinfer1
 {
@@ -55,6 +62,7 @@ public:
 extern LogStream<ILogger::Severity::kERROR> gLogError;
 extern LogStream<ILogger::Severity::kWARNING> gLogWarning;
 extern LogStream<ILogger::Severity::kINFO> gLogInfo;
+extern LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
 void reportAssertion(const char* msg, const char* file, int line);
 void logError(const char* msg, const char* file, const char* fn, int line);
@@ -121,6 +129,9 @@ public:
 
 } // namespace nvinfer1
 
+#ifndef TRT_CHECK_MACROS_H
+#ifndef TRT_TUT_HELPERS_H
+
 #define API_CHECK(condition)                                                                                           \
     {                                                                                                                  \
         if ((condition) == false)                                                                                      \
@@ -167,7 +178,6 @@ public:
 #define API_CHECK_ENUM_RANGE_RETVAL(Type, val, retval)                                                                 \
     API_CHECK_RETVAL(int(val) >= 0 && int(val) < EnumMax<Type>(), retval)
 
-#ifndef TRT_PLUGIN_H
 #define CUBLASASSERTMSG(status_, msg)                                                                                  \
     {                                                                                                                  \
         auto s_ = status_;                                                                                             \
@@ -244,5 +254,7 @@ public:
             nvinfer1::plugin::logError(#status_ " failure.", __FILE__, FN_NAME, __LINE__);                             \
     }
 
-#endif // TRT_PLUGIN_H
+#endif // TRT_TUT_HELPERS_H
+#endif // TRT_CHECK_MACROS_H
+
 #endif /*CHECK_MACROS_PLUGIN_H*/

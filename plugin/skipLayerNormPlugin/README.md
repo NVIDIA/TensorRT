@@ -40,13 +40,13 @@ output is a tensor with shape `[S, B, E]` where `B` is the batch size.
 
 The parameters are defined below and consists of the following attributes:
 
-| Type     | Parameter                               | Description
-|----------|-----------------------------------------|-------------------------------------------------------------------
-|`int`     |`type_id`                                |Integer encoding the DataType (0: FP32, 1: FP16)
-|`int`     |`ld`                                     |The leading dimension of the input tensor, corresponding to the hidden size, denoted by `E` above.
-|`Weights` |`beta`                                   |The mean to normalize to. Shape: `[1, 1, E]`
-|`Weights` |`gamma`                                  |The standard deviation to normalize to. Shape: `[1, 1, E]`
-|`Weights` |`bias`                                   |An optional bias vector to add before normalization. Shape: `[1, 1, E]`
+| Type     | Parameter                               |  Version   | Description
+|----------|-----------------------------------------|------------|-------------------------------------------------------------------
+|`int`     |`type_id`                                |  1, 2      |Integer encoding the DataType (0: FP32, 1: FP16)
+|`int`     |`ld`                                     |  2,        |The leading dimension of the input tensor, corresponding to the hidden size, denoted by `E` above.
+|`Weights` |`beta`                                   |  1, 2, 3   |The mean to normalize to. Shape: `[1, 1, E]`
+|`Weights` |`gamma`                                  |  1, 2, 3   |The standard deviation to normalize to. Shape: `[1, 1, E]`
+|`Weights` |`bias`                                   |  1, 2      |An optional bias vector to add before normalization. Shape: `[1, 1, E]`
 
 
 ## Additional resources
@@ -62,9 +62,12 @@ documentation.
 
 ## Changelog
 
-November 2019
-This is the first release of this `README.md` file.
+October  2020  
+Add V2 plugin that supports variable sequence length.  
+Add v3 plugin that supports int8 interleaved variable sequence length.
 
+November 2019  
+This is the first release of this `README.md` file.
 
 ## Known issues
 

@@ -13,8 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef TRT_PLUGIN_H
 #define TRT_PLUGIN_H
+#include "checkMacrosPlugin.h"
+
 #include "NvInferPlugin.h"
 #include <cuda_runtime.h>
 #include <iostream>
@@ -22,6 +25,7 @@
 #include <sstream>
 #include <string>
 
+#ifndef TRT_LEGACY_PLUGIN_H
 // Enumerator for status
 typedef enum
 {
@@ -40,9 +44,15 @@ namespace plugin
 class BasePlugin : public IPluginV2
 {
 protected:
-    void setPluginNamespace(const char* libNamespace) override { mNamespace = libNamespace; }
+    void setPluginNamespace(const char* libNamespace) override
+    {
+        mNamespace = libNamespace;
+    }
 
-    const char* getPluginNamespace() const override { return mNamespace.c_str(); }
+    const char* getPluginNamespace() const override
+    {
+        return mNamespace.c_str();
+    }
 
     std::string mNamespace;
 };
@@ -85,42 +95,9 @@ T read(const char*& buffer)
 } // namespace nvinfer1
 
 #ifndef DEBUG
-#ifndef CHECK_MACROS_PLUGIN_H
-#define ASSERT(assertion)                                                                                              \
-    {                                                                                                                  \
-        if (!(assertion))                                                                                              \
-        {                                                                                                              \
-            std::cerr << "#assertion" << __FILE__ << "," << __LINE__ << std::endl;                                     \
-            abort();                                                                                                   \
-        }                                                                                                              \
-    }
-#define FAIL(msg)                                                                                                      \
-    {                                                                                                                  \
-        fprintf(stderr, "Failure - " #msg ", %s:%d\n", __FILE__, __LINE__);                                            \
-        abort();                                                                                                       \
-    }
-#define CUASSERT(status_)                                                                                              \
-    {                                                                                                                  \
-        auto s_ = status_;                                                                                             \
-        if (s_ != cudaSuccess)                                                                                         \
-        {                                                                                                              \
-            std::cerr << __FILE__ << ", " << __LINE__ << ", " << s_ << ", " << cudaGetErrorString(s_) << std::endl;    \
-        }                                                                                                              \
-    }
-#define CUBLASASSERT(status_)                                                                                          \
-    {                                                                                                                  \
-        auto s_ = status_;                                                                                             \
-        if (s_ != CUBLAS_STATUS_SUCCESS)                                                                               \
-        {                                                                                                              \
-            std::cerr << __FILE__ << ", " << __LINE__ << ", " << s_ << std::endl;                                      \
-        }                                                                                                              \
-    }
-#define CUERRORMSG(status_)                                                                                            \
-    {                                                                                                                  \
-        auto s_ = status_;                                                                                             \
-        if (s_ != 0)                                                                                                   \
-            std::cerr << __FILE__ << ", " << __LINE__ << ", " << s_ << std::endl;                                      \
-    }
+#ifndef TRT_CHECK_MACROS_H
+#ifndef TRT_TUT_HELPERS_H
+
 #define CHECK(status)                                                                                                  \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -205,7 +182,9 @@ T read(const char*& buffer)
         printf(__VA_ARGS__);                                                                                           \
     } while (0)
 
-#endif // CHECK_MACROS_H
+#endif // TRT_TUT_HELPERS_H
+#endif // TRT_CHECK_MACROS_H
+#endif // TRT_LEGACY_PLUGIN_H
 #endif
 
 #endif // TRT_PLUGIN_H

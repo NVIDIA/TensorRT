@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef TRT_NMS_UTILS_H
 #define TRT_NMS_UTILS_H
 

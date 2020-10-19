@@ -149,6 +149,7 @@ public:
         : mParams(params)
     {
     }
+    virtual ~SampleCharRNNBase() = default;
 
     //!
     //! \brief Builds the network engine
@@ -182,6 +183,7 @@ protected:
     nvinfer1::Weights convertRNNBias(nvinfer1::Weights input);
 
     std::map<std::string, nvinfer1::Weights> mWeightMap;
+    std::vector<SampleUniquePtr<nvinfer1::IHostMemory>> weightsMemory;
     SampleCharRNNParams mParams;
 
     nvinfer1::ITensor* addReshape(
@@ -399,7 +401,10 @@ std::map<std::string, nvinfer1::Weights> SampleCharRNNBase::loadWeights(const st
 
         // Read weight values
         input.seekg(input.tellg() + static_cast<std::streamoff>(1)); // skip space char
-        char* wtVals = new char[numOfBytes];
+        // We do not really care about the setup of DataType here. Use char here to avoid additional conversion
+        auto mem = new samplesCommon::TypedHostMemory<char, nvinfer1::DataType::kINT8>(numOfBytes);
+        weightsMemory.emplace_back(mem);
+        auto wtVals = mem->raw();
         input.read(wtVals, numOfBytes);
         input.seekg(input.tellg() + static_cast<std::streamoff>(1)); // skip new-line char
         wt.values = wtVals;
@@ -436,7 +441,9 @@ std::map<std::string, nvinfer1::Weights> SampleCharRNNBase::loadWeights(const st
 nvinfer1::Weights SampleCharRNNBase::convertRNNWeights(nvinfer1::Weights orig, int dataSize)
 {
     nvinfer1::Weights input{orig.type, orig.values, (dataSize + mParams.hiddenSize) * 4 * mParams.hiddenSize};
-    float* ptr = new float[input.count];
+    auto mem = new samplesCommon::FloatMemory(input.count);
+    weightsMemory.emplace_back(mem);
+    auto ptr = mem->raw();
     const float* data = static_cast<const float*>(input.values);
     int dimsW[2]{dataSize, 4 * mParams.hiddenSize};
     int dimsR[2]{mParams.hiddenSize, 4 * mParams.hiddenSize};
@@ -463,7 +470,9 @@ nvinfer1::Weights SampleCharRNNBase::convertRNNWeights(nvinfer1::Weights orig, i
 //!       we double the size and set all of U to zero.
 nvinfer1::Weights SampleCharRNNBase::convertRNNBias(nvinfer1::Weights input)
 {
-    float* ptr = new float[input.count * 2];
+    auto mem = new samplesCommon::FloatMemory(input.count * 2);
+    weightsMemory.emplace_back(mem);
+    auto ptr = mem->raw();
     const float* iptr = static_cast<const float*>(input.values);
     int64_t count = 4 * mParams.hiddenSize;
     ASSERT(input.count == count);
@@ -938,12 +947,6 @@ void SampleCharRNNBase::copyRNNOutputsToInputs(samplesCommon::BufferManager& buf
 //!
 bool SampleCharRNNBase::teardown()
 {
-    // Clean up runtime resources
-    for (auto& mem : mWeightMap)
-    {
-        delete[] static_cast<const float*>(mem.second.values);
-    }
-
     return true;
 }
 

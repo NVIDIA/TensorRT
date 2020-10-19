@@ -1,0 +1,7 @@
+[style]
+based_on_style = google
+indent_width = 4
+COLUMN_LIMIT = 120
+SPACES_BEFORE_COMMENT = 2
+EACH_DICT_ENTRY_ON_SEPARATE_LINE = 1
+CONTINUATION_INDENT_WIDTH = 4

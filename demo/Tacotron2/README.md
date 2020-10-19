@@ -14,7 +14,7 @@ Software version configuration tested for the instructions that follow:
 |Python|3.6.9|
 |CUDA|11.0.171|
 |Apex|0.1|
-|TensorRT|7.1.3.4|
+|TensorRT|7.2.0.13|
 |PyTorch|1.5.1|
 
 
@@ -29,7 +29,7 @@ Software version configuration tested for the instructions that follow:
     cd $TRT_SOURCE/demo/Tacotron2
 
     export LD_LIBRARY_PATH=$TRT_SOURCE/build/out:/tensorrt/lib:$LD_LIBRARY_PATH
-    pip3 install /tensorrt/python/tensorrt-7.1*-cp36-none-linux_x86_64.whl
+    pip3 install /tensorrt/python/tensorrt-7.2*-cp36-none-linux_x86_64.whl
 
     bash ./scripts/install_prerequisites.sh
     ```

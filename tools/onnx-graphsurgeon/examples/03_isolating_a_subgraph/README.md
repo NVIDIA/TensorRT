@@ -1,6 +1,8 @@
 # Isolating A Subgraph
 
-This example first generates a very basic model,
+## Introduction
+
+This example first generates a basic model,
 then extracts a subgraph from this model.
 
 Isolating a subgraph from a model is as simple as modifying the inputs and
@@ -8,7 +10,7 @@ outputs of the graph, running `graph.cleanup()`, and then re-exporting the graph
 
 We do **not** need to know which nodes, initializers, or intermediate tensors we
 want - marking the inputs and outputs is sufficient for ONNX GraphSurgeon to be able
-to deduce the other information automatically.
+to determine the other information automatically.
 
 ## Running the example
 

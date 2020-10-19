@@ -69,6 +69,11 @@ nvinfer1::ICudaEngine* modelToEngine(
     const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
 
 //!
+//! \brief Log refittable layers and weights of a refittable engine
+//!
+void dumpRefittable(nvinfer1::ICudaEngine& engine);
+
+//!
 //! \brief Load a serialized engine
 //!
 //! \return Pointer to the engine loaded or nullptr if the operation failed

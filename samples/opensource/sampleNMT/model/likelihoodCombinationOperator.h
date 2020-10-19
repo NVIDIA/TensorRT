@@ -26,7 +26,7 @@ class LikelihoodCombinationOperator
 public:
     typedef std::shared_ptr<LikelihoodCombinationOperator> ptr;
 
-    // The  return value should be less or equal to rayLikelihood
+    // The return value should be less or equal to rayLikelihood
     virtual float combine(float rayLikelihood, float optionLikelihood) const = 0;
 
     virtual float init() const = 0;

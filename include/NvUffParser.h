@@ -42,11 +42,11 @@ namespace nvuffparser
 //! \enum UffInputOrder
 //! \brief The different possible supported input order.
 //!
-enum class UffInputOrder : int
+enum class UffInputOrder : int32_t
 {
-    kNCHW = 0,  //!< NCHW order.
-    kNHWC = 1,  //!< NHWC order.
-    kNC = 2     //!< NC order.
+    kNCHW = 0, //!< NCHW order.
+    kNHWC = 1, //!< NHWC order.
+    kNC = 2    //!< NC order.
 };
 
 //!
@@ -54,13 +54,13 @@ enum class UffInputOrder : int
 //! \brief The possible field types for custom layer.
 //!
 
-enum class FieldType : int
+enum class FieldType : int32_t
 {
-    kFLOAT = 0,     //!< FP32 field type.
-    kINT32 = 1,     //!< INT32 field type.
-    kCHAR = 2,      //!< char field type. String for length>1.
-    kDIMS = 4,      //!< nvinfer1::Dims field type.
-    kDATATYPE = 5,  //!< nvinfer1::DataType field type.
+    kFLOAT = 0,    //!< FP32 field type.
+    kINT32 = 1,    //!< INT32 field type.
+    kCHAR = 2,     //!< char field type. String for length>1.
+    kDIMS = 4,     //!< nvinfer1::Dims field type.
+    kDATATYPE = 5, //!< nvinfer1::DataType field type.
     kUNKNOWN = 6
 };
 
@@ -79,14 +79,14 @@ public:
     const char* name;
     const void* data;
     FieldType type = FieldType::kUNKNOWN;
-    int length = 1;
+    int32_t length = 1;
 
-    FieldMap(const char* name, const void* data, const FieldType type, int length = 1) TRTNOEXCEPT;
+    FieldMap(const char* name, const void* data, const FieldType type, int32_t length = 1) TRTNOEXCEPT;
 };
 
 struct FieldCollection
 {
-    int nbFields;
+    int32_t nbFields;
     const FieldMap* fields;
 };
 
@@ -115,8 +115,8 @@ public:
     //!
     //! \see FieldCollection
     //!
-    virtual nvinfer1::IPlugin* createPlugin(const char* layerName, const nvinfer1::Weights* weights, int nbWeights,
-                                            const FieldCollection fc) TRTNOEXCEPT = 0;
+    virtual nvinfer1::IPlugin* createPlugin(const char* layerName, const nvinfer1::Weights* weights, int32_t nbWeights,
+        const FieldCollection fc) TRTNOEXCEPT = 0;
 
     virtual ~IPluginFactory() {}
 };
@@ -129,7 +129,7 @@ public:
 class IPluginFactoryExt : public IPluginFactory
 {
 public:
-    virtual int getVersion() const TRTNOEXCEPT
+    virtual int32_t getVersion() const TRTNOEXCEPT
     {
         return NV_TENSORRT_VERSION;
     }
@@ -196,17 +196,17 @@ public:
     //!
     //! \brief Return Version Major of the UFF.
     //!
-    virtual int getUffRequiredVersionMajor() TRTNOEXCEPT = 0;
+    virtual int32_t getUffRequiredVersionMajor() TRTNOEXCEPT = 0;
 
     //!
     //! \brief Return Version Minor of the UFF.
     //!
-    virtual int getUffRequiredVersionMinor() TRTNOEXCEPT = 0;
+    virtual int32_t getUffRequiredVersionMinor() TRTNOEXCEPT = 0;
 
     //!
     //! \brief Return Patch Version of the UFF.
     //!
-    virtual int getUffRequiredVersionPatch() TRTNOEXCEPT = 0;
+    virtual int32_t getUffRequiredVersionPatch() TRTNOEXCEPT = 0;
 
     //!
     //! \brief Set the IPluginFactory used to create the user defined plugins.
