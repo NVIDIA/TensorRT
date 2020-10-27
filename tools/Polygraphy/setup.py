@@ -39,7 +39,7 @@ def main():
         version=polygraphy.__version__,
         description="Polygraphy: A Deep Learning Inference Prototyping and Debugging Toolkit",
         long_description=open("README.md", "r", encoding="utf-8").read(),
-        url="https://github.com/NVIDIA/TensorRT/tree/master/tools/polygraphy",
+        url="https://github.com/NVIDIA/TensorRT/tree/master/tools/Polygraphy",
         author="NVIDIA",
         author_email="svc_tensorrt@nvidia.com",
         classifiers=[
