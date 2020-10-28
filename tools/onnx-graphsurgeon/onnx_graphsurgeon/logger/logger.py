@@ -90,7 +90,7 @@ class Logger(object):
         """
         Logger.
 
-        Optional Args:
+        Args:
             severity (Logger.Severity): Messages below this severity are ignored.
             colors (bool): Whether to use colored output.
             letter (bool): Whether to prepend each logging message with a letter indicating it's severity. Defaults to True.

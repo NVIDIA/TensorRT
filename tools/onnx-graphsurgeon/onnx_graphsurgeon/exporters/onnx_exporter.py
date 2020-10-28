@@ -14,22 +14,18 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.exporters.base_exporter import BaseExporter
-from onnx_graphsurgeon.logger.logger import G_LOGGER
-from onnx_graphsurgeon.ir.tensor import Tensor, Constant, Variable
-from onnx_graphsurgeon.ir.graph import Graph
-from onnx_graphsurgeon.ir.node import Node
-
-from collections import OrderedDict
-from typing import Union
-import onnx.numpy_helper
 import numpy as np
 import onnx
+import onnx.numpy_helper
+from onnx_graphsurgeon.exporters.base_exporter import BaseExporter
+from onnx_graphsurgeon.ir.graph import Graph
+from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable
+from onnx_graphsurgeon.logger.logger import G_LOGGER
 
 
 def dtype_to_onnx(dtype: np.dtype) -> int:
     return onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
-
 
 class OnnxExporter(BaseExporter):
     @staticmethod
@@ -76,7 +72,6 @@ class OnnxExporter(BaseExporter):
         Args:
             graph (Graph): The graph to export.
 
-        Optional Args:
             do_type_check (bool): Whether to check that input and output tensors have data types defined, and fail if not.
         """
         nodes = [OnnxExporter.export_node(node) for node in graph.nodes]
@@ -93,3 +88,24 @@ class OnnxExporter(BaseExporter):
         # Omit tensors if we don't know their shape/type
         value_info = [OnnxExporter.export_value_info_proto(tensor, do_type_check) for tensor in tensor_map.values() if isinstance(tensor, Variable) and tensor.dtype is not None]
         return onnx.helper.make_graph(nodes=nodes, name=graph.name, inputs=inputs, outputs=outputs, initializer=initializer, doc_string=graph.doc_string, value_info=value_info)
+
+
+def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto":
+    """
+    Exports an onnx-graphsurgeon Graph to an ONNX model.
+
+    Args:
+        graph (Graph): The graph to export
+
+        do_type_check (bool): Whether to check that input and output tensors have data types defined, and fail if not.
+        kwargs: Additional arguments to onnx.helper.make_model
+
+    Returns:
+        onnx.ModelProto: A corresponding ONNX model.
+    """
+    onnx_graph = OnnxExporter.export_graph(graph, do_type_check=do_type_check)
+
+    if "opset_imports" not in kwargs:
+        kwargs["opset_imports"] = [onnx.helper.make_opsetid("", graph.opset)]
+
+    return onnx.helper.make_model(onnx_graph, **kwargs)

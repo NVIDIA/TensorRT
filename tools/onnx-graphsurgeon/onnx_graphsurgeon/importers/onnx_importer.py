@@ -14,19 +14,19 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.ir.tensor import Tensor, Constant, Variable
-from onnx_graphsurgeon.importers.base_importer import BaseImporter
-from onnx_graphsurgeon.logger.logger import G_LOGGER
-from onnx_graphsurgeon.ir.graph import Graph
-from onnx_graphsurgeon.ir.node import Node
-from onnx_graphsurgeon.util import misc
-
-from typing import List, Union
+import copy
 from collections import OrderedDict
-import onnx.numpy_helper
+from typing import List, Union
+
 import numpy as np
 import onnx
-import copy
+import onnx.numpy_helper
+from onnx_graphsurgeon.importers.base_importer import BaseImporter
+from onnx_graphsurgeon.ir.graph import Graph
+from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable
+from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.util import misc
 
 # Maps values from the AttributeType enum to their string representations, e.g., {1: "FLOAT"}
 ATTR_TYPE_MAPPING = dict(zip(onnx.AttributeProto.AttributeType.values(), onnx.AttributeProto.AttributeType.keys()))
@@ -159,7 +159,6 @@ class OnnxImporter(BaseImporter):
         Args:
             onnx_graph (onnx.GraphProto): The ONNX graph to import.
 
-        Optional Args:
             tensor_map (OrderedDict[str, Tensor]): A mapping of tensor names to Tensors. This is generally only useful for subgraph import.
             opset (int): The ONNX opset to use for this graph.
         """
@@ -221,3 +220,16 @@ class OnnxImporter(BaseImporter):
             nodes.append(node)
 
         return Graph(nodes=nodes, inputs=graph_inputs, outputs=graph_outputs, name=onnx_graph.name, doc_string=onnx_graph.doc_string, opset=opset)
+
+
+def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
+    """
+    Import an onnx-graphsurgeon Graph from the provided ONNX model.
+
+    Args:
+        onnx_model (onnx.ModelProto): The ONNX model.
+
+    Returns:
+        Graph: A corresponding onnx-graphsurgeon Graph.
+    """
+    return OnnxImporter.import_graph(onnx_model.graph, opset=OnnxImporter.get_opset(onnx_model))
