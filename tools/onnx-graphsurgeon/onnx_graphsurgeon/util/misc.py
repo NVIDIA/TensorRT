@@ -14,8 +14,6 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.logger.logger import G_LOGGER
-
 from collections import OrderedDict
 from typing import List, Sequence
 

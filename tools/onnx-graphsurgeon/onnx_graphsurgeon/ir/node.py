@@ -29,8 +29,6 @@ class Node(object):
         Args:
             op (str): The operation this node performs.
 
-
-        Optional Args:
             name (str): The name of this node.
             attrs (Dict[str, object]): A dictionary that maps attribute names to their values.
             inputs (List[Tensor]): A list of zero or more input Tensors.
@@ -48,13 +46,15 @@ class Node(object):
         Convenience function to get a producer node of one of this node's input tensors.
         Note that the parameters are swapped compared to the o() function; this is because tensors are likely to have only a single producer
 
+        For example:
+        ::
+
+            assert node.i() == node.inputs[0].inputs[0]
+            assert node.i(1, 2) == node.inputs[1].inputs[2]
+
         Args:
             tensor_idx (int): The index of the input tensor of this node. Defaults to 0.
             producer_idx (int): The index of the producer of the input tensor, if the tensor has multiple producers. Defaults to 0
-
-        Example:
-            assert node.i() == node.inputs[0].inputs[0]
-            assert node.i(1, 2) == node.inputs[1].inputs[2]
 
         Returns:
             Node: The specified producer (input) node.
@@ -66,13 +66,15 @@ class Node(object):
         """
         Convenience function to get a consumer node of one of this node's output tensors.
 
+        For example:
+        ::
+
+            assert node.o() == node.outputs[0].outputs[0]
+            assert node.o(2, 1) == node.outputs[1].outputs[2]
+
         Args:
             consumer_idx (int): The index of the consumer of the input tensor. Defaults to 0.
             tensor_idx (int): The index of the output tensor of this node, if the node has multiple outputs. Defaults to 0.
-
-        Example:
-            assert node.o() == node.outputs[0].outputs[0]
-            assert node.o(2, 1) == node.outputs[1].outputs[2]
 
         Returns:
             Node: The specified consumer (output) node
@@ -105,6 +107,7 @@ class Node(object):
         if self.attrs:
             ret += "\nAttributes: {:}".format(self.attrs)
         return ret
+
 
     def __repr__(self):
         return self.__str__()

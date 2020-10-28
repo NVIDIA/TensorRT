@@ -14,15 +14,15 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.logger.logger import G_LOGGER
-from onnx_graphsurgeon.ir.tensor import Tensor, Constant, Variable
-from onnx_graphsurgeon.ir.node import Node
-from onnx_graphsurgeon.util import misc
-
-from collections import OrderedDict, defaultdict
-from typing import Sequence, Set, Dict, Tuple
-import numpy as np
 import copy
+from collections import OrderedDict, defaultdict
+from typing import Dict, Sequence, Set, Tuple
+
+import numpy as np
+from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable
+from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.util import misc
 
 
 # Functor that returns whether a Tensor has never been seen before
@@ -57,52 +57,65 @@ class NodeIDAdder(object):
 
 
 class Graph(object):
+    """
+    Represents a graph containing nodes and tensors.
+    """
     DEFAULT_OPSET = 11
-    OPSET_FUNC_MAP = defaultdict(dict)
+    OPSET_FUNC_MAP = defaultdict(dict) # Ops registered for specific opsets.
+    GLOBAL_FUNC_MAP = dict() # Ops registered for ALL opsets.
+
 
     @staticmethod
-    def register(opsets=list(range(DEFAULT_OPSET + 1))):
+    def register(opsets=None):
         """
         Registers a function with the Graph class for the specified group of opsets.
         After registering the function, it can be accessed like a normal member function.
 
         For example:
         ::
+
             @Graph.register()
             def add(self, a, b):
                 return self.layer(op="Add", inputs=[a, b], outputs=["add_out_gs"])
 
             graph.add(a, b)
 
-        Optional Args:
-            opsets (Sequence[int]): A group of opsets for which to register the function. By default, the function is registered for all opsets up to and including Graph.DEFAULT_OPSET. Multiple functions with the same name may be registered simultaneously if they are registered for different opsets. Registering a function with a duplicate name for the same opsets will overwrite any function previously registered for those opsets.
+        Args:
+            opsets (Sequence[int]):
+                    A group of opsets for which to register the function. Multiple functions with the same
+                    name may be registered simultaneously if they are registered for different opsets.
+                    Registering a function with a duplicate name for the same opsets will overwrite any
+                    function previously registered for those opsets.  By default, the function is
+                    registered for all opsets.
         """
         def register_func(func):
             if hasattr(Graph, func.__name__):
                 G_LOGGER.warning("Registered function: {:} is hidden by a Graph attribute or function with the same name. This function will never be called!".format(func.__name__))
 
-            for opset in opsets:
-                Graph.OPSET_FUNC_MAP[opset][func.__name__] = func
+            # Default behavior is to register functions for all opsets.
+            if opsets is None:
+                Graph.GLOBAL_FUNC_MAP[func.__name__] = func
+            else:
+                for opset in opsets:
+                    Graph.OPSET_FUNC_MAP[opset][func.__name__] = func
             return func
         return register_func
 
 
     def __init__(self, nodes: Sequence[Node]=None, inputs: Sequence[Tensor]=None, outputs: Sequence[Tensor]=None, name=None, doc_string=None, opset=None):
         """
-        Represents a graph containing nodes and tensors.
-
-        Optional Args:
+        Args:
             nodes (Sequence[Node]): A list of the nodes in this graph.
             inputs (Sequence[Tensor]): A list of graph input Tensors.
             outputs (Sequence[Tensor]): A list of graph output Tensors.
-            name (str): The name of the graph. Defaults to "onnx_graphsurgeon".
+            name (str): The name of the graph. Defaults to "onnx_graphsurgeon_graph".
             doc_string (str): A doc_string for the graph. Defaults to "".
         """
         self.nodes = misc.default_value(nodes, [])
         self.inputs = list(misc.default_value(inputs, []))
         self.outputs = list(misc.default_value(outputs, []))
 
-        self.name = misc.default_value(name, "onnx_graphsurgeon")
+        self.name = misc.default_value(name, "onnx_graphsurgeon_graph")
         self.__name__ = self.name
 
         self.doc_string = misc.default_value(doc_string, "")
@@ -117,10 +130,15 @@ class Graph(object):
         try:
             return super().__getattribute__(name)
         except AttributeError as err:
-            if self.opset not in Graph.OPSET_FUNC_MAP or name not in Graph.OPSET_FUNC_MAP[self.opset]:
-                G_LOGGER.error("No function: {:} registered for opset: {:}".format(name, self.opset))
-                raise err
-            return lambda *args, **kwargs: Graph.OPSET_FUNC_MAP[self.opset][name](self, *args, **kwargs)
+            # Opset specific ops always take priority over global ops.
+            if self.opset in Graph.OPSET_FUNC_MAP and name in Graph.OPSET_FUNC_MAP[self.opset]:
+                return lambda *args, **kwargs: Graph.OPSET_FUNC_MAP[self.opset][name](self, *args, **kwargs)
+
+            if name in Graph.GLOBAL_FUNC_MAP:
+                return lambda *args, **kwargs: Graph.GLOBAL_FUNC_MAP[name](self, *args, **kwargs)
+
+            G_LOGGER.error("No function: {:} registered for opset: {:}".format(name, self.opset))
+            raise err
 
 
     def __setattr__(self, name, value):
@@ -141,7 +159,9 @@ class Graph(object):
         """
         Returns a context manager that supplies unique integer IDs for Nodes in the Graph.
 
-        Example:
+        For example:
+        ::
+
             with graph.node_ids():
                 assert graph.nodes[0].id != graph.nodes[1].id
 
@@ -182,11 +202,11 @@ class Graph(object):
 
         Additionally, any producer nodes of graph input tensors are removed from the graph.
 
-        Note: This function will never modify graph output tensors.
+        *Note: This function will never modify graph output tensors.*
 
-        Optional Args:
+        Args:
             remove_unused_node_outputs (bool): Whether to remove unused output tensors of nodes. This will never remove
-                empty tensor outputs. Defaults to False.
+                empty-tensor (i.e. optional, but omitted) outputs. Defaults to False.
 
         Returns:
             self
@@ -280,11 +300,11 @@ class Graph(object):
 
     def tensors(self, check_duplicates=False):
         """
-        Creates a tensor map of all the tensors in this graph by walking over all nodes. Empty tensors are omitted from this map. The graph must not contain tensors with duplicate names.
+        Creates a tensor map of all the tensors in this graph by walking over all nodes. Empty tensors are omitted from this map.
 
         Tensors are guaranteed to be in order of the nodes in the graph. Hence, if the graph is topologically sorted, the tensor map will be too.
 
-        Optional Args:
+        Args:
             check_duplicates (bool): Whether to fail if multiple tensors with the same name are encountered.
 
         Raises:
@@ -320,18 +340,20 @@ class Graph(object):
 
     def fold_constants(self):
         """
-        Folds constants in-place in the graph. The graph must be topologically sorted prior to calling this function (see `toposort()`).
+        Folds constants in-place in the graph. The graph must be topologically sorted prior to
+        calling this function (see `toposort()`).
 
-        NOTE: This function will not remove constants after folding them. In order to get rid of these hanging nodes, you can run the `cleanup()` function.
+        This function will not remove constants after folding them. In order to get rid of
+        these hanging nodes, you can run the `cleanup()` function.
 
-        NOTE: Due to how this is implemented, the graph must be exportable to ONNX, and evaluable in ONNX Runtime.
+        *Note: Due to how this function is implemented, the graph must be exportable to ONNX,
+        and evaluable in ONNX-Runtime. Additionally, ONNX-Runtime must be installed.*
 
         Returns:
             self
         """
-        from onnx_graphsurgeon.api.api import export_onnx
         import onnxruntime
-        import onnx
+        from onnx_graphsurgeon.exporters.onnx_exporter import export_onnx
 
         temp_graph = copy.deepcopy(self)
 
@@ -377,14 +399,17 @@ class Graph(object):
         Creates a node, adds it to this graph, and optionally creates its input and output tensors.
 
         The input and output lists can include various different types:
-            - Tensor: Any Tensors provided will be used as-is in the inputs/outputs of the node created
-            - str: If a string is provided, this function will generate a new tensor, using the string to generate a name. It will append an index to the end of the provided string to attempt to avoid duplicates, but since this doesn't guarantee that the name is unique, you should try to ensure that the string provided is as specific as possible.
-            - np.ndarray: If a NumPy array is provided, this function will generate a Constant tensor using the prefix: "onnx_graphsurgeon_constant"
 
-        Optional Args:
-            inputs (List[Union[Tensor, str, np.array]]): The list of inputs
-            outputs (List[Union[Tensor, str, np.array]]): The list of outputs
-            *args and **kwargs: These are passed directly to the constructor of Node
+            - ``Tensor``: Any Tensors provided will be used as-is in the inputs/outputs of the node created.
+            - ``str``: If a string is provided, this function will generate a new tensor using the string to generate a name. \
+                    It will append an index to the end of the provided string to attempt to avoid duplicate tensor names, but since this \
+                    doesn't guarantee that the name will be unique, you should try to ensure that the string provided is as unique as possible.
+            - ``numpy.ndarray``: If a NumPy array is provided, this function will generate a Constant tensor using the name prefix: "onnx_graphsurgeon_constant"
+
+        Args:
+            inputs (List[Union[Tensor, str, numpy.ndarray]]): The list of inputs
+            outputs (List[Union[Tensor, str, numpy.ndarray]]): The list of outputs
+            args/kwargs: These are passed directly to the constructor of Node
 
         Returns:
             List[Tensor]: The output tensors of the node

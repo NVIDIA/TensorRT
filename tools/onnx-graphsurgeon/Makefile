@@ -14,7 +14,9 @@
 # limitations under the License.
 #
 
-test:
+.PHONY: test clean build install_venv install docs
+
+test: docs
 	python3 -m pytest tests/ -v -x --pdb
 
 clean:
@@ -28,3 +30,7 @@ install_venv: build
 
 install: build
 	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl --user
+
+docs:
+	mkdir -p build/docs
+	sphinx-build docs build/docs/ -j auto -W

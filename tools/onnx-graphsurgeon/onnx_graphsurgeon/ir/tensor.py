@@ -22,9 +22,13 @@ import numpy as np
 
 
 class Tensor(object):
+    """Abstract base class for tensors in a graph"""
     DYNAMIC = -1
 
     def __init__(self):
+        """
+        **This class is abstract and cannot be constructed directly.**
+        """
         raise NotImplementedError("Tensor is an abstract class")
 
 
@@ -41,10 +45,13 @@ class Tensor(object):
 
     def is_empty(self):
         """
-        Returns whether this tensor is empty.
+        Returns whether this tensor is considered empty in the graph.
+
+        *Note: 'Empty' here refers to the name of the tensor, which is omitted for
+        optional tensors, NOT the shape of the tensor*
 
         Returns:
-            bool: Whether the tensor is empty.
+            bool: Whether the tensor is empty, meaning that it is used for an omitted optional input or output.
         """
         return self.name == ""
 
@@ -68,7 +75,7 @@ class Tensor(object):
         """
         Modifies this tensor in-place to convert it to a Variable. This means that all consumers/producers of the tensor will see the update.
 
-        Optional Args:
+        Args:
             dtype (np.dtype): The data type of the tensor.
             shape (Sequence[int]): The shape of the tensor.
 
@@ -86,16 +93,18 @@ class Tensor(object):
         Convenience function to get an input tensor of one of this tensor's input nodes.
         Note that the parameters are swapped compared to the o() function; this is because tensors are likely to have only a single producer
 
+        For example:
+        ::
+
+            assert tensor.i() == tensor.inputs[0].inputs[0]
+            assert tensor.i(1, 2) == tensor.inputs[2].inputs[1]
+
         Args:
             tensor_idx (int): The index of the input tensor of the input node. Defaults to 0.
             producer_idx (int): The index of the producer node of the input tensor, if the tensor has multiple producers. Defaults to 0.
 
-        Example:
-            assert tensor.i() == tensor.inputs[0].inputs[0]
-            assert tensor.i(1, 2) == tensor.inputs[2].inputs[1]
-
         Returns:
-            Node: The specified producer (input) tensor.
+            Tensor: The specified producer (input) tensor.
         """
         return self.inputs[producer_idx].inputs[tensor_idx]
 
@@ -104,16 +113,18 @@ class Tensor(object):
         """
         Convenience function to get an output tensor of one of this tensor's output nodes.
 
+        For example:
+        ::
+
+            assert tensor.o() == tensor.outputs[0].outputs[0]
+            assert tensor.o(2, 1) == tensor.outputs[2].outputs[1]
+
         Args:
             consumer_idx (int): The index of the consumer of the input tensor. Defaults to 0.
             tensor_idx (int): The index of the output tensor of the node, if the node has multiple outputs. Defaults to 0.
 
-        Example:
-            assert tensor.o() == tensor.outputs[0].outputs[0]
-            assert tensor.o(2, 1) == tensor.outputs[2].outputs[1]
-
         Returns:
-            Node: The specified consumer (output) tensor
+            Tensor: The specified consumer (output) tensor
         """
         return self.outputs[consumer_idx].outputs[tensor_idx]
 
@@ -147,7 +158,7 @@ class Variable(Tensor):
 
         Args:
             name (str): The name of the tensor.
-            dtype (np.dtype): The data type of the tensor.
+            dtype (numpy.dtype): The data type of the tensor.
             shape (Sequence[Union[int, str]]): The shape of the tensor. This may contain strings if the model uses dimension parameters.
         """
         self.name = name
@@ -179,8 +190,8 @@ class Constant(Tensor):
 
         Args:
             name (str): The name of the tensor.
-            values (np.ndarray): The values in this tensor, in the form of a NumPy array.
-            dtype (np.dtype): The data type of the tensor.
+            values (numpy.ndarray): The values in this tensor, in the form of a NumPy array.
+            dtype (numpy.dtype): The data type of the tensor.
             shape (Sequence[Union[int, str]]): The shape of the tensor.
         """
         self.name = name
@@ -209,9 +220,11 @@ class Constant(Tensor):
     def shape(self):
         return self.values.shape
 
+
     @property
     def dtype(self):
         return self.values.dtype.type
+
 
     def __repr__(self):
         ret = self.__str__()
