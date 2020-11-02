@@ -900,7 +900,7 @@ public:
         , sm(interface->mSm)
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_FP16, sm))
     {
-        assert((sm == kSM_80 || sm == kSM_75) && "Unsupported architecture");
+        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86) && "Unsupported architecture");
         params.clear();
     }
 
@@ -1054,7 +1054,7 @@ public:
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_INT8, sm))
         , mDqProbs(interface->mDqProbs)
     {
-        assert((sm == kSM_80 || sm == kSM_75 || sm == kSM_72) && "Unsupported architecture");
+        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86) && "Unsupported architecture");
         params.clear();
     }
 
