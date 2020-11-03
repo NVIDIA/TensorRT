@@ -425,6 +425,12 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
         }
     }
 
+    if (!hasDynamicShapes && !build.shapes.empty())
+    {
+        sample::gLogError << "Static model does not take explicit shapes since the shape of inference tensors will be determined by the model itself" << std::endl;
+        return nullptr;
+    }
+
     if (profile && hasDynamicShapes)
     {
         SMP_RETVAL_IF_FALSE(profile->isValid(), "Required optimization profile is invalid", nullptr, err);
