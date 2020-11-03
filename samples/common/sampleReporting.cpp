@@ -199,6 +199,10 @@ void printPerformanceReport(const std::vector<InferenceTrace>& trace, const Repo
     const auto noWarmup = std::find_if(trace.begin(), trace.end(), isNotWarmup);
     const int warmups = noWarmup - trace.begin();
     const float benchTime = trace.back().outEnd - noWarmup->inStart;
+    // when implicit batch used, queries = options.inference.batch, which is parsed through --batch
+    // when explicit batch used, queries = options.inference.batch = 0
+    // treat inference with explicit batch as a single query and report the throughput
+    queries = queries ? queries : 1;
     printProlog(warmups * queries, (trace.size() - warmups) * queries, warmupMs, benchTime, os);
 
     std::vector<InferenceTime> timings(trace.size() - warmups);
