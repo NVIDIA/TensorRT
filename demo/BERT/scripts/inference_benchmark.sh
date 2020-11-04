@@ -24,12 +24,7 @@ SEQUENCE_LENGTH="${4}"
 MAX_BATCH="${5}"
 GPU_ARCH="${6}"
 
-if [ "${PRECISION}" == "int8" ] || [ "${PRECISION}" == "int8-qat" ]; then
-    CHECKPOINT_PRECISION="fp16"
-else
-    CHECKPOINT_PRECISION="${PRECISION}"
-fi;
-CHECKPOINTS_DIR="/workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_v2_${MODEL_VARIANT}_${CHECKPOINT_PRECISION}_${SEQUENCE_LENGTH}_v2"
+CHECKPOINTS_DIR="/workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_ckpt_${MODEL_VARIANT}_qa_squad2_amp_${SEQUENCE_LENGTH}_v19.03.1"
 SQUAD_DIR="/workspace/TensorRT/demo/BERT/squad"
 ENGINE_NAME="/workspace/TensorRT/demo/BERT/engines/bert_${MODEL_VARIANT}_${PRECISION}_bs${MAX_BATCH}_seqlen${SEQUENCE_LENGTH}_benchmark.engine"
 # QAT Checkpoint - available only for BERT-Large
@@ -39,8 +34,8 @@ CUDAGRAPH_PERFBIN="/workspace/TensorRT/demo/BERT/build/perf"
 echo "==== Benchmarking BERT ${MODEL_VARIANT} ${PRECISION} SEQLEN ${SEQUENCE_LENGTH} on ${GPU_ARCH} ===="
 if [ ! -f ${ENGINE_NAME} ]; then
     if [ ! -d ${CHECKPOINTS_DIR} ]; then
-        echo "Downloading checkpoints: scripts/download_model.sh ${MODEL_VARIANT} ${CHECKPOINT_PRECISION} ${SEQUENCE_LENGTH}"
-        scripts/download_model.sh "${MODEL_VARIANT}" "${CHECKPOINT_PRECISION}" "${SEQUENCE_LENGTH}"
+        echo "Downloading checkpoints: scripts/download_model.sh ${MODEL_VARIANT} ${SEQUENCE_LENGTH}"
+        scripts/download_model.sh "${MODEL_VARIANT}" "${SEQUENCE_LENGTH}"
     fi;
     if [ "${PRECISION}" == "int8-qat" ]; then
         if [ ${MODEL_VARIANT} != "large" ]; then
@@ -54,7 +49,7 @@ if [ ! -f ${ENGINE_NAME} ]; then
         PRECISION="int8"
         BUILDER_ARGS="-x ${QAT_CHECKPOINT}"
     else
-        BUILDER_ARGS="-m ${CHECKPOINTS_DIR}/model.ckpt-8144"
+        BUILDER_ARGS="-m ${CHECKPOINTS_DIR}/model.ckpt"
     fi;
     BUILDER_ARGS="${BUILDER_ARGS} -o ${ENGINE_NAME} ${BATCH_SIZES} -s ${SEQUENCE_LENGTH} -c ${CHECKPOINTS_DIR} -v ${CHECKPOINTS_DIR}/vocab.txt --${PRECISION}"
     if [ "${PRECISION}" == "int8" ]; then

@@ -16,33 +16,28 @@
 #
 
 # Setup default parameters (if no command-line parameters given)
-VERSION='v2'
+SQUAD='2'
 MODEL='large'
-FT_PRECISION='fp16'
 SEQ_LEN='128'
 FW='tf'
 
 while test $# -gt 0
 do
     case "$1" in
-        -h) echo "Usage: sh download_model.sh [tf|pyt] [base|large] [fp16|fp32] [128|384] [v2|v1_1]"
+        -h) echo "Usage: sh download_model.sh [tf|pyt] [base|large] [128|384] [v2|v1_1]"
             exit 0
             ;;
         base) MODEL='base'
             ;;
         large) MODEL='large'
             ;;
-        fp16) FT_PRECISION='fp16'
-            ;;
-        fp32) FT_PRECISION='fp32'
-            ;;
         128) SEQ_LEN='128'
             ;;
         384) SEQ_LEN='384'
             ;;
-        v2) VERSION='v2'
+        v2) SQUAD='2'
             ;;
-        v1_1) VERSION='v1_1'
+        v1_1) SQUAD='11'
             ;;
         tf) FW='tf'
             ;;
@@ -60,15 +55,26 @@ mkdir -p /workspace/TensorRT/demo/BERT/models/fine-tuned
 cd /workspace/TensorRT/demo/BERT/models/fine-tuned
 
 # Download the BERT fine-tuned model
-echo "Downloading BERT-${FW} ${MODEL} checkpoints with precision ${FT_PRECISION} and sequence length ${SEQ_LEN} and fine-tuned for SQuAD ${VERSION} from NGC"
+echo "Downloading BERT-${FW} ${MODEL} checkpoints for sequence length ${SEQ_LEN} and fine-tuned for SQuAD ${SQUAD}."
+
 if [ "${FW}" = 'tf' ]; then
-    ngc registry model download-version nvidia/bert_tf_${VERSION}_${MODEL}_${FT_PRECISION}_${SEQ_LEN}:2
+    CKPT=bert_${FW}_ckpt_${MODEL}_qa_squad${SQUAD}_amp_${SEQ_LEN}
+    CKPT_VERSION=19.03.1
 elif [ "${FW}" = 'pyt' ]; then
-    if [ "${MODEL}" != 'large' ] || [ "${VERSION}" != 'v1_1' ]; then
-        echo "Skipping. Currently only BERT-large checkpoint fine-tuned for SQuAD v1.1 available in QAT (PyTorch) workflow."
+    if [ "${MODEL}" != 'large' ] || [ "${SQUAD}" != '11' ]; then
+        echo "ERROR: Only BERT-large checkpoint fine-tuned for SQuAD v1.1 available in the QAT (PyTorch) workflow."
     else
-        ngc registry model download-version nvidia/bert_pyt_onnx_large_qa_squad11_amp_fake_quant:1
+        CKPT=bert_${FW}_onnx_${MODEL}_qa_squad${SQUAD}_amp_fake_quant
+        CKPT_VERSION=1
     fi
 else
     echo "Invalid framework specified for checkpoint. Run download_model.sh -h for help."
+fi
+
+if [ -n "$CKPT" ]; then
+    if [ -d "${CKPT}_v${CKPT_VERSION}" ]; then
+        echo "Checkpoint directory ${PWD}/${CKPT}_v${CKPT_VERSION} already exists. Skip download."
+    else
+        ngc registry model download-version nvidia/${CKPT}:${CKPT_VERSION}
+    fi
 fi
