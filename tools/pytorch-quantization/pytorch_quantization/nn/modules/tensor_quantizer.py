@@ -87,6 +87,10 @@ class TensorQuantizer(nn.Module):
 
         if quant_desc.amax is not None:
             self.register_buffer('_amax', torch.tensor(quant_desc.amax))
+        
+        ##dynamic amax needs to be stored as a part of state dict to be used at inference time to map dynamic range to
+        # TRT layer
+        self.register_buffer('learned_amax',torch.tensor(1))
 
         # Clip module consumes a lot of memory, so only create it if learn_amax is True
         if self._learn_amax:
@@ -273,6 +277,7 @@ class TensorQuantizer(nn.Module):
         if self._scale_amax is not None:
             amax = amax.detach() * self._scale_amax
 
+        self.learned_amax = amax
         return amax
 
     def _fb_fake_quant(self, inputs, amax):
