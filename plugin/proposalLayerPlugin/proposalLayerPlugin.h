@@ -97,7 +97,6 @@ private:
     int mBackgroundLabel;
     int mPreNMSTopK;
     int mKeepTopK;
-    float mScoreThreshold;
     float mIOUThreshold;
 
     int mMaxBatchSize;

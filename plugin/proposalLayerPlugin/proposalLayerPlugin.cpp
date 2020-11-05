@@ -220,7 +220,6 @@ ProposalLayer::ProposalLayer(const void* data, size_t length)
     mBackgroundLabel = -1;
     mPreNMSTopK = prenms_topk;
     mKeepTopK = keep_topk;
-    mScoreThreshold = 0.0;
     mIOUThreshold = iou_threshold;
 
     mParam.backgroundLabelId = -1;
