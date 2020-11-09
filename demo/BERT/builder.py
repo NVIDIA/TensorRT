@@ -523,27 +523,21 @@ def load_onnx_weights_and_quant(path, config):
     return weights_dict
 
 def emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_length, batch_sizes):
-    if len(batch_sizes) > 1:
-        input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1, sequence_length))
-        segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1, sequence_length))
-        input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1, sequence_length))
+    input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1, sequence_length))
+    segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1, sequence_length))
+    input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1, sequence_length))
 
-        # Specify profiles for the batch sizes we're interested in.
-        # Make sure the profile also works for all sizes not covered by the previous profile.
-        prev_size = 0
-        for batch_size in sorted(batch_sizes):
-            profile = builder.create_optimization_profile()
-            min_shape = (prev_size + 1, sequence_length)
-            shape = (batch_size, sequence_length)
-            profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
-            profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
-            profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
-            builder_config.add_optimization_profile(profile)
-            prev_size = batch_size
-    else:
-        input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(batch_sizes[0], sequence_length))
-        segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(batch_sizes[0], sequence_length))
-        input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(batch_sizes[0], sequence_length))
+    # Specify profiles for the batch sizes we're interested in.
+    # Make sure the profile also works for all sizes not covered by the previous profile.
+    for batch_size in sorted(batch_sizes):
+        profile = builder.create_optimization_profile()
+        min_shape = (1, sequence_length)
+        shape = (batch_size, sequence_length)
+        profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
+        profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
+        profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
+        builder_config.add_optimization_profile(profile)
+
     wbeta = trt.PluginField("bert_embeddings_layernorm_beta", weights_dict["bert_embeddings_layernorm_beta"].numpy(), trt.PluginFieldType.FLOAT32)
     wgamma = trt.PluginField("bert_embeddings_layernorm_gamma", weights_dict["bert_embeddings_layernorm_gamma"].numpy(), trt.PluginFieldType.FLOAT32)
     wwordemb = trt.PluginField("bert_embeddings_word_embeddings", weights_dict["bert_embeddings_word_embeddings"].numpy(), trt.PluginFieldType.FLOAT32)
