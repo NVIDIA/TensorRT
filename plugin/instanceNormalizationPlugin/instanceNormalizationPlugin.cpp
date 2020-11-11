@@ -297,14 +297,6 @@ void InstanceNormalizationPlugin::configurePlugin(const nvinfer1::DynamicPluginT
     const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs)
 {
     auto input_dims = in[0].desc.dims;
-    for (int i = 0; i < nbInputs; i++)
-    {
-        for (int j = 0; j < input_dims.nbDims; j++)
-        {
-            // Do not support dynamic dimensions
-            ASSERT(input_dims.d[j] != -1);
-        }
-    }
 
     int n = input_dims.d[0];
     int c = input_dims.d[1];
