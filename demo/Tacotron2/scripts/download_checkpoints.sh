@@ -19,13 +19,13 @@
 mkdir -p checkpoints && cd checkpoints
 
 # Download the Tacotron2 and Waveglow checkpoints
-if [ ! -f "checkpoints/tacotron2pyt_fp16_v3/tacotron2_1032590_6000_amp" ]; then
-    echo "Downloading Tacotron2 fp16 checkpoint from NGC"
-    ngc registry model download-version nvidia/tacotron2pyt_fp16:3
+if [ ! -f "checkpoints/tacotron2_pyt_ckpt_amp_v19.09.0/nvidia_tacotron2pyt_fp16_20190427" ]; then
+    echo "Downloading Tacotron2 checkpoint from NGC"
+    ngc registry model download-version nvidia/tacotron2_pyt_ckpt_amp:19.09.0
 fi;
-if [ ! -f "checkpoints/waveglow256pyt_fp16_v2/waveglow_1076430_14000_amp" ]; then
-    echo "Downloading Waveglow fp16 checkpoint from NGC"
-    ngc registry model download-version nvidia/waveglow256pyt_fp16:2
+if [ ! -f "checkpoints/waveglow_ckpt_amp_256_v19.10.0/nvidia_waveglow256pyt_fp16" ]; then
+    echo "Downloading Waveglow checkpoint from NGC"
+    ngc registry model download-version nvidia/waveglow_ckpt_amp_256:19.10.0
 fi;
 
 cd -
