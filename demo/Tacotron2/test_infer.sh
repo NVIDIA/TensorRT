@@ -18,8 +18,8 @@
 BATCH_SIZE=1
 INPUT_LENGTH=128
 NUM_ITERS=1003 # extra 3 iterations for warmup
-TACOTRON2_CKPT="tacotron2_1032590_6000_amp"
-WAVEGLOW_CKPT="waveglow_1076430_14000_amp"
+TACOTRON2_CKPT="nvidia_tacotron2pyt_fp16_20190427"
+WAVEGLOW_CKPT="nvidia_waveglow256pyt_fp16"
 RUN_MODE="" # = fp32
 LOG_RUN_MODE="gpu_fp32"
 TEST_PROGRAM="test_infer.py"

@@ -17,7 +17,7 @@
 
 pip3 install numba==0.48 torch==1.4.0
 pip3 install -r requirements.txt
-sudo apt-get install -y libsndfile1
+echo "nvidia" | sudo -S apt-get install -y libsndfile1
 
 pushd /tmp
 git clone https://github.com/NVIDIA/apex

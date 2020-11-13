@@ -27,10 +27,7 @@ Software version configuration tested for the instructions that follow:
 2. Install prerequisite software for TTS sample:
     ```bash
     cd $TRT_SOURCE/demo/Tacotron2
-
-    export LD_LIBRARY_PATH=$TRT_SOURCE/build/out:/tensorrt/lib:$LD_LIBRARY_PATH
     pip3 install /tensorrt/python/tensorrt-7.2*-cp36-none-linux_x86_64.whl
-
     bash ./scripts/install_prerequisites.sh
     ```
 3. Download pretrained checkpoints from [NGC](https://ngc.nvidia.com/catalog/models) into the `./checkpoints` directory:
@@ -48,13 +45,13 @@ Software version configuration tested for the instructions that follow:
 
 	```bash
 	mkdir -p output
-    python3 exports/export_tacotron2_onnx.py --tacotron2 ./checkpoints/tacotron2pyt_fp16_v3/tacotron2_1032590_6000_amp -o output/ --fp16
+    python3 exports/export_tacotron2_onnx.py --tacotron2 ./checkpoints/tacotron2_pyt_ckpt_amp_v19.09.0/nvidia_tacotron2pyt_fp16_20190427 -o output/ --fp16
 	```
 
     Export WaveGlow to ONNX IR:
 
 	```bash
-    python3 exports/export_waveglow_onnx.py --waveglow checkpoints/waveglow256pyt_fp16_v2/waveglow_1076430_14000_amp --wn-channels 256 -o output/ --fp16
+    python3 exports/export_waveglow_onnx.py --waveglow ./checkpoints/waveglow_ckpt_amp_256_v19.10.0/nvidia_waveglow256pyt_fp16 --wn-channels 256 -o output/ --fp16
 	```
 
 	After running the above commands, there should be four new ONNX files in `./output/` directory:
