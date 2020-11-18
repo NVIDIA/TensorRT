@@ -16,6 +16,7 @@
 #include "multilevelCropAndResizePlugin.h"
 #include "plugin.h"
 #include <cuda_runtime_api.h>
+#include <algorithm>
 
 #include <fstream>
 
@@ -36,6 +37,7 @@ std::vector<PluginField> MultilevelCropAndResizePluginCreator::mPluginAttributes
 MultilevelCropAndResizePluginCreator::MultilevelCropAndResizePluginCreator()
 {
     mPluginAttributes.emplace_back(PluginField("pooled_size", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 3));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -58,6 +60,7 @@ const PluginFieldCollection* MultilevelCropAndResizePluginCreator::getFieldNames
 
 IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
+    auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
     const PluginField* fields = fc->fields;
     for (int i = 0; i < fc->nbFields; ++i)
     {
@@ -67,8 +70,14 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(const char* nam
             assert(fields[i].type == PluginFieldType::kINT32);
             mPooledSize = *(static_cast<const int*>(fields[i].data));
         }
+        if (!strcmp(attrName, "image_size"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            const auto dims = static_cast<const int32_t*>(fields[i].data);
+            std::copy_n(dims, 3, image_size.d);
+        }
     }
-    return new MultilevelCropAndResize(mPooledSize);
+    return new MultilevelCropAndResize(mPooledSize, image_size);
 };
 
 IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(const char* name, const void* data, size_t length)
@@ -76,14 +85,14 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(const char
     return new MultilevelCropAndResize(data, length);
 };
 
-MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size)
+MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1::Dims& image_size)
     : mPooledSize({pooled_size, pooled_size})
 {
 
     assert(pooled_size > 0);
     // shape
-    mInputHeight = TLTMaskRCNNConfig::IMAGE_SHAPE.d[1];
-    mInputWidth = TLTMaskRCNNConfig::IMAGE_SHAPE.d[2];
+    mInputHeight = image_size.d[1];
+    mInputWidth = image_size.d[2];
     // Threshold to P3: Smaller -> P2
     mThresh = (224 * 224) / (4.0f);
 };
