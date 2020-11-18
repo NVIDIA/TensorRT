@@ -253,7 +253,8 @@ public:
         for (int i = 0; i < mEngine->getNbBindings(); i++)
         {
             auto dims = context ? context->getBindingDimensions(i) : mEngine->getBindingDimensions(i);
-            size_t vol = context || !mBatchSize ? 1 : static_cast<size_t>(mBatchSize);
+            assert(dims[0] == mBatchSize);
+            size_t vol = 1;
             nvinfer1::DataType type = mEngine->getBindingDataType(i);
             int vecDim = mEngine->getBindingVectorizedDim(i);
             if (-1 != vecDim) // i.e., 0 != lgScalarsPerVector
@@ -262,7 +263,7 @@ public:
                 dims.d[vecDim] = divUp(dims.d[vecDim], scalarsPerVec);
                 vol *= scalarsPerVec;
             }
-            vol *= samplesCommon::volume(dims);
+            vol *= samplesCommon::volume(dims); // volume =  n*c*h*w;
             std::unique_ptr<ManagedBuffer> manBuf{new ManagedBuffer()};
             manBuf->deviceBuffer = DeviceBuffer(vol, type);
             manBuf->hostBuffer = HostBuffer(vol, type);
