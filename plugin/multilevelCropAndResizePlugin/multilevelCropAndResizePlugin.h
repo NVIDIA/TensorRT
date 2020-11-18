@@ -35,7 +35,7 @@ namespace plugin
 class MultilevelCropAndResize : public IPluginV2Ext
 {
 public:
-    MultilevelCropAndResize(int pooled_size);
+    MultilevelCropAndResize(int pooled_size, const nvinfer1::Dims& image_size);
 
     MultilevelCropAndResize(const void* data, size_t length);
 

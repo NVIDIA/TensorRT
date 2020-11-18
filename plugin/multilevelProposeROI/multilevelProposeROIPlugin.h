@@ -34,7 +34,7 @@ namespace plugin
 class MultilevelProposeROI : public IPluginV2Ext
 {
 public:
-    MultilevelProposeROI(int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold);
+    MultilevelProposeROI(int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size);
 
     MultilevelProposeROI(const void* data, size_t length);
 
@@ -88,7 +88,7 @@ public:
 
 private:
     void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims);
-    void generate_pyramid_anchors();
+    void generate_pyramid_anchors(const nvinfer1::Dims& image_size);
 
     int mBackgroundLabel;
     int mPreNMSTopK;
@@ -109,6 +109,7 @@ private:
     float** mDeviceBboxes;
     std::shared_ptr<CudaBind<float>> mRegWeightDevice;
 
+    nvinfer1::Dims mImageSize;
     nvinfer1::DataType mType;
     RefineNMSParameters mParam;
 
