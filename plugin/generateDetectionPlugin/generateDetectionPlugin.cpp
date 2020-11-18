@@ -16,6 +16,7 @@
 #include "generateDetectionPlugin.h"
 #include "plugin.h"
 #include <cuda_runtime_api.h>
+#include <algorithm>
 
 using namespace nvinfer1;
 using namespace plugin;
@@ -40,6 +41,7 @@ GenerateDetectionPluginCreator::GenerateDetectionPluginCreator()
     mPluginAttributes.emplace_back(PluginField("keep_topk", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
+    mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 3));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -62,6 +64,7 @@ const PluginFieldCollection* GenerateDetectionPluginCreator::getFieldNames()
 
 IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
+    auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
     const PluginField* fields = fc->fields;
     for (int i = 0; i < fc->nbFields; ++i)
     {
@@ -86,8 +89,14 @@ IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(const char* name, con
             assert(fields[i].type == PluginFieldType::kFLOAT32);
             mIOUThreshold = *(static_cast<const float*>(fields[i].data));
         }
+        if (!strcmp(attrName, "image_size"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            const auto dims = static_cast<const int32_t*>(fields[i].data);
+            std::copy_n(dims, 3, image_size.d);
+        }
     }
-    return new GenerateDetection(mNbClasses, mKeepTopK, mScoreThreshold, mIOUThreshold);
+    return new GenerateDetection(mNbClasses, mKeepTopK, mScoreThreshold, mIOUThreshold, image_size);
 };
 
 IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(const char* name, const void* data, size_t length)
@@ -95,11 +104,12 @@ IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(const char* name
     return new GenerateDetection(data, length);
 };
 
-GenerateDetection::GenerateDetection(int num_classes, int keep_topk, float score_threshold, float iou_threshold)
+GenerateDetection::GenerateDetection(int num_classes, int keep_topk, float score_threshold, float iou_threshold, const nvinfer1::Dims& image_size)
     : mNbClasses(num_classes)
     , mKeepTopK(keep_topk)
     , mScoreThreshold(score_threshold)
     , mIOUThreshold(iou_threshold)
+    , mImageSize(image_size)
 {
     mBackgroundLabel = 0;
     assert(mNbClasses > 0);
@@ -178,7 +188,7 @@ const char* GenerateDetection::getPluginNamespace() const
 
 size_t GenerateDetection::getSerializationSize() const
 {
-    return sizeof(int) * 2 + sizeof(float) * 2 + sizeof(int) * 2;
+    return sizeof(int) * 2 + sizeof(float) * 2 + sizeof(int) * 2 + sizeof(nvinfer1::Dims);
 };
 
 void GenerateDetection::serialize(void* buffer) const
@@ -190,6 +200,7 @@ void GenerateDetection::serialize(void* buffer) const
     write(d, mIOUThreshold);
     write(d, mMaxBatchSize);
     write(d, mAnchorsCnt);
+    write(d, mImageSize);
     ASSERT(d == a + getSerializationSize());
 };
 
@@ -202,6 +213,7 @@ GenerateDetection::GenerateDetection(const void* data, size_t length)
     float iou_threshold = read<float>(d);
     mMaxBatchSize = read<int>(d);
     mAnchorsCnt = read<int>(d);
+    mImageSize = read<nvinfer1::Dims3>(d);
     ASSERT(d == a + length);
 
     mNbClasses = num_classes;
@@ -264,17 +276,17 @@ int GenerateDetection::enqueue(
 
     // refine detection
     RefineDetectionWorkSpace refDetcWorkspace(batch_size, mAnchorsCnt, mParam, mType);
-    cudaError_t status = DetectionPostProcess(stream, batch_size, mAnchorsCnt,
-        static_cast<float*>(mRegWeightDevice->mPtr), 
-        static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[1]), // Image Height
-        static_cast<float>(TLTMaskRCNNConfig::IMAGE_SHAPE.d[2]), // Image Width
-        DataType::kFLOAT, // mType,
-        mParam, refDetcWorkspace, workspace,
-        inputs[1],       // inputs[InScore]
-        inputs[0],       // inputs[InDelta],
-        mValidCnt->mPtr, // inputs[InCountValid],
-        inputs[2],       // inputs[ROI]
-        detections);
+    cudaError_t status
+        = DetectionPostProcess(stream, batch_size, mAnchorsCnt, static_cast<float*>(mRegWeightDevice->mPtr),
+            static_cast<float>(mImageSize.d[1]), // Image Height
+            static_cast<float>(mImageSize.d[2]), // Image Width
+            DataType::kFLOAT,                                        // mType,
+            mParam, refDetcWorkspace, workspace,
+            inputs[1],       // inputs[InScore]
+            inputs[0],       // inputs[InDelta],
+            mValidCnt->mPtr, // inputs[InCountValid],
+            inputs[2],       // inputs[ROI]
+            detections);
 
     assert(status == cudaSuccess);
     return status;
