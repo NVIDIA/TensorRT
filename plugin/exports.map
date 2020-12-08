@@ -17,7 +17,12 @@
 /* Hides all symbols except those specified in the global section */
 {
   global:
+    getInferLibVersion;
+    getPluginRegistry;
     initLibNvInferPlugins;
+    extern "C++" {
+      nvinfer1::*;
+    };
   local: *;
 };
 
