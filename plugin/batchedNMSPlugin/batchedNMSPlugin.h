@@ -70,6 +70,7 @@ private:
     int numPriors{};
     std::string mNamespace;
     bool mClipBoxes{};
+    DataType mPrecision;
 };
 
 class BatchedNMSDynamicPlugin : public IPluginV2DynamicExt
@@ -114,6 +115,7 @@ private:
     int numPriors{};
     std::string mNamespace;
     bool mClipBoxes{};
+    DataType mPrecision;
 };
 
 class BatchedNMSBasePluginCreator : public BaseCreator

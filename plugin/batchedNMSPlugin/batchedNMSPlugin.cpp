@@ -51,6 +51,7 @@ BatchedNMSPlugin::BatchedNMSPlugin(const void* data, size_t length)
     scoresSize = read<int>(d);
     numPriors = read<int>(d);
     mClipBoxes = read<bool>(d);
+    mPrecision = read<DataType>(d);
     ASSERT(d == a + length);
 }
 
@@ -67,6 +68,7 @@ BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(const void* data, size_t length
     scoresSize = read<int>(d);
     numPriors = read<int>(d);
     mClipBoxes = read<bool>(d);
+    mPrecision = read<DataType>(d);
     ASSERT(d == a + length);
 }
 
@@ -195,14 +197,14 @@ DimsExprs BatchedNMSDynamicPlugin::getOutputDimensions(
 size_t BatchedNMSPlugin::getWorkspaceSize(int maxBatchSize) const
 {
     return detectionInferenceWorkspaceSize(param.shareLocation, maxBatchSize, boxesSize, scoresSize, param.numClasses,
-        numPriors, param.topK, DataType::kFLOAT, DataType::kFLOAT);
+        numPriors, param.topK, mPrecision, mPrecision);
 }
 
 size_t BatchedNMSDynamicPlugin::getWorkspaceSize(
     const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const
 {
     return detectionInferenceWorkspaceSize(param.shareLocation, inputs[0].dims.d[0], boxesSize, scoresSize,
-        param.numClasses, numPriors, param.topK, DataType::kFLOAT, DataType::kFLOAT);
+        param.numClasses, numPriors, param.topK, mPrecision, mPrecision);
 }
 
 int BatchedNMSPlugin::enqueue(
@@ -218,7 +220,7 @@ int BatchedNMSPlugin::enqueue(
 
     pluginStatus_t status = nmsInference(stream, batchSize, boxesSize, scoresSize, param.shareLocation,
         param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
-        param.iouThreshold, DataType::kFLOAT, locData, DataType::kFLOAT, confData, keepCount, nmsedBoxes, nmsedScores,
+        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores,
         nmsedClasses, workspace, param.isNormalized, false, mClipBoxes);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
@@ -237,7 +239,7 @@ int BatchedNMSDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const Pl
 
     pluginStatus_t status = nmsInference(stream, inputDesc[0].dims.d[0], boxesSize, scoresSize, param.shareLocation,
         param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
-        param.iouThreshold, DataType::kFLOAT, locData, DataType::kFLOAT, confData, keepCount, nmsedBoxes, nmsedScores,
+        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores,
         nmsedClasses, workspace, param.isNormalized, false, mClipBoxes);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
@@ -257,6 +259,7 @@ void BatchedNMSPlugin::serialize(void* buffer) const
     write(d, scoresSize);
     write(d, numPriors);
     write(d, mClipBoxes);
+    write(d, mPrecision);
     ASSERT(d == a + getSerializationSize());
 }
 
@@ -274,6 +277,7 @@ void BatchedNMSDynamicPlugin::serialize(void* buffer) const
     write(d, scoresSize);
     write(d, numPriors);
     write(d, mClipBoxes);
+    write(d, mPrecision);
     ASSERT(d == a + getSerializationSize());
 }
 
@@ -320,11 +324,13 @@ void BatchedNMSDynamicPlugin::configurePlugin(
     scoresSize = in[1].desc.dims.d[1] * in[1].desc.dims.d[2];
     // num_boxes
     numPriors = in[0].desc.dims.d[1];
+
+    mPrecision = in[0].desc.type;
 }
 
 bool BatchedNMSPlugin::supportsFormat(DataType type, PluginFormat format) const
 {
-    return ((type == DataType::kFLOAT || type == DataType::kINT32) && format == PluginFormat::kNCHW);
+    return ((type == DataType::kHALF || type == DataType::kFLOAT || type == DataType::kINT32) && format == PluginFormat::kNCHW);
 }
 
 bool BatchedNMSDynamicPlugin::supportsFormatCombination(
@@ -333,14 +339,15 @@ bool BatchedNMSDynamicPlugin::supportsFormatCombination(
     ASSERT(0 <= pos && pos < 6);
     const auto* in = inOut;
     const auto* out = inOut + nbInputs;
+    const bool consistentFloatPrecision = in[0].type == in[pos].type;
     switch (pos)
     {
-    case 0: return in[0].type == DataType::kFLOAT && in[0].format == PluginFormat::kLINEAR;
-    case 1: return in[1].type == DataType::kFLOAT && in[1].format == PluginFormat::kLINEAR;
+    case 0: return (in[0].type == DataType::kHALF || in[0].type == DataType::kFLOAT) && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 1: return (in[1].type == DataType::kHALF || in[1].type == DataType::kFLOAT) && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     case 2: return out[0].type == DataType::kINT32 && out[0].format == PluginFormat::kLINEAR;
-    case 3: return out[1].type == DataType::kFLOAT && out[1].format == PluginFormat::kLINEAR;
-    case 4: return out[2].type == DataType::kFLOAT && out[2].format == PluginFormat::kLINEAR;
-    case 5: return out[3].type == DataType::kFLOAT && out[3].format == PluginFormat::kLINEAR;
+    case 3: return (out[1].type == DataType::kHALF || out[1].type == DataType::kFLOAT) && out[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 4: return (out[2].type == DataType::kHALF || out[2].type == DataType::kFLOAT) && out[2].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 5: return (out[3].type == DataType::kHALF || out[3].type == DataType::kFLOAT) && out[3].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     }
     return false;
 }
@@ -383,6 +390,7 @@ IPluginV2Ext* BatchedNMSPlugin::clone() const
     plugin->numPriors = numPriors;
     plugin->setPluginNamespace(mNamespace.c_str());
     plugin->setClipParam(mClipBoxes);
+    plugin->mPrecision = mPrecision;
     return plugin;
 }
 
@@ -394,6 +402,7 @@ IPluginV2DynamicExt* BatchedNMSDynamicPlugin::clone() const
     plugin->numPriors = numPriors;
     plugin->setPluginNamespace(mNamespace.c_str());
     plugin->setClipParam(mClipBoxes);
+    plugin->mPrecision = mPrecision;
     return plugin;
 }
 

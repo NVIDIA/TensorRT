@@ -57,7 +57,7 @@ __launch_bounds__(nthds_per_cta)
             // "Clear" scores lower than threshold
             else
             {
-                if (score > confidence_threshold)
+                if (float(score) > confidence_threshold)
                 {
                     temp_scores[targetIdx] = score;
                     temp_idx[targetIdx] = cur_idx + i * numPredsPerBatch;
@@ -157,8 +157,10 @@ struct sspcLaunchConfig
     }
 };
 
-static std::array<sspcLaunchConfig, 1> sspcLCOptions = {
-    sspcLaunchConfig(DataType::kFLOAT, sortScoresPerClass_gpu<float>)};
+static std::array<sspcLaunchConfig, 2> sspcLCOptions = {
+    sspcLaunchConfig(DataType::kFLOAT, sortScoresPerClass_gpu<float>),
+    sspcLaunchConfig(DataType::kHALF, sortScoresPerClass_gpu<__half>)
+};
 
 pluginStatus_t sortScoresPerClass(
     cudaStream_t stream,
@@ -206,6 +208,10 @@ size_t sortScoresPerClassWorkspaceSize(
     if (DT_CONF == DataType::kFLOAT)
     {
         wss[3] = cubSortPairsWorkspaceSize<float, int>(arrayLen, num * num_classes); // cub workspace
+    }
+    else if (DT_CONF == DataType::kHALF)
+    {
+        wss[3] = cubSortPairsWorkspaceSize<__half, int>(arrayLen, num * num_classes); // cub workspace
     }
     else
     {
