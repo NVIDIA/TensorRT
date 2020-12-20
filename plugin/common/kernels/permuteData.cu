@@ -95,8 +95,10 @@ struct pdLaunchConfig
     }
 };
 
-static std::array<pdLaunchConfig, 1> pdLCOptions = {
-  pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>)};
+static std::array<pdLaunchConfig, 2> pdLCOptions = {
+  pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>),
+  pdLaunchConfig(DataType::kHALF, permuteData_gpu<__half>)
+};
 
 pluginStatus_t permuteData(cudaStream_t stream,
                         const int nthreads,

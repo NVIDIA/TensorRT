@@ -15,6 +15,7 @@
  */
 #include "kernel.h"
 #include "plugin.h"
+#include "cuda_fp16.h"
 #include "gatherNMSOutputs.h"
 #include <array>
 
@@ -64,21 +65,37 @@ __launch_bounds__(nthds_per_cta)
                         : index % (numClasses * numPredsPerClass)) + bboxOffset) * 4;
             nmsedClasses[i] = (index % (numClasses * numPredsPerClass)) / numPredsPerClass; // label
             nmsedScores[i] = score;                                                        // confidence score
+            const T_BBOX xMin = bboxData[bboxId];
+            const T_BBOX yMin = bboxData[bboxId + 1];
+            const T_BBOX xMax = bboxData[bboxId + 2];
+            const T_BBOX yMax = bboxData[bboxId + 3];
             // clipped bbox xmin
-            nmsedBoxes[i * 4] = clipBoxes ? max(min(bboxData[bboxId],
-                        T_BBOX(1.)), T_BBOX(0.)) : bboxData[bboxId];
+            nmsedBoxes[i * 4] = clipBoxes ? saturate(xMin) : xMin;
             // clipped bbox ymin
-            nmsedBoxes[i * 4 + 1] = clipBoxes ? max(min(bboxData[bboxId + 1],
-                        T_BBOX(1.)), T_BBOX(0.)) : bboxData[bboxId + 1];
+            nmsedBoxes[i * 4 + 1] = clipBoxes ? saturate(yMin) : yMin;
             // clipped bbox xmax
-            nmsedBoxes[i * 4 + 2] = clipBoxes ? max(min(bboxData[bboxId + 2],
-                        T_BBOX(1.)), T_BBOX(0.)) : bboxData[bboxId + 2];
+            nmsedBoxes[i * 4 + 2] = clipBoxes ? saturate(xMax) : xMax;
             // clipped bbox ymax
-            nmsedBoxes[i * 4 + 3] = clipBoxes ? max(min(bboxData[bboxId + 3],
-                        T_BBOX(1.)), T_BBOX(0.)) : bboxData[bboxId + 3];
+            nmsedBoxes[i * 4 + 3] = clipBoxes ? saturate(yMax) : yMax;
             atomicAdd(&numDetections[i / keepTopK], 1);
         }
     }
+}
+
+template <typename T_BBOX>
+__device__ T_BBOX saturate(T_BBOX v)
+{
+    return max(min(v, T_BBOX(1)), T_BBOX(0));
+}
+
+template <>
+__device__ __half saturate(__half v)
+{
+#if __CUDA_ARCH__ >= 800
+    return __hmax(__hmin(v, __half(1)), __half(0));
+#else
+    return max(min(v, float(1)), float(0));
+#endif
 }
 
 template <typename T_BBOX, typename T_SCORE>
@@ -158,8 +175,10 @@ struct nmsOutLaunchConfig
 
 using nvinfer1::DataType;
 
-static std::array<nmsOutLaunchConfig, 1> nmsOutLCOptions = {
-  nmsOutLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherNMSOutputs_gpu<float, float>)};
+static std::array<nmsOutLaunchConfig, 2> nmsOutLCOptions = {
+  nmsOutLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherNMSOutputs_gpu<float, float>),
+  nmsOutLaunchConfig(DataType::kHALF, DataType::kHALF, gatherNMSOutputs_gpu<__half, __half>)
+};
 
 pluginStatus_t gatherNMSOutputs(
     cudaStream_t stream,
