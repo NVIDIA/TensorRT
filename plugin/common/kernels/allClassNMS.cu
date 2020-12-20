@@ -15,6 +15,7 @@
  */
 #include "kernel.h"
 #include "bboxUtils.h"
+#include "cuda_fp16.h"
 #include <array>
 
 template <typename T_BBOX>
@@ -38,7 +39,7 @@ __device__ T_BBOX bboxSize(
         else
         {
             // If bbox is not within range [0, 1].
-            return (width + 1) * (height + 1);
+            return (width + T_BBOX(1)) * (height + T_BBOX(1));
         }
     }
 }
@@ -67,6 +68,37 @@ __device__ void intersectBbox(
 }
 
 
+template <>
+__device__ void intersectBbox<__half>(
+    const Bbox<__half>& bbox1,
+    const Bbox<__half>& bbox2,
+    Bbox<__half>* intersect_bbox)
+{
+    if (bbox2.xmin > bbox1.xmax || bbox2.xmax < bbox1.xmin || bbox2.ymin > bbox1.ymax || bbox2.ymax < bbox1.ymin)
+    {
+        // Return [0, 0, 0, 0] if there is no intersection.
+        intersect_bbox->xmin = __half(0);
+        intersect_bbox->ymin = __half(0);
+        intersect_bbox->xmax = __half(0);
+        intersect_bbox->ymax = __half(0);
+    }
+    else
+    {
+#if __CUDA_ARCH__ >= 800
+        intersect_bbox->xmin = __hmax(bbox1.xmin, bbox2.xmin);
+        intersect_bbox->ymin = __hmax(bbox1.ymin, bbox2.ymin);
+        intersect_bbox->xmax = __hmin(bbox1.xmax, bbox2.xmax);
+        intersect_bbox->ymax = __hmin(bbox1.ymax, bbox2.ymax);
+#else
+        intersect_bbox->xmin = max(float(bbox1.xmin), float(bbox2.xmin));
+        intersect_bbox->ymin = max(float(bbox1.ymin), float(bbox2.ymin));
+        intersect_bbox->xmax = min(float(bbox1.xmax), float(bbox2.xmax));
+        intersect_bbox->ymax = min(float(bbox1.ymax), float(bbox2.ymax));
+#endif
+    }
+}
+
+
 template <typename T_BBOX>
 __device__ Bbox<T_BBOX> getDiagonalMinMaxSortedBox(const Bbox<T_BBOX>& bbox1)
 {
@@ -76,6 +108,26 @@ __device__ Bbox<T_BBOX> getDiagonalMinMaxSortedBox(const Bbox<T_BBOX>& bbox1)
 
     result.ymin = min(bbox1.ymin, bbox1.ymax);
     result.ymax = max(bbox1.ymin, bbox1.ymax);
+    return result;
+}
+
+template <>
+__device__ Bbox<__half> getDiagonalMinMaxSortedBox(const Bbox<__half>& bbox1)
+{
+    Bbox<__half> result;
+#if __CUDA_ARCH__ >= 800
+    result.xmin = __hmin(bbox1.xmin, bbox1.xmax);
+    result.xmax = __hmax(bbox1.xmin, bbox1.xmax);
+
+    result.ymin = __hmin(bbox1.ymin, bbox1.ymax);
+    result.ymax = __hmax(bbox1.ymin, bbox1.ymax);
+#else
+    result.xmin = min(float(bbox1.xmin), float(bbox1.xmax));
+    result.xmax = max(float(bbox1.xmin), float(bbox1.xmax));
+
+    result.ymin = min(float(bbox1.ymin), float(bbox1.ymax));
+    result.ymax = max(float(bbox1.ymin), float(bbox1.ymax));
+#endif
     return result;
 }
 
@@ -99,8 +151,8 @@ __device__ float jaccardOverlap(
     }
     else
     {
-        intersect_width = intersect_bbox.xmax - intersect_bbox.xmin + 1;
-        intersect_height = intersect_bbox.ymax - intersect_bbox.ymin + 1;
+        intersect_width = intersect_bbox.xmax - intersect_bbox.xmin + T_BBOX(1);
+        intersect_height = intersect_bbox.ymax - intersect_bbox.ymin + T_BBOX(1);
     }
     if (intersect_width > 0 && intersect_height > 0)
     {
@@ -245,7 +297,7 @@ __global__ void allClassNMS_kernel(
              */
             if (read_item_idx < max_idx)
             {
-                afterNMS_scores[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? beforeNMS_scores[read_item_idx] : 0.0f;
+                afterNMS_scores[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? T_SCORE(beforeNMS_scores[read_item_idx]) : T_SCORE(0.f);
                 afterNMS_index_array[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? loc_bboxIndex[t] : -1;
             }
         }
@@ -272,7 +324,7 @@ pluginStatus_t allClassNMS_gpu(
 #define P(tsize) allClassNMS_kernel<T_SCORE, T_BBOX, (tsize)>
 
     void (*kernel[8])(const int, const int, const int, const int, const float,
-                      const bool, const bool, float*, T_SCORE*, int*, T_SCORE*,
+                      const bool, const bool, T_BBOX*, T_SCORE*, int*, T_SCORE*,
                       int*, bool)
         = {
             P(1), P(2), P(3), P(4), P(5), P(6), P(7), P(8),
@@ -334,8 +386,10 @@ struct nmsLaunchConfigSSD
     }
 };
 
-static std::array<nmsLaunchConfigSSD, 1> nmsSsdLCOptions = {
-    nmsLaunchConfigSSD(DataType::kFLOAT, DataType::kFLOAT, allClassNMS_gpu<float, float>)};
+static std::array<nmsLaunchConfigSSD, 2> nmsSsdLCOptions = {
+    nmsLaunchConfigSSD(DataType::kFLOAT, DataType::kFLOAT, allClassNMS_gpu<float, float>),
+    nmsLaunchConfigSSD(DataType::kHALF, DataType::kHALF, allClassNMS_gpu<__half, __half>)
+};
 
 pluginStatus_t allClassNMS(cudaStream_t stream,
                         const int num,

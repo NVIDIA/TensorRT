@@ -78,8 +78,10 @@ struct sspiLaunchConfig
     }
 };
 
-static std::array<sspiLaunchConfig, 1> sspiLCOptions = {
-    sspiLaunchConfig(DataType::kFLOAT, sortScoresPerImage_gpu<float>)};
+static std::array<sspiLaunchConfig, 2> sspiLCOptions = {
+    sspiLaunchConfig(DataType::kFLOAT, sortScoresPerImage_gpu<float>),
+    sspiLaunchConfig(DataType::kHALF, sortScoresPerImage_gpu<__half>),
+};
 
 pluginStatus_t sortScoresPerImage(
     cudaStream_t stream,
@@ -122,6 +124,10 @@ size_t sortScoresPerImageWorkspaceSize(
     if (DT_SCORE == DataType::kFLOAT)
     {
         wss[1] = cubSortPairsWorkspaceSize<float, int>(arrayLen, num_images); // cub workspace
+    }
+    else if (DT_SCORE == DataType::kHALF)
+    {
+        wss[1] = cubSortPairsWorkspaceSize<__half, int>(arrayLen, num_images); // cub workspace
     }
     else
     {
