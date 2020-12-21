@@ -248,7 +248,7 @@ int BatchedNMSDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const Pl
 size_t BatchedNMSPlugin::getSerializationSize() const
 {
     // NMSParameters, boxesSize,scoresSize,numPriors
-    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool);
+    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) + sizeof(DataType);
 }
 
 void BatchedNMSPlugin::serialize(void* buffer) const
@@ -266,7 +266,7 @@ void BatchedNMSPlugin::serialize(void* buffer) const
 size_t BatchedNMSDynamicPlugin::getSerializationSize() const
 {
     // NMSParameters, boxesSize,scoresSize,numPriors
-    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool);
+    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) + sizeof(DataType);
 }
 
 void BatchedNMSDynamicPlugin::serialize(void* buffer) const
