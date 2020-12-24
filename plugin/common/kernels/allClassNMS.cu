@@ -19,7 +19,7 @@
 #include <array>
 
 template <typename T_BBOX>
-__device__ T_BBOX bboxSize(
+__device__ float bboxSize(
     const Bbox<T_BBOX>& bbox,
     const bool normalized)
 {
@@ -30,8 +30,8 @@ __device__ T_BBOX bboxSize(
     }
     else
     {
-        T_BBOX width = bbox.xmax - bbox.xmin;
-        T_BBOX height = bbox.ymax - bbox.ymin;
+        float width = float(bbox.xmax) - float(bbox.xmin);
+        float height = float(bbox.ymax) - float(bbox.ymin);
         if (normalized)
         {
             return width * height;
@@ -39,7 +39,7 @@ __device__ T_BBOX bboxSize(
         else
         {
             // If bbox is not within range [0, 1].
-            return (width + T_BBOX(1)) * (height + T_BBOX(1));
+            return (width + 1.f) * (height + 1.f);
         }
     }
 }
@@ -84,17 +84,10 @@ __device__ void intersectBbox<__half>(
     }
     else
     {
-#if __CUDA_ARCH__ >= 800
-        intersect_bbox->xmin = __hmax(bbox1.xmin, bbox2.xmin);
-        intersect_bbox->ymin = __hmax(bbox1.ymin, bbox2.ymin);
-        intersect_bbox->xmax = __hmin(bbox1.xmax, bbox2.xmax);
-        intersect_bbox->ymax = __hmin(bbox1.ymax, bbox2.ymax);
-#else
         intersect_bbox->xmin = max(float(bbox1.xmin), float(bbox2.xmin));
         intersect_bbox->ymin = max(float(bbox1.ymin), float(bbox2.ymin));
         intersect_bbox->xmax = min(float(bbox1.xmax), float(bbox2.xmax));
         intersect_bbox->ymax = min(float(bbox1.ymax), float(bbox2.ymax));
-#endif
     }
 }
 
@@ -115,19 +108,11 @@ template <>
 __device__ Bbox<__half> getDiagonalMinMaxSortedBox(const Bbox<__half>& bbox1)
 {
     Bbox<__half> result;
-#if __CUDA_ARCH__ >= 800
-    result.xmin = __hmin(bbox1.xmin, bbox1.xmax);
-    result.xmax = __hmax(bbox1.xmin, bbox1.xmax);
-
-    result.ymin = __hmin(bbox1.ymin, bbox1.ymax);
-    result.ymax = __hmax(bbox1.ymin, bbox1.ymax);
-#else
     result.xmin = min(float(bbox1.xmin), float(bbox1.xmax));
     result.xmax = max(float(bbox1.xmin), float(bbox1.xmax));
 
     result.ymin = min(float(bbox1.ymin), float(bbox1.ymax));
     result.ymax = max(float(bbox1.ymin), float(bbox1.ymax));
-#endif
     return result;
 }
 
@@ -224,14 +209,10 @@ __global__ void allClassNMS_kernel(
                 {
                     const int bbox_data_idx = share_location ? (loc_bboxIndex[t] % num_preds_per_class + bbox_idx_offset) : loc_bboxIndex[t];
 
-                    loc_bbox[t].xmin = flipXY ? bbox_data[bbox_data_idx * 4 + 1]
-                      : bbox_data[bbox_data_idx * 4 + 0];
-                    loc_bbox[t].ymin = flipXY ? bbox_data[bbox_data_idx * 4 + 0]
-                      : bbox_data[bbox_data_idx * 4 + 1];
-                    loc_bbox[t].xmax = flipXY ? bbox_data[bbox_data_idx * 4 + 3]
-                      : bbox_data[bbox_data_idx * 4 + 2];
-                    loc_bbox[t].ymax = flipXY ? bbox_data[bbox_data_idx * 4 + 2]
-                      : bbox_data[bbox_data_idx * 4 + 3];
+                    loc_bbox[t].xmin = flipXY ? bbox_data[bbox_data_idx * 4 + 1] : bbox_data[bbox_data_idx * 4 + 0];
+                    loc_bbox[t].ymin = flipXY ? bbox_data[bbox_data_idx * 4 + 0] : bbox_data[bbox_data_idx * 4 + 1];
+                    loc_bbox[t].xmax = flipXY ? bbox_data[bbox_data_idx * 4 + 3] : bbox_data[bbox_data_idx * 4 + 2];
+                    loc_bbox[t].ymax = flipXY ? bbox_data[bbox_data_idx * 4 + 2] : bbox_data[bbox_data_idx * 4 + 3];
                     kept_bboxinfo_flag[cur_idx] = true;
                 }
                 else
@@ -408,7 +389,7 @@ pluginStatus_t allClassNMS(cudaStream_t stream,
                         void* afterNMS_index_array,
                         bool flipXY)
 {
-    nmsLaunchConfigSSD lc = nmsLaunchConfigSSD(DT_SCORE, DT_BBOX, allClassNMS_gpu<float, float>);
+    nmsLaunchConfigSSD lc = nmsLaunchConfigSSD(DT_SCORE, DT_BBOX);
     for (unsigned i = 0; i < nmsSsdLCOptions.size(); ++i)
     {
         if (lc == nmsSsdLCOptions[i])

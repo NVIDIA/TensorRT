@@ -32,7 +32,7 @@ size_t detectionForwardBBoxDataSize(int N, int C1, DataType DT_BBOX)
         return N * C1 * sizeof(__half);
     }
 
-    printf("Only FP32 type bounding boxes are supported.\n");
+    printf("Only FP32/FP16 type bounding boxes are supported.\n");
     return (size_t) -1;
 }
 
@@ -47,7 +47,7 @@ size_t detectionForwardBBoxPermuteSize(bool shareLocation, int N, int C1, DataTy
         return shareLocation ? 0 : N * C1 * sizeof(__half);
     }
 
-    printf("Only FP32 type bounding boxes are supported.\n");
+    printf("Only FP32/FP16 type bounding boxes are supported.\n");
     return (size_t) -1;
 }
 
