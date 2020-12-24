@@ -77,7 +77,7 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
      */
     const int numScores = N * perBatchScoresSize;
     size_t totalScoresSize = detectionForwardPreNMSSize(N, perBatchScoresSize);
-    if(DT_BBOX == DataType::kHALF) totalScoresSize /= 2; // detectionForwardPreNMSSize is implemented in terms of kFLOAT
+    if(DT_SCORE == DataType::kHALF) totalScoresSize /= 2; // detectionForwardPreNMSSize is implemented in terms of kFLOAT
     void* scores = nextWorkspacePtr((int8_t*) bboxPermute, bboxPermuteSize);
 
     // need a conf_scores
@@ -93,7 +93,7 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
     void* indices = nextWorkspacePtr((int8_t*) scores, totalScoresSize);
 
     size_t postNMSScoresSize = detectionForwardPostNMSSize(N, numClasses, topK);
-    if(DT_BBOX == DataType::kHALF) postNMSScoresSize /= 2; // detectionForwardPostNMSSize is implemented in terms of kFLOAT
+    if(DT_SCORE == DataType::kHALF) postNMSScoresSize /= 2; // detectionForwardPostNMSSize is implemented in terms of kFLOAT
     size_t postNMSIndicesSize = detectionForwardPostNMSSize(N, numClasses, topK); // indices are full int32
     void* postNMSScores = nextWorkspacePtr((int8_t*) indices, indicesSize);
     void* postNMSIndices = nextWorkspacePtr((int8_t*) postNMSScores, postNMSScoresSize);

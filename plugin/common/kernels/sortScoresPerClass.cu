@@ -50,9 +50,9 @@ __launch_bounds__(nthds_per_cta)
             {
                 // Set scores to 0
                 // Set label = -1
-                temp_scores[targetIdx] = 0.0f;
+                temp_scores[targetIdx] = 0.f;
                 temp_idx[targetIdx] = -1;
-                conf_scores_gpu[targetIdx] = 0.0f;
+                conf_scores_gpu[targetIdx] = 0.f;
             }
             // "Clear" scores lower than threshold
             else
@@ -66,9 +66,9 @@ __launch_bounds__(nthds_per_cta)
                 {
                     // Set scores to 0
                     // Set label = -1
-                    temp_scores[targetIdx] = 0.0f;
+                    temp_scores[targetIdx] = 0.f;
                     temp_idx[targetIdx] = -1;
-                    conf_scores_gpu[targetIdx] = 0.0f;
+                    conf_scores_gpu[targetIdx] = 0.f;
                     // TODO: HERE writing memory too many times
                 }
             }
