@@ -35,7 +35,7 @@ namespace plugin
 class GenerateDetection : public IPluginV2Ext
 {
 public:
-    GenerateDetection(int num_classes, int keep_topk, float score_threshold, float iou_threshold);
+    GenerateDetection(int num_classes, int keep_topk, float score_threshold, float iou_threshold, const nvinfer1::Dims& image_size);
 
     GenerateDetection(const void* data, size_t length);
 
@@ -102,6 +102,8 @@ private:
     nvinfer1::DataType mType;
     RefineNMSParameters mParam;
     std::shared_ptr<CudaBind<float>> mRegWeightDevice;
+
+    nvinfer1::Dims mImageSize;
 
     std::string mNameSpace;
 };
