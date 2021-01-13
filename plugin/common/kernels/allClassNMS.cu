@@ -23,7 +23,7 @@ __device__ float bboxSize(
     const Bbox<T_BBOX>& bbox,
     const bool normalized)
 {
-    if (bbox.xmax < bbox.xmin || bbox.ymax < bbox.ymin)
+    if (float(bbox.xmax) < float(bbox.xmin) || float(bbox.ymax) < float(bbox.ymin))
     {
         // If bbox is invalid (e.g. xmax < xmin or ymax < ymin), return 0.
         return 0;
@@ -74,7 +74,10 @@ __device__ void intersectBbox<__half>(
     const Bbox<__half>& bbox2,
     Bbox<__half>* intersect_bbox)
 {
-    if (bbox2.xmin > bbox1.xmax || bbox2.xmax < bbox1.xmin || bbox2.ymin > bbox1.ymax || bbox2.ymax < bbox1.ymin)
+    if (float(bbox2.xmin) > float(bbox1.xmax)
+        || float(bbox2.xmax) < float(bbox1.xmin)
+        || float(bbox2.ymin) > float(bbox1.ymax)
+        || float(bbox2.ymax) < float(bbox1.ymin))
     {
         // Return [0, 0, 0, 0] if there is no intersection.
         intersect_bbox->xmin = __half(0);
@@ -131,13 +134,13 @@ __device__ float jaccardOverlap(
     float intersect_width, intersect_height;
     if (normalized)
     {
-        intersect_width = intersect_bbox.xmax - intersect_bbox.xmin;
-        intersect_height = intersect_bbox.ymax - intersect_bbox.ymin;
+        intersect_width = float(intersect_bbox.xmax) - float(intersect_bbox.xmin);
+        intersect_height = float(intersect_bbox.ymax) - float(intersect_bbox.ymin);
     }
     else
     {
-        intersect_width = intersect_bbox.xmax - intersect_bbox.xmin + T_BBOX(1);
-        intersect_height = intersect_bbox.ymax - intersect_bbox.ymin + T_BBOX(1);
+        intersect_width = float(intersect_bbox.xmax) - float(intersect_bbox.xmin) + float(T_BBOX(1));
+        intersect_height = float(intersect_bbox.ymax) - float(intersect_bbox.ymin) + float(T_BBOX(1));
     }
     if (intersect_width > 0 && intersect_height > 0)
     {
