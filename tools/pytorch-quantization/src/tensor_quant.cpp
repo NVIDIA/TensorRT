@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 void fake_tensor_quant_cuda_inplace(at::Tensor, at::Tensor, int, bool);
 at::Tensor fake_tensor_quant_cuda(at::Tensor, at::Tensor, int, bool);
 at::Tensor fake_tensor_quant_with_axis_cuda(at::Tensor, at::Tensor, int, int, bool);
-float bits_to_bound(int, int); 
+float bits_to_bound(int, int);
 
 void fake_tensor_quant_inplace(at::Tensor inputs, at::Tensor amax, int num_bits=8, bool is_unsigned=false) {
   TORCH_CHECK(amax.numel(), 1);

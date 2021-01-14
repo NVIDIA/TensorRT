@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -96,3 +96,17 @@ def extend(extend_func):
 
         return extended_func
     return extend_decorator
+
+
+def invoke(func, *args, **kwargs):
+    """
+    Invokes the specified callable with the provided arguments.
+
+    Args:
+        func (Callable): The callable to invoke.
+        args, kwargs: Arguments to pass to the callable.
+
+    Returns:
+        Any: The return value of the callable.
+    """
+    return func(*args, **kwargs)

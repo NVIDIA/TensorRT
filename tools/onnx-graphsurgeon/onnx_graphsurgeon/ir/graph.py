@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -405,6 +405,7 @@ class Graph(object):
                     It will append an index to the end of the provided string to attempt to avoid duplicate tensor names, but since this \
                     doesn't guarantee that the name will be unique, you should try to ensure that the string provided is as unique as possible.
             - ``numpy.ndarray``: If a NumPy array is provided, this function will generate a Constant tensor using the name prefix: "onnx_graphsurgeon_constant"
+            - ``Union[List[Number], Tuple[Number]]``: If a list or tuple of numbers (int or float) is provided, this function will generate a Constant tensor using the name prefix: "onnx_graphsurgeon_lst_constant"
 
         Args:
             inputs (List[Union[Tensor, str, numpy.ndarray]]): The list of inputs
@@ -424,6 +425,10 @@ class Graph(object):
                     new_io.append(tensor)
                 elif isinstance(elem, np.ndarray):
                     new_io.append(Constant(name=self._generate_name("onnx_graphsurgeon_constant"), values=elem))
+                elif isinstance(elem, list) or isinstance(elem, tuple):
+                    dtype = np.float32 if any([isinstance(x, float) for x in elem]) else np.int64
+                    arr = np.array(elem, dtype=dtype)
+                    new_io.append(Constant(name=self._generate_name("onnx_graphsurgeon_lst_constant"), values=arr))
                 else:
                     G_LOGGER.critical("Unrecognized type passed to Graph.layer: {:}.\n\tHint: Did you forget to unpack a list with `*`?\n\tPlease use Tensors, strings, or NumPy arrays.".format(elem))
             return new_io

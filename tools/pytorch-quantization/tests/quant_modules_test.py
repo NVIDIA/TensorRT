@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -62,8 +62,8 @@ class TestQuantModuleReplace():
         replacement_helper.prepare_state(no_replace_list, custom_quant_modules)
         replacement_helper.apply_quant_modules()
 
-        # Although no replace list indicates Linear module should not be replaced with its 
-        # quantized version, since the custom_quant_modules still contains the Linear module's 
+        # Although no replace list indicates Linear module should not be replaced with its
+        # quantized version, since the custom_quant_modules still contains the Linear module's
         # mapping, it will replaced.
         assert(type(quant_nn.QuantLinear(16, 256, 3)) == type(torch.nn.Linear(16, 256, 3)))
         assert(type(quant_nn.QuantConv2d(16, 256, 3)) == type(torch.nn.Conv2d(16, 256, 3)))
@@ -73,7 +73,7 @@ class TestQuantModuleReplace():
     def test_initialize_deactivate(self):
         no_replace_list = ["Linear"]
         custom_quant_modules = [(torch.nn, "Linear", quant_nn.QuantLinear)]
-        
+
         quant_modules.initialize(no_replace_list, custom_quant_modules)
 
         assert(type(quant_nn.QuantLinear(16, 256, 3)) == type(torch.nn.Linear(16, 256, 3)))

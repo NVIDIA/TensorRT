@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,12 +19,13 @@
 This script demonstrates how to use the Calibrator API provided by Polygraphy
 to calibrate a TensorRT engine to run in INT8 precision.
 """
-from polygraphy.backend.trt import NetworkFromOnnxPath, CreateConfig, EngineFromNetwork, Calibrator, TrtRunner
-from polygraphy.logger import G_LOGGER
-
-import numpy as np
 import os
 
+import numpy as np
+from polygraphy.backend.trt import (Calibrator, CreateConfig,
+                                    EngineFromNetwork, NetworkFromOnnxPath,
+                                    TrtRunner)
+from polygraphy.logger import G_LOGGER
 
 MODEL = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, "models", "identity.onnx")
 INPUT_SHAPE = (1, 1, 2, 2)

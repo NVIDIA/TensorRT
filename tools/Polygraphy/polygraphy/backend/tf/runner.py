@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,10 +72,10 @@ class TfRunner(BaseRunner):
 
     def deactivate_impl(self):
         self.sess.close()
-        del self.sess
+        self.sess = None
 
 
-    def infer(self, feed_dict):
+    def infer_impl(self, feed_dict):
         G_LOGGER.extra_verbose("Received feed_dict: {:}".format(feed_dict))
         start = time.time()
         inference_outputs = self.sess.run(self.output_names, feed_dict=feed_dict, options=self.run_options,

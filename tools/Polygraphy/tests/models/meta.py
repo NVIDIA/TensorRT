@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.tf import GraphFromFrozen
-from polygraphy.backend.common import BytesFromPath
-from polygraphy.common import TensorMetadata
-from polygraphy.util import misc
+import os
 
 import numpy as np
-import os
+from polygraphy.backend.common import BytesFromPath
+from polygraphy.backend.tf import GraphFromFrozen
+from polygraphy.common import TensorMetadata
+from polygraphy.util import misc
 
 
 def model_path(name):
@@ -73,9 +73,12 @@ def check_empty_tensor_expand(runner, shapes):
     assert misc.volume(outputs["expanded"].shape) == 0
 
 
-# scan
-# "and": Model(path=model_path("and.onnx"), LoaderType=OnnxFileLoader),
-# "pow_scalar": Model(path=model_path("pow_scalar.onnx"), LoaderType=OnnxFileLoader),
+def check_reshape(runner):
+    feed_dict = {"data": np.random.random_sample(size=(1, 3, 5, 5)).astype(np.float32)}
+    outputs = runner.infer(feed_dict)
+    assert np.all(outputs["output"] == feed_dict["data"].ravel())
+
+
 def no_check_implemented(runner):
     raise NotImplementedError("No check_runner implemented for this model")
 
@@ -90,4 +93,6 @@ ONNX_MODELS = {
     "dim_param": Model(path=model_path("dim_param.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
     "tensor_attr": Model(path=model_path("tensor_attr.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
     "identity_with_initializer": Model(path=model_path("identity_with_initializer.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
+    "const_foldable": Model(path=model_path("const_foldable.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
+    "reshape": Model(path=model_path("reshape.onnx"), LoaderType=BytesFromPath, check_runner=check_reshape),
 }

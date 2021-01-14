@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -117,7 +117,7 @@ class DeviceBuffer(object):
 
         Args:
             shape (Tuple[int]): The initial shape of the buffer.
-            dtype (np.dtype): The data type of the buffer.
+            dtype (numpy.dtype): The data type of the buffer.
         """
         self.shape = misc.default_value(shape, tuple())
         self.dtype = misc.default_value(dtype, np.float32)
@@ -174,12 +174,12 @@ class DeviceBuffer(object):
         Host buffer must be contiguous in memory (see np.ascontiguousarray).
 
         Args:
-            host_buffer (np.ndarray): The host buffer to copy into.
+            host_buffer (numpy.ndarray): The host buffer to copy into.
             stream (Stream):
                     A Stream instance (see util/cuda.py). Performs a synchronous copy if no stream is provided.
 
         Returns:
-            np.ndarray: The host buffer, possibly reallocated if the provided buffer was too small.
+            numpy.ndarray: The host buffer, possibly reallocated if the provided buffer was too small.
         """
         nbytes = misc.volume(self.shape) * np.dtype(self.dtype).itemsize
         self._check_dtype_matches(host_buffer)

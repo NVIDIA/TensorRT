@@ -33,12 +33,15 @@ using:
 python3 -m pip install -r polygraphy/backend/<name>/requirements.txt
 ```
 
-### Install From Package Index
+### Installing The Wheel
 
 ```bash
 python3 -m pip install nvidia-pyindex
 python3 -m pip install polygraphy
 ```
+
+**NOTE:** When using this method, the command-line toolkit will be installed into `${HOME}/.local/bin` by default.
+
 
 ### Building From Source
 
