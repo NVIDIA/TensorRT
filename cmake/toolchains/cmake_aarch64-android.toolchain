@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ set(CMAKE_CUDA_COMPILER_FORCED TRUE)
 
 set(CUDA_LIBS -L${CUDA_ROOT}/lib64)
 
-set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcublas -lcudart -lnvToolsExt -lculibos -lcudadevrt -llog)	
+set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcublas -lcudart -lnvToolsExt -lculibos -lcudadevrt -llog)
 
 
 set(DISABLE_SWIG TRUE)

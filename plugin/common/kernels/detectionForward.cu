@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -154,7 +154,7 @@ pluginStatus_t detectionInference(
                                 indices,
                                 sortingWorkspace);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
-    
+
     // NMS
     status = allClassNMS(stream,
                          N,
@@ -348,7 +348,7 @@ namespace plugin
                                 indices,
                                 sortingWorkspace);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
-    
+
     // NMS
     status = allClassNMS(stream,
                          N,

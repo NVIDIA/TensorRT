@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -124,8 +124,8 @@ pluginStatus_t gatherNMSOutputs_gpu(
                                                                            numClasses, topK, keepTopK,
                                                                            (int*) indices, (T_SCORE*) scores, (T_BBOX*) bboxData,
                                                                            (int*) numDetections,
-                                                                           (T_BBOX*) nmsedBoxes, 
-                                                                           (T_BBOX*) nmsedScores, 
+                                                                           (T_BBOX*) nmsedBoxes,
+                                                                           (T_BBOX*) nmsedScores,
                                                                            (T_BBOX*) nmsedClasses,
                                                                            clipBoxes
                                                                             );
@@ -147,7 +147,7 @@ typedef pluginStatus_t (*nmsOutFunc)(cudaStream_t,
                                const void*,
                                void*,
                                void*,
-                               void*, 
+                               void*,
                                void*,
                                bool);
 struct nmsOutLaunchConfig

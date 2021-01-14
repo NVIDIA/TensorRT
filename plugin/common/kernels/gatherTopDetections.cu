@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -111,7 +111,7 @@ pluginStatus_t gatherTopDetections_gpu(
     return STATUS_SUCCESS;
 }
 
-// gatherTopDetections LAUNCH CONFIG 
+// gatherTopDetections LAUNCH CONFIG
 typedef pluginStatus_t (*gtdFunc)(cudaStream_t,
                                const bool,
                                const int,

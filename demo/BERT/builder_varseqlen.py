@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -165,9 +165,9 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, mask_i
         qkv2ctx_plug = mha_plg_creator3.create_plugin("qkv2ctx", pfc)
         qkv_in = [mult_all.get_output(0), cu_seqlens, max_seqlen]
     else:
-        fields.append(pf_has_mask) 
-        fields.append(pf_type) 
-        fields.append(pf_var_seqlen) 
+        fields.append(pf_has_mask)
+        fields.append(pf_type)
+        fields.append(pf_var_seqlen)
         pfc = trt.PluginFieldCollection(fields)
         qkv2ctx_plug = mha_plg_creator2.create_plugin("qkv2ctx", pfc)
         qkv_in = [mult_all.get_output(0), mask_idx, cu_seqlens, max_seqlen]
@@ -212,7 +212,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, mask
     hidden_size = config.hidden_size
 
     if config.use_qat:
-        dr_input = init_dict[prefix + 'attention_self_query_input_amax'] 
+        dr_input = init_dict[prefix + 'attention_self_query_input_amax']
         assert(dr_input ==init_dict[prefix + 'attention_self_key_input_amax'] )
         assert(dr_input ==init_dict[prefix + 'attention_self_value_input_amax'] )
         input_tensor.set_dynamic_range(-dr_input, dr_input)
@@ -270,7 +270,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, mask
             dr_gelu = init_dict[prefix + 'output_dense_input_amax']
             set_output_range(gelu_layer, dr_gelu)
         else:
-            # use gelu10 according to whitepaper http://arxiv.org/abs/2004.09602 
+            # use gelu10 according to whitepaper http://arxiv.org/abs/2004.09602
             set_output_range(gelu_layer, 10)
 
     # FC2
@@ -423,7 +423,7 @@ def onnx_to_trt_name(onnx_name):
     toks = [t.strip('_') for t in onnx_name.split('.')]
     if toks[0] == 'bert': #embeddings or encoder
         if toks[1] == 'encoder': #transformer
-            
+
             if toks[-2] == 'layernorm': #bias->beta, weight->gamma
                 toks[-1] = 'beta' if toks[-1] == 'bias' else 'gamma'
             elif (toks[-2] == 'dense' or toks[-2] in {'key', 'value', 'query'}) and toks[-1] == 'weight':
@@ -433,7 +433,7 @@ def onnx_to_trt_name(onnx_name):
                     toks[-2] = 'kernel'
                 elif toks[-2] == 'input_quantizer':
                     toks[-2] = 'input'
-            
+
             if 'final_input_quantizer' not in toks[2]:
                 toks = toks[3:]
                 toks[0] = 'l{}'.format(int(toks[0]))
@@ -481,14 +481,14 @@ def load_onnx_weights_and_quant(path, config):
             Bqkv[0,:] = tensor
             Bqkv[1,:] = tensor_dict[prefix + BK]
             Bqkv[2,:] = tensor_dict[prefix + BV]
-    
+
             if config.use_int8 and config.interleaved:
                 Wqkv = np.ascontiguousarray(Wqkv.reshape((3, N, H, N, H)))
                 Bqkv = np.ascontiguousarray(Bqkv.reshape((3, N, H)))
             else:
                 Wqkv = np.ascontiguousarray(Wqkv.reshape((3, N, H, N, H)).transpose((1,0,2,3,4)))
                 Bqkv = np.ascontiguousarray(Bqkv.reshape((3, N, H)).transpose((1,0,2)))
-    
+
             weights_dict[prefix + WQKV] = trt.Weights(Wqkv)
             weights_dict[prefix + BQKV] = trt.Weights(Bqkv)
             weights_dict[prefix + WQKV + "_notrans"] = trt.Weights(Wqkv.T)
@@ -513,7 +513,7 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, max_se
     cu_seqlens = network.add_input(name="cu_seqlens", dtype=trt.int32, shape=(-1,))
     max_seqlen = network.add_input(name="max_seqlen", dtype=trt.int32, shape=(-1,))
 
-    # Specify profiles 
+    # Specify profiles
     profile = builder.create_optimization_profile()
     min_shape = (1,)
     shape = (max_sequence_length*max_batch_size,)
@@ -538,7 +538,7 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, max_se
     emb_layer = network.add_plugin_v2(inputs, fn)
 
     if config.use_int8 and config.use_qat:
-        dr_input = weights_dict['l0_attention_self_query_input_amax'] 
+        dr_input = weights_dict['l0_attention_self_query_input_amax']
         set_output_range(emb_layer, dr_input)
     set_output_name(emb_layer, "embeddings_", "output")
     return emb_layer, cu_seqlens, max_seqlen
@@ -559,9 +559,9 @@ def build_engine(batch_size, workspace_size, sequence_length, config, weights_di
         emb_layer, cu_seqlens, max_seqlen = emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_length, batch_size)
         embeddings = emb_layer.get_output(0)
         if config.use_int8 and config.interleaved:
-            shuffle = network.add_shuffle(embeddings) 
+            shuffle = network.add_shuffle(embeddings)
             shuffle.second_transpose = (2, 1, 0, 3)
-            embeddings = shuffle.get_output(0) 
+            embeddings = shuffle.get_output(0)
             mask_idx = None
         else:
             mask_idx = emb_layer.get_output(1)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 #
 
 """
-This script uses a prebuilt TensorRT BERT QA Engine to answer a question 
-based on the provided passage. It additionally includes an interactive mode 
+This script uses a prebuilt TensorRT BERT QA Engine to answer a question
+based on the provided passage. It additionally includes an interactive mode
 where multiple questions can be asked.
 """
 
@@ -139,7 +139,7 @@ if __name__ == '__main__':
         context.active_optimization_profile = selected_profile
         binding_idx_offset = selected_profile * num_binding_per_profile
 
-        # Specify input shapes. These must be within the min/max bounds of the active profile 
+        # Specify input shapes. These must be within the min/max bounds of the active profile
         # Note that input shapes can be specified on a per-inference basis, but in this case, we only have a single shape.
         input_shape = (max_seq_length, args.batch_size)
         input_nbytes = trt.volume(input_shape) * trt.int32.itemsize

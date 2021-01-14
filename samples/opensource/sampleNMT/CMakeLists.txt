@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
 # limitations under the License.
 #
 SET(SAMPLE_SOURCES
-    sampleNMT.cpp 
+    sampleNMT.cpp
     trtUtil.cpp
-) 
+)
 include(../../CMakeSamplesTemplate.txt)
 
 # define SAMPLE_NMT_DATA_SOURCES and SAMPLE_NMT_MODEL_SOURCES
-set(SAMPLE_NMT_MODEL_SOURCES 
+set(SAMPLE_NMT_MODEL_SOURCES
     model/beamSearchPolicy.cpp
     model/componentWeights.cpp
     model/contextNMT.cpp
@@ -46,7 +46,7 @@ set(SAMPLE_NMT_DATA_SOURCES
 
 set(TARGET_NAME ${SAMPLE_NAME})
 target_sources(${TARGET_NAME}
-PRIVATE 
+PRIVATE
     ${SAMPLE_NMT_MODEL_SOURCES}
     ${SAMPLE_NMT_DATA_SOURCES}
 )

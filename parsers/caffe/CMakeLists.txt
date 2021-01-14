@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 protobuf_generate_cpp(CAFFE_PROTO_SRC CAFFE_PROTO_HDR proto/trtcaffe.proto)
 add_custom_target(caffe_proto
     DEPENDS
-    ${CAFFE_PROTO_SRC} ${CAFFE_PROTO_HDR} 
+    ${CAFFE_PROTO_SRC} ${CAFFE_PROTO_HDR}
 )
 ############################## BUILD CAFFE PARSER ########################################
 add_custom_target(nvcaffeparserlibs)
@@ -50,7 +50,7 @@ target_include_directories(${SHARED_TARGET}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/proto
 )
 
-set_target_properties(${SHARED_TARGET} 
+set_target_properties(${SHARED_TARGET}
     PROPERTIES
     CXX_STANDARD 11
     CXX_STANDARD_REQUIRED YES
@@ -60,7 +60,7 @@ set_target_properties(${SHARED_TARGET}
     RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
-target_link_libraries(${SHARED_TARGET} 
+target_link_libraries(${SHARED_TARGET}
     ${Protobuf_LIBRARY}
     nvinfer
 )
@@ -68,7 +68,7 @@ target_link_libraries(${SHARED_TARGET}
 # modify google namespace to avoid namespace collision.
 set(GOOGLE google_private)
 target_compile_definitions(${SHARED_TARGET}
-    PRIVATE 
+    PRIVATE
     "-Dgoogle=${GOOGLE}"
     "-DGOOGLE_PROTOBUF_ARCH_64_BIT"
 )
@@ -84,7 +84,7 @@ set_property(TARGET ${SHARED_TARGET} PROPERTY CUDA_STANDARD 11)
 ################################## STATIC LIBRARY #######################################
 
 add_library(${STATIC_TARGET} STATIC
-    ${CAFFE_PARSER_SRCS} 
+    ${CAFFE_PARSER_SRCS}
 )
 
 add_dependencies(${STATIC_TARGET} caffe_proto)
@@ -100,7 +100,7 @@ target_include_directories(${STATIC_TARGET}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/proto
 )
 
-set_target_properties(${STATIC_TARGET} 
+set_target_properties(${STATIC_TARGET}
     PROPERTIES
     CXX_STANDARD 11
     CXX_STANDARD_REQUIRED YES
@@ -110,14 +110,14 @@ set_target_properties(${STATIC_TARGET}
     RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
-target_link_libraries(${STATIC_TARGET} 
+target_link_libraries(${STATIC_TARGET}
     ${Protobuf_LIBRARY}
 )
 
 # modify google namespace to avoid namespace collision.
 set(GOOGLE google_private)
 target_compile_definitions(${STATIC_TARGET}
-    PRIVATE 
+    PRIVATE
     "-Dgoogle=${GOOGLE}"
     "-DGOOGLE_PROTOBUF_ARCH_64_BIT"
 )

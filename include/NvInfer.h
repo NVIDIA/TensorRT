@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -6745,7 +6745,7 @@ public:
     //!
     //! \brief Set Algorithm Selector.
     //!
-    //! \param selector The algorithm slector to be set in the build config.
+    //! \param selector The algorithm selector to be set in the build config.
     virtual void setAlgorithmSelector(IAlgorithmSelector* selector) TRTNOEXCEPT = 0;
 
     //!

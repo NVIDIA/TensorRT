@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ link_directories(
     ${TRT_LIB_DIR}
 )
 
-pybind11_add_module(infer_c 
+pybind11_add_module(infer_c
     infer_c/infer_c.cpp
     infer_c/logging.cpp
 )
@@ -64,9 +64,8 @@ add_executable(perf
     infer_c/logging.cpp
 )
 
-target_link_libraries(perf 
+target_link_libraries(perf
     ${CUDA_LIBRARIES}
     nvinfer
     nvinfer_plugin
 )
-
