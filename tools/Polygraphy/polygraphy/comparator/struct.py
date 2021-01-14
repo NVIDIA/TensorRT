@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 #
 from collections import OrderedDict
 
+from polygraphy.logger.logger import G_LOGGER
 from polygraphy.util import misc
 
 
@@ -45,14 +46,83 @@ class IterationResult(OrderedDict):
         self.runner_name = misc.default_value(runner_name, "")
 
 
-class RunResults(OrderedDict):
+class RunResults(list):
     def __init__(self):
         """
-        An ordered dictionary that maps runners, by name, to zero or more IterationResults.
+        Maps runner names to zero or more IterationResults.
 
-        More specifically, it is an OrderedDict[str, List[IterationResult]].
+        Note: Technically, it is an List[Tuple[str, List[IterationResult]]], but includes
+        helpers that make it behave like an OrderedDict that can contain duplicates.
         """
         pass
+
+
+    def items(self):
+        """
+        Creates a generator that yields Tuple[str, List[IterationResult]] - runner names
+        and corresponding outputs.
+        """
+        for name, iteration_results in self:
+            yield name, iteration_results
+
+
+    def keys(self):
+        """
+        Creates a generator that yields runner names (str).
+        """
+        for name, _ in self:
+            yield name
+
+
+    def values(self):
+        """
+        Creates a generator that yields runner outputs (List[IterationResult]).
+        """
+        for _, iteration_results in self:
+            yield iteration_results
+
+
+    def update(self, other):
+        """
+        Updates the results stored in this instance.
+
+        Args:
+            other (Union[Dict[str, List[IterationResult]], RunResults]):
+                    A dictionary or RunResults instance from which to update this one.
+        """
+        for name, iteration_results in other.items():
+            self[name] = iteration_results
+        return self
+
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return super().__getitem__(key)
+
+        for name, iteration_results in self:
+            if name == key:
+                return iteration_results
+
+        G_LOGGER.critical("Runner: {:} does not exist in this RunResults instance. Note: Available runners: {:}".format(
+                        key, list(self.keys())))
+
+
+    def __setitem__(self, key, value):
+        if isinstance(key, int):
+            super().__setitem__(key, value)
+
+        for index, name in enumerate(self.keys()):
+            if name == key:
+                super().__setitem__(index, (key, value))
+                break
+        else:
+            self.append((key, value))
+
+
+    def __contains__(self, val):
+        if isinstance(val, str) or isinstance(val, bytes):
+            return val in list(self.keys())
+        return super().__contains__(val)
 
 
 class AccuracyResult(OrderedDict):

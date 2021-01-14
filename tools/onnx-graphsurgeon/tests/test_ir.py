@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -532,6 +532,21 @@ class TestGraph(object):
     def test_layer_with_arrays(self):
         x0 = np.array([1])
         x1 = np.array([1])
+        y0 = "y0"
+        y1 = "y1"
+        graph = Graph()
+
+        outputs = graph.layer(op="Fake", inputs=[x0, x1], outputs=[y0, y1])
+        assert [prefix in tensor.name for prefix, tensor in zip([y0, y1], graph.nodes[-1].outputs)]
+        assert len(graph.nodes) == 1
+        assert graph.nodes[-1].inputs[0].values == x0
+        assert graph.nodes[-1].inputs[1].values == x1
+        assert graph.nodes[-1].outputs == outputs
+
+
+    def test_layer_with_iterables(self):
+        x0 = [1]
+        x1 = (1, )
         y0 = "y0"
         y1 = "y1"
         graph = Graph()

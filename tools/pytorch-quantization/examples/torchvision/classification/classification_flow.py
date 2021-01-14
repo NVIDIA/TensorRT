@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ import numpy as np
 
 from prettytable import PrettyTable
 
-# The following path assumes running in nvcr.io/nvidia/pytorch:20.08-py3 
+# The following path assumes running in nvcr.io/nvidia/pytorch:20.08-py3
 sys.path.insert(0,"/opt/pytorch/vision/references/classification/")
 
 # Import functions from torchvision reference

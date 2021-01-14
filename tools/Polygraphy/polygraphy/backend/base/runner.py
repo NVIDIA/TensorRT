@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.util import misc
-from polygraphy.logger.logger import G_LOGGER, LogMode
-
-from collections import defaultdict
 import time
+from collections import defaultdict
+
+from polygraphy.logger.logger import G_LOGGER, LogMode
+from polygraphy.util import misc
 
 
 class BaseRunner(object):
@@ -50,15 +50,15 @@ class BaseRunner(object):
 
     def last_inference_time(self):
         """
-        Returns the total time required for the last call to ``infer()``.
+        Returns the total inference time required during the last call to ``infer()``.
 
         Returns:
             float: The time in seconds, or None if runtime was not measured by the runner.
         """
         if self.inference_time is None:
-            G_LOGGER.warning("inference_time was not set by this runner. Inference time will be incorrect!"
+            G_LOGGER.warning("Runner {:40} | inference_time was not set. Inference time will be incorrect!"
                              "To correctly compare runtimes, please set the inference_time property in the"
-                             "infer() function", mode=LogMode.ONCE)
+                             "infer() function".format(self.name), mode=LogMode.ONCE)
             return None
         return self.inference_time
 
@@ -85,14 +85,20 @@ class BaseRunner(object):
         Activate the runner for inference. This may involve allocating GPU buffers, for example.
         """
         if self.is_active:
-            G_LOGGER.warning("Runner is already active; Will not activate again. If you really want to "
-                              "activate this runner twice, call activate_impl() directly")
+            G_LOGGER.warning("Runner {:40} | Already active; will not activate again. If you really want to "
+                             "activate this runner again, call activate_impl() directly".format(self.name))
             return
 
-        try:
-            self.activate_impl()
-        finally:
-            self.is_active = True
+        self.activate_impl()
+        self.is_active = True
+
+
+    def infer_impl(self):
+        """
+        Implementation for runner inference. Derived classes should override this function
+        rather than ``infer()``
+        """
+        raise NotImplementedError("BaseRunner is an abstract class")
 
 
     def infer(self, feed_dict):
@@ -100,15 +106,18 @@ class BaseRunner(object):
         Runs inference using the provided feed_dict.
 
         Args:
-            feed_dict (OrderedDict[str, np.ndarray]): A mapping of input tensor names to corresponding input NumPy arrays.
+            feed_dict (OrderedDict[str, numpy.ndarray]): A mapping of input tensor names to corresponding input NumPy arrays.
 
         Returns:
-            OrderedDict[str, np.ndarray]:
+            OrderedDict[str, numpy.ndarray]:
                     A mapping of output tensor names to their corresponding NumPy arrays.
                     IMPORTANT: Runners may reuse these output buffers. Thus, if you need to save
                     outputs from multiple inferences, you should make a copy with ``copy.copy(outputs)``.
         """
-        raise NotImplementedError("BaseRunner is an abstract class")
+        if not self.is_active:
+            G_LOGGER.critical("Runner {:40} | Must be activated prior to calling infer()".format(self.name))
+
+        return self.infer_impl(feed_dict)
 
 
     def get_input_metadata(self):
@@ -136,11 +145,14 @@ class BaseRunner(object):
         Deactivate the runner.
         """
         if not self.is_active:
-            G_LOGGER.warning("Runner is not active; Will not deactivate. If you really want to "
-                                "deactivate this runner, call deactivate_impl() directly")
+            G_LOGGER.warning("Runner {:40} | Not active; will not deactivate. If you really want to "
+                             "deactivate this runner, call deactivate_impl() directly".format(self.name))
             return
 
-        try:
-            self.deactivate_impl()
-        finally:
-            self.is_active = False
+        self.deactivate_impl()
+        self.is_active = False
+
+
+    def __del__(self):
+        if self.is_active:
+            print("[W] Runner {:40} | Was activated but never deactivated. This could cause a memory leak!".format(self.name))

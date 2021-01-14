@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -104,9 +104,9 @@ class TestNetwork():
         qlenet = QuantLeNet()
 
         mod_list = [type(mod) for name, mod in lenet.named_modules()]
-        mod_list = mod_list[1:]    
+        mod_list = mod_list[1:]
         qmod_list = [type(mod) for name, mod in qlenet.named_modules()]
-        qmod_list = qmod_list[1:]  
+        qmod_list = qmod_list[1:]
 
         # Before any monkey patching, the networks should be different
         assert(mod_list != qmod_list)
@@ -119,9 +119,9 @@ class TestNetwork():
 
         lenet = LeNet()
         qlenet = QuantLeNet()
-    
+
         mod_list = [type(mod) for name, mod in lenet.named_modules()]
-        mod_list = mod_list[1:]    
+        mod_list = mod_list[1:]
         qmod_list = [type(mod) for name, mod in qlenet.named_modules()]
         qmod_list = qmod_list[1:]
 
@@ -133,9 +133,9 @@ class TestNetwork():
 
         lenet = LeNet()
         qlenet = QuantLeNet()
-    
+
         mod_list = [type(mod) for name, mod in lenet.named_modules()]
-        mod_list = mod_list[1:]    
+        mod_list = mod_list[1:]
         qmod_list = [type(mod) for name, mod in qlenet.named_modules()]
         qmod_list = qmod_list[1:]
 
@@ -166,4 +166,3 @@ class TestNetwork():
                 else:
                     module.enable()
         quant_model.cuda()
-

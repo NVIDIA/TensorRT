@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ __all__ = [
 ]
 
 class QuantInstanceNorm1d(instancenorm.InstanceNorm1d, _utils.QuantInputMixin):
-    r"""Applies Quantized Instance Normalization over a 3D input 
+    r"""Applies Quantized Instance Normalization over a 3D input
     """
     def __init__(
             self, num_features: int, eps: float = 1e-5, momentum: float = 0.1, affine: bool = False,

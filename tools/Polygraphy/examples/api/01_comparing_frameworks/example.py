@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,12 +19,13 @@
 This script runs an identity model with ONNX-Runtime and TensorRT,
 then compares outputs.
 """
-from polygraphy.backend.trt import NetworkFromOnnxBytes, EngineFromNetwork, TrtRunner
-from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnxBytes
-from polygraphy.backend.common import BytesFromPath
-from polygraphy.comparator import Comparator
-
 import os
+
+from polygraphy.backend.common import BytesFromPath
+from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnxBytes
+from polygraphy.backend.trt import (EngineFromNetwork, NetworkFromOnnxBytes,
+                                    TrtRunner)
+from polygraphy.comparator import Comparator
 
 # Create loaders for both ONNX Runtime and TensorRT
 MODEL = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, "models", "identity.onnx")

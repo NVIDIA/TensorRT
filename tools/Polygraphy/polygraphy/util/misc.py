@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,18 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.util.format import DataFormat, FormatManager
-from polygraphy.logger import G_LOGGER
-from polygraphy.common import constants
-
-from collections import OrderedDict
-import pickle
-import zlib
-import sys
+import contextlib
 import os
+import pickle
+import sys
+import zlib
+from collections import OrderedDict
 
 import numpy as np
-
+from polygraphy.common import constants
+from polygraphy.logger import G_LOGGER
+from polygraphy.util.format import FormatManager
 
 NP_TYPE_FROM_STR = {np.dtype(dtype).name: np.dtype(dtype) for dtype in np.sctypeDict.values()}
 STR_FROM_NP_TYPE = {dtype: name for name, dtype in NP_TYPE_FROM_STR.items()}
@@ -329,11 +328,11 @@ def try_match_shape(arr, shape):
     This is a no-op if the array is already the correct shape.
 
     Args:
-        arr (np.ndarray): The array to reshape.
+        arr (numpy.ndarray): The array to reshape.
         shape (Tuple[int]): The shape to use. May contain at most 1 dynamic dimension.
 
     Returns:
-        np.ndarray: The reshaped array.
+        numpy.ndarray: The reshaped array.
     """
     def is_rank_same(arr, shape):
         return len(shape) == len(arr.shape)
@@ -428,3 +427,36 @@ def indent_block(block, level=1):
     tab = constants.TAB * level
     sep = "\n{:}".format(tab)
     return tab + sep.join(str(block).splitlines())
+
+
+class FreeOnException(object):
+    def __init__(self, objs):
+        """
+        Frees the specified objects if an exception occurs in this context.
+        Does nothing otherwise.
+
+        Args:
+            objs (List[object]): List of objects with __enter__/__exit__ methods defined.
+        """
+        assert isinstance(objs, list) or isinstance(objs, tuple), "FreeOnException requires a tuple or list of objects!"
+        self.objs = objs
+
+
+    def __enter__(self):
+        """
+        Returns the objects managed by this context manager.
+        """
+        return self.objs
+
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        On exception, deletes all tracked objects.
+        Does nothing if there are no exceptions.
+        """
+        if exc_type is not None:
+            # Objects are freed in reverse order
+            with contextlib.ExitStack() as stack:
+                for obj in self.objs:
+                    if obj is not None:
+                        stack.enter_context(obj)

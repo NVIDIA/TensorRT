@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ class PostprocessFunc(object):
 
             for name, output in run_result.items():
                 if name in outputs and name not in exclude:
-                    indices = np.argsort(-output, axis=axis)
+                    indices = np.argsort(-output, axis=axis, kind="stable")
                     axis_len = indices.shape[axis]
                     run_result[name] = np.take(indices, np.arange(0, min(k, axis_len)), axis=axis)
             return run_result
