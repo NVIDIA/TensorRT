@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -276,4 +276,3 @@ run_benchmark "-b 24" "large" "fp32" "384" "24" "${arg_gpu}"
 run_benchmark "-b 32" "large" "fp32" "384" "32" "${arg_gpu}"
 run_benchmark "-b 64" "large" "fp32" "384" "64" "${arg_gpu}"
 run_benchmark "-b 128" "large" "fp32" "384" "128" "${arg_gpu}"
-

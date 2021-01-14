@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ macro(configure_protobuf VERSION)
             -DCMAKE_INSTALL_PREFIX=${Protobuf_INSTALL_DIR}/${Protobuf_TARGET}
             -Dprotobuf_BUILD_TESTS=OFF
         SOURCE_SUBDIR cmake
-        BINARY_DIR ${Protobuf_INSTALL_DIR}/${Protobuf_TARGET}/src/${Protobuf_TARGET} 
+        BINARY_DIR ${Protobuf_INSTALL_DIR}/${Protobuf_TARGET}/src/${Protobuf_TARGET}
     )
 
     set(Protobuf_BIN_DIR "${CMAKE_BINARY_DIR}/${Protobuf_TARGET}/bin")
@@ -216,4 +216,3 @@ function(protobuf_generate_cpp SRCS HDRS)
     set(${SRCS} ${SOURCES} PARENT_SCOPE)
     set(${HDRS} ${HEADERS} PARENT_SCOPE)
 endfunction()
-

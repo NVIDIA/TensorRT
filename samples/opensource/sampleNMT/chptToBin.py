@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,14 +22,14 @@ import argparse
 from copy import deepcopy
 
 """
-    The conversion of a checkpoint from 
-    https://github.com/tensorflow/nmt project 
+    The conversion of a checkpoint from
+    https://github.com/tensorflow/nmt project
     The conversion was tested using Tensorflow 1.6
 """
 
 def chpt_to_dict_arrays_simple(file_name):
     """
-        Convert a checkpoint into into a dictionary of numpy arrays 
+        Convert a checkpoint into into a dictionary of numpy arrays
         for later use in TensorRT NMT sample.
     """
     config = tf.ConfigProto(allow_soft_placement=True)
@@ -53,7 +53,7 @@ def chpt_to_dict_arrays_simple(file_name):
 
 def chpt_to_dict_arrays():
     """
-        Convert a checkpoint into a dictionary of numpy arrays 
+        Convert a checkpoint into a dictionary of numpy arrays
         for later use in TensorRT NMT sample.
         git clone https://github.com/tensorflow/nmt.git
     """
@@ -132,7 +132,7 @@ def concatenate_layers(params):
         if bi_layers == 1:
             bifw_encoder_prefix = u'dynamic_seq2seq/encoder/bidirectional_rnn/fw/basic_lstm_cell/'
             bibw_encoder_prefix = u'dynamic_seq2seq/encoder/bidirectional_rnn/bw/basic_lstm_cell/'
-            data["encrnnkernel"] = params[bifw_encoder_prefix + kernel_alias] 
+            data["encrnnkernel"] = params[bifw_encoder_prefix + kernel_alias]
             tmp_weights = params[bibw_encoder_prefix + kernel_alias]
             data["encrnnkernel"] = np.concatenate((data["encrnnkernel"], tmp_weights), axis=0)
 
@@ -188,8 +188,8 @@ def concatenate_layers(params):
 
     num_units = int(data["decrnnkernel"].shape[1] / 4)
     encoder_type_int = 1 if encoder_type == 'bidirectional' else 0
-    dimensions = {"layers": layers, 
-                  "encoder_type": encoder_type_int, 
+    dimensions = {"layers": layers,
+                  "encoder_type": encoder_type_int,
                   "num_units":  num_units,
                   "encembed_outputs": data['encembed'].shape[0],
                   "decembed_outputs": data['decembed'].shape[0],
@@ -197,7 +197,7 @@ def concatenate_layers(params):
     return dimensions, data
 
 def convert_rnn_kernel(weights, dimensions, is_decoder_rnn = False):
-    """ 
+    """
     In place. weights conversion
     TensorFlow weight parameters for BasicLSTMCell
     are formatted as:
@@ -219,7 +219,7 @@ def convert_rnn_kernel(weights, dimensions, is_decoder_rnn = False):
     CellN: Wf, Rf, Wi, Ri, Wc, Rc, Wo, Ro, Empty states
 
     Update: alternative notation
-    Tensorflow documents gates' order in e.g. 
+    Tensorflow documents gates' order in e.g.
     https:github.com/tensorflow/tensorflow/blob/r1.4/tensorflow/python/ops/rnn_cell_impl.py:439
     TF: i = input_gate, j = new_input (cell gate), f = forget_gate, o = output_gate - ijfo
     Need to convert 'ijfo' to 'fijo'
@@ -241,7 +241,7 @@ def convert_rnn_kernel(weights, dimensions, is_decoder_rnn = False):
         weights = np.reshape(weights, (layers, 2, input_size, 4, num_units))
         print("After reshape: {0}".format(weights.shape))
 
-        # reorder/transpose axis to match TensorRT format (layers, 2, 4, num_units, input_size) 
+        # reorder/transpose axis to match TensorRT format (layers, 2, 4, num_units, input_size)
         weights = np.moveaxis(weights, [2, 3, 4], [4, 2, 3])
         print("After moveaxis: {0}".format(weights.shape))
 
@@ -313,24 +313,24 @@ def convert_rnn_bias(weights, dimensions, forget_bias = 1.0):
 
 def convert_weigts(dimensions, data, forget_bias = 1.0):
     """Convert weights from Tensorflow to TensorRT format"""
-  
-    print("Processing encoder RNN kernel") 
+
+    print("Processing encoder RNN kernel")
     data["encrnnkernel"] = convert_rnn_kernel(data["encrnnkernel"], dimensions, False)
-    
+
     print("Processing encoder RNN bias")
     data["encrnnbias"] = convert_rnn_bias(data["encrnnbias"], dimensions, forget_bias = forget_bias)
 
-    print("Processing decoder RNN kernel") 
+    print("Processing decoder RNN kernel")
     data["decrnnkernel"] = convert_rnn_kernel(data["decrnnkernel"], dimensions, True)
 
     print("Processing decoder RNN bias")
     data["decrnnbias"] = convert_rnn_bias(data["decrnnbias"], dimensions, forget_bias = forget_bias)
-    
+
     return data
 
 def save_layer_weights(data, list_keys, dims, footer_string, file_name):
     """
-        data          - dictionary with string names as keys and 
+        data          - dictionary with string names as keys and
                         numpy weights as values
         list_keys     - list of dictionary keys to save
         dims          - list of int values relevant to the layer
@@ -362,7 +362,7 @@ def main(_):
         print ('python {0} <NMT inference parameters> --weightsdir=<case_name_dir>'.format(sys.argv[0]))
         print ("""e.g. \npython {0} --src=en --tgt=vi \\
     --ckpt=/path/to/envi_model/translate.ckpt \\
-    --hparams_path=nmt/standard_hparams/iwslt15.json \\ 
+    --hparams_path=nmt/standard_hparams/iwslt15.json \\
     --out_dir=/tmp/envi \\
     --vocab_prefix=/tmp/nmt_data/vocab \\
     --inference_input_file=/tmp/nmt_data/tst2013.en \\
@@ -387,7 +387,7 @@ def main(_):
         params = chpt_to_dict_arrays(trt_flags.metafile)
 
     print('\nLoading the checkpoint...\n')
-    
+
     print('\nConcatenating the weights...')
     dimensions, data = concatenate_layers(params)
 
@@ -435,7 +435,7 @@ def main(_):
                         [ dimensions["num_units"], \
                         dimensions["num_units"] ], \
                         trt_string, case_dir + "decmem.bin")
-                        
+
     #decattkernel
     # first dimension is 3 * num_units of bi RNN, 2 * num_units otherwise
     save_layer_weights(data, ["decattkernel"], \

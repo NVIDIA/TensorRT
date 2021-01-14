@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
 using std::max;
 using std::min;
 
-// BBD2P KERNEL 
+// BBD2P KERNEL
 template <typename T_DELTAS,
           DLayout_t L_DELTAS,
           typename TV_PROPOSALS,
@@ -120,7 +120,7 @@ __global__ void bboxDeltas2Proposals_kernel(
         float bw = ctr_y + (b_h / 2);
 
         TV_PROPOSALS bbox;
-        // Make sure that the decoded bouding box go outside of the original input image 
+        // Make sure that the decoded bouding box go outside of the original input image
         bbox.x = fminf(fmaxf(bx, 0.0f), imWidth - 1.0f);
         bbox.y = fminf(fmaxf(by, 0.0f), imHeight - 1.0f);
         bbox.z = fminf(fmaxf(bz, 0.0f), imWidth - 1.0f);
@@ -145,7 +145,7 @@ __global__ void bboxDeltas2Proposals_kernel(
     }
 }
 
-// BBD2P KERNEL LAUNCHER 
+// BBD2P KERNEL LAUNCHER
 template <typename T_DELTAS,
           DLayout_t L_DELTAS,
           typename TV_PROPOSALS,
@@ -240,7 +240,7 @@ static std::array<bd2pLaunchConfig, 2> bd2pLCOptions = {
     bd2pLaunchConfig(FLOAT32, NC4HW, FLOAT32, NC4HW, FLOAT32, NCHW, bboxDeltas2Proposals_gpu<float, NC4HW, float4, NC4HW, float, NCHW>),
     bd2pLaunchConfig(FLOAT32, NCHW, FLOAT32, NC4HW, FLOAT32, NCHW, bboxDeltas2Proposals_gpu<float, NCHW, float4, NC4HW, float, NCHW>)};
 
-// BBD2P 
+// BBD2P
 pluginStatus_t bboxDeltas2Proposals(cudaStream_t stream,
                                    const int N,
                                    const int A,

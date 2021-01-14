@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,9 +47,9 @@ __launch_bounds__(nthds_per_cta)
             // Ignore background class if not share_location.
             return;
         }
-        // Index to the right anchor box corresponding to the current bounding box 
+        // Index to the right anchor box corresponding to the current bounding box
         const int pi = d * 4;
-        // Index to the right variances corresponding to the current bounding box 
+        // Index to the right variances corresponding to the current bounding box
         const int vi = pi + num_priors * 4;
         // Encoding method: CodeTypeSSD::CORNER
         //if (code_type == PriorBoxParameter_CodeType_CORNER){
@@ -164,7 +164,7 @@ __launch_bounds__(nthds_per_cta)
                 bbox_data[index] = prior_data[pi + i] + loc_data[index] * prior_data[vi + i] * p_size;
             }
         }
-        // Exactly the same to CodeTypeSSD::CENTER_SIZE with using variance to adjust the bounding box decoding 
+        // Exactly the same to CodeTypeSSD::CENTER_SIZE with using variance to adjust the bounding box decoding
         else if (code_type == CodeTypeSSD::TF_CENTER)
         {
             const T_BBOX pXmin = prior_data[pi];

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -127,7 +127,7 @@ pluginStatus_t sortScoresPerClass_gpu(
     return STATUS_SUCCESS;
 }
 
-// sortScoresPerClass LAUNCH CONFIG 
+// sortScoresPerClass LAUNCH CONFIG
 typedef pluginStatus_t (*sspcFunc)(cudaStream_t,
                                 const int,
                                 const int,

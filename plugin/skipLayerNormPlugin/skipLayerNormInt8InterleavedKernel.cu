@@ -1,6 +1,6 @@
 
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -165,7 +165,7 @@ __global__ void skipln_vec32(const int8_t* input, const int8_t* skip, int8_t* ou
     stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 1); __syncwarp();
 
     if (VECS_PER_CTA == 1)
-    { 
+    {
         stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 2); __syncwarp();
         stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 4); __syncwarp();
     }
@@ -173,7 +173,7 @@ __global__ void skipln_vec32(const int8_t* input, const int8_t* skip, int8_t* ou
     {
         stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 4); __syncwarp();
     }
-    
+
     stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 8); __syncwarp();
     stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 16); __syncwarp();
 
@@ -288,8 +288,8 @@ __global__ void skiplnDQQ_vec(const int ld, const int8_t* input, const int8_t* s
     int8_t in_local[VPT];
     int8_t skip_local[VPT];
 
-    half in_local_dq[VPT]; // dequantized input + skip 
-    half beta_local[VPT];  
+    half in_local_dq[VPT]; // dequantized input + skip
+    half beta_local[VPT];
     half gamma_local[VPT];
 
     // load input tensors
@@ -369,4 +369,3 @@ void launch_small(cudaStream_t stream, const int ld, const int total, const int8
 }
 
 } // namespace bert
-
