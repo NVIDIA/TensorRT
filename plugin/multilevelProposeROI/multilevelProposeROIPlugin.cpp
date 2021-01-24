@@ -405,7 +405,7 @@ int MultilevelProposeROI::enqueue(
             static_cast<float>(mImageSize.d[1]), // Input Height
             static_cast<float>(mImageSize.d[2]),
             DataType::kFLOAT, // mType,
-            mParam, proposal_ws, workspace + kernel_workspace_offset,
+            mParam, proposal_ws, reinterpret_cast<uint8_t*>(workspace) + kernel_workspace_offset,
             inputs[2 * i + 1], // inputs[object_score],
             inputs[2 * i],     // inputs[bbox_delta]
             mValidCnt->mPtr,
@@ -418,8 +418,8 @@ int MultilevelProposeROI::enqueue(
 
     ConcatTopKWorkSpace ctopk_ws(batch_size, mFeatureCnt, mKeepTopK, mType);
     status = ConcatTopK(stream, batch_size, mFeatureCnt, mKeepTopK, DataType::kFLOAT,
-        workspace + kernel_workspace_offset, ctopk_ws, reinterpret_cast<void**>(mDeviceScores),
-        reinterpret_cast<void**>(mDeviceBboxes), final_proposals);
+        reinterpret_cast<uint8_t*>(workspace) + kernel_workspace_offset, ctopk_ws,
+        reinterpret_cast<void**>(mDeviceScores), reinterpret_cast<void**>(mDeviceBboxes), final_proposals);
 
     assert(status == cudaSuccess);
     return status;
