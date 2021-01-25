@@ -37,10 +37,26 @@ ILayer* parsePReLU(INetworkDefinition& network, const trtcaffe::LayerParameter& 
     {
         return nullptr;
     }
-    int nWeights = channelShared ? 1 : inputDims.d[1]; // Caffe treats second input dimension as channels
-    Dims slopesDims{inputDims.nbDims, {1}, {DimensionType::kSPATIAL}};
-    slopesDims.d[1] = nWeights;
+    int nWeights = channelShared ? 1 : inputDims.d[0];
 
+    Dims slopesDims{inputDims.nbDims, {nWeights, 1, 1, 1, 1, 1, 1, 1},
+                    {DimensionType::kCHANNEL, DimensionType::kSPATIAL, DimensionType::kSPATIAL, DimensionType::kSPATIAL,
+                     DimensionType::kSPATIAL, DimensionType::kSPATIAL, DimensionType::kSPATIAL, DimensionType::kSPATIAL}};
+    for(int i = 0; i < inputDims.nbDims; i++) {
+        int d{0};
+        switch(inputDims.type[i]) {
+        case DimensionType::kSPATIAL:
+            d = 1; break;
+        case DimensionType::kCHANNEL:
+            d = channelShared ? 1 : inputDims.d[i]; break;
+        case DimensionType::kINDEX:
+            d = inputDims.d[i]; break;
+        case DimensionType::kSEQUENCE:
+            d = 1; break; // (AK) Should not be here. Caffe does not have this.
+        }
+        slopesDims.d[i] = d;
+        slopesDims.type[i] = inputDims.type[i];
+    }
     Weights w = weightFactory.isInitialized() ? weightFactory(msg.name(), WeightType::kGENERIC) :
                 weightFactory.allocateWeights(nWeights, std::uniform_real_distribution<float>(0.F, 1.F));
     auto constLayer = network.addConstant(slopesDims, w);
