@@ -58,19 +58,14 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
 
 ## Generating UFF model
 
-We use the Tensorflow 19.10-py3 container for generating the UFF model for MaskRCNN.
+1. Install [TensorFlow 1.15](https://www.tensoriflow.org/install/pip) or launch the NVIDIA Tensorflow 1.x container in a separate terminal for this step.
 
-1.  Launch the 19.10-py3 tensorflow container.
+2. Install the required packages alongwith UFF toolkit and graph surgeon
     ```bash
-    docker run --rm -it --gpus all -v $TRT_SOURCE:/workspace/TensorRT -v $TRT_RELEASE:/tensorrt nvcr.io/nvidia/tensorflow:19.10-py3 /bin/bash
-    ```
-
-2.  Inside the container, install required packages alongwith UFF toolkit and graph surgeon.
-    ```bash
-    cd /workspace/TensorRT/samples/opensource/sampleUffMaskRCNN/converted/
+    cd $TRT_OSSPATH/samples/opensource/sampleUffMaskRCNN/converted/
     pip3 install -r requirements.txt
-    pip3 install /tensorrt/uff/uff-*-py2.py3-none-any.whl
-    pip3 install /tensorrt/graphsurgeon/graphsurgeon-*-py2.py3-none-any.whl
+    pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com uff
+    pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com graphsurgeon
     ```
 
 3.  Modify the `conv2d_transpose` conversion function in UFF, for example `/usr/lib/python3.6/dist-packages/uff/converters/tensorflow/converter_functions.py`.
@@ -106,38 +101,31 @@ We use the Tensorflow 19.10-py3 container for generating the UFF model for MaskR
     **Note:** The md5sum of model file is e98aaff6f99e307b5e2a8a3ff741a518.
 
 7.  Convert the h5 model to the UFF model and copy it to your data folder
-    ```
+    ```bash
     python3 mrcnn_to_trt_single.py -w mask_rcnn_coco.h5 -o mrcnn_nchw.uff -p ./config.py
     ```
 
-8.  Populate your `/data` folder with the following test images.
-    ```
-    /usr/src/tensorrt/data/faster-rcnn/001763.ppm
-    /usr/src/tensorrt/data/faster-rcnn/004545.ppm
+8.  Populate your `$TRT_DATADIR/maskrcnn` folder with the test images.
+    ```bash
+    cp $TRT_DATADIR/faster-rcnn/001763.ppm $TRT_DATADIR/maskrcnn
+    cp $TRT_DATADIR/faster-rcnn/004545.ppm $TRT_DATADIR/maskrcnn
     ```
 
 ## Running the sample
 
 Switch back to the TensorRT container/environment for running the sample.
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleUffMaskRCNN` directory. The binary named `sample_uff_mask_rcnn` will be created in the `<TensorRT root directory>/bin` directory.
-    ```
-    cd <TensorRT root directory>/samples/sampleUffMaskRCNN
-    make
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
+
+2. Run the sample to perform object detection and object mask prediction.
+
+    ```bash
+    sample_uff_maskRCNN --datadir=<path/to/data> --fp16 --batch N
     ```
 
-    Where `<TensorRT root directory>` is where you installed TensorRT.
-
-2.  Run the sample to perform object detection and object mask prediction.
-
-    To run the sample in FP32 mode:
-    ```
-    ./sample_uff_mask_rcnn -d path/to/data
-    ```
-
-    To run the sample in FP16 mode:
-    ```
-    ./sample_uff_mask_rcnn -d path/to/data --fp16
+    For example:
+    ```bash
+    sample_uff_maskRCNN --datadir $TRT_DATADIR/maskrcnn --fp16
     ```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
@@ -179,5 +167,4 @@ This is the first release of the `README.md` file and sample.
 
 
 ## Known issues
-
-1. Tensorflow installed from PyPI (`pip install tensorflow-gpu`) requires CUDA 10.1 and is incompatible with CUDA 11.x. To generate the UFF model required for this sample, use a container built with `CUDA_VERSION=10.1`.
+There are no known issues in this sample.

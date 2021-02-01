@@ -21,8 +21,6 @@ from absl import logging
 import torch
 from torch.autograd import Function
 
-from pytorch_quantization.utils import amp_wrapper as amp
-
 
 class ClipFunction(Function):
     """An universal tensor clip function
@@ -60,4 +58,4 @@ class ClipFunction(Function):
         return grad_input, grad_clip_value_min, grad_clip_value_max
 
 
-clip = amp.promote_function(ClipFunction.apply)
+clip = ClipFunction.apply

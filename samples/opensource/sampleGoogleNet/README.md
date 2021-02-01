@@ -4,6 +4,7 @@
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -51,21 +52,30 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
 [SoftMax layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#softmax-layer)
 The SoftMax layer applies the SoftMax function on the input tensor along an input dimension specified by the user.
 
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    ```
+
 ## Running the sample
 
-1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleGoogleNet` directory. The binary named `sample_googlenet` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleGoogleNet
-	make
-	```
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2. Run the sample to build and run a GPU inference engine for GoogleNet.
-	`./sample_googlenet --datadir=<path_to_data_directory> --useDLACore=N`
-	Where `<path_to_data_directory>` is the path to your `data` directory.
-	**Note:** By default, this sample assumes both `googlenet.prototxt` and `googlenet.caffemodel` files are located in either the `data/samples/googlenet/` or `data/googlenet/` directories. The default directory can be changed by supplying the `--datadir=<new_path/>` path as a command line argument.
+    ```bash
+	sample_googlenet --datadir=<path_to_data_directory> --useDLACore=N
+    ```
 
-3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
+    For example:
+    ```bash
+    sample_googlenet --datadir $TRT_DATADIR/googlenet
+    ```
+
+  **NOTE:** By default, this sample assumes both `googlenet.prototxt` and `googlenet.caffemodel` files are located in either the `data/samples/googlenet/` or `data/googlenet/` directories. The default directory can be changed by supplying the `--datadir=<new_path/>` path as a command line argument.
+
+3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	```
 	&&&& RUNNING TensorRT.sample_googlenet # ./sample_googlenet
 	[I] Building and running a GPU inference engine for GoogleNet

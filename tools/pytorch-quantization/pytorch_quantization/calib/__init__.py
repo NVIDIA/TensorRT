@@ -20,4 +20,4 @@ collect data statistics and determine pytorch_quantization parameters.
 """
 
 from .max import MaxCalibrator
-from .histogram import HistogramCalibrator
+from .histogram import *

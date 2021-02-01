@@ -53,7 +53,7 @@ class TestClip():
         labels = torch.randint(6, (3,)).type(torch.LongTensor).cuda()
         criterion = torch.nn.CrossEntropyLoss()
         loss = criterion(clip_x, labels)
-        with pytest.raises(RuntimeError, match="can only be scalar"):
+        with pytest.raises(ValueError, match="can only be scalar"):
             loss.backward()
 
     def test_broadcast(self):

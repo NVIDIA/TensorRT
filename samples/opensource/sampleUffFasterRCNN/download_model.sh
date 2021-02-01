@@ -19,8 +19,8 @@ set -eo pipefail
 # check for wget
 which wget || { echo 'wget not found, please install.' && exit 1; }
 # download
-mkdir -p uff_faster_rcnn && \
-cd uff_faster_rcnn && \
+mkdir -p faster-rcnn && \
+cd faster-rcnn && \
 wget 'https://raw.githubusercontent.com/NVIDIA-AI-IOT/deepstream_4.x_apps/master/models/frcnn/faster_rcnn.pb' && \
 wget 'https://raw.githubusercontent.com/NVIDIA-AI-IOT/deepstream_4.x_apps/master/models/frcnn/2015_0502_034830_005_00001_rain_000179.ppm' && \
 wget 'https://raw.githubusercontent.com/NVIDIA-AI-IOT/deepstream_4.x_apps/master/models/frcnn/2016_1111_185016_003_00001_night_000441.ppm' && \

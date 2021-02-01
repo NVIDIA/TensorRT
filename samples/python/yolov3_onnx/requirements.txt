@@ -1,0 +1,6 @@
+numpy>=1.15.1
+protobuf>=3.11.3
+onnx==1.6.0
+pycuda>=2017.1.1
+Pillow==7.2.0
+wget>=3.2

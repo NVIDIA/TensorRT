@@ -31,7 +31,13 @@ _DEFAULT_QUANT_MAP = [_quant_entry(torch.nn, "Conv1d", quant_nn.QuantConv1d),
                       _quant_entry(torch.nn, "ConvTranspose3d", quant_nn.QuantConvTranspose3d),
                       _quant_entry(torch.nn, "Linear", quant_nn.QuantLinear),
                       _quant_entry(torch.nn, "LSTM", quant_nn.QuantLSTM),
-                      _quant_entry(torch.nn, "LSTMCell", quant_nn.QuantLSTMCell)]
+                      _quant_entry(torch.nn, "LSTMCell", quant_nn.QuantLSTMCell),
+                      _quant_entry(torch.nn, "AvgPool1d", quant_nn.QuantAvgPool1d),
+                      _quant_entry(torch.nn, "AvgPool2d", quant_nn.QuantAvgPool2d),
+                      _quant_entry(torch.nn, "AvgPool3d", quant_nn.QuantAvgPool3d),
+                      _quant_entry(torch.nn, "AdaptiveAvgPool1d", quant_nn.QuantAdaptiveAvgPool1d),
+                      _quant_entry(torch.nn, "AdaptiveAvgPool2d", quant_nn.QuantAdaptiveAvgPool2d),
+                      _quant_entry(torch.nn, "AdaptiveAvgPool3d", quant_nn.QuantAdaptiveAvgPool3d),]
 
 class QuantModuleReplacementHelper():
     """To help replace torch.nn modules with quantized versions.

@@ -103,7 +103,7 @@ RUN rm -rf cublas cudart rt prof nvcc
 RUN rm *.deb
 
 WORKDIR /workspace
-ENV TRT_RELEASE /tensorrt
-ENV TRT_SOURCE /workspace/TensorRT
+ENV TRT_LIBPATH /usr/lib/x86_64-linux-gnu
+ENV TRT_OSSPATH /workspace/TensorRT
 USER trtuser
 RUN ["/bin/bash"]

@@ -1,0 +1,9 @@
+sample: uff_ssd
+files:
+  - path: samples/python/uff_ssd/VOCtest_06-Nov-2007.tar
+    url: http://pjreddie.com/media/files/VOCtest_06-Nov-2007.tar
+    checksum: b6e924de25625d8de591ea690078ad9f
+
+  - path: samples/python/uff_ssd/ssd_inception_v2_coco_2017_11_17.tar.gz
+    url: http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz
+    checksum: 122558e068a2dcf07f91c172bcea96fe

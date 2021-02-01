@@ -3,6 +3,7 @@
 **Table Of Contents**
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample---help-options)
 - [Additional resources](#additional-resources)
@@ -38,19 +39,31 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
 2. AlgorithmCacheReader - Uses `IAlgorithmSelector::selectAlgorithms` to replicate algorithm choices from the file "AlgorithmChoices.txt" and verifies the choices using `IAlgorithmSelector::reportAlgorithms`.
 3. MinimumWorkspaceAlgorithmSelector - Uses `IAlgorithmSelector::selectAlgorithms` to select algorithms with minimum workspace requirements.
  
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    pushd $TRT_DATADIR/mnist
+    pip install Pillow
+    python3 download_pgms.py
+    popd
+    ```
+
 ## Running the sample
 
-1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleAlgorithmSelector` directory. The binary named `sample_algorithm_selector` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleAlgorithmSelector
-	make
-	```
-	Where `<TensorRT root directory>` is where you installed TensorRT.
-	
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
+
 2. Run the sample to perform inference on the digit:
-    ```
-	./sample_algorithm_selector [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
+    ```bash
+	sample_algorithm_selector [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
 	```
+
+    For example:
+    ```bash
+    sample_algorithm_selector --datadir $TRT_DATADIR/mnist --fp16
+    ```
+
 	This sample reads three Caffe files to build the network:
 	-   `mnist.prototxt` 
 	The prototxt file that contains the network design.
