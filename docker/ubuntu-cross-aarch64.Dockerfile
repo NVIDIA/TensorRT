@@ -115,8 +115,8 @@ RUN cd /pdk_files/tensorrt \
        ; done
 
 # Set environment and working directory
-ENV TRT_RELEASE /pdk_files/tensorrt
-ENV TRT_SOURCE /workspace/TensorRT
+ENV TRT_LIBPATH /pdk_files/tensorrt/lib
+ENV TRT_OSSPATH /workspace/TensorRT
 WORKDIR /workspace
 
 USER trtuser

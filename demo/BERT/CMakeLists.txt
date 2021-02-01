@@ -33,10 +33,10 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 
-include($ENV{TRT_SOURCE}/cmake/modules/set_ifndef.cmake)
-set_ifndef(TRT_INC_DIR $ENV{TRT_SOURCE}/include)
-set_ifndef(TRT_LIB_DIR $ENV{TRT_RELEASE}/lib)
-set_ifndef(TRT_OUT_DIR $ENV{TRT_SOURCE}/build/out)
+include($ENV{TRT_OSSPATH}/cmake/modules/set_ifndef.cmake)
+set_ifndef(TRT_INC_DIR $ENV{TRT_OSSPATH}/include)
+set_ifndef(TRT_LIB_DIR $ENV{TRT_LIBPATH})
+set_ifndef(TRT_OUT_DIR $ENV{TRT_OSSPATH}/build/out)
 
 include_directories(
     infer_c

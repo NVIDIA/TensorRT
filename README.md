@@ -12,7 +12,7 @@ This repository contains the Open Source Software (OSS) components of NVIDIA Ten
 To build the TensorRT-OSS components, you will first need the following software packages.
 
 **TensorRT GA build**
-* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v7.2.1
+* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v7.2.2
     - See [Downloading TensorRT Builds](#downloading-tensorrt-builds) for details
 
 **System Packages**
@@ -56,69 +56,55 @@ To build the TensorRT-OSS components, you will first need the following software
 	git clone -b master https://github.com/nvidia/TensorRT TensorRT
 	cd TensorRT
 	git submodule update --init --recursive
-	export TRT_SOURCE=`pwd`
 	```
 	**On Windows: Powershell**
 	```powershell
 	git clone -b master https://github.com/nvidia/TensorRT TensorRT
 	cd TensorRT
 	git submodule update --init --recursive
-	$Env:TRT_SOURCE = $(Get-Location)
 	```
 
-2. #### Download TensorRT GA
-	To build TensorRT OSS, obtain the corresponding TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com/nvidia-tensorrt-download).
+2. #### Specify the TensorRT Release build
 
-	**Example: Ubuntu 18.04 on x86-64 with cuda-11.1**
+    If using NVIDIA build containers, TensorRT is preinstalled under `/usr/lib/x86_64-linux-gnu`.
 
-	Download and extract the latest *TensorRT 7.2.1 GA package for Ubuntu 18.04 and CUDA 11.1*
-	```bash
-	cd ~/Downloads
-	tar -xvzf TensorRT-7.2.1.6.Ubuntu-18.04.x86_64-gnu.cuda-11.1.cudnn8.0.tar.gz
-	export TRT_RELEASE=`pwd`/TensorRT-7.2.1.6
-	```
-	**Example: Ubuntu 18.04 on PowerPC with cuda-11.0**
+    Else download and extract the TensorRT build from [NVIDIA Developer Zone](https://developer.nvidia.com/nvidia-tensorrt-download).
 
-	Download and extract the latest *TensorRT 7.2.1 GA package for Ubuntu 18.04 and CUDA 11.0*
-	```bash
-	cd ~/Downloads
-	tar -xvzf TensorRT-7.2.1.6.Ubuntu-18.04.powerpc64le-gnu.cuda-11.0.cudnn8.0.tar.gz
-	export TRT_RELEASE=`pwd`/TensorRT-7.2.1.6
-	```
-	**Example: CentOS/RedHat 7 on x86-64 with cuda-11.0**
+    **Example: Ubuntu 18.04 on x86-64 with cuda-11.1**
 
-	Download and extract the *TensorRT 7.2.1 GA for CentOS/RedHat 7 and CUDA 11.0 tar package*
-	```bash
-	cd ~/Downloads
-	tar -xvzf TensorRT-7.2.1.6.CentOS-7.6.x86_64-gnu.cuda-11.0.cudnn8.0.tar.gz
-	export TRT_RELEASE=`pwd`/TensorRT-7.2.1.6
-	```
-	**Example: Ubuntu18.04 Cross-Compile for QNX with cuda-10.2**
+    ```bash
+    cd ~/Downloads
+    tar -xvzf TensorRT-7.2.2.3.Ubuntu-18.04.x86_64-gnu.cuda-11.1.cudnn8.0.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-7.2.2.3
+    ```
 
-	Download and extract the *TensorRT 7.2.1 GA for QNX and CUDA 10.2 tar package*
-	```bash
-	cd ~/Downloads
-	tar -xvzf TensorRT-7.2.1.6.Ubuntu-18.04.aarch64-qnx.cuda-10.2.cudnn7.6.tar.gz
-	export TRT_RELEASE=`pwd`/TensorRT-7.2.1.6
-	export QNX_HOST=/<path-to-qnx-toolchain>/host/linux/x86_64
-	export QNX_TARGET=/<path-to-qnx-toolchain>/target/qnx7
-	```
-	**Example: Windows on x86-64 with cuda-11.0**
+    **Example: Ubuntu18.04 Cross-Compile for QNX with cuda-10.2**
 
-	Download and extract the *TensorRT 7.2.1 GA for Windows and CUDA 11.0 zip package* and add *msbuild* to *PATH*
-	```powershell
-	cd ~\Downloads
-	Expand-Archive .\TensorRT-7.2.1.6.Windows10.x86_64.cuda-11.0.cudnn8.0.zip
-	$Env:TRT_RELEASE = '$(Get-Location)\TensorRT-7.2.1.6'
-	$Env:PATH += 'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\MSBuild\15.0\Bin\'
-	```
+    ```bash
+    cd ~/Downloads
+    tar -xvzf TensorRT-7.2.2.3.Ubuntu-18.04.aarch64-qnx.cuda-10.2.cudnn7.6.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-7.2.2.3
+    export QNX_HOST=/<path-to-qnx-toolchain>/host/linux/x86_64
+    export QNX_TARGET=/<path-to-qnx-toolchain>/target/qnx7
+    ```
+
+    **Example: Windows on x86-64 with cuda-11.0**
+
+    ```powershell
+    cd ~\Downloads
+    Expand-Archive .\TensorRT-7.2.2.3.Windows10.x86_64.cuda-11.0.cudnn8.0.zip
+    $Env:TRT_LIBPATH = '$(Get-Location)\TensorRT-7.2.2.3'
+    $Env:PATH += 'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\MSBuild\15.0\Bin\'
+    ```
+
 
 3. #### (Optional) JetPack SDK for Jetson builds
     Using the JetPack SDK manager, download the host components. Steps:
     1. Download and launch the SDK manager. Login with your developer account.
     2. Select the  platform and target OS  (example: Jetson AGX Xavier, `Linux Jetpack 4.4`), and click Continue.
     3. Under `Download & Install Options` change the download folder and select `Download now, Install later`. Agree to the license terms and click Continue.
-    4. Move the extracted files into the `$TRT_SOURCE/docker/jetpack_files` folder.
+    4. Move the extracted files into the `<TensorRT-OSS>/docker/jetpack_files` folder.
+
 
 ## Setting Up The Build Environment
 
@@ -129,25 +115,25 @@ For native builds, install the [prerequisite](#prerequisites) *System Packages*.
 
     **Example: Ubuntu 18.04 on x86-64 with cuda-11.1**
     ```bash
-    ./docker/build.sh --file docker/ubuntu.Dockerfile --tag tensorrt-ubuntu --os 18.04 --cuda 11.1
+    ./docker/build.sh --file docker/ubuntu-18.04.Dockerfile --tag tensorrt-ubuntu-1804 --cuda 11.1
     ```
-    **Example: Ubuntu 18.04 on PowerPC with cuda-11.0**
+    **Example: Ubuntu 18.04 cross-compile for PowerPC with cuda-11.0**
     ```bash
-    ./docker/build.sh --file docker/ubuntu-cross-ppc64le.Dockerfile --tag tensorrt-ubuntu-ppc --os 18.04 --cuda 11.0
+    ./docker/build.sh --file docker/ubuntu-cross-ppc64le.Dockerfile --tag tensorrt-ubuntu-ppc --cuda 11.0
     ```
     **Example: CentOS/RedHat 7 on x86-64 with cuda-11.0**
     ```bash
-    ./docker/build.sh --file docker/centos.Dockerfile --tag tensorrt-centos --os 7 --cuda 11.0
+    ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos --cuda 11.0
     ```
-    **Example: Ubuntu 18.04 Cross-Compile for Jetson (arm64) with cuda-10.2 (JetPack)**
+    **Example: Ubuntu 18.04 cross-compile for Jetson (arm64) with cuda-10.2 (JetPack SDK)**
     ```bash
-    ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-cross-jetpack --os 18.04 --cuda 10.2
+    ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-cross-jetpack --cuda 10.2
     ```
 
 2. #### Launch the TensorRT-OSS build container.
     **Example: Ubuntu 18.04 build container**
 	```bash
-	./docker/launch.sh --tag tensorrt-ubuntu --gpus all --release $TRT_RELEASE --source $TRT_SOURCE
+	./docker/launch.sh --tag tensorrt-ubuntu-1804 --gpus all
 	```
 	> NOTE:
 	1. Use the tag corresponding to the build container you generated in 
@@ -158,37 +144,37 @@ For native builds, install the [prerequisite](#prerequisites) *System Packages*.
 
    **Example: Linux (x86-64) build with default cuda-11.1**
 	```bash
-	cd $TRT_SOURCE
+	cd $TRT_OSSPATH
 	mkdir -p build && cd build
-	cmake .. -DTRT_LIB_DIR=$TRT_RELEASE/lib -DTRT_OUT_DIR=`pwd`/out
+	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
 	make -j$(nproc)
 	```
     **Example: Native build on Jetson (arm64) with cuda-10.2**
     ```bash
-    cd $TRT_SOURCE
+    cd $TRT_OSSPATH
     mkdir -p build && cd build
-    cmake .. -DTRT_LIB_DIR=$TRT_RELEASE/lib -DTRT_OUT_DIR=`pwd`/out -DTRT_PLATFORM_ID=aarch64 -DCUDA_VERSION=10.2
+    cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DTRT_PLATFORM_ID=aarch64 -DCUDA_VERSION=10.2
     make -j$(nproc)
     ```
     **Example: Ubuntu 18.04 Cross-Compile for Jetson (arm64) with cuda-10.2 (JetPack)**
 	```bash
-	cd $TRT_SOURCE
+	cd $TRT_OSSPATH
 	mkdir -p build && cd build
-	cmake .. -DTRT_LIB_DIR=$TRT_RELEASE/lib -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_SOURCE/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=10.2
+	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=10.2
 	make -j$(nproc)
 	```
     **Example: Cross-Compile for QNX with cuda-10.2**
 	```bash
-	cd $TRT_SOURCE
+	cd $TRT_OSSPATH
 	mkdir -p build && cd build
-	cmake .. -DTRT_LIB_DIR=$TRT_RELEASE/lib -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_SOURCE/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=10.2
+	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=10.2
 	make -j$(nproc)
 	```
     **Example: Windows (x86-64) build in Powershell**
 	```powershell
-	cd $Env:TRT_SOURCE
+	cd $Env:TRT_OSSPATH
 	mkdir -p build ; cd build
-	cmake .. -DTRT_LIB_DIR=$Env:TRT_RELEASE\lib -DTRT_OUT_DIR='$(Get-Location)\out' -DCMAKE_TOOLCHAIN_FILE=..\cmake\toolchains\cmake_x64_win.toolchain
+	cmake .. -DTRT_LIB_DIR=$Env:TRT_LIBPATH -DTRT_OUT_DIR='$(Get-Location)\out' -DCMAKE_TOOLCHAIN_FILE=..\cmake\toolchains\cmake_x64_win.toolchain
 	msbuild ALL_BUILD.vcxproj
 	```
 	> NOTE:
@@ -215,15 +201,6 @@ For native builds, install the [prerequisite](#prerequisites) *System Packages*.
         - Multiple SMs: `-DGPU_ARCHS="80 75"`
 	- `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation) on non Linux/x86 platforms must explicitly specify the target platform. Currently supported options: `x86_64` (default), `aarch64`
 
-#### (Optional) Install TensorRT python bindings
-
-* The TensorRT python API bindings must be installed for running TensorRT python applications
-
-    **Example: install TensorRT wheel for python 3.6**
-    ```bash
-    pip3 install $TRT_RELEASE/python/tensorrt-7.2.1.6-cp36-none-linux_x86_64.whl
-    ```
-
 # References
 
 ## TensorRT Resources
@@ -236,5 +213,5 @@ For native builds, install the [prerequisite](#prerequisites) *System Packages*.
 
 ## Known Issues
 
-#### TensorRT 7.2.1
+#### TensorRT 7.2.2
 * None

@@ -24,9 +24,6 @@ from absl import logging
 import torch
 from torch.autograd import Function
 
-from pytorch_quantization.utils import amp_wrapper as amp
-
-
 class ScaledQuantDescriptor():
     """Supportive descriptor of quantization
 
@@ -423,6 +420,6 @@ class FakeAffineTensorQuantFunction(Function):
         return grad_inputs, None, None, None
 
 
-tensor_quant = amp.promote_function(TensorQuantFunction.apply)
-fake_tensor_quant = amp.promote_function(FakeTensorQuantFunction.apply)
-fake_affine_tensor_quant = amp.promote_function(FakeAffineTensorQuantFunction.apply)
+tensor_quant = TensorQuantFunction.apply
+fake_tensor_quant = FakeTensorQuantFunction.apply
+fake_affine_tensor_quant = FakeAffineTensorQuantFunction.apply

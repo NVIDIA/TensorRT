@@ -119,8 +119,7 @@ def quant_weight_inplace(model):
     derivative of the nondifferentiable quantization function, which works to some extended but by no means the F=ma of
     the problem.
     Inplace quantization can be used to implement relax-and-round, which is a common method in Discrete Optimization's
-    or Integer Programming, see more explanation in
-    p4hw://hw/doc/gpu/compute/DL/reduced_precision_study/fine.tune.4.int8/Train.for.Quantization.md
+    or Integer Programming.
     """
     for name, module in model.named_modules():
         if hasattr(module, '_weight_quantizer') and module.weight_quantizer is not None:

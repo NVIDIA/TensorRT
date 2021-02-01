@@ -54,10 +54,9 @@ class TestClassificationFlow():
         # Run in a subprocess to avoid contaminating the module state for other test cases
         ret = subprocess.run(
             [
-                'python3', dir_path + '/../examples/torchvision/classification/classification_flow.py',
+                'python3', dir_path + '/../examples/torchvision/classification_flow.py',
                 '--data-dir', dataset_dir,
                 '--model', 'resnet50', '--pretrained',
-                '-dpcq',
                 '-t', '0.5',
                 '--num-finetune-epochs', '1',
                 '--evaluate-onnx',

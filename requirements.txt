@@ -1,6 +1,6 @@
 numpy
-onnx==1.6.0
+onnx==1.7.0
 onnxruntime==1.3.0
 pycuda==2019.1.2
 pytest
-tensorflow-gpu>=1.15.4, <2.0
+tensorflow-gpu>=2.2

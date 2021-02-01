@@ -120,3 +120,4 @@ at::Tensor fake_tensor_quant_with_axis_cuda(
       num_bits, is_unsigned);
   return outputs;
 }
+
