@@ -227,13 +227,13 @@ class TensorQuantizer(nn.Module):
             raise RuntimeError("Calibrator not created.")
         calib_amax = self._calibrator.compute_amax(*args, **kwargs)
         if calib_amax is None:
-            err_msg = "Calibrator returned None."
+            err_msg = "Calibrator returned None. This usually happens when calibrator hasn't seen any tensor."
             if not strict:
                 logging.warning(err_msg)
                 logging.warning("Set amax to NaN!")
                 calib_amax = torch.tensor(math.nan)
             else:
-                raise RuntimeError(err_msg)
+                raise RuntimeError(err_msg + " Passing 'strict=False' to `load_calib_amax()` will ignore the error.")
         logging.warning("Load calibrated amax, shape={}.".format(calib_amax.shape))
         logging.log_first_n(
             logging.WARNING, "Call .cuda() if running on GPU after loading calibrated amax.", 1)
@@ -308,6 +308,8 @@ class TensorQuantizer(nn.Module):
             if not TensorQuantizer.use_fb_fake_quant:
                 outputs = fake_tensor_quant(inputs, amax, self._num_bits, self._unsigned, self._narrow_range)
             else:
+                if inputs.dtype == torch.half or amax.dtype == torch.half:
+                    raise Exception("Exporting to ONNX in fp16 is not supported. Please export in fp32, i.e. disable AMP.")
                 outputs = self._fb_fake_quant(inputs, amax)
         else:
             outputs, self._scale = tensor_quant(inputs, amax, self._num_bits, self._unsigned)

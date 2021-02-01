@@ -228,7 +228,7 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
 
 1.  Install require packages.
     ```bash
-    pip3 install -r $TRT_SOURCE/samples/opensource/sampleSSD/requirements.txt
+    pip3 install -r $TRT_OSSPATH/samples/opensource/sampleSSD/requirements.txt
     ```
 
 2.  Preparing models:
@@ -240,8 +240,8 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
     3.  Extract the archive, and copy the model file to the TensorRT `data` directory.
         ```bash
         tar xvf models_VGGNet_VOC0712_SSD_300x300.tar.gz
-        cp models/VGGNet/VOC0712/SSD_300x300/VGG_VOC0712_SSD_300x300_iter_120000.caffemodel <TensorRT root directory>/data/ssd
-        cp models/VGGNet/VOC0712/SSD_300x300/deploy.prototxt <TensorRT root directory>/data/ssd/ssd.prototxt
+        cp models/VGGNet/VOC0712/SSD_300x300/VGG_VOC0712_SSD_300x300_iter_120000.caffemodel $TRT_DATADIR/ssd
+        cp models/VGGNet/VOC0712/SSD_300x300/deploy.prototxt $TRT_DATADIR/ssd/ssd.prototxt
         ```
     4.  In `ssd.prototxt`, change all `Flatten` layers to `Reshape` operations (e.g. `type:Reshape`) as TensorRT enables `Flatten` by `Reshape`, and add `reshape_param` (like below) to each of them:
         ```bash
@@ -258,26 +258,27 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
 
 4.  Generate the INT8 calibration batches. The script selects 500 random JPEG images from the PASCAL VOC dataset and converts them to PPM images. These 500 PPM images are used to generate INT8 calibration batches.
     ```bash
-    $TRT_SOURCE/samples/opensource/sampleSSD/PrepareINT8CalibrationBatches.sh
+    $TRT_OSSPATH/samples/opensource/sampleSSD/PrepareINT8CalibrationBatches.sh
     ```
-    **Note:** Do not move the batch files from the `<TensorRT root directory>/data/ssd/batches` directory.
+    **NOTE:** Do not move the batch files from the `$TRT_DATADIR/ssd/batches` directory.
 
-    If you want to use a different dataset to generate INT8 batches, use the `batchPrepare.py` script and place the batch files in the `<TensorRT root directory>/data/ssd/batches` directory.
+    If you want to use a different dataset to generate INT8 batches, use the `batchPrepare.py` script and place the batch files in the `$TRT_DATADIR/ssd/batches` directory.
 
 
 ## Running the sample
 
-1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleSSD` directory. The binary named `sample_ssd` will be created in the `<TensorRT root directory>/bin` directory.
-    ```bash
-    cd <TensorRT root directory>/samples/sampleSSD
-    make
-    ```
-    Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2. Run the sample to perform inference on the digit:
     ```bash
-    ./sample_ssd [-h] [--fp16] [--int8]
+    sample_ssd [-h] --datadir=<path/to/data> [--fp16] [--int8]
     ```
+
+    For example:
+    ```bash
+    sample_ssd --datadir $TRT_DATADIR/ssd --fp16
+    ```
+
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
     ```
     &&&& RUNNING TensorRT.sample_ssd # ./sample_ssd

@@ -1,0 +1,14 @@
+sample: yolov3_onnx
+files:
+  - path: samples/python/yolov3_onnx/yolov3.cfg
+    url: https://raw.githubusercontent.com/pjreddie/darknet/f86901f6177dfc6116360a13cc06ab680e0c86b0/cfg/yolov3.cfg
+    checksum: b969a43a848bbf26901643b833cfb96c
+
+  - path: samples/python/yolov3_onnx/yolov3.weights
+    url: https://pjreddie.com/media/files/yolov3.weights
+    # mirror: https://master.dl.sourceforge.net/project/darknet-yolo.mirror/darknet_yolo_v3_optimal/yolov3.weights
+    checksum: c84e5b99d0e52cd466ae710cadf6d84c
+
+  - path: samples/python/yolov3_onnx/dog.jpg
+    url: https://github.com/pjreddie/darknet/raw/f86901f6177dfc6116360a13cc06ab680e0c86b0/data/dog.jpg
+    checksum: 0efe2b8fa0609cf67d33ad9ed8112e66

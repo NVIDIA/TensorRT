@@ -90,6 +90,7 @@ arguments of the original module.
         quant_desc_weight=tensor_quant.QUANT_DESC_8BIT_LINEAR_WEIGHT_PER_ROW)
     quant_conv1 = quant_nn.Conv2d(
         in_channels, out_channels, kernel_size,
+        quant_desc_input=tensor_quant.QUANT_DESC_8BIT_PER_TENSOR,
         quant_desc_weight=tensor_quant.QUANT_DESC_8BIT_CONV2D_WEIGHT_PER_CHANNEL)
 
 Post training quantization
@@ -114,8 +115,8 @@ calibration method:
 
 -  ``max``: Simply use global maximum absolute value
 -  ``entropy``: TensorRT's entropy calibration
--  ``percentile``: Get rid of out lier based on given percentile.
--  ``mse``: MSE(Mean Square Error) based calibration
+-  ``percentile``: Get rid of outlier based on given percentile.
+-  ``mse``: MSE(Mean Squared Error) based calibration
 
 In above ResNet50 example, calibration method is set to ``mse``, it can
 be used as the following example:
@@ -255,8 +256,4 @@ For example:
 
 .. Note::
 
-    Note that ``axis`` is added to ``QuantizeLinear`` and ``DequantizeLinear`` in opset13
-    which hasn't been released yet, so that ONNX runtime doesn't support it yet.
-
-    If only per tensor quantization is used, the generated graph can be run
-    by ONNX runtime on CPU.
+    Note that ``axis`` is added to ``QuantizeLinear`` and ``DequantizeLinear`` in opset13.
