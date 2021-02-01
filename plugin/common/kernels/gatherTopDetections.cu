@@ -16,6 +16,15 @@
 #include <array>
 #include "plugin.h"
 #include "kernel.h"
+#include "cuda_fp16.h"
+
+inline __device__ __half minus_fb(const __half & a, const __half & b) {
+#if __CUDA_ARCH__ >= 530
+    return a - b;
+#else
+    return __float2half(__half2float(a) - __half2float(b));
+#endif
+}
 
 template <typename T_BBOX, typename T_SCORE, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
@@ -30,7 +39,8 @@ __launch_bounds__(nthds_per_cta)
         const T_SCORE* scores,
         const T_BBOX* bboxData,
         int* keepCount,
-        T_BBOX* topDetections)
+        T_BBOX* topDetections,
+        const T_SCORE score_shift)
 {
     if (keepTopK > topK)
         return;
@@ -69,14 +79,20 @@ __launch_bounds__(nthds_per_cta)
             topDetections[i * 7] = imgId;                                                            // image id
             topDetections[i * 7 + 1] = (index % (numClasses * numPredsPerClass)) / numPredsPerClass; // label
             topDetections[i * 7 + 2] = score;                                                        // confidence score
+            // subtract 1.0 score shift we added in sortScorePerClass
+            topDetections[i * 7 + 2] = minus_fb(topDetections[i * 7 + 2], score_shift);
+            const T_BBOX xMin = bboxData[bboxId];
+            const T_BBOX yMin = bboxData[bboxId + 1];
+            const T_BBOX xMax = bboxData[bboxId + 2];
+            const T_BBOX yMax = bboxData[bboxId + 3];
             // clipped bbox xmin
-            topDetections[i * 7 + 3] = max(min(bboxData[bboxId], T_BBOX(1.)), T_BBOX(0.));
+            topDetections[i * 7 + 3] = saturate(xMin);
             // clipped bbox ymin
-            topDetections[i * 7 + 4] = max(min(bboxData[bboxId + 1], T_BBOX(1.)), T_BBOX(0.));
+            topDetections[i * 7 + 4] = saturate(yMin);
             // clipped bbox xmax
-            topDetections[i * 7 + 5] = max(min(bboxData[bboxId + 2], T_BBOX(1.)), T_BBOX(0.));
+            topDetections[i * 7 + 5] = saturate(xMax);
             // clipped bbox ymax
-            topDetections[i * 7 + 6] = max(min(bboxData[bboxId + 3], T_BBOX(1.)), T_BBOX(0.));
+            topDetections[i * 7 + 6] = saturate(yMax);
             // Atomic add to increase the count of valid keepTopK bounding boxes
             // Without having to do manual sync.
             atomicAdd(&keepCount[i / keepTopK], 1);
@@ -97,7 +113,9 @@ pluginStatus_t gatherTopDetections_gpu(
     const void* scores,
     const void* bboxData,
     void* keepCount,
-    void* topDetections)
+    void* topDetections,
+    const float score_shift
+)
 {
     cudaMemsetAsync(keepCount, 0, numImages * sizeof(int), stream);
     const int BS = 32;
@@ -105,7 +123,8 @@ pluginStatus_t gatherTopDetections_gpu(
     gatherTopDetections_kernel<T_BBOX, T_SCORE, BS><<<GS, BS, 0, stream>>>(shareLocation, numImages, numPredsPerClass,
                                                                            numClasses, topK, keepTopK,
                                                                            (int*) indices, (T_SCORE*) scores, (T_BBOX*) bboxData,
-                                                                           (int*) keepCount, (T_BBOX*) topDetections);
+                                                                           (int*) keepCount, (T_BBOX*) topDetections,
+                                                                           T_SCORE(score_shift));
 
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
@@ -123,7 +142,8 @@ typedef pluginStatus_t (*gtdFunc)(cudaStream_t,
                                const void*,
                                const void*,
                                void*,
-                               void*);
+                               void*,
+                               const float);
 struct gtdLaunchConfig
 {
     DataType t_bbox;
@@ -149,8 +169,10 @@ struct gtdLaunchConfig
 
 using nvinfer1::DataType;
 
-static std::array<gtdLaunchConfig, 1> gtdLCOptions = {
-    gtdLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherTopDetections_gpu<float, float>)};
+static std::array<gtdLaunchConfig, 2> gtdLCOptions = {
+    gtdLaunchConfig(DataType::kFLOAT, DataType::kFLOAT, gatherTopDetections_gpu<float, float>),
+    gtdLaunchConfig(DataType::kHALF, DataType::kHALF, gatherTopDetections_gpu<__half, __half>)
+};
 
 pluginStatus_t gatherTopDetections(
     cudaStream_t stream,
@@ -166,7 +188,8 @@ pluginStatus_t gatherTopDetections(
     const void* scores,
     const void* bboxData,
     void* keepCount,
-    void* topDetections)
+    void* topDetections,
+    const float score_shift)
 {
     gtdLaunchConfig lc = gtdLaunchConfig(DT_BBOX, DT_SCORE);
     for (unsigned i = 0; i < gtdLCOptions.size(); ++i)
@@ -185,7 +208,8 @@ pluginStatus_t gatherTopDetections(
                                           scores,
                                           bboxData,
                                           keepCount,
-                                          topDetections);
+                                          topDetections,
+                                          score_shift);
         }
     }
     return STATUS_BAD_PARAM;
