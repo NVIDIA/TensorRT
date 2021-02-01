@@ -19,6 +19,33 @@
 #include "gatherNMSOutputs.h"
 #include <array>
 
+// __half minus with fallback to float for old sm
+inline __device__ __half minus_fb(const __half & a, const __half & b) {
+#if __CUDA_ARCH__ >= 530
+    return a - b;
+#else
+    return __float2half(__half2float(a) - __half2float(b));
+#endif
+}
+
+template <typename T_BBOX>
+__device__ T_BBOX saturate(T_BBOX v)
+{
+    return max(min(v, T_BBOX(1)), T_BBOX(0));
+}
+
+template <>
+__device__ __half saturate(__half v)
+{
+#if __CUDA_ARCH__ >= 800
+    return __hmax(__hmin(v, __half(1)), __half(0));
+#elif __CUDA_ARCH__ >= 530
+    return __hge(v, __half(1)) ? __half(1) : (__hle(v, __half(0)) ? __half(0) : v);
+#else
+    return max(min(v, float(1)), float(0));
+#endif
+}
+
 template <typename T_BBOX, typename T_SCORE, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
     __global__ void gatherNMSOutputs_kernel(
@@ -35,7 +62,8 @@ __launch_bounds__(nthds_per_cta)
         T_BBOX* nmsedBoxes,
         T_BBOX* nmsedScores,
         T_BBOX* nmsedClasses,
-        bool clipBoxes
+        bool clipBoxes,
+        const T_SCORE scoreShift
         )
 {
     if (keepTopK > topK)
@@ -65,6 +93,7 @@ __launch_bounds__(nthds_per_cta)
                         : index % (numClasses * numPredsPerClass)) + bboxOffset) * 4;
             nmsedClasses[i] = (index % (numClasses * numPredsPerClass)) / numPredsPerClass; // label
             nmsedScores[i] = score;                                                        // confidence score
+            nmsedScores[i] = minus_fb(nmsedScores[i], scoreShift);
             const T_BBOX xMin = bboxData[bboxId];
             const T_BBOX yMin = bboxData[bboxId + 1];
             const T_BBOX xMax = bboxData[bboxId + 2];
@@ -80,22 +109,6 @@ __launch_bounds__(nthds_per_cta)
             atomicAdd(&numDetections[i / keepTopK], 1);
         }
     }
-}
-
-template <typename T_BBOX>
-__device__ T_BBOX saturate(T_BBOX v)
-{
-    return max(min(v, T_BBOX(1)), T_BBOX(0));
-}
-
-template <>
-__device__ __half saturate(__half v)
-{
-#if __CUDA_ARCH__ >= 800
-    return __hmax(__hmin(v, __half(1)), __half(0));
-#else
-    return max(min(v, float(1)), float(0));
-#endif
 }
 
 template <typename T_BBOX, typename T_SCORE>
@@ -114,7 +127,8 @@ pluginStatus_t gatherNMSOutputs_gpu(
     void* nmsedBoxes,
     void* nmsedScores,
     void* nmsedClasses,
-    bool clipBoxes
+    bool clipBoxes,
+    const float scoreShift
     )
 {
     cudaMemsetAsync(numDetections, 0, numImages * sizeof(int), stream);
@@ -127,7 +141,8 @@ pluginStatus_t gatherNMSOutputs_gpu(
                                                                            (T_BBOX*) nmsedBoxes,
                                                                            (T_BBOX*) nmsedScores,
                                                                            (T_BBOX*) nmsedClasses,
-                                                                           clipBoxes
+                                                                           clipBoxes,
+                                                                           T_SCORE(scoreShift)
                                                                             );
 
     CSC(cudaGetLastError(), STATUS_FAILURE);
@@ -149,7 +164,8 @@ typedef pluginStatus_t (*nmsOutFunc)(cudaStream_t,
                                void*,
                                void*,
                                void*,
-                               bool);
+                               bool,
+                               const float);
 struct nmsOutLaunchConfig
 {
     DataType t_bbox;
@@ -197,7 +213,8 @@ pluginStatus_t gatherNMSOutputs(
     void* nmsedBoxes,
     void* nmsedScores,
     void* nmsedClasses,
-    bool clipBoxes
+    bool clipBoxes,
+    const float scoreShift
     )
 {
     nmsOutLaunchConfig lc = nmsOutLaunchConfig(DT_BBOX, DT_SCORE);
@@ -220,7 +237,8 @@ pluginStatus_t gatherNMSOutputs(
                                           nmsedBoxes,
                                           nmsedScores,
                                           nmsedClasses,
-                                          clipBoxes
+                                          clipBoxes,
+                                          scoreShift
                                           );
         }
     }

@@ -180,7 +180,8 @@ __global__ void allClassNMS_kernel(
     int* beforeNMS_index_array,
     T_SCORE* afterNMS_scores,
     int* afterNMS_index_array,
-    bool flipXY = false)
+    bool flipXY,
+    const float score_shift)
 {
     //__shared__ bool kept_bboxinfo_flag[CAFFE_CUDA_NUM_THREADS * TSIZE];
     extern __shared__ bool kept_bboxinfo_flag[];
@@ -281,7 +282,7 @@ __global__ void allClassNMS_kernel(
              */
             if (read_item_idx < max_idx)
             {
-                afterNMS_scores[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? T_SCORE(beforeNMS_scores[read_item_idx]) : T_SCORE(0.f);
+                afterNMS_scores[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? T_SCORE(beforeNMS_scores[read_item_idx]) : T_SCORE(score_shift);
                 afterNMS_index_array[write_item_idx] = kept_bboxinfo_flag[cur_idx] ? loc_bboxIndex[t] : -1;
             }
         }
@@ -303,13 +304,14 @@ pluginStatus_t allClassNMS_gpu(
     void* beforeNMS_index_array,
     void* afterNMS_scores,
     void* afterNMS_index_array,
-    bool flipXY = false)
+    bool flipXY,
+    const float score_shift)
 {
 #define P(tsize) allClassNMS_kernel<T_SCORE, T_BBOX, (tsize)>
 
     void (*kernel[8])(const int, const int, const int, const int, const float,
                       const bool, const bool, T_BBOX*, T_SCORE*, int*, T_SCORE*,
-                      int*, bool)
+                      int*, bool, const float)
         = {
             P(1), P(2), P(3), P(4), P(5), P(6), P(7), P(8),
         };
@@ -325,7 +327,8 @@ pluginStatus_t allClassNMS_gpu(
                                                                        (int*) beforeNMS_index_array,
                                                                        (T_SCORE*) afterNMS_scores,
                                                                        (int*) afterNMS_index_array,
-                                                                       flipXY);
+                                                                       flipXY,
+                                                                       score_shift);
 
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
@@ -345,7 +348,8 @@ typedef pluginStatus_t (*nmsFunc)(cudaStream_t,
                                void*,
                                void*,
                                void*,
-                               bool);
+                               bool,
+                               const float);
 
 struct nmsLaunchConfigSSD
 {
@@ -390,7 +394,8 @@ pluginStatus_t allClassNMS(cudaStream_t stream,
                         void* beforeNMS_index_array,
                         void* afterNMS_scores,
                         void* afterNMS_index_array,
-                        bool flipXY)
+                        bool flipXY,
+                        const float score_shift)
 {
     nmsLaunchConfigSSD lc = nmsLaunchConfigSSD(DT_SCORE, DT_BBOX);
     for (unsigned i = 0; i < nmsSsdLCOptions.size(); ++i)
@@ -411,7 +416,8 @@ pluginStatus_t allClassNMS(cudaStream_t stream,
                                           beforeNMS_index_array,
                                           afterNMS_scores,
                                           afterNMS_index_array,
-                                          flipXY);
+                                          flipXY,
+                                          score_shift);
         }
     }
     return STATUS_BAD_PARAM;

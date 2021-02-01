@@ -69,6 +69,7 @@ The `DetectionOutput` plugin instance is created using an array of `DetectionOut
 |`int`             |`inputOrder`                    |Specifies the order of inputs `{loc_data, conf_data, priorbox_data}`, in other words, `inputOrder[0]` is for `loc_data`, `inputOrder[1]` is for `conf_data` and `inputOrder[2]` is for `priorbox_data`. For example, if your inputs in the memory are in the order of `loc_data`, `priorbox_data`, `conf_data`, then `inputOrder` should be `[0, 2, 1]`.
 |`bool`            |`confSigmoid`                   |Set to `true` to calculate sigmoid of confidence scores.
 |`bool`            |`isNormalized`                  |Set to `true` if bounding box data is normalized by the network, in other words, the bounding box coordinates used in the model are not pixel coordinates.
+|`int`             |`scoreBits`                     |The number of bits to represent the score values during radix sort. The number of bits to represent score values(confidences) during radix sort. This valid range is 0 < scoreBits <= 10. The default value is 16(which means to use full bits in radix sort). Setting this parameter to any invalid value will result in the same effect as setting it to 16. This parameter can be tuned to strike for a best trade-off between performance and accuracy. Lowering scoreBits will improve performance but with some minor degradation to the accuracy. This parameter is only valid for FP16 data type for now.
 
 ### `CodeType`
 
