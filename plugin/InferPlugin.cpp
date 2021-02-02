@@ -167,6 +167,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::BatchedNMSDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::CoordConvACPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::CropAndResizePluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::CropAndResizeDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::DetectionLayerPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::FlattenConcatPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::GenerateDetectionPluginCreator>(logger, libNamespace);
@@ -182,6 +183,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::PriorBoxPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ProposalLayerPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ProposalDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::PyramidROIAlignPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::RegionPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ReorgPluginCreator>(logger, libNamespace);
