@@ -565,7 +565,7 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     pfc = trt.PluginFieldCollection([wbeta, wgamma, wwordemb, wtokemb, wposemb, output_fp16, mha_type])
     fn = emln_plg_creator.create_plugin("embeddings", pfc)
 
-    inputs = [input_ids, segment_ids, input_mask]
+    input_ids = network.add_shuffle(input_ids)
     input_ids.second_transpose = (1, 0)
     segment_ids = network.add_shuffle(segment_ids)
     segment_ids.second_transpose = (1, 0)
