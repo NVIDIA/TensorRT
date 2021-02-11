@@ -26,7 +26,7 @@ from __future__ import print_function
 
 
 
-def combine_descriptions(prolog, features, descriptions):
+def combineDescriptions(prolog, features, descriptions):
     ''' Combine features with their descriptions '''
 
     fullDescription = prolog
