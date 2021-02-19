@@ -36,11 +36,15 @@ __launch_bounds__(nthds_per_cta)
          index += nthds_per_cta * gridDim.x)
     {
         // Bounding box coordinate index {0, 1, 2, 3}
+        // loc_data: (N, R, C, 4)
+        // prior_data: (N, 2, R, 4)
         const int i = index % 4;
         // Bounding box class index
         const int c = (index / 4) % num_loc_classes;
         // Prior box id corresponding to the bounding box
         const int d = (index / 4 / num_loc_classes) % num_priors;
+        // batch dim
+        const int batch = index / (4 * num_loc_classes * num_priors);
         // If bounding box was not shared among all the classes and the bounding box is corresponding to the background class
         if (!share_location && c == background_label_id)
         {
@@ -48,7 +52,10 @@ __launch_bounds__(nthds_per_cta)
             return;
         }
         // Index to the right anchor box corresponding to the current bounding box 
-        const int pi = d * 4;
+        // do not assume each images' anchor boxes are identical
+        // e.g., in FasterRCNN, priors are ROIs from proposal layer and are different
+        // for each image.
+        const int pi = (batch * 2 * num_priors + d) * 4;
         // Index to the right variances corresponding to the current bounding box 
         const int vi = pi + num_priors * 4;
         // Encoding method: CodeTypeSSD::CORNER
