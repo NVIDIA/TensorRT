@@ -33,7 +33,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
          -DEXT_PATH=${EXT_PATH} \
          -DCUDA_INCLUDE_DIRS=/usr/local/cuda/include \
          -DTENSORRT_ROOT=${ROOT_PATH} \
-         -DTENSORRT_BUILD=${ROOT_PATH}/build/out
+         -DTENSORRT_BUILD=${ROOT_PATH}/build/
 make -j12
 
 # Generate wheel

@@ -47,25 +47,39 @@ set(PY_MODULE_NAME tensorrt)
 
 set_ifndef(TENSORRT_ROOT ../)
 # Convert to an absolute path.
-set_ifndef(ONNX_INC_DIR ${TENSORRT_ROOT}/parsers/)
+set_ifndef(ONNX_INC_DIR ${TENSORRT_ROOT}/parsers/onnx/)
 set_ifndef(PYBIND11_DIR ${EXT_PATH}/pybind11/)
 
 # Source Files
 file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 
 # Find headers
-find_path(PY_INCLUDE Python.h HINTS ${EXT_PATH}/python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION} PATH_SUFFIXES include)
+find_path(PY_INCLUDE Python.h
+    HINTS ${EXT_PATH}/python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION}
+    PATH_SUFFIXES include
+)
 
 set(PY_TARGET_DIR ${TARGET_ARCHITECTURE}-linux-gnu)
 if (${TARGET_ARCHITECTURE} STREQUAL ppc64le)
     set(PY_TARGET_DIR powerpc64le-linux-gnu)
 endif()
-find_path(PY_CONFIG_INCLUDE pyconfig.h HINTS ${PY_INCLUDE} PATH_SUFFIXES ${PY_TARGET_DIR}/python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION})
+
+find_path(PY_CONFIG_INCLUDE pyconfig.h
+    HINTS ${PY_INCLUDE}
+    PATH_SUFFIXES ${PY_TARGET_DIR}/python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION}
+)
 
 # -------- GLOBAL COMPILE OPTIONS --------
 
 # Add include directories
-include_directories(${TENSORRT_ROOT}/include ${PROJECT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/docstrings ${ONNX_INC_DIR} ${PYBIND11_DIR}/include)
+include_directories(${TENSORRT_ROOT}/include
+    ${PROJECT_SOURCE_DIR}/include
+    ${CUDA_INCLUDE_DIRS}
+    ${PROJECT_SOURCE_DIR}/docstrings
+    ${ONNX_INC_DIR}
+    ${PYBIND11_DIR}/include
+)
+
 # And lib directories.
 link_directories(${TENSORRT_BUILD})
 # Enable link-time optimizations
