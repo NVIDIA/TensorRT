@@ -24,7 +24,7 @@ SHELL ["/bin/bash", "-c"]
 # Setup user account
 ARG uid=1000
 ARG gid=1000
-RUN groupadd -r -f -g ${gid} trtuser && useradd -r -u ${uid} -g ${gid} -ms /bin/bash trtuser
+RUN groupadd -r -f -g ${gid} trtuser && useradd -o -r -u ${uid} -g ${gid} -ms /bin/bash trtuser
 RUN usermod -aG sudo trtuser
 RUN echo 'trtuser:nvidia' | chpasswd
 RUN mkdir -p /workspace && chown trtuser /workspace
