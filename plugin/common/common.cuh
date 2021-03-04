@@ -326,7 +326,6 @@ template <typename T, unsigned TPB>
 __device__ inline void scaledSoftmax(
     const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
 {
-
     using BlockReduce = cub::BlockReduce<float, TPB>;
     __shared__ typename BlockReduce::TempStorage tmpStorage;
 
@@ -346,7 +345,7 @@ __device__ inline void scaledSoftmax(
     for (int i = threadIdx.x; i < lastValid; i += TPB)
     {
         const int idx = offset + i;
-        threadData = input[idx];
+        threadData = max(static_cast<float>(input[idx]), threadData);
     }
 
     const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
@@ -356,16 +355,12 @@ __device__ inline void scaledSoftmax(
     }
     __syncthreads();
 
-    if (lastValid < blockDim.x)
-    {
-        if (threadIdx.x >= lastValid)
-        {
-            threadData = 0;
-        }
-    }
+    threadData = 0;
+
     for (int i = threadIdx.x; i < lastValid; i += TPB)
     {
-        threadData += exp((threadData - fMax) * w);
+        const int idx = offset + i;
+        threadData += exp((static_cast<float>(input[idx]) - fMax) * w);
     }
 
     const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
@@ -379,7 +374,7 @@ __device__ inline void scaledSoftmax(
     for (int i = threadIdx.x; i < ld; i += TPB)
     {
         const int idx = offset + i;
-        const float val = (i < lastValid) ? exp(float(input[idx]) * w) * rZ : 0.f;
+        const float val = (i < lastValid) ? exp((static_cast<float>(input[idx]) - fMax) * w) * rZ : 0.f;
         output[idx] = T(val);
     }
 }
