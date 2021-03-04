@@ -322,66 +322,54 @@ __device__ inline void scaledSoftmaxSmall(
     }
 }
 
+
 template <typename T, unsigned TPB>
-__device__ inline void scaledSoftmax(
-    const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
-{
+__device__ inline void scaledSoftmax(const int ld, const int lastValid,
+                                     const float rsqrtHeadSize, const T* input,
+                                     T* output) {
+  using BlockReduce = cub::BlockReduce<float, TPB>;
+  __shared__ typename BlockReduce::TempStorage tmpStorage;
 
-    using BlockReduce = cub::BlockReduce<float, TPB>;
-    __shared__ typename BlockReduce::TempStorage tmpStorage;
+  __shared__ float rZ;
+  __shared__ float fMax;
 
-    __shared__ float rZ;
-    __shared__ float fMax;
+  const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
 
-    const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
+  const float w(rsqrtHeadSize);
+  cub::Sum sum;
+  float threadData(-FLT_MAX);
 
-    const float w(rsqrtHeadSize);
-    cub::Sum sum;
-    float threadData(-FLT_MAX);
+  for (int i = threadIdx.x; i < lastValid; i += TPB) {
+    const int idx = offset + i;
+    threadData = max(static_cast<float>(input[idx]), threadData);
+  }
 
-    if (lastValid >= blockDim.x)
-    {
-        threadData = 0;
-    }
-    for (int i = threadIdx.x; i < lastValid; i += TPB)
-    {
-        const int idx = offset + i;
-        threadData = input[idx];
-    }
+  const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
+  if (threadIdx.x == 0) {
+    fMax = maxElem;
+  }
+  __syncthreads();
 
-    const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
-    if (threadIdx.x == 0)
-    {
-        fMax = maxElem;
-    }
-    __syncthreads();
+  threadData = 0;
+  for (int i = threadIdx.x; i < lastValid; i += TPB) {
+    const int idx = offset + i;
+    threadData += exp((static_cast<float>(input[idx]) - fMax) * w);
+  }
 
-    if (lastValid < blockDim.x)
-    {
-        if (threadIdx.x >= lastValid)
-        {
-            threadData = 0;
-        }
-    }
-    for (int i = threadIdx.x; i < lastValid; i += TPB)
-    {
-        threadData += exp((threadData - fMax) * w);
-    }
+  const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
 
-    const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
+  if (threadIdx.x == 0) {
+    rZ = 1.f / Z;
+  }
+  __syncthreads();
 
-    if (threadIdx.x == 0)
-    {
-        rZ = 1.f / Z;
-    }
-    __syncthreads();
-
-    for (int i = threadIdx.x; i < ld; i += TPB)
-    {
-        const int idx = offset + i;
-        const float val = (i < lastValid) ? exp(float(input[idx]) * w) * rZ : 0.f;
-        output[idx] = T(val);
-    }
+  for (int i = threadIdx.x; i < ld; i += TPB) {
+    const int idx = offset + i;
+    const float val =
+        (i < lastValid) ? exp((static_cast<float>(input[idx]) - fMax) * w) * rZ
+                        : 0.f;
+    output[idx] = T(val);
+  }
 }
 
 template <typename IntType>
