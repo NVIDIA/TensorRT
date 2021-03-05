@@ -326,7 +326,6 @@ template <typename T, unsigned TPB>
 __device__ inline void scaledSoftmax(
     const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
 {
-    
     using BlockReduce = cub::BlockReduce<float, TPB>;
     __shared__ typename BlockReduce::TempStorage tmpStorage;
 
@@ -343,7 +342,6 @@ __device__ inline void scaledSoftmax(
     {
         threadData = 0;
     }
-
     for (int i = threadIdx.x; i < lastValid; i += TPB)
     {
         const int idx = offset + i;
