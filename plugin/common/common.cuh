@@ -35,7 +35,6 @@ __device__ inline T rsqrt(const T& x);
 template <typename T>
 __device__ inline T exp(const T& x);
 
-
 // Float32 Operations
 template <>
 __device__ inline float tanh(const float& x)
@@ -55,12 +54,10 @@ __device__ inline float exp(const float& x)
     return expf(x);
 }
 
-
 __device__ inline kv_float operator+(const kv_float& a, const kv_float& b)
 {
     return kv_float(a.key + b.key, a.value + b.value);
 }
-
 
 // Half Operations
 
@@ -84,7 +81,6 @@ __device__ inline T operator+(const T& a, const T& b);
 template <typename T>
 __device__ inline T operator*(const T& a, const T& b);
 
-
 template <>
 __device__ inline half2 operator+(const half2& a, const half2& b)
 {
@@ -103,10 +99,8 @@ __device__ inline half2 operator*(const half2& a, const half2& b)
 template <typename T>
 __device__ inline T operator+(const T& a, const T& b);
 
-
 template <typename T>
 __device__ inline T operator/(const T& a, const T& b);
-
 
 template <typename T>
 __device__ inline T& operator+=(T& a, const T& b);
@@ -116,7 +110,6 @@ __device__ inline T operator-(const T& a, const T& b);
 
 template <typename T>
 __device__ inline T operator*(const T& a, const T& b);
-
 
 template <>
 __device__ inline half operator+(const half& a, const half& b)
@@ -200,7 +193,6 @@ __device__ inline kv_half2 operator+(const kv_half2& a, const kv_half2& b)
 {
     return kv_half2(__hadd2_with_fallback(a.key, b.key), __hadd2_with_fallback(a.value, b.value));
 }
-
 
 // Helper Functions
 
@@ -322,54 +314,61 @@ __device__ inline void scaledSoftmaxSmall(
     }
 }
 
-
 template <typename T, unsigned TPB>
-__device__ inline void scaledSoftmax(const int ld, const int lastValid,
-                                     const float rsqrtHeadSize, const T* input,
-                                     T* output) {
-  using BlockReduce = cub::BlockReduce<float, TPB>;
-  __shared__ typename BlockReduce::TempStorage tmpStorage;
+__device__ inline void scaledSoftmax(
+    const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
+{
+    using BlockReduce = cub::BlockReduce<float, TPB>;
+    __shared__ typename BlockReduce::TempStorage tmpStorage;
 
-  __shared__ float rZ;
-  __shared__ float fMax;
+    __shared__ float rZ;
+    __shared__ float fMax;
 
-  const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
+    const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
 
-  const float w(rsqrtHeadSize);
-  cub::Sum sum;
-  float threadData(-FLT_MAX);
+    const float w(rsqrtHeadSize);
+    cub::Sum sum;
+    float threadData(-FLT_MAX);
 
-  for (int i = threadIdx.x; i < lastValid; i += TPB) {
-    const int idx = offset + i;
-    threadData = max(static_cast<float>(input[idx]), threadData);
-  }
+    if (lastValid >= blockDim.x)
+    {
+        threadData = 0;
+    }
 
-  const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
-  if (threadIdx.x == 0) {
-    fMax = maxElem;
-  }
-  __syncthreads();
+    for (int i = threadIdx.x; i < lastValid; i += TPB)
+    {
+        const int idx = offset + i;
+        threadData = max(static_cast<float>(input[idx]), threadData);
+    }
 
-  threadData = 0;
-  for (int i = threadIdx.x; i < lastValid; i += TPB) {
-    const int idx = offset + i;
-    threadData += exp((static_cast<float>(input[idx]) - fMax) * w);
-  }
+    const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
+    if (threadIdx.x == 0)
+    {
+        fMax = maxElem;
+    }
+    __syncthreads();
 
-  const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
+    threadData = 0;
+    for (int i = threadIdx.x; i < lastValid; i += TPB)
+    {
+        const int idx = offset + i;
+        threadData += exp((static_cast<float>(input[idx]) - fMax) * w);
+    }
 
-  if (threadIdx.x == 0) {
-    rZ = 1.f / Z;
-  }
-  __syncthreads();
+    const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
 
-  for (int i = threadIdx.x; i < ld; i += TPB) {
-    const int idx = offset + i;
-    const float val =
-        (i < lastValid) ? exp((static_cast<float>(input[idx]) - fMax) * w) * rZ
-                        : 0.f;
-    output[idx] = T(val);
-  }
+    if (threadIdx.x == 0)
+    {
+        rZ = 1.f / Z;
+    }
+    __syncthreads();
+
+    for (int i = threadIdx.x; i < ld; i += TPB)
+    {
+        const int idx = offset + i;
+        const float val = (i < lastValid) ? exp((static_cast<float>(input[idx]) - fMax) * w) * rZ : 0.f;
+        output[idx] = T(val);
+    }
 }
 
 template <typename IntType>
