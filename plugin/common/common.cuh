@@ -349,6 +349,7 @@ __device__ inline void scaledSoftmax(
     __syncthreads();
 
     threadData = 0;
+
     for (int i = threadIdx.x; i < lastValid; i += TPB)
     {
         const int idx = offset + i;
