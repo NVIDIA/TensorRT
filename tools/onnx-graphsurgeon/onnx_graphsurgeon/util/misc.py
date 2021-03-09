@@ -60,6 +60,10 @@ def combine_dicts(dict0, dict1):
     return combined
 
 
+def is_dynamic_shape(shape):
+    return any(not isinstance(dim, int) or dim < 0 for dim in shape)
+
+
 # Special type of list that synchronizes contents with another list.
 # Concrete example: Assume some node, n, contains an input tensor, t. If we remove t from n.inputs,
 # we also need to remove n from t.outputs. To avoid having to do this manually, we use SynchronizedList,

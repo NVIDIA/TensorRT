@@ -243,7 +243,7 @@ class Logger(object):
     # Like error, but immediately exits.
     def critical(self, message):
         self.log(message, Logger.CRITICAL, stack_depth=3)
-        raise OnnxGraphSurgeonException("Error encountered - see logging output for details") from None # Erase exception chain
+        raise OnnxGraphSurgeonException(message) from None # Erase exception chain
 
 
 global G_LOGGER
