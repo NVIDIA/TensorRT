@@ -1,5 +1,18 @@
 # TensorRT OSS Release Changelog
 
+## [21.03](https://github.com/NVIDIA/TensorRT/releases/tag/21.03) - 2021-03-09
+### Added
+- Optimized FP16 NMS/batchedNMS plugins with n-bit radix sort and based on `IPluginV2DynamicExt`
+- `ProposalDynamic` and `CropAndResizeDynamic` plugins based on `IPluginV2DynamicExt`
+
+### Changed
+- [ONNX-GraphSurgeon v0.3.3 update](tools/onnx-graphsurgeon/CHANGELOG.md#v03-2021-03-04)
+- Bugfix for `scaledSoftmax` kernel
+
+### Removed
+- N/A
+
+
 ## [21.02](https://github.com/NVIDIA/TensorRT/releases/tag/21.02) - 2021-02-01
 ### Added
 - [TensorRT Python API bindings](python)
