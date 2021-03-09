@@ -6,6 +6,7 @@
 - `ProposalDynamic` and `CropAndResizeDynamic` plugins based on `IPluginV2DynamicExt`
 
 ### Changed
+- [ONNX-TensorRT v21.03 update](https://github.com/onnx/onnx-tensorrt/blob/master/docs/Changelog.md#2103-container-release---2021-03-09)
 - [ONNX-GraphSurgeon v0.3.3 update](tools/onnx-graphsurgeon/CHANGELOG.md#v03-2021-03-04)
 - Bugfix for `scaledSoftmax` kernel
 
