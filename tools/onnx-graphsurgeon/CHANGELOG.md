@@ -3,6 +3,47 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.3 (2021-03-04)
+### Fixed
+- Fixed a bug in `fold_constants` where it would fail if ONNX-Runtime could not run a node with constant inputs.
+    In such cases, the graph is now partitioned to exclude the node before running another pass of constant folding.
+- Fixed a bug where graph output tensors would still point to consumer nodes that had been removed from the graph.
+- Constant folding is now significantly faster in models with large weights.
+
+
+## v0.3.2 (2021-02-13)
+### Added
+- Added support for folding `Shape` nodes in `fold_constants`. This requires that shape inference has been run
+    on the graph, and that the input to the `Shape` node has a static shape.
+    This behavior can be disabled by setting `fold_shapes=False`.
+
+### Changed
+- `cleanup`, `toposort`, and `fold_constants` are now recursively applied to subgraphs by default.
+    This behavior can be disabled by setting `recurse_subgraphs=False`.
+
+
+## v0.3.1 (2021-02-12)
+### Fixed
+- Fixed a bug where `do_type_check` would not propagate to subgraphs.
+- Fixed a bug where `cleanup()` would incorrectly remove outer-level nodes if they were used only by inner-nodes of subgraphs.
+
+### Removed
+- Removed `__deepcopy__` from `Graph` as it wasn't deep-copying weights or attributes.
+    The method is now called `copy` and makes a shallow copy of everything except `Node`s and `Tensor` instances.
+
+
+## v0.3.0 (2021-02-12)
+### Fixed
+- Fixed a bug where shapes including empty strings for `dim_param` would be treated as empty tensors.
+    They are now correctly imported as tensors with dynamic shapes.
+- Fixed a bug where variable tensors with unknown shapes would be imported as scalars.
+
+
+## v0.2.9 (2021-02-01)
+### Changed
+- The `values` property of `Constant` tensors is now lazily loaded. This can greatly improve model loading times.
+
+
 ## v0.2.8 (2020-10-08)
 ### Fixed
 - Fixed a bug where graph inputs and outputs could be assigned `SynchronizedList` instances, and would therefore be modified if nodes in the graph were.

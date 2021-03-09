@@ -20,7 +20,7 @@ from onnx_graphsurgeon.logger.logger import G_LOGGER
 
 from onnx_models import identity_model, lstm_model, scan_model, dim_param_model, initializer_is_output_model
 
-from onnx_graphsurgeon.ir.tensor import Tensor, Constant, Variable
+from onnx_graphsurgeon.ir.tensor import Tensor, LazyValues, Constant, Variable
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
 
@@ -31,6 +31,18 @@ import pytest
 import onnx
 
 class TestOnnxExporter(object):
+    def test_export_constant_tensor_lazy_values_to_tensor_proto(self):
+        name = "constant_tensor"
+        shape = (3, 3, 3)
+        dtype = np.float32
+        onnx_tensor = onnx.numpy_helper.from_array(np.ones(shape=shape, dtype=dtype))
+        tensor = Constant(name=name, values=LazyValues(onnx_tensor))
+
+        # Exporter should *not* load LazyValues into a numpy array.
+        onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
+        assert isinstance(tensor._values, LazyValues)
+
+
     def test_export_constant_tensor_to_tensor_proto(self):
         name = "constant_tensor"
         shape = (3, 224, 224)
@@ -76,6 +88,37 @@ class TestOnnxExporter(object):
         assert tuple(onnx_shape) == shape
 
 
+    def test_export_variable_tensor_empty_dim_param(self):
+        shape = ("", 224, 224)
+
+        tensor = Variable(dtype=np.float32, shape=shape, name="variable_tensor")
+        onnx_tensor = OnnxExporter.export_value_info_proto(tensor, do_type_check=True)
+
+        onnx_shape = []
+        for dim in onnx_tensor.type.tensor_type.shape.dim:
+            onnx_shape.append(dim.dim_value if dim.HasField("dim_value") else dim.dim_param)
+        assert tuple(onnx_shape) == shape
+
+
+    # When a tensor shape is unknown, we should leave the shape field empty.
+    def test_export_variable_tensor_empty_shape(self):
+        shape = None
+
+        tensor = Variable(dtype=np.float32, shape=shape, name="variable_tensor")
+        onnx_tensor = OnnxExporter.export_value_info_proto(tensor, do_type_check=True)
+        assert not onnx_tensor.type.tensor_type.HasField("shape")
+
+
+    # When a tensor shape is unknown, we should leave the shape field empty.
+    def test_export_variable_tensor_scalar_shape(self):
+        shape = [None]
+
+        tensor = Variable(dtype=np.float32, shape=shape, name="variable_tensor")
+        onnx_tensor = OnnxExporter.export_value_info_proto(tensor, do_type_check=True)
+        assert not onnx_tensor.type.tensor_type.shape.dim[0].HasField("dim_param")
+        assert not onnx_tensor.type.tensor_type.shape.dim[0].HasField("dim_value")
+
+
     # TODO: Test subgraph export.
     def test_export_node(self):
         name = "TestNode"
@@ -92,7 +135,7 @@ class TestOnnxExporter(object):
         attrs["strings_attr"] = ["constant", "and", "variable"]
         node = Node(op=op, name=name, inputs=inputs, outputs=outputs, attrs=attrs)
 
-        onnx_node = OnnxExporter.export_node(node)
+        onnx_node = OnnxExporter.export_node(node, do_type_check=True)
         assert onnx_node.name == name
         assert onnx_node.op_type == op
         assert onnx_node.input == ["input"]
