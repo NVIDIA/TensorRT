@@ -20,17 +20,23 @@ import onnx.numpy_helper
 from onnx_graphsurgeon.exporters.base_exporter import BaseExporter
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
-from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable
+from onnx_graphsurgeon.ir.tensor import LazyValues, Constant, Tensor, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 
 
 def dtype_to_onnx(dtype: np.dtype) -> int:
     return onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
 
+
 class OnnxExporter(BaseExporter):
     @staticmethod
     def export_tensor_proto(tensor: Constant) -> onnx.TensorProto:
-        onnx_tensor = onnx.numpy_helper.from_array(tensor.values)
+        # Do *not* load LazyValues into an intermediate numpy array - instead, use
+        # the original onnx.TensorProto directly.
+        if isinstance(tensor._values, LazyValues):
+            onnx_tensor = tensor._values.tensor
+        else:
+            onnx_tensor = onnx.numpy_helper.from_array(tensor.values)
         onnx_tensor.name = tensor.name
         return onnx_tensor
 
@@ -51,7 +57,7 @@ class OnnxExporter(BaseExporter):
 
 
     @staticmethod
-    def export_node(node: Node) -> onnx.NodeProto:
+    def export_node(node: Node, do_type_check: bool) -> onnx.NodeProto:
         # Cannot pass in attrs directly as make_node will change the order
         onnx_node = onnx.helper.make_node(node.op, inputs=[t.name for t in node.inputs], outputs=[t.name for t in node.outputs], name=node.name)
         # Convert Tensors and Graphs to TensorProtos and GraphProtos respectively
@@ -59,7 +65,7 @@ class OnnxExporter(BaseExporter):
             if isinstance(val, Tensor):
                 val = OnnxExporter.export_tensor_proto(val)
             elif isinstance(val, Graph):
-                val = OnnxExporter.export_graph(val)
+                val = OnnxExporter.export_graph(val, do_type_check)
             onnx_node.attribute.extend([onnx.helper.make_attribute(key, val)])
         return onnx_node
 
@@ -74,7 +80,7 @@ class OnnxExporter(BaseExporter):
 
             do_type_check (bool): Whether to check that input and output tensors have data types defined, and fail if not.
         """
-        nodes = [OnnxExporter.export_node(node) for node in graph.nodes]
+        nodes = [OnnxExporter.export_node(node, do_type_check) for node in graph.nodes]
         inputs = [OnnxExporter.export_value_info_proto(inp, do_type_check) for inp in graph.inputs]
         outputs = [OnnxExporter.export_value_info_proto(out, do_type_check) for out in graph.outputs]
         tensor_map = graph.tensors()

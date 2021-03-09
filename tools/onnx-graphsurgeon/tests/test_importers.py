@@ -59,6 +59,36 @@ class TestOnnxImporter(object):
         assert tensor.name == name
 
 
+    # An empty string in `dim_param` should be treated like a dynamic dimension
+    def test_import_empty_dim_param_tensor(self):
+        shape = [1, 2, "non-empty", ""]
+        onnx_tensor = onnx.helper.make_tensor_value_info("test0", onnx.TensorProto.FLOAT, shape)
+        tensor = OnnxImporter.import_tensor(onnx_tensor)
+        assert type(tensor) == Variable
+        assert tensor.shape == shape
+
+
+    # Sometimes, tensor shape is not known, in which case we shouldn't import it
+    def test_import_unknown_shape_tensor(self):
+        shape = None
+        onnx_tensor = onnx.helper.make_tensor_value_info("test0", onnx.TensorProto.FLOAT, shape)
+        tensor = OnnxImporter.import_tensor(onnx_tensor)
+        assert type(tensor) == Variable
+        assert tensor.shape is None
+
+
+    # Scalars can be represented in ONNX with a dim that includes neither a dim_param nor dim_value
+    def test_import_empty_dim_tensor(self):
+        shape = [None]
+        onnx_tensor = onnx.helper.make_tensor_value_info("test0", onnx.TensorProto.FLOAT, shape)
+        onnx_tensor.type.tensor_type.shape.dim[0].ClearField("dim_value")
+        onnx_tensor.type.tensor_type.shape.dim[0].ClearField("dim_param")
+
+        tensor = OnnxImporter.import_tensor(onnx_tensor)
+        assert type(tensor) == Variable
+        assert tensor.shape == shape
+
+
     # TODO: Test all attribute types - missing graph
     def test_import_node(self):
         op = "Test"

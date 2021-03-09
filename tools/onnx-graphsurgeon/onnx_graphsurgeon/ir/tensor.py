@@ -178,13 +178,37 @@ class Variable(Tensor):
         """
         Makes a shallow copy of this tensor, omitting input and output information.
 
-        Note: Generally, you should only ever make a deep copy of a Graph.
+        Note: Generally, you should only ever make a copy of a Graph.
         """
         return Variable(self.name, self.dtype, self.shape)
 
 
+class LazyValues(object):
+    """
+    A special object that represents constant tensor values that should be lazily loaded.
+    """
+    def __init__(self, tensor):
+        """
+        Args:
+            tensor (onnx.TensorProto): The ONNX tensor that this instance should lazily load.
+        """
+        self.tensor = tensor
+
+
+    def load(self):
+        """
+        Load a numpy array from the underlying tensor values.
+
+        Returns:
+            np.array: A numpy array containing the values of the tensor.
+        """
+        import onnx
+        import onnx.numpy_helper
+        return np.array(onnx.numpy_helper.to_array(self.tensor))
+
+
 class Constant(Tensor):
-    def __init__(self, name: str, values: np.ndarray):
+    def __init__(self, name: str, values: Union[np.ndarray, LazyValues]):
         """
         Represents a Tensor whose value is known.
 
@@ -197,13 +221,15 @@ class Constant(Tensor):
         self.name = name
         self.inputs = misc.SynchronizedList(self, field_name="outputs", initial=[])
         self.outputs = misc.SynchronizedList(self, field_name="inputs", initial=[])
-        if not isinstance(values, np.ndarray):
-            G_LOGGER.critical("Provided `values` argument is not a NumPy array (please provide a NumPy array to construct a Constant): {:}".format(values))
-        self.values = np.array(values)
+        if not isinstance(values, np.ndarray) and not isinstance(values, LazyValues):
+            G_LOGGER.critical("Provided `values` argument is not a NumPy array or a LazyValues instance. "
+                              "Please provide a NumPy array or LazyValues instance to construct a Constant. "
+                              "Note: Provided `values` parameter was: {:}".format(values))
+        self._values = values
 
 
     def to_variable(self, dtype: np.dtype=None, shape: Sequence[Union[int, str]]=[]):
-        del self.values
+        del self._values
         return super().to_variable(dtype, shape)
 
 
@@ -211,9 +237,22 @@ class Constant(Tensor):
         """
         Makes a shallow copy of this tensor, omitting input and output information.
 
-        Note: Generally, you should only ever make a deep copy of a Graph.
+        Note: Generally, you should only ever make a copy of a Graph.
         """
         return Constant(self.name, self.values)
+
+
+    @property
+    def values(self):
+        # Load values when they are first accesed
+        if isinstance(self._values, LazyValues):
+            self._values = self._values.load()
+        return self._values
+
+
+    @values.setter
+    def values(self, values: Union[np.ndarray, LazyValues]):
+        self._values = values
 
 
     @property
