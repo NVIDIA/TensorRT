@@ -203,7 +203,7 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     assert(conv2);
     conv2->setStride(DimsHW{1, 1});
 
-    // Add second max pooling layer with stride of 2x2 and kernel size of 2x3>
+    // Add second max pooling layer with stride of 2x2 and kernel size of 2x2.
     IPoolingLayer* pool2 = network->addPoolingNd(*conv2->getOutput(0), PoolingType::kMAX, Dims{2, {2, 2}, {}});
     assert(pool2);
     pool2->setStride(DimsHW{2, 2});
