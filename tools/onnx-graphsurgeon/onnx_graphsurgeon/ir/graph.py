@@ -527,12 +527,6 @@ class Graph(object):
 
             graph_constants = update_foldable_outputs(graph_constants)
 
-        if not graph_constants:
-            G_LOGGER.warning("Could not find any operations in this graph ({:}) that can be folded. "
-                             "This could mean that constant folding has already been run on this graph. "
-                             "Skipping.".format(self.name))
-            return self
-
 
         def partition_and_infer(subgraph):
             def get_out_node_ids():
@@ -585,21 +579,25 @@ class Graph(object):
         graph_clone.outputs = [t for t in graph_constants.values() if not isinstance(t, Constant)]
         graph_clone.cleanup()
 
-        constant_values = {}
-        if partitioning:
-            constant_values = partition_and_infer(graph_clone)
-        else:
-            names = [t.name for t in graph_clone.outputs]
-            try:
-                sess = rt.InferenceSession(export_onnx(graph_clone, do_type_check=False).SerializeToString())
-                values = sess.run(names, {})
-                constant_values.update({name: val for name, val in zip(names, values)})
-            except Exception as err:
-                G_LOGGER.warning("Inference failed. You may want to try enabling partitioning to see better results. "
-                                 "Note: Error was:\n{:}".format(err))
-
         # Using ._values avoids a deep copy of the values.
-        constant_values.update({name: tensor._values for name, tensor in graph_constants.items() if isinstance(tensor, Constant)})
+        constant_values = {name: tensor._values for name, tensor in graph_constants.items() if isinstance(tensor, Constant)}
+        if graph_clone.outputs:
+            if partitioning:
+                constant_values.update(partition_and_infer(graph_clone))
+            else:
+                names = [t.name for t in graph_clone.outputs]
+                try:
+                    sess = rt.InferenceSession(export_onnx(graph_clone, do_type_check=False).SerializeToString())
+                    values = sess.run(names, {})
+                    constant_values.update({name: val for name, val in zip(names, values)})
+                except Exception as err:
+                    G_LOGGER.warning("Inference failed. You may want to try enabling partitioning to see better results. "
+                                    "Note: Error was:\n{:}".format(err))
+        elif not constant_values:
+            G_LOGGER.warning("Could not find any nodes in this graph ({:}) that can be folded. "
+                             "This could mean that constant folding has already been run on this graph. "
+                             "Skipping.".format(self.name))
+            return self
 
         # Finally, replace the Variables in the original graph with constants.
         graph_tensors = self.tensors()

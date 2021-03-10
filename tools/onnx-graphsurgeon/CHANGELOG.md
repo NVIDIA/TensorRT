@@ -3,6 +3,11 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.4 (2021-03-10)
+### Fixed
+- `fold_constants` will no longer attempt to run inference if there are no constants to compute.
+
+
 ## v0.3.3 (2021-03-04)
 ### Fixed
 - Fixed a bug in `fold_constants` where it would fail if ONNX-Runtime could not run a node with constant inputs.
