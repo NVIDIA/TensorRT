@@ -46,7 +46,7 @@ The parameters are defined below and consists of the following attributes:
 
 | Type     | Parameter                               |  Version                          | Description
 |----------|-----------------------------------------|-----------------------------------|-------------------------------------------------------------------
-|`int`     |`type_id`                                |  1, 2                             |Integer encoding the DataType (0: FP32, 1: FP16)
+|`int`     |`type_id`                                |  1, 2                             |Integer encoding the DataType (0: FP32, 1: FP16, 2: INT8)
 |`int`     |`hidden_size`                            |  1, 2, 3                          |The hidden size, denoted by `E` above.
 |`int`     |`num_heads`                              |  1, 2, 3                          |The number of self-attention heads.
 |`bool`    |`has_mask`                               |  1, 2                             |Whether to use the input_mask input.
