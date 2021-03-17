@@ -14,7 +14,7 @@ Software version configuration tested for the instructions that follow:
 |Python|3.6.9|
 |CUDA|11.1.1|
 |Apex|0.1|
-|TensorRT|7.2.2.3|
+|TensorRT|7.2.3.4|
 |PyTorch|1.5.1|
 
 
