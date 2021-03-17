@@ -37,8 +37,8 @@ class CropAndResizePlugin : public IPluginV2Ext
 {
 public:
     CropAndResizePlugin(int crop_width, int crop_height) noexcept;
-    CropAndResizePlugin(int crop_width, int crop_height, int depth, int input_width,
-        int input_height, int max_box_num) noexcept;
+    CropAndResizePlugin(
+        int crop_width, int crop_height, int depth, int input_width, int input_height, int max_box_num) noexcept;
     CropAndResizePlugin(const void* serial_buf, size_t serial_size) noexcept;
 
     // It doesn't make sense to make CropAndResizePlugin without arguments, so we delete default constructor.
@@ -56,8 +56,8 @@ public:
 
     size_t getWorkspaceSize(int) const noexcept override;
 
-    int enqueue(
-        int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept override;
+    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace,
+        cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
@@ -79,7 +79,8 @@ public:
 
     DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+        noexcept override;
 
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
@@ -101,8 +102,8 @@ class CropAndResizeDynamicPlugin : public IPluginV2DynamicExt
 {
 public:
     CropAndResizeDynamicPlugin(int crop_width, int crop_height) noexcept;
-    CropAndResizeDynamicPlugin(int crop_width, int crop_height, int depth, int input_width,
-        int input_height, int max_box_num) noexcept;
+    CropAndResizeDynamicPlugin(
+        int crop_width, int crop_height, int depth, int input_width, int input_height, int max_box_num) noexcept;
     CropAndResizeDynamicPlugin(const void* serial_buf, size_t serial_size) noexcept;
 
     // It doesn't make sense to make CropAndResizeDynamicPlugin without arguments, so we delete default constructor.
@@ -129,11 +130,12 @@ public:
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
         int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept override;
-    bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(
-        const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(
-        const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
+    bool supportsFormatCombination(
+        int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
+    void configurePlugin(const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out,
+        int nbOutputs) noexcept override;
+    size_t getWorkspaceSize(const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs,
+        int nbOutputs) const noexcept override;
     int enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
@@ -172,7 +174,8 @@ public:
     CropAndResizeDynamicPluginCreator() noexcept;
     ~CropAndResizeDynamicPluginCreator() noexcept override = default;
     IPluginV2DynamicExt* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
-    IPluginV2DynamicExt* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    IPluginV2DynamicExt* deserializePlugin(
+        const char* name, const void* serialData, size_t serialLength) noexcept override;
 };
 
 } // namespace plugin

@@ -222,8 +222,8 @@ int BatchedNMSPlugin::enqueue(
 
     pluginStatus_t status = nmsInference(stream, batchSize, boxesSize, scoresSize, param.shareLocation,
         param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
-        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores,
-        nmsedClasses, workspace, param.isNormalized, false, mClipBoxes, mScoreBits);
+        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses,
+        workspace, param.isNormalized, false, mClipBoxes, mScoreBits);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
@@ -241,8 +241,8 @@ int BatchedNMSDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const Pl
 
     pluginStatus_t status = nmsInference(stream, inputDesc[0].dims.d[0], boxesSize, scoresSize, param.shareLocation,
         param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
-        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores,
-        nmsedClasses, workspace, param.isNormalized, false, mClipBoxes, mScoreBits);
+        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses,
+        workspace, param.isNormalized, false, mClipBoxes, mScoreBits);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
@@ -335,7 +335,8 @@ void BatchedNMSDynamicPlugin::configurePlugin(
 
 bool BatchedNMSPlugin::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return ((type == DataType::kHALF || type == DataType::kFLOAT || type == DataType::kINT32) && format == PluginFormat::kNCHW);
+    return ((type == DataType::kHALF || type == DataType::kFLOAT || type == DataType::kINT32)
+        && format == PluginFormat::kNCHW);
 }
 
 bool BatchedNMSDynamicPlugin::supportsFormatCombination(
@@ -347,12 +348,22 @@ bool BatchedNMSDynamicPlugin::supportsFormatCombination(
     const bool consistentFloatPrecision = in[0].type == in[pos].type;
     switch (pos)
     {
-    case 0: return (in[0].type == DataType::kHALF || in[0].type == DataType::kFLOAT) && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 1: return (in[1].type == DataType::kHALF || in[1].type == DataType::kFLOAT) && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 0:
+        return (in[0].type == DataType::kHALF || in[0].type == DataType::kFLOAT)
+            && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 1:
+        return (in[1].type == DataType::kHALF || in[1].type == DataType::kFLOAT)
+            && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     case 2: return out[0].type == DataType::kINT32 && out[0].format == PluginFormat::kLINEAR;
-    case 3: return (out[1].type == DataType::kHALF || out[1].type == DataType::kFLOAT) && out[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 4: return (out[2].type == DataType::kHALF || out[2].type == DataType::kFLOAT) && out[2].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 5: return (out[3].type == DataType::kHALF || out[3].type == DataType::kFLOAT) && out[3].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 3:
+        return (out[1].type == DataType::kHALF || out[1].type == DataType::kFLOAT)
+            && out[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 4:
+        return (out[2].type == DataType::kHALF || out[2].type == DataType::kFLOAT)
+            && out[2].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 5:
+        return (out[3].type == DataType::kHALF || out[3].type == DataType::kFLOAT)
+            && out[3].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     }
     return false;
 }
@@ -473,7 +484,8 @@ void BatchedNMSDynamicPlugin::setScoreBits(int32_t scoreBits) noexcept
     mScoreBits = scoreBits;
 }
 
-bool BatchedNMSPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool BatchedNMSPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+    noexcept
 {
     return false;
 }
@@ -589,7 +601,8 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const Plug
     return plugin;
 }
 
-IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     mClipBoxes = true;
@@ -652,7 +665,8 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(const char* na
     return plugin;
 }
 
-IPluginV2Ext* BatchedNMSPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2Ext* BatchedNMSPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call NMS::destroy()

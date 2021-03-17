@@ -160,15 +160,17 @@ DimsExprs DetectionOutputDynamic::getOutputDimensions(
     if (inputs[C1_idx].d[0]->isConstant() && inputs[C1_idx].d[1]->isConstant() && inputs[C1_idx].d[2]->isConstant()
         && inputs[C1_idx].d[3]->isConstant())
     {
-        C1 = exprBuilder.operation(
-            DimensionOperation::kPROD,
-            *exprBuilder.operation(DimensionOperation::kPROD, *inputs[C1_idx].d[1], *inputs[C1_idx].d[2]),
-            *inputs[C1_idx].d[3])->getConstantValue();
+        C1 = exprBuilder
+                 .operation(DimensionOperation::kPROD,
+                     *exprBuilder.operation(DimensionOperation::kPROD, *inputs[C1_idx].d[1], *inputs[C1_idx].d[2]),
+                     *inputs[C1_idx].d[3])
+                 ->getConstantValue();
     }
 
     if (inputs[C2_idx].d[0]->isConstant() && inputs[C2_idx].d[1]->isConstant() && inputs[C2_idx].d[2]->isConstant())
     {
-        C2 = exprBuilder.operation(DimensionOperation::kPROD, *inputs[C2_idx].d[1], *inputs[C2_idx].d[2])->getConstantValue();
+        C2 = exprBuilder.operation(DimensionOperation::kPROD, *inputs[C2_idx].d[1], *inputs[C2_idx].d[2])
+                 ->getConstantValue();
     }
     // Output dimensions
     // index 0 : Dimensions 1x param.keepTopK x 7
@@ -197,15 +199,15 @@ DimsExprs DetectionOutputDynamic::getOutputDimensions(
 // Returns the workspace size
 size_t DetectionOutput::getWorkspaceSize(int maxBatchSize) const noexcept
 {
-    return detectionInferenceWorkspaceSize(param.shareLocation, maxBatchSize, C1, C2, param.numClasses, numPriors,
-        param.topK, mType, mType);
+    return detectionInferenceWorkspaceSize(
+        param.shareLocation, maxBatchSize, C1, C2, param.numClasses, numPriors, param.topK, mType, mType);
 }
 
 size_t DetectionOutputDynamic::getWorkspaceSize(
     const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
-    return detectionInferenceWorkspaceSize(param.shareLocation, inputs[0].dims.d[0], C1, C2,
-        param.numClasses, numPriors, param.topK, mType, mType);
+    return detectionInferenceWorkspaceSize(
+        param.shareLocation, inputs[0].dims.d[0], C1, C2, param.numClasses, numPriors, param.topK, mType, mType);
 }
 
 // Plugin layer implementation
@@ -223,9 +225,8 @@ int DetectionOutput::enqueue(
 
     pluginStatus_t status = detectionInference(stream, batchSize, C1, C2, param.shareLocation,
         param.varianceEncodedInTarget, param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK,
-        param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData, priorData,
-        mType, confData, keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid,
-        mScoreBits);
+        param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData, priorData, mType, confData,
+        keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid, mScoreBits);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
@@ -244,9 +245,8 @@ int DetectionOutputDynamic::enqueue(const PluginTensorDesc* inputDesc, const Plu
 
     pluginStatus_t status = detectionInference(stream, inputDesc[0].dims.d[0], C1, C2, param.shareLocation,
         param.varianceEncodedInTarget, param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK,
-        param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData, priorData,
-        mType, confData, keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid,
-        mScoreBits);
+        param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData, priorData, mType, confData,
+        keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid, mScoreBits);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
@@ -292,10 +292,7 @@ void DetectionOutputDynamic::serialize(void* buffer) const noexcept
 // Check if the DataType and Plugin format is supported
 bool DetectionOutput::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (
-        (type == DataType::kHALF || type == DataType::kFLOAT) &&
-        format == PluginFormat::kNCHW
-    );
+    return ((type == DataType::kHALF || type == DataType::kFLOAT) && format == PluginFormat::kNCHW);
 }
 
 bool DetectionOutputDynamic::supportsFormatCombination(
@@ -308,10 +305,18 @@ bool DetectionOutputDynamic::supportsFormatCombination(
     const bool consistentFloatPrecision = (in[0].type == in[pos].type);
     switch (pos)
     {
-    case 0: return (in[0].type == DataType::kHALF || in[0].type == DataType::kFLOAT) && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 1: return (in[1].type == DataType::kHALF || in[1].type == DataType::kFLOAT) && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 2: return (in[2].type == DataType::kHALF || in[2].type == DataType::kFLOAT) && in[2].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 3: return (out[0].type == DataType::kHALF || out[0].type == DataType::kFLOAT) && out[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 0:
+        return (in[0].type == DataType::kHALF || in[0].type == DataType::kFLOAT)
+            && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 1:
+        return (in[1].type == DataType::kHALF || in[1].type == DataType::kFLOAT)
+            && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 2:
+        return (in[2].type == DataType::kHALF || in[2].type == DataType::kFLOAT)
+            && in[2].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 3:
+        return (out[0].type == DataType::kHALF || out[0].type == DataType::kFLOAT)
+            && out[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     case 4: return out[1].type == DataType::kFLOAT && out[1].format == PluginFormat::kLINEAR;
     }
     return false;
@@ -407,13 +412,15 @@ const char* DetectionOutputDynamic::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index.
-DataType DetectionOutput::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType DetectionOutput::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
 {
     // Two outputs
     ASSERT(index == 0 || index == 1);
     ASSERT(inputTypes[0] == inputTypes[1] && inputTypes[2] == inputTypes[1]);
     // topDetections
-    if (index == 0) {
+    if (index == 0)
+    {
         return inputTypes[0];
     }
     // keepCount: use kFLOAT instead as they have same sizeof(type)
@@ -421,13 +428,15 @@ DataType DetectionOutput::getOutputDataType(int index, const nvinfer1::DataType*
     return DataType::kFLOAT;
 }
 
-DataType DetectionOutputDynamic::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType DetectionOutputDynamic::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
 {
     // Two outputs
     ASSERT(index == 0 || index == 1);
     ASSERT(inputTypes[0] == inputTypes[1] && inputTypes[2] == inputTypes[1]);
     // topDetections
-    if (index == 0) {
+    if (index == 0)
+    {
         return inputTypes[0];
     }
     // keepCount: use kFLOAT instead as they have same sizeof(type)
@@ -436,7 +445,8 @@ DataType DetectionOutputDynamic::getOutputDataType(int index, const nvinfer1::Da
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool DetectionOutput::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool DetectionOutput::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+    noexcept
 {
     return false;
 }
@@ -572,7 +582,7 @@ NMSDynamicPluginCreator::NMSDynamicPluginCreator() noexcept
 }
 
 // Returns the plugin name
-const char* NMSBasePluginCreator::getPluginName() const noexcept 
+const char* NMSBasePluginCreator::getPluginName() const noexcept
 {
     return mPluginName.c_str();
 }
@@ -774,7 +784,8 @@ IPluginV2DynamicExt* NMSDynamicPluginCreator::createPlugin(const char* name, con
     return obj;
 }
 
-IPluginV2Ext* NMSPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2Ext* NMSPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call NMS::destroy()
@@ -783,7 +794,8 @@ IPluginV2Ext* NMSPluginCreator::deserializePlugin(const char* name, const void* 
     return obj;
 }
 
-IPluginV2DynamicExt* NMSDynamicPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2DynamicExt* NMSDynamicPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call NMS::destroy()

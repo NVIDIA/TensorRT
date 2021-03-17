@@ -35,7 +35,8 @@ namespace plugin
 class MultilevelProposeROI : public IPluginV2Ext
 {
 public:
-    MultilevelProposeROI(int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size);
+    MultilevelProposeROI(
+        int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size);
 
     MultilevelProposeROI(const void* data, size_t length);
 

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <cuda.h>
 #include <cstring>
+#include <cuda.h>
 #include <vector>
 
 #include "NvInfer.h"

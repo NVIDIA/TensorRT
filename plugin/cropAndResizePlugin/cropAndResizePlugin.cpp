@@ -94,8 +94,8 @@ CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(const void* serial_buf, s
     ASSERT(d == a + sizeof(size_t) * 6);
 }
 
-CropAndResizePlugin::CropAndResizePlugin(int crop_width, int crop_height, int depth,
-    int input_width, int input_height, int max_box_num) noexcept
+CropAndResizePlugin::CropAndResizePlugin(
+    int crop_width, int crop_height, int depth, int input_width, int input_height, int max_box_num) noexcept
     : mCropWidth(crop_width)
     , mCropHeight(crop_height)
     , mDepth(depth)
@@ -105,8 +105,8 @@ CropAndResizePlugin::CropAndResizePlugin(int crop_width, int crop_height, int de
 {
 }
 
-CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(int crop_width, int crop_height, int depth,
-    int input_width, int input_height, int max_box_num) noexcept
+CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(
+    int crop_width, int crop_height, int depth, int input_width, int input_height, int max_box_num) noexcept
     : mCropWidth(crop_width)
     , mCropHeight(crop_height)
     , mDepth(depth)
@@ -116,15 +116,9 @@ CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(int crop_width, int crop_
 {
 }
 
-CropAndResizePlugin::~CropAndResizePlugin() noexcept
-{
+CropAndResizePlugin::~CropAndResizePlugin() noexcept {}
 
-}
-
-CropAndResizeDynamicPlugin::~CropAndResizeDynamicPlugin() noexcept
-{
-
-}
+CropAndResizeDynamicPlugin::~CropAndResizeDynamicPlugin() noexcept {}
 
 const char* CropAndResizePlugin::getPluginType() const noexcept
 {
@@ -196,7 +190,8 @@ int CropAndResizeDynamicPlugin::initialize() noexcept
     return STATUS_SUCCESS;
 }
 
-int CropAndResizePlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream) noexcept
+int CropAndResizePlugin::enqueue(
+    int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream) noexcept
 {
     int status = -1;
     // Our plugin outputs only one tensor
@@ -208,9 +203,8 @@ int CropAndResizePlugin::enqueue(int batchSize, const void* const* inputs, void*
     return status;
 }
 
-int CropAndResizeDynamicPlugin::enqueue(
-    const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs,
-    void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int CropAndResizeDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     int status = -1;
     // Our plugin outputs only one tensor
@@ -272,7 +266,8 @@ bool CropAndResizePlugin::supportsFormat(DataType type, PluginFormat format) con
     }
 }
 
-bool CropAndResizeDynamicPlugin::supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
+bool CropAndResizeDynamicPlugin::supportsFormatCombination(
+    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
     // 2 inputs, 1 outputs, so 3 input/output in total
     ASSERT(0 <= pos && pos < 3);
@@ -283,7 +278,8 @@ bool CropAndResizeDynamicPlugin::supportsFormatCombination(int pos, const Plugin
     {
     case 0: return in[0].type == DataType::kFLOAT && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     case 1: return in[1].type == DataType::kFLOAT && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 2: return out[0].type == DataType::kFLOAT && out[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 2:
+        return out[0].type == DataType::kFLOAT && out[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     }
     return false;
 }
@@ -294,13 +290,13 @@ void CropAndResizeDynamicPlugin::terminate() noexcept {}
 
 size_t CropAndResizePlugin::getWorkspaceSize(int) const noexcept
 {
-return 0;
+    return 0;
 }
 
 size_t CropAndResizeDynamicPlugin::getWorkspaceSize(
     const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
-return 0;
+    return 0;
 }
 
 void CropAndResizePlugin::destroy() noexcept
@@ -352,14 +348,16 @@ const char* CropAndResizeDynamicPlugin::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index.
-DataType CropAndResizePlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType CropAndResizePlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
 {
     // one outputs
     ASSERT(index == 0);
     return DataType::kFLOAT;
 }
 
-DataType CropAndResizeDynamicPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType CropAndResizeDynamicPlugin::getOutputDataType(
+    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // one outputs
     ASSERT(index == 0);
@@ -409,7 +407,6 @@ void CropAndResizePlugin::attachToContext(
 
 // Detach the plugin object from its execution context.
 void CropAndResizePlugin::detachFromContext() noexcept {}
-
 
 CropAndResizeBasePluginCreator::CropAndResizeBasePluginCreator() noexcept
 {
@@ -472,7 +469,8 @@ IPluginV2Ext* CropAndResizePluginCreator::createPlugin(const char* name, const P
     return plugin;
 }
 
-IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     int nbFields = fc->nbFields;

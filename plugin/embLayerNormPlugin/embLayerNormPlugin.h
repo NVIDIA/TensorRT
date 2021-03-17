@@ -38,7 +38,6 @@ int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* input
 void convertMask(const uint32_t S, const uint32_t B, const uint32_t warps_m, const uint32_t warps_n,
     const uint32_t warps_k, const int* inputMaskSB, uint32_t* inputMaskX, cudaStream_t stream);
 
-
 class EmbLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:

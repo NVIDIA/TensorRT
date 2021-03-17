@@ -34,7 +34,7 @@ class BatchedNMSPlugin : public IPluginV2Ext
 public:
     BatchedNMSPlugin(NMSParameters param) noexcept;
     BatchedNMSPlugin(const void* data, size_t length) noexcept;
-    ~BatchedNMSPlugin()  noexcept override = default;
+    ~BatchedNMSPlugin() noexcept override = default;
 
     // IPluginV2 methods
     const char* getPluginType() const noexcept override;
@@ -43,8 +43,8 @@ public:
     Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override;
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
     size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
-    int enqueue(
-        int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept override;
+    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace,
+        cudaStream_t stream) noexcept override;
     int initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
@@ -56,8 +56,10 @@ public:
     void setScoreBits(int32_t scoreBits) noexcept;
 
     // IPluginV2Ext methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const noexcept override;
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
+    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const
+        noexcept override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+        noexcept override;
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
     void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
         const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
@@ -97,17 +99,19 @@ public:
     void setScoreBits(int32_t scoreBits) noexcept;
 
     // IPluginV2Ext methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const noexcept override;
+    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const
+        noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
         int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept override;
-    bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(
-        const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(
-        const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
+    bool supportsFormatCombination(
+        int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
+    void configurePlugin(const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out,
+        int nbOutputs) noexcept override;
+    size_t getWorkspaceSize(const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs,
+        int nbOutputs) const noexcept override;
     int enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
@@ -158,7 +162,8 @@ public:
     ~BatchedNMSDynamicPluginCreator() noexcept override = default;
 
     IPluginV2DynamicExt* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
-    IPluginV2DynamicExt* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    IPluginV2DynamicExt* deserializePlugin(
+        const char* name, const void* serialData, size_t serialLength) noexcept override;
 };
 
 } // namespace plugin
