@@ -79,7 +79,7 @@ The following software version configuration has been tested:
 |Software|Version|
 |--------|-------|
 |Python|3.6.9|
-|TensorRT|7.2.2.3|
+|TensorRT|7.2.3.4|
 |CUDA|11.1.1|
 
 

@@ -12,15 +12,13 @@ This repository contains the Open Source Software (OSS) components of NVIDIA Ten
 To build the TensorRT-OSS components, you will first need the following software packages.
 
 **TensorRT GA build**
-* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v7.2.2
-    - See [Downloading TensorRT Builds](#downloading-tensorrt-builds) for details
+* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v7.2.3.4
 
 **System Packages**
 * [CUDA](https://developer.nvidia.com/cuda-toolkit)
   * Recommended versions:
-  * cuda-11.1 + cuDNN-8.0
-  * cuda-11.0 + cuDNN-8.0
-  * cuda-10.2 + cuDNN-8.0
+  * cuda-11.x + cuDNN-8.1
+  * cuda-10.2 + cuDNN-8.1
 * [GNU make](https://ftp.gnu.org/gnu/make/) >= v4.1
 * [cmake](https://github.com/Kitware/CMake/releases) >= v3.13
 * [python](<https://www.python.org/downloads/>) >= v3.6.5
@@ -74,26 +72,16 @@ To build the TensorRT-OSS components, you will first need the following software
 
     ```bash
     cd ~/Downloads
-    tar -xvzf TensorRT-7.2.2.3.Ubuntu-18.04.x86_64-gnu.cuda-11.1.cudnn8.0.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-7.2.2.3
-    ```
-
-    **Example: Ubuntu18.04 Cross-Compile for QNX with cuda-10.2**
-
-    ```bash
-    cd ~/Downloads
-    tar -xvzf TensorRT-7.2.2.3.Ubuntu-18.04.aarch64-qnx.cuda-10.2.cudnn7.6.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-7.2.2.3
-    export QNX_HOST=/<path-to-qnx-toolchain>/host/linux/x86_64
-    export QNX_TARGET=/<path-to-qnx-toolchain>/target/qnx7
+    tar -xvzf TensorRT-7.2.3.4.Ubuntu-18.04.x86_64-gnu.cuda-11.1.cudnn8.1.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-7.2.3.4
     ```
 
     **Example: Windows on x86-64 with cuda-11.0**
 
     ```powershell
     cd ~\Downloads
-    Expand-Archive .\TensorRT-7.2.2.3.Windows10.x86_64.cuda-11.0.cudnn8.0.zip
-    $Env:TRT_LIBPATH = '$(Get-Location)\TensorRT-7.2.2.3'
+    Expand-Archive .\TensorRT-7.2.3.4.Windows10.x86_64.cuda-11.0.cudnn8.1.zip
+    $Env:TRT_LIBPATH = '$(Get-Location)\TensorRT-7.2.3.4'
     $Env:PATH += 'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\MSBuild\15.0\Bin\'
     ```
 
@@ -136,8 +124,9 @@ For native builds, install the [prerequisite](#prerequisites) *System Packages*.
 	./docker/launch.sh --tag tensorrt-ubuntu-1804 --gpus all
 	```
 	> NOTE:
-	1. Use the tag corresponding to the build container you generated in 
+	1. Use the tag corresponding to the build container.
 	2. To run TensorRT/CUDA programs in the build container, install [NVIDIA Container Toolkit](#prerequisites). Docker versions < 19.03 require `nvidia-docker2` and `--runtime=nvidia` flag for docker run commands. On versions >= 19.03, you need the `nvidia-container-toolkit` package and `--gpus all` flag.
+	3. sudo password for Ubuntu containers is 'nvidia'.
 
 ## Building TensorRT-OSS
 * Generate Makefiles or VS project (Windows) and build.
@@ -213,5 +202,5 @@ For native builds, install the [prerequisite](#prerequisites) *System Packages*.
 
 ## Known Issues
 
-#### TensorRT 7.2.2
+#### TensorRT 7.2.3.4
 * None
