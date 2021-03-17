@@ -534,7 +534,7 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
             {
                 elemCount.push_back(volume(profileCalib->getDimensions(input->getName(), OptProfileSelector::kOPT)));
             }
-            else if (profile)
+            else if (profile && (profile->getDimensions(input->getName(), OptProfileSelector::kOPT).nbDims >= 0))
             {
                 elemCount.push_back(volume(profile->getDimensions(input->getName(), OptProfileSelector::kOPT)));
             }
