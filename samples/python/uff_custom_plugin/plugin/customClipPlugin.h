@@ -21,7 +21,6 @@
 #include <string>
 #include <vector>
 
-
 using namespace nvinfer1;
 
 // One of the preferred ways of making TensorRT to be able to see
@@ -46,15 +45,20 @@ public:
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int) const noexcept override { return 0; };
+    size_t getWorkspaceSize(int) const noexcept override
+    {
+        return 0;
+    };
 
-    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept override;
+    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace,
+        cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
     void serialize(void* buffer) const noexcept override;
 
-    void configureWithFormat(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type, PluginFormat format, int maxBatchSize) noexcept override;
+    void configureWithFormat(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type,
+        PluginFormat format, int maxBatchSize) noexcept override;
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
@@ -91,7 +95,7 @@ public:
     IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
 
     IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
-    
+
     void setPluginNamespace(const char* pluginNamespace) noexcept override;
 
     const char* getPluginNamespace() const noexcept override;

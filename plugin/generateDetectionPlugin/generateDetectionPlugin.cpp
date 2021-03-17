@@ -16,8 +16,8 @@
 
 #include "generateDetectionPlugin.h"
 #include "plugin.h"
-#include <cuda_runtime_api.h>
 #include <algorithm>
+#include <cuda_runtime_api.h>
 
 using namespace nvinfer1;
 using namespace plugin;
@@ -105,7 +105,8 @@ IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(const char* name
     return new GenerateDetection(data, length);
 };
 
-GenerateDetection::GenerateDetection(int num_classes, int keep_topk, float score_threshold, float iou_threshold, const nvinfer1::Dims& image_size)
+GenerateDetection::GenerateDetection(
+    int num_classes, int keep_topk, float score_threshold, float iou_threshold, const nvinfer1::Dims& image_size)
     : mNbClasses(num_classes)
     , mKeepTopK(keep_topk)
     , mScoreThreshold(score_threshold)
@@ -281,7 +282,7 @@ int GenerateDetection::enqueue(
         = DetectionPostProcess(stream, batch_size, mAnchorsCnt, static_cast<float*>(mRegWeightDevice->mPtr),
             static_cast<float>(mImageSize.d[1]), // Image Height
             static_cast<float>(mImageSize.d[2]), // Image Width
-            DataType::kFLOAT,                                        // mType,
+            DataType::kFLOAT,                    // mType,
             mParam, refDetcWorkspace, workspace,
             inputs[1],       // inputs[InScore]
             inputs[0],       // inputs[InDelta],

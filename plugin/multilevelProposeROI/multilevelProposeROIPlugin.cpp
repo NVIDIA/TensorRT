@@ -17,9 +17,9 @@
 #include "multilevelProposeROIPlugin.h"
 #include "plugin.h"
 #include "tlt_mrcnn_config.h"
+#include <algorithm>
 #include <cuda_runtime_api.h>
 #include <iostream>
-#include <algorithm>
 #include <math.h>
 
 #include <fstream>
@@ -108,7 +108,8 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::deserializePlugin(const char* n
     return new MultilevelProposeROI(data, length);
 };
 
-MultilevelProposeROI::MultilevelProposeROI(int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size)
+MultilevelProposeROI::MultilevelProposeROI(
+    int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size)
     : mPreNMSTopK(prenms_topk)
     , mKeepTopK(keep_topk)
     , mFGThreshold(fg_threshold)

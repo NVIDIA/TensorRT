@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#include <cuda.h>
+#include "skipLayerNormInt8InterleavedPlugin.h"
 #include "NvInfer.h"
 #include "serialize.hpp"
-#include "skipLayerNormInt8InterleavedPlugin.h"
+#include <cuda.h>
 
 #include <cstring>
 #include <vector>
@@ -161,7 +161,7 @@ size_t SkipLayerNormInterleavedPlugin::getWorkspaceSize(
 int SkipLayerNormInterleavedPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
     const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
 {
-    //Input shape: 1x(hxd)xtotalx1
+    // Input shape: 1x(hxd)xtotalx1
     const auto iDesc = inputDesc[0];
     const auto sDesc = inputDesc[1];
     const auto oDesc = outputDesc[0];
@@ -188,9 +188,12 @@ int SkipLayerNormInterleavedPlugin::enqueue(const PluginTensorDesc* inputDesc, c
     const half* gamma = static_cast<const half*>(mGammaDev.get());
     const half* beta = static_cast<const half*>(mBetaDev.get());
 
-    if(total < 4096){
+    if (total < 4096)
+    {
         launch_small(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
-    }else{
+    }
+    else
+    {
         launch_large(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
     }
 

@@ -18,9 +18,9 @@
 #include "NvInfer.h"
 #include "clipKernel.h"
 
-#include <vector>
 #include <cassert>
 #include <cstring>
+#include <vector>
 
 using namespace nvinfer1;
 
@@ -38,7 +38,7 @@ std::vector<PluginField> ClipPluginCreator::mPluginAttributes;
 REGISTER_TENSORRT_PLUGIN(ClipPluginCreator);
 
 // Helper function for serializing plugin
-template<typename T>
+template <typename T>
 void writeToBuffer(char*& buffer, const T& val)
 {
     *reinterpret_cast<T*>(buffer) = val;
@@ -46,7 +46,7 @@ void writeToBuffer(char*& buffer, const T& val)
 }
 
 // Helper function for deserializing plugin
-template<typename T>
+template <typename T>
 T readFromBuffer(const char*& buffer)
 {
     T val = *reinterpret_cast<const T*>(buffer);
@@ -65,8 +65,8 @@ ClipPlugin::ClipPlugin(const std::string name, const void* data, size_t length)
     : mLayerName(name)
 {
     // Deserialize in the same order as serialization
-    const char *d = static_cast<const char *>(data);
-    const char *a = d;
+    const char* d = static_cast<const char*>(data);
+    const char* a = d;
 
     mClipMin = readFromBuffer<float>(d);
     mClipMax = readFromBuffer<float>(d);
@@ -122,10 +122,10 @@ size_t ClipPlugin::getSerializationSize() const noexcept
     return 2 * sizeof(float);
 }
 
-void ClipPlugin::serialize(void* buffer) const noexcept 
+void ClipPlugin::serialize(void* buffer) const noexcept
 {
-    char *d = static_cast<char *>(buffer);
-    const char *a = d;
+    char* d = static_cast<char*>(buffer);
+    const char* a = d;
 
     writeToBuffer(d, mClipMin);
     writeToBuffer(d, mClipMax);
@@ -133,7 +133,8 @@ void ClipPlugin::serialize(void* buffer) const noexcept
     assert(d == a + getSerializationSize());
 }
 
-void ClipPlugin::configureWithFormat(const Dims* inputs, int nbInputs, const Dims* outputs, int nbOutputs, DataType type, PluginFormat format, int) noexcept
+void ClipPlugin::configureWithFormat(const Dims* inputs, int nbInputs, const Dims* outputs, int nbOutputs,
+    DataType type, PluginFormat format, int) noexcept
 {
     // Validate input arguments
     assert(nbOutputs == 1);
@@ -142,7 +143,8 @@ void ClipPlugin::configureWithFormat(const Dims* inputs, int nbInputs, const Dim
 
     // Fetch volume for future enqueue() operations
     size_t volume = 1;
-    for (int i = 0; i < inputs->nbDims; i++) {
+    for (int i = 0; i < inputs->nbDims; i++)
+    {
         volume *= inputs->d[i];
     }
     mInputVolume = volume;
@@ -159,7 +161,8 @@ bool ClipPlugin::supportsFormat(DataType type, PluginFormat format) const noexce
 
 void ClipPlugin::terminate() noexcept {}
 
-void ClipPlugin::destroy() noexcept {
+void ClipPlugin::destroy() noexcept
+{
     // This gets called when the network containing plugin is destroyed
     delete this;
 }
@@ -171,7 +174,7 @@ IPluginV2* ClipPlugin::clone() const noexcept
     return plugin;
 }
 
-void ClipPlugin::setPluginNamespace(const char* libNamespace) noexcept 
+void ClipPlugin::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
@@ -214,11 +217,15 @@ IPluginV2* ClipPluginCreator::createPlugin(const char* name, const PluginFieldCo
 
     // Parse fields from PluginFieldCollection
     assert(fc->nbFields == 2);
-    for (int i = 0; i < fc->nbFields; i++){
-        if (strcmp(fields[i].name, "clipMin") == 0) {
+    for (int i = 0; i < fc->nbFields; i++)
+    {
+        if (strcmp(fields[i].name, "clipMin") == 0)
+        {
             assert(fields[i].type == PluginFieldType::kFLOAT32);
             clipMin = *(static_cast<const float*>(fields[i].data));
-        } else if (strcmp(fields[i].name, "clipMax") == 0) {
+        }
+        else if (strcmp(fields[i].name, "clipMax") == 0)
+        {
             assert(fields[i].type == PluginFieldType::kFLOAT32);
             clipMax = *(static_cast<const float*>(fields[i].data));
         }
@@ -233,7 +240,7 @@ IPluginV2* ClipPluginCreator::deserializePlugin(const char* name, const void* se
     return new ClipPlugin(name, serialData, serialLength);
 }
 
-void ClipPluginCreator::setPluginNamespace(const char* libNamespace) noexcept 
+void ClipPluginCreator::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }

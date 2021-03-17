@@ -20,8 +20,8 @@
 #ifndef TRT_GELU_PLUGIN_H
 #define TRT_GELU_PLUGIN_H
 
-#include "bertCommon.h"
 #include "NvInferPlugin.h"
+#include "bertCommon.h"
 #include <string>
 #include <vector>
 

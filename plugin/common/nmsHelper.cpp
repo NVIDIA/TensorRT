@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "plugin.h"
 #include "cuda_fp16.h"
+#include "plugin.h"
 #include <algorithm>
 
 using namespace nvinfer1;

@@ -36,13 +36,13 @@ namespace plugin
 class ProposalPlugin : public IPluginV2Ext
 {
 public:
-    ProposalPlugin(int input_height, int input_width, int rpn_height, int rpn_width,
-        float rpn_std_scaling, int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n,
-        int max_box_num, const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept;
+    ProposalPlugin(int input_height, int input_width, int rpn_height, int rpn_width, float rpn_std_scaling,
+        int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num,
+        const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept;
 
-    ProposalPlugin(int input_height, int input_width, float rpn_std_scaling, int rpn_stride,
-        float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num, const float* anchor_sizes,
-        int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept;
+    ProposalPlugin(int input_height, int input_width, float rpn_std_scaling, int rpn_stride, float bbox_min_size,
+        float nms_iou_threshold, int pre_nms_top_n, int max_box_num, const float* anchor_sizes, int anc_size_num,
+        const float* anchor_ratios, int anc_ratio_num) noexcept;
 
     ProposalPlugin(const void* serial_buf, size_t serial_size) noexcept;
 
@@ -61,8 +61,8 @@ public:
 
     size_t getWorkspaceSize(int) const noexcept override;
 
-    int enqueue(
-        int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept override;
+    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace,
+        cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
@@ -84,7 +84,8 @@ public:
 
     DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+        noexcept override;
 
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
@@ -118,13 +119,13 @@ private:
 class ProposalDynamicPlugin : public IPluginV2DynamicExt
 {
 public:
-    ProposalDynamicPlugin(int input_height, int input_width, int rpn_height, int rpn_width,
-        float rpn_std_scaling, int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n,
-        int max_box_num, const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept;
+    ProposalDynamicPlugin(int input_height, int input_width, int rpn_height, int rpn_width, float rpn_std_scaling,
+        int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num,
+        const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept;
 
-    ProposalDynamicPlugin(int input_height, int input_width, float rpn_std_scaling, int rpn_stride,
-        float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num, const float* anchor_sizes,
-        int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept;
+    ProposalDynamicPlugin(int input_height, int input_width, float rpn_std_scaling, int rpn_stride, float bbox_min_size,
+        float nms_iou_threshold, int pre_nms_top_n, int max_box_num, const float* anchor_sizes, int anc_size_num,
+        const float* anchor_ratios, int anc_ratio_num) noexcept;
 
     ProposalDynamicPlugin(const void* serial_buf, size_t serial_size) noexcept;
 
@@ -152,11 +153,12 @@ public:
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
         int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept override;
-    bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(
-        const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(
-        const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
+    bool supportsFormatCombination(
+        int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
+    void configurePlugin(const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out,
+        int nbOutputs) noexcept override;
+    size_t getWorkspaceSize(const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs,
+        int nbOutputs) const noexcept override;
     int enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
@@ -208,7 +210,8 @@ public:
     ProposalDynamicPluginCreator() noexcept;
     ~ProposalDynamicPluginCreator() noexcept override = default;
     IPluginV2DynamicExt* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
-    IPluginV2DynamicExt* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    IPluginV2DynamicExt* deserializePlugin(
+        const char* name, const void* serialData, size_t serialLength) noexcept override;
 };
 
 } // namespace plugin

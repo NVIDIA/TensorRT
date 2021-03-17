@@ -36,8 +36,8 @@ typedef enum
 
 pluginStatus_t allClassNMS(cudaStream_t stream, int num, int num_classes, int num_preds_per_class, int top_k,
     float nms_threshold, bool share_location, bool isNormalized, DataType DT_SCORE, DataType DT_BBOX, void* bbox_data,
-    void* beforeNMS_scores, void* beforeNMS_index_array, void* afterNMS_scores, void* afterNMS_index_array,
-    bool flipXY, const float score_shift);
+    void* beforeNMS_scores, void* beforeNMS_index_array, void* afterNMS_scores, void* afterNMS_index_array, bool flipXY,
+    const float score_shift);
 
 pluginStatus_t detectionInference(cudaStream_t stream, int N, int C1, int C2, bool shareLocation,
     bool varianceEncodedInTarget, int backgroundLabelId, int numPredsPerClass, int numClasses, int topK, int keepTopK,
@@ -64,8 +64,8 @@ size_t sortScoresPerClassWorkspaceSize(int num, int num_classes, int num_preds_p
 size_t sortScoresPerImageWorkspaceSize(int num_images, int num_items_per_image, DataType DT_SCORE);
 
 pluginStatus_t sortScoresPerImage(cudaStream_t stream, int num_images, int num_items_per_image, DataType DT_SCORE,
-    void* unsorted_scores, void* unsorted_bbox_indices, void* sorted_scores, void* sorted_bbox_indices,
-    void* workspace, int score_bits);
+    void* unsorted_scores, void* unsorted_bbox_indices, void* sorted_scores, void* sorted_bbox_indices, void* workspace,
+    int score_bits);
 
 pluginStatus_t sortScoresPerClass(cudaStream_t stream, int num, int num_classes, int num_preds_per_class,
     int background_label_id, float confidence_threshold, DataType DT_SCORE, void* conf_scores_gpu,
