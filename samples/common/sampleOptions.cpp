@@ -93,7 +93,7 @@ nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
     const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
         {"fp16", nvinfer1::DataType::kHALF}, {"int8", nvinfer1::DataType::kINT8},
         {"int32", nvinfer1::DataType::kINT32}};
-    const auto dt = strToDT.find(option);
+    const auto& dt = strToDT.find(option);
     if (dt == strToDT.end())
     {
         throw std::invalid_argument("Invalid DataType " + option);
@@ -109,11 +109,12 @@ nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(const std::string
         {"chw2", nvinfer1::TensorFormat::kCHW2}, {"chw4", nvinfer1::TensorFormat::kCHW4},
         {"hwc8", nvinfer1::TensorFormat::kHWC8}, {"chw16", nvinfer1::TensorFormat::kCHW16},
         {"chw32", nvinfer1::TensorFormat::kCHW32}, {"dhwc8", nvinfer1::TensorFormat::kDHWC8},
-        {"hwc", nvinfer1::TensorFormat::kHWC}};
+        {"hwc", nvinfer1::TensorFormat::kHWC}, {"dla_linear", nvinfer1::TensorFormat::kDLA_LINEAR},
+        {"dla_hwc4", nvinfer1::TensorFormat::kDLA_HWC4}};
     nvinfer1::TensorFormats formats{};
     for (auto f : optionStrings)
     {
-        const auto tf = strToFmt.find(f);
+        const auto& tf = strToFmt.find(f);
         if (tf == strToFmt.end())
         {
             throw std::invalid_argument(std::string("Invalid TensorFormat ") + f);
@@ -988,6 +989,16 @@ std::ostream& operator<<(std::ostream& os, const IOFormat& format)
                 os << "hwc";
                 break;
             }
+            case nvinfer1::TensorFormat::kDLA_LINEAR:
+            {
+                os << "dla_linear";
+                break;
+            }
+            case nvinfer1::TensorFormat::kDLA_HWC4:
+            {
+                os << "dla_hwc4";
+                break;
+            }
             }
         }
     }
@@ -1061,7 +1072,8 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
                          (options.DLACore != -1 && options.fallback ? "(With GPU fallback)" : "") << std::endl;
     // clang-format on
     os << "Plugins:";
-    for (const auto p : options.plugins)
+
+    for (const auto& p : options.plugins)
     {
         os << " " << p;
     }

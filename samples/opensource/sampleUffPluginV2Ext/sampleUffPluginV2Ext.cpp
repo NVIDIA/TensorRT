@@ -22,6 +22,7 @@
 #include <cudnn.h>
 #include <iostream>
 #include <map>
+#include <string.h>
 #include <unordered_map>
 #include <vector>
 
@@ -586,7 +587,7 @@ private:
     template <typename T>
     T read(const char*& buffer) const
     {
-        T val;
+        T val{};
         std::memcpy(&val, buffer, sizeof(T));
         buffer += sizeof(T);
         return val;
