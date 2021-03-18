@@ -22,32 +22,6 @@ using namespace nvinfer1;
 using nvinfer1::plugin::InstanceNormalizationPlugin;
 using nvinfer1::plugin::InstanceNormalizationPluginCreator;
 
-#define CHECK_CUDA(call)                                                                                               \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        cudaError_t status = call;                                                                                     \
-        if (status != cudaSuccess)                                                                                     \
-        {                                                                                                              \
-            return status;                                                                                             \
-        }                                                                                                              \
-    } while (0)
-
-#define CHECK_CUDNN(call)                                                                                              \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        cudnnStatus_t status = call;                                                                                   \
-        if (status != CUDNN_STATUS_SUCCESS)                                                                            \
-        {                                                                                                              \
-            return status;                                                                                             \
-        }                                                                                                              \
-    } while (0)
-
-inline bool is_CHW(nvinfer1::Dims const& dims)
-{
-    return (dims.nbDims == 3 && dims.type[0] == nvinfer1::DimensionType::kCHANNEL
-        && dims.type[1] == nvinfer1::DimensionType::kSPATIAL && dims.type[2] == nvinfer1::DimensionType::kSPATIAL);
-}
-
 cudnnStatus_t convert_trt2cudnn_dtype(nvinfer1::DataType trt_dtype, cudnnDataType_t* cudnn_dtype)
 {
     switch (trt_dtype)
@@ -134,10 +108,7 @@ InstanceNormalizationPlugin::InstanceNormalizationPlugin(void const* serialData,
     deserialize_value(&serialData, &serialLength, &_h_bias);
 }
 
-InstanceNormalizationPlugin::~InstanceNormalizationPlugin()
-{
-    terminate();
-}
+InstanceNormalizationPlugin::~InstanceNormalizationPlugin() {}
 
 // InstanceNormalizationPlugin returns one output.
 int InstanceNormalizationPlugin::getNbOutputs() const
@@ -159,8 +130,8 @@ int InstanceNormalizationPlugin::initialize()
 
 void InstanceNormalizationPlugin::terminate()
 {
-    cudaFree(_d_bias);
-    cudaFree(_d_scale);
+    CUASSERT(cudaFree(_d_bias));
+    CUASSERT(cudaFree(_d_scale));
 }
 
 size_t InstanceNormalizationPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
@@ -177,40 +148,40 @@ int InstanceNormalizationPlugin::enqueue(const nvinfer1::PluginTensorDesc* input
     int n = input_dims.d[0];
     int c = input_dims.d[1];
     int h = input_dims.d[2];
-    int w = input_dims.d[3] > 0 ? input_dims.d[3] : 1;
+    int w = input_dims.nbDims > 3 ? input_dims.d[3] : 1;
     size_t nchan_bytes = c * sizeof(float);
 
     // Note: We repeat the data for each batch entry so that we can do the full
     //       computation in a single CUDNN call in enqueue().
     if (_d_bytes < n * nchan_bytes)
     {
-        cudaFree(_d_bias);
-        cudaFree(_d_scale);
+        CUASSERT(cudaFree(_d_bias));
+        CUASSERT(cudaFree(_d_scale));
         _d_bytes = n * nchan_bytes;
-        CHECK_CUDA(cudaMalloc((void**) &_d_scale, _d_bytes));
-        CHECK_CUDA(cudaMalloc((void**) &_d_bias, _d_bytes));
+        CUASSERT(cudaMalloc((void**) &_d_scale, _d_bytes));
+        CUASSERT(cudaMalloc((void**) &_d_bias, _d_bytes));
     }
     for (int i = 0; i < n; ++i)
     {
-        CHECK_CUDA(cudaMemcpy(_d_scale + i * c, _h_scale.data(), nchan_bytes, cudaMemcpyHostToDevice));
-        CHECK_CUDA(cudaMemcpy(_d_bias + i * c, _h_bias.data(), nchan_bytes, cudaMemcpyHostToDevice));
+        CUASSERT(cudaMemcpy(_d_scale + i * c, _h_scale.data(), nchan_bytes, cudaMemcpyHostToDevice));
+        CUASSERT(cudaMemcpy(_d_bias + i * c, _h_bias.data(), nchan_bytes, cudaMemcpyHostToDevice));
     }
 
-    CHECK_CUDNN(cudnnSetTensor4dDescriptor(_b_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, n * c, 1, 1));
+    CUDNNASSERT(cudnnSetTensor4dDescriptor(_b_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, n * c, 1, 1));
     cudnnDataType_t cudnn_dtype{};
-    CHECK_CUDNN(convert_trt2cudnn_dtype(inputDesc[0].type, &cudnn_dtype));
-    CHECK_CUDNN(cudnnSetTensor4dDescriptor(_x_desc, CUDNN_TENSOR_NCHW, cudnn_dtype, 1, n * c, h, w));
-    CHECK_CUDNN(cudnnSetTensor4dDescriptor(_y_desc, CUDNN_TENSOR_NCHW, cudnn_dtype, 1, n * c, h, w));
+    CUDNNASSERT(convert_trt2cudnn_dtype(inputDesc[0].type, &cudnn_dtype));
+    CUDNNASSERT(cudnnSetTensor4dDescriptor(_x_desc, CUDNN_TENSOR_NCHW, cudnn_dtype, 1, n * c, h, w));
+    CUDNNASSERT(cudnnSetTensor4dDescriptor(_y_desc, CUDNN_TENSOR_NCHW, cudnn_dtype, 1, n * c, h, w));
     float alpha = 1;
     float beta = 0;
     void const* x_ptr = inputs[0];
     void* y_ptr = outputs[0];
-    CHECK_CUDNN(cudnnSetStream(_cudnn_handle, stream));
+    CUDNNASSERT(cudnnSetStream(_cudnn_handle, stream));
     // Note: Use of CUDNN_BATCHNORM_SPATIAL_PERSISTENT can cause numerical
     //       overflows (NaNs) for fp32 data in some circumstances. The lower-
     //       performance CUDNN_BATCHNORM_SPATIAL should be used if this is not
     //       acceptable.
-    CHECK_CUDNN(cudnnBatchNormalizationForwardTraining(_cudnn_handle, CUDNN_BATCHNORM_SPATIAL_PERSISTENT, &alpha, &beta,
+    CUDNNASSERT(cudnnBatchNormalizationForwardTraining(_cudnn_handle, CUDNN_BATCHNORM_SPATIAL_PERSISTENT, &alpha, &beta,
         _x_desc, x_ptr, _y_desc, y_ptr, _b_desc, _d_scale, _d_bias, 1., nullptr, nullptr, _epsilon, nullptr, nullptr));
     return 0;
 }
@@ -298,26 +269,17 @@ void InstanceNormalizationPlugin::configurePlugin(const nvinfer1::DynamicPluginT
     const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs)
 {
     auto input_dims = in[0].desc.dims;
-    for (int i = 0; i < nbInputs; i++)
-    {
-        for (int j = 0; j < input_dims.nbDims; j++)
-        {
-            // Do not support dynamic dimensions
-            ASSERT(input_dims.d[j] != -1);
-        }
-    }
-
     int n = input_dims.d[0];
     int c = input_dims.d[1];
     size_t nchan_bytes = c * sizeof(float);
 
     if (_d_bytes < n * nchan_bytes)
     {
-        cudaFree(_d_bias);
-        cudaFree(_d_scale);
+        CUASSERT(cudaFree(_d_bias));
+        CUASSERT(cudaFree(_d_scale));
         _d_bytes = n * nchan_bytes;
-        cudaMalloc((void**) &_d_scale, _d_bytes);
-        cudaMalloc((void**) &_d_bias, _d_bytes);
+        CUASSERT(cudaMalloc((void**) &_d_scale, _d_bytes));
+        CUASSERT(cudaMalloc((void**) &_d_bias, _d_bytes));
     }
 }
 
