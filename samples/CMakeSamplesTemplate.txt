@@ -27,7 +27,7 @@ set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 get_filename_component(SAMPLES_DIR ../../ ABSOLUTE)
 get_filename_component(SAMPLE_DIR_NAME ${TARGET_DIR} NAME)
 
-set(CUDA_INSTALL_DIR /usr/local/cuda)
+set_ifndef(CUDA_INSTALL_DIR /usr/local/cuda)
 
 # SAMPLES_COMMON_SOURCES
 set(SAMPLES_COMMON_SOURCES
