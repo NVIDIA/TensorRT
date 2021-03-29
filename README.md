@@ -48,7 +48,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
   > NOTE: [onnx-tensorrt](https://github.com/onnx/onnx-tensorrt), [cub](http://nvlabs.github.io/cub/), and [protobuf](https://github.com/protocolbuffers/protobuf.git) packages are downloaded along with TensorRT OSS, and not required to be installed.
 
-## Downloading TensorRT Build
+## Downloading TensorRT Builds
 
 1. #### Download TensorRT OSS
 	**On Linux: Bash**
