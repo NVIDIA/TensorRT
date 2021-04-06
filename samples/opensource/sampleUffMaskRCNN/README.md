@@ -58,7 +58,7 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
 
 ## Generating UFF model
 
-1. Install [TensorFlow 1.15](https://www.tensoriflow.org/install/pip) or launch the NVIDIA Tensorflow 1.x container in a separate terminal for this step.
+1. Install [TensorFlow 1.15](https://www.tensorflow.org/install/pip) or launch the NVIDIA Tensorflow 1.x container in a separate terminal for this step.
 
 2. Install the required packages alongwith UFF toolkit and graph surgeon
     ```bash
