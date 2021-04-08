@@ -60,8 +60,7 @@ option(BUILD_SAMPLES "Build TensorRT samples" ON)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations ${CMAKE_CXX_FLAGS} -DBUILD_SYSTEM=cmake_oss")
-
+set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations ${CMAKE_CXX_FLAGS} -DBUILD_SYSTEM=cmake_oss -Wl,-rpath-link=/usr/local/cuda-10.2/targets/aarch64-linux/lib:/pdk_files/cudnn/usr/lib/aarch64-linux-gnu")
 ############################################################################################
 # Cross-compilation settings
 

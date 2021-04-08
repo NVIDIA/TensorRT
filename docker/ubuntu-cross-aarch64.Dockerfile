@@ -69,6 +69,9 @@ RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.
 COPY docker/jetpack_files /pdk_files
 COPY scripts/stubify.sh /pdk_files
 
+# Put the lib I had to get off of Jetson
+COPY docker/libnvrtc.so.10.2 /usr/local/cuda-10.2/targets/aarch64-linux/lib/
+
 # Install CUDA cross compile toolchain
 RUN dpkg -i /pdk_files/cuda-repo-cross-aarch64*.deb /pdk_files/cuda-repo-ubuntu*_amd64.deb \
     && apt-get update \
@@ -114,10 +117,28 @@ RUN cd /pdk_files/tensorrt \
             CC=aarch64-linux-gnu-gcc /pdk_files/stubify.sh lib${x}.so stubs/lib${x}.so \
        ; done
 
+# Clone TensorRT (wrapper API, "OSS")
+RUN cd /workspace && \
+    git clone -b master https://github.com/edgeimpulse/TensorRT.git TensorRT && \
+    cd TensorRT && \
+    git submodule update --init --recursive
+
 # Set environment and working directory
 ENV TRT_LIBPATH /pdk_files/tensorrt/lib
 ENV TRT_OSSPATH /workspace/TensorRT
-WORKDIR /workspace
+# ENV LD_LIBRARY_PATH "/workspace/TensorRT/build/out:/usr/local/cuda/lib64:/usr/lib/aarch64-linux-gnu/:/pdk_files/cudnn/usr/lib/aarch64-linux-gnu/:${LD_LIBRARY_PATH}"
+# ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$TRT_LIB_DIR
+
+# WORKDIR /workspace
+# Build libraries
+RUN cd ${TRT_OSSPATH} && \
+    mkdir -p build && cd build && \
+    cmake .. -DTRT_LIB_DIR=${TRT_LIBPATH} -DTRT_OUT_DIR=`pwd`/out \ 
+    -DCMAKE_TOOLCHAIN_FILE=${TRT_OSSPATH}/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=10.2 \
+    -DBUILD_SAMPLES=OFF -DGPU_ARCHS="53" -DCUDNN_LIB=../../../pdk_files/cudnn/usr/lib/aarch64-linux-gnu/libcudnn.so \
+    -DCUBLAS_LIB=/usr/lib/aarch64-linux-gnu/libcublas.so -DCUBLASLT_LIB=/usr/lib/x86_64-linux-gnu/libcublasLt.so \
+    -DBUILD_PLUGINS=OFF && \
+    make VERBOSE=1
 
 USER trtuser
 RUN ["/bin/bash"]
