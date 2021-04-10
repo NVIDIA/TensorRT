@@ -14,12 +14,7 @@
 # limitations under the License.
 #
 
-# ensure SAMPLE_SOURCES is set
-
-set(SAMPLE_SOURCES .)
-
 set_ifndef(PLUGINS_NEEDED OFF)
-set_ifndef(SAMPLE_PARSERS "none")
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -33,25 +28,18 @@ set(SAMPLES_COMMON_SOURCES
     ${SAMPLES_DIR}/common/logger.cpp
 )
 
-# add underscores (snake) to camelCase cases
-string(REGEX REPLACE "(.)([A-Z][a-z]+)" "\\1_\\2" SAMPLE_NAME_SNAKE_MIXED ${SAMPLE_DIR_NAME})
-string(REGEX REPLACE "([a-z0-9])([A-Z])" "\\1_\\2" SAMPLE_NAME_SNAKE_MIXED ${SAMPLE_NAME_SNAKE_MIXED})
-string(TOLOWER ${SAMPLE_NAME_SNAKE_MIXED} SAMPLE_NAME_SNAKE)
-
-# fix a few sample names
-string(REGEX REPLACE "movie_lens" "movielens" SAMPLE_NAME_FIXED ${SAMPLE_NAME_SNAKE})
-string(REGEX REPLACE "google_net" "googlenet" SAMPLE_NAME_FIXED ${SAMPLE_NAME_FIXED})
-string(REGEX REPLACE "([a-zA-Z0-0])api" "\\1_api" SAMPLE_NAME_FIXED ${SAMPLE_NAME_FIXED})
-string(REGEX REPLACE "_rcnn" "RCNN" SAMPLE_NAME_FIXED ${SAMPLE_NAME_FIXED})
-
-set(SAMPLE_NAME ${SAMPLE_NAME_FIXED})# CACHE STRING "binary name of the sample")
+set(SAMPLE_NAME ei)# CACHE STRING "binary name of the sample")
 
 set(TARGET_NAME ${SAMPLE_NAME})
 
-add_library(${TARGET_NAME}
-    ${SAMPLE_SOURCES}
+add_library(${TARGET_NAME} 
+    ${CMAKE_CURRENT_LIST_DIR}/ei_tensorrt_lib.cpp
     ${SAMPLES_COMMON_SOURCES}
 )
+
+# debug
+set(CMAKE_BUILD_TYPE Debug)
+
 set(DEPS_LIST "")
 
 if(BUILD_PLUGINS)
@@ -94,17 +82,7 @@ if(${PLUGINS_NEEDED})
     list(APPEND SAMPLE_DEP_LIBS nvinfer_plugin)
 endif()
 
-if("caffe" IN_LIST SAMPLE_PARSERS)
-    list(APPEND SAMPLE_DEP_LIBS nvcaffeparser)
-endif()
-
-if("onnx" IN_LIST SAMPLE_PARSERS)
-    list(APPEND SAMPLE_DEP_LIBS nvonnxparser)
-endif()
-
-if("uff" IN_LIST SAMPLE_PARSERS)
-    list(APPEND SAMPLE_DEP_LIBS nvuffparser)
-endif()
+list(APPEND SAMPLE_DEP_LIBS nvonnxparser)
 
 # Necessary to link nvinfer_plugin library.
 target_link_libraries(${TARGET_NAME}
@@ -112,7 +90,6 @@ target_link_libraries(${TARGET_NAME}
     -Wl,--unresolved-symbols=ignore-in-shared-libs
 )
 
-set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL")
 
 set_target_properties(${TARGET_NAME} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})
 
@@ -123,7 +100,6 @@ set_target_properties(${TARGET_NAME}
     RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
-add_dependencies(samples ${TARGET_NAME})
 
 ################################### INSTALLATION ########################################
 
@@ -139,6 +115,4 @@ get_filename_component(LICENSE_STATUS ../ ABSOLUTE)
 get_filename_component(LICENSE_STATUS "${LICENSE_STATUS}" NAME)
 
 message(STATUS "Adding new sample: ${TARGET_NAME}")
-message(STATUS "    - Parsers Used: ${SAMPLE_PARSERS}")
 message(STATUS "    - InferPlugin Used: ${PLUGINS_NEEDED}")
-message(STATUS "    - Licensing: ${LICENSE_STATUS}")

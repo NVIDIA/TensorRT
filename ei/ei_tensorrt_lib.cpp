@@ -66,7 +66,6 @@ public:
     //!
     bool infer();
 
-private:
     samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
 
     nvinfer1::Dims mInputDims;  //!< The dimensions of the input to the network.
@@ -327,37 +326,28 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 //!
 //! \brief Initializes members of the params struct using the command line args
 //!
-samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args& args)
+samplesCommon::OnnxSampleParams initializeSampleParams()
 {
     samplesCommon::OnnxSampleParams params;
-    if (args.dataDirs.empty()) //!< Use default directories if user hasn't provided directory paths
-    {
-        params.dataDirs.push_back("data/mnist/");
-        params.dataDirs.push_back("data/samples/mnist/");
-    }
-    else //!< Use the data directory provided by the user
-    {
-        params.dataDirs = args.dataDirs;
-    }
     // params.onnxFileName = "mnist.onnx"; //moved to where it's loaded
     params.inputTensorNames.push_back("x_input:0");
     params.outputTensorNames.push_back("dense_1");
-    params.dlaCore = args.useDLACore;
-    params.int8 = args.runInInt8;
-    params.fp16 = args.runInFp16;
+    params.dlaCore = -1;
+    params.int8 = false;
+    params.fp16 = false;
 
     return params;
 }
 
-int ei_infer(char* file_name)
+int ei_infer(char* fileName)
 {
-    mParams.dataDirs = file_name;
-
-    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::gLogger.defineTest("ei_lib","ei_lib");
 
     sample::gLogger.reportTestStart(sampleTest);
 
-    SampleOnnxMNIST sample(initializeSampleParams(args));
+    SampleOnnxMNIST sample(initializeSampleParams());
+
+    sample.mParams.dataDirs.push_back(fileName);
 
     sample::gLogInfo << "EI TensorRT lib" << std::endl;
 
@@ -372,3 +362,8 @@ int ei_infer(char* file_name)
 
     return sample::gLogger.reportPass(sampleTest);
 }
+
+// int main()
+// {
+//     ei_infer("calc5c.rgb");
+// }
