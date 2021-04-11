@@ -71,6 +71,8 @@ public:
     nvinfer1::Dims mInputDims;  //!< The dimensions of the input to the network.
     nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
     int mNumber{0};             //!< The number to classify
+    std::string input_name;
+    std::string output_name;
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
@@ -143,6 +145,10 @@ bool SampleOnnxMNIST::build()
 
     assert(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
+    sample::gLogInfo << "Input tensor name: " << network->getInput(0)->getName() << std::endl;
+    sample::gLogInfo << "Output tensor name: " << network->getOutput(0)->getName() << std::endl;
+    input_name = network->getInput(0)->getName();
+    output_name = network->getOutput(0)->getName();
     // assert(mInputDims.nbDims == 4);
 
     assert(network->getNbOutputs() == 1);
@@ -205,7 +211,6 @@ bool SampleOnnxMNIST::infer()
     }
 
     // Read the input data into the managed buffers
-    assert(mParams.inputTensorNames.size() == 1);
     if (!processInput(buffers))
     {
         return false;
@@ -274,7 +279,7 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
         return false;
     }
 
-    float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
+    float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(input_name));
     if( hostDataBuffer ) {
         int i;
         sample::gLogInfo << "h,w,c: " << inputH << ", " << inputW << ", " << chans << endl;
@@ -299,7 +304,7 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 {
     const int outputSize = 2;//mOutputDims.d[1];
-    float* output = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
+    float* output = static_cast<float*>(buffers.getHostBuffer(output_name));
     sample::gLogInfo << "Output size: " << outputSize << endl;
     if( output ) {
         float val{0.0f};
@@ -330,8 +335,6 @@ samplesCommon::OnnxSampleParams initializeSampleParams()
 {
     samplesCommon::OnnxSampleParams params;
     // params.onnxFileName = "mnist.onnx"; //moved to where it's loaded
-    params.inputTensorNames.push_back("x_input:0");
-    params.outputTensorNames.push_back("dense_1");
     params.dlaCore = -1;
     params.int8 = false;
     params.fp16 = false;
