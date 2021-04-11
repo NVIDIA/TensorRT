@@ -50,9 +50,12 @@ class SampleOnnxMNIST
     using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
 
 public:
-    SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params)
+    SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params, const char* model_file_name, float* output, int output_size)
         : mParams(params)
         , mEngine(nullptr)
+        , model_file_name(model_file_name)
+        , output_size(output_size)
+        , output(output)
     {
     }
 
@@ -73,6 +76,9 @@ public:
     int mNumber{0};             //!< The number to classify
     std::string input_name;
     std::string output_name;
+    std::string model_file_name;
+    float* output;
+    int output_size;
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
@@ -170,7 +176,7 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
     SampleUniquePtr<nvonnxparser::IParser>& parser)
 {
-    auto parsed = parser->parseFromFile("model-1batch.onnx",
+    auto parsed = parser->parseFromFile(model_file_name.c_str(),
         static_cast<int>(sample::gLogger.getReportableSeverity()));
     if (!parsed)
     {
@@ -303,17 +309,19 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 //!
 bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 {
-    const int outputSize = 2;//mOutputDims.d[1];
-    float* output = static_cast<float*>(buffers.getHostBuffer(output_name));
-    sample::gLogInfo << "Output size: " << outputSize << endl;
-    if( output ) {
+    float* output_from_engine = static_cast<float*>(buffers.getHostBuffer(output_name));
+
+    if( output_from_engine ) {
+        memcpy(output, output_from_engine, output_size*sizeof(float)); //use output size provided in call.
+        // output size derived by TensorRT parser is always -1.  Even though web onnx parser says 1x2 (or 1x3, etc)
+        sample::gLogInfo << "Output size (according to onnx parser, currently not used): " << mOutputDims.d[1] << endl;
         float val{0.0f};
         int idx{0};
 
         // For some other model, we had to calculate the softmax manually here
         // For EI model, we already do the softmax in the model
         sample::gLogInfo << "Output:" << std::endl;
-        for (int i = 0; i < outputSize; i++)
+        for (int i = 0; i < output_size; i++)
         {
             sample::gLogInfo << " Prob " << i << "  " << std::fixed << std::setw(5) << std::setprecision(4) << output[i]
                             << " "
@@ -323,7 +331,7 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
         sample::gLogInfo << std::endl;
         return idx == mNumber && val > 0.9f;
     } else {
-        sample::gLogInfo << " Failed to get buffer by output tensor name";
+        sample::gLogError << " Failed to get buffer by output tensor name";
         return false;
     }  
 }
@@ -342,13 +350,13 @@ samplesCommon::OnnxSampleParams initializeSampleParams()
     return params;
 }
 
-int ei_infer(char* fileName)
+int ei_infer(const char* fileName, const char* model_file_name, float* output, int output_size)
 {
     auto sampleTest = sample::gLogger.defineTest("ei_lib","ei_lib");
 
     sample::gLogger.reportTestStart(sampleTest);
 
-    SampleOnnxMNIST sample(initializeSampleParams());
+    SampleOnnxMNIST sample(initializeSampleParams(), model_file_name, output, output_size);
 
     sample.mParams.dataDirs.push_back(fileName);
 
