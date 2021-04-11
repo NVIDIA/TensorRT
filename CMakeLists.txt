@@ -193,3 +193,8 @@ endif()
 if(BUILD_SAMPLES)
     add_subdirectory(samples)
 endif()
+
+option(BUILD_EI_LIB "Build the ei callable lib" ON)
+if(BUILD_EI_LIB)
+    add_subdirectory(ei)
+endif()
