@@ -1,5 +1,29 @@
 # TensorRT OSS Release Changelog
 
+## [21.04](https://github.com/NVIDIA/TensorRT/releases/tag/21.04) - 2021-04-12
+### Added
+- SM86 kernels for BERT MHA plugin
+- Added opset13 support for `SoftMax`, `LogSoftmax`, `Squeeze`, and `Unsqueeze`.
+- Added support for the `EyeLike` and `GatherElements` operators.
+
+
+### Changed
+- Updated TensorRT version to v7.2.3.4.
+- Update to ONNX-TensorRT [21.03](https://github.com/onnx/onnx-tensorrt/releases/tag/21.03)
+- ONNX-GraphSurgeon (v0.3.4) - updates fold_constants to correctly exit early.
+- Set default CUDA_INSTALL_DIR [#798](https://github.com/NVIDIA/TensorRT/pull/798)
+- Plugin bugfixes, qkv kernels for sm86
+- Fixed GroupNorm CMakeFile for cu sources [#1083](https://github.com/NVIDIA/TensorRT/pull/1083)
+- Permit groupadd with non-unique GID in build containers [#1091](https://github.com/NVIDIA/TensorRT/pull/1091)
+- Avoid `reinterpret_cast` [#146](https://github.com/NVIDIA/TensorRT/pull/146)
+- Clang-format plugins and samples 
+- Avoid arithmetic on void pointer in multilevelProposeROIPlugin.cpp [#1028](https://github.com/NVIDIA/TensorRT/pull/1028)
+- Update BERT plugin documentation.
+
+### Removed
+- Removes extra terminate call in InstanceNorm
+
+
 ## [21.03](https://github.com/NVIDIA/TensorRT/releases/tag/21.03) - 2021-03-09
 ### Added
 - Optimized FP16 NMS/batchedNMS plugins with n-bit radix sort and based on `IPluginV2DynamicExt`
