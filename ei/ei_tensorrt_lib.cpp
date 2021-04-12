@@ -70,6 +70,9 @@ public:
     //!
     bool infer();
 
+    ICudaEngine* createCudaEngine();
+    ICudaEngine* getCudaEngine();
+
     samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
 
     nvinfer1::Dims mInputDims;  //!< The dimensions of the input to the network.
@@ -103,6 +106,103 @@ public:
     bool verifyOutput(const samplesCommon::BufferManager& buffers);
 };
 
+void writeBuffer(void* buffer, size_t size, string const& path)
+{
+    ofstream stream(path.c_str(), ios::binary);
+
+    if (stream)
+    {
+        stream.write(static_cast<char*>(buffer), size);
+    }
+}
+
+// Returns empty string iff can't read the file
+string readBuffer(string const& path)
+{
+    string buffer;
+    ifstream stream(path.c_str(), ios::binary);
+
+    if (stream)
+    {
+        stream >> noskipws;
+        copy(istream_iterator<char>(stream), istream_iterator<char>(), back_inserter(buffer));
+    }
+
+    return buffer;
+}
+
+ICudaEngine* SampleOnnxMNIST::createCudaEngine()
+{
+    sample::gLogInfo << "Creating engine from ONNX model\n";
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    if (!builder)
+    {
+        return nullptr;
+    }
+
+    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
+    if (!network)
+    {
+        return nullptr;
+    }
+
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    if (!config)
+    {
+        return nullptr;
+    }
+
+    auto parser
+        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+    if (!parser)
+    {
+        return nullptr;
+    }
+
+    auto constructed = constructNetwork(builder, network, config, parser);
+    if (!constructed)
+    {
+        return nullptr;
+    }
+
+    return builder->buildEngineWithConfig(*network, *config);
+}
+
+ICudaEngine* SampleOnnxMNIST::getCudaEngine()
+{
+    string enginePath{model_file_name + ".engine"};
+    ICudaEngine* engine{nullptr};
+
+    string buffer = readBuffer(enginePath);
+    
+    if (buffer.size())
+    {
+        // Try to deserialize engine.
+        SampleUniquePtr<nvinfer1::IRuntime> runtime{createInferRuntime(sample::gLogger)};
+        engine = runtime->deserializeCudaEngine(buffer.data(), buffer.size(), nullptr);
+
+    } else {
+        sample::gLogInfo << "No existing engine found\n";
+    }
+
+    if (!engine)
+    {
+        // Fallback to creating engine from scratch.
+        engine = createCudaEngine();
+
+        if (engine)
+        {
+            SampleUniquePtr<nvinfer1::IHostMemory> engine_plan{engine->serialize()};
+            // Try to save engine for future uses.
+            writeBuffer(engine_plan->data(), engine_plan->size(), enginePath);
+        }
+    } else {
+        sample::gLogInfo << "Successfully deserialized existing engine\n";
+    }
+    return engine;
+}
+
 //!
 //! \brief Creates the network, configures the builder and creates the network engine
 //!
@@ -113,51 +213,17 @@ public:
 //!
 bool SampleOnnxMNIST::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
-    if (!builder)
-    {
-        return false;
-    }
-
-    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
-    if (!network)
-    {
-        return false;
-    }
-
-    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
-    if (!config)
-    {
-        return false;
-    }
-
-    auto parser
-        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
-    if (!parser)
-    {
-        return false;
-    }
-
-    auto constructed = constructNetwork(builder, network, config, parser);
-    if (!constructed)
-    {
-        return false;
-    }
-
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>( getCudaEngine(), samplesCommon::InferDeleter() );
     if (!mEngine)
     {
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
-    mInputDims = network->getInput(0)->getDimensions();
-    sample::gLogInfo << "Input tensor name: " << network->getInput(0)->getName() << std::endl;
-    sample::gLogInfo << "Output tensor name: " << network->getOutput(0)->getName() << std::endl;
-    input_name = network->getInput(0)->getName();
-    output_name = network->getOutput(0)->getName();
+    mInputDims = mEngine->getBindingDimensions(0);
+    sample::gLogInfo << "Input tensor name: " << mEngine->getBindingName(0) << std::endl;
+    sample::gLogInfo << "Output tensor name: " << mEngine->getBindingName(1) << std::endl;
+    input_name = mEngine->getBindingName(0);
+    output_name = mEngine->getBindingName(1);
     sample::gLogInfo << "Parsing input dimensions:\n";
     input_size = 1;
     for(int i = 0; i < mInputDims.nbDims; i++) {
@@ -166,8 +232,7 @@ bool SampleOnnxMNIST::build()
     }
     sample::gLogInfo << "Total input size: " << input_size << endl;
 
-    assert(network->getNbOutputs() == 1);
-    mOutputDims = network->getOutput(0)->getDimensions();
+    mOutputDims = mEngine->getBindingDimensions(1);
 
     return true;
 }
@@ -332,7 +397,7 @@ int ei_infer(float* input, const char* model_file_name, float* output, int outpu
 {
     SampleOnnxMNIST sample(initializeSampleParams(), model_file_name, output, output_size, input);
 
-    sample::gLogInfo << "EI TensorRT lib" << std::endl;
+    sample::gLogInfo << "EI TensorRT lib v1.2" << std::endl;
 
     if (!sample.build())
     {
