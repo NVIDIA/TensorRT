@@ -81,19 +81,21 @@ __global__ void skiplnDQQ(const int ld, const int8_t* input, const int8_t* skip,
         rsigma = rsqrt(__high2half(sum2) - mu * mu );
     }
     __syncthreads();
+
+    static_assert(VPT % 4 == 0, "");
+    uint32_t out_local[VPT/4];
 #pragma unroll
-    for (int it = 0; it < VPT; it++)
+    for (int it = 0; it < VPT / 4; it++)
     {
-        // apply layernorm
-        const float tmp = gamma_local[it] * (in_local_dq[it] - mu) * rsigma + bias_local[it];
-        // Quantize
-        int tmpq = __float2int_rn(qScale * tmp);
-        tmpq = max(-127, tmpq);
-        tmpq = min(127, tmpq);
-        in_local[it] = tmpq;
+        const float tmp0 = gamma_local[it*4+0] * (in_local_dq[it*4+0] - mu) * rsigma + bias_local[it*4+0];
+        const float tmp1 = gamma_local[it*4+1] * (in_local_dq[it*4+1] - mu) * rsigma + bias_local[it*4+1];
+        const float tmp2 = gamma_local[it*4+2] * (in_local_dq[it*4+2] - mu) * rsigma + bias_local[it*4+2];
+        const float tmp3 = gamma_local[it*4+3] * (in_local_dq[it*4+3] - mu) * rsigma + bias_local[it*4+3];
+        out_local[it] = float4_to_char4(tmp0 * qScale, tmp1 * qScale, tmp2 * qScale, tmp3 * qScale);
     }
 
-    copy<sizeof(int8_t) * VPT>(in_local, &output[idx]);
+    copy<sizeof(int8_t) * VPT>(out_local, &output[idx]);
+
 }
 
 template <typename T, int TPB, int VPT, bool hasBias>

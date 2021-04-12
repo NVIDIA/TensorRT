@@ -438,4 +438,51 @@ __device__ inline float myExp<float>(const float x)
     return __expf(x);
 }
 
+static inline __device__ uint32_t float4_to_char4(float x, 
+                                                  float y, 
+                                                  float z, 
+                                                  float w) {
+  uint32_t dst;
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 720
+  uint32_t a; asm volatile("cvt.rni.sat.s32.f32 %0, %1;\n" : "=r"(a) : "f"(x));
+  uint32_t b; asm volatile("cvt.rni.sat.s32.f32 %0, %1;\n" : "=r"(b) : "f"(y));
+  uint32_t c; asm volatile("cvt.rni.sat.s32.f32 %0, %1;\n" : "=r"(c) : "f"(z));
+  uint32_t d; asm volatile("cvt.rni.sat.s32.f32 %0, %1;\n" : "=r"(d) : "f"(w));
+
+  asm volatile("cvt.pack.sat.s8.s32.b32 %0, %1, %2,  0;\n" : "=r"(dst) : "r"(d), "r"(c));
+  asm volatile("cvt.pack.sat.s8.s32.b32 %0, %1, %2, %0;\n" : "+r"(dst) : "r"(b), "r"(a));
+#else
+  char4 tmp;
+  tmp.x = x;
+  tmp.y = y;
+  tmp.z = z;
+  tmp.w = w;
+  dst = reinterpret_cast<const uint32_t&>(tmp);
+#endif
+  return dst;
+}
+
+inline __device__ char quantize(const float x, const float qScale)
+{
+    int tmpq = __float2int_rn(qScale * x);  // scale and round
+    char tmpq8 = min(127, max(-127, tmpq)); // clip and cast
+    return tmpq8;
+}
+
+inline __device__ void ldg(const int8_t* input, uint4& data)
+{
+    data = *reinterpret_cast<const uint4*>(input);
+}
+
+inline __device__ void stg(int8_t* output, uint4& data)
+{
+    *reinterpret_cast<uint4*>(output) = data;
+}
+
+inline __device__ uint32_t pack4(const float (&hdata)[4], const float qScale)
+{
+    return float4_to_char4(hdata[0] * qScale, hdata[1] * qScale , hdata[2] * qScale, hdata[3] * qScale);
+}
+
+
 #endif // #ifndef COMMON_CUH
