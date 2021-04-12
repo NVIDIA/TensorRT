@@ -50,12 +50,13 @@ class SampleOnnxMNIST
     using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
 
 public:
-    SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params, const char* model_file_name, float* output, int output_size)
+    SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params, const char* model_file_name, float* output, int output_size, float* input)
         : mParams(params)
         , mEngine(nullptr)
         , model_file_name(model_file_name)
         , output_size(output_size)
         , output(output)
+        , input(input)
     {
     }
 
@@ -79,6 +80,8 @@ public:
     std::string model_file_name;
     float* output;
     int output_size;
+    float* input;
+    int32_t input_size; //calculated from dimensions
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
@@ -155,11 +158,16 @@ bool SampleOnnxMNIST::build()
     sample::gLogInfo << "Output tensor name: " << network->getOutput(0)->getName() << std::endl;
     input_name = network->getInput(0)->getName();
     output_name = network->getOutput(0)->getName();
-    // assert(mInputDims.nbDims == 4);
+    sample::gLogInfo << "Parsing input dimensions:\n";
+    input_size = 1;
+    for(int i = 0; i < mInputDims.nbDims; i++) {
+        sample::gLogInfo << mInputDims.d[i] << endl;
+        input_size *= mInputDims.d[i];
+    }
+    sample::gLogInfo << "Total input size: " << input_size << endl;
 
     assert(network->getNbOutputs() == 1);
     mOutputDims = network->getOutput(0)->getDimensions();
-    // assert(mOutputDims.nbDims == 2);
 
     return true;
 }
@@ -260,43 +268,13 @@ bool SampleOnnxMNIST::infer()
 //!
 bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 {
-    const int inputH = mInputDims.d[1];
-    const int inputW = mInputDims.d[2];
-    const int chans = mInputDims.d[3];
-
-    // // Read a random digit file
-    // srand(unsigned(time(nullptr)));
-    // std::vector<uint8_t> fileData(inputH * inputW);
-    // mNumber = rand() % 10;
-    // readPGMFile(locateFile(std::to_string(mNumber) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
-
-    // // Print an ascii representation
-    // sample::gLogInfo << "Input:" << std::endl;
-    // for (int i = 0; i < inputH * inputW; i++)
-    // {
-    //     sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
-    // }
-    // sample::gLogInfo << std::endl;
-
-    sample::gLogInfo << mParams.dataDirs[0] << endl;
-    std::ifstream infile(mParams.dataDirs[0], std::ifstream::binary);
-    if( infile.fail() ) {
-        sample::gLogError << "Failed to open input file" << endl;
-        return false;
-    }
-
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(input_name));
     if( hostDataBuffer ) {
-        int i;
-        sample::gLogInfo << "h,w,c: " << inputH << ", " << inputW << ", " << chans << endl;
-        char comma;
-        for (i = 0; i < inputH * inputW * chans; i++)
-        {
-            infile >> hostDataBuffer[i] >> comma;
-        }
-        sample::gLogInfo << hostDataBuffer[0] << " \n" << hostDataBuffer[i-1] << " " << i << endl;
+        memcpy(hostDataBuffer, input, sizeof(float)*input_size);
+        sample::gLogInfo << "First and last features: " << hostDataBuffer[0] << "," << hostDataBuffer[input_size-1] << endl;
     } else {
-        sample::gLogInfo << "failed to get buffer by input tensor name." << endl;
+        sample::gLogError << "failed to get buffer by input tensor name." << endl;
+        return false;
     }
  
     return true;
@@ -350,28 +328,22 @@ samplesCommon::OnnxSampleParams initializeSampleParams()
     return params;
 }
 
-int ei_infer(const char* fileName, const char* model_file_name, float* output, int output_size)
+int ei_infer(float* input, const char* model_file_name, float* output, int output_size)
 {
-    auto sampleTest = sample::gLogger.defineTest("ei_lib","ei_lib");
-
-    sample::gLogger.reportTestStart(sampleTest);
-
-    SampleOnnxMNIST sample(initializeSampleParams(), model_file_name, output, output_size);
-
-    sample.mParams.dataDirs.push_back(fileName);
+    SampleOnnxMNIST sample(initializeSampleParams(), model_file_name, output, output_size, input);
 
     sample::gLogInfo << "EI TensorRT lib" << std::endl;
 
     if (!sample.build())
     {
-        return sample::gLogger.reportFail(sampleTest);
+        return -1;
     }
     if (!sample.infer())
     {
-        return sample::gLogger.reportFail(sampleTest);
+        return -2;
     }
 
-    return sample::gLogger.reportPass(sampleTest);
+    return 0;
 }
 
 // int main()
