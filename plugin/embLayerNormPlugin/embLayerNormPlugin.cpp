@@ -153,9 +153,9 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
     auto cms0 = exprBuilder.constant(unfusedMaskSize);
 
     // this code must match getMHAMaskPackedSize in bertCommon.h
-    if (mUseFullMask
-        || ((mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86)
-               && (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8)))
+    bool isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86);
+    bool isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
+    if (mUseFullMask || (isSmOK && isPrecisionOK))
     {
         // support 128, 384 in both int8 and fp16
         auto cms128 = exprBuilder.constant(packedMaskSize128);

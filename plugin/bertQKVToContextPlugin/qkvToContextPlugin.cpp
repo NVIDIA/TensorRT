@@ -887,6 +887,9 @@ int QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* input
     {
         const int B = inputDesc[1].dims.d[0];
         const int maxS = inputDesc[3].dims.d[0];
+        ASSERT((maxS <= 384)
+            && "No implementation for variable sequence length multi-head attention plugin with sequence > 384.");
+
         int S = 384;
         if (DataType::kHALF == mType && maxS <= 64)
         {

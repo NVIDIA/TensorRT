@@ -87,7 +87,7 @@ void write(char*& buffer, const T& val)
 template <typename T>
 T read(const char*& buffer)
 {
-    T val;
+    T val{};
     std::memcpy(&val, buffer, sizeof(T));
     buffer += sizeof(T);
     return val;
