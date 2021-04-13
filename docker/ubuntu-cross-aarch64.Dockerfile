@@ -66,25 +66,17 @@ RUN pip3 install -r /tmp/requirements.txt
 # Download NGC client
 RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip && unzip ngccli_cat_linux.zip && chmod u+x ngc && rm ngccli_cat_linux.zip ngc.md5 && echo "no-apikey\nascii\n" | ngc config set
 
-# TODO get off of CDN
-COPY docker/jetpack_files /pdk_files
-
-COPY scripts/stubify.sh /pdk_files
-
 # Put the lib I had to get off of Jetson
 COPY docker/libnvrtc.so.10.2 /usr/local/cuda-10.2/targets/aarch64-linux/lib/
 
-# Install CUDA cross compile toolchain
-RUN dpkg -i /pdk_files/cuda-repo-cross-aarch64*.deb /pdk_files/cuda-repo-ubuntu*_amd64.deb \
-    && apt-get update \
-    && apt-get install -y cuda-cross-aarch64 \
-    && rm -rf /var/lib/apt/lists/*
+# Get nvidia libs (they came from SDK manager, I've unpacked and copied to S3
+RUN cd / && wget https://edge-impulse-cdn-prod-new.s3-eu-west-1.amazonaws.com/pdk_files.zip
+RUN unzip pdk_files.zip
+
+COPY scripts/stubify.sh /pdk_files
 
 # Unpack cudnn
-RUN  dpkg -x /pdk_files/libcudnn[7-8]_*-1+cuda10.[0-9]_arm64.deb /pdk_files/cudnn \
-    && dpkg -x /pdk_files/libcudnn[7-8]-dev_*-1+cuda10.[0-9]_arm64.deb /pdk_files/cudnn \
-    && cd /pdk_files/cudnn/usr/lib/aarch64-linux-gnu \
-    && ln -s libcudnn.so.[7-9] libcudnn.so \
+RUN cd /pdk_files/cudnn/usr/lib/aarch64-linux-gnu \
     && cd /pdk_files/cudnn \
     && ln -s usr/include/aarch64-linux-gnu include \
     && ln -s usr/lib/aarch64-linux-gnu lib \
@@ -98,28 +90,22 @@ RUN  dpkg -x /pdk_files/libcudnn[7-8]_*-1+cuda10.[0-9]_arm64.deb /pdk_files/cudn
     && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_v[7-9].h /usr/include/cudnn.h \
     && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_version_v[7-9].h /usr/include/cudnn_version.h
 
-# Unpack libnvinfer
-RUN dpkg -x /pdk_files/libnvinfer[0-7]_*-1+cuda10.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-dev_*-1+cuda10.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvparsers[6-7]_*-1+cuda10.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvparsers-dev_*-1+cuda10.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-plugin[6-7]_*-1+cuda10.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-plugin-dev_*-1+cuda10.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvonnxparsers[6-7]_*-1+cuda10.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvonnxparsers-dev_*-1+cuda10.[0-9]_arm64.deb /pdk_files/tensorrt
-
 # create stub libraries
 RUN cd /pdk_files/tensorrt \
     && ln -s usr/include/aarch64-linux-gnu include \
-    && ln -s usr/lib/aarch64-linux-gnu lib \
-    && cd lib \
-    && mkdir stubs \
-    && for x in nvinfer nvparsers nvinfer_plugin nvonnxparser; \
-       do                                                     \
-            CC=aarch64-linux-gnu-gcc /pdk_files/stubify.sh lib${x}.so stubs/lib${x}.so \
-       ; done
+    && ln -s usr/lib/aarch64-linux-gnu lib 
 
-# Clone TensorRT (wrapper API, "OSS")
+# Get the cross compiler
+RUN cd /pdk_files && wget https://edge-impulse-cdn-prod-new.s3-eu-west-1.amazonaws.com/cuda-repo-cross-aarch64-10-2-local-10.2.89_1.0-1_all.deb
+
+# # Install CUDA cross compile toolchain
+RUN sudo chmod 777 /pdk_files/cuda-repo-cross-aarch64-10-2-local-10.2.89_1.0-1_all.deb && \
+    dpkg -i /pdk_files/cuda-repo-cross-aarch64*.deb \
+    && apt-get update \
+    && apt-get install -y cuda-cross-aarch64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# TensorRT (wrapper API, "OSS")
 COPY . /workspace/TensorRT/
 RUN cd /workspace/TensorRT && \
     git submodule update --init --recursive
@@ -127,10 +113,7 @@ RUN cd /workspace/TensorRT && \
 # Set environment and working directory
 ENV TRT_LIBPATH /pdk_files/tensorrt/lib
 ENV TRT_OSSPATH /workspace/TensorRT
-# ENV LD_LIBRARY_PATH "/workspace/TensorRT/build/out:/usr/local/cuda/lib64:/usr/lib/aarch64-linux-gnu/:/pdk_files/cudnn/usr/lib/aarch64-linux-gnu/:${LD_LIBRARY_PATH}"
-# ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:$TRT_LIB_DIR
 
-# WORKDIR /workspace
 # Build libraries
 RUN cd ${TRT_OSSPATH} && \
     mkdir -p build && cd build && \
