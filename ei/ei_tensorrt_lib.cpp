@@ -397,7 +397,7 @@ int ei_infer(float* input, const char* model_file_name, float* output, int outpu
 {
     SampleOnnxMNIST sample(initializeSampleParams(), model_file_name, output, output_size, input);
 
-    sample::gLogInfo << "EI TensorRT lib v1.2" << std::endl;
+    sample::gLogInfo << "EI TensorRT lib v1.3" << std::endl;
 
     if (!sample.build())
     {

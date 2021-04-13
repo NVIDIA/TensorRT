@@ -66,7 +66,9 @@ RUN pip3 install -r /tmp/requirements.txt
 # Download NGC client
 RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip && unzip ngccli_cat_linux.zip && chmod u+x ngc && rm ngccli_cat_linux.zip ngc.md5 && echo "no-apikey\nascii\n" | ngc config set
 
+# TODO get off of CDN
 COPY docker/jetpack_files /pdk_files
+
 COPY scripts/stubify.sh /pdk_files
 
 # Put the lib I had to get off of Jetson
@@ -118,9 +120,8 @@ RUN cd /pdk_files/tensorrt \
        ; done
 
 # Clone TensorRT (wrapper API, "OSS")
-RUN cd /workspace && \
-    git clone -b master https://github.com/edgeimpulse/TensorRT.git TensorRT && \
-    cd TensorRT && \
+COPY . /workspace/TensorRT/
+RUN cd /workspace/TensorRT && \
     git submodule update --init --recursive
 
 # Set environment and working directory
@@ -133,12 +134,11 @@ ENV TRT_OSSPATH /workspace/TensorRT
 # Build libraries
 RUN cd ${TRT_OSSPATH} && \
     mkdir -p build && cd build && \
-    cmake .. -DTRT_LIB_DIR=${TRT_LIBPATH} -DTRT_OUT_DIR=`pwd`/out \ 
-    -DCMAKE_TOOLCHAIN_FILE=${TRT_OSSPATH}/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=10.2 \
-    -DBUILD_SAMPLES=OFF -DGPU_ARCHS="53" -DCUDNN_LIB=../../../pdk_files/cudnn/usr/lib/aarch64-linux-gnu/libcudnn.so \
+    cmake .. -DTRT_LIB_DIR=${TRT_LIBPATH} -DTRT_OUT_DIR=/workspace/TensorRT/build/out -DCMAKE_TOOLCHAIN_FILE=${TRT_OSSPATH}/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=10.2 \
+    -DGPU_ARCHS="53" -DCUDNN_LIB=../../../pdk_files/cudnn/usr/lib/aarch64-linux-gnu/libcudnn.so \
     -DCUBLAS_LIB=/usr/lib/aarch64-linux-gnu/libcublas.so -DCUBLASLT_LIB=/usr/lib/x86_64-linux-gnu/libcublasLt.so \
-    -DBUILD_PLUGINS=OFF && \
-    make VERBOSE=1
+    -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAMPLES=OFF && \
+    make ei -j
 
 USER trtuser
 RUN ["/bin/bash"]
