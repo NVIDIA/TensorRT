@@ -12,16 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * 
+ *  Modified 2021 Edge Impulse
  */
-
-//!
-//! sampleOnnxMNIST.cpp
-//! This file contains the implementation of the ONNX MNIST sample. It creates the network using
-//! the MNIST onnx model.
-//! It can be run with the following command line:
-//! Command: ./sample_onnx_mnist [-h or --help] [-d=/path/to/data/dir or --datadir=/path/to/data/dir]
-//! [--useDLACore=<int>]
-//!
 
 #include "argsParser.h"
 #include "buffers.h"
@@ -38,52 +31,38 @@
 #include <sstream>
 #include <chrono>
 
-const std::string gSampleName = "TensorRT.sample_onnx_mnist";
+#include "libeitrt.h"
 
-//! \brief  The SampleOnnxMNIST class implements the ONNX MNIST sample
-//!
-//! \details It creates the network using an ONNX model
-//!
-class SampleOnnxMNIST
+class EiTrt
 {
     template <typename T>
     using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
 
 public:
-    SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params, const char* model_file_name, float* output, int output_size, float* input)
+    EiTrt(const samplesCommon::OnnxSampleParams& params)
         : mParams(params)
         , mEngine(nullptr)
-        , model_file_name(model_file_name)
-        , output_size(output_size)
-        , output(output)
-        , input(input)
     {
     }
 
     //!
     //! \brief Function builds the network engine
     //!
-    bool build();
+    bool build(const char* model_file_name);
 
     //!
     //! \brief Runs the TensorRT inference engine for this sample
     //!
-    bool infer();
+    bool infer(float* input, float* output, int output_size);
 
-    ICudaEngine* createCudaEngine();
-    ICudaEngine* getCudaEngine();
+    ICudaEngine* createCudaEngine(const char* model_file_name);
+    ICudaEngine* getCudaEngine(const char* model_file_name);
 
     samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
 
-    nvinfer1::Dims mInputDims;  //!< The dimensions of the input to the network.
     nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
-    int mNumber{0};             //!< The number to classify
     std::string input_name;
     std::string output_name;
-    std::string model_file_name;
-    float* output;
-    int output_size;
-    float* input;
     int32_t input_size; //calculated from dimensions
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
@@ -93,17 +72,14 @@ public:
     //!
     bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
         SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-        SampleUniquePtr<nvonnxparser::IParser>& parser);
+        SampleUniquePtr<nvonnxparser::IParser>& parser, const char* model_file_name);
 
     //!
     //! \brief Reads the input  and stores the result in a managed buffer
     //!
-    bool processInput(const samplesCommon::BufferManager& buffers);
+    bool processInput(const samplesCommon::BufferManager& buffers, float* input);
 
-    //!
-    //! \brief Classifies digits and verify result
-    //!
-    bool verifyOutput(const samplesCommon::BufferManager& buffers);
+    bool reportOutput(const samplesCommon::BufferManager& buffers, float* output, int32_t output_size);
 };
 
 void writeBuffer(void* buffer, size_t size, string const& path)
@@ -131,7 +107,7 @@ string readBuffer(string const& path)
     return buffer;
 }
 
-ICudaEngine* SampleOnnxMNIST::createCudaEngine()
+ICudaEngine* EiTrt::createCudaEngine(const char* model_file_name)
 {
     sample::gLogInfo << "Creating engine from ONNX model\n";
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
@@ -160,7 +136,7 @@ ICudaEngine* SampleOnnxMNIST::createCudaEngine()
         return nullptr;
     }
 
-    auto constructed = constructNetwork(builder, network, config, parser);
+    auto constructed = constructNetwork(builder, network, config, parser, model_file_name);
     if (!constructed)
     {
         return nullptr;
@@ -169,9 +145,10 @@ ICudaEngine* SampleOnnxMNIST::createCudaEngine()
     return builder->buildEngineWithConfig(*network, *config);
 }
 
-ICudaEngine* SampleOnnxMNIST::getCudaEngine()
+ICudaEngine* EiTrt::getCudaEngine(const char* model_file_name)
 {
-    string enginePath{model_file_name + ".engine"};
+    string enginePath{model_file_name}; 
+    enginePath += ".engine";
     ICudaEngine* engine{nullptr};
 
     string buffer = readBuffer(enginePath);
@@ -189,7 +166,7 @@ ICudaEngine* SampleOnnxMNIST::getCudaEngine()
     if (!engine)
     {
         // Fallback to creating engine from scratch.
-        engine = createCudaEngine();
+        engine = createCudaEngine(model_file_name);
 
         if (engine)
         {
@@ -211,15 +188,15 @@ ICudaEngine* SampleOnnxMNIST::getCudaEngine()
 //!
 //! \return Returns true if the engine was created successfully and false otherwise
 //!
-bool SampleOnnxMNIST::build()
+bool EiTrt::build(const char* model_file_name)
 {
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>( getCudaEngine(), samplesCommon::InferDeleter() );
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>( getCudaEngine(model_file_name), samplesCommon::InferDeleter() );
     if (!mEngine)
     {
         return false;
     }
 
-    mInputDims = mEngine->getBindingDimensions(0);
+    auto mInputDims = mEngine->getBindingDimensions(0);
     sample::gLogInfo << "Input tensor name: " << mEngine->getBindingName(0) << std::endl;
     sample::gLogInfo << "Output tensor name: " << mEngine->getBindingName(1) << std::endl;
     input_name = mEngine->getBindingName(0);
@@ -245,11 +222,11 @@ bool SampleOnnxMNIST::build()
 //!
 //! \param builder Pointer to the engine builder
 //!
-bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+bool EiTrt::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-    SampleUniquePtr<nvonnxparser::IParser>& parser)
+    SampleUniquePtr<nvonnxparser::IParser>& parser, const char* model_file_name)
 {
-    auto parsed = parser->parseFromFile(model_file_name.c_str(),
+    auto parsed = parser->parseFromFile(model_file_name,
         static_cast<int>(sample::gLogger.getReportableSeverity()));
     if (!parsed)
     {
@@ -278,7 +255,7 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
 //! \details This function is the main execution function of the sample. It allocates the buffer,
 //!          sets inputs and executes the engine.
 //!
-bool SampleOnnxMNIST::infer()
+bool EiTrt::infer(float* input, float* output, int output_size) 
 {
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine);
@@ -290,7 +267,7 @@ bool SampleOnnxMNIST::infer()
     }
 
     // Read the input data into the managed buffers
-    if (!processInput(buffers))
+    if (!processInput(buffers, input))
     {
         return false;
     }
@@ -319,8 +296,8 @@ bool SampleOnnxMNIST::infer()
     // Memcpy from device output buffers to host output buffers
     buffers.copyOutputToHost();
 
-    // Verify results
-    if (!verifyOutput(buffers))
+    // Report results
+    if (!reportOutput(buffers, output, output_size))
     {
         return false;
     }
@@ -331,7 +308,7 @@ bool SampleOnnxMNIST::infer()
 //!
 //! \brief Reads the input and stores the result in a managed buffer
 //!
-bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
+bool EiTrt::processInput(const samplesCommon::BufferManager& buffers, float* input)
 {
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(input_name));
     if( hostDataBuffer ) {
@@ -346,11 +323,11 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 }
 
 //!
-//! \brief Classifies digits and verify result
+//! \brief Classifies digits and report result
 //!
 //! \return whether the classification output matches expectations
 //!
-bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
+bool EiTrt::reportOutput(const samplesCommon::BufferManager& buffers, float* output, int32_t output_size)
 {
     float* output_from_engine = static_cast<float*>(buffers.getHostBuffer(output_name));
 
@@ -372,7 +349,7 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
                             << std::endl;
         }
         sample::gLogInfo << std::endl;
-        return idx == mNumber && val > 0.9f;
+        return true;
     } else {
         sample::gLogError << " Failed to get buffer by output tensor name";
         return false;
@@ -385,7 +362,6 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 samplesCommon::OnnxSampleParams initializeSampleParams()
 {
     samplesCommon::OnnxSampleParams params;
-    // params.onnxFileName = "mnist.onnx"; //moved to where it's loaded
     params.dlaCore = -1;
     params.int8 = false;
     params.fp16 = false;
@@ -393,25 +369,22 @@ samplesCommon::OnnxSampleParams initializeSampleParams()
     return params;
 }
 
-int ei_infer(float* input, const char* model_file_name, float* output, int output_size)
+EiTrt* libeitrt::create_EiTrt(const char* model_file_name, bool debug)
 {
-    SampleOnnxMNIST sample(initializeSampleParams(), model_file_name, output, output_size, input);
+    // TODO set debug level: kERROR
+    // sample::setReportableSeverity(
+    sample::gLogInfo << "EI TensorRT lib v1.4" << std::endl;
+    auto handle = new EiTrt(initializeSampleParams());
+    // TODO proper error checking and return null
+    handle->build(model_file_name);
+    return handle;
+}
 
-    sample::gLogInfo << "EI TensorRT lib v1.3" << std::endl;
-
-    if (!sample.build())
-    {
-        return -1;
-    }
-    if (!sample.infer())
+int libeitrt::infer(EiTrt* ei_trt_handle, float* input, float* output, int output_size)
+{
+    if (!ei_trt_handle->infer(input, output, output_size))
     {
         return -2;
     }
-
     return 0;
 }
-
-// int main()
-// {
-//     ei_infer("calc5c.rgb");
-// }

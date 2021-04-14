@@ -33,7 +33,7 @@ set(SAMPLE_NAME ei)# CACHE STRING "binary name of the sample")
 set(TARGET_NAME ${SAMPLE_NAME})
 
 add_library(${TARGET_NAME} 
-    ${CMAKE_CURRENT_LIST_DIR}/ei_tensorrt_lib.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/libeitrt.cpp
     ${SAMPLES_COMMON_SOURCES}
 )
 
