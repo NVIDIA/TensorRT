@@ -66,6 +66,7 @@ public:
     int32_t input_size; //calculated from dimensions
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
+    SampleUniquePtr<nvinfer1::IExecutionContext> context;
 
     //!
     //! \brief Parses an ONNX model for MNIST and creates a TensorRT network
@@ -211,6 +212,12 @@ bool EiTrt::build(const char* model_file_name)
 
     mOutputDims = mEngine->getBindingDimensions(1);
 
+    context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    if (!context)
+    {
+        return false;
+    }
+
     return true;
 }
 
@@ -259,12 +266,6 @@ bool EiTrt::infer(float* input, float* output, int output_size)
 {
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine);
-
-    auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
-    if (!context)
-    {
-        return false;
-    }
 
     // Read the input data into the managed buffers
     if (!processInput(buffers, input))
