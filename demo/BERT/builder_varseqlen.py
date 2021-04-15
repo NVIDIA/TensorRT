@@ -40,6 +40,7 @@ except ImportError as err:
 TensorRT Initialization
 """
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
+trt_version = [int(n) for n in trt.__version__.split('.')]
 
 handle = ctypes.CDLL("libnvinfer_plugin.so", mode=ctypes.RTLD_GLOBAL)
 if not handle:
@@ -87,7 +88,7 @@ SQD_W = "squad_output_weights"
 SQD_B = "squad_output_bias"
 
 class BertConfig:
-    def __init__(self, bert_config_path, use_fp16, use_int8, use_qat, interleaved):
+    def __init__(self, bert_config_path, use_fp16, use_int8, use_qat, interleaved, timing_cache):
         with open(bert_config_path, "r") as f:
             data = json.load(f)
             self.num_attention_heads = data["num_attention_heads"]
@@ -99,6 +100,7 @@ class BertConfig:
             self.use_int8 = use_int8
             self.use_qat = use_qat
             self.interleaved = interleaved
+            self.timing_cache = timing_cache
 
     def get_trt_dtype(self):
         dtype = trt.float32
@@ -555,6 +557,22 @@ def build_engine(batch_size, workspace_size, sequence_length, config, weights_di
             if not config.use_qat:
                 raise RuntimeError("Post training calibration is not supported in variable-length BERT.")
 
+        # speed up the engine build for trt major version >= 8 
+        # 1. disable cudnn tactic
+        # 2. load global timing cache
+        if trt_version[0] >= 8:
+            tactic_source = 1 << int(trt.TacticSource.CUBLAS) | 1 << int(trt.TacticSource.CUBLAS_LT)
+            builder_config.set_tactic_sources(tactic_source)
+            if config.timing_cache != None:
+                if os.path.exists(config.timing_cache):
+                    with open(config.timing_cache, "rb") as f:
+                        cache = builder_config.create_timing_cache(f.read())
+                        builder_config.set_timing_cache(cache, ignore_mismatch = False)
+                else:
+                    cache = builder_config.create_timing_cache(b"")
+                    builder_config.set_timing_cache(cache, ignore_mismatch = False)
+
+
         # Create the network
         emb_layer, cu_seqlens, max_seqlen = emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_length, batch_size)
         embeddings = emb_layer.get_output(0)
@@ -576,6 +594,16 @@ def build_engine(batch_size, workspace_size, sequence_length, config, weights_di
         engine = builder.build_engine(network, builder_config)
         build_time_elapsed = (time.time() - build_start_time)
         TRT_LOGGER.log(TRT_LOGGER.INFO, "build engine in {:.3f} Sec".format(build_time_elapsed))
+
+        # save global timing cache
+        if trt_version[0] >= 8 and config.timing_cache != None:
+            cache = builder_config.get_timing_cache()
+            with cache.serialize() as buffer:
+                with open(config.timing_cache, "wb") as f:
+                    f.write(buffer)
+                    f.flush()
+                    os.fsync(f)
+
         return engine
 
 def main():
@@ -596,6 +624,7 @@ def main():
     parser.add_argument("-n", "--calib-num", default=100, help="calibration batch numbers", type=int)
     parser.add_argument("-p", "--calib-path", help="calibration cache path", required=False)
     parser.add_argument("-il", "--interleaved", action="store_true", help="use interleaved format, only valid in INT8 precision", required=False)
+    parser.add_argument("-tcf", "--timing-cache-file", help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later", required=False)
 
     args, _ = parser.parse_known_args()
 
@@ -606,7 +635,7 @@ def main():
     bert_config_path = os.path.join(args.config_dir, "bert_config.json")
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Using configuration file: {:}".format(bert_config_path))
 
-    config = BertConfig(bert_config_path, args.fp16, args.int8, args.int8 and args.onnx != None, args.interleaved)
+    config = BertConfig(bert_config_path, args.fp16, args.int8, args.int8 and args.onnx != None, args.interleaved, args.timing_cache_file)
 
     if args.calib_path != None:
         calib_cache = args.calib_path

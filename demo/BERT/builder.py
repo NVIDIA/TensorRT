@@ -43,6 +43,7 @@ from helpers.calibrator import BertCalibrator as BertCalibrator
 TensorRT Initialization
 """
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
+trt_version = [int(n) for n in trt.__version__.split('.')]
 
 handle = ctypes.CDLL("libnvinfer_plugin.so", mode=ctypes.RTLD_GLOBAL)
 if not handle:
@@ -88,7 +89,7 @@ SQD_W = "squad_output_weights"
 SQD_B = "squad_output_bias"
 
 class BertConfig:
-    def __init__(self, bert_config_path, use_fp16, use_int8, use_strict, use_fc2_gemm, use_int8_skipln, use_int8_multihead, use_qat):
+    def __init__(self, bert_config_path, use_fp16, use_int8, use_strict, use_fc2_gemm, use_int8_skipln, use_int8_multihead, use_qat, timing_cache):
         with open(bert_config_path, "r") as f:
             data = json.load(f)
             self.num_attention_heads = data["num_attention_heads"]
@@ -104,6 +105,7 @@ class BertConfig:
             self.use_int8_multihead = use_int8_multihead
             self.is_calib_mode = False
             self.use_qat = use_qat
+            self.timing_cache = timing_cache
 
 def set_tensor_name(tensor, prefix, name):
     tensor.name = prefix + name
@@ -599,6 +601,21 @@ def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_
         if config.use_strict:
             builder_config.set_flag(trt.BuilderFlag.STRICT_TYPES)
 
+        # speed up the engine build for trt major version >= 8 
+        # 1. disable cudnn tactic
+        # 2. load global timing cache
+        if trt_version[0] >= 8:
+            tactic_source = 1 << int(trt.TacticSource.CUBLAS) | 1 << int(trt.TacticSource.CUBLAS_LT)
+            builder_config.set_tactic_sources(tactic_source)
+            if config.timing_cache != None:
+                if os.path.exists(config.timing_cache):
+                    with open(config.timing_cache, "rb") as f:
+                        cache = builder_config.create_timing_cache(f.read())
+                        builder_config.set_timing_cache(cache, ignore_mismatch = False)
+                else:
+                    cache = builder_config.create_timing_cache(b"")
+                    builder_config.set_timing_cache(cache, ignore_mismatch = False)
+
         # only use the largest sequence when in calibration mode
         if config.is_calib_mode:
             sequence_lengths = sequence_lengths[-1:]
@@ -619,6 +636,16 @@ def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_
         engine = builder.build_engine(network, builder_config)
         build_time_elapsed = (time.time() - build_start_time)
         TRT_LOGGER.log(TRT_LOGGER.INFO, "build engine in {:.3f} Sec".format(build_time_elapsed))
+
+        # save global timing cache
+        if trt_version[0] >= 8 and config.timing_cache != None:
+            cache = builder_config.get_timing_cache()
+            with cache.serialize() as buffer:
+                with open(config.timing_cache, "wb") as f:
+                    f.write(buffer)
+                    f.flush()
+                    os.fsync(f)
+
         if config.use_int8 and not config.use_qat:
             calibrator.free()
         return engine
@@ -667,6 +694,7 @@ def main():
     parser.add_argument("-g", "--force-fc2-gemm", action="store_true", help="Force use gemm to implement FC2 layer", required=False)
     parser.add_argument("-iln", "--force-int8-skipln", action="store_true", help="Run skip layernorm with INT8 (FP32 or FP16 by default) inputs and output", required=False)
     parser.add_argument("-imh", "--force-int8-multihead", action="store_true", help="Run multi-head attention with INT8 (FP32 or FP16 by default) input and output", required=False)
+    parser.add_argument("-tcf", "--timing-cache-file", help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later", required=False)
 
     args, _ = parser.parse_known_args()
     args.batch_size = args.batch_size or [1]
@@ -681,7 +709,7 @@ def main():
     bert_config_path = os.path.join(args.config_dir, "bert_config.json")
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Using configuration file: {:}".format(bert_config_path))
 
-    config = BertConfig(bert_config_path, args.fp16, args.int8, args.strict, args.force_fc2_gemm, args.force_int8_skipln, args.force_int8_multihead, args.int8 and args.onnx != None)
+    config = BertConfig(bert_config_path, args.fp16, args.int8, args.strict, args.force_fc2_gemm, args.force_int8_skipln, args.force_int8_multihead, args.int8 and args.onnx != None, args.timing_cache_file)
 
     if args.calib_path != None:
         calib_cache = args.calib_path
