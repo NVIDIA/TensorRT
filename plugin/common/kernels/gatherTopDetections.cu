@@ -26,6 +26,10 @@ inline __device__ __half minus_fb(const __half & a, const __half & b) {
 #endif
 }
 
+inline __device__ float minus_fb(const float & a, const float & b) {
+    return a - b;
+}
+
 template <typename T_BBOX, typename T_SCORE, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
     __global__ void gatherTopDetections_kernel(
