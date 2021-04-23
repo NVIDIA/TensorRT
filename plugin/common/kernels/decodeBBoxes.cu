@@ -34,12 +34,20 @@ inline __device__ __half add_fb(const __half & a, const __half & b) {
 #endif
 }
 
+inline __device__ float add_fb(const float & a, const float & b) {
+    return a + b;
+}
+
 inline __device__ __half minus_fb(const __half & a, const __half & b) {
 #if __CUDA_ARCH__ >= 530
     return a - b;
 #else
     return __float2half(__half2float(a) - __half2float(b));
 #endif
+}
+
+inline __device__ float minus_fb(const float & a, const float & b) {
+    return a - b;
 }
 
 inline __device__ __half mul_fb(const __half & a, const __half & b) {
@@ -50,12 +58,20 @@ inline __device__ __half mul_fb(const __half & a, const __half & b) {
 #endif
 }
 
+inline __device__ float mul_fb(const float & a, const float & b) {
+    return a * b;
+}
+
 inline __device__ __half div_fb(const __half & a, const __half & b) {
 #if __CUDA_ARCH__ >= 530
     return a / b;
 #else
     return __float2half(__half2float(a) / __half2float(b));
 #endif
+}
+
+inline __device__ float div_fb(const float & a, const float & b) {
+    return a / b;
 }
 
 template <typename T_BBOX, unsigned nthds_per_cta>
