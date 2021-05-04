@@ -60,9 +60,10 @@ This file specifies all the Python packages required to run this Python sample.
     pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com graphsurgeon
     ```
 
-3. Run the sample to train the model, covert to UFF and save the model:
+3. Run these scripts to train the model, covert to UFF and save the model:
     ```bash
     mkdir -p models
+    python lenet5.py
     python model.py
     ```
 
