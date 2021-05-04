@@ -14,13 +14,7 @@
 # limitations under the License.
 #
 
-import sys
 import os
-import ctypes
-from random import randint
-
-from PIL import Image
-import numpy as np
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.ERROR)
 
@@ -84,6 +78,7 @@ def main():
         ))
 
     uff_path = model_to_uff(MODEL_PATH)
+    print("Saved converted UFF model to: " + uff_path)
 
 if __name__ == "__main__":
     main()
