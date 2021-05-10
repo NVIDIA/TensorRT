@@ -37,7 +37,8 @@ done
 
 # Download the SQuAD training and dev datasets
 echo "Downloading SQuAD-${VERSION} training and dev datasets"
-mkdir -p /workspace/TensorRT/demo/BERT/squad
-cd /workspace/TensorRT/demo/BERT/squad
+mkdir -p squad
+pushd squad
 wget https://rajpurkar.github.io/SQuAD-explorer/dataset/train-${VERSION}.json
 wget https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-${VERSION}.json
+popd
