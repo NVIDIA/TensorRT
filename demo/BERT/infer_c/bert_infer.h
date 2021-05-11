@@ -74,7 +74,7 @@ struct BertInference
             exit(-1);
         }
 
-        mEngine = TrtUniquePtr<ICudaEngine>(runtime->deserializeCudaEngine(bytes.data(), bytes.size(), nullptr));
+        mEngine = TrtUniquePtr<ICudaEngine>(runtime->deserializeCudaEngine(bytes.data(), bytes.size()));
         if (mEngine == nullptr)
         {
             gLogError << "Error deserializing CUDA engine\n";
@@ -175,7 +175,7 @@ struct BertInference
         {
             for (int i = 0; i < kBERT_INPUT_NUM; i++)
             {
-                mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(mSeqLength, batchSize));
+                mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(batchSize, mSeqLength));
             }
         }
 

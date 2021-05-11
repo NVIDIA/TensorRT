@@ -118,12 +118,12 @@ This demo BERT application can be run within the TensorRT OSS build container. I
 
     Download SQuAD v1.1 training and dev dataset.
     ```bash
-    sh ./scripts/download_squad.sh
+    bash ./scripts/download_squad.sh
     ```
 
     Download Tensorflow checkpoints for BERT large model with sequence length 128, fine-tuned for SQuAD v2.0.
     ```bash
-    sh scripts/download_model.sh
+    bash scripts/download_model.sh
     ```
 
 **Note:** Since the datasets and checkpoints are stored in the directory mounted from the host, they do *not* need to be downloaded each time the container is launched. 
