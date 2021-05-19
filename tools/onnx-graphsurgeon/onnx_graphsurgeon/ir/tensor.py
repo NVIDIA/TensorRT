@@ -56,18 +56,23 @@ class Tensor(object):
         return self.name == ""
 
 
-    def to_constant(self, values: np.ndarray):
+    def to_constant(self, values: np.ndarray, data_location: int=None):
         """
         Modifies this tensor in-place to convert it to a Constant. This means that all consumers/producers of the tensor will see the update.
 
         Args:
             values (np.ndarray): The values in this tensor
 
+            data_location (int):
+                    An enum value indicating the location where the tensor data is stored.
+                    Generally, this will come from onnx.TensorProto.DataLocation.
+
         Returns:
             self
         """
         self.__class__ = Constant
-        self.values = values
+        self._values = values
+        self.data_location = data_location
         return self
 
 
@@ -133,7 +138,7 @@ class Tensor(object):
         return "{:} ({:}): (shape={:}, dtype={:})".format(type(self).__name__, self.name, self.shape, self.dtype)
 
 
-    def __repr__(self):
+    def __repr__(self): # Hack to make logging output pretty.
         return self.__str__()
 
 
@@ -192,7 +197,10 @@ class LazyValues(object):
         Args:
             tensor (onnx.TensorProto): The ONNX tensor that this instance should lazily load.
         """
+        from onnx_graphsurgeon.importers.onnx_importer import get_onnx_tensor_shape, get_onnx_tensor_dtype
         self.tensor = tensor
+        self.shape = get_onnx_tensor_shape(self.tensor)
+        self.dtype = get_onnx_tensor_dtype(self.tensor)
 
 
     def load(self):
@@ -207,16 +215,26 @@ class LazyValues(object):
         return np.array(onnx.numpy_helper.to_array(self.tensor))
 
 
+    def __str__(self):
+        return "LazyValues (shape={:}, dtype={:})".format(self.shape, self.dtype)
+
+
+    def __repr__(self): # Hack to make logging output pretty.
+        return self.__str__()
+
+
 class Constant(Tensor):
-    def __init__(self, name: str, values: Union[np.ndarray, LazyValues]):
+    def __init__(self, name: str, values: Union[np.ndarray, LazyValues], data_location: int=None):
         """
         Represents a Tensor whose value is known.
 
         Args:
             name (str): The name of the tensor.
             values (numpy.ndarray): The values in this tensor, in the form of a NumPy array.
-            dtype (numpy.dtype): The data type of the tensor.
-            shape (Sequence[Union[int, str]]): The shape of the tensor.
+
+            data_location (int):
+                    An enum value indicating the location where the tensor data is stored.
+                    Generally, this will come from onnx.TensorProto.DataLocation.
         """
         self.name = name
         self.inputs = misc.SynchronizedList(self, field_name="outputs", initial=[])
@@ -226,6 +244,7 @@ class Constant(Tensor):
                               "Please provide a NumPy array or LazyValues instance to construct a Constant. "
                               "Note: Provided `values` parameter was: {:}".format(values))
         self._values = values
+        self.data_location = data_location
 
 
     def to_variable(self, dtype: np.dtype=None, shape: Sequence[Union[int, str]]=[]):
@@ -239,7 +258,7 @@ class Constant(Tensor):
 
         Note: Generally, you should only ever make a copy of a Graph.
         """
-        return Constant(self.name, self.values)
+        return Constant(self.name, self._values)
 
 
     @property
@@ -257,15 +276,15 @@ class Constant(Tensor):
 
     @property
     def shape(self):
-        return self.values.shape
+        return self._values.shape
 
 
     @property
     def dtype(self):
-        return self.values.dtype.type
+        return self._values.dtype.type
 
 
-    def __repr__(self):
+    def __repr__(self): # Hack to make logging output pretty.
         ret = self.__str__()
-        ret += "\n{:}".format(self.values)
+        ret += "\n{:}".format(self._values)
         return ret

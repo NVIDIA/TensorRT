@@ -38,11 +38,13 @@ To build the TensorRT-OSS components, you will first need the following software
   * (For Windows builds) [Visual Studio](https://visualstudio.microsoft.com/vs/older-downloads/) 2017 Community or Enterprise edition
   * (Cross compilation for QNX platform) [QNX Toolchain](https://blackberry.qnx.com/en)
 * PyPI packages (for demo applications/tests)
+  * [onnx](https://pypi.org/project/onnx/1.7.0/) 1.7.0
+  * [onnxruntime](https://pypi.org/project/onnxruntime/1.6.0/) >= 1.6.0
+  * [tensorflow-gpu](https://pypi.org/project/tensorflow/2.2.2/) >= 2.2.2
+  * [Pillow](https://pypi.org/project/Pillow/7.2.0/) >= 7.2.0
+  * [pycuda](https://pypi.org/project/pycuda/)
   * [numpy](https://pypi.org/project/numpy/)
-  * [onnx](https://pypi.org/project/onnx/1.6.0/) 1.6.0
-  * [onnxruntime](https://pypi.org/project/onnxruntime/) >= 1.3.0
   * [pytest](https://pypi.org/project/pytest/)
-  * [tensorflow-gpu](https://pypi.org/project/tensorflow/1.15.4/) 1.15.4
 * Code formatting tools (for contributors)
   * [Clang-format](https://clang.llvm.org/docs/ClangFormat.html)
   * [Git-clang-format](https://github.com/llvm-mirror/clang/blob/master/tools/clang-format/git-clang-format)

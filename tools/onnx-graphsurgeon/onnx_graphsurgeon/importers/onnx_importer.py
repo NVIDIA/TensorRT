@@ -69,21 +69,30 @@ def get_onnx_tensor_dtype(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorPro
         return onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_type]
     return None
 
-
 class OnnxImporter(BaseImporter):
     @staticmethod
     def get_opset(model: onnx.ModelProto):
         try:
-            return model.opset_import[0].version
+            for importer in OnnxImporter.get_import_domains(model):
+                if importer.domain == "" or importer.domain == "ai.onnx":
+                    return importer.version
+            G_LOGGER.warning("Model does not contain ONNX domain opset information! Using default opset.")
+            return None
         except:
             G_LOGGER.warning("Model does not contain opset information! Using default opset.")
             return None
 
 
     @staticmethod
+    def get_import_domains(model: onnx.ModelProto):
+        return model.opset_import
+
+
+    @staticmethod
     def import_tensor(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]) -> Tensor:
         if isinstance(onnx_tensor, onnx.TensorProto):
-            return Constant(name=onnx_tensor.name, values=LazyValues(onnx_tensor))
+            data_location = int(onnx_tensor.data_location) if onnx_tensor.HasField("data_location") else None
+            return Constant(name=onnx_tensor.name, values=LazyValues(onnx_tensor), data_location=data_location)
         else:
             return Variable(name=onnx_tensor.name, dtype=get_onnx_tensor_dtype(onnx_tensor), shape=get_onnx_tensor_shape(onnx_tensor))
 
@@ -155,7 +164,7 @@ class OnnxImporter(BaseImporter):
 
 
     @staticmethod
-    def import_graph(onnx_graph: onnx.GraphProto, tensor_map: "OrderedDict[str, Tensor]"=None, opset=None) -> Graph:
+    def import_graph(onnx_graph: onnx.GraphProto, tensor_map: "OrderedDict[str, Tensor]"=None, opset=None, import_domains: onnx.OperatorSetIdProto=None) -> Graph:
         """
         Imports a Graph from an ONNX Graph.
 
@@ -222,7 +231,7 @@ class OnnxImporter(BaseImporter):
             node = OnnxImporter.import_node(onnx_node, tensor_map, subgraph_tensor_map)
             nodes.append(node)
 
-        return Graph(nodes=nodes, inputs=graph_inputs, outputs=graph_outputs, name=onnx_graph.name, doc_string=onnx_graph.doc_string, opset=opset)
+        return Graph(nodes=nodes, inputs=graph_inputs, outputs=graph_outputs, name=onnx_graph.name, doc_string=onnx_graph.doc_string, opset=opset, import_domains=import_domains)
 
 
 def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
@@ -235,4 +244,4 @@ def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
     Returns:
         Graph: A corresponding onnx-graphsurgeon Graph.
     """
-    return OnnxImporter.import_graph(onnx_model.graph, opset=OnnxImporter.get_opset(onnx_model))
+    return OnnxImporter.import_graph(onnx_model.graph, opset=OnnxImporter.get_opset(onnx_model), import_domains=OnnxImporter.get_import_domains(onnx_model))

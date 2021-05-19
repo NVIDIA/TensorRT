@@ -14,21 +14,21 @@
 # limitations under the License.
 #
 
+from collections import OrderedDict
+
+import numpy as np
+import onnx
+import onnx.numpy_helper
+import pytest
 from onnx_graphsurgeon.exporters.onnx_exporter import OnnxExporter
 from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
-from onnx_graphsurgeon.logger.logger import G_LOGGER
-
-from onnx_models import identity_model, lstm_model, scan_model, dim_param_model, initializer_is_output_model
-
-from onnx_graphsurgeon.ir.tensor import Tensor, LazyValues, Constant, Variable
-from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
 
-from collections import OrderedDict
-import onnx.numpy_helper
-import numpy as np
-import pytest
-import onnx
+from onnx_models import (dim_param_model, ext_weights, identity_model,
+                         initializer_is_output_model, lstm_model,
+                         nested_dup_names, scan_model)
+
 
 class TestOnnxExporter(object):
     def test_export_constant_tensor_lazy_values_to_tensor_proto(self):
@@ -166,7 +166,10 @@ class TestOnnxExporter(object):
     # See test_importers for import correctness checks
     # This function first imports an ONNX graph, and then re-exports it with no changes.
     # The exported ONNX graph should exactly match the original.
-    @pytest.mark.parametrize("model", [identity_model(), lstm_model(), scan_model(), dim_param_model(), initializer_is_output_model()])
+    @pytest.mark.parametrize("model",
+        [identity_model(), lstm_model(), scan_model(), dim_param_model(),
+         initializer_is_output_model(), nested_dup_names(), ext_weights()],
+        ids=lambda model: str(model))
     def test_export_graph(self, model):
         onnx_graph = model.load().graph
         graph = OnnxImporter.import_graph(onnx_graph)

@@ -198,4 +198,32 @@ def nested_dup_names():
     outputs = [Variable("Y", shape=(2, 2), dtype=np.float32)]
 
     node = Node(op="Nested", inputs=inputs, outputs=outputs, attrs={"body": subgraph})
-    return Model(path, inputs=inputs, outputs=outputs, nodes=[node], opset=11)
+    return Model(path, inputs=inputs, outputs=outputs, nodes=[node], opset=OnnxImporter.get_opset(model))
+
+
+def ext_weights():
+    path = os.path.join(TEST_ROOT, "models", "ext_weights.onnx")
+    model = onnx.load(path)
+
+    inputs = [Variable("input", shape=(1, 3), dtype=np.float32)]
+    outputs = [Variable("output", shape=(1, 3), dtype=np.float32)]
+
+    a = Constant("a", values=np.ones((1, 3), dtype=np.float32))
+    b = Constant("b", values=np.ones((1, 3), dtype=np.float32))
+    d = Constant("d", values=np.ones((1, 3), dtype=np.float32))
+
+    c = Variable("c")
+    e = Variable("e")
+
+    nodes = [
+        Node(op="Add", inputs=[a, b], outputs=[c]),
+        Node(op="Add", inputs=[c, d], outputs=[e]),
+        Node(op="Add", inputs=[inputs[0], e], outputs=outputs),
+    ]
+
+    return Model(path, inputs=inputs, outputs=outputs, nodes=nodes, opset=OnnxImporter.get_opset(model))
+
+
+def const_foldable():
+    path = os.path.join(TEST_ROOT, "models", "const_foldable.onnx")
+    return Model(path, inputs=None, outputs=None, nodes=None, opset=None) # Only used for path.
