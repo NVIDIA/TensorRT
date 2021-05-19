@@ -3,6 +3,33 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.7 (2021-03-31)
+### Added
+- `fold_constants()` can now fold `Shape -> Gather` patterns even when the entire shape may not be known.
+- Added an `error_ok` parameter in `fold_constants()` which can be set to `False` to re-raise errors encountered
+    during inference.
+
+### Fixed
+- Fixed a bug where `copy()` would not correctly copy tensors in nested graphs.
+- Fixed a bug where `fold_constants()` would attempt to fold nodes including graph attributes even if nodes within
+    the nested graph could not be folded.
+
+
+## v0.3.6 (2021-03-27)
+### Fixed
+- `fold_constants()` no longer loads constant values into numpy arrays. This can save a significant amount of memory.
+- `cleanup()` will no longer remove unused graph inputs by default - this was causing invalid ONNX models to be generated
+    in cases with `Loop` nodes. Set `remove_unused_graph_inputs` to `True` to revert to the old behavior.
+- `cleanup()` will no longer reorder node inputs in cases where they are also graph outputs.
+
+
+## v0.3.5 (2021-03-24)
+### Added
+- Added support for models with externally stored data. See the README for details on how to import and export such models.
+
+### Fixed
+- Operator domains are now preserved when exporting graphs to ONNX.
+
 ## v0.3.4 (2021-03-10)
 ### Fixed
 - `fold_constants` will no longer attempt to run inference if there are no constants to compute.

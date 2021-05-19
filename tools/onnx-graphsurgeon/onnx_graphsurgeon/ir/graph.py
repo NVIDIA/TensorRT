@@ -87,7 +87,7 @@ class Graph(object):
         return register_func
 
 
-    def __init__(self, nodes: Sequence[Node]=None, inputs: Sequence[Tensor]=None, outputs: Sequence[Tensor]=None, name=None, doc_string=None, opset=None):
+    def __init__(self, nodes: Sequence[Node]=None, inputs: Sequence[Tensor]=None, outputs: Sequence[Tensor]=None, name=None, doc_string=None, opset=None, import_domains=None):
         """
         Args:
             nodes (Sequence[Node]): A list of the nodes in this graph.
@@ -105,6 +105,7 @@ class Graph(object):
 
         self.doc_string = misc.default_value(doc_string, "")
         self.opset = misc.default_value(opset, Graph.DEFAULT_OPSET)
+        self.import_domains = misc.default_value(import_domains, None)
         # Printing graphs can be very expensive
         G_LOGGER.ultra_verbose(lambda: "Created Graph: {:}".format(self))
         # For layer() function
@@ -244,7 +245,7 @@ class Graph(object):
         return used_node_ids, used_tensors
 
 
-    def cleanup(self, remove_unused_node_outputs=False, recurse_subgraphs=True):
+    def cleanup(self, remove_unused_node_outputs=False, recurse_subgraphs=True, remove_unused_graph_inputs=False):
         """
         Removes unused nodes and tensors from the graph.
         A node or tensor is considered unused if it does not contribute to any of the graph outputs.
@@ -260,15 +261,23 @@ class Graph(object):
             recurse_subgraphs (bool):
                     Whether to recursively cleanup subgraphs.
                     Defaults to True.
+            remove_unused_graph_inputs (bool):
+                    Whether to remove unused graph inputs.
+                    Defaults to False.
 
         Returns:
             self
         """
-        if recurse_subgraphs:
+        def cleanup_subgraphs():
             for node in self.nodes:
                 for attr in node.attrs.values():
                     if isinstance(attr, Graph):
-                        attr.cleanup(remove_unused_node_outputs)
+                        attr.cleanup(remove_unused_node_outputs=remove_unused_node_outputs,
+                                     remove_unused_graph_inputs=remove_unused_graph_inputs)
+
+
+        if recurse_subgraphs:
+            cleanup_subgraphs()
 
         G_LOGGER.debug("Cleaning up {:}".format(self.name))
 
@@ -281,10 +290,10 @@ class Graph(object):
 
             inputs = []
             for inp in self.inputs:
-                if inp in used_tensors:
+                if inp in used_tensors or not remove_unused_graph_inputs:
                     inputs.append(inp)
                 else:
-                    G_LOGGER.verbose("Removing unused input: {:}".format(inp))
+                    G_LOGGER.ultra_verbose("Removing unused input: {:}".format(inp))
             self.inputs = inputs
 
             nodes = []
@@ -294,10 +303,7 @@ class Graph(object):
                 else:
                     node.inputs.clear()
                     node.outputs.clear()
-                    G_LOGGER.verbose("Removing unused node: {:}".format(node))
-
-            for out in self.outputs:
-                out.outputs = [n_out for n_out in out.outputs if hasattr(n_out, "id") and n_out.id in used_node_ids]
+                    G_LOGGER.ultra_verbose("Removing unused node: {:}".format(node))
 
             # Remove any hanging tensors - tensors without outputs
             if remove_unused_node_outputs:
@@ -418,7 +424,7 @@ class Graph(object):
         return tensor_map
 
 
-    def fold_constants(self, fold_shapes=True, recurse_subgraphs=True, partitioning=None):
+    def fold_constants(self, fold_shapes=True, recurse_subgraphs=True, partitioning=None, error_ok=True):
         """
         Folds constants in-place in the graph. The graph must be topologically sorted prior to
         calling this function (see `toposort()`).
@@ -449,6 +455,10 @@ class Graph(object):
                             will be further paritioned.
 
                     Defaults to None.
+            error_ok (bool):
+                    Whether inference errors should be suppressed.
+                    When this is enabled, any errors encountered during inference will be re-raised.
+                    Defaults to True.
 
         Returns:
             self
@@ -460,16 +470,10 @@ class Graph(object):
         if partitioning not in PARTITIONING_MODES:
             G_LOGGER.critical("Argument for parameter 'partitioning' must be one of: {:}".format(PARTITIONING_MODES))
 
-        if recurse_subgraphs:
-            for node in self.nodes:
-                for attr in node.attrs.values():
-                    if isinstance(attr, Graph):
-                        attr.fold_constants(fold_shapes=fold_shapes, partitioning=partitioning)
-
         G_LOGGER.debug("Folding constants in {:}".format(self.name))
 
         graph_clone = self.copy()
-        clone_tensors = list(graph_clone.tensors().values())
+        clone_tensors = graph_clone.tensors()
 
         # We find graph constants in two passes:
         # Pass 1 finds all Constant tensors in the graph, then walks over their outputs.
@@ -477,18 +481,34 @@ class Graph(object):
         #    and turns them into Constants iff the input has a statically known shape.
 
         def update_foldable_outputs(graph_constants):
+            def is_foldable(node):
+                def all_tensors_const(tensors):
+                    return all([t.name in graph_constants for t in tensors])
+
+                if not all_tensors_const(node.inputs):
+                    return False
+
+                all_subgraph_foreign_tensors_const = True
+                for attr in node.attrs.values():
+                    if isinstance(attr, Graph):
+                        foreign_tensors = attr._foreign_tensors().values()
+                        all_subgraph_foreign_tensors_const &= all_tensors_const(foreign_tensors)
+                return all_subgraph_foreign_tensors_const
+
+
             # Walks along the outputs of graph_constants to see if they can also be computed statically.
             # Since the graph is topologically sorted, this should find all constant nodes in the graph.
             for node in graph_clone.nodes:
-                if all([inp.name in graph_constants for inp in node.inputs]): # Nodes without inputs are always evaluated as constants.
+                if is_foldable(node):
                     graph_constants.update({out.name: out for out in node.outputs})
             return graph_constants
 
-        # Pass 1
-        graph_constants = {tensor.name: tensor for tensor in clone_tensors if isinstance(tensor, Constant)}
+        # Pass 1: Non-shape Constant Folding
+
+        graph_constants = {name: tensor for name, tensor in clone_tensors.items() if isinstance(tensor, Constant)}
 
         # Replaces outputs of Constant nodes with constant tensors
-        for tensor in clone_tensors:
+        for tensor in clone_tensors.values():
             if len(tensor.inputs) == 1:
                 node = tensor.inputs[0]
                 if node.op == "Constant":
@@ -497,31 +517,91 @@ class Graph(object):
 
         graph_constants = update_foldable_outputs(graph_constants)
 
-        # Pass 2
 
-        # Finds the static shape of a shape node output if possible, otherwise returns None.
-        def lower_shape(tensor):
+        # Pass 2: Shape Folding
+
+        def get_producer(tensor, op):
+            """
+            Get the producer of the specified tensor iff it matches op
+            """
             if len(tensor.inputs) != 1:
                 return None
 
             node = tensor.inputs[0]
-            if node.op != "Shape":
+            if node.op != op:
+                return None
+            return node
+
+
+        def get_input(node, index=0):
+            """
+            Get the input tensor of a node iff the input tensor is not already marked a graph constant.
+            """
+            if node is None:
                 return None
 
-            inp = node.inputs[0] # Shape node must have 1 input or it's malformed.
+            inp = node.inputs[index]
 
             # If the input was already found to be a constant, it will be folded anyway.
             if inp.name in graph_constants:
+                return None
+
+            return inp
+
+
+        def handle_shape(tensor):
+            inp = get_input(get_producer(tensor, "Shape"))
+            if inp is None:
                 return None
 
             if inp.shape is None or misc.is_dynamic_shape(inp.shape):
                 return None
             return np.array(inp.shape, dtype=np.int64)
 
+
+        def handle_shape_gather(tensor):
+            gather = get_producer(tensor, "Gather")
+            if gather is None:
+                return None
+
+            data = gather.inputs[0]
+            indices_tensor = gather.inputs[1]
+
+            inp = get_input(get_producer(data, "Shape"))
+            if inp is None or inp.shape is None:
+                return None
+
+            if not isinstance(indices_tensor, Constant):
+                return None
+
+            indices = indices_tensor.values
+            if not indices.shape: # Scalar-case
+                shape = inp.shape[int(indices)]
+                if misc.is_dynamic_dimension(shape):
+                    return None
+            else:
+                shape = [inp.shape[index] for index in indices]
+                if misc.is_dynamic_shape(shape):
+                    return None
+
+            return np.array(shape, dtype=np.int64)
+
+
+        # Finds the static shape of a shape node output if possible, otherwise returns None.
+        def lower_shape(tensor):
+            SHAPE_FOLD_FUNCS = [handle_shape, handle_shape_gather]
+            for fold_func in SHAPE_FOLD_FUNCS:
+                shape = fold_func(tensor)
+                if shape is not None:
+                    return shape
+
+
         if fold_shapes:
-            for tensor in clone_tensors:
+            for tensor in clone_tensors.values():
                 shape_of = lower_shape(tensor)
+
                 if shape_of is not None:
+                    G_LOGGER.ultra_verbose("Folding shape tensor: {:} to: {:}".format(tensor.name, shape_of))
                     graph_constants[tensor.name] = tensor.to_constant(shape_of)
                     graph_constants[tensor.name].inputs.clear()
 
@@ -548,7 +628,7 @@ class Graph(object):
                 out_node = part.nodes[index]
                 part.outputs = out_node.outputs
                 part.name = "Folding: {:}".format([out.name for out in part.outputs])
-                part.cleanup()
+                part.cleanup(remove_unused_graph_inputs=True)
                 names = [out.name for out in part.outputs]
 
                 try:
@@ -567,6 +647,8 @@ class Graph(object):
                         out_node.inputs.clear()
                     else:
                         G_LOGGER.info("You may see better results if you set partitioning='recursive'")
+                        if not error_ok:
+                            raise err
 
                     constant_values.update(partition_and_infer(part))
                 else:
@@ -577,7 +659,7 @@ class Graph(object):
 
         # Next, evaluate the foldable variables with ONNX-Runtime
         graph_clone.outputs = [t for t in graph_constants.values() if not isinstance(t, Constant)]
-        graph_clone.cleanup()
+        graph_clone.cleanup(remove_unused_graph_inputs=True)
 
         # Using ._values avoids a deep copy of the values.
         constant_values = {name: tensor._values for name, tensor in graph_constants.items() if isinstance(tensor, Constant)}
@@ -593,19 +675,33 @@ class Graph(object):
                 except Exception as err:
                     G_LOGGER.warning("Inference failed. You may want to try enabling partitioning to see better results. "
                                     "Note: Error was:\n{:}".format(err))
+                    G_LOGGER.verbose("Note: Graph was:\n{:}".format(graph_clone))
+                    if not error_ok:
+                        raise
         elif not constant_values:
-            G_LOGGER.warning("Could not find any nodes in this graph ({:}) that can be folded. "
-                             "This could mean that constant folding has already been run on this graph. "
-                             "Skipping.".format(self.name))
-            return self
+            G_LOGGER.info("Could not find any nodes in this graph ({:}) that can be folded. "
+                          "This could mean that constant folding has already been run on this graph. "
+                          "Skipping.".format(self.name))
 
         # Finally, replace the Variables in the original graph with constants.
-        graph_tensors = self.tensors()
-        for name, values in constant_values.items():
-            tensor = graph_tensors[name]
-            if not isinstance(tensor, Constant):
-                tensor.to_constant(values)
-                tensor.inputs.clear() # Constants do not need inputs
+        if constant_values:
+            graph_tensors = self.tensors()
+            for name, values in constant_values.items():
+                tensor = graph_tensors[name]
+                if not isinstance(tensor, Constant):
+                    tensor.to_constant(values)
+                    tensor.inputs.clear() # Constants do not need inputs
+
+
+        # Folding subgraphs after the outer graph can lead to better folding.
+        def fold_subgraphs():
+            for node in self.nodes:
+                for attr in node.attrs.values():
+                    if isinstance(attr, Graph):
+                        attr.fold_constants(fold_shapes=fold_shapes, partitioning=partitioning)
+
+        if recurse_subgraphs:
+            fold_subgraphs()
 
         return self
 
@@ -690,22 +786,25 @@ class Graph(object):
         Returns:
             Graph: A copy of the graph.
         """
-        tensor_map = copy.copy(misc.default_value(tensor_map, {}))
         # First, reconstruct each tensor in the graph, but with no inputs or outputs
-        local_tensor_map = self.tensors()
-        tensor_map.update({name: tensor.copy() for name, tensor in local_tensor_map.items()})
+        tensor_map = copy.copy(misc.default_value(tensor_map, {}))
+
+        local_tensors = self.tensors()
+        local_tensor_copies = {name: tensor.copy() for name, tensor in local_tensors.items()}
+        local_tensor_copies.update(tensor_map)
 
         def get_tensor(name):
             if not name:
                 return Variable.empty()
-            return tensor_map[name]
+            return local_tensor_copies[name]
+
 
         # Next, copy nodes, and update inputs/outputs
         new_nodes = []
         for node in self.nodes:
             new_node = node.copy(inputs=[get_tensor(inp.name) for inp in node.inputs],
                                  outputs=[get_tensor(out.name) for out in node.outputs],
-                                 tensor_map=tensor_map)
+                                 tensor_map=local_tensor_copies)
             new_nodes.append(new_node)
 
         new_graph_inputs = [get_tensor(inp.name) for inp in self.inputs]

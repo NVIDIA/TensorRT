@@ -122,7 +122,6 @@ MultilevelProposeROI::MultilevelProposeROI(
     assert(mIOUThreshold >= 0.0f);
     assert(mFGThreshold >= 0.0f);
 
-    mPreNMSTopK = 4096;
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
     mParam.keepTopK = mKeepTopK;

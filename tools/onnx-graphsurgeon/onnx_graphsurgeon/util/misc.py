@@ -60,8 +60,12 @@ def combine_dicts(dict0, dict1):
     return combined
 
 
+def is_dynamic_dimension(dim):
+    return not isinstance(dim, int) or dim < 0
+
+
 def is_dynamic_shape(shape):
-    return any(not isinstance(dim, int) or dim < 0 for dim in shape)
+    return any(is_dynamic_dimension(dim) for dim in shape)
 
 
 # Special type of list that synchronizes contents with another list.

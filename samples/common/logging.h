@@ -86,11 +86,11 @@ public:
             // std::stringbuf::str() gets the string contents of the buffer
             // insert the buffer contents pre-appended by the appropriate prefix into the stream
             mOutput << mPrefix << str();
-            // set the buffer to empty
-            str("");
-            // flush the stream
-            mOutput.flush();
         }
+        // set the buffer to empty
+        str("");
+        // flush the stream
+        mOutput.flush();
     }
 
     void setShouldLog(bool shouldLog)

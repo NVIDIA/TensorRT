@@ -17,14 +17,15 @@
 import copy
 
 import numpy as np
-from numpy.core.numeric import identity
+import onnx_graphsurgeon as gs
 import pytest
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
-from onnx_graphsurgeon.ir.tensor import Constant, Variable
+from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
 from onnx_graphsurgeon.util.misc import SynchronizedList
+from onnx_models import const_foldable
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
@@ -62,6 +63,23 @@ def fake(self, inp, name=None):
     out = self.layer(op="Fake", inputs=[inp], outputs=outputs)[0]
     out.dtype = inp.dtype
     return out
+
+
+@gs.Graph.register()
+def gather(self, data, indices):
+    return self.layer(op="Gather", inputs=[data, indices], outputs=["gather_out"])[0]
+
+
+@gs.Graph.register()
+def nested(self, inp, graph):
+    return self.layer(op="Nested", inputs=[inp], outputs=["nested_out"], attrs={"body": graph})[0]
+
+
+@gs.Graph.register()
+def if_op(self, cond, then_graph, else_graph):
+    return self.layer(op="If", inputs=[cond], outputs=["if_out"],
+                      attrs={"then_branch": then_graph, "else_branch": else_graph})[0]
+
 
 
 # Generates a graph where an outer node has no outputs except
@@ -427,7 +445,7 @@ class TestCleanup(object):
             assert all([used_tensor in used_tensors for used_tensor in graph_used_tensors])
 
 
-    def test_cleanup_multi_tier(self):
+    def test_multi_tier(self):
         graph, _ = toposort_multi_tier_output_graph()
         tensor = graph.outputs.pop()
         unused_node = tensor.inputs[0]
@@ -440,7 +458,7 @@ class TestCleanup(object):
         assert tensor.name not in tensor_map
 
 
-    def test_cleanup_remove_unused_node_outputs(self):
+    def test_remove_unused_node_outputs(self):
         graph, _  = toposort_linear_graph()
         graph.toposort()
         graph_output = graph.outputs[0]
@@ -455,7 +473,7 @@ class TestCleanup(object):
         assert graph.outputs[0] == graph_output # Graoh outputs will never be removed
 
 
-    def test_cleanup_graph_input_producers(self):
+    def test_graph_input_producers(self):
         graph, _ = toposort_linear_graph()
         tensor_map = graph.tensors()
         assert "x" in tensor_map
@@ -467,24 +485,25 @@ class TestCleanup(object):
         assert "x" not in cleaned_tensor_map
 
 
-    def test_cleanup_independent_path(self):
+    @pytest.mark.parametrize("remove_unused_graph_inputs", [True, False])
+    def test_independent_path(self, remove_unused_graph_inputs):
         graph, _ = toposort_linear_graph()
         # Build out a path totally unrelated to rest of the graph
         indep0 = Variable(name="indep0")
         indep1 = Variable(name="indep1")
         node = Node(op="IndepTest", inputs=[indep0], outputs=[indep1])
-        graph.inputs.append(indep0) # Unused inputs should be removed as well
         graph.nodes.append(node)
-        graph.cleanup()
-        assert indep0 not in graph.inputs
-        assert node not in graph.nodes
+        graph.inputs.append(indep0)
+        graph.cleanup(remove_unused_graph_inputs=remove_unused_graph_inputs)
+        assert indep0 not in graph.inputs or not remove_unused_graph_inputs
+        assert node not in graph.nodes or not remove_unused_graph_inputs
 
         tensor_map = graph.tensors()
-        assert indep0.name not in tensor_map
-        assert indep1.name not in tensor_map
+        assert indep0.name not in tensor_map or not remove_unused_graph_inputs
+        assert indep1.name not in tensor_map or not remove_unused_graph_inputs
 
 
-    def test_cleanup_nested_graph(self, nested_graph):
+    def test_nested_graph(self, nested_graph):
         nested_node = nested_graph.nodes[1]
         nested_inp = nested_node.inputs[0]
         nested_out = nested_node.outputs[0]
@@ -504,6 +523,46 @@ class TestCleanup(object):
         subgraph.outputs.clear()
         nested_graph.cleanup(recurse_subgraphs=True)
         assert not subgraph.nodes
+
+
+    def test_node_used_only_in_nested_graph(self):
+        X = Variable("X", dtype=np.float32, shape=(1, ))
+        Y = Variable("Y", dtype=np.float32, shape=(1, ))
+        graph = Graph(inputs=[X, Y])
+
+        X_p = graph.identity(X) # X_p is only used by the subgraph, not in the outer graph.
+
+        subgraph_inp = Variable("subgraph_input", dtype=np.float32, shape=(1, ))
+        subgraph = Graph(inputs=[subgraph_inp])
+        subgraph.outputs = [subgraph.add(subgraph_inp, X_p)]
+
+        graph.outputs = [graph.nested(Y, subgraph)]
+
+        graph.cleanup(remove_unused_graph_inputs=True)
+
+        assert graph.nodes[0].op == "Identity"
+        assert graph.nodes[0].inputs == [X]
+
+
+    def test_input_is_output(self):
+        graph = Graph()
+
+        A = Variable("A", dtype=np.float32, shape=(1, 1))
+        B = Variable("B", dtype=np.float32, shape=(1, 1))
+
+        C = graph.add(A, B)
+
+        graph.inputs = [A, B]
+        graph.outputs = [C, B, A] # Out of order w/ respect to Add node inputs
+
+        # Graph should remain unchanged after cleanup, including I/O tensors.
+        graph.cleanup()
+
+        assert graph.inputs == [A, B]
+        assert graph.outputs == [C, B, A]
+        assert len(graph.nodes) == 1
+        assert graph.nodes[0].inputs == [A, B]
+        assert graph.nodes[0].outputs == [C]
 
 
 class TestCopy(object):
@@ -531,6 +590,13 @@ class TestCopy(object):
         assert new_graph == nested_graph
 
         new_subgraph = new_graph.nodes[1].attrs["body"]
+
+        id_out = new_subgraph.nodes[0].inputs[0]
+        assert id_out.name == "id_out"
+        assert len(id_out.inputs) == 1
+        assert id_out.inputs[0].op == "Identity"
+        assert id_out.inputs[0].inputs[0].name == "input"
+
         new_subgraph.nodes[0].outputs.clear()
         new_subgraph.nodes[1].inputs.clear()
 
@@ -615,7 +681,7 @@ class TestFoldConstants(object):
     def test_basic(self, simple_foldable, partitioning):
         inp = simple_foldable.inputs[0]
 
-        simple_foldable.fold_constants(partitioning=partitioning).cleanup()
+        simple_foldable.fold_constants(partitioning=partitioning).cleanup(remove_unused_graph_inputs=True)
 
         # Extra node should be removed
         assert len(simple_foldable.nodes) == 1
@@ -769,6 +835,108 @@ class TestFoldConstants(object):
         assert len(graph.nodes) == 1
         assert graph.nodes[0].op == "Shape"
         assert isinstance(graph.outputs[0], Variable)
+
+
+    # Constant folding should not cause constant tensors in the model to be loaded.
+    def test_no_load_constants(self):
+        graph = gs.import_onnx(const_foldable().load())
+
+        new_graph = graph.fold_constants()
+
+        def check_no_const_loaded(graph):
+            num_lazy_constants = 0
+            for tensor in graph.tensors().values():
+                if isinstance(tensor, Constant) and isinstance(tensor._values, LazyValues):
+                    num_lazy_constants += 1
+            assert num_lazy_constants == 3 # Graph starts with 3 constants - none should be loaded.
+
+        check_no_const_loaded(graph)
+        check_no_const_loaded(new_graph)
+
+
+    @pytest.mark.parametrize("shape, indices", [
+        (("batch", 3, "height", "width"), 1), # Scalar indices case
+        (None, 1), # Shape not inferered case
+        (("batch", 3, "height", "width"), [1]),
+        (("batch", 3, "height", 224), [1, 3]),
+        (("batch", 3, 224, 224), [1, 2, 3]),
+    ])
+    def test_shape_gather(self, shape, indices):
+        indices = np.array(indices)
+
+        inp = Variable("input", dtype=np.float32, shape=shape)
+        graph = Graph(inputs=[inp])
+
+        inp_shape = graph.shape(inp)
+        shape_part = graph.gather(inp_shape, indices=indices)
+        graph.outputs = [
+            graph.add(shape_part, shape_part),
+            graph.gather(inp_shape, indices=[0]),
+            graph.gather(inp_shape, indices=np.array(0)),
+        ]
+
+        graph.fold_constants()
+
+        if shape is not None:
+            assert isinstance(graph.outputs[0], Constant)
+            expected_shape = np.array(shape)[indices].astype(np.int64) * 2
+            assert np.all(graph.outputs[0].values == expected_shape)
+        else:
+            assert isinstance(graph.outputs[0], Variable)
+
+        assert isinstance(graph.outputs[1], Variable)
+        assert isinstance(graph.outputs[2], Variable)
+
+
+    def test_with_nested_graph(self):
+        cond = gs.Variable("cond", dtype=np.bool, shape=(1, ))
+
+        X = gs.Variable("X", dtype=np.float32, shape=(1, ))
+        Y = gs.Constant("Y", values=np.ones((1, ), dtype=np.float32))
+        graph = Graph(inputs=[X, cond])
+
+        then_graph = Graph(name="Then")
+        then_graph.outputs = [then_graph.add(Y, Y)]
+
+        else_graph = Graph(name="Else")
+        else_graph.outputs = [else_graph.add(X, else_graph.add(Y, Y))]
+
+        graph.outputs = [graph.if_op(cond, then_graph, else_graph)]
+
+        graph.fold_constants()
+        graph.cleanup()
+
+        assert len(then_graph.nodes) == 0
+        assert np.all(then_graph.outputs[0].values == (Y.values * 2))
+
+        assert len(else_graph.nodes) == 1
+        assert isinstance(else_graph.nodes[0].inputs[1], Constant)
+        assert np.all(else_graph.nodes[0].inputs[1].values == (Y.values * 2))
+
+
+    def test_const_inp_but_non_foldable_nested_graph(self):
+        cond = gs.Constant("cond", values=np.array(True))
+        X = gs.Variable("X", dtype=np.float32, shape=(1, ))
+
+        graph = Graph(inputs=[X])
+
+        then_graph = Graph(name="Then")
+        then_graph.outputs = [then_graph.add(X, X)]
+
+        else_graph = Graph(name="Else")
+        else_graph.outputs = [else_graph.add(X, else_graph.add(X, X))]
+
+        # Even though if_op looks foldable because it has all constant inputs,
+        # it's not, since its subgraphs depend on variables in the outer scope.
+        graph.outputs = [graph.if_op(cond, then_graph, else_graph)]
+
+        # This should not raise because the `If` node should be excluded from
+        # constant folding.
+        graph.fold_constants(error_ok=False).cleanup()
+
+        assert graph.nodes[0].op == "If"
+        assert len(then_graph.nodes) == 1
+        assert len(else_graph.nodes) == 2
 
 
 class TestIO(object):

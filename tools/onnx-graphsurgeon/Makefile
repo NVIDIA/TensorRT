@@ -25,11 +25,8 @@ clean:
 build: clean
 	python3 setup.py bdist_wheel
 
-install_venv: build
-	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl
-
 install: build
-	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl --user
+	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl
 
 docs:
 	mkdir -p build/docs
