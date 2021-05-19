@@ -1,7 +1,7 @@
 onnx==1.7.0
 onnxruntime==1.6.0
 tensorflow-gpu>=2.2
-Pillow==7.2.0
+Pillow>=8.1.2
 pycuda
 numpy
 pytest

@@ -2,5 +2,5 @@ numpy
 -f https://download.pytorch.org/whl/torch_stable.html
 torch==1.5.0+cpu; platform_machine=="x86_64" and sys.platform=="linux"
 torchvision==0.6.0; platform_machine=="x86_64" and sys.platform=="linux"
-Pillow==7.2.0
+Pillow>=8.1.2
 pycuda
