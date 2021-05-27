@@ -87,11 +87,14 @@ __launch_bounds__(nthds_per_cta)
                     // result, but will help reduce the computation because
                     // we only need to sort the mantissa part of the floating-point
                     // numbers
-                    if(score_shift > 0.f){
+                    if (score_shift > 0.f)
+                    {
                         temp_scores[targetIdx] = add_fb(score, score_shift);
                         if (ge_fb(temp_scores[targetIdx], T_SCORE(2.f - 1.f / 1024.f)))
                             temp_scores[targetIdx] = T_SCORE(2.f - 1.f / 1024.f);
-                    }else{
+                    }
+                    else
+                    {
                         temp_scores[targetIdx] = score;
                     }
                     temp_idx[targetIdx] = cur_idx + i * numPredsPerBatch;
