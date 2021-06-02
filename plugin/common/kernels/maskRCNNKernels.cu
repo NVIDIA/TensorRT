@@ -43,6 +43,23 @@ struct BBoxT
     BoxType y1, x1, y2, x2;
 };
 
+
+inline __device__ __half mul_fb(const __half & a, const __half & b) {
+    #if __CUDA_ARCH__ >= 530
+        return a * b;
+    #else
+        return __float2half(__half2float(a) * __half2float(b));
+    #endif
+}
+
+inline __device__ __half add_fb(const __half & a, const half & b) {
+    #if __CUDA_ARCH__ >= 530
+        return a + b;
+    #else
+        return __float2half(__half2float(a) + __half2float(b));
+    #endif
+}
+
 template <typename DType>
 __global__ void argMaxReset_kernel(
     int samples, int NClass, const DType* in_scores, const int* maxIdx, DType* out_scores)
@@ -88,6 +105,16 @@ __global__ void resetMemValue_kernel(void* outPtr, int samples, float val)
     }
 }
 
+template <>
+__global__ void resetMemValue_kernel<half>(void* outPtr, int samples, float val)
+{
+    __half* out = static_cast<__half*>(outPtr);
+    int loop = gridDim.x * blockDim.x;
+    for (int idx = blockIdx.x * blockDim.x + threadIdx.x; idx < samples; idx += loop)
+    {
+        out[idx] = __float2half(val);
+    }
+}
 // blockDim.x : NClass
 // GroupDim.x : sample count
 // GroupDim.y : batch N
@@ -174,22 +201,23 @@ struct BlockClassSumPrefix
     }
 };
 
-#define LabelShift (DType)(2.5f)
-#define MinValidScore (DType)(0.01f)
+#define LabelShift (2.5f)
+#define MinValidScore (0.01f)
+#define ScoreShift (1.0f)
 
 template <typename DType>
 __device__ __forceinline__ DType getKey(DType score, int lable, int NClass)
 {
-    return (lable < 0 ? (DType) 0 : ((DType)(NClass - lable - 1) * LabelShift + score + MinValidScore));
+    return (lable < 0 ? (DType) 0 : ((DType)(NClass - lable - 1) * LabelShift + score + ScoreShift));
 }
 
 template <typename DType, typename BoxType>
 __device__ __forceinline__ void getScoreLable(DType key, int NClass, DType& score, BoxType& lable)
 {
     int i = key / LabelShift;
-    score = (key <= MinValidScore ? (DType) 0 : key - (DType) i * LabelShift - MinValidScore);
+    score = (key <= ScoreShift ? (DType) 0 : key - (DType) i * LabelShift - ScoreShift);
     score = dCLAMP(score, (DType) 0, (DType) 1.0);
-    lable = (BoxType)(key <= MinValidScore ? -1 : (NClass - i - 1));
+    lable = (BoxType)(key <= ScoreShift ? -1 : (NClass - i - 1));
 }
 
 // blockDim.x : threads
@@ -252,7 +280,7 @@ __global__ void sortPerClass_kernel(
         {
             int label = (int) (inLabel[blockOffset + curIdx]);
             DType score = inScore[blockOffset + curIdx];
-            if (label != background && label != -1 && score >= (DType) scoreThreshold)
+            if (label != background && label != -1 && score >= scoreThreshold)
             {
                 key[i] = getKey(score, label, NClass);
                 iSample[i] = curIdx;
@@ -286,6 +314,140 @@ __global__ void sortPerClass_kernel(
         if (lable[i] >= (BoxType) 0)
         {
             atomicAdd(&smemClassCount[(int) lable[i]], 1);
+        }
+    }
+    __syncthreads();
+
+    int classBlockOffset = N * (NClass + 1); // Exclusive-sum, 1st is 0, last is final sum
+
+#if DUBUG_KERNEL
+    if (N == DUBUG_BATCH && threadIdx.x == 0)
+    {
+        printf("sortPerClass(N:%d) final count of each label, valid samples:%d\n", N, validSamples);
+        for (int k = 0; k < NClass; ++k)
+        {
+            if (smemClassCount[k] > 0)
+                printf("Batch:%d, L:%d, count:%d, \n", N, k, smemClassCount[k]);
+        }
+    }
+    __syncthreads();
+#endif
+
+    BlockClassSumPrefix sumPrefix;
+    for (int s = 0; s < NClass; s += blockDim.x)
+    { // s start from block
+        int iClassSamples = 0;
+        int iClass = s + threadIdx.x;
+        if (iClass < NClass)
+        {
+            iClassSamples = smemClassCount[iClass];
+        }
+        BlockScanClass(temp_storage.storageScan).ExclusiveSum(iClassSamples, iClassSamples, sumPrefix);
+        __syncthreads();
+        if (iClass < NClass)
+        {
+            classStartPos[classBlockOffset + iClass] = iClassSamples;
+        }
+    }
+    if (threadIdx.x == 0)
+    {
+        classStartPos[classBlockOffset + NClass] = sumPrefix.total;
+        assert(sumPrefix.total <= validSamples); // background data removed.
+        outValidSampleCount[N] = sumPrefix.total;
+#if DUBUG_KERNEL
+        if (N == DUBUG_BATCH)
+            printf("After sortPerClass, batch:%d valid samples total:%d\n", N, sumPrefix.total);
+#endif
+    }
+}
+
+template <int Threads = 256, int IPerThread = 4>
+__global__ void sortPerClass_kernel_half(
+    // int N,
+    int samples, int NClass, int background, float scoreThreshold, const void* validSampleCountPtr,
+    const void* inScorePtr, const void* inLabelPtr, const void* inBboxPtr, void* classStartPosPtr, void* outScorePtr,
+    void* outLabelPtr, void* outSampleIdxPtr, void* outValidSampleCountPtr)
+{
+    typedef cub::BlockExchange<float, Threads, IPerThread> BlockExchangeKey;
+    typedef cub::BlockExchange<int, Threads, IPerThread> BlockExchangeI;
+    typedef cub::BlockRadixSort<float, Threads, IPerThread, int> BlockRadixSort;
+    typedef cub::BlockScan<int, Threads> BlockScanClass;
+    __shared__ union
+    {
+        typename BlockExchangeKey::TempStorage storageKey;
+        typename BlockExchangeI::TempStorage storageI;
+        typename BlockRadixSort::TempStorage storageSort;
+        typename BlockScanClass::TempStorage storageScan;
+    } temp_storage;
+    __shared__ int smemClassCount[MaxClassNum];
+    assert(NClass < MaxClassNum);
+    assert(IPerThread * Threads >= samples);
+
+    const int* validSampleCount = static_cast<const int*>(validSampleCountPtr);
+    const __half* inScore = static_cast<const __half*>(inScorePtr);
+    const __half* inLabel = static_cast<const __half*>(inLabelPtr);
+    int* classStartPos = static_cast<int*>(classStartPosPtr);
+    __half* outScore = static_cast<__half*>(outScorePtr);
+    __half* outLabel = static_cast<__half*>(outLabelPtr);
+    int* outSampleIdx = static_cast<int*>(outSampleIdxPtr);
+    int* outValidSampleCount = static_cast<int*>(outValidSampleCountPtr);
+
+    for (int s = threadIdx.x; s < NClass + 1; s += blockDim.x)
+    {
+        smemClassCount[s] = 0;
+    }
+
+    int N = blockIdx.x;
+    int blockOffset = N * samples;
+    int validSamples = validSampleCount[N];
+    float key[IPerThread];
+    int iSample[IPerThread];
+    for (int i = 0; i < IPerThread; ++i)
+    {
+        iSample[i] = -1;
+        key[i] = -1.0f;
+        int curIdx = i * Threads + threadIdx.x;
+        if (curIdx < validSamples)
+        {
+            int label = __half2int_rd(inLabel[blockOffset + curIdx]);
+            float score = __half2float(inScore[blockOffset + curIdx]);
+            if (label != background && label != -1 && score >= scoreThreshold)
+            {
+                key[i] = getKey<float>(score, label, NClass);
+                iSample[i] = curIdx;
+            }
+        }
+    }
+
+    BlockExchangeKey(temp_storage.storageKey).StripedToBlocked(key);
+    __syncthreads();
+    BlockExchangeI(temp_storage.storageI).StripedToBlocked(iSample);
+    __syncthreads();
+    BlockRadixSort(temp_storage.storageSort).SortDescendingBlockedToStriped(key, iSample);
+    __syncthreads();
+
+    // store Idx
+    cub::StoreDirectStriped<Threads>(threadIdx.x, outSampleIdx + blockOffset, iSample, validSamples);
+    __half lable[IPerThread];
+    __half score[IPerThread];
+
+    for (int i = 0; i < IPerThread; ++i)
+    {
+        float label_float;
+        float score_float;
+        getScoreLable<float>(key[i], NClass, score_float, label_float);
+        lable[i] = __float2half(label_float);
+        score[i] = __float2half(score_float);
+    }
+    cub::StoreDirectStriped<Threads>(threadIdx.x, outScore + blockOffset, score, validSamples);
+    cub::StoreDirectStriped<Threads>(threadIdx.x, outLabel + blockOffset, lable, validSamples);
+
+    // final
+    for (int i = 0; i < IPerThread; ++i)
+    {
+        if (__half2float(lable[i]) >= 0)
+        {
+            atomicAdd(&smemClassCount[__half2int_rd(lable[i])], 1);
         }
     }
     __syncthreads();
@@ -518,6 +680,176 @@ __global__ void PerClassNMS_kernel(
     }
 }
 
+template <int Threads = 256, int ItemsPerThreads = 4>
+__global__ void PerClassNMS_half_kernel(
+    // int N,
+    int samples, int NClass, const float nmsThreshold, const void* validSampleCountPtr,
+    // const void *inScorePtr,
+    const void* inLabelPtr, const void* inBboxPtr, const void* inBboxRefIdxPtr, const void* classStartsPtr,
+    void* outFlagSamplesPtr)
+{
+    typedef BBoxT<__half> BBox;
+    __shared__ struct
+    {
+        BBox refBox[MaxClassNum];
+        int endIdx[MaxClassNum];
+        int refIdx[MaxClassNum + 1];
+        bool markSamples[Threads * ItemsPerThreads];
+        int done;
+    } smemClasses;
+    assert(NClass + 1 < MaxClassNum);
+    assert(samples <= Threads * ItemsPerThreads);
+
+    const int* validSampleCount = static_cast<const int*>(validSampleCountPtr);
+    // const DType *inScore = static_cast<const DType *>(inScorePtr);
+    const __half* inLabel = static_cast<const __half*>(inLabelPtr);
+    const BBox* inBbox = static_cast<const BBox*>(inBboxPtr);
+    const int* inBboxRefIdx = static_cast<const int*>(inBboxRefIdxPtr);
+    const int* classStarts = static_cast<const int*>(classStartsPtr);
+    int* outFlagSamples = static_cast<int*>(outFlagSamplesPtr);
+
+    int N = blockIdx.x;
+    int blockOffset = N * samples;
+    int validSamples = validSampleCount[N];
+
+    if (threadIdx.x == 0)
+    {
+        smemClasses.done = 0;
+    }
+
+    BBox curBox[ItemsPerThreads];
+    int label[ItemsPerThreads];
+#pragma unroll
+    for (int ite = 0; ite * blockDim.x < validSamples; ++ite)
+    {
+        int curIdx = ite * blockDim.x + threadIdx.x;
+        if (curIdx < validSamples)
+        {
+            label[ite] = __half2int_rd(inLabel[blockOffset + curIdx]);
+            curBox[ite] = readBbox<__half>(inBbox, blockOffset + inBboxRefIdx[blockOffset + curIdx]);
+        }
+        else
+        {
+            label[ite] = -1;
+        }
+        smemClasses.markSamples[curIdx] = (label[ite] < 0 ? false : true);
+    }
+
+    int classBlockOffset = N * (NClass + 1);
+    for (int i = threadIdx.x; i < NClass + 1; i += blockDim.x)
+    {
+        int refIdx = classStarts[classBlockOffset + i];
+        smemClasses.refIdx[i] = refIdx;
+        smemClasses.refBox[i] = readBbox<__half>(inBbox, blockOffset + inBboxRefIdx[blockOffset + refIdx]);
+    }
+    __syncthreads();
+
+    for (int i = threadIdx.x; i < NClass; i += blockDim.x)
+    {
+        int endIdx = smemClasses.refIdx[i + 1];
+        smemClasses.endIdx[i] = endIdx;
+        if (endIdx == smemClasses.refIdx[i])
+        {
+            atomicAdd(&smemClasses.done, 1);
+        }
+    }
+    __syncthreads();
+
+#if DUBUG_KERNEL
+    // print info
+    if (N == DUBUG_BATCH && threadIdx.x == 0)
+    {
+        printf("batch:%d, before starting NMS, done count:%d\n", N, smemClasses.done);
+        printf("batch:%d, Total num:%d, startPos:\n", N, validSamples);
+        for (int k = 0; k < NClass; ++k)
+        {
+            if (smemClasses.refIdx[k] != smemClasses.endIdx[k])
+            {
+                printf("Batch:%d, label:%d [%d : %d], check ref-label:%d\n", N, k, smemClasses.refIdx[k],
+                    smemClasses.endIdx[k], (int) inLabel[blockOffset + smemClasses.refIdx[k]]);
+            }
+        }
+        printf("\n");
+    }
+    __syncthreads();
+#endif
+
+    // class done to check stop point
+    while (smemClasses.done < NClass)
+    {
+
+        for (int ite = 0; ite * blockDim.x < validSamples; ++ite)
+        {
+            int curIdx = ite * blockDim.x + threadIdx.x;
+            int refIdx = -1;
+            int endIdx = -1;
+            if (curIdx < validSamples && smemClasses.markSamples[curIdx])
+            {
+                if (label[ite] >= 0)
+                {
+                    refIdx = smemClasses.refIdx[label[ite]];
+                    endIdx = smemClasses.endIdx[label[ite]];
+                    if (curIdx > refIdx && curIdx < endIdx)
+                    {
+                        BBox refBox_half = smemClasses.refBox[label[ite]];
+                        BBox curBox_half = curBox[ite];
+                        BBoxT<float> refBox;
+                        BBoxT<float> curBox_float;
+                        refBox.y1 = __half2float(refBox_half.y1);
+                        refBox.x1 = __half2float(refBox_half.x1);
+                        refBox.y2 = __half2float(refBox_half.y2);
+                        refBox.x2 = __half2float(refBox_half.x2);
+                        curBox_float.y1 = __half2float(curBox_half.y1);
+                        curBox_float.x1 = __half2float(curBox_half.x1);
+                        curBox_float.y2 = __half2float(curBox_half.y2);
+                        curBox_float.x2 = __half2float(curBox_half.x2);
+                        if (boxIoU<float>(refBox, curBox_float) > nmsThreshold)
+                        {
+                            smemClasses.markSamples[curIdx] = false;
+                        }
+                    }
+                }
+            }
+        }
+        __syncthreads();
+
+        // push refIdx/refBox forward to next mark
+        // only the refIdx thread to push itself. other threads idle
+        for (int i = threadIdx.x; i < NClass; i += blockDim.x)
+        {
+            int refIdx = smemClasses.refIdx[i];
+            int endIdx = smemClasses.endIdx[i];
+            if (refIdx < endIdx)
+            {
+                do
+                {
+                    ++refIdx;
+                } while (refIdx < endIdx && smemClasses.markSamples[refIdx] == false);
+                smemClasses.refIdx[i] = refIdx;
+                if (refIdx < endIdx)
+                {
+                    smemClasses.refBox[i] = readBbox<__half>(inBbox, blockOffset + inBboxRefIdx[blockOffset + refIdx]);
+                }
+                else
+                {
+                    atomicAdd(&smemClasses.done, 1);
+                }
+            }
+        }
+        __syncthreads();
+    }
+
+    // no need to write all data out
+    for (int segment = 0; segment < validSamples; segment += blockDim.x)
+    {
+        int curIdx = segment + threadIdx.x;
+        if (curIdx < validSamples)
+        {
+            outFlagSamples[blockOffset + curIdx] = (smemClasses.markSamples[curIdx] ? 1 : 0);
+        }
+    }
+}
+
 // TopKGather
 // gridDim.x : batch-N
 // blockDim.x : Threads
@@ -621,7 +953,7 @@ __global__ void TopKGatherProposal_kernel(int samples, int keepTopK, const void*
         if (curI < keepTopK)
         {
             BBox oB = {(BoxType) 0.0f, (BoxType) 0.0f, (BoxType) 0.0f, (BoxType) 0.0f};
-            if (curI < finalTopK && idx[i] >= 0 && score[i] > MinValidScore)
+            if (curI < finalTopK && idx[i] >= 0 && float(score[i]) > MinValidScore)
             {
                 oB = ((BBox*) inBbox)[blockOffset + inBboxRefIdx[blockOffset + idx[i]]];
             }
@@ -731,7 +1063,7 @@ __global__ void TopKGather_kernel(int samples, int keepTopK, const void* validSa
             BBox oB = {(BoxType) 0.0f, (BoxType) 0.0f, (BoxType) 0.0f, (BoxType) 0.0f};
             DType oS = 0.0f;
             BoxType oL = -1;
-            if (curI < finalTopK && idx[i] >= 0 && score[i] > MinValidScore)
+            if (curI < finalTopK && idx[i] >= 0 && float(score[i]) > MinValidScore)
             {
                 oB = ((BBox*) inBbox)[blockOffset + inBboxRefIdx[blockOffset + idx[i]]];
                 oS = score[i];
@@ -891,7 +1223,7 @@ MultilevelProposeROIWorkSpace::MultilevelProposeROIWorkSpace(const int batchSize
 {
     size_t sumSize = 0;
 
-    const nvinfer1::DataType type = nvinfer1::DataType::kFLOAT;
+    const nvinfer1::DataType type = inType;
 
     // resource
     // temp storage size for sorting scores
@@ -954,7 +1286,8 @@ ConcatTopKWorkSpace::ConcatTopKWorkSpace(
 {
     size_t sumSize = 0;
 
-    const nvinfer1::DataType type = nvinfer1::DataType::kFLOAT;
+    // const nvinfer1::DataType type = nvinfer1::DataType::kFLOAT;
+    const nvinfer1::DataType type = inType;
 
     // resource
     // temp storage size for sorting scores
@@ -984,8 +1317,10 @@ template <int Threads>
 cudaError_t argMaxGroup(cudaStream_t stream, int N, nvinfer1::DataType dtype, int samples, int NClass,
     const void* inScore, const void* inBbox, const void* validSamples, void* outScore, void* outLabel, void* outBbox)
 {
-    int maxGridX = dMIN(samples, 512 / N);
-    dim3 gridDim = {(unsigned int) nAlignDown(maxGridX, 32), (unsigned int) N, 1};
+    int gridX = nAlignDown(dMIN(samples, 512 / N), 32);
+    gridX = dMAX(gridX, 1);
+
+    dim3 gridDim = {static_cast<unsigned int>(gridX), static_cast<unsigned int>(N), 1};
     dim3 threads = {Threads, 1, 1};
     switch (dtype)
     {
@@ -1004,8 +1339,10 @@ template <int Threads>
 cudaError_t argMaxWOBackground(cudaStream_t stream, int N, nvinfer1::DataType dtype, int samples, int NClass,
     const void* inScore, const void* inBbox, const void* validSamples, void* outScore, void* outLabel, void* outBbox)
 {
-    int maxGridX = dMIN(samples, 512 / N);
-    dim3 gridDim = {(unsigned int) nAlignDown(maxGridX, 32), (unsigned int) N, 1};
+    int gridX = nAlignDown(dMIN(samples, 512 / N), 32);
+    gridX = dMAX(gridX, 1);
+
+    dim3 gridDim = {static_cast<unsigned int>(gridX), static_cast<unsigned int>(N), 1};
     dim3 threads = {Threads, 1, 1};
     switch (dtype)
     {
@@ -1036,7 +1373,11 @@ cudaError_t sortPerClass(cudaStream_t stream, int N, nvinfer1::DataType dtype, i
             background, scoreThreshold, inSampleValidCount, inScorePtr, inLabelPtr, inBboxPtr, outclassStartPosPtr,
             outScorePtr, outLabelPtr, outSampleIdxPtr, outValidSampleCountPtr);
         break;
-    case nvinfer1::DataType::kHALF: break;
+    case nvinfer1::DataType::kHALF:
+        sortPerClass_kernel_half<Threads, ItermPerThreads><<<blocks, threads, 0, stream>>>(samples, NClass,
+            background, scoreThreshold, inSampleValidCount, inScorePtr, inLabelPtr, inBboxPtr, outclassStartPosPtr,
+            outScorePtr, outLabelPtr, outSampleIdxPtr, outValidSampleCountPtr);
+        break;
     default: assert(false);
     }
 
@@ -1058,7 +1399,10 @@ cudaError_t PerClassNMS(cudaStream_t stream, int N, nvinfer1::DataType dtype, in
         PerClassNMS_kernel<float, float, Threads><<<blocks, threads, 0, stream>>>(samples, NClass, nmsThreshold,
             validSampleCount, inLabel, inBbox, inBboxRefIdx, classStarts, outFlagSamples);
         break;
-    case nvinfer1::DataType::kHALF: break;
+    case nvinfer1::DataType::kHALF: 
+        PerClassNMS_half_kernel<Threads><<<blocks, threads, 0, stream>>>(samples, NClass, nmsThreshold,
+            validSampleCount, inLabel, inBbox, inBboxRefIdx, classStarts, outFlagSamples);
+        break;
     default: assert(false);
     }
 
@@ -1235,7 +1579,20 @@ cudaError_t KeepTopKGatherBoxScore(cudaStream_t stream, int N, nvinfer1::DataTyp
                 outDetections);
         }
         break;
-    case nvinfer1::DataType::kHALF: break;
+    case nvinfer1::DataType::kHALF:
+        if (proposal)
+        {
+            TopKGatherBoxScore_kernel<__half, __half, Threads><<<blocks, threads, 0, stream>>>(samples, keepTopK,
+                validSampleCountPtr, inScorePtr, inLabelPtr, inBboxPtr, inBboxRefIdxPtr, inFlagSamplesPtr, outScores,
+                outDetections);
+        }
+        else
+        {
+            TopKGather_kernel<__half, __half, Threads><<<blocks, threads, 0, stream>>>(samples, keepTopK,
+                validSampleCountPtr, inScorePtr, inLabelPtr, inBboxPtr, inBboxRefIdxPtr, inFlagSamplesPtr,
+                outDetections);
+        }
+        break;
     default: assert(false);
     }
 
@@ -1383,7 +1740,7 @@ cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const 
         }
     }
 
-    status = DecodeBBoxes(stream, N, samples, regWeight, inputHeight, inputWidth, inROI, argMaxBBoxPtr, argMaxBBoxPtr);
+    status = DecodeBBoxes(stream, N, samples, regWeight, inputHeight, inputWidth, inROI, argMaxBBoxPtr, argMaxBBoxPtr, dtype);
     assert(status == cudaSuccess);
 
     if (samples <= 1024)
@@ -1457,13 +1814,14 @@ __global__ void set_offset_kernel(int stride, int size, int* output)
     }
 }
 
+template <typename Dtype>
 __global__ void resample_kernel(int orig_size, int sample_size, const void* orig_score_ptr, const void* orig_bbox_ptr,
     void* sampled_score_ptr, void* sampled_bbox_ptr)
 {
-    const float* in_score = static_cast<const float*>(orig_score_ptr);
-    const BBoxT<float>* in_bbox = static_cast<const BBoxT<float>*>(orig_bbox_ptr);
-    float* out_score = static_cast<float*>(sampled_score_ptr);
-    BBoxT<float>* out_bbox = static_cast<BBoxT<float>*>(sampled_bbox_ptr);
+    const Dtype* in_score = static_cast<const Dtype*>(orig_score_ptr);
+    const BBoxT<Dtype>* in_bbox = static_cast<const BBoxT<Dtype>*>(orig_bbox_ptr);
+    Dtype* out_score = static_cast<Dtype*>(sampled_score_ptr);
+    BBoxT<Dtype>* out_bbox = static_cast<BBoxT<Dtype>*>(sampled_bbox_ptr);
 
     int N = blockIdx.x;
     int blockOffset_in = N * orig_size;
@@ -1546,7 +1904,7 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
     assert(NClass == 1);
     if (NClass == 1)
     { // Only one class
-        resample_kernel<<<N, dMIN(samples, 1024), 0, stream>>>(
+        resample_kernel<float><<<N, dMIN(samples, 1024), 0, stream>>>(
             inputCnt, samples, preRefineSortedScorePtr, preRefineBboxPtr, argMaxScorePtr, argMaxBBoxPtr);
 
         int threads = 512;
@@ -1602,6 +1960,30 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
     return status;
 }
 
+template<typename Dtype>
+void score_bbox_cub_sort(void* tempStorage,
+                         const void* inScore,
+                         void* sortedScore,
+                         const void* inBBox,
+                         void* sortedBBox,
+                         int totalCnt,
+                         int segCnt,
+                         int* offsets,
+                         cudaStream_t stream
+                         )
+{
+    size_t temp_storage_bytes = 0;
+    cub::DeviceSegmentedRadixSort::SortPairsDescending(NULL, temp_storage_bytes, (Dtype*) inScore,
+        (Dtype*) sortedScore, (BBoxT<Dtype>*) inBBox, (BBoxT<Dtype>*) sortedBBox, totalCnt, segCnt,
+        offsets, offsets + 1, 0, 8 * sizeof(Dtype), stream);
+    CUASSERT(cudaGetLastError());
+
+    cub::DeviceSegmentedRadixSort::SortPairsDescending(tempStorage, temp_storage_bytes, (Dtype*) inScore,
+        (Dtype*) sortedScore, (BBoxT<Dtype>*) inBBox, (BBoxT<Dtype>*) sortedBBox, totalCnt, segCnt,
+        offsets, offsets + 1, 0, 8 * sizeof(Dtype), stream);
+    CUASSERT(cudaGetLastError());
+}
+
 cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samples, const float* regWeight,
     const float inputHeight, const float inputWidth, nvinfer1::DataType dtype, const RefineNMSParameters& param,
     const MultilevelProposeROIWorkSpace& proposalOffset, void* workspace,
@@ -1630,8 +2012,8 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
     cudaError_t status = cudaSuccess;
     int NClass = param.numClasses;
     assert(NClass == 1);
-    CUASSERT(cudaMemsetAsync(argMaxScorePtr, 0, N * samples * sizeof(float), stream));
-    CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4 * sizeof(float), stream));
+    CUASSERT(cudaMemsetAsync(argMaxScorePtr, 0, N * samples * sizeof(dtype), stream));
+    CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4 * sizeof(dtype), stream));
     CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
     CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass + 1) * sizeof(int), stream));
     CUASSERT(cudaMemsetAsync(sortClassSampleIdxPtr, 0, N * (samples + 1) * sizeof(int), stream));
@@ -1640,7 +2022,7 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
 
     // Here, inDelta are converted to normalize coordinates based on anchors
     status = DecodeBBoxes(
-        stream, N, inputCnt, regWeight, inputHeight, inputWidth, inAnchors, inDelta, const_cast<void*>(inDelta));
+        stream, N, inputCnt, regWeight, inputHeight, inputWidth, inAnchors, inDelta, const_cast<void*>(inDelta), dtype);
     CUASSERT(cudaGetLastError());
 
     // sort the score
@@ -1657,25 +2039,45 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
     CUASSERT(cudaGetLastError());
     tempStoragePtr = static_cast<void*>(static_cast<int*>(tempStoragePtr) + (N + 1));
 
-    size_t temp_storage_bytes = 0;
-    cub::DeviceSegmentedRadixSort::SortPairsDescending(NULL, temp_storage_bytes, (float*) inScore,
-        (float*) preRefineSortedScorePtr, (BBoxT<float>*) inDelta, (BBoxT<float>*) preRefineBboxPtr, N * inputCnt, N,
-        offsets, offsets + 1, 0, 8 * sizeof(float), stream);
-    CUASSERT(cudaGetLastError());
-
-    assert((1 << 23) * N > (int) temp_storage_bytes);
-
-    cub::DeviceSegmentedRadixSort::SortPairsDescending(tempStoragePtr, temp_storage_bytes, (float*) inScore,
-        (float*) preRefineSortedScorePtr, (BBoxT<float>*) inDelta, (BBoxT<float>*) preRefineBboxPtr, N * inputCnt, N,
-        offsets, offsets + 1, 0, 8 * sizeof(float), stream);
-    CUASSERT(cudaGetLastError());
+    switch (dtype)
+    {
+        case nvinfer1::DataType::kFLOAT:
+        {
+            score_bbox_cub_sort<float>(tempStoragePtr, inScore, preRefineSortedScorePtr,
+                                       inDelta, preRefineBboxPtr, N * inputCnt, N,
+                                       offsets, stream);
+            break;
+        }
+        case nvinfer1::DataType::kHALF:
+        {
+            score_bbox_cub_sort<__half>(tempStoragePtr, inScore, preRefineSortedScorePtr,
+                                        inDelta, preRefineBboxPtr, N * inputCnt, N,
+                                        offsets, stream);
+            break;
+        }
+        default: assert(false);
+    }
 
     if (NClass == 1)
     { // Only one class
-        resample_kernel<<<N, dMIN(samples, 1024), 0, stream>>>(
-            inputCnt, samples, preRefineSortedScorePtr, preRefineBboxPtr, argMaxScorePtr, argMaxBBoxPtr);
-
-        CUASSERT(cudaGetLastError());
+        switch (dtype)
+        {
+            case nvinfer1::DataType::kFLOAT:
+            {
+                resample_kernel<float><<<N, dMIN(samples, 1024), 0, stream>>>(
+                    inputCnt, samples, preRefineSortedScorePtr, preRefineBboxPtr, argMaxScorePtr, argMaxBBoxPtr);
+                CUASSERT(cudaGetLastError());
+                break;
+            }
+            case nvinfer1::DataType::kHALF: 
+            { 
+                resample_kernel<__half><<<N, dMIN(samples, 1024), 0, stream>>>(
+                    inputCnt, samples, preRefineSortedScorePtr, preRefineBboxPtr, argMaxScorePtr, argMaxBBoxPtr);
+                CUASSERT(cudaGetLastError());
+                break;
+            }
+        default: assert(false);
+        }
 
         int threads = 512;
         int blocks = (N * samples + threads - 1) / threads;
@@ -1683,15 +2085,18 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
 
         switch (dtype)
         {
-        case nvinfer1::DataType::kFLOAT:
-        {
-            resetMemValue_kernel<float><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
-            CUASSERT(cudaGetLastError());
-            break;
-        }
-        case nvinfer1::DataType::kHALF: { break;
-        }
-        default: assert(false);
+            case nvinfer1::DataType::kFLOAT:
+            {
+                resetMemValue_kernel<float><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
+                CUASSERT(cudaGetLastError());
+                break;
+            }
+            case nvinfer1::DataType::kHALF: {
+                resetMemValue_kernel<__half><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
+                CUASSERT(cudaGetLastError());
+                break;
+            }
+            default: assert(false);
         }
     }
 
@@ -1743,6 +2148,11 @@ struct BBOX
 struct DELTA
 {
     float dy, dx, logdh, logdw;
+};
+
+struct DELTA_HALF
+{
+    __half dy, dx, logdh, logdw;
 };
 
 __global__ void decode_bboxes_kernel(int samples, const void* anchors, const void* delta, const float* regWeight,
@@ -1809,12 +2219,81 @@ __global__ void decode_bboxes_kernel(int samples, const void* anchors, const voi
     }
 }
 
+__global__ void decode_bboxes_kernel_half(int samples, const void* anchors, const void* delta, const float* regWeight,
+    const float inputHeight, const float inputWidth, void* outputBbox, float bboxClipThresh)
+{
+
+    const BBoxT<float>* anchors_in = static_cast<const BBoxT<float>*>(anchors);
+    const DELTA_HALF* delta_in = static_cast<const DELTA_HALF*>(delta);
+    BBoxT<__half>* bbox_out = static_cast<BBoxT<__half>*>(outputBbox);
+
+    int N = blockIdx.x;
+    int blockOffset = N * samples;
+    int totalItems = (samples + (blockDim.x - 1)) / blockDim.x;
+
+    for (int i = 0; i < totalItems; i++)
+    {
+        int cur_id = i * blockDim.x + threadIdx.x;
+
+        if (cur_id < samples)
+        {
+            BBoxT<float> cur_anchor_yxyx = anchors_in[blockOffset + cur_id];
+            // convert yxyx -> cyxhw
+            // cy, cx, h, w
+
+            float cur_anchor_h = (cur_anchor_yxyx.y2 - cur_anchor_yxyx.y1 + 1.0);
+            float cur_anchor_w = (cur_anchor_yxyx.x2 - cur_anchor_yxyx.x1 + 1.0); // w
+            float cur_anchor_yc = cur_anchor_yxyx.y1 + cur_anchor_h * 0.5;        // cy
+            float cur_anchor_xc = cur_anchor_yxyx.x1 + cur_anchor_w * 0.5;        // cx
+
+            DELTA_HALF cur_delta_half = delta_in[blockOffset + cur_id];
+            DELTA cur_delta;
+            cur_delta.dy = __half2float(cur_delta_half.dy);
+            cur_delta.dx = __half2float(cur_delta_half.dx);
+            cur_delta.logdh = __half2float(cur_delta_half.logdh);
+            cur_delta.logdw = __half2float(cur_delta_half.logdw);
+
+            // divided by regWeight
+            cur_delta.dy /= regWeight[0];
+            cur_delta.dx /= regWeight[1];
+            cur_delta.logdh /= regWeight[2];
+            cur_delta.logdw /= regWeight[3];
+
+            cur_delta.logdh = dMIN(cur_delta.logdh, bboxClipThresh);
+            cur_delta.logdw = dMIN(cur_delta.logdw, bboxClipThresh);
+
+            // apply delta
+            float decoded_box_yc = cur_anchor_yc + cur_delta.dy * cur_anchor_h;
+            float decoded_box_xc = cur_anchor_xc + cur_delta.dx * cur_anchor_w;
+            float decoded_box_h = expf(cur_delta.logdh) * cur_anchor_h;
+            float decoded_box_w = expf(cur_delta.logdw) * cur_anchor_w;
+
+            float decoded_box_ymin = decoded_box_yc - 0.5 * decoded_box_h;
+            float decoded_box_xmin = decoded_box_xc - 0.5 * decoded_box_w;
+            float decoded_box_ymax = decoded_box_ymin + decoded_box_h - 1.0;
+            float decoded_box_xmax = decoded_box_xmin + decoded_box_w - 1.0;
+
+            // clip bbox: a more precision clip method based on real window could be implemented
+            decoded_box_ymin = dMAX(dMIN(decoded_box_ymin, inputHeight - 1.0), 0.0);
+            decoded_box_xmin = dMAX(dMIN(decoded_box_xmin, inputWidth - 1.0), 0.0);
+            decoded_box_ymax = dMAX(dMIN(decoded_box_ymax, inputHeight - 1.0), 0.0);
+            decoded_box_xmax = dMAX(dMIN(decoded_box_xmax, inputWidth - 1.0), 0.0);
+
+            bbox_out[blockOffset + cur_id].y1 = __float2half(decoded_box_ymin);
+            bbox_out[blockOffset + cur_id].x1 = __float2half(decoded_box_xmin);
+            bbox_out[blockOffset + cur_id].y2 = __float2half(decoded_box_ymax);
+            bbox_out[blockOffset + cur_id].x2 = __float2half(decoded_box_xmax);
+        }
+    }
+}
+
 cudaError_t DecodeBBoxes(cudaStream_t stream, int N,
     int samples, // number of anchors per image
     const float* regWeight, const float inputHeight, const float inputWidth,
     const void* anchors, // [N, anchors, (y1, x1, y2, x2)]
     const void* delta,   //[N, anchors, (dy, dx, log(dh), log(dw)])
-    void* outputBbox     //[N, anchors, (y1, x1, y2, x2)]
+    void* outputBbox,     //[N, anchors, (y1, x1, y2, x2)]
+    nvinfer1::DataType dtype
 )
 {
 
@@ -1830,8 +2309,22 @@ cudaError_t DecodeBBoxes(cudaStream_t stream, int N,
     // clip the bbox in absolute coordinates
     float bboxClipThresh = log(1000.0f / 16.0f);
 
-    decode_bboxes_kernel<<<blocks, threads, 0, stream>>>(
-        samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
+    switch (dtype)
+    {
+        case nvinfer1::DataType::kFLOAT:
+        {
+            decode_bboxes_kernel<<<blocks, threads, 0, stream>>>(
+                samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
+            break;
+        }
+        case nvinfer1::DataType::kHALF:
+        {
+            decode_bboxes_kernel_half<<<blocks, threads, 0, stream>>>(
+                samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
+            break;
+        }
+        default: assert(false);   
+    }
 
     return cudaGetLastError();
 }
@@ -1936,15 +2429,43 @@ __device__ inline Tfeat interpolateBilinear(const Tfeat* src, xy_t srcDims, floa
     assert(y1 < srcDims.y);
     assert(x1 < srcDims.x);
 
-    const float src00 = src[(y0) *srcDims.x + (x0)];
-    const float src01 = src[(y0) *srcDims.x + (x1)];
-    const float src10 = src[(y1) *srcDims.x + (x0)];
-    const float src11 = src[(y1) *srcDims.x + (x1)];
+    const Tfeat src00 = src[(y0) *srcDims.x + (x0)];
+    const Tfeat src01 = src[(y0) *srcDims.x + (x1)];
+    const Tfeat src10 = src[(y1) *srcDims.x + (x0)];
+    const Tfeat src11 = src[(y1) *srcDims.x + (x1)];
 
-    const float src0 = src00 * (1 - xAlpha) + src01 * xAlpha;
-    const float src1 = src10 * (1 - xAlpha) + src11 * xAlpha;
+    const Tfeat src0 = src00 * (1.0 - xAlpha) + src01 * xAlpha;
+    const Tfeat src1 = src10 * (1.0 - xAlpha) + src11 * xAlpha;
 
-    return src0 * (1 - yAlpha) + src1 * yAlpha;
+    return src0 * (1.0 - yAlpha) + src1 * yAlpha;
+}
+
+template <>
+__device__ inline __half interpolateBilinear(const __half* src, xy_t srcDims, float y, float x)
+{
+    const int y0 = static_cast<int>(y);
+    const float yAlpha = y - static_cast<float>(y0);
+    const int x0 = static_cast<int>(x);
+    const float xAlpha = x - static_cast<float>(x0);
+
+    assert(y0 < srcDims.y);
+    assert(x0 < srcDims.x);
+
+    const int y1 = (yAlpha == 0) ? y0 : y0 + 1; // ceil
+    const int x1 = (xAlpha == 0) ? x0 : x0 + 1; // ceil
+
+    assert(y1 < srcDims.y);
+    assert(x1 < srcDims.x);
+
+    const __half src00 = src[(y0) *srcDims.x + (x0)];
+    const __half src01 = src[(y0) *srcDims.x + (x1)];
+    const __half src10 = src[(y1) *srcDims.x + (x0)];
+    const __half src11 = src[(y1) *srcDims.x + (x1)];
+
+    const __half src0 = add_fb(mul_fb(src00, (1.0 - xAlpha)), mul_fb(src01, xAlpha));
+    const __half src1 = add_fb(mul_fb(src10, (1.0 - xAlpha)), mul_fb(src11, xAlpha));
+
+    return add_fb(mul_fb(src0, (1.0 - yAlpha)), mul_fb(src1, yAlpha));
 }
 
 template <typename Trois, typename Tfeat>
@@ -2061,17 +2582,26 @@ cudaError_t roiAlign(cudaStream_t stream, int batchSize, int featureCount, int r
 template <typename Trois, typename Tfeat>
 __global__ void roiAlignHalfCenter_kernel(int featureCount, int roiCount,
 
-    float threshold, int inputHeight, int inputWidth, const Trois* rois,
+    float threshold, int inputHeight, int inputWidth, const void* rois_,
 
-    const Tfeat* P2, const xy_t P2dims, const Tfeat* P3, const xy_t P3dims, const Tfeat* P4, const xy_t P4dims,
-    const Tfeat* P5, const xy_t P5dims, const Tfeat* P6, const xy_t P6dims,
+    const void* const P2_, const xy_t P2dims, const void* const P3_, const xy_t P3dims, const void* const P4_, const xy_t P4dims,
+    const void* const P5_, const xy_t P5dims, const void* const P6_, const xy_t P6dims,
 
-    Tfeat* pooled, const xy_t poolDims)
+    void* pooled_, const xy_t poolDims)
 {
+    const Trois* rois = static_cast<const Trois*>(rois_);
+    const Tfeat* P2 = static_cast<const Tfeat*>(P2_);
+    const Tfeat* P3 = static_cast<const Tfeat*>(P3_);
+    const Tfeat* P4 = static_cast<const Tfeat*>(P4_);
+    const Tfeat* P5 = static_cast<const Tfeat*>(P5_);
+    const Tfeat* P6 = static_cast<const Tfeat*>(P6_);
+    Tfeat* pooled = static_cast<Tfeat* >(pooled_);
     const int batch = blockIdx.x;
     const int feature = blockIdx.y;
+    const int roiIdx = blockIdx.z;
+    const int total_item_cnt = poolDims.x * poolDims.y;
 
-    for (int roiIdx = threadIdx.x; roiIdx < roiCount; roiIdx += blockDim.x)
+    for (int itemIdx = threadIdx.x; itemIdx < total_item_cnt; itemIdx += blockDim.x)
     {
         const Trois* roi = rois + 4 * (batch * roiCount + roiIdx);
 
@@ -2096,31 +2626,33 @@ __global__ void roiAlignHalfCenter_kernel(int featureCount, int roiCount,
         xy_t srcDims = P2dims;
         int iP = 2;
 
-        if (hw > threshold)
+        float threshold_per_item = threshold;
+
+        if (hw > threshold_per_item)
         {
             src = P3;
             srcDims = P3dims;
             ++iP;
         }
-        threshold *= 4;
+        threshold_per_item *= 4;
 
-        if (hw > threshold)
+        if (hw > threshold_per_item)
         {
             src = P4;
             srcDims = P4dims;
             ++iP;
         }
-        threshold *= 4;
+        threshold_per_item *= 4;
 
-        if (hw > threshold)
+        if (hw > threshold_per_item)
         {
             src = P5;
             srcDims = P5dims;
             ++iP;
         }
-        threshold *= 4;
+        threshold_per_item *= 4;
 
-        if (hw > threshold)
+        if (hw > threshold_per_item)
         {
             src = P6;
             srcDims = P6dims;
@@ -2130,9 +2662,10 @@ __global__ void roiAlignHalfCenter_kernel(int featureCount, int roiCount,
         src += srcDims.x * srcDims.y * (batch * featureCount + feature);
 
         Tfeat* dst
-            = pooled + poolDims.x * poolDims.y * (batch * roiCount * featureCount + roiIdx * featureCount + feature);
+            = pooled + poolDims.x * poolDims.y * (batch * roiCount * featureCount + roiIdx * featureCount + feature) + itemIdx;
 
         float scale_to_level = 1.0f;
+
         for (int i = 0; i < iP; i++)
         {
             scale_to_level *= 2.0f;
@@ -2147,37 +2680,165 @@ __global__ void roiAlignHalfCenter_kernel(int featureCount, int roiCount,
         const float yDelta = (yEnd - yStart) / (poolDims.y);
         const float xDelta = (xEnd - xStart) / (poolDims.x);
 
-        for (int yy = 0; yy < poolDims.y; ++yy)
-        {
-            const float ySample = dMIN(dMAX(yStart + yDelta * (yy + 0.5), 0.0f), srcDims.y - 1.0f);
+        const int yy = itemIdx / poolDims.y;
+        const int xx = itemIdx % poolDims.x;
 
-            for (int xx = 0; xx < poolDims.x; ++xx)
-            {
-                const float xSample = dMIN(dMAX(xStart + xDelta * (xx + 0.5), 0.0f), srcDims.x - 1.0f);
+        const float ySample = dMIN(dMAX(yStart + yDelta * (yy + 0.5), 0.0f), srcDims.y - 1.0f);
+        const float xSample = dMIN(dMAX(xStart + xDelta * (xx + 0.5), 0.0f), srcDims.x - 1.0f);
 
-                float result = interpolateBilinear(src, srcDims, ySample, xSample);
+        Tfeat result = interpolateBilinear<Tfeat>(src, srcDims, ySample, xSample);
 
-                *dst = result;
-                dst++;
-            }
-        }
+        *dst = result;
+
     }
 }
+
+template <>
+__global__ void roiAlignHalfCenter_kernel<__half, __half>(int featureCount, int roiCount,
+
+    float threshold, int inputHeight, int inputWidth, const void* rois_,
+
+    const void* const P2_, const xy_t P2dims, const void* const P3_, const xy_t P3dims, const void* const P4_, const xy_t P4dims,
+    const void* const P5_, const xy_t P5dims, const void* const P6_, const xy_t P6dims,
+
+    void* pooled_, const xy_t poolDims)
+{
+    const __half* rois = static_cast<const __half*>(rois_);
+    const __half* P2 = static_cast<const __half*>(P2_);
+    const __half* P3 = static_cast<const __half*>(P3_);
+    const __half* P4 = static_cast<const __half*>(P4_);
+    const __half* P5 = static_cast<const __half*>(P5_);
+    const __half* P6 = static_cast<const __half*>(P6_);
+    __half* pooled = static_cast<__half* >(pooled_);
+    const int batch = blockIdx.x;
+    const int feature = blockIdx.y;
+    const int roiIdx = blockIdx.z;
+    const int total_item_cnt = poolDims.x * poolDims.y;
+
+    for (int itemIdx = threadIdx.x; itemIdx < total_item_cnt; itemIdx += blockDim.x)
+    {
+        const __half* roi = rois + 4 * (batch * roiCount + roiIdx);
+
+        const float y1 = __half2float(roi[0]);
+        const float x1 = __half2float(roi[1]);
+        const float y2 = __half2float(roi[2]);
+        const float x2 = __half2float(roi[3]);
+
+        if (!(0 <= y1 && y1 <= inputHeight && 0 <= x1 && x1 <= inputWidth && 0 <= y2 && y2 <= inputHeight && 0 <= x2
+                && x2 <= inputWidth && y1 < y2 && x1 < x2))
+        {
+
+            continue;
+        }
+        else
+        {
+        }
+
+        const float hw = (y2 - y1) * (x2 - x1);
+
+        const __half* src = P2;
+        xy_t srcDims = P2dims;
+        int iP = 2;
+
+        float threshold_per_item = threshold;
+
+        if (hw > threshold_per_item)
+        {
+            src = P3;
+            srcDims = P3dims;
+            ++iP;
+        }
+        threshold_per_item *= 4;
+
+        if (hw > threshold_per_item)
+        {
+            src = P4;
+            srcDims = P4dims;
+            ++iP;
+        }
+        threshold_per_item *= 4;
+
+        if (hw > threshold_per_item)
+        {
+            src = P5;
+            srcDims = P5dims;
+            ++iP;
+        }
+        threshold_per_item *= 4;
+
+        if (hw > threshold_per_item)
+        {
+            src = P6;
+            srcDims = P6dims;
+            ++iP;
+        }
+
+        src += srcDims.x * srcDims.y * (batch * featureCount + feature);
+
+        __half* dst
+            = pooled + poolDims.x * poolDims.y * (batch * roiCount * featureCount + roiIdx * featureCount + feature) + itemIdx;
+
+        float scale_to_level = 1.0f;
+
+        for (int i = 0; i < iP; i++)
+        {
+            scale_to_level *= 2.0f;
+        }
+
+        const float yStart = y1 / scale_to_level;
+        const float xStart = x1 / scale_to_level;
+
+        const float yEnd = y2 / scale_to_level;
+        const float xEnd = x2 / scale_to_level;
+
+        const float yDelta = (yEnd - yStart) / (poolDims.y);
+        const float xDelta = (xEnd - xStart) / (poolDims.x);
+
+        const int yy = itemIdx / poolDims.y;
+        const int xx = itemIdx % poolDims.x;
+
+        const float ySample = dMIN(dMAX(yStart + yDelta * (yy + 0.5), 0.0f), srcDims.y - 1.0f);
+        const float xSample = dMIN(dMAX(xStart + xDelta * (xx + 0.5), 0.0f), srcDims.x - 1.0f);
+
+        __half result = interpolateBilinear<__half>(src, srcDims, ySample, xSample);
+
+        *dst = result;
+    }
+}
+
+
 
 cudaError_t roiAlignHalfCenter(cudaStream_t stream, int batchSize, int featureCount, int roiCount, float firstThreshold,
 
     int inputHeight, int inputWidth, const void* rois, const void* const layers[], const xy_t* layerDims,
 
-    void* pooled, const xy_t poolDims)
+    void* pooled, const xy_t poolDims, const DataType dtype)
 {
-    const dim3 blocks(batchSize, featureCount);
-    const int threads(256);
+    const dim3 blocks(batchSize, featureCount, roiCount);
+    const int threads(64);
+    switch (dtype){
+        case nvinfer1::DataType::kFLOAT:
+        {
+            roiAlignHalfCenter_kernel<float, float><<<blocks, threads, 0, stream>>>(featureCount, roiCount, firstThreshold, inputHeight,
+                inputWidth, rois, layers[0], layerDims[0],
+                layers[1], layerDims[1], layers[2], layerDims[2],
+                layers[3], layerDims[3], layers[4], layerDims[4],
+                pooled, poolDims);
+            break;
+        }
+        case nvinfer1::DataType::kHALF: 
+        {            
+            roiAlignHalfCenter_kernel<__half, __half><<<blocks, threads, 0, stream>>>(featureCount, roiCount, firstThreshold, inputHeight,
+            inputWidth, rois, layers[0], layerDims[0],
+            layers[1], layerDims[1], layers[2], layerDims[2],
+            layers[3], layerDims[3], layers[4], layerDims[4],
+            pooled, poolDims);
+            break;
+        }
+        default: assert(false);
+    }
 
-    roiAlignHalfCenter_kernel<<<blocks, threads, 0, stream>>>(featureCount, roiCount, firstThreshold, inputHeight,
-        inputWidth, static_cast<const float*>(rois), static_cast<const float*>(layers[0]), layerDims[0],
-        static_cast<const float*>(layers[1]), layerDims[1], static_cast<const float*>(layers[2]), layerDims[2],
-        static_cast<const float*>(layers[3]), layerDims[3], static_cast<const float*>(layers[4]), layerDims[4],
-        static_cast<float*>(pooled), poolDims);
+
 
     return cudaGetLastError();
 }
@@ -2260,12 +2921,12 @@ __global__ void concatenate(int featureCnt, int sampleCnt, const void* const* in
     int inBlockOffset = N * sampleCnt;
     int itemsPerThread = (sampleCnt + blockDim.x - 1) / blockDim.x;
     Dtype* outScorePtr = static_cast<Dtype*>(outScore);
-    BOX* outBBoxPtr = static_cast<BOX*>(outBBox);
+    BBoxT<Dtype>* outBBoxPtr = static_cast<BBoxT<Dtype>*>(outBBox);
 
     for (int fId = 0; fId < featureCnt; fId++)
     {
         const Dtype* fInScorePtr = static_cast<const Dtype*>(inScores[fId]);
-        const BOX* fInBBoxPtr = static_cast<const BOX*>(inBBox[fId]);
+        const BBoxT<Dtype>* fInBBoxPtr = static_cast<const BBoxT<Dtype>*>(inBBox[fId]);
         int featureOffset = fId * sampleCnt;
         for (int i = 0; i < itemsPerThread; i++)
         {
@@ -2279,10 +2940,11 @@ __global__ void concatenate(int featureCnt, int sampleCnt, const void* const* in
     }
 }
 
+template <typename Dtype>
 __global__ void resampleBBox_kernel(int orig_size, int sample_size, const void* orig_bbox_ptr, void* sampled_bbox_ptr)
 {
-    const BBoxT<float>* in_bbox = static_cast<const BBoxT<float>*>(orig_bbox_ptr);
-    BBoxT<float>* out_bbox = static_cast<BBoxT<float>*>(sampled_bbox_ptr);
+    const BBoxT<Dtype>* in_bbox = static_cast<const BBoxT<Dtype>*>(orig_bbox_ptr);
+    BBoxT<Dtype>* out_bbox = static_cast<BBoxT<Dtype>*>(sampled_bbox_ptr);
 
     int N = blockIdx.x;
     int blockOffset_in = N * orig_size;
@@ -2321,7 +2983,11 @@ cudaError_t ConcatTopK(cudaStream_t stream, int N, int featureCnt, int topK, nvi
 
         CUASSERT(cudaGetLastError());
         break;
-    case nvinfer1::DataType::kHALF: assert(false);
+    case nvinfer1::DataType::kHALF:
+        concatenate<__half>
+            <<<blocks, threads, 0, stream>>>(featureCnt, topK, inScores, inBBox, concatedScorePtr, concatedBBoxPtr);
+        CUASSERT(cudaGetLastError());
+        break;
     default: assert(false);
     }
 
@@ -2332,23 +2998,39 @@ cudaError_t ConcatTopK(cudaStream_t stream, int N, int featureCnt, int topK, nvi
     assert(cudaGetLastError() == cudaSuccess);
     tempStoragePtr = static_cast<void*>(static_cast<int*>(tempStoragePtr) + (N + 1));
 
-    // Sort
-    size_t temp_storage_bytes = 0;
-    cub::DeviceSegmentedRadixSort::SortPairsDescending(NULL, temp_storage_bytes, (float*) concatedScorePtr,
-        (float*) sortedScorePtr, (BBoxT<float>*) concatedBBoxPtr, (BBoxT<float>*) sortedBBoxPtr, N * itemCnt, N,
-        offsets, offsets + 1, 0, 8 * sizeof(float), stream);
-
-    assert((1 << 23) * N > (int) temp_storage_bytes);
-
-    cub::DeviceSegmentedRadixSort::SortPairsDescending(tempStoragePtr, temp_storage_bytes, (float*) concatedScorePtr,
-        (float*) sortedScorePtr, (BBoxT<float>*) concatedBBoxPtr, (BBoxT<float>*) sortedBBoxPtr, N * itemCnt, N,
-        offsets, offsets + 1, 0, 8 * sizeof(float), stream);
-
-    assert(cudaGetLastError() == cudaSuccess);
+    switch (dtype)
+    {
+        case nvinfer1::DataType::kFLOAT:
+        {
+            score_bbox_cub_sort<float>(tempStoragePtr, concatedScorePtr, sortedScorePtr,
+                                       concatedBBoxPtr, sortedBBoxPtr, N * itemCnt, N,
+                                       offsets, stream);
+            break;
+        }
+        case nvinfer1::DataType::kHALF:
+        {
+            score_bbox_cub_sort<__half>(tempStoragePtr, concatedScorePtr, sortedScorePtr,
+                                       concatedBBoxPtr, sortedBBoxPtr, N * itemCnt, N,
+                                       offsets, stream);
+            break;
+        }
+        default: assert(false);
+    }
 
     // Sample
-    resampleBBox_kernel<<<N, dMIN(topK, 1024), 0, stream>>>(itemCnt, topK, sortedBBoxPtr, outProposals);
-
+    switch (dtype)
+    {
+    case nvinfer1::DataType::kFLOAT:
+        resampleBBox_kernel<float><<<N, dMIN(topK, 1024), 0, stream>>>(itemCnt, topK, sortedBBoxPtr, outProposals);
+        CUASSERT(cudaGetLastError());
+        break;
+    case nvinfer1::DataType::kHALF:
+        resampleBBox_kernel<__half><<<N, dMIN(topK, 1024), 0, stream>>>(itemCnt, topK, sortedBBoxPtr, outProposals);
+        CUASSERT(cudaGetLastError());
+        break;
+    default: assert(false);
+    }
+    
     assert(cudaGetLastError() == cudaSuccess);
     return cudaGetLastError();
 }
