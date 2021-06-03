@@ -18,8 +18,8 @@ The `inspect` tool can be used to display information about supported types of f
 - `model` displays information about models, such as network structure.
     This can be useful in case you are unfamiliar with the model, and need to know details about
     the inputs or outputs, or layers.
-- `results` displays information about `RunResults` from `Comparator.run()` (like those written by
-    `polygraphy run --save-outputs`).
+- `data` displays information about inference inputs and outputs from `Comparator.run()` (like those written by
+    `polygraphy run --save-outputs/--save-inputs`).
 
 
 ## Usage

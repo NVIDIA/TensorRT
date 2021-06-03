@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -125,7 +125,7 @@ def convert_example_to_features(doc_tokens, question_text, tokenizer, max_seq_le
             "Feature",
             ["input_ids", "input_mask", "segment_ids", "tokens", "token_to_orig_map", "token_is_max_context"])
 
-        
+
     features = []
     for (doc_span_index, doc_span) in enumerate(doc_spans):
         tokens = []
@@ -345,7 +345,7 @@ def get_predictions(doc_tokens, features, results, n_best_size, max_answer_lengt
     null_start_logit = 0  # the start logit at the slice with min null score
     null_end_logit = 0  # the end logit at the slice with min null score
     version_2_with_negative = False
-    
+
     for result in results:
         start_indexes = _get_best_indexes(result.start_logits, n_best_size)
         end_indexes = _get_best_indexes(result.end_logits, n_best_size)

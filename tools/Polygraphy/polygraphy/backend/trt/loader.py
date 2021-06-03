@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ from collections import OrderedDict
 import tensorrt as trt
 from polygraphy.backend.base import BaseLoadModel
 from polygraphy.backend.trt import util as trt_util
-from polygraphy.common import constants
+from polygraphy.common import constants, func
 from polygraphy.logger.logger import G_LOGGER
 from polygraphy.util import misc
 
@@ -32,10 +32,10 @@ class LoadPlugins(BaseLoadModel):
         another loader is that you can control the order of execution when lazily evaluating.
 
         For immediate evaluation, call the loader. For example:
-
         ::
-            # Note the `()` at the end
-            LoadPlugins(plugins=["/path/to/my/plugin.so", "/path/to/my/other_plugin.so"])()
+
+            from polygraphy.common import func
+            func.invoke(LoadPlugins(plugins=["/path/to/my/plugin.so", "/path/to/my/other_plugin.so"]))
 
         Args:
             obj (object):
@@ -79,16 +79,16 @@ class CreateNetwork(BaseLoadModel):
         Returns:
             (trt.Builder, trt.INetworkDefinition): The builder and empty network.
         """
-        builder = trt.Builder(trt_util.TRT_LOGGER)
-        network_flags = 0
-        if self.explicit_batch:
-            network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-        if self.explicit_precision:
-            network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_PRECISION)
-        network = builder.create_network(flags=network_flags)
-        if network is None:
-            G_LOGGER.critical("Invalid network. See logging output above for details.")
-        return builder, network
+        with misc.FreeOnException([trt.Builder(trt_util.TRT_LOGGER)]) as (builder, ):
+            network_flags = 0
+            if self.explicit_batch:
+                network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+            if self.explicit_precision:
+                network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_PRECISION)
+            network = builder.create_network(flags=network_flags)
+            if network is None:
+                G_LOGGER.critical("Invalid network. See logging output above for details.")
+            return builder, network
 
 
 class BaseNetworkFromOnnx(BaseLoadModel):
@@ -102,9 +102,10 @@ class BaseNetworkFromOnnx(BaseLoadModel):
 
 
     def __call__(self):
-        builder, network = CreateNetwork(explicit_precision=self.explicit_precision, explicit_batch=self.explicit_batch)()
-        parser = trt.OnnxParser(network, trt_util.TRT_LOGGER)
-        return builder, network, parser
+        with misc.FreeOnException(func.invoke(CreateNetwork(explicit_precision=self.explicit_precision,
+                                                            explicit_batch=self.explicit_batch))) as (builder, network):
+            parser = trt.OnnxParser(network, trt_util.TRT_LOGGER)
+            return builder, network, parser
 
 
 class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
@@ -128,10 +129,11 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
                     A TensorRT network, as well as the builder used to create it, and the parser
                     used to populate it.
         """
-        builder, network, parser = super().__call__()
-        parser.parse(misc.try_call(self._model_bytes)[0])
-        trt_util.check_onnx_parser_errors(parser)
-        return builder, network, parser
+        with misc.FreeOnException(super().__call__()) as (builder, network, parser):
+            parser.parse(misc.try_call(self._model_bytes)[0])
+            trt_util.check_onnx_parser_errors(parser)
+            return builder, network, parser
+
 
 
 if misc.version(trt.__version__) >= misc.version("7.1"):
@@ -157,12 +159,12 @@ if misc.version(trt.__version__) >= misc.version("7.1"):
                         A TensorRT network, as well as the builder used to create it, and the parser
                         used to populate it.
             """
-            builder, network, parser = super().__call__()
-            # We need to use parse_from_file for the ONNX parser to keep track of the location of the ONNX file for
-            # potentially parsing any external weights.
-            parser.parse_from_file(misc.try_call(self.path)[0])
-            trt_util.check_onnx_parser_errors(parser)
-            return builder, network, parser
+            with misc.FreeOnException(super().__call__()) as (builder, network, parser):
+                # We need to use parse_from_file for the ONNX parser to keep track of the location of the ONNX file for
+                # potentially parsing any external weights.
+                parser.parse_from_file(misc.try_call(self.path)[0])
+                trt_util.check_onnx_parser_errors(parser)
+                return builder, network, parser
 else:
     class NetworkFromOnnxPath(NetworkFromOnnxBytes):
         def __init__(self, path, explicit_precision=None):
@@ -174,7 +176,7 @@ else:
                 path (str): The path from which to load the model.
             """
             from polygraphy.backend.common import BytesFromPath
-            load_model = BytesFromPath(misc.try_call(self.path)[0](self.path))
+            load_model = BytesFromPath(misc.try_call(path)[0])
             super().__init__(load_model, explicit_precision)
 
 
@@ -195,8 +197,8 @@ class ModifyNetwork(BaseLoadModel):
                     already marked in the network.
                     If a value of `constants.MARK_ALL` is used instead of a list, all tensors in the network are marked.
             exclude_outputs (Sequence[str]):
-                Names of tensors to exclude as outputs. This can be useful in conjunction with
-                ``outputs=constants.MARK_ALL`` to omit outputs.
+                    Names of tensors to exclude as outputs. This can be useful in conjunction with
+                    ``outputs=constants.MARK_ALL`` to omit outputs.
         """
         self._network = network
         self.outputs = outputs
@@ -210,21 +212,24 @@ class ModifyNetwork(BaseLoadModel):
         Returns:
             trt.INetworkDefinition: The modified network.
         """
-        ret, _ = misc.try_call(self._network)
+        ret, owns_network = misc.try_call(self._network)
         builder, network, parser = misc.unpack_args(ret, num=3)
 
-        if self.outputs == constants.MARK_ALL:
-            trt_util.mark_layerwise(network)
-        elif self.outputs is not None:
-            trt_util.mark_outputs(network, self.outputs)
+        with contextlib.ExitStack() as stack:
+            if owns_network:
+                stack.enter_context(misc.FreeOnException([builder, network, parser]))
 
-        if self.exclude_outputs is not None:
-            trt_util.unmark_outputs(network, self.exclude_outputs)
+            if self.outputs == constants.MARK_ALL:
+                trt_util.mark_layerwise(network)
+            elif self.outputs is not None:
+                trt_util.mark_outputs(network, self.outputs)
 
-        if parser is not None:
+            if self.exclude_outputs is not None:
+                trt_util.unmark_outputs(network, self.exclude_outputs)
+
+            if parser is None:
+                return builder, network
             return builder, network, parser
-        else:
-            return builder, network
 
 
 class ShapeTuple(object):
@@ -275,6 +280,7 @@ class Profile(OrderedDict):
         """
         self[name] = ShapeTuple(min, opt, max)
         return self
+
 
     def __getitem__(self, key):
         """
@@ -339,40 +345,41 @@ class CreateConfig(BaseLoadModel):
         Returns:
             trt.IBuilderConfig: The TensorRT builder configuration.
         """
-        config = builder.create_builder_config()
+        with misc.FreeOnException([builder.create_builder_config()]) as (config, ):
+            calibration_profile = None
+            for profile in self.profiles:
+                calibration_profile = trt_util.build_profile(builder, network, profile)
+                config.add_optimization_profile(calibration_profile)
+            if not self.profiles:
+                calibration_profile = trt_util.build_default_profile(builder, network)
+                config.add_optimization_profile(calibration_profile)
 
-        calibration_profile = None
-        for profile in self.profiles:
-            calibration_profile = trt_util.build_profile(builder, network, profile)
-            config.add_optimization_profile(calibration_profile)
-        if not self.profiles:
-            calibration_profile = trt_util.build_default_profile(builder, network)
-            config.add_optimization_profile(calibration_profile)
+            if self.profiles:
+                G_LOGGER.info("Configuring with profiles: {:}".format(self.profiles))
 
-        if self.profiles:
-            G_LOGGER.info("Configuring with profiles: {:}".format(self.profiles))
+            config.max_workspace_size = int(self.max_workspace_size)
 
-        config.max_workspace_size = int(self.max_workspace_size)
-
-        if self.strict_types:
-            config.set_flag(trt.BuilderFlag.STRICT_TYPES)
-        if not self.tf32:
-            with contextlib.suppress(AttributeError):
-                config.clear_flag(trt.BuilderFlag.TF32)
-        if self.fp16:
-            config.set_flag(trt.BuilderFlag.FP16)
-        if self.int8:
-            config.set_flag(trt.BuilderFlag.INT8)
-            if not network.has_explicit_precision:
-                if self.calibrator is not None:
-                    input_metadata = trt_util.get_input_metadata_from_profile(calibration_profile, network)
-                    with contextlib.suppress(AttributeError):
-                        self.calibrator.reset(input_metadata)
-                    config.int8_calibrator = self.calibrator
-                else:
-                    G_LOGGER.warning("Network does not have explicit precision and no calibrator was provided. Please ensure "
-                                     "that tensors in the network have dynamic ranges set, or provide a calibrator in order to use int8 mode.")
-        return config
+            if self.strict_types:
+                config.set_flag(trt.BuilderFlag.STRICT_TYPES)
+            if not self.tf32:
+                with contextlib.suppress(AttributeError):
+                    config.clear_flag(trt.BuilderFlag.TF32)
+            if self.fp16:
+                config.set_flag(trt.BuilderFlag.FP16)
+            if self.int8:
+                config.set_flag(trt.BuilderFlag.INT8)
+                if not network.has_explicit_precision:
+                    if self.calibrator is not None:
+                        input_metadata = trt_util.get_input_metadata_from_profile(calibration_profile, network)
+                        with contextlib.suppress(AttributeError):
+                            self.calibrator.reset(input_metadata)
+                        config.int8_calibrator = self.calibrator
+                        with contextlib.suppress(AttributeError):
+                            config.set_calibration_profile(calibration_profile)
+                    else:
+                        G_LOGGER.warning("Network does not have explicit precision and no calibrator was provided. Please ensure "
+                                        "that tensors in the network have dynamic ranges set, or provide a calibrator in order to use int8 mode.")
+            return config
 
 
 class EngineFromNetwork(BaseLoadModel):
@@ -408,32 +415,43 @@ class EngineFromNetwork(BaseLoadModel):
             trt.ICudaEngine: The engine that was created.
         """
         # If network is a callable, then we own its return value
-        ret, owning = misc.try_call(self._network)
+        ret, owns_network = misc.try_call(self._network)
         builder, network, parser = misc.unpack_args(ret, num=3)
 
         with contextlib.ExitStack() as stack:
-            provided = "Builder and Network" if parser is None else "Builder, Network, and Parser"
-            if owning:
+            if owns_network:
                 stack.enter_context(builder)
                 stack.enter_context(network)
                 if parser is not None:
                     stack.enter_context(parser)
             else:
+                provided = "Builder and Network" if parser is None else "Builder, Network, and Parser"
                 G_LOGGER.verbose("{:} were provided directly instead of via a Callable. This loader will not assume ownership. "
                                "Please ensure that they are freed.".format(provided))
+
+            config, owns_config = misc.try_call(self._config, builder, network)
+            if owns_config:
+                stack.enter_context(config)
+            else:
+                G_LOGGER.verbose("Builder configuration was provided directly instead of via a Callable. This loader will not assume "
+                                 "ownership. Please ensure it is freed.")
 
             network_log_mode = "full" if G_LOGGER.severity <= G_LOGGER.ULTRA_VERBOSE else "attrs"
             G_LOGGER.super_verbose(lambda: ("Displaying TensorRT Network:\n" + trt_util.str_from_network(network, mode=network_log_mode)))
 
-            config, _ = misc.try_call(self._config, builder, network)
             G_LOGGER.info("Building engine with configuration: {:}".format(trt_util.str_from_config(config)))
-            engine = builder.build_engine(network, config)
-            if not engine:
-                G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
+
+            if misc.version(trt.__version__) < misc.version("7.3"):
+                engine = builder.build_engine(network, config)
+            else:
+                engine = func.invoke(EngineFromBytes(builder.build_serialized_network(network, config)))
 
             if hasattr(config.int8_calibrator, "free"):
+                # Must go before engine check to ensure calibrator is freed on failures too.
                 config.int8_calibrator.free()
 
+            if not engine:
+                G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
             return engine
 
 
@@ -465,7 +483,6 @@ class EngineFromBytes(BaseLoadModel):
             engine = runtime.deserialize_cuda_engine(buffer)
             if not engine:
                 G_LOGGER.critical("Could not load engine")
-                G_LOGGER.ultra_verbose(lambda: "Note: serialized_engine was: {:}".format(buffer))
         return engine
 
 
@@ -492,6 +509,11 @@ class SaveEngine(BaseLoadModel):
         Returns:
             trt.ICudaEngine: The engine that was saved.
         """
-        engine, _ = misc.try_call(self._engine)
-        misc.lazy_write(contents=lambda: engine.serialize(), path=self.path)
-        return engine
+        engine, owns_engine = misc.try_call(self._engine)
+
+        with contextlib.ExitStack() as stack:
+            if owns_engine:
+                stack.enter_context(misc.FreeOnException([engine]))
+
+            misc.lazy_write(contents=lambda: engine.serialize(), path=self.path)
+            return engine

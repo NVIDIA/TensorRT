@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -93,13 +93,22 @@ class Node(object):
             super().__setattr__(name, value)
 
 
-    def copy(self, inputs: List["Tensor"]=None, outputs: List["Tensor"]=None):
+    def copy(self, inputs: List["Tensor"]=None, outputs: List["Tensor"]=None, tensor_map=None):
         """
         Makes a shallow copy of this node, overriding input and output information.
 
-        Note: Generally, you should only ever make a deep copy of a Graph.
+        Note: Generally, you should only ever make a copy of a Graph.
         """
-        return Node(self.op, self.name, self.attrs, inputs=inputs, outputs=outputs)
+        from onnx_graphsurgeon.ir.graph import Graph
+
+        new_attrs = OrderedDict()
+        for name, attr in self.attrs.items():
+            if isinstance(attr, Graph):
+                new_attrs[name] = attr.copy(tensor_map)
+            else:
+                new_attrs[name] = attr
+
+        return Node(self.op, self.name, new_attrs, inputs=inputs, outputs=outputs)
 
 
     def __str__(self):

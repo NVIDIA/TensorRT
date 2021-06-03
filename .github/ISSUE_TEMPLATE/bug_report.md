@@ -1,6 +1,6 @@
 ---
-name: Bug report
-about: Create a report to help us improve
+name: TensorRT OSS Bug Report
+about: Report any bugs to help us improve TensorRT.
 title: ''
 labels: ''
 assignees: ''
@@ -15,20 +15,20 @@ assignees: ''
 ## Environment
 
 **TensorRT Version**: 
-**GPU Type**: 
-**Nvidia Driver Version**: 
+**NVIDIA GPU**: 
+**NVIDIA Driver Version**: 
 **CUDA Version**: 
 **CUDNN Version**: 
-**Operating System + Version**: 
+**Operating System**: 
 **Python Version (if applicable)**: 
-**TensorFlow Version (if applicable)**: 
+**Tensorflow Version (if applicable)**: 
 **PyTorch Version (if applicable)**: 
-**Baremetal or Container (if container which image + tag)**: 
+**Baremetal or Container (if so, version)**: 
 
 
 ## Relevant Files
 
-<!-- Please include links to any models, data, files, or scripts necessary to reproduce your issue. (Github repo, Google Drive, Dropbox, etc.) -->
+<!-- Please include links to any models, data, files, or scripts necessary to reproduce your issue. (Github repo, Google Drive/Dropbox, etc.) -->
 
 
 ## Steps To Reproduce

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,25 +22,41 @@
 
 using namespace nvinfer1;
 using nvinfer1::plugin::DetectionOutput;
+using nvinfer1::plugin::DetectionOutputDynamic;
 using nvinfer1::plugin::DetectionOutputParameters;
 using nvinfer1::plugin::NMSPluginCreator;
+using nvinfer1::plugin::NMSDynamicPluginCreator;
+using nvinfer1::plugin::NMSBasePluginCreator;
 
 namespace
 {
 const char* NMS_PLUGIN_VERSION{"1"};
-const char* NMS_PLUGIN_NAME{"NMS_TRT"};
+const char* NMS_PLUGIN_NAMES[] = {"NMS_TRT", "NMSDynamic_TRT"};
 } // namespace
 
-PluginFieldCollection NMSPluginCreator::mFC{};
-std::vector<PluginField> NMSPluginCreator::mPluginAttributes;
+PluginFieldCollection NMSBasePluginCreator::mFC{};
+std::vector<PluginField> NMSBasePluginCreator::mPluginAttributes;
 
 // Constrcutor
-DetectionOutput::DetectionOutput(DetectionOutputParameters params)
+DetectionOutput::DetectionOutput(DetectionOutputParameters params) noexcept
     : param(params)
 {
 }
 
-DetectionOutput::DetectionOutput(DetectionOutputParameters params, int C1, int C2, int numPriors)
+DetectionOutputDynamic::DetectionOutputDynamic(DetectionOutputParameters params) noexcept
+    : param(params)
+{
+}
+
+DetectionOutput::DetectionOutput(DetectionOutputParameters params, int C1, int C2, int numPriors) noexcept
+    : param(params)
+    , C1(C1)
+    , C2(C2)
+    , numPriors(numPriors)
+{
+}
+
+DetectionOutputDynamic::DetectionOutputDynamic(DetectionOutputParameters params, int C1, int C2, int numPriors) noexcept
     : param(params)
     , C1(C1)
     , C2(C2)
@@ -49,7 +65,7 @@ DetectionOutput::DetectionOutput(DetectionOutputParameters params, int C1, int C
 }
 
 // Parameterized constructor
-DetectionOutput::DetectionOutput(const void* data, size_t length)
+DetectionOutput::DetectionOutput(const void* data, size_t length) noexcept
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     param = read<DetectionOutputParameters>(d);
@@ -61,24 +77,60 @@ DetectionOutput::DetectionOutput(const void* data, size_t length)
     C2 = read<int>(d);
     // Number of bounding boxes per sample
     numPriors = read<int>(d);
+    // data type of this plugin
+    mType = read<DataType>(d);
+    // mScoreBits
+    mScoreBits = read<int32_t>(d);
     ASSERT(d == a + length);
 }
 
-int DetectionOutput::getNbOutputs() const
+DetectionOutputDynamic::DetectionOutputDynamic(const void* data, size_t length) noexcept
+{
+    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    param = read<DetectionOutputParameters>(d);
+    // Channel size of the locData tensor
+    // numPriors * numLocClasses * 4
+    C1 = read<int>(d);
+    // Channel size of the confData tensor
+    // numPriors * param.numClasses
+    C2 = read<int>(d);
+    // Number of bounding boxes per sample
+    numPriors = read<int>(d);
+    // data type of this plugin
+    mType = read<DataType>(d);
+    // mScoreBits
+    mScoreBits = read<int32_t>(d);
+    ASSERT(d == a + length);
+}
+
+int DetectionOutput::getNbOutputs() const noexcept
 {
     // Plugin layer has 2 outputs
     return 2;
 }
 
-int DetectionOutput::initialize()
+int DetectionOutputDynamic::getNbOutputs() const noexcept
+{
+    // Plugin layer has 2 outputs
+    return 2;
+}
+
+int DetectionOutput::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
-void DetectionOutput::terminate() {}
+int DetectionOutputDynamic::initialize() noexcept
+{
+    return STATUS_SUCCESS;
+}
+
+void DetectionOutput::terminate() noexcept {}
+
+void DetectionOutputDynamic::terminate() noexcept {}
 
 // Returns output dimensions at given index
-Dims DetectionOutput::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims DetectionOutput::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
     ASSERT(nbInputDims == 3);
     ASSERT(index == 0 || index == 1);
@@ -92,16 +144,75 @@ Dims DetectionOutput::getOutputDimensions(int index, const Dims* inputs, int nbI
     return DimsCHW(1, 1, 1);
 }
 
-// Returns the workspace size
-size_t DetectionOutput::getWorkspaceSize(int maxBatchSize) const
+DimsExprs DetectionOutputDynamic::getOutputDimensions(
+    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
-    return detectionInferenceWorkspaceSize(param.shareLocation, maxBatchSize, C1, C2, param.numClasses, numPriors,
-        param.topK, DataType::kFLOAT, DataType::kFLOAT);
+    ASSERT(nbInputs == 3);
+    ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
+    // loc data
+    ASSERT(inputs[0].nbDims == 4);
+    // conf data
+    ASSERT(inputs[1].nbDims == 4);
+    // prior data
+    ASSERT(inputs[2].nbDims == 4);
+    const int C1_idx = param.inputOrder[0];
+    const int C2_idx = param.inputOrder[1];
+    if (inputs[C1_idx].d[0]->isConstant() && inputs[C1_idx].d[1]->isConstant() && inputs[C1_idx].d[2]->isConstant()
+        && inputs[C1_idx].d[3]->isConstant())
+    {
+        C1 = exprBuilder
+                 .operation(DimensionOperation::kPROD,
+                     *exprBuilder.operation(DimensionOperation::kPROD, *inputs[C1_idx].d[1], *inputs[C1_idx].d[2]),
+                     *inputs[C1_idx].d[3])
+                 ->getConstantValue();
+    }
+
+    if (inputs[C2_idx].d[0]->isConstant() && inputs[C2_idx].d[1]->isConstant() && inputs[C2_idx].d[2]->isConstant())
+    {
+        C2 = exprBuilder.operation(DimensionOperation::kPROD, *inputs[C2_idx].d[1], *inputs[C2_idx].d[2])
+                 ->getConstantValue();
+    }
+    // Output dimensions
+    // index 0 : Dimensions 1x param.keepTopK x 7
+    // index 1: Dimensions 1x1x1
+    DimsExprs out_dim;
+    if (outputIndex == 0)
+    {
+        // (N, 1, param.keepTopK, 7)
+        out_dim.nbDims = 4;
+        out_dim.d[0] = inputs[0].d[0];
+        out_dim.d[1] = exprBuilder.constant(1);
+        out_dim.d[2] = exprBuilder.constant(param.keepTopK);
+        out_dim.d[3] = exprBuilder.constant(7);
+    }
+    else
+    {
+        out_dim.nbDims = 4;
+        out_dim.d[0] = inputs[0].d[0];
+        out_dim.d[1] = exprBuilder.constant(1);
+        out_dim.d[2] = exprBuilder.constant(1);
+        out_dim.d[3] = exprBuilder.constant(1);
+    }
+    return out_dim;
+}
+
+// Returns the workspace size
+size_t DetectionOutput::getWorkspaceSize(int maxBatchSize) const noexcept
+{
+    return detectionInferenceWorkspaceSize(
+        param.shareLocation, maxBatchSize, C1, C2, param.numClasses, numPriors, param.topK, mType, mType);
+}
+
+size_t DetectionOutputDynamic::getWorkspaceSize(
+    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
+{
+    return detectionInferenceWorkspaceSize(
+        param.shareLocation, inputs[0].dims.d[0], C1, C2, param.numClasses, numPriors, param.topK, mType, mType);
 }
 
 // Plugin layer implementation
 int DetectionOutput::enqueue(
-    int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+    int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept
 {
     // Input order {loc, conf, prior}
     const void* const locData = inputs[param.inputOrder[0]];
@@ -114,92 +225,234 @@ int DetectionOutput::enqueue(
 
     pluginStatus_t status = detectionInference(stream, batchSize, C1, C2, param.shareLocation,
         param.varianceEncodedInTarget, param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK,
-        param.confidenceThreshold, param.nmsThreshold, param.codeType, DataType::kFLOAT, locData, priorData,
-        DataType::kFLOAT, confData, keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid);
+        param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData, priorData, mType, confData,
+        keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid, mScoreBits);
+    ASSERT(status == STATUS_SUCCESS);
+    return 0;
+}
+
+int DetectionOutputDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+{
+    // Input order {loc, conf, prior}
+    const void* const locData = inputs[param.inputOrder[0]];
+    const void* const confData = inputs[param.inputOrder[1]];
+    const void* const priorData = inputs[param.inputOrder[2]];
+
+    // Output from plugin index 0: topDetections index 1: keepCount
+    void* topDetections = outputs[0];
+    void* keepCount = outputs[1];
+
+    pluginStatus_t status = detectionInference(stream, inputDesc[0].dims.d[0], C1, C2, param.shareLocation,
+        param.varianceEncodedInTarget, param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK,
+        param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData, priorData, mType, confData,
+        keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid, mScoreBits);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
 
 // Returns the size of serialized parameters
-size_t DetectionOutput::getSerializationSize() const
+size_t DetectionOutput::getSerializationSize() const noexcept
 {
-    // DetectionOutputParameters, C1,C2,numPriors
-    return sizeof(DetectionOutputParameters) + sizeof(int) * 3;
+    // DetectionOutputParameters, C1, C2, numPriors, mType, mScoreBits
+    return sizeof(DetectionOutputParameters) + sizeof(int) * 3 + sizeof(DataType) + sizeof(int32_t);
+}
+
+size_t DetectionOutputDynamic::getSerializationSize() const noexcept
+{
+    // DetectionOutputParameters, C1, C2, numPriors, mType, mScoreBits
+    return sizeof(DetectionOutputParameters) + sizeof(int) * 3 + sizeof(DataType) + sizeof(int32_t);
 }
 
 // Serialization of plugin parameters
-void DetectionOutput::serialize(void* buffer) const
+void DetectionOutput::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, param);
     write(d, C1);
     write(d, C2);
     write(d, numPriors);
+    write(d, mType);
+    write(d, mScoreBits);
+    ASSERT(d == a + getSerializationSize());
+}
+
+void DetectionOutputDynamic::serialize(void* buffer) const noexcept
+{
+    char *d = reinterpret_cast<char*>(buffer), *a = d;
+    write(d, param);
+    write(d, C1);
+    write(d, C2);
+    write(d, numPriors);
+    write(d, mType);
+    write(d, mScoreBits);
     ASSERT(d == a + getSerializationSize());
 }
 
 // Check if the DataType and Plugin format is supported
-bool DetectionOutput::supportsFormat(DataType type, PluginFormat format) const
+bool DetectionOutput::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return ((type == DataType::kHALF || type == DataType::kFLOAT) && format == PluginFormat::kNCHW);
+}
+
+bool DetectionOutputDynamic::supportsFormatCombination(
+    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
+{
+    // 3 inputs, 2 outputs, so 5 input/output in total
+    ASSERT(0 <= pos && pos < 5);
+    const auto* in = inOut;
+    const auto* out = inOut + nbInputs;
+    const bool consistentFloatPrecision = (in[0].type == in[pos].type);
+    switch (pos)
+    {
+    case 0:
+        return (in[0].type == DataType::kHALF || in[0].type == DataType::kFLOAT)
+            && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 1:
+        return (in[1].type == DataType::kHALF || in[1].type == DataType::kFLOAT)
+            && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 2:
+        return (in[2].type == DataType::kHALF || in[2].type == DataType::kFLOAT)
+            && in[2].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 3:
+        return (out[0].type == DataType::kHALF || out[0].type == DataType::kFLOAT)
+            && out[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 4: return out[1].type == DataType::kFLOAT && out[1].format == PluginFormat::kLINEAR;
+    }
+    return false;
 }
 
 // Get the plugin type
-const char* DetectionOutput::getPluginType() const
+const char* DetectionOutput::getPluginType() const noexcept
 {
-    return NMS_PLUGIN_NAME;
+    return NMS_PLUGIN_NAMES[0];
+}
+
+const char* DetectionOutputDynamic::getPluginType() const noexcept
+{
+    return NMS_PLUGIN_NAMES[1];
 }
 
 // Get the plugin version
-const char* DetectionOutput::getPluginVersion() const
+const char* DetectionOutput::getPluginVersion() const noexcept
+{
+    return NMS_PLUGIN_VERSION;
+}
+
+const char* DetectionOutputDynamic::getPluginVersion() const noexcept
 {
     return NMS_PLUGIN_VERSION;
 }
 
 // Clean up
-void DetectionOutput::destroy()
+void DetectionOutput::destroy() noexcept
 {
     delete this;
 }
 
+void DetectionOutputDynamic::destroy() noexcept
+{
+    delete this;
+}
+
+void DetectionOutput::setScoreBits(int32_t scoreBits) noexcept
+{
+    mScoreBits = scoreBits;
+}
+
+void DetectionOutputDynamic::setScoreBits(int32_t scoreBits) noexcept
+{
+    mScoreBits = scoreBits;
+}
+
 // Cloning the plugin
-IPluginV2Ext* DetectionOutput::clone() const
+IPluginV2Ext* DetectionOutput::clone() const noexcept
 {
     // Create a new instance
-    IPluginV2Ext* plugin = new DetectionOutput(param, C1, C2, numPriors);
-
+    auto* plugin = new DetectionOutput(param, C1, C2, numPriors);
+    plugin->mType = mType;
     // Set the namespace
     plugin->setPluginNamespace(mPluginNamespace.c_str());
+    // set mScoreBits
+    plugin->setScoreBits(mScoreBits);
+    return plugin;
+}
+
+IPluginV2DynamicExt* DetectionOutputDynamic::clone() const noexcept
+{
+    // Create a new instance
+    auto* plugin = new DetectionOutputDynamic(param, C1, C2, numPriors);
+    plugin->mType = mType;
+    // Set the namespace
+    plugin->setPluginNamespace(mPluginNamespace.c_str());
+    // set mScoreBits
+    plugin->setScoreBits(mScoreBits);
     return plugin;
 }
 
 // Set plugin namespace
-void DetectionOutput::setPluginNamespace(const char* pluginNamespace)
+void DetectionOutput::setPluginNamespace(const char* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* DetectionOutput::getPluginNamespace() const
+void DetectionOutputDynamic::setPluginNamespace(const char* pluginNamespace) noexcept
+{
+    mPluginNamespace = pluginNamespace;
+}
+
+const char* DetectionOutput::getPluginNamespace() const noexcept
+{
+    return mPluginNamespace.c_str();
+}
+
+const char* DetectionOutputDynamic::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index.
 DataType DetectionOutput::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
 {
     // Two outputs
     ASSERT(index == 0 || index == 1);
+    ASSERT(inputTypes[0] == inputTypes[1] && inputTypes[2] == inputTypes[1]);
+    // topDetections
+    if (index == 0)
+    {
+        return inputTypes[0];
+    }
+    // keepCount: use kFLOAT instead as they have same sizeof(type)
+    ASSERT(sizeof(int) == sizeof(float));
+    return DataType::kFLOAT;
+}
+
+DataType DetectionOutputDynamic::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
+{
+    // Two outputs
+    ASSERT(index == 0 || index == 1);
+    ASSERT(inputTypes[0] == inputTypes[1] && inputTypes[2] == inputTypes[1]);
+    // topDetections
+    if (index == 0)
+    {
+        return inputTypes[0];
+    }
+    // keepCount: use kFLOAT instead as they have same sizeof(type)
+    ASSERT(sizeof(int) == sizeof(float));
     return DataType::kFLOAT;
 }
 
 // Return true if output tensor is broadcast across a batch.
 bool DetectionOutput::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+    noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool DetectionOutput::canBroadcastInputAcrossBatch(int inputIndex) const
+bool DetectionOutput::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 {
     return false;
 }
@@ -214,7 +467,7 @@ bool DetectionOutput::canBroadcastInputAcrossBatch(int inputIndex) const
 // maxbatchSize: maximum batch size for the plugin layer
 void DetectionOutput::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
+    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     ASSERT(nbInputs == 3);
     ASSERT(nbOutputs == 2);
@@ -245,21 +498,62 @@ void DetectionOutput::configurePlugin(const Dims* inputDims, int nbInputs, const
 
     // Verify C2
     ASSERT(numPriors * param.numClasses == inputDims[param.inputOrder[1]].d[0]);
+
+    // initialize mType
+    mType = inputTypes[0];
+}
+
+void DetectionOutputDynamic::configurePlugin(
+    const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) noexcept
+{
+    ASSERT(nbInputs == 3);
+    ASSERT(nbOutputs == 2);
+
+    // Verify all the input dimensions
+    for (int i = 0; i < nbInputs; i++)
+    {
+        ASSERT(in[i].desc.dims.nbDims == 4);
+    }
+
+    // Verify all the output dimensions
+    for (int i = 0; i < nbOutputs; i++)
+    {
+        ASSERT(out[i].desc.dims.nbDims == 4);
+    }
+
+    // Configure C1, C2 and numPriors
+    // Input ordering  C1, C2, numPriors
+    C1 = in[param.inputOrder[0]].desc.dims.d[1];
+    C2 = in[param.inputOrder[1]].desc.dims.d[1];
+
+    const int nbBoxCoordinates = 4;
+    numPriors = in[param.inputOrder[2]].desc.dims.d[2] / nbBoxCoordinates;
+    const int numLocClasses = param.shareLocation ? 1 : param.numClasses;
+
+    // Verify C1
+    ASSERT(numPriors * numLocClasses * nbBoxCoordinates == in[param.inputOrder[0]].desc.dims.d[1]);
+
+    // Verify C2
+    ASSERT(numPriors * param.numClasses == in[param.inputOrder[1]].desc.dims.d[1]);
+
+    // initialize mType
+    mType = in[0].desc.type;
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void DetectionOutput::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator)
+    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
 {
 }
 
 // Detach the plugin object from its execution context.
-void DetectionOutput::detachFromContext() {}
+void DetectionOutput::detachFromContext() noexcept {}
 
 // Plugin creator constructor
-NMSPluginCreator::NMSPluginCreator()
+NMSBasePluginCreator::NMSBasePluginCreator() noexcept
 {
     // NMS Plugin field meta data {name,  data, type, length}
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("shareLocation", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("varianceEncodedInTarget", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("backgroundLabelId", nullptr, PluginFieldType::kINT32, 1));
@@ -272,31 +566,41 @@ NMSPluginCreator::NMSPluginCreator()
     mPluginAttributes.emplace_back(PluginField("confSigmoid", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("isNormalized", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("codeType", nullptr, PluginFieldType::kINT32, 1));
-
+    mPluginAttributes.emplace_back(PluginField("scoreBits", nullptr, PluginFieldType::kINT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
 
-// Returns the plugin name
-const char* NMSPluginCreator::getPluginName() const
+NMSPluginCreator::NMSPluginCreator() noexcept
 {
-    return NMS_PLUGIN_NAME;
+    mPluginName = NMS_PLUGIN_NAMES[0];
+}
+
+NMSDynamicPluginCreator::NMSDynamicPluginCreator() noexcept
+{
+    mPluginName = NMS_PLUGIN_NAMES[1];
+}
+
+// Returns the plugin name
+const char* NMSBasePluginCreator::getPluginName() const noexcept
+{
+    return mPluginName.c_str();
 }
 
 // Returns the plugin version
-const char* NMSPluginCreator::getPluginVersion() const
+const char* NMSBasePluginCreator::getPluginVersion() const noexcept
 {
     return NMS_PLUGIN_VERSION;
 }
 
 // Returns the plugin field names
-const PluginFieldCollection* NMSPluginCreator::getFieldNames()
+const PluginFieldCollection* NMSBasePluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
 // Creates the NMS plugin
-IPluginV2Ext* NMSPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* NMSPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     // Default init values for TF SSD network
@@ -304,6 +608,8 @@ IPluginV2Ext* NMSPluginCreator::createPlugin(const char* name, const PluginField
     params.inputOrder[0] = 0;
     params.inputOrder[1] = 2;
     params.inputOrder[2] = 1;
+    // scoreBits defaults to 16
+    mScoreBits = 16;
 
     // Read configurations from  each fields
     for (int i = 0; i < fc->nbFields; ++i)
@@ -373,18 +679,127 @@ IPluginV2Ext* NMSPluginCreator::createPlugin(const char* name, const PluginField
             ASSERT(fields[i].type == PluginFieldType::kINT32);
             params.codeType = static_cast<CodeTypeSSD>(*(static_cast<const int*>(fields[i].data)));
         }
+        else if (!strcmp(attrName, "scoreBits"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            mScoreBits = *(static_cast<const int32_t*>(fields[i].data));
+        }
     }
 
     DetectionOutput* obj = new DetectionOutput(params);
+    obj->setScoreBits(mScoreBits);
     obj->setPluginNamespace(mNamespace.c_str());
     return obj;
 }
 
-IPluginV2Ext* NMSPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2DynamicExt* NMSDynamicPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+{
+    const PluginField* fields = fc->fields;
+    // Default init values for TF SSD network
+    params.codeType = CodeTypeSSD::TF_CENTER;
+    params.inputOrder[0] = 0;
+    params.inputOrder[1] = 2;
+    params.inputOrder[2] = 1;
+    // scoreBits defaults to 16
+    mScoreBits = 16;
+
+    // Read configurations from  each fields
+    for (int i = 0; i < fc->nbFields; ++i)
+    {
+        const char* attrName = fields[i].name;
+        if (!strcmp(attrName, "shareLocation"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            params.shareLocation = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "varianceEncodedInTarget"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            params.varianceEncodedInTarget = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "backgroundLabelId"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            params.backgroundLabelId = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "numClasses"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            params.numClasses = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "topK"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            params.topK = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "keepTopK"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            params.keepTopK = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "confidenceThreshold"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            params.confidenceThreshold = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "nmsThreshold"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            params.nmsThreshold = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "confSigmoid"))
+        {
+            params.confSigmoid = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "isNormalized"))
+        {
+            params.isNormalized = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "inputOrder"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            const int size = fields[i].length;
+            const int* o = static_cast<const int*>(fields[i].data);
+            for (int j = 0; j < size; j++)
+            {
+                params.inputOrder[j] = *o;
+                o++;
+            }
+        }
+        else if (!strcmp(attrName, "codeType"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            params.codeType = static_cast<CodeTypeSSD>(*(static_cast<const int*>(fields[i].data)));
+        }
+        else if (!strcmp(attrName, "scoreBits"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            mScoreBits = *(static_cast<const int32_t*>(fields[i].data));
+        }
+    }
+
+    DetectionOutputDynamic* obj = new DetectionOutputDynamic(params);
+    obj->setScoreBits(mScoreBits);
+    obj->setPluginNamespace(mNamespace.c_str());
+    return obj;
+}
+
+IPluginV2Ext* NMSPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call NMS::destroy()
     DetectionOutput* obj = new DetectionOutput(serialData, serialLength);
+    obj->setPluginNamespace(mNamespace.c_str());
+    return obj;
+}
+
+IPluginV2DynamicExt* NMSDynamicPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
+{
+    // This object will be deleted when the network is destroyed, which will
+    // call NMS::destroy()
+    DetectionOutputDynamic* obj = new DetectionOutputDynamic(serialData, serialLength);
     obj->setPluginNamespace(mNamespace.c_str());
     return obj;
 }

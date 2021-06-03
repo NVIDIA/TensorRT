@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,26 +36,24 @@ typedef enum
 
 pluginStatus_t allClassNMS(cudaStream_t stream, int num, int num_classes, int num_preds_per_class, int top_k,
     float nms_threshold, bool share_location, bool isNormalized, DataType DT_SCORE, DataType DT_BBOX, void* bbox_data,
-    void* beforeNMS_scores, void* beforeNMS_index_array, void* afterNMS_scores, void* afterNMS_index_array,
-    bool flipXY = false);
+    void* beforeNMS_scores, void* beforeNMS_index_array, void* afterNMS_scores, void* afterNMS_index_array, bool flipXY,
+    const float score_shift);
 
 pluginStatus_t detectionInference(cudaStream_t stream, int N, int C1, int C2, bool shareLocation,
     bool varianceEncodedInTarget, int backgroundLabelId, int numPredsPerClass, int numClasses, int topK, int keepTopK,
     float confidenceThreshold, float nmsThreshold, CodeTypeSSD codeType, DataType DT_BBOX, const void* locData,
     const void* priorData, DataType DT_SCORE, const void* confData, void* keepCount, void* topDetections,
-    void* workspace, bool isNormalized = true, bool confSigmoid = false
-
-);
+    void* workspace, bool isNormalized = true, bool confSigmoid = false, int scoreBits = 16);
 
 pluginStatus_t nmsInference(cudaStream_t stream, int N, int boxesSize, int scoresSize, bool shareLocation,
     int backgroundLabelId, int numPredsPerClass, int numClasses, int topK, int keepTopK, float scoreThreshold,
     float iouThreshold, DataType DT_BBOX, const void* locData, DataType DT_SCORE, const void* confData, void* keepCount,
     void* nmsedBoxes, void* nmsedScores, void* nmsedClasses, void* workspace, bool isNormalized = true,
-    bool confSigmoid = false, bool clipBoxes = true);
+    bool confSigmoid = false, bool clipBoxes = true, int scoreBits = 16);
 
 pluginStatus_t gatherTopDetections(cudaStream_t stream, bool shareLocation, int numImages, int numPredsPerClass,
     int numClasses, int topK, int keepTopK, DataType DT_BBOX, DataType DT_SCORE, const void* indices,
-    const void* scores, const void* bboxData, void* keepCount, void* topDetections);
+    const void* scores, const void* bboxData, void* keepCount, void* topDetections, const float scoreShift);
 
 size_t detectionForwardBBoxDataSize(int N, int C1, DataType DT_BBOX);
 
@@ -66,12 +64,12 @@ size_t sortScoresPerClassWorkspaceSize(int num, int num_classes, int num_preds_p
 size_t sortScoresPerImageWorkspaceSize(int num_images, int num_items_per_image, DataType DT_SCORE);
 
 pluginStatus_t sortScoresPerImage(cudaStream_t stream, int num_images, int num_items_per_image, DataType DT_SCORE,
-    void* unsorted_scores, void* unsorted_bbox_indices, void* sorted_scores, void* sorted_bbox_indices,
-    void* workspace);
+    void* unsorted_scores, void* unsorted_bbox_indices, void* sorted_scores, void* sorted_bbox_indices, void* workspace,
+    int score_bits);
 
 pluginStatus_t sortScoresPerClass(cudaStream_t stream, int num, int num_classes, int num_preds_per_class,
     int background_label_id, float confidence_threshold, DataType DT_SCORE, void* conf_scores_gpu,
-    void* index_array_gpu, void* workspace);
+    void* index_array_gpu, void* workspace, const int score_bits, const float score_shift);
 
 size_t calculateTotalWorkspaceSize(size_t* workspaces, int count);
 

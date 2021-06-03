@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -58,6 +58,14 @@ def combine_dicts(dict0, dict1):
     combined.update(dict0)
     combined.update(dict1)
     return combined
+
+
+def is_dynamic_dimension(dim):
+    return not isinstance(dim, int) or dim < 0
+
+
+def is_dynamic_shape(shape):
+    return any(is_dynamic_dimension(dim) for dim in shape)
 
 
 # Special type of list that synchronizes contents with another list.

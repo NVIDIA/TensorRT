@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -222,24 +222,51 @@ class TestOther(object):
     def test_0_iterations(self):
         run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--iterations=0"])
 
+    def test_subprocess_sanity(self):
+        run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--use-subprocess"])
+
 
     def test_custom_tolerance(self):
-        run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--iterations=0", "--atol=1.0", "--rtol=1.0"])
+        run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--onnxrt", "--iterations=0", "--atol=1.0", "--rtol=1.0"])
+
+
+    def test_custom_per_output_tolerance(self):
+        run_polygraphy_run([ONNX_MODELS["identity_identity"].path, "--onnxrt", "--onnxrt", "--onnx-outputs", "mark", "all",
+                            "--atol", "identity_out_0,1.0", "identity_out_2,3.0", "0.5",
+                            "--rtol", "identity_out_0,1.0", "identity_out_2,3.0", "0.5"])
 
 
     def test_top_k(self):
         run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--top-k=5"])
 
 
-    def test_save_load_outputs(self):
-        with tempfile.NamedTemporaryFile() as outfile0, tempfile.NamedTemporaryFile() as outfile1:
-            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-results", outfile0.name])
-            run_polygraphy_run(["--load-results", outfile0.name, "--save-results", outfile1.name]) # Copy
-            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-results", outfile0.name, outfile1.name])
-            # Should work even with no runners specified
-            run_polygraphy_run([ONNX_MODELS["identity"].path, "--load-results", outfile0.name, outfile1.name])
-            # Should work with only one file
-            run_polygraphy_run([ONNX_MODELS["identity"].path, "--load-results", outfile0.name])
+    def test_save_load_outputs(self, tmp_path):
+        OUTFILE0 = os.path.join(tmp_path, "outputs0.pkl")
+        OUTFILE1 = os.path.join(tmp_path, "outputs1.pkl")
+        run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-results", OUTFILE0])
+        run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-results", OUTFILE1])
+
+        status = run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-results", OUTFILE0, OUTFILE1])
+        assert "Difference is within tolerance" in status.stdout + status.stderr # Make sure it actually compared stuff.
+
+        # Should work with only one file
+        status = run_polygraphy_run([ONNX_MODELS["identity"].path, "--load-results", OUTFILE0])
+        assert "Difference is within tolerance" not in status.stdout + status.stderr # Make sure it DIDN'T compare stuff.
+
+        # Should work even with no runners specified
+        status = run_polygraphy_run([ONNX_MODELS["identity"].path, "--load-results", OUTFILE0, OUTFILE1])
+        assert "Difference is within tolerance" in status.stdout + status.stderr # Make sure it actually compared stuff.
+
+        # Should work even when comparing a single runner to itself.
+        status = run_polygraphy_run([ONNX_MODELS["identity"].path, "--load-results", OUTFILE0, OUTFILE0])
+        assert "Difference is within tolerance" in status.stdout + status.stderr # Make sure it actually compared stuff.
+
+
+    def test_save_load_inputs(self):
+        with tempfile.NamedTemporaryFile() as infile0, tempfile.NamedTemporaryFile() as infile1:
+            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-input-data", infile0.name])
+            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-input-data", infile0.name, "--save-input-data", infile1.name]) # Copy
+            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-input-data", infile0.name, infile1.name])
 
 
     @pytest.mark.skipif(version(trt.__version__) < version("7.0"), reason="Unsupported for TRT 6")

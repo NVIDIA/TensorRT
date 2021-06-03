@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,11 +25,8 @@ clean:
 build: clean
 	python3 setup.py bdist_wheel
 
-install_venv: build
-	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl
-
 install: build
-	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl --user
+	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl
 
 docs:
 	mkdir -p build/docs

@@ -22,8 +22,8 @@ parameter.
 ## Running the Example
 
 1. Install prerequisites
-    a. Ensure that TensorRT is installed
-    b. Install other dependencies with `python3 -m pip install -r requirements.txt`
+    * Ensure that TensorRT is installed
+    * Install other dependencies with `python3 -m pip install -r requirements.txt`
 
 2. Run the example:
     ```bash

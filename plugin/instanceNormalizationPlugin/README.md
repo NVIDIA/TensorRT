@@ -30,6 +30,8 @@ This plugin consists of the plugin creator class `InstanceNormalizationPluginCre
 |`float`     |`epsilon`                 |A small number to prevent being divided by zero during normalization.
 |`Weights *` |`scale`                   |A pointer to weights which contains information about scale factors for normalization. The definition of `Weights` can be found in the [NvInfer.h](https://docs.nvidia.com/deeplearning/sdk/tensorrt-api/c_api/_nv_infer_8h_source.html) header.
 |`Weights *` |`bias`                    |A pointer to weights which contains information about the bias values for normalization. The definition of `Weights` can be found in the [NvInfer.h](https://docs.nvidia.com/deeplearning/sdk/tensorrt-api/c_api/_nv_infer_8h_source.html) header.
+|`int`       |`relu`                    |A value used to enable leaky relu activation
+|`float`     |`alpha`                   |A small negative slope for the leaky relu activation 
 
 
 ## Additional resources

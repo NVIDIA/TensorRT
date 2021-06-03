@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,15 +48,15 @@ inline bool parseArgs(Args& args, int argc, char* argv[])
     {
         int arg;
         // clang-format off
-        static struct option long_options[] = 
+        static struct option long_options[] =
         {
-            {"help", no_argument, 0, 'h'}, 
+            {"help", no_argument, 0, 'h'},
             {"engine", required_argument, 0, 'e'},
-            {"batch_size", required_argument, 0, 'b'}, 
+            {"batch_size", required_argument, 0, 'b'},
             {"sequence_length", no_argument, 0, 's'},
-            {"iterations", required_argument, 0, 'i'}, 
+            {"iterations", required_argument, 0, 'i'},
             {"warm_up_runs", required_argument, 0, 'w'},
-            {"ramdon_seed", required_argument, 0, 'r'}, 
+            {"ramdon_seed", required_argument, 0, 'r'},
             {"enable_graph", no_argument, 0, 'g'},
             {nullptr, 0, nullptr, 0}
         };

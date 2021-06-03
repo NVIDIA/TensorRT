@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,21 @@
 #include "bboxUtils.h"
 #include "cub_helper.h"
 
+inline __device__ __half add_fb(const __half & a, const __half & b) {
+#if __CUDA_ARCH__ >= 530
+    return a + b;
+#else
+    return __float2half(__half2float(a) + __half2float(b));
+#endif
+}
+
+inline __device__ bool ge_fb(const __half & a, const __half & b) {
+#if __CUDA_ARCH__ >= 530
+    return a >= b;
+#else
+    return __half2float(a) >= __half2float(b);
+#endif
+}
 
 template <typename T_SCORE, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta)
@@ -30,6 +45,7 @@ __launch_bounds__(nthds_per_cta)
         const float confidence_threshold,
         T_SCORE* conf_scores_gpu,
         T_SCORE* temp_scores,
+        T_SCORE score_shift,
         int* temp_idx,
         int* d_offsets)
 {
@@ -50,25 +66,45 @@ __launch_bounds__(nthds_per_cta)
             {
                 // Set scores to 0
                 // Set label = -1
-                temp_scores[targetIdx] = 0.f;
+                // add shift of 1.0 to normalize the score values
+                // to the range [1, 2). 
+                // add a constant shift to scores will not change the sort
+                // result, but will help reduce the computation because
+                // we only need to sort the mantissa part of the floating-point
+                // numbers
+                temp_scores[targetIdx] = score_shift;
                 temp_idx[targetIdx] = -1;
-                conf_scores_gpu[targetIdx] = 0.f;
+                conf_scores_gpu[targetIdx] = score_shift;
             }
             // "Clear" scores lower than threshold
             else
             {
                 if (float(score) > confidence_threshold)
                 {
-                    temp_scores[targetIdx] = score;
+                    // add shift of 1.0 to normalize the score values
+                    // to the range [1, 2). 
+                    // add a constant shift to scores will not change the sort
+                    // result, but will help reduce the computation because
+                    // we only need to sort the mantissa part of the floating-point
+                    // numbers
+                    temp_scores[targetIdx] = add_fb(score, score_shift);
+                    if (ge_fb(temp_scores[targetIdx], T_SCORE(2.f - 1.f / 1024.f)))
+                        temp_scores[targetIdx] = T_SCORE(2.f - 1.f / 1024.f);
                     temp_idx[targetIdx] = cur_idx + i * numPredsPerBatch;
                 }
                 else
                 {
                     // Set scores to 0
                     // Set label = -1
-                    temp_scores[targetIdx] = 0.f;
+                    // add shift of 1.0 to normalize the score values
+                    // to the range [1, 2). 
+                    // add a constant shift to scores will not change the sort
+                    // result, but will help reduce the computation because
+                    // we only need to sort the mantissa part of the floating-point
+                    // numbers
+                    temp_scores[targetIdx] = score_shift;
                     temp_idx[targetIdx] = -1;
-                    conf_scores_gpu[targetIdx] = 0.f;
+                    conf_scores_gpu[targetIdx] = score_shift;
                     // TODO: HERE writing memory too many times
                 }
             }
@@ -95,7 +131,10 @@ pluginStatus_t sortScoresPerClass_gpu(
     const float confidence_threshold,
     void* conf_scores_gpu,
     void* index_array_gpu,
-    void* workspace)
+    void* workspace,
+    const int score_bits,
+    const float score_shift
+)
 {
     const int num_segments = num * num_classes;
     void* temp_scores = workspace;
@@ -107,27 +146,41 @@ pluginStatus_t sortScoresPerClass_gpu(
 
     const int BS = 512;
     const int GS = (num_classes * num_preds_per_class + BS - 1) / BS;
+    // prepare the score, index, and offsets for CUB radix sort
+    // also normalize the scores to the range [1, 2)
+    // so we only need to sort the mantissa of floating-point numbers
+    // since their sign bit and exponential bits are identical
+    // we will subtract the 1.0 shift in gatherTopDetections()
     prepareSortData<T_SCORE, BS><<<GS, BS, 0, stream>>>(num, num_classes, num_preds_per_class,
                                                         background_label_id, confidence_threshold,
                                                         (T_SCORE*) conf_scores_gpu,
                                                         (T_SCORE*) temp_scores,
+                                                        T_SCORE(score_shift),
                                                         (int*) temp_idx,
                                                         (int*) d_offsets);
 
     size_t temp_storage_bytes = cubSortPairsWorkspaceSize<T_SCORE, int>(arrayLen, num_segments);
+    size_t begin_bit = 0;
+    size_t end_bit = sizeof(T_SCORE) * 8;
+    if (sizeof(T_SCORE) == 2 && score_bits > 0 && score_bits <= 10)
+    {
+        // only sort score_bits in 10 mantissa bits.
+        end_bit = 10;
+        begin_bit = end_bit - score_bits;
+    }
     cub::DeviceSegmentedRadixSort::SortPairsDescending(
         cubWorkspace, temp_storage_bytes,
         (const T_SCORE*) (temp_scores), (T_SCORE*) (conf_scores_gpu),
         (const int*) (temp_idx), (int*) (index_array_gpu),
         arrayLen, num_segments,
         (const int*) d_offsets, (const int*) d_offsets + 1,
-        0, sizeof(T_SCORE) * 8,
+        begin_bit, end_bit,
         stream);
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
 }
 
-// sortScoresPerClass LAUNCH CONFIG 
+// sortScoresPerClass LAUNCH CONFIG
 typedef pluginStatus_t (*sspcFunc)(cudaStream_t,
                                 const int,
                                 const int,
@@ -136,7 +189,9 @@ typedef pluginStatus_t (*sspcFunc)(cudaStream_t,
                                 const float,
                                 void*,
                                 void*,
-                                void*);
+                                void*,
+                                const int,
+                                const float);
 struct sspcLaunchConfig
 {
     DataType t_score;
@@ -172,7 +227,10 @@ pluginStatus_t sortScoresPerClass(
     const DataType DT_SCORE,
     void* conf_scores_gpu,
     void* index_array_gpu,
-    void* workspace)
+    void* workspace,
+    const int score_bits,
+    const float score_shift
+)
 {
     sspcLaunchConfig lc = sspcLaunchConfig(DT_SCORE);
     for (unsigned i = 0; i < sspcLCOptions.size(); ++i)
@@ -188,7 +246,9 @@ pluginStatus_t sortScoresPerClass(
                                            confidence_threshold,
                                            conf_scores_gpu,
                                            index_array_gpu,
-                                           workspace);
+                                           workspace,
+                                           score_bits,
+                                           score_shift);
         }
     }
     return STATUS_BAD_PARAM;

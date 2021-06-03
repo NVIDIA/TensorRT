@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@
 
 #define CUDA_MEM_ALIGN 256
 
-// HASH 
+// HASH
 unsigned int hash(const void* array_, size_t size)
 {
     // Apply hashing only when debugging RPN codes.
@@ -50,7 +50,7 @@ unsigned int hash(const void* array_, size_t size)
     }
 }
 
-// ALIGNPTR 
+// ALIGNPTR
 int8_t* alignPtr(int8_t* ptr, uintptr_t to)
 {
     uintptr_t addr = (uintptr_t) ptr;
@@ -61,7 +61,7 @@ int8_t* alignPtr(int8_t* ptr, uintptr_t to)
     return (int8_t*) addr;
 }
 
-// NEXTWORKSPACEPTR 
+// NEXTWORKSPACEPTR
 int8_t* nextWorkspacePtr(int8_t* ptr, uintptr_t previousWorkspaceSize)
 {
     uintptr_t addr = (uintptr_t) ptr;
@@ -69,7 +69,7 @@ int8_t* nextWorkspacePtr(int8_t* ptr, uintptr_t previousWorkspaceSize)
     return alignPtr((int8_t*) addr, CUDA_MEM_ALIGN);
 }
 
-// CALCULATE TOTAL WORKSPACE SIZE 
+// CALCULATE TOTAL WORKSPACE SIZE
 size_t calculateTotalWorkspaceSize(size_t* workspaces, int count)
 {
     size_t total = 0;
@@ -86,7 +86,7 @@ size_t calculateTotalWorkspaceSize(size_t* workspaces, int count)
 
 using nvinfer1::DataType;
 
-// DATA TYPE SIZE 
+// DATA TYPE SIZE
 size_t dataTypeSize(const DataType dtype)
 {
     switch (dtype)
@@ -98,7 +98,7 @@ size_t dataTypeSize(const DataType dtype)
     }
 }
 
-// CUB 
+// CUB
 /*
 size_t cubSortFloatIntPairsWorkspaceSize(int num_items, int num_segments)
 {
@@ -106,9 +106,9 @@ size_t cubSortFloatIntPairsWorkspaceSize(int num_items, int num_segments)
     cub::DeviceSegmentedRadixSort::SortPairsDescending(
     (int *)NULL, temp_storage_bytes,
     (const float *)NULL, (float *)NULL,
-    (const int *)NULL, (int *)NULL, 
+    (const int *)NULL, (int *)NULL,
     num_items,     // # items
-    num_segments,  // # segments 
+    num_segments,  // # segments
     (const int *)NULL, (const int *)NULL);
     return temp_storage_bytes;
 }
@@ -119,9 +119,9 @@ size_t cubSortFloatBboxInfoPairsWorkspaceSize(int num_items, int num_segments)
     cub::DeviceSegmentedRadixSort::SortPairsDescending(
     (int *)NULL, temp_storage_bytes,
     (const float *)NULL, (float *)NULL,
-    (const BboxInfo<float> *)NULL, (BboxInfo<float> *)NULL, 
+    (const BboxInfo<float> *)NULL, (BboxInfo<float> *)NULL,
     num_items,     // # items
-    num_segments,  // # segments 
+    num_segments,  // # segments
     (const int *)NULL, (const int *)NULL);
     return temp_storage_bytes;
 }

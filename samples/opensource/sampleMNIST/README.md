@@ -5,6 +5,7 @@
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -52,33 +53,44 @@ The Scale layer implements a per-tensor, per-channel, or per-element affine tran
 [SoftMax layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#softmax-layer)
 The SoftMax layer applies the SoftMax function on the input tensor along an input dimension specified by the user.
 
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    pushd $TRT_DATADIR/mnist
+    pip install Pillow
+    python3 download_pgms.py
+    popd
+    ```
 	
 ## Running the sample
 
-1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleMNIST` directory. The binary named `sample_mnist` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleMNIST
-	make
-	```
-	Where `<TensorRT root directory>` is where you installed TensorRT.
-	
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
+
 2. Run the sample to perform inference on the digit:
-    ```
-	./sample_mnist [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
+    ```bash
+	sample_mnist [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
 	```
+
+    For example:
+    ```bash
+    sample_mnist --datadir $TRT_DATADIR/mnist --fp16
+    ```
+
 	This sample reads three Caffe files to build the network:
-	-   `mnist.prototxt` 
+	- `mnist.prototxt` 
 	The prototxt file that contains the network design.
 
-	-   `mnist.caffemodel`
+	- `mnist.caffemodel`
 	The model file which contains the trained weights for the network.
 
-	-   `mnist_mean.binaryproto`
+	- `mnist_mean.binaryproto`
 	The binaryproto file which contains the means.
 
 	This sample can be run in FP16 and INT8 modes as well.
 
-	**Note:** By default, the sample expects these files to be in either the `data/samples/mnist/` or `data/mnist/` directories. The list of default directories can be changed by adding one or more paths with `--datadir=/new/path/` as a command line argument.
+	**NOTE:** By default, the sample expects these files to be in either the `data/samples/mnist/` or `data/mnist/` directories. The list of default directories can be changed by adding one or more paths with `--datadir=/new/path/` as a command line argument.
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following; ASCII rendering of the input image with digit 3:
     ```

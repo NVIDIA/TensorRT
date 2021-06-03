@@ -6,6 +6,7 @@
 - [How does this sample work?](#how-does-this-sample-work)
 	* [TensorRT API layers](#tensorrt-api-layers)
 - [Prerequisites](#prerequisites)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -66,20 +67,26 @@ When you build a network by individually creating every layer, ensure you provid
 	IConvolutionLayer* conv1 = network->addConvolutionNd(*scale_1->getOutput(0), 20, Dims{2, {5, 5}, {}}, weightMap["conv1filter"], weightMap["conv1bias"]);
 	```
 
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    ```
+
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleMNISTAPI` directory. The binary named `sample_mnist_api` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleMNISTAPI
-	make
-	```
-
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2.  Run the sample to perform inference on the digit:
+	```bash
+	sample_mnist_api [-h] [--datadir=/path/to/data/dir/] [--useDLACore=N]
 	```
-	./sample_mnist_api [-h] [--datadir=/path/to/data/dir/] [--useDLACore=N]
-	```
+
+    For example:
+    ```bash
+    sample_mnist_api --datadir $TRT_DATADIR/mnist
+    ```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following; ASCII rendering of the input image with digit 9:
 	```

@@ -8,7 +8,7 @@
     * [Attention mechanisms](#attention-mechanisms)
     * [Beam search and projection](#beam-search-and-projection)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
-- [Prerequisites](#prerequisites)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -77,32 +77,32 @@ The Shuffle layer implements a reshape and transpose operator for tensors.  As u
 [TopK layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#topk-layer)
 The TopK layer finds the top K maximum (or minimum) elements along a dimension, returning a reduced tensor and a tensor of index positions.  As used in the `softmax_likelihood.cpp` file.
 
-## Prerequisites
+## Preparing sample data
 
-The model was trained on the [German to English (De-En) dataset](https://github.com/tensorflow/nmt#wmt-german-english) in the WMT database. Before you can run the sample, you need trained model weights and the text and vocabulary data for performing inference.
+1. The NMT model was trained on the [German to English (De-En) dataset](https://github.com/tensorflow/nmt#wmt-german-english) in the WMT database. Before you can run the sample, you need trained model weights and the text and vocabulary data for performing inference.
 
-Run the following command from the `<TensorRT root directory>`. This will download the pre-trained weights, a vocabulary file and an example input text file. In addition, it will preprocess the input text file so that sampleNMT can translate it. The following command prepares all necessary input data.
-`./samples/sampleNMT/get_newstest2015.sh`
+    Run the following command to download the pre-trained weights, a vocabulary file and an example input text file. In addition, it will preprocess the input text file so that sampleNMT can translate it.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    pushd /tmp
+    $TRT_OSSPATH/samples/opensource/sampleNMT/get_newstest2015.sh
+    mkdir -p $TRT_DATADIR/nmt && mv data/nmt/* $TRT_DATADIR/nmt/
+    popd
+    ```
 
 ## Running the sample
 
 Now that you have trained weights, downloaded the text and vocabulary data, and compiled the sample you can run the sample.
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleNMT` directory. The binary named `sample_nmt` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleNMT
-	make
-	```
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
-	Where `<TensorRT root directory>` is where you installed TensorRT.
-
-2.  Run the sample to generate the example translation from German to English:
-	```
+2. Run the sample to generate the example translation from German to English:
+	```bash
 	sample_nmt --data_writer=text
 	```
 
-	**Note:** If your data is not located in `<path_to_tensorrt>/data/samples/nmt/deen`, use the `--data_dir=<path_to_data_directory>` option. Where `<path_to_data_directory>` is the path to your data directory. For example:
-    ```
+	**NOTE:** If your data is not located in `<path_to_tensorrt>/data/samples/nmt/deen`, use the `--data_dir=<path_to_data_directory>` option. Where `<path_to_data_directory>` is the path to your data directory. For example:
+    ```bash
     sample_nmt --data_dir=<path_to_data_directory> --data_writer=text
     ```
 
@@ -110,14 +110,14 @@ Now that you have trained weights, downloaded the text and vocabulary data, and 
 
 	The translated output is located in the `./translation_output.txt` file.
 
-3.  Run the sample to get the BLEU score (the quality of the translated text) for the first 100 sentences:
-	```
+3. Run the sample to get the BLEU score (the quality of the translated text) for the first 100 sentences:
+	```bash
 	sample_nmt --max_inference_samples=100 --data-writer=bleu
 	```
 
-4.  Verify your translated output.
-		a. Compare your translated output to the `<path_to_tensorrt>/data/newstest2015.tok.bpe.32000.en` translated output file in the TensorRT package.
-		b. Compare the quality of your translated output with the 25.85 BLEU score quality metric file in the TensorRT package.
+4. Verify your translated output.
+    a. Compare your translated output to the `$TRT_DATADIR/data/newstest2015.tok.bpe.32000.en` translated output file in the TensorRT package.
+    b. Compare the quality of your translated output with the 25.85 BLEU score quality metric file in the TensorRT package.
 
 
 ### Sample `--help` options

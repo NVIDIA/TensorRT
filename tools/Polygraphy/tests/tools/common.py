@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,8 @@ polygraphy = os.path.join(BIN_DIR, "polygraphy")
 
 
 def check_subprocess(status):
-    assert not status.returncode
+    if status.returncode:
+        G_LOGGER.critical(status.stdout + status.stderr)
 
 
 def run_subtool(subtool, additional_opts, disable_verbose=False):
@@ -34,6 +35,8 @@ def run_subtool(subtool, additional_opts, disable_verbose=False):
         cmd += ["-vvvvv"]
     G_LOGGER.info("Running command: {:}".format(" ".join(cmd)))
     status = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+    status.stdout = status.stdout.decode()
+    status.stderr = status.stderr.decode()
     check_subprocess(status)
     return status
 

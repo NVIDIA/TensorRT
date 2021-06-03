@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import onnx.numpy_helper
 from onnx_graphsurgeon.importers.base_importer import BaseImporter
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
-from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable
+from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 from onnx_graphsurgeon.util import misc
 
@@ -44,15 +44,19 @@ ONNX_PYTHON_ATTR_MAPPING = {
 }
 
 def get_onnx_tensor_shape(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]) -> List[int]:
-    shape = []
+    shape = None
     if isinstance(onnx_tensor, onnx.TensorProto):
         shape = onnx_tensor.dims
     else:
-        for dim in onnx_tensor.type.tensor_type.shape.dim:
-            if dim.dim_param:
-                shape.append(dim.dim_param)
-            else:
-                shape.append(dim.dim_value)
+        if onnx_tensor.type.tensor_type.HasField("shape"):
+            shape = []
+            for dim in onnx_tensor.type.tensor_type.shape.dim:
+                if dim.HasField("dim_param"):
+                    shape.append(dim.dim_param)
+                elif dim.HasField("dim_value"):
+                    shape.append(dim.dim_value)
+                else:
+                    shape.append(None)
     return shape
 
 
@@ -65,23 +69,31 @@ def get_onnx_tensor_dtype(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorPro
         return onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_type]
     return None
 
-
 class OnnxImporter(BaseImporter):
     @staticmethod
     def get_opset(model: onnx.ModelProto):
         try:
-            return model.opset_import[0].version
+            for importer in OnnxImporter.get_import_domains(model):
+                if importer.domain == "" or importer.domain == "ai.onnx":
+                    return importer.version
+            G_LOGGER.warning("Model does not contain ONNX domain opset information! Using default opset.")
+            return None
         except:
             G_LOGGER.warning("Model does not contain opset information! Using default opset.")
             return None
 
 
     @staticmethod
+    def get_import_domains(model: onnx.ModelProto):
+        return model.opset_import
+
+
+    @staticmethod
     def import_tensor(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]) -> Tensor:
-        try:
-            values = onnx.numpy_helper.to_array(onnx_tensor)
-            return Constant(name=onnx_tensor.name, values=values)
-        except ValueError:
+        if isinstance(onnx_tensor, onnx.TensorProto):
+            data_location = int(onnx_tensor.data_location) if onnx_tensor.HasField("data_location") else None
+            return Constant(name=onnx_tensor.name, values=LazyValues(onnx_tensor), data_location=data_location)
+        else:
             return Variable(name=onnx_tensor.name, dtype=get_onnx_tensor_dtype(onnx_tensor), shape=get_onnx_tensor_shape(onnx_tensor))
 
 
@@ -152,7 +164,7 @@ class OnnxImporter(BaseImporter):
 
 
     @staticmethod
-    def import_graph(onnx_graph: onnx.GraphProto, tensor_map: "OrderedDict[str, Tensor]"=None, opset=None) -> Graph:
+    def import_graph(onnx_graph: onnx.GraphProto, tensor_map: "OrderedDict[str, Tensor]"=None, opset=None, import_domains: onnx.OperatorSetIdProto=None) -> Graph:
         """
         Imports a Graph from an ONNX Graph.
 
@@ -186,40 +198,40 @@ class OnnxImporter(BaseImporter):
 
 
         # Import initializers contents into Constants.
-        G_LOGGER.debug("Importing initializers")
+        G_LOGGER.verbose("Importing initializers")
         for initializer in onnx_graph.initializer:
             get_tensor(initializer)
 
         # Import all tensors whose shapes are known. Tensors may be repeated, and some of these
         # duplicates may not include shape/dtype information, so overwrite is set to True
         # so that we can capture all the information available about the tensor
-        G_LOGGER.debug("Importing tensors with known shapes")
+        G_LOGGER.verbose("Importing tensors with known shapes")
         for tensor in onnx_graph.value_info:
             get_tensor(tensor, overwrite=True)
 
         # Import graph inputs and outputs. Initializers are not considered to be inputs.
         # Graph inputs and outputs can never come from the outer graph!
         initializer_names = set([tensor.name for tensor in onnx_graph.initializer])
-        G_LOGGER.debug("Importing graph inputs")
+        G_LOGGER.verbose("Importing graph inputs")
         graph_inputs = [] # List[Tensor]
         for inp in onnx_graph.input:
             if inp.name not in initializer_names:
                 tensor = get_tensor(inp, check_outer_graph=False)
                 graph_inputs.append(tensor)
 
-        G_LOGGER.debug("Importing graph outputs")
+        G_LOGGER.verbose("Importing graph outputs")
         graph_outputs = [] # List[Tensor]
         for out in onnx_graph.output:
             tensor = get_tensor(out, check_outer_graph=False)
             graph_outputs.append(tensor)
 
-        G_LOGGER.debug("Importing nodes")
+        G_LOGGER.verbose("Importing nodes")
         nodes = [] # List[Node]
         for onnx_node in onnx_graph.node:
             node = OnnxImporter.import_node(onnx_node, tensor_map, subgraph_tensor_map)
             nodes.append(node)
 
-        return Graph(nodes=nodes, inputs=graph_inputs, outputs=graph_outputs, name=onnx_graph.name, doc_string=onnx_graph.doc_string, opset=opset)
+        return Graph(nodes=nodes, inputs=graph_inputs, outputs=graph_outputs, name=onnx_graph.name, doc_string=onnx_graph.doc_string, opset=opset, import_domains=import_domains)
 
 
 def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
@@ -232,4 +244,4 @@ def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
     Returns:
         Graph: A corresponding onnx-graphsurgeon Graph.
     """
-    return OnnxImporter.import_graph(onnx_model.graph, opset=OnnxImporter.get_opset(onnx_model))
+    return OnnxImporter.import_graph(onnx_model.graph, opset=OnnxImporter.get_opset(onnx_model), import_domains=OnnxImporter.get_import_domains(onnx_model))

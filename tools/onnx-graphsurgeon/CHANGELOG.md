@@ -3,6 +3,79 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.7 (2021-03-31)
+### Added
+- `fold_constants()` can now fold `Shape -> Gather` patterns even when the entire shape may not be known.
+- Added an `error_ok` parameter in `fold_constants()` which can be set to `False` to re-raise errors encountered
+    during inference.
+
+### Fixed
+- Fixed a bug where `copy()` would not correctly copy tensors in nested graphs.
+- Fixed a bug where `fold_constants()` would attempt to fold nodes including graph attributes even if nodes within
+    the nested graph could not be folded.
+
+
+## v0.3.6 (2021-03-27)
+### Fixed
+- `fold_constants()` no longer loads constant values into numpy arrays. This can save a significant amount of memory.
+- `cleanup()` will no longer remove unused graph inputs by default - this was causing invalid ONNX models to be generated
+    in cases with `Loop` nodes. Set `remove_unused_graph_inputs` to `True` to revert to the old behavior.
+- `cleanup()` will no longer reorder node inputs in cases where they are also graph outputs.
+
+
+## v0.3.5 (2021-03-24)
+### Added
+- Added support for models with externally stored data. See the README for details on how to import and export such models.
+
+### Fixed
+- Operator domains are now preserved when exporting graphs to ONNX.
+
+## v0.3.4 (2021-03-10)
+### Fixed
+- `fold_constants` will no longer attempt to run inference if there are no constants to compute.
+
+
+## v0.3.3 (2021-03-04)
+### Fixed
+- Fixed a bug in `fold_constants` where it would fail if ONNX-Runtime could not run a node with constant inputs.
+    In such cases, the graph is now partitioned to exclude the node before running another pass of constant folding.
+- Fixed a bug where graph output tensors would still point to consumer nodes that had been removed from the graph.
+- Constant folding is now significantly faster in models with large weights.
+
+
+## v0.3.2 (2021-02-13)
+### Added
+- Added support for folding `Shape` nodes in `fold_constants`. This requires that shape inference has been run
+    on the graph, and that the input to the `Shape` node has a static shape.
+    This behavior can be disabled by setting `fold_shapes=False`.
+
+### Changed
+- `cleanup`, `toposort`, and `fold_constants` are now recursively applied to subgraphs by default.
+    This behavior can be disabled by setting `recurse_subgraphs=False`.
+
+
+## v0.3.1 (2021-02-12)
+### Fixed
+- Fixed a bug where `do_type_check` would not propagate to subgraphs.
+- Fixed a bug where `cleanup()` would incorrectly remove outer-level nodes if they were used only by inner-nodes of subgraphs.
+
+### Removed
+- Removed `__deepcopy__` from `Graph` as it wasn't deep-copying weights or attributes.
+    The method is now called `copy` and makes a shallow copy of everything except `Node`s and `Tensor` instances.
+
+
+## v0.3.0 (2021-02-12)
+### Fixed
+- Fixed a bug where shapes including empty strings for `dim_param` would be treated as empty tensors.
+    They are now correctly imported as tensors with dynamic shapes.
+- Fixed a bug where variable tensors with unknown shapes would be imported as scalars.
+
+
+## v0.2.9 (2021-02-01)
+### Changed
+- The `values` property of `Constant` tensors is now lazily loaded. This can greatly improve model loading times.
+
+
 ## v0.2.8 (2020-10-08)
 ### Fixed
 - Fixed a bug where graph inputs and outputs could be assigned `SynchronizedList` instances, and would therefore be modified if nodes in the graph were.

@@ -4,11 +4,11 @@
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
     * [Processing the input graph](#processing-the-input-graph)
-    * [Preparing the data](#preparing-the-data)
+    * [Data preparation](#data-preparation)
     * [sampleUffFasterRCNN plugins](#sampleufffasterrcnn-plugins)
     * [Verifying the output](#verifying-the-output)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
-- [Prerequisites](#prerequisites)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -67,7 +67,7 @@ The TensorFlow FasterRCNN graph has some operations that are currently not suppo
 
 To use the preprocessor, the `convert-to-uff` utility should be called with a `-p` flag and a config file. The config script should also include attributes for all custom plugins which will be embedded in the generated `.uff` file. Current sample script for UFF Faster R-CNN is located in `config.py` in this sample.
 
-### Preparing the data
+### Data preparation
 
 The generated network has an input node called `input_1`, and the output nodes's names are `dense_class/Softmax`, `dense_regress/BiasAdd` and `proposal`. These nodes are registered by the UFF Parser in the sample.
 
@@ -125,63 +125,74 @@ The Scale layer implements a per-tensor, per-channel, or per-element affine tran
 [SoftMax layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#softmax-layer)
 The SoftMax layer applies the SoftMax function on the input tensor along an input dimension specified by the user.
 
-## Prerequisites
-1. Install the UFF toolkit and graph surgeon; depending on your TensorRT installation method, to install the toolkit and graph surgeon, choose the method you used to install TensorRT for instructions (see [TensorRT Installation Guide: Installing TensorRT](https://docs.nvidia.com/deeplearning/sdk/tensorrt-install-guide/index.html#installing)).
+## Preparing sample data
 
-2. We provide a bash script to download the model as well as other data required for this sample: `./download_model.sh`.
+1. Install [TensorFlow 1.15](https://www.tensoriflow.org/install/pip) or launch the NVIDIA Tensorflow 1.x container in a separate terminal for this step.
 
-   The model is downloaded and unzipped in the directory `uff_faster_rcnn` and the `pb` model is `uff_faster_rcnn/faster_rcnn.pb`.
+2. Install the UFF toolkit and graph surgeon
+    ```bash
+    pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com uff
+    pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com graphsurgeon
+    ```
+
+3. We provide a bash script to download the model as well as other data required for this sample: `./download_model.sh`.
+
+   The model is downloaded and unzipped in the directory `faster-rcnn` and the `pb` model is `faster-rcnn/faster_rcnn.pb`.
 
    Along with the `pb` mode there are some PPM images and a `list.txt` in the directory. These PPM images are the test images used in this sample. The `list.txt` is used in the INT8 mode for listing the image names used in INT8 calibration step in TensorRT.
 
-3. Perform preprocessing on the TensorFlow model using the UFF converter.
-    1.  Copy the TensorFlow protobuf file (`faster_rcnn.pb`) from the downloaded directory in the previous step to the working directory (for example `/usr/src/tensorrt/data/faster-rcnn-uff`).
+4. Perform preprocessing on the TensorFlow model using the UFF converter.
+    1. Copy the TensorFlow protobuf file (`faster_rcnn.pb`) from the downloaded directory in the previous step to the working directory (for example `/usr/src/tensorrt/data/faster-rcnn-uff`).
 
-    2.  Patch the UFF converter.
+    2. Patch the UFF converter.
 
-        Apply a patch to the UFF converter to fix an issue with the Softmax layer in the UFF package. Let `UFF_ROOT` denotes the root directory of the Python UFF package, for example, `/usr/lib/python2.7/dist-packages/uff`
+        Apply a patch to the UFF converter to fix an issue with the Softmax layer in the UFF package. `$UFF_ROOT` denotes the root directory of the Python UFF package, for example, `/usr/local/lib/python3.8/dist-packages/uff`
 
         Then, apply the patch with the following command:
-        `patch UFF_ROOT/converters/tensorflow/converter_functions.py < fix_softmax.patch`
+        ```bash
+        export UFF_ROOT=/usr/local/lib/python3.8/dist-packages/uff
+        patch $UFF_ROOT/converters/tensorflow/converter_functions.py < fix_softmax.patch
+        ```
 
         The patch file `fix_softmax.patch` is generated using the UFF package version 0.6.3 in TensorRT 5.1 GA. Ensure your UFF package version is also 0.6.3 before applying the patch. For TensorRT 6.0, feel free to ignore this since it should already be fixed.
 
-    3.  Run the following command for the conversion.
-        ```
+    3. Run the following command for the conversion.
+        ```bash
         convert-to-uff -p config.py -O dense_class/Softmax -O dense_regress/BiasAdd -O proposal faster_rcnn.pb
         ```
         This saves the converted `.uff` file in the same directory as the input with the name `faster_rcnn.uff`.
 
         The `config.py` script specifies the preprocessing operations necessary for the UFF Faster R-CNN TensorFlow graph. The plugin nodes and plugin parameters used in the `config.py` script should match the registered plugins in TensorRT.
 
-4. The sample also requires a `list.txt` file with a list of all the calibration images (basename, without suffix) when running in INT8 mode. Copy the `list.txt` to the same directory that contains the `pb` model.
+5. The sample also requires a `list.txt` file with a list of all the calibration images (basename, without suffix) when running in INT8 mode. Copy the `list.txt` to the same directory that contains the `pb` model.
 
-5. Copy the PPM images in the data directory the same directory that contains the `pb` model.
+6. Copy the PPM images in the data directory the same directory that contains the `pb` model.
 
 
 ## Running the sample
 
-1. Following the [top level guide](../../../README.md) to build the OSS samples(including this sample, of course). The binary named `sample_uff_faster_rcnn` will be created in the `build/cmake/out` directory.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2. Run the sample to perform object detection and localization.
 
    To run the sample in FP32 mode:
-    ```
-    ./sample_uff_faster_rcnn --datadir /data/uff_faster_rcnn -W 480 -H 272 -I 2016_1111_185016_003_00001_night_000441.ppm
+    ```bash
+    sample_uff_fasterRCNN --datadir $TRT_DATADIR/faster-rcnn -W 480 -H 272 -I 000456.ppm
     ```
 
    To run the sample in INT8 mode:
-    ```
-    ./sample_uff_faster_rcnn --datadir /data/uff_faster_rcnn -i -W 480 -H 272 -I 2016_1111_185016_003_00001_night_000441.ppm
+    ```bash
+    sample_uff_fasterRCNN --datadir $TRT_DATADIR/faster-rcnn -i -W 480 -H 272 -I 000456.ppm
     ```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
     ```
-    Detected Automobile in 2016_1111_185016_003_00001_night_000441.ppm with confidence 99.9734%
-    Detected Automobile in 2016_1111_185016_003_00001_night_000441.ppm with confidence 99.9259%
-    Detected Automobile in 2016_1111_185016_003_00001_night_000441.ppm with confidence 98.7359%
-    Detected Automobile in 2016_1111_185016_003_00001_night_000441.ppm with confidence 92.4371%
-    Detected Automobile in 2016_1111_185016_003_00001_night_000441.ppm with confidence 89.7888%
+    Detected Automobile in 000456.ppm with confidence 98.2884%
+    Detected Automobile in 000456.ppm with confidence 97.0637%
+    Detected Automobile in 000456.ppm with confidence 96.5686%
+    ....
+    Detected Person in 000456.ppm with confidence 81.8942%
+    Detected Roadsign in 000456.ppm with confidence 93.2723%
     ```
    This output shows that the sample ran successfully; `PASSED`.
 

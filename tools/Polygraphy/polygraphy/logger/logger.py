@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,12 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import inspect
 import enum
-import time
-import sys
+import inspect
 import os
-
+import sys
+import time
 
 try:
     ModuleNotFoundError
@@ -81,21 +80,23 @@ class Logger(object):
     EXTRA_VERBOSE = 0
     VERBOSE = 10
     INFO = 20
-    SUCCESS = 21
+    START = 22
+    FINISH = 28
     WARNING = 30
     ERROR = 40
     CRITICAL = 50
 
     SEVERITY_LETTER_MAPPING = {
-        ULTRA_VERBOSE: "[U]",
-        SUPER_VERBOSE: "[P]",
-        EXTRA_VERBOSE: "[X]",
-        VERBOSE: "[V]",
-        INFO: "[I]",
-        SUCCESS: "[S]",
-        WARNING: "[W]",
-        ERROR: "[E]",
-        CRITICAL: "[C]",
+        ULTRA_VERBOSE:  "[U]",
+        SUPER_VERBOSE:  "[S]",
+        EXTRA_VERBOSE:  "[X]",
+        VERBOSE:        "[V]",
+        INFO:           "[I]",
+        START:          "[I]",
+        FINISH:         "[D]",
+        WARNING:        "[W]",
+        ERROR:          "[E]",
+        CRITICAL:       "[!]",
     }
 
     SEVERITY_COLOR_MAPPING = {
@@ -104,7 +105,8 @@ class Logger(object):
         EXTRA_VERBOSE: "cyan",
         VERBOSE: "dark_gray",
         INFO: None,
-        SUCCESS: "light_green",
+        START: "light_blue",
+        FINISH: "light_green",
         WARNING: "light_yellow",
         ERROR: "light_red",
         CRITICAL: "light_red",
@@ -265,8 +267,12 @@ class Logger(object):
         self.log(message, Logger.INFO, mode=mode, stack_depth=3)
 
 
-    def success(self, message, mode=LogMode.EACH):
-        self.log(message, Logger.SUCCESS, mode=mode, stack_depth=3)
+    def start(self, message, mode=LogMode.EACH):
+        self.log(message, Logger.START, mode=mode, stack_depth=3)
+
+
+    def finish(self, message, mode=LogMode.EACH):
+        self.log(message, Logger.FINISH, mode=mode, stack_depth=3)
 
 
     def warning(self, message, mode=LogMode.EACH):

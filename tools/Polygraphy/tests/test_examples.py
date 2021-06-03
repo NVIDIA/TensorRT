@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -123,10 +123,11 @@ def test_cli_examples(example):
 
 CLI_INSPECT_EXAMPLES = [
     Example(["cli", "inspect", "01_inspecting_a_tensorrt_network"]),
-    Example(["cli", "inspect", "02_inspecting_a_tensorrt_engine"], artifact_names=["identity.engine"]),
+    Example(["cli", "inspect", "02_inspecting_a_tensorrt_engine"], artifact_names=["dynamic_identity.engine"]),
     Example(["cli", "inspect", "03_inspecting_an_onnx_model"]),
     Example(["cli", "inspect", "04_inspecting_a_tensorflow_graph"]),
     Example(["cli", "inspect", "05_inspecting_run_results"], artifact_names=["onnxrt_results.pkl"]),
+    Example(["cli", "inspect", "06_inspecting_input_data"], artifact_names=["inputs.pkl"]),
 ]
 
 @pytest.mark.skipif(version(trt.__version__) < version("7.0"), reason="Unsupported for TRT 6")

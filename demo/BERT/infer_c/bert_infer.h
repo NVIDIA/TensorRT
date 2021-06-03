@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,7 +74,7 @@ struct BertInference
             exit(-1);
         }
 
-        mEngine = TrtUniquePtr<ICudaEngine>(runtime->deserializeCudaEngine(bytes.data(), bytes.size(), nullptr));
+        mEngine = TrtUniquePtr<ICudaEngine>(runtime->deserializeCudaEngine(bytes.data(), bytes.size()));
         if (mEngine == nullptr)
         {
             gLogError << "Error deserializing CUDA engine\n";
@@ -175,7 +175,7 @@ struct BertInference
         {
             for (int i = 0; i < kBERT_INPUT_NUM; i++)
             {
-                mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(mSeqLength, batchSize));
+                mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(batchSize, mSeqLength));
             }
         }
 
@@ -287,7 +287,7 @@ struct BertInference
             const std::vector<const void*> inputBuffers = {inputIds, segmentIds, mCuSeqlens.data()};
             run(inputBuffers.data(), warmUps, iterations);
         }
-        else 
+        else
         {
             const std::vector<const void*> inputBuffers = {inputIds, segmentIds, inputMask};
             run(inputBuffers.data(), warmUps, iterations);

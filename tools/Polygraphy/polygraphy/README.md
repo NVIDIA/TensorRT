@@ -77,7 +77,7 @@ with TrtRunner(build_engine) as runner:
 Generally, you do not need to write custom runners unless you want to support a new backend.
 
 In case you do, in the simplest case, you only need to implement two functions:
-- `infer`: Accepts a dictionary of numpy buffers, runs inference, and finally returns a dictionary containing the outputs.
+- `infer_impl`: Accepts a dictionary of numpy buffers, runs inference, and finally returns a dictionary containing the outputs.
 - `get_input_metadata`: Returns a [`TensorMetadata`](./common/struct.py) mapping input names to their shapes and data types.
     You may use `None` to indicate dynamic dimensions.
 

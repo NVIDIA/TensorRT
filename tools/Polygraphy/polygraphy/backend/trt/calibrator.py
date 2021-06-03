@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ def Calibrator(data_loader, cache=None, BaseClass=trt.IInt8MinMaxCalibrator,
     Supplies calibration data to TensorRT to calibrate the network for INT8 inference.
 
     Args:
-        data_loader (Generator -> OrderedDict[str, np.ndarray]):
+        data_loader (Generator -> OrderedDict[str, numpy.ndarray]):
             A generator or iterable that yields a dictionary that maps input names to input NumPy buffers.
 
             In case you don't know details about the inputs ahead of time, you can access the
@@ -139,13 +139,19 @@ def Calibrator(data_loader, cache=None, BaseClass=trt.IInt8MinMaxCalibrator,
                     return None
 
 
+            # Only attempt to read from the cache once.
             if not self.has_cached_scales:
                 self.cache_contents = load_from_cache()
+
                 if not self.cache_contents:
-                    G_LOGGER.warning("Calibration cache was provided, but is empty. Will regenerate scales by running calibration.", mode=LogMode.ONCE)
+                    if self.cache_contents is not None:
+                        G_LOGGER.warning("Calibration cache was provided, but is empty. "
+                                         "Will regenerate scales by running calibration.",
+                                         mode=LogMode.ONCE)
                     self.cache_contents = None
                 else:
                     self.has_cached_scales = True
+
             return self.cache_contents
 
 

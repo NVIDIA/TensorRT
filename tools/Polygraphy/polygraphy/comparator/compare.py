@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import numbers
 from collections import OrderedDict
 
 import numpy as np
@@ -25,18 +26,18 @@ class OutputCompareResult(object):
     Represents the result of comparing a single output of a single iteration
     between two runners.
     """
-    def __init__(self, passed, required_atol, required_rtol):
+    def __init__(self, passed, max_absdiff, max_reldiff):
         """
         Records the required tolerances for the results to be considered equivalent.
 
         Args:
             passed (bool): Whether the error was within acceptable limits.
-            required_atol (float): The minimum required absolute tolerance to consider the outputs equivalent.
-            required_rtol (float): The minimum required relative tolerance to consider the outputs equivalent.
+            max_absdiff (float): The minimum required absolute tolerance to consider the outputs equivalent.
+            max_reldiff (float): The minimum required relative tolerance to consider the outputs equivalent.
         """
         self.passed = passed
-        self.required_atol = required_atol
-        self.required_rtol = required_rtol
+        self.max_absdiff = max_absdiff
+        self.max_reldiff = max_reldiff
 
 
     def __bool__(self):
@@ -50,7 +51,7 @@ class OutputCompareResult(object):
 
 
     def __str__(self):
-        return "(atol={:}, rtol={:})".format(self.required_atol, self.required_rtol)
+        return "(atol={:}, rtol={:})".format(self.max_absdiff, self.max_reldiff)
 
 
 # Provides functions to compare two IterationResults
@@ -71,10 +72,14 @@ class CompareFunc(object):
             check_shapes (bool):
                     Whether shapes must match exactly. If this is False, this function may
                     permute or reshape outputs before comparison. Defaults to True.
-            rtol (float):
+            rtol (Union[float, Dict[str, float]]):
                     The relative tolerance to use when checking accuracy. Defaults to 1e-5.
-            atol (float):
+                    This can be provided on a per-output basis using a dictionary. In that case,
+                    use an empty string ("") as the key to specify default tolerance for outputs not explicitly listed.
+            atol (Union[float, Dict[str, float]]):
                     The absolute tolerance to use when checking accuracy. Defaults to 1e-5.
+                    This can be provided on a per-output basis using a dictionary. In that case,
+                    use an empty string ("") as the key to specify default tolerance for outputs not explicitly listed.
             fail_fast (bool):
                     Whether the function should exit immediately after the first failure. Defaults to False.
             find_output_func (Callable(str, int, IterationResult) -> List[str]):
@@ -117,7 +122,7 @@ class CompareFunc(object):
                 PolygraphyException: If all output names are skipped, and thus no outputs are compared.
             """
             # Returns whether the outputs match
-            def check_outputs_match(out0, out0_name, out1, out1_name):
+            def check_outputs_match(out0, out0_name, out1, out1_name, per_out_rtol, per_out_atol):
                 def compute_max(buffer):
                     if misc.is_empty_shape(buffer.shape):
                         return 0
@@ -149,30 +154,31 @@ class CompareFunc(object):
                 def compute_required():
                     # The purpose of this function is to determine the minimum tolerances such that
                     # the outputs would be considered a match.
-                    # The NumPy formula for np.isclose is absolute(out0 - out1) <= (atol + rtol * absolute(out1))
+                    # The NumPy formula for np.isclose is absolute(out0 - out1) <= (per_out_atol + per_out_rtol * absolute(out1))
                     # So, for both absolute/relative tolerance, given either one,
                     # we can compute the required value for the other:
-                    # atol = absolute(out0 - out1)
-                    # atol_if_rtol = absolute(out0 - out1)  - rtol * absolute(out1)
-                    # rtol = (absolute(out0 - out1) - atol) / absolute(out1)
+                    # per_out_atol = absolute(out0 - out1)
+                    # atol_if_rtol = absolute(out0 - out1)  - per_out_rtol * absolute(out1)
+                    # per_out_rtol = (absolute(out0 - out1) - per_out_atol) / absolute(out1)
                     if np.issubdtype(out0.dtype, np.bool_) and np.issubdtype(out1.dtype, np.bool_):
                         absdiff = np.logical_xor(out0, out1)
                     else:
                         absdiff = np.abs(out0 - out1)
                     absout1 = np.abs(out1)
-                    required_atol = max(compute_max(absdiff), 0.0)
-                    required_atol_if_rtol = max(compute_max(absdiff - rtol * absout1), 0.0)
+                    max_absdiff = max(compute_max(absdiff), 0.0)
+                    required_atol_if_rtol = max(compute_max(absdiff - per_out_rtol * absout1), 0.0)
                     # Suppress divide by 0 warnings
                     with np.testing.suppress_warnings() as sup:
                         sup.filter(RuntimeWarning)
-                        required_rtol = max(compute_max((absdiff - atol) / absout1), 0.0)
-                    return required_atol, required_atol_if_rtol, required_rtol
+                        reldiff = np.maximum(absdiff - per_out_atol, 0.0) / absout1
+                        max_reldiff = max(compute_max(reldiff), 0.0)
+                    return max_absdiff, required_atol_if_rtol, max_reldiff, compute_mean(absdiff), compute_mean(reldiff)
 
 
                 def log_mismatches(mismatches):
                     try:
                         with G_LOGGER.indent():
-                            G_LOGGER.super_verbose("Mismatches at:\n" + str(mismatches))
+                            G_LOGGER.super_verbose("Mismatched indices:\n{:}".format(np.argwhere(mismatches)))
                             G_LOGGER.extra_verbose("Runner: {:40} | Mismatched values:\n{:}".format(iter_result0.runner_name, out0[mismatches]))
                             G_LOGGER.extra_verbose("Runner: {:40} | Mismatched values:\n{:}".format(iter_result1.runner_name, out1[mismatches]))
                     except:
@@ -180,7 +186,7 @@ class CompareFunc(object):
 
 
                 try:
-                    mismatches = np.logical_not(np.isclose(output0, output1, rtol=rtol, atol=atol))
+                    mismatches = np.logical_not(np.isclose(output0, output1, rtol=per_out_rtol, atol=per_out_atol))
                 except Exception as err:
                     G_LOGGER.warning("Failed to compare outputs with:\n{:}\nSkipping".format(err))
                     return False
@@ -193,31 +199,30 @@ class CompareFunc(object):
                 failed = np.any(mismatches)
 
                 try:
-                    required_atol, required_atol_if_rtol, required_rtol = compute_required()
+                    max_absdiff, required_atol_if_rtol, max_reldiff, mean_absdiff, mean_reldiff = compute_required()
                 except Exception as err:
-                    required_atol, required_atol_if_rtol, required_rtol = None, None, None
+                    max_absdiff, required_atol_if_rtol, max_reldiff, mean_absdiff, mean_reldiff = None, None, None, None, None
                     G_LOGGER.warning("Could not determine required tolerances due to an error:\n{:}".format(err))
                     log_msg = ""
                 else:
-                    log_msg = "Required tolerances: [atol={:.5g}] OR [rtol={:.5g}, atol={:.5g}] OR [rtol={:.5g}, atol={:.5g}]\n".format(
-                                    required_atol, rtol, required_atol_if_rtol, required_rtol, atol)
+                    log_msg = "Required tolerances: [atol={:.5g}] OR [rtol={:.5g}, atol={:.5g}] OR [rtol={:.5g}, atol={:.5g}] | Mean Error: Absolute={:.5g}, Relative={:.5g}\n".format(
+                                    max_absdiff, per_out_rtol, required_atol_if_rtol, max_reldiff, per_out_atol, mean_absdiff, mean_reldiff)
 
                 log_msg += "Runner: {:40} | Stats: mean={:.5g}, min={:.5g} at {:}, max={:.5g} at {:}\n".format(
                                 iter_result0.runner_name, compute_mean(out0), compute_min(out0), compute_argmin(out0), compute_max(out0), compute_argmax(out0))
                 log_msg += "Runner: {:40} | Stats: mean={:.5g}, min={:.5g} at {:}, max={:.5g} at {:}\n".format(
                                 iter_result1.runner_name, compute_mean(out1), compute_min(out1), compute_argmin(out1), compute_max(out1), compute_argmax(out1))
+                G_LOGGER.info(log_msg)
 
                 if failed:
                     log_mismatches(mismatches)
-                    G_LOGGER.info(log_msg)
-                    G_LOGGER.error("FAILED | Difference exceeds tolerance (rtol={:}, atol={:})".format(rtol, atol))
+                    G_LOGGER.error("FAILED | Difference exceeds tolerance (rtol={:}, atol={:})".format(per_out_rtol, per_out_atol))
                 else:
-                    G_LOGGER.verbose(log_msg)
-                    G_LOGGER.success("PASSED | Difference is within tolerance (rtol={:}, atol={:})".format(rtol, atol))
+                    G_LOGGER.finish("PASSED | Difference is within tolerance (rtol={:}, atol={:})".format(per_out_rtol, per_out_atol))
 
                 G_LOGGER.extra_verbose("Finished comparing: '{:}' (dtype={:}, shape={:}) [{:}] and '{:}' (dtype={:}, shape={:}) [{:}]"
                                 .format(out0_name, out0.dtype, out0.shape, iter_result0.runner_name, out1_name, out1.dtype, out1.shape, iter_result1.runner_name))
-                return OutputCompareResult(not failed, required_atol, required_rtol)
+                return OutputCompareResult(not failed, max_absdiff, max_reldiff)
 
 
             output_status = OrderedDict() # OrderedDict[str, bool] Maps output names to whether they matched.
@@ -260,9 +265,23 @@ class CompareFunc(object):
                         continue
 
                     output1 = iter_result1[out1_name]
-                    G_LOGGER.info("Comparing Output: '{:}' (dtype={:}, shape={:}) with '{:}' (dtype={:}, shape={:})".format(
+                    G_LOGGER.start("Comparing Output: '{:}' (dtype={:}, shape={:}) with '{:}' (dtype={:}, shape={:})".format(
                                         out0_name, output0.dtype, output0.shape, out1_name, output1.dtype, output1.shape))
                     G_LOGGER.extra_verbose("Note: Comparing {:} vs. {:}".format(iter_result0.runner_name, iter_result1.runner_name))
+
+
+                    def get_tol(tol_dict):
+                        if isinstance(tol_dict, numbers.Number):
+                            return tol_dict
+
+                        if out0_name in tol_dict:
+                            return tol_dict[out0_name]
+                        elif "" in tol_dict:
+                            return tol_dict[""]
+
+                        G_LOGGER.critical("Could not find a tolerance for output: '{:}' in the provided tolerance map: {:}.\n"
+                                          "Note: Use a key of `""` in the map to specify a default tolerance.".format(out0_name, tol_dict))
+
 
                     with G_LOGGER.indent():
                         if check_shapes and output0.shape != output1.shape:
@@ -274,11 +293,13 @@ class CompareFunc(object):
                         else:
                             output1 = misc.try_match_shape(output1, output0.shape)
                             output0 = output0.reshape(output1.shape)
-                            outputs_match = check_outputs_match(output0, out0_name, output1, out1_name)
+                            outputs_match = check_outputs_match(output0, out0_name, output1, out1_name,
+                                                                per_out_rtol=get_tol(rtol), per_out_atol=get_tol(atol))
 
                         output_status[out0_name] = outputs_match
                         if fail_fast and not outputs_match:
                             return output_status
+
 
             mismatched_output_names = [name for name, matched in output_status.items() if not matched]
             if mismatched_output_names:

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,13 +85,15 @@ public:
     void detachFromContext() override;
 
 private:
-    Weights copyToDevice(const void* hostData, size_t count);
-    void serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const;
-    Weights deserializeToDevice(const char*& hostBuffer, size_t count);
+    void setupDeviceMemory();
 
     PriorBoxParameters mParam;
-    int mNumPriors, mH, mW;
-    Weights minSize, maxSize, aspectRatios; // not learnable weights
+    int32_t mNumPriors;
+    int32_t mH;
+    int32_t mW;
+    Weights minSize{};      // not learnable weights
+    Weights maxSize{};      // not learnable weights
+    Weights aspectRatios{}; // not learnable weights
     std::string mPluginNamespace;
 };
 

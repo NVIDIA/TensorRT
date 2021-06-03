@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@
 // workspace alignment.
 const uintptr_t ALIGNMENT = 1 << 20;
 
-// IOU 
+// IOU
 template <typename TFloat>
 __device__ __host__ inline float IoU(const Bbox<TFloat>& a, const Bbox<TFloat>& b)
 {
@@ -42,7 +42,7 @@ __device__ __host__ inline float IoU(const Bbox<TFloat>& a, const Bbox<TFloat>& 
     return (float) interS / (float) (Sa + Sb - interS);
 }
 
-// NMS KERNEL FOR SMALL BATCH SIZE 
+// NMS KERNEL FOR SMALL BATCH SIZE
 template <typename T_PROPOSALS, typename T_ROIS, int DIM, int TSIZE>
 __global__ __launch_bounds__(DIM) void nmsKernel1(const int propSize,
                                                   Bbox<T_PROPOSALS> const* __restrict__ preNmsProposals,
@@ -118,7 +118,7 @@ __global__ __launch_bounds__(DIM) void nmsKernel1(const int propSize,
     }
 }
 
-// NMS KERNEL FOR LARGE BATCH SIZE 
+// NMS KERNEL FOR LARGE BATCH SIZE
 template <typename T_PROPOSALS, typename T_ROIS, int DIM, int TSIZE>
 __global__ __launch_bounds__(DIM) void nmsKernel2(const int propSize,
                                                   Bbox<T_PROPOSALS> const* __restrict__ proposals,
@@ -197,7 +197,7 @@ __global__ __launch_bounds__(DIM) void nmsKernel2(const int propSize,
     }
 }
 
-// NMS LAUNCH 
+// NMS LAUNCH
 template <typename T_PROPOSALS, DLayout_t L_PROPOSALS, typename T_ROIS>
 pluginStatus_t nmsLaunch(cudaStream_t stream,
                         const int batch,
@@ -235,7 +235,7 @@ pluginStatus_t nmsLaunch(cudaStream_t stream,
     return STATUS_SUCCESS;
 }
 
-// SET OFFSET 
+// SET OFFSET
 // Works for up to 2Gi elements (cub's limitation)!
 __global__ void setOffset(int stride, int size, int* output)
 {
@@ -246,7 +246,7 @@ __global__ void setOffset(int stride, int size, int* output)
     }
 }
 
-// NMS GPU 
+// NMS GPU
 template <typename T_SCORES, typename T_ROIS>
 pluginStatus_t nmsGpu(cudaStream_t stream,
                      const int N,
@@ -333,7 +333,7 @@ pluginStatus_t nmsGpu(cudaStream_t stream,
     return STATUS_SUCCESS;
 }
 
-// NMS LAUNCH CONFIG 
+// NMS LAUNCH CONFIG
 typedef pluginStatus_t (*nmsFun)(cudaStream_t,
                                 const int,   // N
                                 const int,   // R
@@ -394,7 +394,7 @@ struct nmsLaunchConfig
 static std::array<nmsLaunchConfig, 1> nmsLCOptions = {
     nmsLaunchConfig(FLOAT32, NCHW, FLOAT32, NC4HW, FLOAT32, nmsGpu<float, float>)};
 
-// NMS 
+// NMS
 pluginStatus_t nms(cudaStream_t stream,
                   const int N,
                   const int R,

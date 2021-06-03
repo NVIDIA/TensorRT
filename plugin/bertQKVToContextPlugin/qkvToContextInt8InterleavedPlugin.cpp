@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
+#include "qkvToContextInt8InterleavedPlugin.h"
 #include "NvInfer.h"
 #include "bertCommon.h"
-#include "qkvToContextInt8InterleavedPlugin.h"
 #include "serialize.hpp"
 
 #include <cassert>
@@ -62,7 +62,7 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(
     mSM = getSMVersion();
     // variable sequence length is only supported with the fused MHA kernels
     // we should not override mS!
-    assert((mSM == kSM_AMPERE || mSM == kSM_TURING || mSM == kSM_XAVIER)
+    assert((mSM == kSM_AMPERE_100 || mSM == kSM_AMPERE_10X || mSM == kSM_TURING || mSM == kSM_XAVIER)
         && "requesting maxSeqlen not compatible with GPU arch");
     // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
     mXmmaKernel = getXMMAKernelsV2(DATA_TYPE_INT8, mSM);

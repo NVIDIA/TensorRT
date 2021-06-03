@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,14 +36,14 @@ parser.add_argument('-o', '--output', required=True, help='The weight file to du
 
 opt = parser.parse_args()
 
-print "Outputting the trained weights in TensorRT's wts v2 format. This format is documented as:"
-print "Line 0: <number of buffers in the file>"
-print "Line 1-Num: [buffer name] [buffer type] [(buffer shape{e.g. (1, 2, 3)}] <buffer shaped size bytes of data>"
+print("Outputting the trained weights in TensorRT's wts v2 format. This format is documented as:")
+print("Line 0: <number of buffers in the file>")
+print("Line 1-Num: [buffer name] [buffer type] [(buffer shape{e.g. (1, 2, 3)}] <buffer shaped size bytes of data>")
 
 inputbase = opt.model
 outputbase = opt.output
 
-# This dictionary translates from the TF weight names to the weight names expected 
+# This dictionary translates from the TF weight names to the weight names expected
 # by the sampleMLP sample. This is the location that needs to be changed if training
 # something other than what is specified in README.txt.
 remap = {

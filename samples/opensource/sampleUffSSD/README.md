@@ -5,11 +5,11 @@
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
 	* [Processing the input graph](#processing-the-input-graph)
-	* [Preparing the data](#preparing-the-data)
+	* [Data preparation](#data-preparation)
 	* [sampleUffSSD plugins](#sampleuffssd-plugins)
 	* [Verifying the output](#verifying-the-output)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
-- [Prerequisites](#prerequisites)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -72,7 +72,7 @@ The TensorFlow graph has some operations like `Assert` and `Identity` which can 
 
 `Identity` operations are deleted and the input is forwarded to all the connected outputs. Additional documentation on the graph preprocessor can be found in the [TensorRT API](https://docs.nvidia.com/deeplearning/sdk/tensorrt-api/python_api/graphsurgeon/graphsurgeon.html).
 
-### Preparing the data
+### Data preparation
 
 The generated network has an input node called `Input`, and the output node is given the name `MarkOutput_0` by the UFF converter. These nodes are registered by the UFF Parser in the sample.
 
@@ -205,46 +205,60 @@ The Scale layer implements a per-tensor, per-channel, or per-element affine tran
 [Shuffle layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#shuffle-layer)
 The Shuffle layer implements a reshape and transpose operator for tensors.
 
-## Prerequisites
+## Preparing sample data
+1. Install [TensorFlow 1.15](https://www.tensoriflow.org/install/pip) or launch the NVIDIA Tensorflow 1.x container in a separate terminal for this step.
 
-1.  Install the UFF toolkit and graph surgeon; depending on your TensorRT installation method, to install the toolkit and graph surgeon, choose the method you used to install TensorRT for instructions (see [TensorRT Installation Guide: Installing TensorRT](https://docs.nvidia.com/deeplearning/sdk/tensorrt-install-guide/index.html#installing)).
+2. Install the UFF toolkit and graph surgeon
+    ```bash
+    pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com uff
+    pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com graphsurgeon
+    ```
 
-2.  Download the [ssd_inception_v2_coco TensorFlow trained model](http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz).
+3. Download the [ssd_inception_v2_coco TensorFlow trained model](http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz).
+    ```bash
+    cd $TRT_OSSPATH/samples/opensource/sampleUffSSD
+    wget http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz
+    tar xvzf ssd_inception_v2_coco_2017_11_17.tar.gz
+    ```
 
-3.  Perform preprocessing on the tensorflow model using the UFF converter.
-	1.  Copy the TensorFlow protobuf file (`frozen_inference_graph.pb`) from the downloaded directory in the previous step to the working directory (for example `/usr/src/tensorrt/samples/sampleUffSSD/`).
+4. Perform preprocessing on the tensorflow model using the UFF converter.
+	1. Copy the TensorFlow protobuf file (`frozen_inference_graph.pb`) from the downloaded directory in the previous step to the working directory (for example `$TRT_OSSPATH/samples/opensource/sampleUffSSD/`).
 
-	2.  Run the following command for the conversion.
-	`convert-to-uff frozen_inference_graph.pb -O NMS -p config.py`
+	2. Run the following command for the conversion.
+	```bash
+    convert-to-uff ssd_inception_v2_coco_2017_11_17/frozen_inference_graph.pb -O NMS -p config.py
+    ```
 
 		This saves the converted `.uff` file in the same directory as the input with the name `frozen_inference_graph.pb.uff`.
 
 		The `config.py` script specifies the preprocessing operations necessary for the SSD TensorFlow graph. The plugin nodes and plugin parameters used in the `config.py` script should match the registered plugins in TensorRT.
 
-	3.  Copy the converted `.uff` file to the data directory and rename it to `sample_ssd_relu6.uff <TensorRT Install>/data/ssd/sample_ssd_relu6.uff`.
+	3. Copy the converted `.uff` file to the data directory and rename it to `sample_ssd_relu6.uff $TRT_DATADIR/ssd/sample_ssd_relu6.uff`.
+	```bash
+    mv ./ssd_inception_v2_coco_2017_11_17/frozen_inference_graph.uff $TRT_DATADIR/ssd/sample_ssd_relu6.uff
+	```
 
-4.  The sample also requires a `labels.txt` file with a list of all labels used to train the model. The labels file for this network is `<TensorRT Install>/data/ssd/ssd_coco_labels.txt`.
+5. The sample also requires a `labels.txt` file with a list of all labels used to train the model. The labels file for this network is `$TRT_DATADIR/ssd/ssd_coco_labels.txt`.
 
 
 ## Running the sample
 
-1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleUffSSD` directory. The binary named `sample_uff_ssd` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleUffSSD
-	make
-	```
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2. Run the sample to perform object detection and localization.
 
 	To run the sample in FP32 mode:
-	`./sample_uff_ssd`
+	```bash
+    sample_uff_ssd --datadir=$TRT_DATADIR/ssd
+    ```
 
 	To run the sample in INT8 mode:
-	`./sample_uff_ssd --int8`
+	```bash
+    sample_uff_ssd sample_uff_ssd --datadir=$TRT_DATADIR/ssd --int8
+    ```
 
-	**Note:** To run the network in INT8 mode, refer to `BatchStreamPPM.h` for details on how
-calibration can be performed. Currently, we require a file called `list.txt`, with a list of all PPM images for calibration in the `<TensorRT Install>/data/ssd/` folder. The PPM images to be used for calibration can also reside in the same folder.
+	**NOTE:** To run the network in INT8 mode, refer to `BatchStreamPPM.h` for details on how
+calibration can be performed. Currently, we require a file called `list.txt`, with a list of all PPM images for calibration in the `$TRT_DATADIR/ssd/` folder. The PPM images to be used for calibration can also reside in the same folder.
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	```

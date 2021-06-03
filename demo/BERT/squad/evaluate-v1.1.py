@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -113,4 +113,3 @@ if __name__ == '__main__':
         predictions = json.load(prediction_file)
         f1_acc = float(args.f1_acc)
     print(json.dumps(evaluate(dataset, predictions, f1_acc)))
-

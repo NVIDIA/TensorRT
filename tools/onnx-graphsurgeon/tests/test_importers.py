@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,31 +14,33 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
-from onnx_graphsurgeon.logger.logger import G_LOGGER
-from onnx_graphsurgeon.ir.tensor import Tensor, Variable, Constant
-
-from onnx_models import identity_model, lstm_model, scan_model, dim_param_model, initializer_is_output_model, nested_dup_names
-
 from collections import OrderedDict
-import onnx.shape_inference
-import onnx.numpy_helper
+
 import numpy as np
-import pytest
 import onnx
+import onnx.numpy_helper
+import onnx.shape_inference
+import pytest
+from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
+from onnx_graphsurgeon.ir.tensor import Constant, Variable
+from onnx_graphsurgeon.logger.logger import G_LOGGER
+
+from onnx_models import (dim_param_model, ext_weights, identity_model,
+                         initializer_is_output_model, lstm_model,
+                         nested_dup_names, scan_model)
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
 class TestOnnxImporter(object):
     def test_import_variable_tensor(self):
         name = "test0"
-        shape = [1, 2, 3, 4]
+        shape = (1, 2, 3, 4)
         onnx_tensor = onnx.helper.make_tensor_value_info(name, onnx.TensorProto.FLOAT, shape)
         tensor = OnnxImporter.import_tensor(onnx_tensor)
         assert type(tensor) == Variable
         assert tensor.name == name
         assert tensor.dtype == np.float32
-        assert tensor.shape == shape
+        assert tuple(tensor.shape) == shape
 
 
     def test_import_constant_tensor(self):
@@ -48,7 +50,7 @@ class TestOnnxImporter(object):
         tensor = OnnxImporter.import_tensor(onnx_tensor)
         assert type(tensor) == Constant
         assert tensor.dtype == dtype
-        assert tensor.shape == shape
+        assert tuple(tensor.shape) == shape
 
 
     def test_import_tensor_unknown_metadata(self):
@@ -57,6 +59,36 @@ class TestOnnxImporter(object):
         tensor = OnnxImporter.import_tensor(onnx_tensor)
         assert type(tensor) == Variable
         assert tensor.name == name
+
+
+    # An empty string in `dim_param` should be treated like a dynamic dimension
+    def test_import_empty_dim_param_tensor(self):
+        shape = (1, 2, "non-empty", "")
+        onnx_tensor = onnx.helper.make_tensor_value_info("test0", onnx.TensorProto.FLOAT, shape)
+        tensor = OnnxImporter.import_tensor(onnx_tensor)
+        assert type(tensor) == Variable
+        assert tuple(tensor.shape) == shape
+
+
+    # Sometimes, tensor shape is not known, in which case we shouldn't import it
+    def test_import_unknown_shape_tensor(self):
+        shape = None
+        onnx_tensor = onnx.helper.make_tensor_value_info("test0", onnx.TensorProto.FLOAT, shape)
+        tensor = OnnxImporter.import_tensor(onnx_tensor)
+        assert type(tensor) == Variable
+        assert tensor.shape is None
+
+
+    # Scalars can be represented in ONNX with a dim that includes neither a dim_param nor dim_value
+    def test_import_empty_dim_tensor(self):
+        shape = (None, )
+        onnx_tensor = onnx.helper.make_tensor_value_info("test0", onnx.TensorProto.FLOAT, shape)
+        onnx_tensor.type.tensor_type.shape.dim[0].ClearField("dim_value")
+        onnx_tensor.type.tensor_type.shape.dim[0].ClearField("dim_param")
+
+        tensor = OnnxImporter.import_tensor(onnx_tensor)
+        assert type(tensor) == Variable
+        assert tuple(tensor.shape) == shape
 
 
     # TODO: Test all attribute types - missing graph
@@ -87,9 +119,9 @@ class TestOnnxImporter(object):
 
 
     @pytest.mark.parametrize("model",
-        [identity_model(), lstm_model(), scan_model(), dim_param_model(), initializer_is_output_model(), nested_dup_names()],
-        ids=lambda model: str(model)
-    )
+        [identity_model(), lstm_model(), scan_model(), dim_param_model(),
+         initializer_is_output_model(), nested_dup_names(), ext_weights()],
+        ids=lambda model: str(model))
     def test_import_graph(self, model):
         graph = OnnxImporter.import_graph(model.load().graph)
         model.assert_equal(graph)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -181,6 +181,13 @@ int main(int argc, char** argv)
     if ((options.reporting.profile || !options.reporting.exportProfile.empty()) && !options.inference.rerun)
     {
         iEnv.profiler.reset(new Profiler);
+        if (options.inference.graph)
+        {
+            options.inference.graph = false;
+            sample::gLogWarning << "Profiler does not work when CUDA graph is enabled. Ignored --useCudaGraph flag "
+                                   "and disabled CUDA graph."
+                                << std::endl;
+        }
     }
 
     if (!setUpInference(iEnv, options.inference))
@@ -201,6 +208,13 @@ int main(int argc, char** argv)
         auto* profiler = new Profiler;
         iEnv.profiler.reset(profiler);
         iEnv.context.front()->setProfiler(profiler);
+        if (options.inference.graph)
+        {
+            options.inference.graph = false;
+            sample::gLogWarning << "Profiler does not work when CUDA graph is enabled. Ignored --useCudaGraph flag "
+                                   "and disabled CUDA graph in the second run with the profiler."
+                                << std::endl;
+        }
         runInference(options.inference, iEnv, options.system.device, trace);
     }
     printPerformanceProfile(options.reporting, iEnv, sample::gLogInfo);

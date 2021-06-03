@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -172,9 +172,10 @@ def str_from_network(network, mode="full"):
                 for attr in attrs:
                     val = getattr(layer, attr)
                     if mode == "full" or not isinstance(val, np.ndarray):
+                        attr_str = ""
                         if layer.name:
-                            network_str += "{:}.".format(layer.name)
-                        network_str += misc.indent_block("{:} = {:}".format(attr, val)) + "\n"
+                            attr_str += "{:}.".format(layer.name)
+                        network_str += misc.indent_block("{:}{:} = {:}".format(attr_str, attr, val)) + "\n"
             network_str += "\n"
     else:
         network_str += "(Use --mode to display)"
@@ -186,14 +187,21 @@ def _get_network_outputs(network):
     return [network.get_output(index).name for index in range(network.num_outputs)]
 
 
-def check_outputs_not_found(not_found, all_outputs):
+def check_outputs_not_found(not_found, available_outputs):
     if not_found:
-        all_outputs = misc.unique_list(all_outputs)
+        available_outputs = misc.unique_list(available_outputs)
         G_LOGGER.critical("The following outputs: {:} were not found. "
-                          "Note: Available tensors: {:}".format(not_found, all_outputs))
+                          "Note: Available tensors: {:}".format(not_found, available_outputs))
 
 
 def mark_outputs(network, outputs):
+    """
+    Mark the specified outputs as network outputs.
+
+    Args:
+        network (trt.INetworkDefinition): The network in which to mark outputs.
+        outputs (Sequence[str]): The names of tensors to mark as outputs.
+    """
     outputs = set(outputs)
     all_outputs = []
     for layer in network:
@@ -206,6 +214,7 @@ def mark_outputs(network, outputs):
 
             if tensor.name in outputs:
                 if not tensor.is_network_output:
+                    G_LOGGER.ultra_verbose("Marking {:} as an output".format(tensor.name))
                     network.mark_output(tensor)
 
     marked_outputs = set(_get_network_outputs(network))
@@ -215,32 +224,29 @@ def mark_outputs(network, outputs):
 
 def mark_layerwise(network):
     # Layers within loops cannot be marked as network outputs.
-    LOOP_START_NAMES = ["TRIP_LIMIT", "ITERATOR"]
+    LOOP_START_NAMES = ["TRIP_LIMIT", "ITERATOR", "RECURRENCE"]
     LOOP_END_NAMES = ["LOOP_OUTPUT"]
     LOOP_START_LAYERS = [getattr(trt.LayerType, attr) for attr in LOOP_START_NAMES if hasattr(trt.LayerType, attr)]
     LOOP_END_LAYERS = [getattr(trt.LayerType, attr) for attr in LOOP_END_NAMES if hasattr(trt.LayerType, attr)]
     EXCLUDE_OUTPUT_LAYERS = [trt.LayerType.SHAPE, trt.LayerType.CONSTANT]
-    num_tensors_marked = 0
+    outputs = []
     in_loop = False
     for layer in network:
         if layer.type in LOOP_START_LAYERS:
             G_LOGGER.warning("Loop detected. Please ensure the network is topologically sorted so that layers within "
-                             "the loop body are not marked as network outputs in layerwise mode")
+                             "the loop body are not marked as network outputs in layerwise mode", mode=LogMode.ONCE)
             in_loop = True
         elif layer.type in LOOP_END_LAYERS:
             in_loop = False
 
-        def should_mark_layer():
-            return not in_loop and layer.type not in EXCLUDE_OUTPUT_LAYERS
-
-        if should_mark_layer():
+        should_mark_layer = not in_loop and layer.type not in EXCLUDE_OUTPUT_LAYERS
+        if should_mark_layer:
             for index in range(layer.num_outputs):
                 tensor = layer.get_output(index)
-                if not tensor.is_network_output:
-                    G_LOGGER.verbose("Marking {:} as an output".format(tensor.name))
-                    network.mark_output(tensor)
-                    num_tensors_marked += 1
-    G_LOGGER.verbose("Marking {:} tensors as outputs".format(num_tensors_marked))
+                outputs.append(tensor.name)
+
+    G_LOGGER.verbose("Marking {:} tensors as outputs".format(len(outputs)))
+    mark_outputs(network, outputs)
 
 
 def unmark_outputs(network, outputs):
@@ -258,7 +264,7 @@ def unmark_outputs(network, outputs):
 
 
 def str_from_config(config):
-    config_str = "max_workspace_size={:} bytes ({:.2f} MB) | ".format(config.max_workspace_size, config.max_workspace_size / (1024.0 ** 2))
+    config_str = "max_workspace_size={:} ({:.2f} MB) | ".format(config.max_workspace_size, config.max_workspace_size / (1024.0 ** 2))
     with contextlib.suppress(AttributeError): config_str += "tf32={:}, ".format(config.get_flag(trt.BuilderFlag.TF32))
     config_str += "fp16={:}, int8={:}, strict_types={:} | {:} profiles".format(config.get_flag(trt.BuilderFlag.FP16),
                         config.get_flag(trt.BuilderFlag.INT8), config.get_flag(trt.BuilderFlag.STRICT_TYPES), config.num_optimization_profiles)
@@ -267,7 +273,7 @@ def str_from_config(config):
 
 def check_profile(profile):
     if not bool(profile):
-        G_LOGGER.critical("Profile is not valid, please provide profile data. Note: profile was: {:}".format(profile_shapes))
+        G_LOGGER.critical("Profile is not valid, please provide profile data. Note: profile was: {:}".format(profile))
     return profile
 
 
@@ -281,20 +287,22 @@ def build_default_profile(builder, network, default_shape_value=None):
     for idx in range(network.num_inputs):
         inp = network.get_input(idx)
 
-        with G_LOGGER.verbosity(): # WAR for spam from TRT
+        with G_LOGGER.verbosity(G_LOGGER.CRITICAL): # WAR for spam from TRT
             is_shape_tensor = inp.is_shape_tensor
 
         if is_shape_tensor:
             rank = inp.shape[0]
             shape = (default_shape_value, ) * rank
-            G_LOGGER.warning("Input shape-tensor: {:32} | Adjusted dynamic shape-tensor contents to: {:}. If this is incorrect, please provide a profile "
+            G_LOGGER.warning("Input shape-tensor: {:24} | Will use input values: {:} in profile.\n"
+                             "If this is incorrect, please provide a profile "
                              "that sets the values for this input shape-tensor.".format(inp.name, shape, rank), mode=LogMode.ONCE)
             trt_profile.set_shape_input(inp.name, shape, shape, shape)
         else:
             shape = override_shape(inp.shape)
             if override_shape(inp.shape) != inp.shape:
-                G_LOGGER.warning("Input tensor: {:32} | Adjusted dynamic shape: {:} to: {:}. If this is incorrect, please provide a profile "
-                                 "that sets the shape for this input tensor.".format(inp.name, inp.shape, shape), mode=LogMode.ONCE)
+                G_LOGGER.warning("Input tensor: {:24} | Will use shape: {:} in profile (tensor shape is: {:}).\n"
+                                 "If this is incorrect, please provide a profile "
+                                 "that sets the shape for this input tensor.".format(inp.name, shape, inp.shape), mode=LogMode.ONCE)
             trt_profile.set_shape(inp.name, shape, shape, shape)
     return check_profile(trt_profile)
 
@@ -314,13 +322,13 @@ def build_profile(builder, network, profile):
             if inp.name in profile:
                 shapes = profile[inp.name]
                 trt_profile.set_shape_input(inp.name, shapes.min, shapes.opt, shapes.max)
-                G_LOGGER.extra_verbose("Input shape-tensor: {:32} | Setting values to min: {:}, opt: {:}, max: {:}".format(inp.name, shapes.min, shapes.opt, shapes.max))
+                G_LOGGER.extra_verbose("Input shape-tensor: {:24} | Setting values to min: {:}, opt: {:}, max: {:}".format(inp.name, shapes.min, shapes.opt, shapes.max))
             else:
-                G_LOGGER.warning("input shape-tensor: {:32} | No values provided. Assuming this is not a dynamic shape-tensor.".format(inp.name), mode=LogMode.ONCE)
+                G_LOGGER.warning("input shape-tensor: {:24} | No values provided. Assuming this is not a dynamic shape-tensor.".format(inp.name), mode=LogMode.ONCE)
         elif misc.is_shape_dynamic(inp.shape):
             shapes = profile[inp.name]
             trt_profile.set_shape(inp.name, shapes.min, shapes.opt, shapes.max)
-            G_LOGGER.extra_verbose("Input tensor: {:32} | Setting shape to min: {:}, opt: {:}, max: {:}".format(inp.name, shapes.min, shapes.opt, shapes.max))
+            G_LOGGER.extra_verbose("Input tensor: {:24} | Setting shape to min: {:}, opt: {:}, max: {:}".format(inp.name, shapes.min, shapes.opt, shapes.max))
 
     if unused_keys:
         G_LOGGER.warning("Some inputs provided in the profile were unused: {:}".format(list(unused_keys)))
@@ -392,7 +400,7 @@ def str_from_engine(engine):
     output_metadata = get_output_metadata_from_engine(engine, 0, bindings_per_profile)
     engine_str += "---- {:} Engine Outputs ----\n{:}\n\n".format(len(output_metadata), output_metadata)
 
-    engine_str += "---- Memory ----\nWorkspace Memory: {:} bytes\n\n".format(engine.max_workspace_size)
+    engine_str += "---- Memory ----\nDevice Memory: {:} bytes\n\n".format(engine.device_memory_size)
 
     engine_str += "---- {:} Profiles ({:} Bindings Each) ----\n".format(engine.num_optimization_profiles, bindings_per_profile)
     for profile_index in range(engine.num_optimization_profiles):
@@ -421,7 +429,7 @@ def get_bindings_per_profile(engine):
     return engine.num_bindings // engine.num_optimization_profiles
 
 
-def get_active_profile_bindings(engine, context):
+def get_active_profile_bindings(context):
     """
     Gets the start and end binding indices for the active optimization profile.
 
@@ -433,13 +441,13 @@ def get_active_profile_bindings(engine, context):
         Tuple[int, int]: The start and end bindings indices, in that order
     """
     active_profile = context.active_optimization_profile
-    bindings_per_profile = get_bindings_per_profile(engine)
+    bindings_per_profile = get_bindings_per_profile(context.engine)
 
     start_binding = bindings_per_profile * active_profile
     end_binding = start_binding + bindings_per_profile
 
     G_LOGGER.ultra_verbose("Total # of Profiles: {:}, Bindings Per Profile: {:}, Active Profile: {:}, "
                            "Start Binding: {:}, End Binding: {:}".format(
-                                engine.num_optimization_profiles, bindings_per_profile,
+                                context.engine.num_optimization_profiles, bindings_per_profile,
                                 active_profile, start_binding, end_binding))
     return start_binding, end_binding

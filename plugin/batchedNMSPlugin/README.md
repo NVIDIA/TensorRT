@@ -27,7 +27,7 @@ This plugin accelerates this non maximum suppression step during TensorRT infere
 The `batchedNMSPlugin` takes two inputs, boxes input and scores input.
 
 **Boxes input**
-The boxes input are of shape `[batch_size, number_boxes, number_classes, number_box_parameters]`. The box location usually consists of four parameters such as `[x_min, y_min, x_max, y_max]`. For example, if your model outputs `8732` bounding boxes given one image, there are `100` candidate classes, the shape of boxes input will be `[8732, 100, 4]`.
+The boxes input are of shape `[batch_size, number_boxes, number_classes, number_box_parameters]`. The box location usually consists of four parameters such as `[x1, y1, x2, y2]` where (x1, y1) and (x2, y2) are the coordinates of any diagonal pair of box corners. For example, if your model outputs `8732` bounding boxes given one image, there are `100` candidate classes, the shape of boxes input will be `[8732, 100, 4]`.
 
 **Scores input**
 The scores input are of shape `[batch_size, number_boxes, number_classes]`. Each box has an array of probability for each candidate class.
@@ -64,7 +64,7 @@ The `batchedNMSPlugin` is created using `BatchedNMSPluginCreator` with `NMSParam
 |`float`   |`iouThreshold`            |The scalar threshold for IOU (new boxes that have high IOU overlap with previously selected boxes are removed).
 |`bool`    |`isNormalized`            |Set to `false` if the box coordinates are not normalized, meaning they are not in the range `[0,1]`. Defaults to `true`.
 |`bool`    |`clipBoxes`               |Forcibly restrict bounding boxes to the normalized range `[0,1]`. Only applicable if `isNormalized` is also `true`. Defaults to `true`.
-
+|`int`     |`scoreBits`               |The number of bits to represent the score values during radix sort. The number of bits to represent score values(confidences) during radix sort. This valid range is 0 < scoreBits <= 10. The default value is 16(which means to use full bits in radix sort). Setting this parameter to any invalid value will result in the same effect as setting it to 16. This parameter can be tuned to strike for a best trade-off between performance and accuracy. Lowering scoreBits will improve performance but with some minor degradation to the accuracy. This parameter is only valid for FP16 data type for now.
 
 ## Algorithms
 

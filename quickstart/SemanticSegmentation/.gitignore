@@ -1,0 +1,5 @@
+bin/*
+.ipynb_checkpoints/
+*.ppm
+*.onnx
+*.engine

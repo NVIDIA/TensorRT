@@ -9,6 +9,7 @@
     * [Running the engine](#running-the-engine)
     * [Verifying the output](#verifying-the-output)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -133,30 +134,31 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 [SoftMax layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#softmax-layer)
 The SoftMax layer applies the SoftMax function on the input tensor along an input dimension specified by the user.
 
+## Preparing sample data
+
+1. Set `$TRT_DATADIR` to point to the sample data directory.
+
+2.  Download the [faster_rcnn_models.tgz](https://dl.dropboxusercontent.com/s/o6ii098bu51d139/faster_rcnn_models.tgz) dataset.
+    ```
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    mkdir -p $TRT_DATADIR/faster-rcnn
+    wget --no-check-certificate https://dl.dropboxusercontent.com/s/o6ii098bu51d139/faster_rcnn_models.tgz?dl=0 -O $TRT_DATADIR/faster-rcnn/faster-rcnn.tgz
+    ```
+
+3.  Extract the dataset into the `data/faster-rcnn` directory.
+	```
+    tar zxvf $TRT_DATADIR/faster-rcnn/faster-rcnn.tgz -C $TRT_DATADIR/faster-rcnn --strip-components=1 --exclude=ZF_*
+	```
+
 ## Running the sample
 
-1.  Download the [faster_rcnn_models.tgz](https://dl.dropboxusercontent.com/s/o6ii098bu51d139/faster_rcnn_models.tgz) dataset.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
+
+2.  Run the sample to generate characters based on the trained model:
+    ```bash
+	sample_fasterRCNN --datadir=$TRT_DATADIR/faster-rcnn
     ```
-    cd <TensorRT directory>
-    wget --no-check-certificate https://dl.dropboxusercontent.com/s/o6ii098bu51d139/faster_rcnn_models.tgz?dl=0 -O data/faster-rcnn/faster-rcnn.tgz
-    ```
-
-2.  Extract the dataset into the `data/faster-rcnn` directory.
-	```
-    tar zxvf data/faster-rcnn/faster-rcnn.tgz -C data/faster-rcnn --strip-components=1 --exclude=ZF_*
-	```
-
-3.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleFasterRCNN` directory. The binary named `sample_fasterRCNN` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples
-	make
-	```
-	Where `<TensorRT root directory>` is where you installed TensorRT.
-
-4.  Run the sample to perform inference.
-	`./sample_fasterRCNN`
-
-5.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
+3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	```
 	Sample output
 	[I] Detected car in 000456.ppm with confidence 99.0063%  (Result stored in car-0.990063.ppm).

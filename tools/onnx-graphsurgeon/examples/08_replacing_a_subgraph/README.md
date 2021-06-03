@@ -1,5 +1,7 @@
 # Replacing A Subgraph
 
+## Introduction
+
 This example first generates a model consisting of a `Min` op followed by a
 `Max`, and then uses the `graph.layer()` and `graph.register()` APIs seen in
 [example 07](../07_creating_a_model_with_the_layer_api) to create a function

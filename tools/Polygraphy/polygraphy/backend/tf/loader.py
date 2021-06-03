@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import os
 import tensorflow as tf
 from polygraphy.backend.base import BaseLoadModel
 from polygraphy.backend.tf import util as tf_util
-from polygraphy.common import constants
+from polygraphy.common import constants, func
 from polygraphy.logger.logger import G_LOGGER
 from polygraphy.util import misc
 
@@ -105,7 +105,7 @@ class OptimizeGraph(BaseLoadModel):
             output_names = [name.split(":")[0] for name in output_names]
             output_graph_def = tf.graph_util.convert_variables_to_constants(sess, graphdef, output_names)
             output_graph_def = self.constfold(output_graph_def, output_names)
-            return GraphFromFrozen(output_graph_def)()
+            return func.invoke(GraphFromFrozen(output_graph_def))
 
 
 class GraphFromKeras(BaseLoadModel):

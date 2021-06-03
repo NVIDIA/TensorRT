@@ -1,9 +1,9 @@
 onnx
 tensorflow-gpu < 2.0
-onnx-tf
+onnx-tf < 1.5.0
 pytest
 tf2onnx
-onnxruntime==1.0.0
+onnxruntime==1.6.0
 colored
 numpy
 pytest-xdist

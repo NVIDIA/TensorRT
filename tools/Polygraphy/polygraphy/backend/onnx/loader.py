@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,7 +59,10 @@ class OnnxFromTfGraph(BaseLoadModel):
 
             opset (int): The ONNX opset to use during conversion.
             optimize (bool): Whether to use tf2onnx's graph optimization pass.
-            fold_constant (bool): Whether to fold constants in the TensorFlow Graph. Requires that ``optimize`` is also enabled. Defaults to True.
+            fold_constant (bool):
+                    Whether to fold constants in the TensorFlow Graph.
+                    Requires that ``optimize`` is also enabled.
+                    Defaults to True.
         """
         self._graph = graph
         self.opset = misc.default_value(opset, 11)
@@ -110,12 +113,12 @@ class ModifyOnnx(BaseLoadModel):
             model (Callable() -> onnx.ModelProto): A loader that can supply an ONNX model.
 
             outputs (Sequence[str]):
-                Names of tensors to mark as outputs. If provided, this will override the
-                existing model outputs.
-                If a value of `constants.MARK_ALL` is used instead of a list, all tensors in the network are marked.
+                    Names of tensors to mark as outputs. If provided, this will override the
+                    existing model outputs.
+                    If a value of `constants.MARK_ALL` is used instead of a list, all tensors in the network are marked.
             exclude_outputs (Sequence[str]):
-                Names of tensors to exclude as outputs. This can be useful in conjunction with
-                ``outputs=constants.MARK_ALL`` to omit outputs.
+                    Names of tensors to exclude as outputs. This can be useful in conjunction with
+                    ``outputs=constants.MARK_ALL`` to omit outputs.
         """
         self._model = model
         self.do_shape_inference = misc.default_value(do_shape_inference, False)

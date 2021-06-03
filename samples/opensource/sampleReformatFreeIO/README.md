@@ -6,6 +6,7 @@
 - [How does this sample work?](#how-does-this-sample-work)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample-help-options)
+- [Preparing sample data](#preparing-sample-data)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -35,18 +36,30 @@ This sample, sampleReformatFreeIO, uses a Caffe model that was trained on the [M
 	}
 	```
 
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    pushd $TRT_DATADIR/mnist
+    pip install Pillow
+    python3 download_pgms.py
+    popd
+    ```
+
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleReformatFreeIO` directory. The binary named `sample_reformat_free_io` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleReformatFreeIO
-	make
-	```
-
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2.  Run inference on the digit looping from 0 to 9:
-    `./sample_reformat_free_io`
+    ```bash
+    sample_reformat_free_io --datadir=<path/to/data> --useDLACore=N
+    ```
+
+    For example:
+    ```bash
+    sample_reformat_free_io --datadir $TRT_DATADIR/mnist
+    ```
 
 3.  Verify that all 10 digits match correctly. If the sample runs successfully, you should see output similar to the following:
 	```

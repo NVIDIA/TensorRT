@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,10 +44,10 @@ class OnnxTfRunner(BaseRunner):
 
 
     def deactivate_impl(self):
-        del self.tf_rep
+        self.tf_rep = None
 
 
-    def infer(self, feed_dict):
+    def infer_impl(self, feed_dict):
         start = time.time()
         outputs = self.tf_rep.run(list(feed_dict.values()))
         end = time.time()

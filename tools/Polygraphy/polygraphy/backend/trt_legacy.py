@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,23 +14,21 @@
 # limitations under the License.
 #
 
-from polygraphy.backend.base import BaseRunner, BaseLoadModel
-from polygraphy.backend.trt.loader import BaseNetworkFromOnnx
-from polygraphy.util.format import DataFormat, FormatManager
-from polygraphy.common import TensorMetadata, constants
-from polygraphy.backend.trt import util as trt_util
-from polygraphy.backend.trt.util import TRT_LOGGER
-from polygraphy.logger.logger import G_LOGGER
-from polygraphy.util import misc, cuda
-
-
-from collections import OrderedDict
 import contextlib
-import time
 import os
+import time
+from collections import OrderedDict
 
-import tensorrt as trt
 import numpy as np
+import tensorrt as trt
+from polygraphy.backend.base import BaseLoadModel, BaseRunner
+from polygraphy.backend.trt import util as trt_util
+from polygraphy.backend.trt.loader import BaseNetworkFromOnnx
+from polygraphy.backend.trt.util import TRT_LOGGER
+from polygraphy.common import TensorMetadata, constants
+from polygraphy.logger.logger import G_LOGGER
+from polygraphy.util import cuda, misc
+from polygraphy.util.format import DataFormat, FormatManager
 
 misc.log_module_info(trt)
 
@@ -58,8 +56,8 @@ class ConvertToUff(BaseLoadModel):
 
             save_uff (bool): Whether to write the generated UFF and corresponding PBTXT files.
         """
-        from polygraphy.backend.tf import util as tf_util
         import uff
+        from polygraphy.backend.tf import util as tf_util
         misc.log_module_info(uff)
 
         graph, output_names = self.tf_loader()
@@ -132,14 +130,14 @@ class ParseNetworkFromOnnxLegacy(BaseNetworkFromOnnx):
     def __call__(self):
         from polygraphy.backend.onnx import util as onnx_util
 
-        builder, network, parser = super().__call__()
-        onnx_model, _ = misc.try_call(self.onnx_loader)
-        dtype, shape = list(onnx_util.get_input_metadata(onnx_model.graph).values())[0]
+        with misc.FreeOnException(super().__call__()) as (builder, network, parser):
+            onnx_model, _ = misc.try_call(self.onnx_loader)
+            _, shape = list(onnx_util.get_input_metadata(onnx_model.graph).values())[0]
 
-        parser.parse(onnx_model.SerializeToString())
-        trt_util.check_onnx_parser_errors(parser)
+            parser.parse(onnx_model.SerializeToString())
+            trt_util.check_onnx_parser_errors(parser)
 
-        return builder, network, parser, shape[0]
+            return builder, network, parser, shape[0]
 
 
 class LoadNetworkFromCaffe(BaseLoadModel):
@@ -273,10 +271,9 @@ class TrtLegacyRunner(BaseRunner):
         else:
             trt.init_libnvinfer_plugins(TRT_LOGGER, "")
             builder, network, parser, model_batch_size = self.network_loader()
-            with builder, network, parser:
+            with builder, network, parser, builder.create_builder_config() as config:
                 builder.max_batch_size = int(self.max_batch_size or model_batch_size or 1)
 
-                config = builder.create_builder_config()
                 config.max_workspace_size = int(self.max_workspace_size)
 
                 if not self.tf32:
@@ -299,7 +296,7 @@ class TrtLegacyRunner(BaseRunner):
                                 network.mark_output(out)
 
                 G_LOGGER.info("Building engine: max workspace size={:} bytes, max batch size={:}, fp16={:}, "
-                              "tf32={:}".format(builder.max_workspace_size, builder.max_batch_size, self.fp16, self.tf32))
+                              "tf32={:}".format(config.max_workspace_size, builder.max_batch_size, self.fp16, self.tf32))
                 self.engine = builder.build_engine(network, config)
 
 
@@ -334,7 +331,7 @@ class TrtLegacyRunner(BaseRunner):
         self.stream.free()
 
 
-    def infer(self, feed_dict):
+    def infer_impl(self, feed_dict):
         start = time.time()
         [self.input_buffers[name].device.copy_from(buffer, self.stream) for name, buffer in feed_dict.items()]
         # We will not run with smaller batch sizes than whatever the builder chose.

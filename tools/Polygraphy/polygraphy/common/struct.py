@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ MetadataTuple = namedtuple("MetadataTuple", ["dtype", "shape"]) # Metadata for s
 
 class TensorMetadata(OrderedDict):
     """
-    An OrderedDict[str, Tuple[np.dtype, Tuple[int]]] that maps input names to their data types and shapes.
+    An OrderedDict[str, Tuple[numpy.dtype, Tuple[int]]] that maps input names to their data types and shapes.
     """
     def add(self, name, dtype, shape):
         """
@@ -29,7 +29,7 @@ class TensorMetadata(OrderedDict):
 
         Args:
             name (str): The name of the input.
-            dtype (np.dtype): The data type of the input.
+            dtype (numpy.dtype): The data type of the input.
             shape (Tuple[int]):
                     The shape of the input. Dynamic dimensions may
                     be indicated by negative values, ``None``, or a string.

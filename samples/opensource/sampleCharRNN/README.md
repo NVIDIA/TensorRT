@@ -4,6 +4,7 @@
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
+- [Preparing sample data](#preparing-sample-data)
 - [Converting TensorFlow weights](#converting-tensorflow-weights)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample-help-options)
@@ -45,30 +46,42 @@ The RNNv2 layer implements recurrent layers such as Recurrent Neural Network (RN
 [TopK](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#topk-layer)
 The TopK layer is used to identify the character that has the maximum probability of appearing next. The TopK layer finds the top K maximum (or minimum) elements along a dimension, returning a reduced tensor and a tensor of index positions.
 
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    ```
+
 ## Converting TensorFlow weights
 
-If you want to train your own model and not use the pre-trained model included in this sample, you’ll need to convert the TensorFlow weights into a format that TensorRT can use.
+(Optional) If you want to train your own model and not use the pre-trained model included in this sample, you’ll need to convert the TensorFlow weights into a format that TensorRT can use.
 
 1.  Locate TensorFlow weights dumping script:  
-`/usr/src/tensorrt/samples/common/dumpTFWts.py`
+    ```bash
+    $TRT_OSSPATH/samples/common/dumpTFWts.py
+    ```
 
 	This script has been provided to extract the weights from the model checkpoint files that are created during training. Use `dumpTFWts.py -h` for directions on the usage of the script.
 
 2.  Convert the TensorFlow weights using the following command:
- `dumpTFWts.py -m /path/to/checkpoint -o /path/to/output`
-
+    ```bash
+    dumpTFWts.py -m /path/to/checkpoint -o /path/to/output
+    ```
 
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleCharRNN` directory. The binary named `sample_char_rnn` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples
-	make
-	```
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2.  Run the sample to generate characters based on the trained model:
-	`./sample_char_rnn --datadir=<path/to/data>`
+    ```bash
+	sample_char_rnn --datadir=<path/to/data>
+    ```
+
+    For example:
+    ```bash
+    sample_char_rnn --datadir $TRT_DATADIR/char-rnn
+    ```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	```

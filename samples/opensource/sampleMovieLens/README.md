@@ -9,6 +9,7 @@
     * [Verifying the output](#verifying-the-output)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Training an NCF network](#training-an-ncf-network)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -70,18 +71,17 @@ The TopK layer finds the top `K` maximum (or minimum) elements along a dimension
 This sample comes with a pre-trained model. However, if you want to train your own model, you would need to also convert the model weights to UFF format before you can run the sample.
 
 1.  Clone the NCF repository.
-    ```
+    ```bash
     git clone https://github.com/hexiangnan/neural_collaborative_filtering.git
     cd neural_collaborative_filtering
     git checkout 0cd2681598507f1cc26d110083327069963f4433
     ```
 2.  Apply the `sampleMovieLensTraining.patch` file to save the final result.
-    ```
+    ```bash
     patch -l -p1 < <TensorRT Install>/samples/sampleMovieLens/sampleMovieLensTraining.patch
     ```
-3.  [Install Python 3](https://www.tensorflow.org/install/pip#1.-install-the-python-development-environment-on-your-system).
-4. Train the MLP based NCF network.
-    ```
+3. Train the MLP based NCF network.
+    ```bash
     python3 MLP.py --dataset ml-1m --epochs 20 --batch_size 256 --layers [64,32,16,8] --reg_layers [0,0,0,0] --num_neg 4 --lr 0.001 --learner adam --verbose 1 --out 1
     ```
 
@@ -89,9 +89,9 @@ This sample comes with a pre-trained model. However, if you want to train your o
     -   `movielens_ratings.txt`: A text file which contains the lists of `MovieIDs` for each user and the 10 highest-rated `MovieIDs` with their probabilities.
     -   `sampleMovieLens.pb`: The frozen TensorFlow graph which contains the information of the network structure and parameters.
 
-5.  Convert the trained model weights to UFF format which sampleMovieLens understands.
+4. Convert the trained model weights to UFF format which sampleMovieLens understands.
     1.  Convert the `frozen .pb` file to `.uff` format.
-        ```
+        ```bash
         convert-to-uff sampleMovieLens.pb -p preprocess.py
         ```
 
@@ -104,21 +104,22 @@ This sample comes with a pre-trained model. However, if you want to train your o
         -   The `movielens_ratings.txt` file to the `<TensorRT Install>/data/movielens` directory.
 
 
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    ```
+
 ## Running the sample
 
-1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleMovieLens` directory. The binary named `sample_movielens` will be created in the `<TensorRT root directory>/bin` directory.
-    ```
-    cd <TensorRT root directory>/samples/sampleMovieLens
-    make
-    ```
-    Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2. Run the sample to predict the highest-rated movie for each user.
-    ```
-    cd <TensorRT Install>/bin
-    ./sample_movielens # Run with default batch=32 i.e. num of users
-    ./sample_movielens -b <N> # Run with batch=N i.e. num of users
-    ./sample_movielens --verbose # Prints out inputs, outputs, expected outputs, and expected vs predicted probabilities
+    ```bash
+    sample_movielens # Run with default batch=32 i.e. num of users
+    sample_movielens -b <N> # Run with batch=N i.e. num of users
+    sample_movielens --verbose # Prints out inputs, outputs, expected outputs, and expected vs predicted probabilities
     ```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

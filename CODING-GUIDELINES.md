@@ -76,7 +76,7 @@ if (nbInputs == kNbInputsWBias) {/*...*/}
    * Public member variables do not require the 'm' prefix but it is highly encouraged to use the prefix when needed to improve code clarity, especially in cases where the class is a base class in an inheritance chain.
 
 8. Constants
-   * Enumerations, global constants, static constants at class-scope and function-scope magic-number/literal constants are uppercase snakecase with prefix 'k': 
+   * Enumerations, global constants, static constants at class-scope and function-scope magic-number/literal constants are uppercase snakecase with prefix 'k':
 ```cpp
 const int kDIGIT_NUM = 10;
 ```
@@ -103,7 +103,7 @@ Notes:
 
 #### Formatting
 1. Use the [LLVM clang-format](https://clang.llvm.org/docs/ClangFormat.html) tool for formatting your changes prior to submitting the PR.
-2. Use a maximum of 120 characters per line. The auto formatting tool will wrap longer lines. 
+2. Use a maximum of 120 characters per line. The auto formatting tool will wrap longer lines.
 3. Exceptions to formatting violations must be justified on a per-case basis. Bypassing the formatting rules is discouraged, but can be achieved for exceptions as follows:
 ```cpp
 // clang-format off
@@ -133,7 +133,7 @@ doSomeOperation(/* checkForErrors = */ false);
 ```cpp
 //! This is a Doxygen comment
 //! in C++ style
- 
+
 struct Foo
 {
     int x; //!< This is a Doxygen comment for members
@@ -149,7 +149,7 @@ struct Foo
 #endif
 ```
 
-```cpp 
+```cpp
 // Alternative: use a macro which evaluates to a noop in release code.
 #if DEBUG_CONVOLUTION_INSTRUMENTATION
 # define DEBUG_CONV_CODE(x) x
@@ -235,7 +235,7 @@ switch (x) case 4: if (y) case 5: return 0; else default: return 1;
 switch (x)
 {
 case 0:         // Fall-through allowed from case 0: to case 1: since case 0 is empty.
-case 1:    
+case 1:
     a();
     b();
     break;
@@ -250,7 +250,7 @@ case 5:
     c();
     throw 42;  // Terminating with throw is okay
 default:
-    throw 42;   
+    throw 42;
 }
 ```
 
@@ -297,7 +297,7 @@ case 1:
 #### Preprocessor Directives
 1. *MISRA C++: 2008 Rule 16-0-2*
    `#define` and `#undef` of macros should be done only at global namespace.
-2. Avoid the use of `#ifdef` and `#ifndef` directives (except in the case of header include guards). Prefer to use `#if defined(...)` or `#if !defined(...)` instead. The latter syntax is more consistent with C syntax, and allows you to use more complicated preprocessor conditionals, e.g.: 
+2. Avoid the use of `#ifdef` and `#ifndef` directives (except in the case of header include guards). Prefer to use `#if defined(...)` or `#if !defined(...)` instead. The latter syntax is more consistent with C syntax, and allows you to use more complicated preprocessor conditionals, e.g.:
 ```cpp
 #if defined(FOO) || defined(BAR)
 void foo();
@@ -343,14 +343,14 @@ for (size_t i = 0; i < mTensors.size(); ++i) // preferred style
 ```
 * Using only signed integers for the above would lead to prolixity and perhaps unsafe narrowing:
 ```cpp
-for (int i = 0; i < static_cast<int>(mTensors.size()); ++i)  
+for (int i = 0; i < static_cast<int>(mTensors.size()); ++i)
 ```
 
 
 #### Special Considerations for API
 1. The API consists, with very few exceptions, of methodless structs and pure virtual interface classes.
 2. API class methods should be either virtual or inline.
-3. The API does not use  integral types with platform-dependent sizes, other than `int`, `unsigned`, and `bool`.   `size_t` should be used only for sizes of memory buffers. 
+3. The API does not use  integral types with platform-dependent sizes, other than `int`, `unsigned`, and `bool`.   `size_t` should be used only for sizes of memory buffers.
 4. The API does not use any aggregate types (e.g. `std::string`) which may be compiled differently with different compilers and libraries.
 5. The API minimizes dependencies on system headers - currently only `<cstddef>` and `<cstdint>`.
 6. Memory ownership may not be transferred across API boundaries - any memory allocated inside a library must be freed inside the library.
@@ -419,7 +419,7 @@ char const * const errStr = getErrorStr(status);
 1. All TensorRT Open Source Software code should contain an NVIDIA copyright header that includes the current year.  The following block of text should be prepended to the top of all OSS files.  This includes .cpp, .h, .cu, .py, and any other source files which are compiled or interpreted.
 ```cpp
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 #include "kernel.h"
 #include "bboxUtils.h"
 
-// PROPOSALS INFERENCE 
+// PROPOSALS INFERENCE
 pluginStatus_t proposalsInference(cudaStream_t stream,
                                  const int N,
                                  const int A,
@@ -59,7 +59,7 @@ pluginStatus_t proposalsInference(cudaStream_t stream,
      */
     DEBUG_PRINTF("&&&& ANCHORS %u\n", hash(anchors, 9 * 4 * sizeof(float)));
     // scores: objectness of each predicted bounding boxes
-    // 2: softmax, instead of sigmoid, was used for binary objectness classifcation in Faster R-CNN 
+    // 2: softmax, instead of sigmoid, was used for binary objectness classifcation in Faster R-CNN
     DEBUG_PRINTF("&&&& SCORES  %u\n", hash(scores, N * A * 2 * H * W * sizeof(float)));
     // deltas: predicted bounding box offsets
     DEBUG_PRINTF("&&&& DELTAS  %u\n", hash(deltas, N * A * 4 * H * W * sizeof(float)));
@@ -111,7 +111,7 @@ pluginStatus_t proposalsInference(cudaStream_t stream,
     DEBUG_PRINTF("&&&& FG SCORES %u\n", hash((void*) fgScores, N * A * H * W * sizeof(float)));
 
     /*
-     * Non maximum suppression using objectness scores to get the most representative bounding boxes (ROIs). 
+     * Non maximum suppression using objectness scores to get the most representative bounding boxes (ROIs).
      * The rois were at the feature map scale.
      */
     status = nms(stream,
@@ -130,7 +130,7 @@ pluginStatus_t proposalsInference(cudaStream_t stream,
     return STATUS_SUCCESS;
 }
 
-// WORKSPACE SIZES 
+// WORKSPACE SIZES
 size_t proposalsForwardNMSWorkspaceSize(int N,
                                         int A,
                                         int H,
@@ -167,4 +167,3 @@ size_t proposalsInferenceWorkspaceSize(int N,
     wss[2] = proposalForwardFgScoresWorkspaceSize(N, A, H, W);
     return calculateTotalWorkspaceSize(wss, 3);
 }
-

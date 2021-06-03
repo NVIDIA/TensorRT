@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,24 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.trt import EngineFromBytes, EngineFromNetwork, CreateConfig, NetworkFromOnnxBytes, NetworkFromOnnxPath, ModifyNetwork, Calibrator, Profile, SaveEngine, LoadPlugins
-from polygraphy.backend.trt import util as trt_util
-from polygraphy.common import PolygraphyException, constants
-from polygraphy.comparator import DataLoader
-
-from tests.models.meta import ONNX_MODELS
-from tests.common import version, check_file_non_empty
-
-import tensorrt as trt
-import numpy as np
-import tempfile
-import pytest
 import os
+import tempfile
+
+import numpy as np
+import pytest
+import tensorrt as trt
+from polygraphy.backend.trt import (Calibrator, CreateConfig,
+                                    EngineFromNetwork, NetworkFromOnnxBytes)
+from polygraphy.backend.trt.loader import EngineFromBytes
+from polygraphy.common import func
+from polygraphy.util import misc
+from tests.common import check_file_non_empty
+from tests.models.meta import ONNX_MODELS
 
 
 @pytest.fixture(scope="session")
 def identity_builder_network():
-    builder, network, parser = NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader)()
+    builder, network, parser = func.invoke(NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader))
     with builder, network, parser:
         yield builder, network
 
@@ -78,7 +78,12 @@ class TestCalibrator(object):
         config.set_flag(trt.BuilderFlag.INT8)
         config.int8_calibrator = calibrator
 
-        with builder.build_engine(network, config) as engine:
+        if misc.version(trt.__version__) < misc.version("7.3"):
+            engine = builder.build_engine(network, config)
+        else:
+            engine = func.invoke(EngineFromBytes(builder.build_serialized_network(network, config)))
+
+        with engine:
             assert engine
 
 
@@ -88,7 +93,7 @@ class TestCalibrator(object):
 
         with tempfile.NamedTemporaryFile() as cache:
             create_config = CreateConfig(int8=True, calibrator=Calibrator(data, cache=cache.name))
-            with EngineFromNetwork((builder, network), create_config)():
+            with func.invoke(EngineFromNetwork((builder, network), create_config)):
                 check_file_non_empty(cache.name)
 
 
@@ -99,7 +104,7 @@ class TestCalibrator(object):
 
         with tempfile.NamedTemporaryFile(mode=mode) as cache:
             create_config = CreateConfig(int8=True, calibrator=Calibrator(data, cache=cache))
-            with EngineFromNetwork((builder, network), create_config)():
+            with func.invoke(EngineFromNetwork((builder, network), create_config)):
                 if mode != "rb":
                     check_file_non_empty(cache.name)
 
@@ -113,7 +118,7 @@ class TestCalibrator(object):
         calibrator = Calibrator(data)
         # First, populate the cache
         create_config = CreateConfig(int8=True, calibrator=calibrator)
-        with EngineFromNetwork((builder, network), create_config)():
+        with func.invoke(EngineFromNetwork((builder, network), create_config)):
             pass
 
         # Check that the internal cache is populated
@@ -128,7 +133,7 @@ class TestCalibrator(object):
             calibrator = Calibrator(data, cache=cache.name)
             # First, populate the cache
             create_config = CreateConfig(int8=True, calibrator=calibrator)
-            with EngineFromNetwork((builder, network), create_config)():
+            with func.invoke(EngineFromNetwork((builder, network), create_config)):
                 pass
 
             # Ensure that now the calibrator will read from the cache when reset

@@ -10,6 +10,7 @@
     * [Serializing and deserializing](#serializing-and-deserializing)
     * [Resource management and execution](#resource-management-and-execution)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -233,20 +234,31 @@ The Scale layer implements a per-tensor, per-channel, or per-element affine tran
 [SoftMax layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#softmax-layer)
 The SoftMax layer applies the SoftMax function on the input tensor along an input dimension specified by the user.
 
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    pushd $TRT_DATADIR/mnist
+    pip install Pillow
+    python3 download_pgms.py
+    popd
+    ```
 
 ## Running the sample
 
-1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/samplePlugin` directory. The binary named `sample_plugin` will be created in the `<TensorRT root directory>/bin` directory.
-    ```sh
-    cd <TensorRT root directory>/samples/samplePlugin
-    make
-    ```
-    Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2. Run the sample to perform inference on the digit:
+    ```bash
+    sample_plugin --datadir=<path/to/data>
     ```
-    ./sample_plugin
+
+    For example:
+    ```bash
+    sample_plugin --datadir $TRT_DATADIR/mnist
     ```
+
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
     ```
     &&&& RUNNING TensorRT.sample_plugin # ./build/x86_64-linux/sample_plugin

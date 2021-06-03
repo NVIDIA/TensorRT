@@ -1,0 +1,8 @@
+TensorRT Open Source Software
+Copyright (c) 2021, NVIDIA CORPORATION.
+
+This product includes software developed at
+NVIDIA CORPORATION (https://www.nvidia.com/).
+
+This software contains code derived by Soumith Chintala.
+BSD 3-Clause License (https://github.com/pytorch/vision/blob/master/LICENSE)

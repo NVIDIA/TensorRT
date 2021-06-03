@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@
 #include "multilevelProposeROIPlugin.h"
 #include "plugin.h"
 #include "tlt_mrcnn_config.h"
+#include <algorithm>
 #include <cuda_runtime_api.h>
 #include <iostream>
-#include <algorithm>
 #include <math.h>
 
 #include <fstream>
@@ -108,7 +108,8 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::deserializePlugin(const char* n
     return new MultilevelProposeROI(data, length);
 };
 
-MultilevelProposeROI::MultilevelProposeROI(int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size)
+MultilevelProposeROI::MultilevelProposeROI(
+    int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size)
     : mPreNMSTopK(prenms_topk)
     , mKeepTopK(keep_topk)
     , mFGThreshold(fg_threshold)
@@ -121,7 +122,6 @@ MultilevelProposeROI::MultilevelProposeROI(int prenms_topk, int keep_topk, float
     assert(mIOUThreshold >= 0.0f);
     assert(mFGThreshold >= 0.0f);
 
-    mPreNMSTopK = 4096;
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
     mParam.keepTopK = mKeepTopK;
@@ -405,7 +405,7 @@ int MultilevelProposeROI::enqueue(
             static_cast<float>(mImageSize.d[1]), // Input Height
             static_cast<float>(mImageSize.d[2]),
             DataType::kFLOAT, // mType,
-            mParam, proposal_ws, workspace + kernel_workspace_offset,
+            mParam, proposal_ws, static_cast<uint8_t*>(workspace) + kernel_workspace_offset,
             inputs[2 * i + 1], // inputs[object_score],
             inputs[2 * i],     // inputs[bbox_delta]
             mValidCnt->mPtr,
@@ -418,7 +418,7 @@ int MultilevelProposeROI::enqueue(
 
     ConcatTopKWorkSpace ctopk_ws(batch_size, mFeatureCnt, mKeepTopK, mType);
     status = ConcatTopK(stream, batch_size, mFeatureCnt, mKeepTopK, DataType::kFLOAT,
-        workspace + kernel_workspace_offset, ctopk_ws, reinterpret_cast<void**>(mDeviceScores),
+        static_cast<uint8_t*>(workspace) + kernel_workspace_offset, ctopk_ws, reinterpret_cast<void**>(mDeviceScores),
         reinterpret_cast<void**>(mDeviceBboxes), final_proposals);
 
     assert(status == cudaSuccess);

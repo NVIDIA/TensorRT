@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,12 +38,11 @@ template <typename T, bool hasBias>
 int computeSkipLayerNorm(cudaStream_t stream, const int ld, const int n, const T* input, const T* skip, const T* beta,
     const T* gamma, T* output, const T* bias);
 
-
 class SkipLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    SkipLayerNormPluginDynamic(const std::string name, const nvinfer1::DataType type, const int ld, const nvinfer1::Weights& beta,
-        const nvinfer1::Weights& gamma, const nvinfer1::Weights& bias);
+    SkipLayerNormPluginDynamic(const std::string name, const nvinfer1::DataType type, const int ld,
+        const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma, const nvinfer1::Weights& bias);
 
     SkipLayerNormPluginDynamic(const std::string name, const void* data, size_t length);
 

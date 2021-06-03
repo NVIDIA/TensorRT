@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 #ifndef TRT_CAFFE_PARSER_WEIGHT_TYPE_H
 #define TRT_CAFFE_PARSER_WEIGHT_TYPE_H
 
-namespace nvcaffeparser1 
+namespace nvcaffeparser1
 {
 enum class WeightType
 {

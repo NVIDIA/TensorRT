@@ -1,6 +1,6 @@
 # TensorRT Plugins
 
-## Plugins shipped in this release
+## Contents
 
 | Plugin | Name | Versions |
 |---|---|---|
@@ -36,3 +36,7 @@
 | [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 1, 2, 3 |
 | [specialSlicePlugin](specialSlicePlugin) | SpecialSlice_TRT | 1 |
 | [splitPlugin](splitPlugin) | Split | 1 |
+
+## Known Limitations
+
+  - None

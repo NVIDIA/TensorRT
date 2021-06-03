@@ -9,6 +9,7 @@
     * [Building engines](#building-engines)
     * [Running inference](#running-inference)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -152,19 +153,29 @@ In this sample, the following layers are used. For more information about these 
 [Resize layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#resize-layer)
 The IResizeLayer implements the resize operation on an input tensor.
 
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    pushd $TRT_DATADIR/mnist
+    pip install Pillow
+    python3 download_pgms.py
+    popd
+    ```
+
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleDynamicReshape` directory. The binary named `sample_dynamic_reshape` will be created in the `<TensorRT root directory>/bin` directory.
-    ```
-    cd <TensorRT root directory>/samples/sampleDynamicReshape
-    make
-    ```
-
-    Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2.  Run the sample.
+    ```bash
+    sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
     ```
-    ./sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+
+    For example:
+    ```bash
+    sample_dynamic_reshape --datadir $TRT_DATADIR/char-rnn --fp16
     ```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

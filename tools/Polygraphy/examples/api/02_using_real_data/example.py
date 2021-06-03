@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,11 +19,11 @@
 This script uses the Polygraphy Runner API to validate the outputs
 of an identity model using a trivial dataset.
 """
-from polygraphy.backend.trt import NetworkFromOnnxPath, EngineFromNetwork, TrtRunner
-
-import numpy as np
 import os
 
+import numpy as np
+from polygraphy.backend.trt import (EngineFromNetwork, NetworkFromOnnxPath,
+                                    TrtRunner)
 
 INPUT_SHAPE = (1, 1, 2, 2)
 REAL_DATASET = [ # Definitely real data

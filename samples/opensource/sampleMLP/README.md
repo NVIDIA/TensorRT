@@ -7,6 +7,7 @@
     * [Defining the network](#defining-the-network)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Training an MLP network](#training-an-mlp-network)
+- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -57,20 +58,26 @@ The TopK layer finds the top K maximum (or minimum) elements along a dimension, 
 
 This sample comes with pre-trained weights. However, if you want to train your own MLP network, you first need to generate the weights by training a TensorFlow based neural network using an MLP optimizer, and then verify that the trained weights are converted into a format that sampleMLP can read. If you want to use the weights that are shipped with this sample, see [Running the sample](#running-the-sample).
 
-1.  [Install Python](https://www.tensorflow.org/install/pip#1.-install-the-python-development-environment-on-your-system).
-2.  Install [TensorFlow 1.4 or later](https://www.tensorflow.org/install/pip).
-3.  Download the [TensorFlow tutorial](https://github.com/aymericdamien/TensorFlow-Examples).
-	```
+1. Install [TensorFlow 1.15](https://www.tensoriflow.org/install/pip) or launch the NVIDIA Tensorflow 1.x container in a separate terminal for this step.
+    ```bash
+    docker run --rm -it --gpus all -v `pwd`:/workspace/TensorRT nvcr.io/nvidia/tensorflow:20.12-tf1-py3 /bin/bash
+    ```
+
+2. Download the [TensorFlow tutorial](https://github.com/aymericdamien/TensorFlow-Examples).
+	```bash
 	git clone https://github.com/aymericdamien/TensorFlow-Examples.git
 	cd TensorFlow-Examples
 	```
-4.  Apply the `update_mlp.patch` file to save the final result.
+
+3. Apply the patch `update_mlp.patch`.
+	```bash
+	patch -p1 < $TRT_OSSPATH/samples/opensource/sampleMLP/update_mlp.patch
+    ln -s tensorflow_v1 tensorflow
 	```
-	patch -p1 < <TensorRT Install>/samples/sampleMLP/update_mlp.patch
-	```
-5.  Train the MNIST MLP network.
-	```
-	python examples/3_NeuralNetworks/multilayer_perceptron.py
+
+4. Train the MNIST MLP network.
+	```bash
+	python3 examples/3_NeuralNetworks/multilayer_perceptron.py
 	```
 	This step produces the following file:
 	```
@@ -78,26 +85,30 @@ This sample comes with pre-trained weights. However, if you want to train your o
 	```
 	The `sampleMLP.ckpt` file contains the checkpoint for the parameters and weights.
 
- 6. Convert the trained model weights to a format sampleMLP understands.
+5. Convert the trained model weights to a format sampleMLP understands.
+	```bash
+	python3 $TRT_OSSPATH/samples/opensource/sampleMLP/convert_weights.py -m /tmp/sampleMLP.ckpt -o sampleMLP
 	```
-	python <TensorRT Install>/samples/sampleMLP/convert_weights.py -m /tmp/sampleMLP.ckpt -o sampleMLP
-	mkdir -p <TensorRT Install>/data/mlp
-	cp sampleMLP.wts2 <TensorRT Install>/data/mlp/
-	```
+
+	Copy out the `sampleMLP.wts2` generated into the test container under `$TRT_DATADIR/mlp/`
+
+## Preparing sample data
+
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    pushd $TRT_DATADIR/mlp
+    python3 ../mnist/download_pgms.py
+    popd
+    ```
 
 ## Running the sample
 
-1. Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleMLP` directory. The binary named `sample_mlp` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleMLP
-	make
-	```
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2. Run the sample to classify the MNIST digit.
-	```
-	cd <TensorRT Install>/bin
-	./sample_mlp
+	```bash
+	sample_mlp --datadir=$TRT_DATADIR/mlp --fp16
 	```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following; ASCII rendering of the input image with digit 9:

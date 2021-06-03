@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -225,12 +225,14 @@ typedef uint32_t TensorFormats;
 enum class TensorFormat : int32_t
 {
     //! Row major linear format.
-    //! For a tensor with dimensions {N, C, H, W} or {numbers, channels,
-    //! columns, rows}, the dimensional index corresponds to {3, 2, 1, 0}
-    //! and thus the order is W minor.
+    //! For a tensor with dimensions {N, C, H, W}, the W axis always has
+    //! unit stride, and the stride of every other axis is at least the the
+    //! product of of the next dimension times the next stride. the strides
+    //! are the same as for a C array with dimensions [N][C][H][W].
     kLINEAR = 0,
-    kNCHW TRT_DEPRECATED_ENUM = kLINEAR, //!< Deprecated name of kLINEAR, provided for backwards compatibility and will
-                                         //!< be removed in TensorRT 8.0.
+    //! Deprecated name of kLINEAR, provided for backwards compatibility and will
+    //! be removed in TensorRT 8.0.
+    kNCHW TRT_DEPRECATED_ENUM = kLINEAR,
 
     //! Two wide channel vectorized row major format. This format is bound to
     //! FP16. It is only available for dimensions >= 3.
@@ -239,18 +241,20 @@ enum class TensorFormat : int32_t
     //! [N][(C+1)/2][H][W][2], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/2][h][w][c%2].
     kCHW2 = 1,
-    kNC2HW2 TRT_DEPRECATED_ENUM = kCHW2, //!< Deprecated name of kCHW2, provided for backwards compatibility and will
-                                         //!< be removed in TensorRT 8.0.
+    //! Deprecated name of kCHW2, provided for backwards compatibility and will
+    //! be removed in TensorRT 8.0.
+    kNC2HW2 TRT_DEPRECATED_ENUM = kCHW2,
 
     //! Eight channel format where C is padded to a multiple of 8. This format
     //! is bound to FP16. It is only available for dimensions >= 3.
-    //! For a tensor with dimensions {N, H, W, C},
+    //! For a tensor with dimensions {N, C, H, W},
     //! the memory layout is equivalent to the array with dimensions
-    //! [N][H][W][(C+7)/8*8], with the tensor coordinates (n, h, w, c)
+    //! [N][H][W][(C+7)/8*8], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][h][w][c].
     kHWC8 = 2,
-    kNHWC8 TRT_DEPRECATED_ENUM = kHWC8, //!< Deprecated name of kHWC8, provided for backwards compatibility and will
-                                        //!< be removed in TensorRT 8.0.
+    //! Deprecated name of kHWC8, provided for backwards compatibility and will
+    //! be removed in TensorRT 8.0.
+    kNHWC8 TRT_DEPRECATED_ENUM = kHWC8,
 
     //! Four wide channel vectorized row major format. This format is bound to
     //! INT8 or FP16. It is only available for dimensions >= 3.
@@ -259,6 +263,9 @@ enum class TensorFormat : int32_t
     //! the memory layout is equivalent to a C array with dimensions
     //! [N][(C+3)/4][H][W][4], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/4][h][w][c%4].
+    //!
+    //! Deprecated usage:
+    //!
     //! If running on the DLA, this format can be used for acceleration
     //! with the caveat that C must be equal or lesser than 4.
     //! If used as DLA input with allowGPUFallback disable, it needs to meet
@@ -290,9 +297,9 @@ enum class TensorFormat : int32_t
 
     //! Eight channel format where C is padded to a multiple of 8. This format
     //! is bound to FP16, and it is only available for dimensions >= 4.
-    //! For a tensor with dimensions {N, D, H, W, C},
+    //! For a tensor with dimensions {N, C, D, H, W},
     //! the memory layout is equivalent to an array with dimensions
-    //! [N][D][H][W][(C+7)/8*8], with the tensor coordinates (n, d, h, w, c)
+    //! [N][D][H][W][(C+7)/8*8], with the tensor coordinates (n, c, d, h, w)
     //! mapping to array subscript [n][d][h][w][c].
     kDHWC8 = 6,
 
@@ -306,7 +313,31 @@ enum class TensorFormat : int32_t
 
     //! Non-vectorized channel-last format. This format is bound to FP32
     //! and is only available for dimensions >= 3.
-    kHWC = 8
+    kHWC = 8,
+
+    //! DLA planar format. For a tensor with dimension {N, C, H, W}, the W axis 
+    //! always has unit stride. The stride for stepping along the H axis is
+    //! rounded up to 64 bytes.
+    //!
+    //! The memory layout is equivalent to a C array with dimensions
+    //! [N][C][H][roundUp(W, 64/elementSize)] where elementSize is
+    //! 2 for FP16 and 1 for Int8, with the tensor coordinates (n, c, h, w)
+    //! mapping to array subscript [n][c][h][w].
+    kDLA_LINEAR = 9,
+
+    //! DLA image format. For a tensor with dimension {N, C, H, W} the C axis 
+    //! always has unit stride. The stride for stepping along the H axis is rounded up
+    //! to 32 bytes. C can only be 1, 3 or 4.
+    //! If C == 1, it will map to grayscale format.
+    //! If C == 3 or C == 4, it will map to color image format. And if C == 3,
+    //! the stride for stepping along the W axis needs to be padded to 4 in elements.
+    //!
+    //! When C is {1, 3, 4}, then C' is {1, 4, 4} respectively,
+    //! the memory layout is equivalent to a C array with dimensions
+    //! [N][H][roundUp(W, 32/C'/elementSize)][C'] where elementSize is 2 for FP16
+    //! and 1 for Int8. The tensor coordinates (n, c, h, w) mapping to array
+    //! subscript [n][h][w][c].
+    kDLA_HWC4 = 10
 };
 
 //!
@@ -320,7 +351,7 @@ using PluginFormat = TensorFormat;
 template <>
 constexpr inline int32_t EnumMax<TensorFormat>()
 {
-    return 9;
+    return 11;
 }
 
 //! \struct PluginTensorDesc
@@ -382,13 +413,13 @@ public:
 
     //!
     //! \brief Return the plugin type. Should match the plugin name returned by the corresponding plugin creator
-    // \see IPluginCreator::getPluginName()
+    //! \see IPluginCreator::getPluginName()
     //!
     virtual const char* getPluginType() const TRTNOEXCEPT = 0;
 
     //!
     //! \brief Return the plugin version. Should match the plugin version returned by the corresponding plugin creator
-    // \see IPluginCreator::getPluginVersion()
+    //! \see IPluginCreator::getPluginVersion()
     //!
     virtual const char* getPluginVersion() const TRTNOEXCEPT = 0;
 

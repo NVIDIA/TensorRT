@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,10 +33,10 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 
-include($ENV{TRT_SOURCE}/cmake/modules/set_ifndef.cmake)
-set_ifndef(TRT_INC_DIR $ENV{TRT_SOURCE}/include)
-set_ifndef(TRT_LIB_DIR $ENV{TRT_RELEASE}/lib)
-set_ifndef(TRT_OUT_DIR $ENV{TRT_SOURCE}/build/out)
+include($ENV{TRT_OSSPATH}/cmake/modules/set_ifndef.cmake)
+set_ifndef(TRT_INC_DIR $ENV{TRT_OSSPATH}/include)
+set_ifndef(TRT_LIB_DIR $ENV{TRT_LIBPATH})
+set_ifndef(TRT_OUT_DIR $ENV{TRT_OSSPATH}/build/out)
 
 include_directories(
     infer_c
@@ -49,7 +49,7 @@ link_directories(
     ${TRT_LIB_DIR}
 )
 
-pybind11_add_module(infer_c 
+pybind11_add_module(infer_c
     infer_c/infer_c.cpp
     infer_c/logging.cpp
 )
@@ -64,9 +64,8 @@ add_executable(perf
     infer_c/logging.cpp
 )
 
-target_link_libraries(perf 
+target_link_libraries(perf
     ${CUDA_LIBRARIES}
     nvinfer
     nvinfer_plugin
 )
-

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.base import Tool
-from polygraphy.logger import G_LOGGER
 import importlib
+
+from polygraphy.common import func
+from polygraphy.logger import G_LOGGER
+from polygraphy.tools.base import Tool
 
 try:
     ModuleNotFoundError
@@ -27,7 +29,7 @@ TOOL_REGISTRY = []
 
 class MissingTool(Tool):
     def __init__(self, name, err):
-        self.name = name
+        super().__init__(name)
         self.__doc__ = "Error: Tool could not be loaded. Run 'polygraphy {:}' for details".format(self.name)
         self.err = err
 
@@ -41,7 +43,7 @@ def try_register_tool(module, tool_class):
 
     try:
         toolmod = importlib.import_module(module)
-        tool = getattr(toolmod, tool_class)()
+        tool = func.invoke(getattr(toolmod, tool_class))
         TOOL_REGISTRY.append(tool)
     except Exception as err:
         TOOL_REGISTRY.append(MissingTool(tool_class.lower(), err=err))

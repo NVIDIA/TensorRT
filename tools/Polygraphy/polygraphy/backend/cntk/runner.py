@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +14,10 @@
 # limitations under the License.
 #
 # EXPERIMENTAL
-from polygraphy.logger.logger import G_LOGGER
-from polygraphy.backend.base import BaseRunner
-
-from collections import OrderedDict
 import time
+from collections import OrderedDict
+
+from polygraphy.backend.base import BaseRunner
 
 import cntk
 
@@ -37,7 +36,7 @@ class CNTKRunner(BaseRunner):
             self.inputs[inp] = inp.shape
 
 
-    def infer(self, feed_dict):
+    def infer_impl(self, feed_dict):
         start = time.time()
         inference_outputs = self.cntk_model.eval(feed_dict)
         end = time.time()

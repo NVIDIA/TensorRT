@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ class PytRunner(BaseRunner):
         self.model.eval()
 
 
-    def infer(self, feed_dict):
+    def infer_impl(self, feed_dict):
         with torch.no_grad():
             inputs = [torch.from_numpy(val.astype(dtype)).cuda() for (val, (dtype, _)) in zip(feed_dict.values(), self.input_metadata.values())]
             start = time.time()

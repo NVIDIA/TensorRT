@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -425,12 +425,6 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
         }
     }
 
-    if (!hasDynamicShapes && !build.shapes.empty())
-    {
-        sample::gLogError << "Static model does not take explicit shapes since the shape of inference tensors will be determined by the model itself" << std::endl;
-        return nullptr;
-    }
-
     if (profile && hasDynamicShapes)
     {
         SMP_RETVAL_IF_FALSE(profile->isValid(), "Required optimization profile is invalid", nullptr, err);
@@ -540,7 +534,7 @@ ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys
             {
                 elemCount.push_back(volume(profileCalib->getDimensions(input->getName(), OptProfileSelector::kOPT)));
             }
-            else if (profile)
+            else if (profile && (profile->getDimensions(input->getName(), OptProfileSelector::kOPT).nbDims >= 0))
             {
                 elemCount.push_back(volume(profile->getDimensions(input->getName(), OptProfileSelector::kOPT)));
             }

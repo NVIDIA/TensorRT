@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,6 @@ using namespace nvinfer1::plugin;
 pluginStatus_t gatherNMSOutputs(cudaStream_t stream, bool shareLocation, int numImages, int numPredsPerClass,
     int numClasses, int topK, int keepTopK, DataType DT_BBOX, DataType DT_SCORE, const void* indices,
     const void* scores, const void* bboxData, void* keepCount, void* nmsedBoxes, void* nmsedScores, void* nmsedClasses,
-    bool clipBoxes = true);
+    bool clipBoxes, const float scoreShift);
 
 #endif

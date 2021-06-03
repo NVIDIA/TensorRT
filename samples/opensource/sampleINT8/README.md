@@ -13,7 +13,8 @@
     * [Running the engine](#running-the-engine)
     * [Verifying the output](#verifying-the-output)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
-- [Batch files for calibration](#batch-files-for-calibration)
+- [Preparing sample data](#preparing-sample-data)
+    * [Batch files for calibration](#batch-files-for-calibration)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -229,27 +230,37 @@ The FullyConnected layer implements a matrix-vector product, with or without bia
 [SoftMax layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#softmax-layer)
 The SoftMax layer applies the SoftMax function on the input tensor along an input dimension specified by the user.
 
-## Batch files for calibration
+## Preparing sample data
 
-Download the [MNIST dataset](http://yann.lecun.com/exdb/mnist/)
+1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
+    ```bash
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    ```
+
+2. Download the [MNIST dataset](http://yann.lecun.com/exdb/mnist/)
     - This sample requires the [training set](http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz) and [training labels](http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz)
-    - Unzip the files obtained above using the `gunzip` utility. For example, `gunzip t10k-labels-idx1-ubyte.gz`.
-    - Lastly, copy these files to the `<TensorRT root directory>/samples/data/int8/mnist/` directory
+    ```bash
+    pushd $TRT_DATADIR/mnist
+    wget http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz
+    wget http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz
+    gunzip train-images-idx3-ubyte.gz
+    gunzip train-labels-idx1-ubyte.gz
+    popd
+    ```
 
 ## Running the sample
 
-1.  Compile this sample by running make  in the `<TensorRT root directory>/samples/sampleINT8` directory. The binary named `sample_int8` will be created in the `<TensorRT root directory>/bin` directory.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
+2. Run the sample to generate characters based on the trained model:
+    ```bash
+    sample_int8 --datadir=<path/to/data> --useDLACore=N batch=N start=N score=N
     ```
-    cd <TensorRT root directory>/samples/sampleINT8
-    make
+
+    For example:
+    ```bash
+    sample_int8 --datadir $TRT_DATADIR/mnist
     ```
-
-    Where `<TensorRT root directory>` is where you installed TensorRT.
-
-2.  Run the sample on MNIST.
-    `./sample_int8`
-
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 
     ```

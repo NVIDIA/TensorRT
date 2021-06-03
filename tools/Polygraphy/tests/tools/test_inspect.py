@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,25 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import copy
-import glob
-import os
-import subprocess as sp
-import sys
 import tempfile
 from textwrap import dedent
 
 import pytest
-from polygraphy.logger import G_LOGGER
-from polygraphy.util import misc
-from tests.common import check_file_non_empty, version
+from tests.common import version
 from tests.models.meta import ONNX_MODELS, TF_MODELS
-from tests.tools.common import (run_polygraphy_inspect, run_polygraphy_run,
-                                run_subtool)
+from tests.tools.common import run_polygraphy_inspect, run_polygraphy_run
 
-#
-# INSPECT MODEL
-#
+
 
 @pytest.fixture(scope="module", params=["none", "basic", "attrs", "full"])
 def run_inspect_model(request):
@@ -233,54 +223,81 @@ ONNX_CASES = [
                 num_scan_inputs = 1
         """
     ],
+    ["dim_param", "basic",
+        """
+        [I] ==== ONNX Model ====
+            Name: tf2onnx | Opset: 10
+
+            ---- 1 Graph Inputs ----
+            {Input:0 [dtype=float32, shape=('dim0', 16, 128)]}
+
+            ---- 1 Graph Outputs ----
+            {Output:0 [dtype=float32, shape=('dim0', 16, 128)]}
+
+            ---- 0 Initializers ----
+            {}
+
+            ---- 1 Nodes ----
+            Node 0    |  [Op: Identity]
+                {Input:0 [dtype=float32, shape=('dim0', 16, 128)]}
+                -> {Output:0 [dtype=float32, shape=('dim0', 16, 128)]}
+        """
+    ],
 ]
 
-@pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: "{:}-{:}".format(case[0], case[1]))
-def test_polygraphy_inspect_model_onnx(run_inspect_model, case):
-    model, mode, expected = case
-    status = run_polygraphy_inspect(["model", ONNX_MODELS[model].path, "--mode={:}".format(mode)], disable_verbose=True)
 
-    expected = dedent(expected).strip()
-    actual = status.stdout.decode()
+class TestInspectModel(object):
+    @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: "{:}-{:}".format(case[0], case[1]))
+    def test_model_onnx(self, case):
+        model, mode, expected = case
+        status = run_polygraphy_inspect(["model", ONNX_MODELS[model].path, "--mode={:}".format(mode)], disable_verbose=True)
 
-    print("Actual output:\n{:}".format(actual))
-    for acline, exline in zip(actual.splitlines(), expected.splitlines()):
-        acline = acline.rstrip()
-        exline = exline.rstrip()
-        print("Checking line : {:}".format(acline))
-        print("Expecting line: {:}".format(exline))
-        assert acline == exline
+        expected = dedent(expected).strip().splitlines()
+        actual = status.stdout.splitlines()
+        assert len(actual) == len(expected)
 
-
-@pytest.mark.parametrize("model", ["identity", "scan", "tensor_attr"])
-def test_polygraphy_inspect_model_trt_sanity(run_inspect_model, model):
-    import tensorrt as trt
-
-    if model == "tensor_attr" and version(trt.__version__) < version("7.2"):
-        pytest.skip("Models with constant outputs were not supported before 7.2")
-
-    if model == "scan" and version(trt.__version__) < version("7.0"):
-        pytest.skip("Scan was not supported until 7.0")
-
-    run_inspect_model([ONNX_MODELS[model].path, "--display-as=trt"])
+        print("Actual output:\n{:}".format(actual))
+        for acline, exline in zip(actual, expected):
+            acline = acline.rstrip()
+            exline = exline.rstrip()
+            print("Checking line : {:}".format(acline))
+            print("Expecting line: {:}".format(exline))
+            assert acline == exline
 
 
-def test_polygraphy_inspect_model_trt_engine_sanity(run_inspect_model):
-    with tempfile.NamedTemporaryFile() as outpath:
-        run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--save-engine", outpath.name])
-        run_inspect_model([outpath.name, "--model-type=engine"])
+    @pytest.mark.parametrize("model", ["identity", "scan", "tensor_attr"])
+    def test_model_trt_sanity(self, run_inspect_model, model):
+        import tensorrt as trt
+
+        if model == "tensor_attr" and version(trt.__version__) < version("7.2"):
+            pytest.skip("Models with constant outputs were not supported before 7.2")
+
+        if model == "scan" and version(trt.__version__) < version("7.0"):
+            pytest.skip("Scan was not supported until 7.0")
+
+        run_inspect_model([ONNX_MODELS[model].path, "--display-as=trt"])
 
 
-def test_polygraphy_inspect_model_tf_sanity(run_inspect_model):
-    run_inspect_model([TF_MODELS["identity"].path, "--model-type=frozen"])
+    def test_model_trt_engine_sanity(self, run_inspect_model):
+        with tempfile.NamedTemporaryFile() as outpath:
+            run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--save-engine", outpath.name])
+            run_inspect_model([outpath.name, "--model-type=engine"])
 
 
-#
-# INSPECT RESULTS
-#
+    def test_model_tf_sanity(self, run_inspect_model):
+        run_inspect_model([TF_MODELS["identity"].path, "--model-type=frozen"])
 
-@pytest.mark.parametrize("opts", [[], ["--show-values"]])
-def test_polygraphy_inspect_results(opts):
-    with tempfile.NamedTemporaryFile() as outpath:
-        run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-results", outpath.name])
-        run_polygraphy_inspect(["results", outpath.name] + opts)
+
+class TestInspectData(object):
+    @pytest.mark.parametrize("opts", [[], ["--show-values"]])
+    def test_results(self, opts):
+        with tempfile.NamedTemporaryFile() as outpath:
+            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-results", outpath.name])
+            run_polygraphy_inspect(["data", outpath.name] + opts)
+
+
+    @pytest.mark.parametrize("opts", [[], ["--show-values"]])
+    def test_inputs(self, opts):
+        with tempfile.NamedTemporaryFile() as outpath:
+            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
+            run_polygraphy_inspect(["data", outpath.name] + opts)

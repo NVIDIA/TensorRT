@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ class BaseDataLoader(object):
                     This is set by the Comparator when the data loader is used.
 
         Returns:
-            OrderedDict[str, np.ndarray]: Mapping of input names to NumPy buffers containing data.
+            OrderedDict[str, numpy.ndarray]: Mapping of input names to NumPy buffers containing data.
         """
         raise NotImplementedError("BaseDataLoader is an abstract class")
 
@@ -91,6 +91,9 @@ class DataLoader(BaseDataLoader):
         self.float_range = default_tuple(float_range, (-1.0, 1.0))
         self.input_metadata = None
 
+        if self.user_input_metadata:
+            G_LOGGER.info("Will generate inference input data according to provided TensorMetadata: {}".format(self.user_input_metadata))
+
 
     def __getitem__(self, index):
         """
@@ -102,7 +105,7 @@ class DataLoader(BaseDataLoader):
                     Generated data is guaranteed to be the same for the same index.
 
             Returns:
-                OrderedDict[str, np.ndarray]: A mapping of input names to input numpy buffers.
+                OrderedDict[str, numpy.ndarray]: A mapping of input names to input numpy buffers.
         """
         if index >= self.iterations:
             raise IndexError()
@@ -118,8 +121,9 @@ class DataLoader(BaseDataLoader):
                 if static_shape != shape and name not in self.user_input_metadata:
                     if not misc.is_valid_shape_override(static_shape, shape):
                         G_LOGGER.critical("Input tensor: {:24} | Cannot override original shape: {:} to {:}".format(name, shape, static_shape))
-                    G_LOGGER.warning("Input tensor: {:24} | Adjusted shape: {:} to: {:}. If this is incorrect, please set input_metadata "
-                                     "or provide a custom data loader.".format(name, shape, static_shape), mode=LogMode.ONCE)
+                    G_LOGGER.warning("Input tensor: {:24} | Will generate data of shape: {:} (tensor shape is: {:}).\n"
+                                     "If this is incorrect, please set input_metadata "
+                                     "or provide a custom data loader.".format(name, static_shape, shape), mode=LogMode.ONCE)
             return static_shape
 
 
@@ -166,14 +170,14 @@ class DataLoader(BaseDataLoader):
             if name in self.user_input_metadata:
                 user_dtype, user_shape = self.user_input_metadata[name]
 
+                dtype = misc.default_value(user_dtype, dtype)
+
                 is_valid_shape_override = user_shape is not None and misc.is_valid_shape_override(user_shape, shape)
                 if not is_valid_shape_override and not is_shape_tensor(name, dtype):
                     G_LOGGER.warning("Input tensor: {:24} | Cannot use provided custom shape: {:}, since this input has "
                                      "a static shape: {:}".format(name, user_shape, shape), mode=LogMode.ONCE)
                 else:
                     shape = misc.default_value(user_shape, shape)
-
-                dtype = misc.default_value(user_dtype, dtype)
 
             static_shape = get_static_shape(name, shape)
             buffers[name] = generate_buffer(name, dtype, shape=static_shape)
@@ -192,9 +196,10 @@ class DataLoader(BaseDataLoader):
 
 # Caches data loaded by a DataLoader for use across multiple runners.
 class DataLoaderCache(object):
-    def __init__(self, data_loader):
+    def __init__(self, data_loader, save_inputs_path=None):
         self.data_loader = data_loader
-        self.cache = [] # List[OrderedDict[str, np.ndarray]]
+        self.cache = [] # List[OrderedDict[str, numpy.ndarray]]
+        self.save_inputs_path = save_inputs_path
 
 
     def __getitem__(self, iteration):
@@ -273,3 +278,7 @@ class DataLoaderCache(object):
             self.cache = list(self.data_loader)
             if not self.cache:
                 G_LOGGER.warning("Data loader did not yield any input data.")
+
+            # Only save inputs the first time the cache is generated
+            if self.save_inputs_path is not None:
+                misc.pickle_save(self.save_inputs_path, self.cache)

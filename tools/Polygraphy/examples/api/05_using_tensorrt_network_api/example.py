@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,12 +19,10 @@
 This script demonstrates how to use the extend() API covered in example 03
 to construct a TensorRT network using the TensorRT Network API.
 """
-from polygraphy.backend.trt import CreateNetwork, EngineFromNetwork, TrtRunner
-from polygraphy.common.func import extend
-
-import tensorrt as trt
 import numpy as np
-
+import tensorrt as trt
+from polygraphy.backend.trt import CreateNetwork, EngineFromNetwork, TrtRunner
+from polygraphy.common import func
 
 INPUT_NAME = "input"
 INPUT_SHAPE = (64, 64)
@@ -32,7 +30,7 @@ OUTPUT_NAME = "output"
 
 # Just like in example 03, we can use `extend` to add our own functionality to existing loaders.
 # `CreateNetwork` will create an empty network, which we can then populate ourselves.
-@extend(CreateNetwork())
+@func.extend(CreateNetwork())
 def create_network(builder, network):
     # This network will add 1 to the input tensor
     inp = network.add_input(name=INPUT_NAME, shape=INPUT_SHAPE, dtype=trt.float32)

@@ -62,7 +62,7 @@ The parameters are defined below and consists of the following attributes:
 
 | Type     | Parameter                              |  Version | Description
 |----------|----------------------------------------|----------|--------------------------------------------------------
-|`int`     |`output_fp16`                           |  1, 2    |Integer encoding the DataType (0: FP32, 1: FP16)
+|`int`     |`output_fp16`                           |  1, 2    |Integer encoding the DataType, set 0 when build FP32 network and set 1 when build FP32/INT8 network (0: FP32, 1: FP16)
 |`int`     |`full_mask`                             |  1       |Whether to output the full mask that works with the specialized multi-head-attention plugin kernels (this is deprecated, please use mha_type_id)
 |`int`     |`mha_type_id`                           |  1       |Integer encoding the multi-head-attention plugin DataType (0: FP32, 1: FP16, 2: INT8)
 |`Weights` |`bert_embeddings_layernorm_beta`        |  1, 2    |Beta parameter for layer norm. Shape: `[E,]` where `E` is hidden size

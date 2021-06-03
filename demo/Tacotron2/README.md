@@ -12,9 +12,9 @@ Software version configuration tested for the instructions that follow:
 |Software|Version|
 |--------|-------|
 |Python|3.6.9|
-|CUDA|11.0.171|
+|CUDA|11.1.1|
 |Apex|0.1|
-|TensorRT|7.2.0.13|
+|TensorRT|7.2.3.4|
 |PyTorch|1.5.1|
 
 
@@ -24,40 +24,43 @@ Software version configuration tested for the instructions that follow:
 
     **Note:** After this point, all commands should be run from within the container.
 
-2. Install prerequisite software for TTS sample:
+2. Verify TensorRT installation by printing the version:
     ```bash
-    cd $TRT_SOURCE/demo/Tacotron2
-    pip3 install /tensorrt/python/tensorrt-7.2*-cp36-none-linux_x86_64.whl
-    bash ./scripts/install_prerequisites.sh
+    python3 -c "import tensorrt as trt; print(trt.__version__)"
     ```
-3. Download pretrained checkpoints from [NGC](https://ngc.nvidia.com/catalog/models) into the `./checkpoints` directory:
+
+3. Install prerequisite software for TTS sample:
+    ```bash
+    cd $TRT_OSSPATH/demo/Tacotron2
+    sh ./scripts/install_prerequisites.sh
+    ```
+4. Download pretrained checkpoints from [NGC](https://ngc.nvidia.com/catalog/models) into the `./checkpoints` directory:
 
 - [Tacotron2 checkpoint](https://ngc.nvidia.com/models/nvidia:tacotron2pyt_fp16)
 - [WaveGlow checkpoint](https://ngc.nvidia.com/models/nvidia:waveglow256pyt_fp16)
 
     ```bash
-    cd $TRT_SOURCE/demo/Tacotron2
-    ./scripts/download_checkpoints.sh
+    sh ./scripts/download_checkpoints.sh
     ```
 
-4. Export the models to ONNX intermediate representation (ONNX IR).
+5. Export the models to ONNX intermediate representation (ONNX IR).
    Export Tacotron 2 to three ONNX parts: Encoder, Decoder, and Postnet:
 
 	```bash
 	mkdir -p output
-    python3 exports/export_tacotron2_onnx.py --tacotron2 ./checkpoints/tacotron2_pyt_ckpt_amp_v19.09.0/nvidia_tacotron2pyt_fp16_20190427 -o output/ --fp16
+    python3 exports/export_tacotron2_onnx.py --tacotron2 checkpoints/tacotron2_pyt_ckpt_amp_v19.09.0/nvidia_tacotron2pyt_fp16_20190427 -o output/ --fp16
 	```
 
     Export WaveGlow to ONNX IR:
 
 	```bash
-    python3 exports/export_waveglow_onnx.py --waveglow ./checkpoints/waveglow_ckpt_amp_256_v19.10.0/nvidia_waveglow256pyt_fp16 --wn-channels 256 -o output/ --fp16
+    python3 exports/export_waveglow_onnx.py --waveglow checkpoints/waveglow_ckpt_amp_256_v19.10.0/nvidia_waveglow256pyt_fp16 --wn-channels 256 -o output/ --fp16
 	```
 
 	After running the above commands, there should be four new ONNX files in `./output/` directory:
     `encoder.onnx`, `decoder_iter.onnx`, `postnet.onnx`, and `waveglow.onnx`.
 
-5. Export the ONNX IRs to TensorRT engines with fp16 mode enabled:
+6. Export the ONNX IRs to TensorRT engines with fp16 mode enabled:
 
 	```bash
 	python3 trt/export_onnx2trt.py --encoder output/encoder.onnx --decoder output/decoder_iter.onnx --postnet output/postnet.onnx --waveglow output/waveglow.onnx -o output/ --fp16
@@ -66,7 +69,7 @@ Software version configuration tested for the instructions that follow:
 	After running the command, there should be four new engine files in `./output/` directory:
     `encoder_fp16.engine`, `decoder_iter_fp16.engine`, `postnet_fp16.engine`, and `waveglow_fp16.engine`.
 
-6. Run TTS inference pipeline with fp16:
+7. Run TTS inference pipeline with fp16:
 
 	```bash
 	python3 trt/inference_trt.py -i phrases/phrase.txt --encoder output/encoder_fp16.engine --decoder output/decoder_iter_fp16.engine --postnet output/postnet_fp16.engine --waveglow output/waveglow_fp16.engine -o output/ --fp16

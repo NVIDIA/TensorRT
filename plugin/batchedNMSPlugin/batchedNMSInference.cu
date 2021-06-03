@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
     const bool shareLocation, const int backgroundLabelId, const int numPredsPerClass, const int numClasses,
     const int topK, const int keepTopK, const float scoreThreshold, const float iouThreshold, const DataType DT_BBOX,
     const void* locData, const DataType DT_SCORE, const void* confData, void* keepCount, void* nmsedBoxes,
-    void* nmsedScores, void* nmsedClasses, void* workspace, bool isNormalized, bool confSigmoid, bool clipBoxes)
+    void* nmsedScores, void* nmsedClasses, void* workspace, bool isNormalized, bool confSigmoid, bool clipBoxes, int scoreBits)
 {
     // locCount = batch_size * number_boxes_per_sample * 4
     const int locCount = N * perBatchBoxesSize;
@@ -86,7 +86,7 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
      * [batch_size, numClasses, numPredsPerClass, 1]
      */
     status = permuteData(
-        stream, numScores, numClasses, numPredsPerClass, 1, DT_BBOX, confSigmoid, confData, scores);
+        stream, numScores, numClasses, numPredsPerClass, 1, DT_SCORE, confSigmoid, confData, scores);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     size_t indicesSize = detectionForwardPreNMSSize(N, perBatchScoresSize);
@@ -100,8 +100,11 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
 
     void* sortingWorkspace = nextWorkspacePtr((int8_t*) postNMSIndices, postNMSIndicesSize);
     // Sort the scores so that the following NMS could be applied.
+    float scoreShift = 0.f;
+    if(DT_SCORE == DataType::kHALF && scoreBits > 0 && scoreBits <= 10)
+        scoreShift = 1.f;
     status = sortScoresPerClass(stream, N, numClasses, numPredsPerClass, backgroundLabelId, scoreThreshold,
-        DT_SCORE, scores, indices, sortingWorkspace);
+        DT_SCORE, scores, indices, sortingWorkspace, scoreBits, scoreShift);
 
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
@@ -110,18 +113,18 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
     bool flipXY = true;
     // NMS
     status = allClassNMS(stream, N, numClasses, numPredsPerClass, topK, iouThreshold, shareLocation, isNormalized,
-        DT_SCORE, DT_BBOX, bboxData, scores, indices, postNMSScores, postNMSIndices, flipXY);
+        DT_SCORE, DT_BBOX, bboxData, scores, indices, postNMSScores, postNMSIndices, flipXY, scoreShift);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Sort the bounding boxes after NMS using scores
     status = sortScoresPerImage(stream, N, numClasses * topK, DT_SCORE, postNMSScores, postNMSIndices, scores,
-        indices, sortingWorkspace);
+        indices, sortingWorkspace, scoreBits);
 
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Gather data from the sorted bounding boxes after NMS
     status = gatherNMSOutputs(stream, shareLocation, N, numPredsPerClass, numClasses, topK, keepTopK, DT_BBOX,
-        DT_SCORE, indices, scores, bboxData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses, clipBoxes);
+        DT_SCORE, indices, scores, bboxData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses, clipBoxes, scoreShift);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     return STATUS_SUCCESS;

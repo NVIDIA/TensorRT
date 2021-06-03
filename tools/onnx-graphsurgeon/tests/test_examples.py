@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,6 +45,7 @@ EXAMPLES = [
     ("06_removing_nodes", [Artifact("model.onnx", infer=False), Artifact("removed.onnx")]),
     ("07_creating_a_model_with_the_layer_api", [Artifact("model.onnx")]),
     ("08_replacing_a_subgraph", [Artifact("model.onnx"), Artifact("replaced.onnx")]),
+    ("09_shape_operations_with_the_layer_api", [Artifact("model.onnx")]),
 ]
 
 # Extract any ``` blocks from the README
@@ -72,7 +73,8 @@ def infer_model(path):
 
     feed_dict = {}
     for tensor in graph.inputs:
-        feed_dict[tensor.name] = np.random.random_sample(size=tensor.shape).astype(tensor.dtype)
+        shape = tuple(dim if dim > 0 else 1 for dim in tensor.shape)
+        feed_dict[tensor.name] = np.random.random_sample(size=shape).astype(tensor.dtype)
 
     output_names = [out.name for out in graph.outputs]
 

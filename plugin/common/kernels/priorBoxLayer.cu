@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -123,7 +123,7 @@ __launch_bounds__(nthdsPerCTA)
             outputData[i * 4 + 3] = w;
         }
     }
-    // Simply copy variance to from the parameter to output 
+    // Simply copy variance to from the parameter to output
     float* output = outputData + dim * 4;
     for (int i = blockIdx.x * nthdsPerCTA + threadIdx.x;
          i < dim; i += gridDim.x * nthdsPerCTA)

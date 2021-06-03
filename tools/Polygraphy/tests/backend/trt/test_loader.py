@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,19 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.trt import EngineFromBytes, EngineFromNetwork, CreateConfig, NetworkFromOnnxBytes, NetworkFromOnnxPath, ModifyNetwork, Calibrator, Profile, SaveEngine, LoadPlugins
-from polygraphy.backend.trt import util as trt_util
-from polygraphy.common import PolygraphyException, constants
-from polygraphy.comparator import DataLoader
-
-from tests.models.meta import ONNX_MODELS
-from tests.common import version, check_file_non_empty
-
-import tensorrt as trt
-import numpy as np
-import tempfile
-import pytest
 import os
+import tempfile
+
+import numpy as np
+import pytest
+import tensorrt as trt
+from polygraphy.backend.trt import (Calibrator, CreateConfig, EngineFromBytes,
+                                    EngineFromNetwork, LoadPlugins,
+                                    ModifyNetwork, NetworkFromOnnxBytes,
+                                    NetworkFromOnnxPath, Profile, SaveEngine)
+from polygraphy.common import constants, func
+from polygraphy.comparator import DataLoader
+from tests.common import check_file_non_empty, version
+from tests.models.meta import ONNX_MODELS
 
 
 @pytest.fixture(scope="session")
@@ -38,19 +39,24 @@ def identity_engine():
 
 @pytest.fixture(scope="session")
 def identity_builder_network():
-    builder, network, parser = NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader)()
+    builder, network, parser = func.invoke(NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader))
     with builder, network, parser:
         yield builder, network
 
 
 @pytest.fixture(scope="session")
-def load_identity():
+def identity_network():
     return NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader)
 
 
 @pytest.fixture(scope="session")
-def load_identity_identity():
+def identity_identity_network():
     return NetworkFromOnnxBytes(ONNX_MODELS["identity_identity"].loader)
+
+
+@pytest.fixture(scope="session")
+def reshape_network():
+    return NetworkFromOnnxBytes(ONNX_MODELS["reshape"].loader)
 
 
 class TestLoadPlugins(object):
@@ -82,14 +88,14 @@ class TestSerializedEngineLoader(object):
 
 class TestOnnxNetworkLoader(object):
     def test_loader(self):
-        builder, network, parser = NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader)()
+        builder, network, parser = func.invoke(NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader))
         with builder, network, parser:
             assert not network.has_implicit_batch_dimension
             assert not network.has_explicit_precision
 
 
     def test_loader_explicit_precision(self):
-        builder, network, parser = NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader, explicit_precision=True)()
+        builder, network, parser = func.invoke(NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader, explicit_precision=True))
         with builder, network, parser:
             assert not network.has_implicit_batch_dimension
             assert network.has_explicit_precision
@@ -98,22 +104,22 @@ class TestOnnxNetworkLoader(object):
 @pytest.mark.skipif(version(trt.__version__) < version("7.1.0.0"), reason="API was added in TRT 7.1")
 class TestNetworkFromOnnxPath(object):
     def test_loader(self):
-        builder, network, parser = NetworkFromOnnxPath(ONNX_MODELS["identity"].path)()
+        builder, network, parser = func.invoke(NetworkFromOnnxPath(ONNX_MODELS["identity"].path))
         with builder, network, parser:
             assert not network.has_implicit_batch_dimension
             assert not network.has_explicit_precision
 
 
     def test_loader_explicit_precision(self):
-        builder, network, parser = NetworkFromOnnxPath(ONNX_MODELS["identity"].path, explicit_precision=True)()
+        builder, network, parser = func.invoke(NetworkFromOnnxPath(ONNX_MODELS["identity"].path, explicit_precision=True))
         with builder, network, parser:
             assert not network.has_implicit_batch_dimension
             assert network.has_explicit_precision
 
 
 class TestModifyNetwork(object):
-    def test_layerwise(self, load_identity_identity):
-        load_network = ModifyNetwork(load_identity_identity, outputs=constants.MARK_ALL)
+    def test_mark_layerwise(self, identity_identity_network):
+        load_network = ModifyNetwork(identity_identity_network, outputs=constants.MARK_ALL)
         builder, network, parser = load_network()
         with builder, network, parser:
             for layer in network:
@@ -121,18 +127,34 @@ class TestModifyNetwork(object):
                     assert layer.get_output(index).is_network_output
 
 
-    def test_custom_outputs(self, load_identity_identity):
-        builder, network, parser = ModifyNetwork(load_identity_identity, outputs=["identity_out_0"])()
+    def test_mark_custom_outputs(self, identity_identity_network):
+        builder, network, parser = func.invoke(ModifyNetwork(identity_identity_network, outputs=["identity_out_0"]))
         with builder, network, parser:
             assert network.num_outputs == 1
             assert network.get_output(0).name == "identity_out_0"
 
 
-    def test_exclude_outputs_with_layerwise(self, load_identity_identity):
-        builder, network, parser = ModifyNetwork(load_identity_identity, outputs=constants.MARK_ALL, exclude_outputs=["identity_out_2"])()
+    def test_exclude_outputs_with_mark_layerwise(self, identity_identity_network):
+        builder, network, parser = func.invoke(ModifyNetwork(identity_identity_network, outputs=constants.MARK_ALL, exclude_outputs=["identity_out_2"]))
         with builder, network, parser:
             assert network.num_outputs == 1
             assert network.get_output(0).name == "identity_out_0"
+
+
+    @pytest.mark.skipif(version(trt.__version__) < version("7.0"), reason="Unsupported for TRT 6")
+    def test_mark_shape_outputs(self, reshape_network):
+        builder, network, parser = func.invoke(ModifyNetwork(reshape_network, outputs=["output", "reduce_prod_out_gs_2"]))
+        with builder, network, parser:
+            assert network.num_outputs == 2
+            assert network.get_output(0).name == "reduce_prod_out_gs_2"
+            assert network.get_output(0).is_shape_tensor
+
+
+    @pytest.mark.skipif(version(trt.__version__) < version("7.0"), reason="Unsupported for TRT 6")
+    def test_unmark_shape_outputs(self, reshape_network):
+        builder, network, parser = func.invoke(ModifyNetwork(reshape_network, outputs=constants.MARK_ALL, exclude_outputs=["reduce_prod_out_gs_2"]))
+        with builder, network, parser:
+            assert network.num_outputs == 1
 
 
 class TestProfile(object):
@@ -246,8 +268,8 @@ class TestEngineFromNetwork(object):
 
 
 class TestSaveEngine(object):
-    def test_save_engine(self, load_identity):
+    def test_save_engine(self, identity_network):
         with tempfile.NamedTemporaryFile() as outpath:
-            engine_loader = SaveEngine(EngineFromNetwork(load_identity), path=outpath.name)
+            engine_loader = SaveEngine(EngineFromNetwork(identity_network), path=outpath.name)
             with engine_loader() as engine:
                 check_file_non_empty(outpath.name)

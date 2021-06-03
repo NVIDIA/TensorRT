@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 #ifndef TRT_CAFFE_PARSER_OP_PARSERS_H
 #define TRT_CAFFE_PARSER_OP_PARSERS_H
-#include <unordered_map> 
+#include <unordered_map>
 #include <iostream>
 
 #include "caffeMacros.h"
@@ -27,7 +27,7 @@
 #include "blobNameToTensor.h"
 #include "caffeWeightFactory.h"
 
-namespace nvcaffeparser1 
+namespace nvcaffeparser1
 {
 inline bool checkBlobs(const trtcaffe::LayerParameter& msg, int bottoms, int tops)
 {
@@ -71,7 +71,7 @@ nvinfer1::ILayer* parseSigmoid(nvinfer1::INetworkDefinition& network, const trtc
 nvinfer1::ILayer* parseSoftMax(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
 nvinfer1::ILayer* parseTanH(nvinfer1::INetworkDefinition& network, const trtcaffe::LayerParameter& msg, CaffeWeightFactory& /*weightFactory*/, BlobNameToTensor& tensors);
 
-static std::unordered_map<std::string, LayerParseFn> gParseTable 
+static std::unordered_map<std::string, LayerParseFn> gParseTable
 {
     {"Convolution", parseConvolution},
     {"Pooling", parsePooling},

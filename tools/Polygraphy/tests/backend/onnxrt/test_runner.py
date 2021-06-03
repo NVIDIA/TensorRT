@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,6 +40,12 @@ class TestOnnxrtRunner(object):
             assert runner.is_active
             model.check_runner(runner)
         assert not runner.is_active
+
+
+    def test_shape_output(self):
+        model = ONNX_MODELS["reshape"]
+        with OnnxrtRunner(SessionFromOnnxBytes(model.loader)) as runner:
+            model.check_runner(runner)
 
 
     def test_dim_param_converted_to_int_shape(self):

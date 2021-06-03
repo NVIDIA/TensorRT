@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -71,17 +71,22 @@ typedef struct
 //!
 //! \brief The PriorBox plugin layer generates the prior boxes of designated sizes and aspect ratios across all
 //! dimensions (H x W). PriorBoxParameters defines a set of parameters for creating the PriorBox plugin layer. It
-//! contains: \param minSize Minimum box size in pixels. Can not be nullptr. \param maxSize Maximum box size in pixels.
-//! Can be nullptr. \param aspectRatios Aspect ratios of the boxes. Can be nullptr. \param numMinSize Number of elements
-//! in minSize. Must be larger than 0. \param numMaxSize Number of elements in maxSize. Can be 0 or same as numMinSize.
+//! contains:
+//! \param minSize Minimum box size in pixels. Can not be nullptr.
+//! \param maxSize Maximum box size in pixels. Can be nullptr.
+//! \param aspectRatios Aspect ratios of the boxes. Can be nullptr.
+//! \param numMinSize Number of element in minSize. Must be larger than 0.
+//! \param numMaxSize Number of elements in maxSize. Can be 0 or same as numMinSize.
 //! \param numAspectRatios Number of elements in aspectRatios. Can be 0.
-//! \param flip If true, will flip each aspect ratio. For example, if there is aspect ratio "r", the aspect ratio
-//! "1.0/r" will be generated as well. \param clip If true, will clip the prior so that it is within [0,1]. \param
-//! variance Variance for adjusting the prior boxes. \param imgH Image height. If 0, then the H dimension of the data
-//! tensor will be used. \param imgW Image width. If 0, then the W dimension of the data tensor will be used. \param
-//! stepH Step in H. If 0, then (float)imgH/h will be used where h is the H dimension of the 1st input tensor. \param
-//! stepW Step in W. If 0, then (float)imgW/w will be used where w is the W dimension of the 1st input tensor. \param
-//! offset Offset to the top left corner of each cell.
+//! \param flip If true, will flip each aspect ratio. For example, if there is an aspect ratio "r", the aspect ratio
+//! "1.0/r" will be generated as well.
+//! \param clip If true, will clip the prior so that it is within [0,1].
+//! \param variance Variance for adjusting the prior boxes.
+//! \param imgH Image height. If 0, then the H dimension of the data tensor will be used.
+//! \param imgW Image width. If 0, then the W dimension of the data tensor will be used.
+//! \param stepH Step in H. If 0, then (float)imgH/h will be used where h is the H dimension of the 1st input tensor.
+//! \param stepW Step in W. If 0, then (float)imgW/w will be used where w is the W dimension of the 1st input tensor.
+//! \param offset Offset to the top left corner of each cell.
 //!
 struct PriorBoxParameters
 {

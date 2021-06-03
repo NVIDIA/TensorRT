@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ class TestNetwork():
         loss.backward()
         optimizer.step()
 
-    def test_amp_fp16(self):
+    def test_apex_amp_fp16(self):
         """test one iteration with random data and labels"""
         try:
             from apex import amp
@@ -97,6 +97,58 @@ class TestNetwork():
         optimizer.step()
         assert loss.dtype == torch.float32
         _amp_state.handle._deactivate()
+
+    def test_native_amp_fp16(self):
+        """test one iteration with random data and labels"""
+        input_desc = tensor_quant.QUANT_DESC_8BIT_PER_TENSOR
+        weight_desc = tensor_quant.QUANT_DESC_8BIT_PER_TENSOR
+        model = QuantLeNet(quant_desc_input=input_desc, quant_desc_weight=weight_desc)
+        optimizer = optim.SGD(model.parameters(), lr=0.01)
+        optimizer.zero_grad()
+        with torch.cuda.amp.autocast():
+            output = model(torch.empty(16, 1, 28, 28))
+            loss = F.nll_loss(output, torch.randint(10, (16,), dtype=torch.int64))
+        loss.backward()
+        optimizer.step()
+        assert loss.dtype == torch.float32
+
+    def test_asp(self):
+        """test Sparsity (ASP) and QAT toolkits together"""
+        try:
+            from apex.contrib.sparsity import ASP
+        except ImportError:
+            pytest.skip("ASP is not available.")
+
+        quant_modules.initialize()
+        model = LeNet()
+        quant_modules.deactivate()
+
+        optimizer = optim.SGD(model.parameters(), lr=0.01)
+
+        ASP.init_model_for_pruning(
+            model,
+            mask_calculator="m4n2_1d",
+            verbosity=2,
+            whitelist=[torch.nn.Linear, torch.nn.Conv2d, torch.nn.Conv3d, quant_nn.modules.quant_linear.QuantLinear],
+            allow_recompute_mask=False,
+            custom_layer_dict={
+                quant_nn.QuantConv1d: ['weight'],
+                quant_nn.QuantConv2d: ['weight'],
+                quant_nn.QuantConv3d: ['weight'],
+                quant_nn.QuantConvTranspose1d: ['weight'],
+                quant_nn.QuantConvTranspose2d: ['weight'],
+                quant_nn.QuantConvTranspose3d: ['weight'],
+                quant_nn.QuantLinear: ['weight']
+            })
+        ASP.init_optimizer_for_pruning(optimizer)
+        ASP.compute_sparse_masks()
+
+        model = model.to('cuda')
+        output = model(torch.empty(16, 1, 28, 28).to('cuda'))
+        optimizer.zero_grad()
+        loss = F.nll_loss(output, torch.randint(10, (16,), dtype=torch.int64))
+        loss.backward()
+        optimizer.step()
 
     def test_quant_module_replacement(self):
         """test monkey patching of modules with their quantized versions"""
