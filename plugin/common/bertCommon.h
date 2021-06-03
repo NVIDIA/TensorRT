@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,8 +83,9 @@ inline int getMHAMaskPackedSize(int smVersion, nvinfer1::DataType dataType, int 
 {
     // this code must match EmbLayerNormPluginDynamic::getOutputDimensions in embLayerNormPlugin.cpp
     int packedSize = unfusedMaskSize;
-    if ((smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86)
-        && (dataType == nvinfer1::DataType::kINT8 || dataType == nvinfer1::DataType::kHALF))
+    bool isSmOK = (smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86);
+    bool isPrecisionOK = (dataType == nvinfer1::DataType::kINT8 || dataType == nvinfer1::DataType::kHALF);
+    if (isSmOK && isPrecisionOK)
     {
         if (sequenceLength == 64)
         {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include "checkMacrosPlugin.h"
 
 #include "NvInferPlugin.h"
+#include <cstring>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <memory>
@@ -78,7 +79,7 @@ protected:
 template <typename T>
 void write(char*& buffer, const T& val)
 {
-    *reinterpret_cast<T*>(buffer) = val;
+    std::memcpy(buffer, &val, sizeof(T));
     buffer += sizeof(T);
 }
 
@@ -86,7 +87,8 @@ void write(char*& buffer, const T& val)
 template <typename T>
 T read(const char*& buffer)
 {
-    T val = *reinterpret_cast<const T*>(buffer);
+    T val{};
+    std::memcpy(&val, buffer, sizeof(T));
     buffer += sizeof(T);
     return val;
 }

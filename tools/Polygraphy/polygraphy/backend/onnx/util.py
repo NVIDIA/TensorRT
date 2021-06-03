@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ def check_model(model):
         import onnx
     except:
         G_LOGGER.warning("Could not import onnx module, skipping model check")
+        return model
 
     try:
         onnx.checker.check_model(model)
@@ -41,6 +42,7 @@ def infer_shapes(model):
         import onnx.shape_inference
     except:
         G_LOGGER.warning("Could not import onnx.shape_inference module, skipping shape inference")
+        return model
 
     try:
         model = onnx.shape_inference.infer_shapes(model)
@@ -121,7 +123,7 @@ def get_shape(tensor):
     else:
         for dim in tensor.type.tensor_type.shape.dim:
             if dim.dim_param:
-                shape.append(-1)
+                shape.append(dim.dim_param)
             else:
                 shape.append(dim.dim_value)
     return shape
@@ -297,9 +299,10 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
                 if attrs:
                     onnx_str += misc.indent_block("---- Attributes ----") + "\n"
                 for key, val in attrs.items():
+                    attr_str = ""
                     if node.name:
-                        onnx_str += "{:}.".format(node.name)
-                    onnx_str += misc.indent_block("{:} = {:}".format(key, val)) + "\n"
+                        attr_str += "{:}.".format(node.name)
+                    onnx_str += misc.indent_block("{:}{:} = {:}".format(attr_str, key, val)) + "\n"
             onnx_str += "\n"
     else:
         onnx_str += "(Use --mode to display)"

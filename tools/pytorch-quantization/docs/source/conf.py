@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,14 +33,15 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 import sphinx_glpi_theme
+from pytorch_quantization import __version__
 
 # -- Project information -----------------------------------------------------
 
 project = 'pytorch-quantization'
-copyright = '2020, NVIDIA'
+copyright = '2021, NVIDIA'
 
 # The short X.Y version
-version = '2.0.0'
+version = __version__
 # The full version, including alpha/beta/rc tags
 release = 'master'
 

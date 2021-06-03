@@ -1,4 +1,4 @@
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ LABEL maintainer="NVIDIA CORPORATION"
 
 ARG uid=1000
 ARG gid=1000
-RUN groupadd -r -f -g ${gid} trtuser && useradd -r -u ${uid} -g ${gid} -ms /bin/bash trtuser
+RUN groupadd -r -f -g ${gid} trtuser && useradd -o -r -u ${uid} -g ${gid} -ms /bin/bash trtuser
 RUN usermod -aG sudo trtuser
 RUN echo 'trtuser:nvidia' | chpasswd
 RUN mkdir -p /workspace && chown -R trtuser:trtuser /workspace
@@ -103,7 +103,7 @@ RUN rm -rf cublas cudart rt prof nvcc
 RUN rm *.deb
 
 WORKDIR /workspace
-ENV TRT_RELEASE /tensorrt
-ENV TRT_SOURCE /workspace/TensorRT
+ENV TRT_LIBPATH /usr/lib/x86_64-linux-gnu
+ENV TRT_OSSPATH /workspace/TensorRT
 USER trtuser
 RUN ["/bin/bash"]

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -51,8 +51,8 @@ do
 done
 
 # Prepare the download directory
-mkdir -p /workspace/TensorRT/demo/BERT/models/fine-tuned
-cd /workspace/TensorRT/demo/BERT/models/fine-tuned
+mkdir -p models/fine-tuned
+pushd models/fine-tuned
 
 # Download the BERT fine-tuned model
 echo "Downloading BERT-${FW} ${MODEL} checkpoints for sequence length ${SEQ_LEN} and fine-tuned for SQuAD ${SQUAD}."
@@ -78,3 +78,4 @@ if [ -n "$CKPT" ]; then
         ngc registry model download-version nvidia/${CKPT}:${CKPT_VERSION}
     fi
 fi
+popd

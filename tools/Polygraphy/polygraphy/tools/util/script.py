@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,15 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.logger import G_LOGGER, LogMode
-from polygraphy.util import misc
-from polygraphy.common import constants
-import polygraphy
-
-from collections import OrderedDict, defaultdict
-import time
 import sys
-import os
+import time
+from collections import OrderedDict, defaultdict
+
+import polygraphy
+from polygraphy.common import constants
+from polygraphy.logger import G_LOGGER
+from polygraphy.util import misc
+
 
 # Special marker that indicates a string should be literally copied into the script, not wrapped in quotes
 class Inline(str):
@@ -89,7 +89,7 @@ class Script(object):
 
         Args:
             type_str (str): A string representing the object that should be invoked.
-            *args and **kwargs:
+            args, kwargs:
                     Arguments to pass along to the object. If a keyword argument
                     is set to None, it will be omitted.
 

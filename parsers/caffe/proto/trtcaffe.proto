@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -128,8 +128,8 @@ message NetParameter {
   optional Type default_backward_type = 12 [default = FLOAT];
   optional Type default_forward_math  = 13 [default = FLOAT];
   optional Type default_backward_math = 14 [default = FLOAT];
-  
-  
+
+
   optional float global_grad_scale = 15 [default = 1.];
 
   // Sets the default "conv_algos_override" value for every convolution layer
@@ -194,13 +194,13 @@ message SolverParameter {
   // If true, run an initial test pass before the first iteration,
   // ensuring memory availability and printing the starting value of the loss.
   optional bool test_initialization = 32 [default = false];
-  
+
   optional int32 rampup_interval = 41 [default = 0];
   optional float rampup_lr = 42 [default = 0.];
   optional float min_lr = 43 [default = 0.];
-  
+
   optional float base_lr = 5; // The base learning rate
-  
+
   // the number of iterations between displaying info. If display = 0, no info
   // will be displayed.
   optional int32 display = 6;
@@ -229,14 +229,14 @@ message SolverParameter {
   optional float gamma = 9; // The parameter to compute the learning rate.
   optional float power = 10; // The parameter to compute the learning rate.
   optional float momentum = 11; // The momentum value.
-    
-  optional string momentum_policy = 46 [default = "fixed"];  
+
+  optional string momentum_policy = 46 [default = "fixed"];
   optional float max_momentum     = 47 [default = 0.99];
   optional float momentum_power   = 48 [default = 1.];
-  
-  optional bool  local_lr_auto = 49 [default = false]; 
-  optional float local_gw_ratio = 50 [default = 0.001];   
-  
+
+  optional bool  local_lr_auto = 49 [default = false];
+  optional float local_gw_ratio = 50 [default = 0.001];
+
   optional float weight_decay = 12; // The weight decay.
   // regularization types supported: L1 and L2
   // controlled by weight_decay
@@ -389,9 +389,9 @@ message LayerParameter {
   optional Type forward_type = 145 [default = FLOAT];
   // Type returned by Backward routines of a particular layer (aka 'Btype')
   optional Type backward_type = 146 [default = FLOAT];
-  // Internal math types. Works for those layers where internal math type 
+  // Internal math types. Works for those layers where internal math type
   // could be different compared to Ftype or Btype. For example, so called
-  // "pseudo fp32 mode" in convolution layers. For other layers has no meaning. 
+  // "pseudo fp32 mode" in convolution layers. For other layers has no meaning.
   optional Type forward_math = 147 [default = FLOAT];
   optional Type backward_math = 148 [default = FLOAT];
 
@@ -502,13 +502,13 @@ message LayerParameter {
   // corresponding weight blobs from the BinaryProto (.caffemodel) file
   // The serialization number here may not match the custom caffe version
   // used to produce the .caffemodel, but since we are parsing from .prototxt
-  // we essentially ignores the serialization number. 
+  // we essentially ignores the serialization number.
   optional PermuteParameter permute_param = 8781;
   optional DetectionOutputParameter detection_output_param = 8782;
   optional NormalizeParameter norm_param = 8783;
   optional PriorBoxParameter prior_box_param = 8784;
   optional ROIPoolingParameter roi_pooling_param = 8785;
-  optional RegionProposalParameter region_proposal_param = 8786; 
+  optional RegionProposalParameter region_proposal_param = 8786;
   // please note that the serialization number for ClipParameter differs from
   // Caffe master, since 148 was already used for a custom field
   optional ClipParameter clip_param = 8787;
@@ -1257,7 +1257,7 @@ message PoolingParameter {
   // If global_pooling then it will pool over the size of the bottom by doing
   // kernel_h = bottom->height and kernel_w = bottom->width
   optional bool global_pooling = 12 [default = false];
-  
+
   // FB pooling parameters
   // Use floor((height + 2 * padding - kernel) / stride) + 1
   // instead of ceil((height + 2 * padding - kernel) / stride) + 1
@@ -1334,21 +1334,21 @@ message RegionProposalParameter {
   // Number of remaining proposals after applying NMS
   optional uint32 nms_max_out = 2;
   // IOU threshold
-  optional float iou_threshold = 3; 
+  optional float iou_threshold = 3;
   // Minimum height and width of an anchor box
   optional float min_box_size = 4;
   // This value indicates the stride length to decide the position of bounding box.
-  optional uint32 feature_stride = 5; 
+  optional uint32 feature_stride = 5;
 
   // Number of anchor box ratios.
-  optional uint32 anchor_ratio_count = 6 [default = 1]; 
+  optional uint32 anchor_ratio_count = 6 [default = 1];
   // Number of anchor box scales.
   optional uint32 anchor_scale_count = 7 [default = 1];
 
   // List representing the ratios of height and width of an anchor box.
-  repeated float anchor_ratio = 8;  
-  // List of height and width scales of an anchor box. 
-  repeated float anchor_scale = 9; 
+  repeated float anchor_ratio = 8;
+  // List of height and width scales of an anchor box.
+  repeated float anchor_scale = 9;
 
 }
 

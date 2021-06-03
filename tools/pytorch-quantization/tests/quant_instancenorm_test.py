@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,14 +46,14 @@ NUM_CHANNELS = 15
 class TestQuantInstanceNorm1D():
 
     def test_no_quant(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm1d(NUM_CHANNELS, affine=True)
         quant_instancenorm_object.input_quantizer.disable()
 
         test_input = torch.randn(8, NUM_CHANNELS, 128)
-        
+
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(test_input, 
+        out2 = F.instance_norm(test_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,
@@ -61,7 +61,7 @@ class TestQuantInstanceNorm1D():
         np.testing.assert_array_equal(out1.detach().cpu().numpy(), out2.detach().cpu().numpy())
 
     def test_fake_quant_per_tensor(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm1d(NUM_CHANNELS, affine=True,
                                                                            quant_desc_input=QuantDescriptor())
 
@@ -69,15 +69,15 @@ class TestQuantInstanceNorm1D():
         quant_input = tensor_quant.fake_tensor_quant(test_input, torch.max(torch.abs(test_input)))
 
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(quant_input, 
+        out2 = F.instance_norm(quant_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,
                                quant_instancenorm_object.bias)
         np.testing.assert_array_equal(out1.detach().cpu().numpy(), out2.detach().cpu().numpy())
-        
+
     def test_fake_quant_per_channel(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm1d(NUM_CHANNELS, affine=True,
                                                                            quant_desc_input=QuantDescriptor(axis=(1)))
 
@@ -86,7 +86,7 @@ class TestQuantInstanceNorm1D():
                                                      torch.abs(test_input).max(0, keepdim=True)[0].max(2, keepdim=True)[0])
 
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(quant_input, 
+        out2 = F.instance_norm(quant_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,
@@ -97,14 +97,14 @@ class TestQuantInstanceNorm1D():
 class TestQuantInstanceNorm2D():
 
     def test_no_quant(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm2d(NUM_CHANNELS, affine=True)
         quant_instancenorm_object.input_quantizer.disable()
 
         test_input = torch.randn(8, NUM_CHANNELS, 128, 128)
-        
+
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(test_input, 
+        out2 = F.instance_norm(test_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,
@@ -112,7 +112,7 @@ class TestQuantInstanceNorm2D():
         np.testing.assert_array_equal(out1.detach().cpu().numpy(), out2.detach().cpu().numpy())
 
     def test_fake_quant_per_tensor(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm2d(NUM_CHANNELS, affine=True,
                                                                            quant_desc_input=QuantDescriptor())
 
@@ -120,15 +120,15 @@ class TestQuantInstanceNorm2D():
         quant_input = tensor_quant.fake_tensor_quant(test_input, torch.max(torch.abs(test_input)))
 
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(quant_input, 
+        out2 = F.instance_norm(quant_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,
                                quant_instancenorm_object.bias)
         np.testing.assert_array_equal(out1.detach().cpu().numpy(), out2.detach().cpu().numpy())
-        
+
     def test_fake_quant_per_channel(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm2d(NUM_CHANNELS, affine=True,
                                                                            quant_desc_input=QuantDescriptor(axis=(1)))
 
@@ -137,7 +137,7 @@ class TestQuantInstanceNorm2D():
                                                      torch.abs(test_input).max(0, keepdim=True)[0].max(2, keepdim=True)[0].max(3, keepdim=True)[0])
 
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(quant_input, 
+        out2 = F.instance_norm(quant_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,
@@ -149,14 +149,14 @@ class TestQuantInstanceNorm2D():
 class TestQuantInstanceNorm3D():
 
     def test_no_quant(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm3d(NUM_CHANNELS, affine=True)
         quant_instancenorm_object.input_quantizer.disable()
 
         test_input = torch.randn(8, NUM_CHANNELS, 128, 128, 128)
-        
+
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(test_input, 
+        out2 = F.instance_norm(test_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,
@@ -164,7 +164,7 @@ class TestQuantInstanceNorm3D():
         np.testing.assert_array_equal(out1.detach().cpu().numpy(), out2.detach().cpu().numpy())
 
     def test_fake_quant_per_tensor(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm3d(NUM_CHANNELS, affine=True,
                                                                            quant_desc_input=QuantDescriptor())
 
@@ -172,15 +172,15 @@ class TestQuantInstanceNorm3D():
         quant_input = tensor_quant.fake_tensor_quant(test_input, torch.max(torch.abs(test_input)))
 
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(quant_input, 
+        out2 = F.instance_norm(quant_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,
                                quant_instancenorm_object.bias)
         np.testing.assert_array_equal(out1.detach().cpu().numpy(), out2.detach().cpu().numpy())
-        
+
     def test_fake_quant_per_channel(self):
-        
+
         quant_instancenorm_object = quant_instancenorm.QuantInstanceNorm3d(NUM_CHANNELS, affine=True,
                                                                            quant_desc_input=QuantDescriptor(axis=(1)))
 
@@ -190,7 +190,7 @@ class TestQuantInstanceNorm3D():
                                                           .max(3, keepdim=True)[0].max(4, keepdim=True)[0])
 
         out1 = quant_instancenorm_object(test_input)
-        out2 = F.instance_norm(quant_input, 
+        out2 = F.instance_norm(quant_input,
                                quant_instancenorm_object.running_mean,
                                quant_instancenorm_object.running_var,
                                quant_instancenorm_object.weight,

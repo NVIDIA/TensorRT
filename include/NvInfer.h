@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -5916,9 +5916,31 @@ public:
 
     //! \brief Add a select layer to the network.
     //!
-    //! \param condition The condition tensor to the layer.
+    //! \param condition The condition tensor to the layer. Must have type DataType::kBOOL.
     //! \param thenInput The "then" input tensor to the layer.
     //! \param elseInput The "else" input tensor to the layer.
+    //!
+    //! All three input tensors must have the same number of dimensions, and along each axis
+    //! must have the same length or a length of one. If the length is one, the tensor
+    //! is broadcast along that axis. The output tensor has the dimensions of the inputs AFTER
+    //! the broadcast rule is applied. For example, given:
+    //!
+    //!    dimensions of condition:  [1,1,5,9]
+    //!    dimensions of thenInput:  [1,1,5,9]
+    //!    dimensions of elseInput:  [1,3,1,9]
+    //!
+    //! the output dimensions are [1,3,5,9], and the output contents are defined by:
+    //!
+    //!      output[0,i,j,k] = condition[0,0,j,k] ? thenInput[0,0,j,k] : elseInput[0,i,0,k]
+    //!
+    //! The output dimensions are not necessarily the max of the input dimensions if any input
+    //! is an empty tensor. For example, if in the preceding example, 5 is changed to 0:
+    //!
+    //!    dimensions of condition:  [1,1,0,9]
+    //!    dimensions of thenInput:  [1,1,0,9]
+    //!    dimensions of elseInput:  [1,3,1,9]
+    //!
+    //! then the output dimensions are [1,3,0,9].
     //!
     //! \see ISelectLayer
     //!
@@ -6745,7 +6767,7 @@ public:
     //!
     //! \brief Set Algorithm Selector.
     //!
-    //! \param selector The algorithm slector to be set in the build config.
+    //! \param selector The algorithm selector to be set in the build config.
     virtual void setAlgorithmSelector(IAlgorithmSelector* selector) TRTNOEXCEPT = 0;
 
     //!

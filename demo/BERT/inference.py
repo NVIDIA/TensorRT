@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 #
 
 """
-This script uses a prebuilt TensorRT BERT QA Engine to answer a question 
-based on the provided passage. It additionally includes an interactive mode 
+This script uses a prebuilt TensorRT BERT QA Engine to answer a question
+based on the provided passage. It additionally includes an interactive mode
 where multiple questions can be asked.
 """
 
@@ -130,7 +130,7 @@ if __name__ == '__main__':
         num_binding_per_profile = engine.num_bindings // engine.num_optimization_profiles
         for idx in range(engine.num_optimization_profiles):
             profile_shape = engine.get_profile_shape(profile_index = idx, binding = idx * num_binding_per_profile)
-            if profile_shape[0][1] <= args.batch_size and profile_shape[2][1] >= args.batch_size and profile_shape[0][0] <= max_seq_length and profile_shape[2][0] >= max_seq_length:
+            if profile_shape[0][0] <= args.batch_size and profile_shape[2][0] >= args.batch_size and profile_shape[0][1] <= max_seq_length and profile_shape[2][1] >= max_seq_length:
                 selected_profile = idx
                 break
         if selected_profile == -1:
@@ -139,9 +139,9 @@ if __name__ == '__main__':
         context.active_optimization_profile = selected_profile
         binding_idx_offset = selected_profile * num_binding_per_profile
 
-        # Specify input shapes. These must be within the min/max bounds of the active profile 
+        # Specify input shapes. These must be within the min/max bounds of the active profile
         # Note that input shapes can be specified on a per-inference basis, but in this case, we only have a single shape.
-        input_shape = (max_seq_length, args.batch_size)
+        input_shape = (args.batch_size, max_seq_length)
         input_nbytes = trt.volume(input_shape) * trt.int32.itemsize
         for binding in range(3):
             context.set_binding_shape(binding_idx_offset + binding, input_shape)
@@ -168,9 +168,9 @@ if __name__ == '__main__':
             eval_time_elapsed = 0
             for feature_index, feature in enumerate(features):
                 # Copy inputs
-                input_ids_batch = np.dstack([feature.input_ids] * args.batch_size).squeeze()
-                segment_ids_batch = np.dstack([feature.segment_ids] * args.batch_size).squeeze()
-                input_mask_batch = np.dstack([feature.input_mask] * args.batch_size).squeeze()
+                input_ids_batch = np.repeat(np.expand_dims(feature.input_ids, 0), args.batch_size, axis=0)
+                segment_ids_batch = np.repeat(np.expand_dims(feature.segment_ids, 0), args.batch_size, axis=0)
+                input_mask_batch = np.repeat(np.expand_dims(feature.input_mask, 0), args.batch_size, axis=0)
 
                 input_ids = cuda.register_host_memory(np.ascontiguousarray(input_ids_batch.ravel()))
                 segment_ids = cuda.register_host_memory(np.ascontiguousarray(segment_ids_batch.ravel()))

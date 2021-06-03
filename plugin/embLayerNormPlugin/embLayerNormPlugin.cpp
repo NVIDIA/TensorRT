@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -114,7 +114,8 @@ IPluginV2DynamicExt* EmbLayerNormPluginDynamic::clone() const
 {
     gLogVerbose << "EmbLayerNormPluginDynamic clone\n";
 
-    auto p = new EmbLayerNormPluginDynamic(mLayerName, mType, mMhaType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb, mUseFullMask);
+    auto p = new EmbLayerNormPluginDynamic(
+        mLayerName, mType, mMhaType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb, mUseFullMask);
     p->mS = mS;
     p->setPluginNamespace(mNamespace.c_str());
 
@@ -152,8 +153,9 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
     auto cms0 = exprBuilder.constant(unfusedMaskSize);
 
     // this code must match getMHAMaskPackedSize in bertCommon.h
-    if (mUseFullMask || ((mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86)
-        && (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8)))
+    bool isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86);
+    bool isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
+    if (mUseFullMask || (isSmOK && isPrecisionOK))
     {
         // support 128, 384 in both int8 and fp16
         auto cms128 = exprBuilder.constant(packedMaskSize128);
@@ -282,7 +284,6 @@ void EmbLayerNormPluginDynamic::configurePlugin(
     assert(outputs[0].desc.type == mType);
     assert(outputs[1].desc.type == DataType::kFLOAT);
 }
-
 
 size_t EmbLayerNormPluginDynamic::getWorkspaceSize(
     const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const
@@ -554,8 +555,8 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
 
     gLogVerbose << "Building the Plugin...\n";
     DataType mhaType = static_cast<DataType>(mhaTypeId);
-    EmbLayerNormPluginDynamic* p = new EmbLayerNormPluginDynamic(
-        name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, mhaType, beta, gamma, word_emb, pos_emb, tok_emb, useFullMask);
+    EmbLayerNormPluginDynamic* p = new EmbLayerNormPluginDynamic(name, output_fp16 ? DataType::kHALF : DataType::kFLOAT,
+        mhaType, beta, gamma, word_emb, pos_emb, tok_emb, useFullMask);
     return p;
 }
 

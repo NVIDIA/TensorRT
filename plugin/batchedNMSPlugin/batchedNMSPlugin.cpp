@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,12 +38,12 @@ const char* NMS_PLUGIN_NAMES[] = {"BatchedNMS_TRT", "BatchedNMSDynamic_TRT"};
 PluginFieldCollection BatchedNMSBasePluginCreator::mFC{};
 std::vector<PluginField> BatchedNMSBasePluginCreator::mPluginAttributes;
 
-BatchedNMSPlugin::BatchedNMSPlugin(NMSParameters params)
+BatchedNMSPlugin::BatchedNMSPlugin(NMSParameters params) noexcept
     : param(params)
 {
 }
 
-BatchedNMSPlugin::BatchedNMSPlugin(const void* data, size_t length)
+BatchedNMSPlugin::BatchedNMSPlugin(const void* data, size_t length) noexcept
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     param = read<NMSParameters>(d);
@@ -52,15 +52,16 @@ BatchedNMSPlugin::BatchedNMSPlugin(const void* data, size_t length)
     numPriors = read<int>(d);
     mClipBoxes = read<bool>(d);
     mPrecision = read<DataType>(d);
+    mScoreBits = read<int32_t>(d);
     ASSERT(d == a + length);
 }
 
-BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(NMSParameters params)
+BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(NMSParameters params) noexcept
     : param(params)
 {
 }
 
-BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(const void* data, size_t length)
+BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(const void* data, size_t length) noexcept
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     param = read<NMSParameters>(d);
@@ -69,34 +70,35 @@ BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(const void* data, size_t length
     numPriors = read<int>(d);
     mClipBoxes = read<bool>(d);
     mPrecision = read<DataType>(d);
+    mScoreBits = read<int32_t>(d);
     ASSERT(d == a + length);
 }
 
-int BatchedNMSPlugin::getNbOutputs() const
+int BatchedNMSPlugin::getNbOutputs() const noexcept
 {
     return 4;
 }
 
-int BatchedNMSDynamicPlugin::getNbOutputs() const
+int BatchedNMSDynamicPlugin::getNbOutputs() const noexcept
 {
     return 4;
 }
 
-int BatchedNMSPlugin::initialize()
+int BatchedNMSPlugin::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
-int BatchedNMSDynamicPlugin::initialize()
+int BatchedNMSDynamicPlugin::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
-void BatchedNMSPlugin::terminate() {}
+void BatchedNMSPlugin::terminate() noexcept {}
 
-void BatchedNMSDynamicPlugin::terminate() {}
+void BatchedNMSDynamicPlugin::terminate() noexcept {}
 
-Dims BatchedNMSPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims BatchedNMSPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
     ASSERT(nbInputDims == 2);
     ASSERT(index >= 0 && index < this->getNbOutputs());
@@ -126,7 +128,7 @@ Dims BatchedNMSPlugin::getOutputDimensions(int index, const Dims* inputs, int nb
 }
 
 DimsExprs BatchedNMSDynamicPlugin::getOutputDimensions(
-    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder)
+    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     ASSERT(nbInputs == 2);
     ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
@@ -194,21 +196,21 @@ DimsExprs BatchedNMSDynamicPlugin::getOutputDimensions(
     return out_dim;
 }
 
-size_t BatchedNMSPlugin::getWorkspaceSize(int maxBatchSize) const
+size_t BatchedNMSPlugin::getWorkspaceSize(int maxBatchSize) const noexcept
 {
     return detectionInferenceWorkspaceSize(param.shareLocation, maxBatchSize, boxesSize, scoresSize, param.numClasses,
         numPriors, param.topK, mPrecision, mPrecision);
 }
 
 size_t BatchedNMSDynamicPlugin::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const
+    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
     return detectionInferenceWorkspaceSize(param.shareLocation, inputs[0].dims.d[0], boxesSize, scoresSize,
         param.numClasses, numPriors, param.topK, mPrecision, mPrecision);
 }
 
 int BatchedNMSPlugin::enqueue(
-    int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+    int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept
 {
     const void* const locData = inputs[0];
     const void* const confData = inputs[1];
@@ -220,14 +222,14 @@ int BatchedNMSPlugin::enqueue(
 
     pluginStatus_t status = nmsInference(stream, batchSize, boxesSize, scoresSize, param.shareLocation,
         param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
-        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores,
-        nmsedClasses, workspace, param.isNormalized, false, mClipBoxes);
+        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses,
+        workspace, param.isNormalized, false, mClipBoxes, mScoreBits);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
 
 int BatchedNMSDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     const void* const locData = inputs[0];
     const void* const confData = inputs[1];
@@ -239,19 +241,19 @@ int BatchedNMSDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const Pl
 
     pluginStatus_t status = nmsInference(stream, inputDesc[0].dims.d[0], boxesSize, scoresSize, param.shareLocation,
         param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
-        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores,
-        nmsedClasses, workspace, param.isNormalized, false, mClipBoxes);
+        param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses,
+        workspace, param.isNormalized, false, mClipBoxes, mScoreBits);
     ASSERT(status == STATUS_SUCCESS);
     return 0;
 }
 
-size_t BatchedNMSPlugin::getSerializationSize() const
+size_t BatchedNMSPlugin::getSerializationSize() const noexcept
 {
     // NMSParameters, boxesSize,scoresSize,numPriors
-    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) + sizeof(DataType);
+    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) + sizeof(DataType) + sizeof(int32_t);
 }
 
-void BatchedNMSPlugin::serialize(void* buffer) const
+void BatchedNMSPlugin::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, param);
@@ -260,16 +262,17 @@ void BatchedNMSPlugin::serialize(void* buffer) const
     write(d, numPriors);
     write(d, mClipBoxes);
     write(d, mPrecision);
+    write(d, mScoreBits);
     ASSERT(d == a + getSerializationSize());
 }
 
-size_t BatchedNMSDynamicPlugin::getSerializationSize() const
+size_t BatchedNMSDynamicPlugin::getSerializationSize() const noexcept
 {
     // NMSParameters, boxesSize,scoresSize,numPriors
-    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) + sizeof(DataType);
+    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) + sizeof(DataType) + sizeof(int32_t);
 }
 
-void BatchedNMSDynamicPlugin::serialize(void* buffer) const
+void BatchedNMSDynamicPlugin::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, param);
@@ -278,12 +281,13 @@ void BatchedNMSDynamicPlugin::serialize(void* buffer) const
     write(d, numPriors);
     write(d, mClipBoxes);
     write(d, mPrecision);
+    write(d, mScoreBits);
     ASSERT(d == a + getSerializationSize());
 }
 
 void BatchedNMSPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, nvinfer1::PluginFormat format, int maxBatchSize)
+    const bool* outputIsBroadcast, nvinfer1::PluginFormat format, int maxBatchSize) noexcept
 {
     ASSERT(nbInputs == 2);
     ASSERT(nbOutputs == 4);
@@ -300,10 +304,11 @@ void BatchedNMSPlugin::configurePlugin(const Dims* inputDims, int nbInputs, cons
     // Third dimension of boxes must be either 1 or num_classes
     ASSERT(inputDims[0].d[1] == numLocClasses);
     ASSERT(inputDims[0].d[2] == 4);
+    mPrecision = inputTypes[0];
 }
 
 void BatchedNMSDynamicPlugin::configurePlugin(
-    const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs)
+    const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) noexcept
 {
     ASSERT(nbInputs == 2);
     ASSERT(nbOutputs == 4);
@@ -328,13 +333,14 @@ void BatchedNMSDynamicPlugin::configurePlugin(
     mPrecision = in[0].desc.type;
 }
 
-bool BatchedNMSPlugin::supportsFormat(DataType type, PluginFormat format) const
+bool BatchedNMSPlugin::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return ((type == DataType::kHALF || type == DataType::kFLOAT || type == DataType::kINT32) && format == PluginFormat::kNCHW);
+    return ((type == DataType::kHALF || type == DataType::kFLOAT || type == DataType::kINT32)
+        && format == PluginFormat::kNCHW);
 }
 
 bool BatchedNMSDynamicPlugin::supportsFormatCombination(
-    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
+    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
     ASSERT(0 <= pos && pos < 6);
     const auto* in = inOut;
@@ -342,47 +348,57 @@ bool BatchedNMSDynamicPlugin::supportsFormatCombination(
     const bool consistentFloatPrecision = in[0].type == in[pos].type;
     switch (pos)
     {
-    case 0: return (in[0].type == DataType::kHALF || in[0].type == DataType::kFLOAT) && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 1: return (in[1].type == DataType::kHALF || in[1].type == DataType::kFLOAT) && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 0:
+        return (in[0].type == DataType::kHALF || in[0].type == DataType::kFLOAT)
+            && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 1:
+        return (in[1].type == DataType::kHALF || in[1].type == DataType::kFLOAT)
+            && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     case 2: return out[0].type == DataType::kINT32 && out[0].format == PluginFormat::kLINEAR;
-    case 3: return (out[1].type == DataType::kHALF || out[1].type == DataType::kFLOAT) && out[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 4: return (out[2].type == DataType::kHALF || out[2].type == DataType::kFLOAT) && out[2].format == PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 5: return (out[3].type == DataType::kHALF || out[3].type == DataType::kFLOAT) && out[3].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 3:
+        return (out[1].type == DataType::kHALF || out[1].type == DataType::kFLOAT)
+            && out[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 4:
+        return (out[2].type == DataType::kHALF || out[2].type == DataType::kFLOAT)
+            && out[2].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    case 5:
+        return (out[3].type == DataType::kHALF || out[3].type == DataType::kFLOAT)
+            && out[3].format == PluginFormat::kLINEAR && consistentFloatPrecision;
     }
     return false;
 }
 
-const char* BatchedNMSPlugin::getPluginType() const
+const char* BatchedNMSPlugin::getPluginType() const noexcept
 {
     return NMS_PLUGIN_NAMES[0];
 }
 
-const char* BatchedNMSDynamicPlugin::getPluginType() const
+const char* BatchedNMSDynamicPlugin::getPluginType() const noexcept
 {
     return NMS_PLUGIN_NAMES[1];
 }
 
-const char* BatchedNMSPlugin::getPluginVersion() const
+const char* BatchedNMSPlugin::getPluginVersion() const noexcept
 {
     return NMS_PLUGIN_VERSION;
 }
 
-const char* BatchedNMSDynamicPlugin::getPluginVersion() const
+const char* BatchedNMSDynamicPlugin::getPluginVersion() const noexcept
 {
     return NMS_PLUGIN_VERSION;
 }
 
-void BatchedNMSPlugin::destroy()
+void BatchedNMSPlugin::destroy() noexcept
 {
     delete this;
 }
 
-void BatchedNMSDynamicPlugin::destroy()
+void BatchedNMSDynamicPlugin::destroy() noexcept
 {
     delete this;
 }
 
-IPluginV2Ext* BatchedNMSPlugin::clone() const
+IPluginV2Ext* BatchedNMSPlugin::clone() const noexcept
 {
     auto* plugin = new BatchedNMSPlugin(param);
     plugin->boxesSize = boxesSize;
@@ -391,10 +407,11 @@ IPluginV2Ext* BatchedNMSPlugin::clone() const
     plugin->setPluginNamespace(mNamespace.c_str());
     plugin->setClipParam(mClipBoxes);
     plugin->mPrecision = mPrecision;
+    plugin->setScoreBits(mScoreBits);
     return plugin;
 }
 
-IPluginV2DynamicExt* BatchedNMSDynamicPlugin::clone() const
+IPluginV2DynamicExt* BatchedNMSDynamicPlugin::clone() const noexcept
 {
     auto* plugin = new BatchedNMSDynamicPlugin(param);
     plugin->boxesSize = boxesSize;
@@ -403,31 +420,32 @@ IPluginV2DynamicExt* BatchedNMSDynamicPlugin::clone() const
     plugin->setPluginNamespace(mNamespace.c_str());
     plugin->setClipParam(mClipBoxes);
     plugin->mPrecision = mPrecision;
+    plugin->setScoreBits(mScoreBits);
     return plugin;
 }
 
-void BatchedNMSPlugin::setPluginNamespace(const char* pluginNamespace)
+void BatchedNMSPlugin::setPluginNamespace(const char* pluginNamespace) noexcept
 {
     mNamespace = pluginNamespace;
 }
 
-const char* BatchedNMSPlugin::getPluginNamespace() const
+const char* BatchedNMSPlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
 
-void BatchedNMSDynamicPlugin::setPluginNamespace(const char* pluginNamespace)
+void BatchedNMSDynamicPlugin::setPluginNamespace(const char* pluginNamespace) noexcept
 {
     mNamespace = pluginNamespace;
 }
 
-const char* BatchedNMSDynamicPlugin::getPluginNamespace() const
+const char* BatchedNMSDynamicPlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
 
 nvinfer1::DataType BatchedNMSPlugin::getOutputDataType(
-    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     if (index == 0)
     {
@@ -437,7 +455,7 @@ nvinfer1::DataType BatchedNMSPlugin::getOutputDataType(
 }
 
 nvinfer1::DataType BatchedNMSDynamicPlugin::getOutputDataType(
-    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     if (index == 0)
     {
@@ -446,29 +464,41 @@ nvinfer1::DataType BatchedNMSDynamicPlugin::getOutputDataType(
     return inputTypes[0];
 }
 
-void BatchedNMSPlugin::setClipParam(bool clip)
+void BatchedNMSPlugin::setClipParam(bool clip) noexcept
 {
     mClipBoxes = clip;
 }
 
-void BatchedNMSDynamicPlugin::setClipParam(bool clip)
+void BatchedNMSDynamicPlugin::setClipParam(bool clip) noexcept
 {
     mClipBoxes = clip;
+}
+
+void BatchedNMSPlugin::setScoreBits(int32_t scoreBits) noexcept
+{
+    mScoreBits = scoreBits;
+}
+
+void BatchedNMSDynamicPlugin::setScoreBits(int32_t scoreBits) noexcept
+{
+    mScoreBits = scoreBits;
 }
 
 bool BatchedNMSPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+    noexcept
 {
     return false;
 }
 
-bool BatchedNMSPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
+bool BatchedNMSPlugin::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 {
     return false;
 }
 
-BatchedNMSBasePluginCreator::BatchedNMSBasePluginCreator()
+BatchedNMSBasePluginCreator::BatchedNMSBasePluginCreator() noexcept
     : params{}
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("shareLocation", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("backgroundLabelId", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("numClasses", nullptr, PluginFieldType::kINT32, 1));
@@ -478,41 +508,41 @@ BatchedNMSBasePluginCreator::BatchedNMSBasePluginCreator()
     mPluginAttributes.emplace_back(PluginField("iouThreshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("isNormalized", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("clipBoxes", nullptr, PluginFieldType::kINT32, 1));
-
+    mPluginAttributes.emplace_back(PluginField("scoreBits", nullptr, PluginFieldType::kINT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
 
-BatchedNMSPluginCreator::BatchedNMSPluginCreator()
+BatchedNMSPluginCreator::BatchedNMSPluginCreator() noexcept
 {
     mPluginName = NMS_PLUGIN_NAMES[0];
 }
 
-BatchedNMSDynamicPluginCreator::BatchedNMSDynamicPluginCreator()
+BatchedNMSDynamicPluginCreator::BatchedNMSDynamicPluginCreator() noexcept
 {
     mPluginName = NMS_PLUGIN_NAMES[1];
 }
 
-const char* BatchedNMSBasePluginCreator::getPluginName() const
+const char* BatchedNMSBasePluginCreator::getPluginName() const noexcept
 {
     return mPluginName.c_str();
 }
 
-const char* BatchedNMSBasePluginCreator::getPluginVersion() const
+const char* BatchedNMSBasePluginCreator::getPluginVersion() const noexcept
 {
     return NMS_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* BatchedNMSBasePluginCreator::getFieldNames()
+const PluginFieldCollection* BatchedNMSBasePluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     mClipBoxes = true;
-
+    mScoreBits = 16;
     for (int i = 0; i < fc->nbFields; ++i)
     {
         const char* attrName = fields[i].name;
@@ -557,20 +587,26 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const Plug
         else if (!strcmp(attrName, "clipBoxes"))
         {
             mClipBoxes = *(static_cast<const bool*>(fields[i].data));
+        }
+        else if (!strcmp(attrName, "scoreBits"))
+        {
+            mScoreBits = *(static_cast<const int32_t*>(fields[i].data));
         }
     }
 
     auto* plugin = new BatchedNMSPlugin(params);
     plugin->setClipParam(mClipBoxes);
+    plugin->setScoreBits(mScoreBits);
     plugin->setPluginNamespace(mNamespace.c_str());
     return plugin;
 }
 
-IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     mClipBoxes = true;
-
+    mScoreBits = 16;
     for (int i = 0; i < fc->nbFields; ++i)
     {
         const char* attrName = fields[i].name;
@@ -616,15 +652,21 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(const char* na
         {
             mClipBoxes = *(static_cast<const bool*>(fields[i].data));
         }
+        else if (!strcmp(attrName, "scoreBits"))
+        {
+            mScoreBits = *(static_cast<const int32_t*>(fields[i].data));
+        }
     }
 
     auto* plugin = new BatchedNMSDynamicPlugin(params);
     plugin->setClipParam(mClipBoxes);
+    plugin->setScoreBits(mScoreBits);
     plugin->setPluginNamespace(mNamespace.c_str());
     return plugin;
 }
 
-IPluginV2Ext* BatchedNMSPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2Ext* BatchedNMSPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call NMS::destroy()
@@ -634,7 +676,7 @@ IPluginV2Ext* BatchedNMSPluginCreator::deserializePlugin(const char* name, const
 }
 
 IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call NMS::destroy()

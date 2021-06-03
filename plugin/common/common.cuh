@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -326,7 +326,6 @@ template <typename T, unsigned TPB>
 __device__ inline void scaledSoftmax(
     const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
 {
-
     using BlockReduce = cub::BlockReduce<float, TPB>;
     __shared__ typename BlockReduce::TempStorage tmpStorage;
 
@@ -346,7 +345,7 @@ __device__ inline void scaledSoftmax(
     for (int i = threadIdx.x; i < lastValid; i += TPB)
     {
         const int idx = offset + i;
-        threadData = input[idx];
+        threadData = max(static_cast<float>(input[idx]), threadData);
     }
 
     const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
@@ -356,16 +355,12 @@ __device__ inline void scaledSoftmax(
     }
     __syncthreads();
 
-    if (lastValid < blockDim.x)
-    {
-        if (threadIdx.x >= lastValid)
-        {
-            threadData = 0;
-        }
-    }
+    threadData = 0;
+
     for (int i = threadIdx.x; i < lastValid; i += TPB)
     {
-        threadData += exp((threadData - fMax) * w);
+        const int idx = offset + i;
+        threadData += exp((static_cast<float>(input[idx]) - fMax) * w);
     }
 
     const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
@@ -379,7 +374,7 @@ __device__ inline void scaledSoftmax(
     for (int i = threadIdx.x; i < ld; i += TPB)
     {
         const int idx = offset + i;
-        const float val = (i < lastValid) ? exp(float(input[idx]) * w) * rZ : 0.f;
+        const float val = (i < lastValid) ? exp((static_cast<float>(input[idx]) - fMax) * w) * rZ : 0.f;
         output[idx] = T(val);
     }
 }
@@ -442,5 +437,52 @@ __device__ inline float myExp<float>(const float x)
 {
     return __expf(x);
 }
+
+static inline __device__ uint32_t float4_to_char4(float x, 
+                                                  float y, 
+                                                  float z, 
+                                                  float w) {
+  uint32_t dst;
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 720
+  uint32_t a; asm volatile("cvt.rni.sat.s32.f32 %0, %1;\n" : "=r"(a) : "f"(x));
+  uint32_t b; asm volatile("cvt.rni.sat.s32.f32 %0, %1;\n" : "=r"(b) : "f"(y));
+  uint32_t c; asm volatile("cvt.rni.sat.s32.f32 %0, %1;\n" : "=r"(c) : "f"(z));
+  uint32_t d; asm volatile("cvt.rni.sat.s32.f32 %0, %1;\n" : "=r"(d) : "f"(w));
+
+  asm volatile("cvt.pack.sat.s8.s32.b32 %0, %1, %2,  0;\n" : "=r"(dst) : "r"(d), "r"(c));
+  asm volatile("cvt.pack.sat.s8.s32.b32 %0, %1, %2, %0;\n" : "+r"(dst) : "r"(b), "r"(a));
+#else
+  char4 tmp;
+  tmp.x = x;
+  tmp.y = y;
+  tmp.z = z;
+  tmp.w = w;
+  dst = reinterpret_cast<const uint32_t&>(tmp);
+#endif
+  return dst;
+}
+
+inline __device__ char quantize(const float x, const float qScale)
+{
+    int tmpq = __float2int_rn(qScale * x);  // scale and round
+    char tmpq8 = min(127, max(-127, tmpq)); // clip and cast
+    return tmpq8;
+}
+
+inline __device__ void ldg(const int8_t* input, uint4& data)
+{
+    data = *reinterpret_cast<const uint4*>(input);
+}
+
+inline __device__ void stg(int8_t* output, uint4& data)
+{
+    *reinterpret_cast<uint4*>(output) = data;
+}
+
+inline __device__ uint32_t pack4(const float (&hdata)[4], const float qScale)
+{
+    return float4_to_char4(hdata[0] * qScale, hdata[1] * qScale , hdata[2] * qScale, hdata[3] * qScale);
+}
+
 
 #endif // #ifndef COMMON_CUH

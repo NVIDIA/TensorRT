@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,9 @@ pluginStatus_t sortScoresPerImage_gpu(
     void* unsorted_bbox_indices,
     void* sorted_scores,
     void* sorted_bbox_indices,
-    void* workspace)
+    void* workspace,
+    int score_bits
+)
 {
     void* d_offsets = workspace;
     void* cubWorkspace = nextWorkspacePtr((int8_t*) d_offsets, (num_images + 1) * sizeof(int));
@@ -37,13 +39,20 @@ pluginStatus_t sortScoresPerImage_gpu(
 
     const int arrayLen = num_images * num_items_per_image;
     size_t temp_storage_bytes = cubSortPairsWorkspaceSize<T_SCORE, int>(arrayLen, num_images);
+    size_t begin_bit = 0;
+    size_t end_bit = sizeof(T_SCORE) * 8;
+    if (sizeof(T_SCORE) == 2 && score_bits > 0 && score_bits <= 10)
+    {
+        end_bit = 10;
+        begin_bit = end_bit - score_bits;
+    }
     cub::DeviceSegmentedRadixSort::SortPairsDescending(
         cubWorkspace, temp_storage_bytes,
         (const T_SCORE*) (unsorted_scores), (T_SCORE*) (sorted_scores),
         (const int*) (unsorted_bbox_indices), (int*) (sorted_bbox_indices),
         arrayLen, num_images,
         (const int*) d_offsets, (const int*) d_offsets + 1,
-        0, sizeof(T_SCORE) * 8,
+        begin_bit, end_bit,
         stream);
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
@@ -57,7 +66,8 @@ typedef pluginStatus_t (*sspiFunc)(cudaStream_t,
                                 void*,
                                 void*,
                                 void*,
-                                void*);
+                                void*,
+                                int);
 struct sspiLaunchConfig
 {
     DataType t_score;
@@ -92,7 +102,9 @@ pluginStatus_t sortScoresPerImage(
     void* unsorted_bbox_indices,
     void* sorted_scores,
     void* sorted_bbox_indices,
-    void* workspace)
+    void* workspace,
+    int score_bits
+)
 {
     sspiLaunchConfig lc = sspiLaunchConfig(DT_SCORE);
     for (unsigned i = 0; i < sspiLCOptions.size(); ++i)
@@ -107,7 +119,8 @@ pluginStatus_t sortScoresPerImage(
                                            unsorted_bbox_indices,
                                            sorted_scores,
                                            sorted_bbox_indices,
-                                           workspace);
+                                           workspace,
+                                           score_bits);
         }
     }
     return STATUS_BAD_PARAM;

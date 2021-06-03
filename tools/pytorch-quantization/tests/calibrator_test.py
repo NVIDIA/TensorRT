@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,8 +23,10 @@ import torch
 
 from pytorch_quantization import utils as quant_utils
 from pytorch_quantization import calib
+from pytorch_quantization import nn as quant_nn
 import tests.utils as test_utils
 from tests.fixtures import verbose
+from tests.fixtures.models import QuantLeNet
 
 np.random.seed(12345)
 torch.manual_seed(12345)
@@ -303,3 +305,92 @@ class TestPercentileCalibrator():
             calibrator.compute_amax("percentile", percentile=-10)
         with pytest.raises(ValueError, match="range"):
             calibrator.compute_amax("percentile", percentile=200)
+
+class TestCalibrateWeights():
+
+    def test_max(self):
+        torch.manual_seed(12345)
+        ref_lenet = QuantLeNet()
+        torch.manual_seed(12345)
+        test_lenet = QuantLeNet()
+
+        for module in ref_lenet.modules():
+            if isinstance(module, (quant_nn.QuantConv2d, quant_nn.QuantLinear)):
+                module.weight_quantizer.enable_calib()
+                module.weight_quantizer.disable_quant()
+                module.weight_quantizer(module.weight)
+                module.weight_quantizer.load_calib_amax()
+
+        calib.calibrate_weights(test_lenet, method="max")
+
+        for ref_module, test_module in zip(ref_lenet.modules(), test_lenet.modules()):
+            if isinstance(ref_module, (quant_nn.QuantConv2d, quant_nn.QuantLinear)):
+                test_utils.compare(
+                    ref_module.weight_quantizer.amax, test_module.weight_quantizer.amax, rtol=0, atol=0, ctol=0)
+                assert ref_module.weight_quantizer.amax.shape == test_module.weight_quantizer.amax.shape
+
+    def test_shape_with_axis(self):
+        """Check calibrate_weight function returns same shape as TensorQuantizer"""
+        torch.manual_seed(12345)
+        ref_lenet = QuantLeNet()
+        torch.manual_seed(12345)
+        test_lenet = QuantLeNet()
+
+        for module in ref_lenet.modules():
+            if isinstance(module, (quant_nn.QuantConv2d, quant_nn.QuantLinear)):
+                module.weight_quantizer.enable_calib()
+                module.weight_quantizer.disable_quant()
+                module.weight_quantizer(module.weight)
+                module.weight_quantizer.load_calib_amax()
+
+        calib.calibrate_weights(test_lenet, method="percentile")
+
+        for ref_module, test_module in zip(ref_lenet.modules(), test_lenet.modules()):
+            if isinstance(ref_module, (quant_nn.QuantConv2d, quant_nn.QuantLinear)):
+                assert ref_module.weight_quantizer.amax.shape == test_module.weight_quantizer.amax.shape
+
+    def test_percentile(self):
+        torch.manual_seed(12345)
+        test_lenet = QuantLeNet()
+        test_percentile = 99.99
+
+        ref_calibrator = calib.HistogramCalibrator(8, None, False)
+
+        calib.calibrate_weights(test_lenet, method="percentile", perchannel=False, percentile=test_percentile)
+        ref_calibrator.collect(test_lenet.conv1.weight)
+        ref_amax = ref_calibrator.compute_amax("percentile", percentile=test_percentile)
+        test_utils.compare(ref_amax, test_lenet.conv1.weight_quantizer.amax, rtol=0, atol=0, ctol=0)
+
+    def test_percentile_with_axis(self):
+        torch.manual_seed(12345)
+        test_lenet = QuantLeNet()
+        test_percentile = 99.99
+
+        ref_calibrator = calib.HistogramCalibrator(8, None, False)
+
+        calib.calibrate_weights(test_lenet, method="percentile", perchannel=True, percentile=test_percentile)
+        ref_calibrator.collect(test_lenet.conv2.weight[1])
+        ref_amax = ref_calibrator.compute_amax("percentile", percentile=test_percentile)
+        test_utils.compare(ref_amax, test_lenet.conv2.weight_quantizer.amax[1], rtol=0, atol=0, ctol=0)
+
+    def test_mse(self):
+        torch.manual_seed(12345)
+        test_lenet = QuantLeNet()
+
+        ref_calibrator = calib.HistogramCalibrator(8, None, False)
+
+        calib.calibrate_weights(test_lenet, method="mse", perchannel=False)
+        ref_calibrator.collect(test_lenet.conv1.weight)
+        ref_amax = ref_calibrator.compute_amax("mse")
+        test_utils.compare(ref_amax, test_lenet.conv1.weight_quantizer.amax, rtol=0, atol=0, ctol=0)
+
+    def test_mse_with_axis(self):
+        torch.manual_seed(12345)
+        test_lenet = QuantLeNet()
+
+        ref_calibrator = calib.HistogramCalibrator(8, None, False)
+
+        calib.calibrate_weights(test_lenet, method="mse", perchannel=True)
+        ref_calibrator.collect(test_lenet.conv2.weight[1])
+        ref_amax = ref_calibrator.compute_amax("mse")
+        test_utils.compare(ref_amax, test_lenet.conv2.weight_quantizer.amax[1], rtol=0, atol=0, ctol=0)

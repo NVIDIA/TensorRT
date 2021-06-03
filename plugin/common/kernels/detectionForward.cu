@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,8 @@ pluginStatus_t detectionInference(
     void* topDetections,
     void* workspace,
     bool isNormalized,
-    bool confSigmoid)
+    bool confSigmoid,
+    int scoreBits)
 {
     // Batch size * number bbox per sample * 4 = total number of bounding boxes * 4
     const int locCount = N * C1;
@@ -54,7 +55,7 @@ pluginStatus_t detectionInference(
      */
     const int numLocClasses = shareLocation ? 1 : numClasses;
 
-    size_t bboxDataSize = detectionForwardBBoxDataSize(N, C1, DataType::kFLOAT);
+    size_t bboxDataSize = detectionForwardBBoxDataSize(N, C1, DT_BBOX);
     void* bboxDataRaw = workspace;
 
     pluginStatus_t status = decodeBBoxes(stream,
@@ -66,7 +67,7 @@ pluginStatus_t detectionInference(
                                       numLocClasses,
                                       backgroundLabelId,
                                       clipBBox,
-                                      DataType::kFLOAT,
+                                      DT_BBOX,
                                       locData,
                                       priorData,
                                       bboxDataRaw);
@@ -79,7 +80,7 @@ pluginStatus_t detectionInference(
      */
     // float for now
     void* bboxData;
-    size_t bboxPermuteSize = detectionForwardBBoxPermuteSize(shareLocation, N, C1, DataType::kFLOAT);
+    size_t bboxPermuteSize = detectionForwardBBoxPermuteSize(shareLocation, N, C1, DT_BBOX);
     void* bboxPermute = nextWorkspacePtr((int8_t*) bboxDataRaw, bboxDataSize);
 
     /*
@@ -94,7 +95,7 @@ pluginStatus_t detectionInference(
                              numLocClasses,
                              numPredsPerClass,
                              4,
-                             DataType::kFLOAT,
+                             DT_BBOX,
                              false,
                              bboxDataRaw,
                              bboxPermute);
@@ -115,10 +116,11 @@ pluginStatus_t detectionInference(
      */
     const int numScores = N * C2;
     size_t scoresSize = detectionForwardPreNMSSize(N, C2);
+    if (DT_SCORE == DataType::kHALF) scoresSize /= 2;
     void* scores = nextWorkspacePtr((int8_t*) bboxPermute, bboxPermuteSize);
     // need a conf_scores
     /*
-     * After permutation, bboxData format:
+     * After permutation, confData format:
      * [batch_size, numClasses, numPredsPerClass, 1]
      */
     status = permuteData(stream,
@@ -126,7 +128,7 @@ pluginStatus_t detectionInference(
                          numClasses,
                          numPredsPerClass,
                          1,
-                         DataType::kFLOAT,
+                         DT_SCORE,
                          confSigmoid,
                          confData,
                          scores);
@@ -136,6 +138,7 @@ pluginStatus_t detectionInference(
     void* indices = nextWorkspacePtr((int8_t*) scores, scoresSize);
 
     size_t postNMSScoresSize = detectionForwardPostNMSSize(N, numClasses, topK);
+    if (DT_SCORE == DataType::kHALF) postNMSScoresSize /= 2;
     size_t postNMSIndicesSize = detectionForwardPostNMSSize(N, numClasses, topK);
     void* postNMSScores = nextWorkspacePtr((int8_t*) indices, indicesSize);
     void* postNMSIndices = nextWorkspacePtr((int8_t*) postNMSScores, postNMSScoresSize);
@@ -143,18 +146,23 @@ pluginStatus_t detectionInference(
     //size_t sortingWorkspaceSize = sortScoresPerClassWorkspaceSize(N, numClasses, numPredsPerClass, FLOAT32);
     void* sortingWorkspace = nextWorkspacePtr((int8_t*) postNMSIndices, postNMSIndicesSize);
     // Sort the scores so that the following NMS could be applied.
+    float scoreShift = 0.f;
+    if(DT_SCORE == DataType::kHALF && scoreBits > 0 && scoreBits <= 10)
+        scoreShift = 1.f;
     status = sortScoresPerClass(stream,
                                 N,
                                 numClasses,
                                 numPredsPerClass,
                                 backgroundLabelId,
                                 confidenceThreshold,
-                                DataType::kFLOAT,
+                                DT_SCORE,
                                 scores,
                                 indices,
-                                sortingWorkspace);
+                                sortingWorkspace,
+                                scoreBits,
+                                scoreShift);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
-    
+
     // NMS
     status = allClassNMS(stream,
                          N,
@@ -164,26 +172,28 @@ pluginStatus_t detectionInference(
                          nmsThreshold,
                          shareLocation,
                          isNormalized,
-                         DataType::kFLOAT,
-                         DataType::kFLOAT,
+                         DT_SCORE,
+                         DT_BBOX,
                          bboxData,
                          scores,
                          indices,
                          postNMSScores,
                          postNMSIndices,
-                         false);
+                         false,
+                         scoreShift);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Sort the bounding boxes after NMS using scores
     status = sortScoresPerImage(stream,
                                 N,
                                 numClasses * topK,
-                                DataType::kFLOAT,
+                                DT_SCORE,
                                 postNMSScores,
                                 postNMSIndices,
                                 scores,
                                 indices,
-                                sortingWorkspace);
+                                sortingWorkspace,
+                                scoreBits);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Gather data from the sorted bounding boxes after NMS
@@ -194,13 +204,14 @@ pluginStatus_t detectionInference(
                                  numClasses,
                                  topK,
                                  keepTopK,
-                                 DataType::kFLOAT,
-                                 DataType::kFLOAT,
+                                 DT_BBOX,
+                                 DT_SCORE,
                                  indices,
                                  scores,
                                  bboxData,
                                  keepCount,
-                                 topDetections);
+                                 topDetections,
+                                 scoreShift);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     return STATUS_SUCCESS;
@@ -234,7 +245,8 @@ namespace plugin
     void* topDetections,
     void* workspace,
     bool isNormalized,
-    bool confSigmoid)
+    bool confSigmoid,
+    int scoreBits)
 {
     // Batch size * number bbox per sample * 4 = total number of bounding boxes * 4
     const int locCount = N * C1;
@@ -248,7 +260,7 @@ namespace plugin
      */
     const int numLocClasses = shareLocation ? 1 : numClasses;
 
-    size_t bboxDataSize = detectionForwardBBoxDataSize(N, C1, DataType::kFLOAT);
+    size_t bboxDataSize = detectionForwardBBoxDataSize(N, C1, DT_BBOX);
     void* bboxDataRaw = workspace;
 
     pluginStatus_t status = decodeBBoxes(stream,
@@ -260,7 +272,7 @@ namespace plugin
                                       numLocClasses,
                                       backgroundLabelId,
                                       clipBBox,
-                                      DataType::kFLOAT,
+                                      DT_BBOX,
                                       locData,
                                       priorData,
                                       bboxDataRaw);
@@ -273,7 +285,7 @@ namespace plugin
      */
     // float for now
     void* bboxData;
-    size_t bboxPermuteSize = detectionForwardBBoxPermuteSize(shareLocation, N, C1, DataType::kFLOAT);
+    size_t bboxPermuteSize = detectionForwardBBoxPermuteSize(shareLocation, N, C1, DT_BBOX);
     void* bboxPermute = nextWorkspacePtr((int8_t*) bboxDataRaw, bboxDataSize);
 
     /*
@@ -288,7 +300,7 @@ namespace plugin
                              numLocClasses,
                              numPredsPerClass,
                              4,
-                             DataType::kFLOAT,
+                             DT_BBOX,
                              false,
                              bboxDataRaw,
                              bboxPermute);
@@ -309,10 +321,11 @@ namespace plugin
      */
     const int numScores = N * C2;
     size_t scoresSize = detectionForwardPreNMSSize(N, C2);
+    if (DT_SCORE == DataType::kHALF) scoresSize /= 2;
     void* scores = nextWorkspacePtr((int8_t*) bboxPermute, bboxPermuteSize);
     // need a conf_scores
     /*
-     * After permutation, bboxData format:
+     * After permutation, confData format:
      * [batch_size, numClasses, numPredsPerClass, 1]
      */
     status = permuteData(stream,
@@ -320,7 +333,7 @@ namespace plugin
                          numClasses,
                          numPredsPerClass,
                          1,
-                         DataType::kFLOAT,
+                         DT_SCORE,
                          confSigmoid,
                          confData,
                          scores);
@@ -330,6 +343,7 @@ namespace plugin
     void* indices = nextWorkspacePtr((int8_t*) scores, scoresSize);
 
     size_t postNMSScoresSize = detectionForwardPostNMSSize(N, numClasses, topK);
+    if (DT_SCORE == DataType::kHALF) postNMSScoresSize /= 2;
     size_t postNMSIndicesSize = detectionForwardPostNMSSize(N, numClasses, topK);
     void* postNMSScores = nextWorkspacePtr((int8_t*) indices, indicesSize);
     void* postNMSIndices = nextWorkspacePtr((int8_t*) postNMSScores, postNMSScoresSize);
@@ -337,18 +351,23 @@ namespace plugin
     //size_t sortingWorkspaceSize = sortScoresPerClassWorkspaceSize(N, numClasses, numPredsPerClass, FLOAT32);
     void* sortingWorkspace = nextWorkspacePtr((int8_t*) postNMSIndices, postNMSIndicesSize);
     // Sort the scores so that the following NMS could be applied.
+    float scoreShift = 0.f;
+    if(DT_SCORE == DataType::kHALF && scoreBits > 0 && scoreBits <= 10)
+        scoreShift = 1.f;
     status = sortScoresPerClass(stream,
                                 N,
                                 numClasses,
                                 numPredsPerClass,
                                 backgroundLabelId,
                                 confidenceThreshold,
-                                DataType::kFLOAT,
+                                DT_SCORE,
                                 scores,
                                 indices,
-                                sortingWorkspace);
+                                sortingWorkspace,
+                                scoreBits,
+                                scoreShift);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
-    
+
     // NMS
     status = allClassNMS(stream,
                          N,
@@ -358,26 +377,28 @@ namespace plugin
                          nmsThreshold,
                          shareLocation,
                          isNormalized,
-                         DataType::kFLOAT,
-                         DataType::kFLOAT,
+                         DT_SCORE,
+                         DT_BBOX,
                          bboxData,
                          scores,
                          indices,
                          postNMSScores,
                          postNMSIndices,
-                         false);
+                         false,
+                         scoreShift);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Sort the bounding boxes after NMS using scores
     status = sortScoresPerImage(stream,
                                 N,
                                 numClasses * topK,
-                                DataType::kFLOAT,
+                                DT_SCORE,
                                 postNMSScores,
                                 postNMSIndices,
                                 scores,
                                 indices,
-                                sortingWorkspace);
+                                sortingWorkspace,
+                                scoreBits);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Gather data from the sorted bounding boxes after NMS
@@ -388,13 +409,14 @@ namespace plugin
                                  numClasses,
                                  topK,
                                  keepTopK,
-                                 DataType::kFLOAT,
-                                 DataType::kFLOAT,
+                                 DT_BBOX,
+                                 DT_SCORE,
                                  indices,
                                  scores,
                                  bboxData,
                                  keepCount,
-                                 topDetections);
+                                 topDetections,
+                                 scoreShift);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     return STATUS_SUCCESS;

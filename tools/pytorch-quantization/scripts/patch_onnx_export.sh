@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Patching script for supporting fake quantization in torch ONNX export 
+# Patching script for supporting fake quantization in torch ONNX export
 # See docs/source/userguide.rst for details
 
 PatchFile() {
@@ -38,35 +38,19 @@ else
    echo "$PATCH_C does not exist."
    exit 1
 fi
-PATCH_T="${CWD}/onnx_export_per_tensor.patch"
-if [ -f $PATCH_T ]; then
-   echo "Found patch: $PATCH_T"
-else
-   echo "$PATCH_T does not exist."
-   exit 1
-fi
 
 # Check if the ONNX opset file exists
 DIR=$(pip show torch | grep Location | cut -d' ' -f 2)
 FILE13="${DIR}/torch/onnx/symbolic_opset13.py"
-FILE10="${DIR}/torch/onnx/symbolic_opset10.py"
-
-# Patch per tensor
-if [ -f $FILE10 ]; then
-   # Patch per tensor in opset 10
-   PatchFile "$FILE10" "$PATCH_T"
-else
-   echo "File ${FILE10} does not exist."
-   exit 1
-fi
 
 # Patch per channel
+if [ ! -f $FILE13 ]; then
+   echo "from __future__ import absolute_import, division, print_function, unicode_literals" >> $FILE13
+   echo "from torch.onnx.symbolic_helper import parse_args, cast_pytorch_to_onnx" >> $FILE13
+fi
 if [ -f $FILE13 ]; then
    # Patch in opset 13
    PatchFile "$FILE13" "$PATCH_C"
-else
-   # Patch in opset 10
-   PatchFile "$FILE10" "$PATCH_C"
 fi
 
 echo "Done."

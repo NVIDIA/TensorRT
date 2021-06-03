@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,17 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.tf import GraphFromFrozen, ModifyGraph, SaveGraph
-from polygraphy.common import constants
-from polygraphy.logger import G_LOGGER
-
-from tests.models.meta import TF_MODELS
-from tests.common import check_file_non_empty
-
-import tensorflow as tf
-import tempfile
-import pytest
 import os
+import tempfile
+
+import pytest
+import tensorflow as tf
+from polygraphy.backend.tf import GraphFromFrozen, ModifyGraph, SaveGraph
+from polygraphy.common import constants, func
+from polygraphy.logger import G_LOGGER
+from tests.common import check_file_non_empty
+from tests.models.meta import TF_MODELS
 
 
 class TestLoggerCallbacks(object):
@@ -38,7 +37,7 @@ class TestFrozenGraphLoader(object):
             inp = tf.placeholder(shape=(1, 1, 1, 1), dtype=tf.float32)
             out = tf.identity(inp)
 
-        graph, outputs = GraphFromFrozen(graph)()
+        graph, outputs = func.invoke(GraphFromFrozen(graph))
         assert graph
         assert outputs
 

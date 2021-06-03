@@ -1,6 +1,6 @@
 
 import numpy as np
-from polygraphy.tools.util.args import parse_meta
+from polygraphy.tools.util.misc import parse_meta
 
 
 class TestParseMeta(object):

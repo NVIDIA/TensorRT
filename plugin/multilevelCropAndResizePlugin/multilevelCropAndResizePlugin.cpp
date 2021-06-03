@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 
 #include "multilevelCropAndResizePlugin.h"
 #include "plugin.h"
-#include <cuda_runtime_api.h>
 #include <algorithm>
+#include <cuda_runtime_api.h>
 
 #include <fstream>
 

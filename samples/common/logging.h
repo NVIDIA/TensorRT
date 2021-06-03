@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,11 +86,11 @@ public:
             // std::stringbuf::str() gets the string contents of the buffer
             // insert the buffer contents pre-appended by the appropriate prefix into the stream
             mOutput << mPrefix << str();
-            // set the buffer to empty
-            str("");
-            // flush the stream
-            mOutput.flush();
         }
+        // set the buffer to empty
+        str("");
+        // flush the stream
+        mOutput.flush();
     }
 
     void setShouldLog(bool shouldLog)

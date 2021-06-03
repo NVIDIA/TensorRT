@@ -21,7 +21,7 @@ Takes query, key and value tensors and computes scaled multi-head attention - co
 The `bertQKVToContextPlugin` takes two inputs; `input`, and optionally `input_mask`.
 
 `input`
-input is a tensor with shape `[S, B, 3 * E]` where `B` is the batch size and `E` is the hidden size.
+input is a tensor with shape `[S, B, 3 * E, 1, 1]` where `B` is the batch size and `E` is the hidden size. The input has two trailing dimensions in order to generate an output with the same trailing dimensions for a FC optimiazation further down the network.
 This plugin makes strong assumptions about its input:
     - The input tensor contains all 3 matrices Q, K, V
     - This input tensor is computed by multiplying a tensor of size `[S, B, E]` with the weights `W_qkv` of size `[E, 3 * E]`
@@ -35,7 +35,7 @@ If provided, the attention scores, i.e. the softmax distribution, are only compu
 The `bertQKVToContextPlugin` generates the following output:
 
 `output`
-output is a tensor with shape `[S, B, E]` where `B` is the batch size.
+output is a tensor with shape `[S, B, E, 1, 1]` where `B` is the batch size.
 
 
 ## Parameters
@@ -46,7 +46,7 @@ The parameters are defined below and consists of the following attributes:
 
 | Type     | Parameter                               |  Version                          | Description
 |----------|-----------------------------------------|-----------------------------------|-------------------------------------------------------------------
-|`int`     |`type_id`                                |  1, 2                             |Integer encoding the DataType (0: FP32, 1: FP16)
+|`int`     |`type_id`                                |  1, 2                             |Integer encoding the DataType (0: FP32, 1: FP16, 2: INT8)
 |`int`     |`hidden_size`                            |  1, 2, 3                          |The hidden size, denoted by `E` above.
 |`int`     |`num_heads`                              |  1, 2, 3                          |The number of self-attention heads.
 |`bool`    |`has_mask`                               |  1, 2                             |Whether to use the input_mask input.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -98,6 +98,7 @@ extern unsigned char fused_multihead_attention_int8_384_64_kernel_sm80_cu_o[];
 extern unsigned char fused_multihead_attention_int8_128_64_kernel_sm80_cu_o[];
 extern unsigned char fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o[];
 extern unsigned char fused_multihead_attention_fp16_384_64_kernel_sm80_cu_o[];
+extern unsigned char fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o[];
 
 extern unsigned int fused_multihead_attention_fp16_64_64_kernel_sm75_cu_o_len;
 extern unsigned int fused_multihead_attention_fp16_96_64_kernel_sm75_cu_o_len;
@@ -111,6 +112,7 @@ extern unsigned int fused_multihead_attention_int8_384_64_kernel_sm80_cu_o_len;
 extern unsigned int fused_multihead_attention_int8_128_64_kernel_sm80_cu_o_len;
 extern unsigned int fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o_len;
 extern unsigned int fused_multihead_attention_fp16_384_64_kernel_sm80_cu_o_len;
+extern unsigned int fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o_len;
 
 static const struct FusedMultiHeadAttentionKernelMetaInfoV1
 {
@@ -175,6 +177,9 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
     {DATA_TYPE_FP16, 128, 64, kSM_86, fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o,
         fused_multihead_attention_fp16_128_64_kernel_sm80_cu_o_len, "fused_multihead_attention_fp16_128_64_kernel_sm80",
         49152, 128},
+    {DATA_TYPE_FP16, 384, 64, kSM_86, fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o,
+        fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o_len, "fused_multihead_attention_fp16_384_64_kernel_sm80",
+        65536, 256},
     {DATA_TYPE_INT8, 128, 64, kSM_86, fused_multihead_attention_int8_128_64_kernel_sm80_cu_o,
         fused_multihead_attention_int8_128_64_kernel_sm80_cu_o_len, "fused_multihead_attention_int8_128_64_kernel_sm80",
         24576, 128},

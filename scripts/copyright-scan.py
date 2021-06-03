@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -100,7 +100,7 @@ def parse_args(parser):
     """
     Parse commandline arguments.
     """
-    parser.add_argument('-d', '--dir', type=str, required=True, help='Root directory to start the scan')             
+    parser.add_argument('-d', '--dir', type=str, required=True, help='Root directory to start the scan')
     parser.add_argument('-f','--force-update', action='store_true', help='Force the header writes for all files')
     parser.add_argument('--dry-run', action='store_true', help='Just perform a dry-run')
     parser.add_argument('--max-depth', type=int,default=100, help='Maximum depth to recurse while scanning files.')

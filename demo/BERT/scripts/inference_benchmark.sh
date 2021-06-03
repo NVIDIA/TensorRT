@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,12 +24,12 @@ SEQUENCE_LENGTH="${4}"
 MAX_BATCH="${5}"
 GPU_ARCH="${6}"
 
-CHECKPOINTS_DIR="/workspace/TensorRT/demo/BERT/models/fine-tuned/bert_tf_ckpt_${MODEL_VARIANT}_qa_squad2_amp_${SEQUENCE_LENGTH}_v19.03.1"
-SQUAD_DIR="/workspace/TensorRT/demo/BERT/squad"
-ENGINE_NAME="/workspace/TensorRT/demo/BERT/engines/bert_${MODEL_VARIANT}_${PRECISION}_bs${MAX_BATCH}_seqlen${SEQUENCE_LENGTH}_benchmark.engine"
+CHECKPOINTS_DIR="models/fine-tuned/bert_tf_ckpt_${MODEL_VARIANT}_qa_squad2_amp_${SEQUENCE_LENGTH}_v19.03.1"
+SQUAD_DIR="BERT/squad"
+ENGINE_NAME="engines/bert_${MODEL_VARIANT}_${PRECISION}_bs${MAX_BATCH}_seqlen${SEQUENCE_LENGTH}_benchmark.engine"
 # QAT Checkpoint - available only for BERT-Large
-QAT_CHECKPOINT="/workspace/TensorRT/demo/BERT/models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx"
-CUDAGRAPH_PERFBIN="/workspace/TensorRT/demo/BERT/build/perf"
+QAT_CHECKPOINT="models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx"
+CUDAGRAPH_PERFBIN="build/perf"
 
 echo "==== Benchmarking BERT ${MODEL_VARIANT} ${PRECISION} SEQLEN ${SEQUENCE_LENGTH} on ${GPU_ARCH} ===="
 if [ ! -f ${ENGINE_NAME} ]; then
@@ -276,4 +276,3 @@ run_benchmark "-b 24" "large" "fp32" "384" "24" "${arg_gpu}"
 run_benchmark "-b 32" "large" "fp32" "384" "32" "${arg_gpu}"
 run_benchmark "-b 64" "large" "fp32" "384" "64" "${arg_gpu}"
 run_benchmark "-b 128" "large" "fp32" "384" "128" "${arg_gpu}"
-

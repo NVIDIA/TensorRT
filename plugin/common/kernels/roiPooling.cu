@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
 #include <math.h>
 #include <stdio.h>
 
-// ROI POOLING FORWARD KERNEL 
+// ROI POOLING FORWARD KERNEL
 template <typename DATA_T, typename ROI_T, bool INFER_ONLY>
 __global__ void ROIPoolingForwardKernelAligned(int ROICount,
                                                const ROI_T* rois,
@@ -159,7 +159,7 @@ pluginStatus_t ROIPoolingForwardKernelAlignedLauncher(cudaStream_t stream,
     return STATUS_SUCCESS;
 }
 
-// ROI POOLING LAUNCH CONFIG 
+// ROI POOLING LAUNCH CONFIG
 
 typedef pluginStatus_t (*roiFwd)(cudaStream_t,
                                 const int,   //R, // TOTAL number of rois -> ~nmsMaxOut * N
@@ -175,7 +175,7 @@ typedef pluginStatus_t (*roiFwd)(cudaStream_t,
                                 void*,       //top
                                 int*);       //maxIds);
 
-// struct 
+// struct
 struct roiFwdLaunchConfig
 {
     DataType t_rois;
@@ -234,7 +234,7 @@ static std::array<roiFwdLaunchConfig, 2> roiFwdLCOptions = {
     roiFwdLaunchConfig(FLOAT32, FLOAT32, NCHW, FLOAT32, NCHW, true, ROIPoolingForwardKernelAlignedLauncher<float, float, true>),
     roiFwdLaunchConfig(FLOAT32, FLOAT32, NCHW, FLOAT32, NCHW, false, ROIPoolingForwardKernelAlignedLauncher<float, float, false>)};
 
-// ROI INFERENCE 
+// ROI INFERENCE
 pluginStatus_t roiInference(cudaStream_t stream,
                            const int R,        // TOTAL number of rois -> ~nmsMaxOut * N
                            const int N,        // Batch size

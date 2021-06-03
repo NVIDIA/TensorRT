@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,8 +20,6 @@ from absl import logging
 
 import torch
 from torch.autograd import Function
-
-from pytorch_quantization.utils import amp_wrapper as amp
 
 
 class ClipFunction(Function):
@@ -60,4 +58,4 @@ class ClipFunction(Function):
         return grad_input, grad_clip_value_min, grad_clip_value_max
 
 
-clip = amp.promote_function(ClipFunction.apply)
+clip = ClipFunction.apply

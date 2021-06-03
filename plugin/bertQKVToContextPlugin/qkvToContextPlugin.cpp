@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -441,6 +441,11 @@ int QKVToContextPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const 
 
 QKVToContextPluginDynamicCreator::QKVToContextPluginDynamicCreator()
 {
+    mPluginAttributes.emplace_back(PluginField("type_id", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("hidden_size", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("num_heads", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("has_mask", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("dq_probs", nullptr, PluginFieldType::kFLOAT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
@@ -525,8 +530,7 @@ IPluginV2* QKVToContextPluginDynamicCreator::createPlugin(const char* name, cons
         dqProbs = 1.f / 127.f;
     }
 
-    QKVToContextPluginDynamic* p
-        = new QKVToContextPluginDynamic(name, type, hiddenSize, numHeads, dqProbs, hasMask);
+    QKVToContextPluginDynamic* p = new QKVToContextPluginDynamic(name, type, hiddenSize, numHeads, dqProbs, hasMask);
     return p;
 }
 
@@ -569,7 +573,8 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(const std::string name,
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        assert((mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75 || mSM == kSM_72) && (type == DataType::kINT8 || type == DataType::kHALF)
+        assert((mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75 || mSM == kSM_72)
+            && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
         mHdim = 1;
@@ -669,8 +674,8 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     // we only support int8 IO in fused mha runner, and we only support fused mha runner on Turing and Ampere
     if (mType == DataType::kINT8 && mSM != kSM_86 && mSM != kSM_80 && mSM != kSM_75 && mSM != kSM_72)
     {
-        gLogVerbose << "INT8 IO is only supported on Xavier, Turing and Ampere for plugin " << QKV_TO_CONTEXT_PLUGIN_NAME
-                    << std::endl;
+        gLogVerbose << "INT8 IO is only supported on Xavier, Turing and Ampere for plugin "
+                    << QKV_TO_CONTEXT_PLUGIN_NAME << std::endl;
         return false;
     }
 
@@ -887,6 +892,9 @@ int QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* input
     {
         const int B = inputDesc[1].dims.d[0];
         const int maxS = inputDesc[3].dims.d[0];
+        ASSERT((maxS <= 384)
+            && "No implementation for variable sequence length multi-head attention plugin with sequence > 384.");
+
         int S = 384;
         if (DataType::kHALF == mType && maxS <= 64)
         {
@@ -903,11 +911,10 @@ int QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* input
         else if (maxS <= 192)
         {
             S = 192;
-            if(mType == DataType::kHALF)
+            if (mType == DataType::kHALF)
             {
                 S = 256;
             }
-
         }
         else if (maxS <= 256)
         {
@@ -932,6 +939,12 @@ int QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* input
 
 QKVToContextVarSeqlenPluginCreator::QKVToContextVarSeqlenPluginCreator()
 {
+    mPluginAttributes.emplace_back(PluginField("type_id", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("hidden_size", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("num_heads", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("has_mask", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("dq_probs", nullptr, PluginFieldType::kFLOAT32, 1));
+    mPluginAttributes.emplace_back(PluginField("var_seqlen", nullptr, PluginFieldType::kINT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }

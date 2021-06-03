@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,13 +63,13 @@ pluginStatus_t generateAnchors_cpu(int numRatios,
             // x_anchor_ctr
             /*
              * This value should not useful in this implementation of generating numRatios * numScales general anchor boxes.
-             * Because the center of anchor box in the original input raw image scale will not be dependent on this. 
+             * Because the center of anchor box in the original input raw image scale will not be dependent on this.
              */
             anchors[id * 4] = (bs - 1) / 2;
             // y_anchor_ctr
             /*
              * This value should not useful in this implementation of generating numRatios * numScales general anchor boxes.
-             * Because the center of anchor box in the original input raw image scale will not be dependent on this. 
+             * Because the center of anchor box in the original input raw image scale will not be dependent on this.
              */
             anchors[id * 4 + 1] = (bs - 1) / 2;
             // w_anchor

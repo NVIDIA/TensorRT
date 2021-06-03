@@ -1,6 +1,6 @@
 
 /*
- * Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,24 +29,6 @@ using namespace nvinfer1;
 namespace bert
 {
 
-
-inline __device__ char quantize(const float x, const float qScale)
-{
-    int tmpq = __float2int_rn(qScale * x);  // scale and round
-    char tmpq8 = min(127, max(-127, tmpq)); // clip and cast
-    return tmpq8;
-}
-
-inline __device__ void ldg(const int8_t* input, uint4& data)
-{
-    data = *reinterpret_cast<const uint4*>(input);
-}
-
-inline __device__ void stg(int8_t* output, uint4& data)
-{
-    *reinterpret_cast<uint4*>(output) = data;
-}
-
 inline __device__ void res_add(
     float (&hdata)[4], const uint32_t idata, const uint32_t ires, const float dqData, const float dqRes)
 {
@@ -56,16 +38,6 @@ inline __device__ void res_add(
     hdata[1] = float(idata4.y) * dqData + float(ires4.y) * dqRes;
     hdata[2] = float(idata4.z) * dqData + float(ires4.z) * dqRes;
     hdata[3] = float(idata4.w) * dqData + float(ires4.w) * dqRes;
-}
-
-inline __device__ uint32_t pack4(const float (&hdata)[4], const float qScale)
-{
-    char4 ret;
-    ret.x = quantize(hdata[0], qScale);
-    ret.y = quantize(hdata[1], qScale);
-    ret.z = quantize(hdata[2], qScale);
-    ret.w = quantize(hdata[3], qScale);
-    return reinterpret_cast<const uint32_t&>(ret);
 }
 
 template <int WARPS, int HEADS, int THREADS_PER_ROW>
@@ -165,7 +137,7 @@ __global__ void skipln_vec32(const int8_t* input, const int8_t* skip, int8_t* ou
     stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 1); __syncwarp();
 
     if (VECS_PER_CTA == 1)
-    { 
+    {
         stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 2); __syncwarp();
         stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 4); __syncwarp();
     }
@@ -173,7 +145,7 @@ __global__ void skipln_vec32(const int8_t* input, const int8_t* skip, int8_t* ou
     {
         stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 4); __syncwarp();
     }
-    
+
     stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 8); __syncwarp();
     stats_local = stats_local + __shfl_xor_sync(uint32_t(-1), stats_local, 16); __syncwarp();
 
@@ -288,8 +260,8 @@ __global__ void skiplnDQQ_vec(const int ld, const int8_t* input, const int8_t* s
     int8_t in_local[VPT];
     int8_t skip_local[VPT];
 
-    half in_local_dq[VPT]; // dequantized input + skip 
-    half beta_local[VPT];  
+    half in_local_dq[VPT]; // dequantized input + skip
+    half beta_local[VPT];
     half gamma_local[VPT];
 
     // load input tensors
@@ -369,4 +341,3 @@ void launch_small(cudaStream_t stream, const int ld, const int total, const int8
 }
 
 } // namespace bert
-

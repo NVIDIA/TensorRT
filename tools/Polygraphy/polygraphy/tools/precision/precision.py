@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,20 +13,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.util import misc as tool_util, args as args_util
+import math
+from collections import OrderedDict
+
+from polygraphy.common import func
+from polygraphy.logger import G_LOGGER
+from polygraphy.tools.args import (ComparatorCompareArgs, ComparatorRunArgs,
+                                   DataLoaderArgs, ModelArgs, OnnxLoaderArgs,
+                                   TrtLoaderArgs, TrtRunnerArgs)
 from polygraphy.tools.base import Tool
 from polygraphy.util import misc
-from polygraphy.logger import G_LOGGER
-
-from collections import OrderedDict
-import math
-
 
 ################################# SUBTOOLS #################################
 
 
 # Subtool base class for accuracy checkers
 class STCheckerBase(Tool):
+    def __init__(self, name):
+        super().__init__(name)
+        self.subscribe_args(DataLoaderArgs())
+        self.subscribe_args(ModelArgs(model_required=True))
+        self.subscribe_args(OnnxLoaderArgs(outputs=False))
+        self.subscribe_args(TrtLoaderArgs())
+        self.subscribe_args(TrtRunnerArgs())
+        self.subscribe_args(ComparatorRunArgs(iters=False, write=False))
+        self.subscribe_args(ComparatorCompareArgs())
+
+
     def add_parser_args(self, parser, mode=True):
         parser.add_argument("--golden", help="Golden outputs for accuracy comparison", required=True)
         parser.add_argument("-s", "--show-output", help="Show logging output when checking network accuracy", action="store_true")
@@ -36,31 +49,24 @@ class STCheckerBase(Tool):
                                         "from the network outputs", choices=["forward", "reverse"], default="reverse")
         parser.add_argument("-p", "--precision", help="Precision to use when marking layers to run in higher precision",
                             choices=["float32", "float16"], default="float32")
-        args_util.add_model_args(parser, model_required=True)
-        args_util.add_comparator_args(parser, iters=False, read=False, write=False, subprocess=False, fail_fast=False)
-        args_util.add_dataloader_args(parser)
-        args_util.add_trt_args(parser)
-        args_util.add_tf_args(parser, tftrt=False, artifacts=False, runtime=False)
-        args_util.add_onnx_args(parser, write=False)
-        args_util.add_tf_onnx_args(parser)
 
 
-    def __call__(self, args):
+    def run(self, args):
         import tensorrt as trt
 
-        if not args.calibration_cache:
+        if not self.makers[TrtLoaderArgs].calibration_cache:
             G_LOGGER.warning("Not using a calibration cache. Using a calibration cache may significantly speed up the search process")
 
         self.precision = {"float32": trt.float32, "float16": trt.float16}[args.precision]
-        if self.precision == trt.float16 and not args.fp16:
-            args.fp16 = True
-        if self.precision == trt.float16 and not args.int8:
+        if self.precision == trt.float16 and not self.makers[TrtLoaderArgs].fp16:
+            self.makers[TrtLoaderArgs].fp16 = True
+        if self.precision == trt.float16 and not self.makers[TrtLoaderArgs].int8:
             G_LOGGER.warning("Using float16 as the higher precision, but float16 is also the lowest precision available. Did you mean to set --int8 as well?")
 
-        if not any([args.tf32, args.fp16, args.int8]):
+        if not any([self.makers[TrtLoaderArgs].tf32, self.makers[TrtLoaderArgs].fp16, self.makers[TrtLoaderArgs].int8]):
             G_LOGGER.critical("Please enable at least one precision besides float32 (e.g. --int8, --fp16)")
 
-        if args.model_type == "engine":
+        if self.makers[ModelArgs].model_type == "engine":
             G_LOGGER.critical("The precision tool cannot work with engines, as they cannot be modified. "
                               "Please provide a different format, such as an ONNX or TensorFlow model.")
 
@@ -69,7 +75,7 @@ class STCheckerBase(Tool):
         self.golden = OrderedDict()
         self.golden.update(misc.pickle_load(args.golden))
 
-        self.builder, self.network, self.parser = tool_util.get_trt_network_loader(args)()
+        self.builder, self.network, self.parser = func.invoke(self.makers[TrtLoaderArgs].get_trt_network_loader())
         with self.builder, self.network, self.parser:
             indices = self.find()
 
@@ -82,6 +88,8 @@ class STCheckerBase(Tool):
 
     # Determines layer indices based on direction and number of layers to mark
     def layer_indices(self, num_layers):
+        start = None
+        end = None
         if self.args.mode == "forward":
             start = 0
             end = num_layers
@@ -116,20 +124,21 @@ class STCheckerBase(Tool):
                     A mapping of output names to an object describing whether they matched, and what the
                     required tolerances were.
         """
-        from polygraphy.comparator import Comparator, CompareFunc, DataLoader
-        from polygraphy.backend.trt import EngineFromNetwork, TrtRunner, ModifyNetwork, SaveEngine
+        from polygraphy.backend.trt import (EngineFromNetwork, ModifyNetwork,
+                                            SaveEngine, TrtRunner)
+        from polygraphy.comparator import Comparator, CompareFunc
 
         with G_LOGGER.verbosity(severity=G_LOGGER.severity if self.args.show_output else G_LOGGER.CRITICAL):
-            data_loader = tool_util.get_data_loader(self.args)
+            data_loader = self.makers[DataLoaderArgs].get_data_loader()
 
-            self.args.strict_types = True # HACK: Override strict types so things actually run in the right precision.
-            config = tool_util.get_trt_config_loader(self.args, data_loader)(self.builder, self.network)
+            self.makers[TrtLoaderArgs].strict_types = True # HACK: Override strict types so things actually run in the right precision.
+            config = func.invoke(self.makers[TrtLoaderArgs].get_trt_config_loader(data_loader), self.builder, self.network)
 
             suffix = "-{:}-{:}".format(suffix, self.precision)
-            engine_path = misc.insert_suffix(self.args.save_engine, suffix)
+            engine_path = misc.insert_suffix(self.makers[TrtRunnerArgs].save_engine, suffix)
 
-            self.builder, self.network, self.parser = ModifyNetwork((self.builder, self.network, self.parser),
-                                                                    outputs=self.args.trt_outputs)()
+            self.builder, self.network, self.parser = func.invoke(ModifyNetwork((self.builder, self.network, self.parser),
+                                                                    outputs=self.makers[TrtLoaderArgs].outputs))
 
             engine_loader = SaveEngine(EngineFromNetwork((self.builder, self.network, self.parser), config),
                                        path=engine_path)
@@ -137,18 +146,18 @@ class STCheckerBase(Tool):
             runners = [TrtRunner(engine_loader)]
 
             results = Comparator.run(runners, data_loader=data_loader)
-            if self.args.validate:
+            if self.makers[ComparatorCompareArgs].validate:
                 Comparator.validate(results)
             results.update(self.golden)
 
-
-            compare_func = CompareFunc.basic_compare_func(atol=self.args.atol, rtol=self.args.rtol, check_shapes=not self.args.no_shape_check)
+            compare_func = CompareFunc.basic_compare_func(atol=self.makers[ComparatorCompareArgs].atol, rtol=self.makers[ComparatorCompareArgs].rtol,
+                                                          check_shapes=not self.makers[ComparatorCompareArgs].no_shape_check)
             accuracy_result = Comparator.compare_accuracy(results, compare_func=compare_func)
 
         tolerances = list(accuracy_result.values())[0][0] # First iteration of first runner pair
         for name, req_tol in tolerances.items():
             if bool(req_tol):
-                G_LOGGER.success("PASSED | Output: {:} | Required Tolerances: {:}".format(name, req_tol))
+                G_LOGGER.finish("PASSED | Output: {:} | Required Tolerances: {:}".format(name, req_tol))
             else:
                 G_LOGGER.error("FAILED | Output: {:} | Required Tolerances: {:}".format(name, req_tol))
         return accuracy_result
@@ -161,7 +170,7 @@ class STWorstFirst(STCheckerBase):
     are topologically sorted.
     """
     def __init__(self):
-        self.name = "worst-first"
+        super().__init__("worst-first")
 
     def add_parser_args(self, parser):
         super().add_parser_args(parser, mode=False)
@@ -184,7 +193,7 @@ class STWorstFirst(STCheckerBase):
             items = list(acc_mapping.items())
             ratios = []
             for (_, prev_tols), (outname, cur_tols) in zip(items[:-1], items[1:]):
-                ratio = cur_tols.required_atol / prev_tols.required_atol
+                ratio = cur_tols.max_absdiff / prev_tols.max_absdiff
                 ratios.append((ratio, outname))
 
             # Mark more layers on each iteration
@@ -193,7 +202,7 @@ class STWorstFirst(STCheckerBase):
             return [output_mapping[outname] for (ratio, outname) in ratios]
 
 
-        if not args_util.get(self.args, "trt_outputs"):
+        if not self.makers[TrtLoaderArgs].outputs:
             G_LOGGER.critical("worst-first requires all outputs to be marked as network outputs mode to determine where errors are being introduced. "
                               "Please enable --trt-outputs mark all, and ensure that your golden outputs also include layer-wise results")
 
@@ -223,7 +232,7 @@ class STLinear(STCheckerBase):
     higher precision to achieve the desired accuracy.
     """
     def __init__(self):
-        self.name = "linear"
+        super().__init__("linear")
 
 
     def find(self):
@@ -243,7 +252,7 @@ class STBisect(STCheckerBase):
     higher precision to achieve the desired accuracy.
     """
     def __init__(self):
-        self.name = "bisect"
+        super().__init__("bisect")
 
 
     def find(self):
@@ -254,6 +263,7 @@ class STBisect(STCheckerBase):
         known_good = self.network.num_layers + 1
         known_bad = 0
 
+        indices = None
         while known_good != known_bad and num_layers != known_good:
             with G_LOGGER.indent():
                 G_LOGGER.info("Last known good: {which_layers} {known_good} layer(s) in {precision} precision.\n"
@@ -284,7 +294,7 @@ class Precision(Tool):
     higher precisions to preserve accuracy.
     """
     def __init__(self):
-        self.name = "precision"
+        super().__init__("precision")
 
 
     def add_parser_args(self, parser):
@@ -299,7 +309,3 @@ class Precision(Tool):
 
         for subtool in PRECISION_SUBTOOLS:
             subtool.setup_parser(subparsers)
-
-
-    def __call__(self, args):
-        pass
