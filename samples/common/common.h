@@ -30,6 +30,7 @@
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
 #include "logger.h"
+#include <cstdlib>
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -362,7 +363,7 @@ inline void* safeCudaMalloc(size_t memSize)
     if (deviceMem == nullptr)
     {
         std::cerr << "Out of memory" << std::endl;
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     return deviceMem;
 }
