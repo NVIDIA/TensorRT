@@ -25,9 +25,8 @@ in various frameworks. It includes a [Python API](./polygraphy), and
 **NOTE:** It is strongly recommended to install the `colored` module for colored output
 from Polygraphy, as this can greatly improve readability.
 
-Each `backend` directory includes a `requirements.txt` file that specifies which packages
-it depends on. You can install the requirements for whichever backends you're interested in
-using:
+Most `backend` directories includes a `requirements.txt` file that specifies the minimum set of packages
+they depend on. You can install the requirements for whichever backends you're interested in using:
 
 ```bash
 python3 -m pip install -r polygraphy/backend/<name>/requirements.txt
