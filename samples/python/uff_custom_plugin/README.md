@@ -35,6 +35,9 @@ A custom TensorRT plugin implementation, which uses the CUDA kernel internally.
 `customClipPlugin.h`
 The ClipPlugin headers.
 
+`lenet5.py`
+This script trains an MNIST network.
+
 `model.py`
 This script trains an MNIST network that uses ReLU6 activation using the clip plugin.
 
@@ -103,12 +106,12 @@ This file specifies all the Python packages required to run this Python sample.
 
 	`cmake ..` displays a complete list of configurable variables. If a variable is set to `VARIABLE_NAME-NOTFOUND`, then you’ll need to specify it manually or set the variable it is derived from correctly.
 
-3.  Run inference using TensorRT with the custom clip plugin implementation:
+2.  Run inference using TensorRT with the custom clip plugin implementation:
    ```bash
    python3 sample.py
    ```
 
-5.  Verify that the sample ran successfully. If the sample runs successfully you should see a match between the test case and the prediction.
+3.  Verify that the sample ran successfully. If the sample runs successfully you should see a match between the test case and the prediction.
    ```
    === Testing ===
    Loading Test Case: 3
