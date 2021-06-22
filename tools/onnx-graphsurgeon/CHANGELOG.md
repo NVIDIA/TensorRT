@@ -3,6 +3,20 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.9 (2021-04-20)
+### Changed
+- `fold_constants()` will no longer store values for foldable tensors whose outputs are all foldable.
+    For example, while folding a constant subgraph like `A (constant) -> B -> C`, previously, `B` values
+    would be computed in addition to `C`. With these changes, only `C` values are computed and stored.
+    This can reduce memory usage significantly.
+
+
+## v0.3.8 (2021-04-15)
+### Fixed
+- Fixed a bug where `copy()` would not work with subgraphs that included tensors with the same
+    names as outer graph tensors unless a `tensor_map` was provided.
+
+
 ## v0.3.7 (2021-03-31)
 ### Added
 - `fold_constants()` can now fold `Shape -> Gather` patterns even when the entire shape may not be known.

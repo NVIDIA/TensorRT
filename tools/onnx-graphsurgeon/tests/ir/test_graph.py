@@ -612,6 +612,38 @@ class TestCopy(object):
         assert len(subgraph.nodes) == 2
 
 
+    # If the subgraph has a tensor with the same name as the outer graph,
+    # the subgraph copy should include a copy of the subgraph tensor, not the outer
+    # graph tensor.
+    def test_copy_with_subgraph_dup_tensors(self):
+        inp = Variable("input", dtype=np.float32, shape=(4, 5))
+        graph = Graph(inputs=[inp])
+
+        # We'll use shape to distinguish inner/outer tensor
+        subgraph_inp = Variable("input", dtype=np.float32, shape=(1, 2))
+        subgraph = Graph(inputs=[subgraph_inp])
+
+        graph.outputs = [graph.nested(inp, subgraph)]
+
+        graph_copy = graph.copy()
+        assert graph_copy.nodes[0].attrs["body"].inputs[0].shape == (1, 2)
+
+
+    def test_copy_with_subgraph_dup_const_tensors(self):
+        inp = Constant("input", values=np.ones(dtype=np.float32, shape=(4, 5)))
+        graph = Graph()
+
+        # We'll use shape to distinguish inner/outer tensor
+        subgraph_inp = Constant("input", values=np.ones(dtype=np.float32, shape=(1, 2)))
+        subgraph = Graph()
+        subgraph.outputs = [subgraph.identity(subgraph_inp)]
+
+        graph.outputs = [graph.nested(inp, subgraph)]
+
+        graph_copy = graph.copy()
+        assert graph_copy.nodes[0].attrs["body"].nodes[0].inputs[0].shape == (1, 2)
+
+
 @pytest.fixture
 def simple_foldable():
     # Graph:
@@ -783,8 +815,8 @@ class TestFoldConstants(object):
 
     # Cannot fold shape nodes if they have dynamically shaped inputs.
     def test_shape_of_variable_tensor_dynamic_shape(self):
-        graph = Graph()
         var = Variable("var", dtype=np.float32, shape=("", -1, 0, 4))
+        graph = Graph(inputs=[var])
         graph.outputs = [graph.shape(var)]
 
         graph.fold_constants().cleanup()
@@ -795,8 +827,8 @@ class TestFoldConstants(object):
 
 
     def test_shape_of_variable_tensor_static_shape(self):
-        graph = Graph()
         var = Variable("var", dtype=np.float32, shape=(1, 3, 4))
+        graph = Graph(inputs=[var])
         graph.inputs = [var]
         graph.outputs = [graph.shape(var)]
 
