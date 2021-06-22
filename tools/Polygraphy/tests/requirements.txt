@@ -1,5 +1,5 @@
-onnx
-tensorflow-gpu < 2.0
+onnx==1.8.1
+tensorflow < 2.0
 onnx-tf < 1.5.0
 pytest
 tf2onnx
@@ -7,4 +7,6 @@ onnxruntime==1.6.0
 colored
 numpy
 pytest-xdist
-onnx_graphsurgeon
+pytest-virtualenv
+onnx_graphsurgeon>=0.3.4
+onnxmltools

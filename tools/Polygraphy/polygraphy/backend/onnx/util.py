@@ -16,46 +16,32 @@
 import copy
 from collections import OrderedDict
 
+from polygraphy import mod, util
 from polygraphy.common import TensorMetadata
-from polygraphy.logger.logger import G_LOGGER
-from polygraphy.util import misc
+from polygraphy.logger import G_LOGGER
+
+onnx = mod.lazy_import("onnx")
+numpy_helper = mod.lazy_import("onnx.numpy_helper")
 
 
-def check_model(model):
-    try:
-        import onnx
-    except:
-        G_LOGGER.warning("Could not import onnx module, skipping model check")
-        return model
+def get_num_nodes(model):
+    def _get_num_graph_nodes(graph):
+        num_nodes = len(graph.node)
+        for node in graph.node:
+            for attr in node.attribute:
+                if attr.type == onnx.AttributeProto.GRAPH:
+                    num_nodes += _get_num_graph_nodes(attr.g)
+                elif attr.type == onnx.AttributeProto.GRAPHS:
+                    for subgraph in attr.graphs:
+                        num_nodes += _get_num_graph_nodes(subgraph)
+        return num_nodes
 
-    try:
-        onnx.checker.check_model(model)
-        G_LOGGER.verbose("ONNX Checker Passed")
-    except onnx.checker.ValidationError as err:
-        G_LOGGER.warning("ONNX Checker exited with an error:\n{:}".format(err))
-    finally:
-        return model
-
-
-def infer_shapes(model):
-    try:
-        import onnx.shape_inference
-    except:
-        G_LOGGER.warning("Could not import onnx.shape_inference module, skipping shape inference")
-        return model
-
-    try:
-        model = onnx.shape_inference.infer_shapes(model)
-        G_LOGGER.verbose("ONNX Shape Inference completed successfully")
-    except Exception as err:
-        G_LOGGER.warning("ONNX shape inference exited with an error:\n{:}".format(err))
-    finally:
-        return model
+    return _get_num_graph_nodes(model.graph)
 
 
 def all_tensor_names(model):
     all_outputs = [output for node in model.graph.node if node.op_type != "Constant" for output in node.output]
-    all_outputs = misc.unique_list(all_outputs)
+    all_outputs = util.unique_list(all_outputs)
     return all_outputs
 
 
@@ -64,22 +50,21 @@ def check_outputs_not_found(not_found, all_outputs):
         G_LOGGER.critical("The following outputs: {:} were not found. "
                           "Note: Available tensors: {:}".format(not_found, all_outputs))
 
-
 def mark_outputs(model, outputs):
-    import onnx
-
     # Clear the old outputs
     while model.graph.output:
         model.graph.output.pop()
 
     all_outputs = all_tensor_names(model)
     all_outputs_set = set(all_outputs)
+    value_info_map = {t.name: t for t in model.graph.value_info}
 
     out_tensors = []
     not_found = set()
     for output in outputs:
         if output in all_outputs_set:
-            out_tensors.append(onnx.helper.make_empty_tensor_value_info(output))
+            value_info = value_info_map.get(output, onnx.helper.make_empty_tensor_value_info(output))
+            out_tensors.append(value_info)
         else:
             not_found.add(output)
 
@@ -115,8 +100,6 @@ def unmark_outputs(model, outputs):
 
 
 def get_shape(tensor):
-    import onnx
-
     shape = []
     if isinstance(tensor, onnx.TensorProto):
         shape = tensor.dims
@@ -130,8 +113,6 @@ def get_shape(tensor):
 
 
 def get_dtype(tensor):
-    import onnx
-
     if isinstance(tensor, onnx.TensorProto):
         onnx_type = tensor.data_type
     else:
@@ -142,9 +123,7 @@ def get_dtype(tensor):
 
 
 def get_values(tensor):
-    import onnx.numpy_helper
-
-    return onnx.numpy_helper.to_array(tensor)
+    return numpy_helper.to_array(tensor)
 
 
 def get_tensor_metadata(tensors):
@@ -192,8 +171,6 @@ def str_from_onnx(model, mode="full"):
 
 
 def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
-    import onnx
-
     input_metadata = get_input_metadata(graph)
     output_metadata = get_output_metadata(graph)
     initializer_metadata = get_tensor_metadata(graph.initializer)
@@ -208,31 +185,27 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
     graph_type = "Graph" if indent_level == 0 else "Subgraph"
 
     onnx_str = ""
-    onnx_str += "---- {:} {:} Inputs ----\n{:}\n\n".format(len(input_metadata), graph_type, input_metadata)
-    onnx_str += "---- {:} {:} Outputs ----\n{:}\n\n".format(len(output_metadata), graph_type, output_metadata)
+    onnx_str += "---- {:} {:} Input(s) ----\n{:}\n\n".format(len(input_metadata), graph_type, input_metadata)
+    onnx_str += "---- {:} {:} Output(s) ----\n{:}\n\n".format(len(output_metadata), graph_type, output_metadata)
 
-    onnx_str += "---- {:} Initializers ----\n".format(len(initializer_metadata))
+    onnx_str += "---- {:} Initializer(s) ----\n".format(len(initializer_metadata))
     if mode == "full":
         for init in graph.initializer:
             onnx_str += "Initializer | {:} [dtype={:}, shape={:}] | Values:\n{:}\n\n".format(
-                            init.name, get_dtype(init), get_shape(init), misc.indent_block(str(get_values(init))))
+                            init.name, get_dtype(init), get_shape(init), util.indent_block(str(get_values(init))))
         if not graph.initializer:
-            onnx_str += "\n"
+            onnx_str += "{}\n\n"
     elif mode != "none":
         onnx_str += str(initializer_metadata)
         onnx_str += "\n\n"
     else:
-        onnx_str += "(Use --mode to display)"
-        onnx_str += "\n\n"
+        onnx_str += "\n"
 
 
     def metadata_from_names(names):
         metadata = TensorMetadata()
         for name in names:
-            dtype = None
-            shape = None
-            if name in tensors:
-                dtype, shape = tensors[name]
+            dtype, shape = tensors.get(name, (None, None))
             if name in initializer_metadata:
                 name = "Initializer | {:}".format(name)
             metadata.add(name=name, dtype=dtype, shape=shape)
@@ -263,7 +236,7 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
                 elif attr_str == "TENSOR":
                     tensor_str = "Tensor: [dtype={:}, shape={:}]".format(get_dtype(processed), get_shape(processed))
                     if mode == "full":
-                        tensor_str += " | Values:\n" + misc.indent_block(str(get_values(processed)))
+                        tensor_str += " | Values:\n" + util.indent_block(str(get_values(processed)))
                     processed = tensor_str
                 elif attr_str == "GRAPH":
                     processed = "\n" + str_from_onnx_graph(processed, mode, tensors, indent_level=indent_level + 2)
@@ -286,25 +259,23 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
         return attr_dict
 
 
-    onnx_str += "---- {:} Nodes ----\n".format(len(graph.node))
+    onnx_str += "---- {:} Node(s) ----\n".format(len(graph.node))
     if mode != "none":
         for index, node in enumerate(graph.node):
             input_info = metadata_from_names(node.input)
             output_info = metadata_from_names(node.output)
 
-            onnx_str += misc.str_from_layer("Node", index, node.name, node.op_type, input_info, output_info)
+            onnx_str += util.str_from_layer("Node", index, node.name, node.op_type, input_info, output_info)
 
             if mode in ["attrs", "full"]:
                 attrs = attrs_to_dict(node.attribute)
                 if attrs:
-                    onnx_str += misc.indent_block("---- Attributes ----") + "\n"
+                    onnx_str += util.indent_block("---- Attributes ----") + "\n"
                 for key, val in attrs.items():
                     attr_str = ""
                     if node.name:
                         attr_str += "{:}.".format(node.name)
-                    onnx_str += misc.indent_block("{:}{:} = {:}".format(attr_str, key, val)) + "\n"
+                    onnx_str += util.indent_block("{:}{:} = {:}".format(attr_str, key, val)) + "\n"
             onnx_str += "\n"
-    else:
-        onnx_str += "(Use --mode to display)"
 
-    return misc.indent_block(onnx_str, indent_level)
+    return util.indent_block(onnx_str, indent_level)

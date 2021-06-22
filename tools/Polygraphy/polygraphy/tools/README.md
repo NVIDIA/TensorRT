@@ -35,3 +35,5 @@ For examples, see the corresponding subdirectory in [examples/cli](../../example
 You can add a new tool by adding a new file in this directory, creating a
 class that extends the [`Tool` base class](./base/tool.py), and adding
 the new tool to the [registry](./registry.py).
+
+For details on developing tools, see [this example](../../examples/dev/01_writing_cli_tools/).

@@ -15,7 +15,7 @@
 #
 import enum
 
-from polygraphy.logger.logger import G_LOGGER
+from polygraphy.logger import G_LOGGER
 
 
 # TRT does not include batch dimension.

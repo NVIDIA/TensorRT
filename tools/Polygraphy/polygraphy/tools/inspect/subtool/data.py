@@ -13,17 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from polygraphy import util
 from polygraphy.common import TensorMetadata
-from polygraphy.comparator.struct import RunResults
+from polygraphy.comparator import RunResults
+from polygraphy.comparator import util as comp_util
+from polygraphy.json import load_json
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.base import Tool
-from polygraphy.util import misc
 
 
 class Data(Tool):
     """
     Display information about inference inputs and outputs saved from Polygraphy's Comparator.run()
-    (for example, outputs saved by `--save-results` or inputs saved by `--save-inputs` from `polygraphy run`).
+    (for example, outputs saved by `--save-outputs` or inputs saved by `--save-inputs` from `polygraphy run`).
     """
     def __init__(self):
         super().__init__("data")
@@ -33,11 +35,14 @@ class Data(Tool):
         parser.add_argument("path", help="Path to a file containing input or output data from Polygraphy")
         parser.add_argument("-a", "--all", help="Show information on all iterations present in the data instead of just the first",
                             action="store_true")
-        parser.add_argument("-s", "--show-values", help="Show values of output tensors instead of just metadata", action="store_true")
+        parser.add_argument("-s", "--show-values", help="Show values of the tensors instead of just metadata", action="store_true")
+        parser.add_argument("--histogram", help="Show a histogram of the value distribution", action="store_true")
 
 
     def run(self, args):
-        data = misc.pickle_load(args.path)
+        # Note: It's important we have encode/decode JSON methods registered
+        # for the types we care about, e.g. RunResults. Importing the class should generally guarantee this.
+        data = load_json(args.path)
 
         def meta_from_iter_result(iter_result):
             meta = TensorMetadata()
@@ -51,39 +56,50 @@ class Data(Tool):
             for index, iter_result in enumerate(iters):
                 if args.show_values:
                     for name, arr in iter_result.items():
-                        out_str += "{:} [dtype={:}, shape={:}]\n{:}\n\n".format(name, arr.dtype, arr.shape, misc.indent_block(str(arr)))
+                        out_str += "{:} [dtype={:}, shape={:}]\n{:}\n".format(name, arr.dtype, arr.shape, util.indent_block(str(arr)))
                 else:
                     iter_meta = meta_from_iter_result(iter_result)
                     if len(iters) > 1 and args.all:
-                        out_str += misc.indent_block("Iteration: {:} | ".format(index))
+                        out_str += util.indent_block("Iteration: {:} | ".format(index))
                     out_str += "{:}\n".format(iter_meta)
+
+                stat_str = "\n-- Statistics --"
+                for name, arr in iter_result.items():
+                    stat_str += "\n{:} | Stats\n".format(name)
+                    stat_str += util.indent_block(comp_util.str_output_stats(arr)) + "\n"
+                    if args.histogram:
+                        stat_str += util.indent_block(comp_util.str_histogram(arr)) + "\n"
+
+                out_str += stat_str
 
                 if not args.all:
                     break
             return out_str
 
 
-        def display_results():
+        def display_results(results):
             results_str = ""
-            results_str += "==== Run Results ({:} runners) ====\n\n".format(len(data))
+            results_str += "==== Run Results ({:} runners) ====\n\n".format(len(results))
 
-            for runner_name, iters in data.items():
-                results_str += "---- Runner: {:} ({:} iterations) ----\n".format(runner_name, len(iters))
+            for runner_name, iters in results.items():
+                results_str += "---- {:35} ({:} iterations) ----\n".format(runner_name, len(iters))
                 results_str += str_from_iters(iters) + "\n"
 
-            results_str = misc.indent_block(results_str, level=0).strip()
+            results_str = util.indent_block(results_str, level=0).strip()
             G_LOGGER.info(results_str)
 
 
-        def display_inputs():
+        def display_inputs(input_data):
             inputs_str = ""
-            inputs_str += "==== Input Data ({:} iterations) ====\n\n".format(len(data))
-            inputs_str += str_from_iters(data) + "\n"
-            inputs_str = misc.indent_block(inputs_str, level=0).strip()
+            inputs_str += "==== Data ({:} iterations) ====\n\n".format(len(input_data))
+            inputs_str += str_from_iters(input_data) + "\n"
+            inputs_str = util.indent_block(inputs_str, level=0).strip()
             G_LOGGER.info(inputs_str)
 
 
         if isinstance(data, RunResults):
-            display_results()
+            display_results(data)
         else:
-            display_inputs()
+            if not util.is_sequence(data):
+                data = [data]
+            display_inputs(data)

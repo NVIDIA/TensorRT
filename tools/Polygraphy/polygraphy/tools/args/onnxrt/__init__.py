@@ -13,4 +13,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.args.onnxrt.runner import OnnxrtRunnerArgs
+from polygraphy.tools.args.onnxrt.runner import *

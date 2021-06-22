@@ -13,5 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.args.trt.loader import TrtLoaderArgs
-from polygraphy.tools.args.trt.runner import TrtRunnerArgs
+from polygraphy.tools.args.trt.config import *
+from polygraphy.tools.args.trt.loader import *
+from polygraphy.tools.args.trt.runner import *

@@ -1,1 +1,1 @@
-from polygraphy.tools.base.tool import Tool
+from polygraphy.tools.base.tool import *

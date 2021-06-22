@@ -25,21 +25,25 @@ extensions = [
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
     'sphinx.ext.mathjax',
+    'sphinx.ext.viewcode',
 ]
 
 # Want to be able to generate docs with no dependencies installed
-autodoc_mock_imports = ["tensorrt", "onnx", "numpy", "tensorflow", "onnx_graphsurgeon", "onnxruntime", "onnxtf", "tf2onnx"]
+autodoc_mock_imports = ["tensorrt", "onnx", "numpy", "tensorflow", "onnx_graphsurgeon", "onnxruntime", "tf2onnx"]
+
 
 autodoc_default_options = {
     "members": True,
     "show-inheritance": True,
-    "exclude-members": "activate_impl, deactivate_impl, BaseNetworkFromOnnx, BaseDataLoader",
-    "special-members": "__call__, __getitem__, __bool__",
+    "exclude-members": "activate_impl, deactivate_impl, get_input_metadata_impl, infer_impl, BaseNetworkFromOnnx, Encoder, Decoder, add_json_methods, constantmethod",
+    "special-members": "__call__, __getitem__, __bool__, __enter__, __exit__",
 }
 
 autodoc_member_order = "bysource"
 
 autodoc_inherit_docstrings = True
+
+add_module_names = False
 
 autosummary_generate = True
 
@@ -86,3 +90,6 @@ html_sidebars = { '**': ['globaltoc.html', 'relations.html', 'sourcelink.html', 
 # Allows us to override the default page width in the Sphinx theme.
 def setup(app):
     app.add_css_file('style.css')
+    LATEX_BUILDER = "sphinx.builders.latex"
+    if LATEX_BUILDER in app.config.extensions:
+        app.config.extensions.remove(LATEX_BUILDER)

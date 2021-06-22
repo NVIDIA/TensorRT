@@ -5,7 +5,7 @@ The `inspect model` subtool can display TensorFlow graphs.
 For example:
 
 ```bash
-polygraphy inspect model ../../../models/identity.pb --model-type=frozen
+polygraphy inspect model identity.pb --model-type=frozen
 ```
 
 This will display something like:

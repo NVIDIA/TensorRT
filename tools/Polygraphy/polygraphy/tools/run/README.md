@@ -9,7 +9,7 @@
 ## Introduction
 
 The `run` tool can be used to convert models, run inference, and compare results across frameworks.
-It can also generate a Python script that uses the Polygraphy Python API to do the same.
+With the `--gen-script` option, it can also generate a Python script that uses the Polygraphy Python API to do the same.
 
 
 ## Usage

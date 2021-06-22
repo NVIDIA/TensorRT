@@ -32,8 +32,8 @@ class Surgeon(Tool):
 
         SURGEON_SUBTOOLS = [
             Extract(),
-            Insert(),
             Sanitize(),
+            Insert(),
         ]
 
         for subtool in SURGEON_SUBTOOLS:

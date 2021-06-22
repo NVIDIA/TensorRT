@@ -15,9 +15,11 @@
 #
 from collections import defaultdict
 
+from polygraphy import mod, util
 from polygraphy.common import TensorMetadata
-from polygraphy.logger.logger import G_LOGGER
-from polygraphy.util import misc
+from polygraphy.logger import G_LOGGER
+
+tf = mod.lazy_import("tensorflow", version="<2.0")
 
 
 def load_graph(path):
@@ -31,15 +33,18 @@ def load_graph(path):
     Returns:
         tf.Graph: The TensorFlow graph
     """
-    import tensorflow as tf
-
     if isinstance(path, tf.Graph):
         return path
 
     if isinstance(path, str):
-        with open(path, "rb") as frozen_pb:
-            graphdef = tf.compat.v1.GraphDef()
-            graphdef.ParseFromString(frozen_pb.read())
+        graphdef = tf.compat.v1.GraphDef()
+
+        import google
+        try:
+            graphdef.ParseFromString(util.load_file(path, description="GraphDef"))
+        except google.protobuf.message.DecodeError:
+            G_LOGGER.backtrace()
+            G_LOGGER.critical("Could not import TensorFlow GraphDef from: {:}. Is this a valid TensorFlow model?".format(path))
     elif isinstance(path, tf.compat.v1.GraphDef):
         graphdef = path
 
@@ -173,4 +178,4 @@ def str_from_graph(graph, mode):
             for node in graph.as_graph_def().node:
                 graph_str += str(node) + "\n"
         graph_str += "\n"
-    return misc.indent_block(graph_str, level=0)
+    return util.indent_block(graph_str, level=0)
