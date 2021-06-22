@@ -169,6 +169,7 @@ class Graph(object):
     def _local_tensors(self):
         local_tensors = {t.name: t for node in self.nodes for t in node.outputs if not t.is_empty()}
         local_tensors.update({t.name: t for t in self.inputs})
+        local_tensors.update({t.name: t for t in self.tensors().values() if isinstance(t, Constant)})
         return local_tensors
 
 
@@ -279,7 +280,7 @@ class Graph(object):
         if recurse_subgraphs:
             cleanup_subgraphs()
 
-        G_LOGGER.debug("Cleaning up {:}".format(self.name))
+        G_LOGGER.verbose("Cleaning up {:}".format(self.name))
 
         with self.node_ids():
             # Graph input producers must be removed first so used_node_ids is correct.
@@ -658,7 +659,17 @@ class Graph(object):
 
 
         # Next, evaluate the foldable variables with ONNX-Runtime
-        graph_clone.outputs = [t for t in graph_constants.values() if not isinstance(t, Constant)]
+
+        # Only evaluate foldable values that have non-foldable outputs or are graph outputs.
+        # Otherwise, if all the outputs are foldable, then we can just evaluate the outputs directly.
+        def should_eval_foldable(tensor):
+            non_const = not isinstance(tensor, Constant)
+            is_graph_output = not tensor.outputs
+            has_non_foldable_outputs = any(out.name not in graph_constants for out in tensor.outputs)
+            return non_const and (is_graph_output or has_non_foldable_outputs)
+
+        graph_clone.outputs = [t for t in graph_constants.values() if should_eval_foldable(t)]
+        G_LOGGER.debug("Folding tensors: {:}".format(graph_clone.outputs))
         graph_clone.cleanup(remove_unused_graph_inputs=True)
 
         # Using ._values avoids a deep copy of the values.
@@ -789,9 +800,15 @@ class Graph(object):
         # First, reconstruct each tensor in the graph, but with no inputs or outputs
         tensor_map = copy.copy(misc.default_value(tensor_map, {}))
 
-        local_tensors = self.tensors()
-        local_tensor_copies = {name: tensor.copy() for name, tensor in local_tensors.items()}
+        local_tensor_copies = {}
+        # When we're cloning a subgraph by itself, we need to use `tensors()` to get all
+        # required tensors - even those produced by outer graphs.
+        local_tensor_copies.update({n: t.copy() for n, t in self.tensors().items()})
+        # However, we should prioritize copies already made by the outer graph.
         local_tensor_copies.update(tensor_map)
+        # And locally produced tensors should take precedence over everything else.
+        local_tensor_copies.update({n: t.copy() for n, t in self._local_tensors().items()})
+
 
         def get_tensor(name):
             if not name:
