@@ -59,8 +59,7 @@ const PluginFieldCollection* MultilevelCropAndResizePluginCreator::getFieldNames
     return &mFC;
 };
 
-IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
     const PluginField* fields = fc->fields;
@@ -82,8 +81,7 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
     return new MultilevelCropAndResize(mPooledSize, image_size);
 };
 
-IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(
-    const char* name, const void* data, size_t length) noexcept
+IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
     return new MultilevelCropAndResize(data, length);
 };
@@ -255,8 +253,7 @@ MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length
 };
 
 // Return the DataType of the plugin output at the requested index
-DataType MultilevelCropAndResize::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-    noexcept
+DataType MultilevelCropAndResize::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     // return DataType::kFLOAT;

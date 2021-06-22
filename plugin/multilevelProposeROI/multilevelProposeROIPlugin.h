@@ -35,8 +35,8 @@ namespace plugin
 class MultilevelProposeROI : public IPluginV2Ext
 {
 public:
-    MultilevelProposeROI(int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold,
-        const nvinfer1::Dims image_size) noexcept;
+    MultilevelProposeROI(
+        int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size) noexcept;
 
     MultilevelProposeROI(const void* data, size_t length) noexcept;
 
@@ -54,8 +54,8 @@ public:
 
     size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
 
-    int enqueue(int batch_size, const void* const* inputs, void** outputs, void* workspace,
-        cudaStream_t stream) noexcept override;
+    int enqueue(
+        int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
@@ -75,8 +75,7 @@ public:
 
     DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-        noexcept override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
 
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
