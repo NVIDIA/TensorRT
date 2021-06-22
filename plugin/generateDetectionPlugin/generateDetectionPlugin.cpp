@@ -100,14 +100,13 @@ IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(const char* name, con
     return new GenerateDetection(mNbClasses, mKeepTopK, mScoreThreshold, mIOUThreshold, image_size);
 };
 
-IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(
-    const char* name, const void* data, size_t length) noexcept
+IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
     return new GenerateDetection(data, length);
 };
 
-GenerateDetection::GenerateDetection(int num_classes, int keep_topk, float score_threshold, float iou_threshold,
-    const nvinfer1::Dims& image_size) noexcept
+GenerateDetection::GenerateDetection(
+    int num_classes, int keep_topk, float score_threshold, float iou_threshold, const nvinfer1::Dims& image_size) noexcept
     : mNbClasses(num_classes)
     , mKeepTopK(keep_topk)
     , mScoreThreshold(score_threshold)
@@ -295,8 +294,7 @@ int GenerateDetection::enqueue(
     return status;
 };
 
-DataType GenerateDetection::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-    noexcept
+DataType GenerateDetection::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;

@@ -52,8 +52,8 @@ public:
 
     size_t getWorkspaceSize(int) const noexcept override;
 
-    int enqueue(int batch_size, const void* const* inputs, void** outputs, void* workspace,
-        cudaStream_t stream) noexcept override;
+    int enqueue(
+        int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
@@ -73,8 +73,7 @@ public:
 
     DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-        noexcept override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
 
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 

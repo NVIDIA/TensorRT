@@ -179,8 +179,7 @@ DataType SpecialSlice::getOutputDataType(int index, const nvinfer1::DataType* in
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool SpecialSlice::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-    noexcept
+bool SpecialSlice::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }

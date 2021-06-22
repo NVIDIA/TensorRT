@@ -225,8 +225,7 @@ DataType ResizeNearest::getOutputDataType(int index, const nvinfer1::DataType* i
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool ResizeNearest::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-    noexcept
+bool ResizeNearest::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }

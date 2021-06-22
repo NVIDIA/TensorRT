@@ -66,8 +66,7 @@ const PluginFieldCollection* MultilevelProposeROIPluginCreator::getFieldNames() 
     return &mFC;
 };
 
-IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
     const PluginField* fields = fc->fields;
@@ -104,8 +103,7 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
     return new MultilevelProposeROI(mPreNMSTopK, mKeepTopK, mFGThreshold, mIOUThreshold, image_size);
 };
 
-IPluginV2Ext* MultilevelProposeROIPluginCreator::deserializePlugin(
-    const char* name, const void* data, size_t length) noexcept
+IPluginV2Ext* MultilevelProposeROIPluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
     return new MultilevelProposeROI(data, length);
 };
@@ -248,8 +246,7 @@ const char* MultilevelProposeROI::getPluginNamespace() const noexcept
 
 size_t MultilevelProposeROI::getSerializationSize() const noexcept
 {
-    return sizeof(int) * 2 + sizeof(float) * 2 + sizeof(int) * (mFeatureCnt + 1) + sizeof(nvinfer1::Dims)
-        + sizeof(DataType);
+    return sizeof(int) * 2 + sizeof(float) * 2 + sizeof(int) * (mFeatureCnt + 1) + sizeof(nvinfer1::Dims) + sizeof(DataType);
 };
 
 void MultilevelProposeROI::serialize(void* buffer) const noexcept
@@ -440,8 +437,8 @@ int MultilevelProposeROI::enqueue(
             inputs[2 * i],     // inputs[bbox_delta]
             mValidCnt->mPtr,
             mAnchorBoxesDevice[i]->mPtr, // inputs[anchors]
-            mTempScores[i],              // temp scores [batch_size, topk, 1]
-            mTempBboxes[i]);             // temp
+            mTempScores[i],        // temp scores [batch_size, topk, 1]
+            mTempBboxes[i]);       // temp
         assert(status == cudaSuccess);
         kernel_workspace_offset += proposal_ws.totalSize;
     }
@@ -456,8 +453,7 @@ int MultilevelProposeROI::enqueue(
 };
 
 // Return the DataType of the plugin output at the requested index
-DataType MultilevelProposeROI::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-    noexcept
+DataType MultilevelProposeROI::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     if ((inputTypes[0] == DataType::kFLOAT) || (inputTypes[0] == DataType::kHALF))

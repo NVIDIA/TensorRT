@@ -36,8 +36,8 @@ namespace plugin
 class GenerateDetection : public IPluginV2Ext
 {
 public:
-    GenerateDetection(int num_classes, int keep_topk, float score_threshold, float iou_threshold,
-        const nvinfer1::Dims& image_size) noexcept;
+    GenerateDetection(
+        int num_classes, int keep_topk, float score_threshold, float iou_threshold, const nvinfer1::Dims& image_size) noexcept;
 
     GenerateDetection(const void* data, size_t length) noexcept;
 
@@ -55,8 +55,8 @@ public:
 
     size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
 
-    int enqueue(int batch_size, const void* const* inputs, void** outputs, void* workspace,
-        cudaStream_t stream) noexcept override;
+    int enqueue(
+        int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
@@ -76,8 +76,7 @@ public:
 
     DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-        noexcept override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
 
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
