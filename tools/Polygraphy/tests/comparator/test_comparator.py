@@ -13,33 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.onnx import OnnxFromTfGraph, BytesFromOnnx
-from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnxBytes
-from polygraphy.comparator import Comparator, CompareFunc, PostprocessFunc, RunResults, IterationResult, DataLoader
-from polygraphy.backend.trt import TrtRunner, EngineFromNetwork, NetworkFromOnnxBytes
-from polygraphy.common import PolygraphyException
-from polygraphy.backend.tf import TfRunner, SessionFromGraph
-
-from tests.models.meta import ONNX_MODELS, TF_MODELS
-from tests.common import version
-
 import subprocess as sp
-import tensorrt as trt
+
 import numpy as np
 import pytest
+import tensorrt as trt
+from polygraphy.backend.onnx import BytesFromOnnx, OnnxFromTfGraph
+from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
+from polygraphy.backend.tf import SessionFromGraph, TfRunner
+from polygraphy.backend.trt import (EngineFromNetwork, NetworkFromOnnxBytes,
+                                    TrtRunner)
+from polygraphy.exception import PolygraphyException
+from polygraphy.comparator import (Comparator, CompareFunc, DataLoader,
+                                   IterationResult, PostprocessFunc,
+                                   RunResults)
+from polygraphy import mod
+from tests.models.meta import ONNX_MODELS, TF_MODELS
 
 
 class TestComparator(object):
     def test_warmup_runs(self):
         onnx_loader = ONNX_MODELS["identity"].loader
-        runner = OnnxrtRunner(SessionFromOnnxBytes(onnx_loader))
+        runner = OnnxrtRunner(SessionFromOnnx(onnx_loader))
         run_results = Comparator.run([runner], warm_up=2)
         assert len(run_results[runner.name]) == 1
 
 
     def test_list_as_data_loader(self):
         onnx_loader = ONNX_MODELS["identity"].loader
-        runner = OnnxrtRunner(SessionFromOnnxBytes(onnx_loader), name="onnx_runner")
+        runner = OnnxrtRunner(SessionFromOnnx(onnx_loader), name="onnx_runner")
 
         data = [{"x": np.ones((1, 1, 2, 2), dtype=np.float32)}] * 2
         run_results = Comparator.run([runner], data_loader=data)
@@ -51,7 +53,7 @@ class TestComparator(object):
 
     def test_generator_as_data_loader(self):
         onnx_loader = ONNX_MODELS["identity"].loader
-        runner = OnnxrtRunner(SessionFromOnnxBytes(onnx_loader), name="onnx_runner")
+        runner = OnnxrtRunner(SessionFromOnnx(onnx_loader), name="onnx_runner")
 
         def data():
             for feed_dict in [{"x": np.ones((1, 1, 2, 2), dtype=np.float32)}] * 2:
@@ -68,7 +70,7 @@ class TestComparator(object):
         load_tf = TF_MODELS["identity"].loader
         build_tf_session = SessionFromGraph(load_tf)
         load_serialized_onnx = BytesFromOnnx(OnnxFromTfGraph(load_tf))
-        build_onnxrt_session = SessionFromOnnxBytes(load_serialized_onnx)
+        build_onnxrt_session = SessionFromOnnx(load_serialized_onnx)
         load_engine = EngineFromNetwork(NetworkFromOnnxBytes(load_serialized_onnx))
 
         runners = [
@@ -78,23 +80,22 @@ class TestComparator(object):
         ]
 
         run_results = Comparator.run(runners)
-        compare_func = CompareFunc.basic_compare_func(check_shapes=version(trt.__version__) >= version("7.0"))
+        compare_func = CompareFunc.basic_compare_func(check_shapes=mod.version(trt.__version__) >= mod.version("7.0"))
         assert bool(Comparator.compare_accuracy(run_results, compare_func=compare_func))
         assert len(list(run_results.values())[0]) == 1 # Default number of iterations
 
 
     def test_postprocess(self):
         onnx_loader = ONNX_MODELS["identity"].loader
-        run_results = Comparator.run([OnnxrtRunner(SessionFromOnnxBytes(onnx_loader))], use_subprocess=True)
+        run_results = Comparator.run([OnnxrtRunner(SessionFromOnnx(onnx_loader))], use_subprocess=True)
         # Output shape is (1, 1, 2, 2)
         postprocessed = Comparator.postprocess(run_results, postprocess_func=PostprocessFunc.topk_func(k=1, axis=-1))
-        for name, results in postprocessed.items():
+        for _, results in postprocessed.items():
             for result in results:
-                for name, output in result.items():
+                for _, output in result.items():
                     assert output.shape == (1, 1, 2, 1)
 
 
-    # When there is an unpickleable exception in the subprocess, the Comparator should be able to recover and exit gracefully.
     def test_errors_do_not_hang(self):
         # Should error because interface is not implemented correctly.
         class FakeRunner(object):
@@ -106,13 +107,12 @@ class TestComparator(object):
             Comparator.run(runners, use_subprocess=True, subprocess_polling_interval=1)
 
 
-    # When there is an unpickleable exception in the subprocess, the Comparator should be able to recover and exit gracefully.
     def test_segfault_does_not_hang(self):
         def raise_called_process_error():
-            class UnpickleableException(sp.CalledProcessError):
+            class FakeSegfault(sp.CalledProcessError):
                 pass
 
-            raise UnpickleableException(-11, ["simulate", "segfault"])
+            raise FakeSegfault(-11, ["simulate", "segfault"])
 
         runners = [TrtRunner(EngineFromNetwork(raise_called_process_error))]
         with pytest.raises(PolygraphyException):
@@ -121,7 +121,7 @@ class TestComparator(object):
 
     def test_multirun_outputs_are_different(self):
         onnx_loader = ONNX_MODELS["identity"].loader
-        runner = OnnxrtRunner(SessionFromOnnxBytes(onnx_loader))
+        runner = TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(onnx_loader)))
         run_results = Comparator.run([runner], data_loader=DataLoader(iterations=2))
 
         iteration0 = run_results[runner.name][0]
@@ -139,4 +139,20 @@ class TestComparator(object):
     def test_validate_inf(self):
         run_results = RunResults()
         run_results["fake-runner"] = [IterationResult(outputs={"x": np.array(np.inf)})]
-        assert not Comparator.validate(run_results, check_finite=True)
+        assert not Comparator.validate(run_results, check_inf=True)
+
+
+    def test_dim_param_trt_onnxrt(self):
+        load_onnx_bytes = ONNX_MODELS["dim_param"].loader
+        build_onnxrt_session = SessionFromOnnx(load_onnx_bytes)
+        load_engine = EngineFromNetwork(NetworkFromOnnxBytes(load_onnx_bytes))
+
+        runners = [
+            OnnxrtRunner(build_onnxrt_session),
+            TrtRunner(load_engine),
+        ]
+
+        run_results = Comparator.run(runners)
+        compare_func = CompareFunc.basic_compare_func(check_shapes=mod.version(trt.__version__) >= mod.version("7.0"))
+        assert bool(Comparator.compare_accuracy(run_results, compare_func=compare_func))
+        assert len(list(run_results.values())[0]) == 1 # Default number of iterations

@@ -28,9 +28,7 @@ def no_publish():
             raise RuntimeError("Command \"{}\" blacklisted".format(cmd))
 
 
-REQUIRED_PACKAGES = [
-    "numpy",
-]
+REQUIRED_PACKAGES = []
 
 def main():
     no_publish()
@@ -46,8 +44,9 @@ def main():
             'Intended Audience :: Developers',
             'Programming Language :: Python :: 3',
         ],
+        license="Apache 2.0",
         install_requires=REQUIRED_PACKAGES,
-        packages=find_packages(),
+        packages=find_packages(exclude=("tests", "tests.*")),
         scripts=[os.path.join(BIN_DIR, "polygraphy")],
         zip_safe=True,
     )

@@ -15,21 +15,19 @@
 #
 import argparse
 import copy
-import os
 
-import polygraphy
-from polygraphy.common import constants
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import (ComparatorCompareArgs, ComparatorRunArgs,
                                    DataLoaderArgs, LoggerArgs, ModelArgs,
                                    OnnxLoaderArgs, OnnxrtRunnerArgs,
-                                   OnnxtfRunnerArgs, Tf2OnnxLoaderArgs,
-                                   TfConfigArgs, TfLoaderArgs, TfRunnerArgs,
-                                   TrtLegacyArgs, TrtLoaderArgs, TrtRunnerArgs)
+                                   OnnxSaveArgs, OnnxShapeInferenceArgs,
+                                   Tf2OnnxLoaderArgs, TfConfigArgs,
+                                   TfLoaderArgs, TfRunnerArgs, TrtConfigArgs,
+                                   TrtEngineLoaderArgs, TrtEngineSaveArgs,
+                                   TrtLegacyArgs, TrtNetworkLoaderArgs,
+                                   TrtPluginLoaderArgs, TrtRunnerArgs)
 from polygraphy.tools.base import Tool
-from polygraphy.tools.util import misc as tools_util
-from polygraphy.tools.util.script import Inline, Script
-from polygraphy.util import misc
+from polygraphy.tools.script import Script, inline, safe
 
 
 # FIXME: This should be moved into tools/args/
@@ -49,7 +47,6 @@ def add_runner_args(parser):
     add_runner("--trt-legacy", help="Run inference using Legacy TensorRT Runner. Only supports networks using implicit batch mode")
     add_runner("--tf", help="Run inference using TensorFlow")
     add_runner("--onnxrt", help="Run inference using ONNX Runtime")
-    add_runner("--onnxtf", help="Run inference using the ONNX-TensorFlow Backend")
 
 
 # Generate a summary line to add as a comment to the script
@@ -76,8 +73,6 @@ def generate_summary(model_file, runners, load_results):
             "trt_legacy": "TensorRT Legacy",
             "tf": "TensorFlow",
             "onnxrt": "ONNX Runtime",
-            "onnxtf": "ONNX-TensorFlow Backend",
-            "cntk": "CNTK"
         }
         runners = [runner_names[runner] for runner in runners]
         summary += "between " if len(runners) > 1 else "using "
@@ -99,14 +94,19 @@ class Run(Tool):
     def __init__(self):
         super().__init__("run")
         self.subscribe_args(ModelArgs())
-        self.subscribe_args(TfLoaderArgs())
+        self.subscribe_args(TfLoaderArgs(tftrt=True))
         self.subscribe_args(TfConfigArgs())
         self.subscribe_args(TfRunnerArgs())
         self.subscribe_args(Tf2OnnxLoaderArgs())
-        self.subscribe_args(OnnxLoaderArgs())
+        self.subscribe_args(OnnxSaveArgs(output="save-onnx", short_opt=None))
+        self.subscribe_args(OnnxShapeInferenceArgs())
+        self.subscribe_args(OnnxLoaderArgs(save=True))
         self.subscribe_args(OnnxrtRunnerArgs())
-        self.subscribe_args(OnnxtfRunnerArgs())
-        self.subscribe_args(TrtLoaderArgs(network_api=True))
+        self.subscribe_args(TrtConfigArgs())
+        self.subscribe_args(TrtPluginLoaderArgs())
+        self.subscribe_args(TrtNetworkLoaderArgs())
+        self.subscribe_args(TrtEngineSaveArgs(output="save-engine", short_opt=None))
+        self.subscribe_args(TrtEngineLoaderArgs(save=True))
         self.subscribe_args(TrtRunnerArgs())
         self.subscribe_args(TrtLegacyArgs())
         self.subscribe_args(DataLoaderArgs())
@@ -123,59 +123,48 @@ class Run(Tool):
 
 
     def run(self, args):
-        if self.makers[TrtLoaderArgs].network_api and not tools_util.get(args, "gen_script"):
-            G_LOGGER.critical("Cannot use the --network-api option if --gen/--gen-script is not being used.")
-        elif self.makers[TrtLoaderArgs].network_api and "trt" not in args.runners:
-            args.runners.append("trt")
-
-        if self.makers[ModelArgs].model_file is None and args.runners and self.makers[TrtLoaderArgs].network_api is None:
-            G_LOGGER.critical("One or more runners was specified, but no model file was provided. Make sure you've specified the model path, "
+        if self.arg_groups[ModelArgs].model_file is None and args.runners:
+            G_LOGGER.exit("One or more runners was specified, but no model file was provided. Make sure you've specified the model path, "
                             "and also that it's not being consumed as an argument for another parameter")
-
-
-        misc.log_module_info(polygraphy)
 
         script = self.build_script(args)
 
         if args.gen_script:
-            with args.gen_script:
-                args.gen_script.write(script)
-
-                path = args.gen_script.name
-                # Somehow, piping fools isatty, e.g. `polygraphy run --gen-script - | cat`
-                if not args.gen_script.isatty() and path not in ["<stdout>", "<stderr>"]:
-                    G_LOGGER.info("Writing script to: {:}".format(path))
-                    # Make file executable
-                    os.chmod(path, os.stat(path).st_mode | 0o111)
+            script.save(args.gen_script)
         else:
-            exec(script)
-
-        return 0
+            exec(str(script))
 
 
     # Generates a script based on command-line arguments
     def build_script(self, args):
-        script = Script(summary=generate_summary(self.makers[ModelArgs].model_file, args.runners, args.load_results))
+        script = Script(summary=generate_summary(self.arg_groups[ModelArgs].model_file, args.runners, args.load_results))
 
-        self.makers[LoggerArgs].add_to_script(script)
+        self.arg_groups[LoggerArgs].add_to_script(script)
 
-        data_loader_name = self.makers[DataLoaderArgs].add_to_script(script)
+        if not args.runners:
+            G_LOGGER.warning("No runners have been selected. Inference will not be run!")
 
         for runner_arg in args.runners:
             add_runner_func = {
-                "tf": self.makers[TfRunnerArgs].add_to_script,
-                "onnxrt": self.makers[OnnxrtRunnerArgs].add_to_script,
-                "onnxtf": self.makers[OnnxtfRunnerArgs].add_to_script,
-                "trt": lambda script: self.makers[TrtRunnerArgs].add_to_script(script, data_loader_name),
-                "trt_legacy": self.makers[TrtLegacyArgs].add_to_script,
+                "tf": self.arg_groups[TfRunnerArgs].add_to_script,
+                "onnxrt": self.arg_groups[OnnxrtRunnerArgs].add_to_script,
+                "trt": self.arg_groups[TrtRunnerArgs].add_to_script,
+                "trt_legacy": self.arg_groups[TrtLegacyArgs].add_to_script,
             }[runner_arg]
             add_runner_func(script)
 
-        RESULTS_VAR_NAME = self.makers[ComparatorRunArgs].add_to_script(script, data_loader_name=data_loader_name)
-        SUCCESS_VAR_NAME = self.makers[ComparatorCompareArgs].add_to_script(script, results_name=RESULTS_VAR_NAME)
+        RESULTS_VAR_NAME = self.arg_groups[ComparatorRunArgs].add_to_script(script)
+        SUCCESS_VAR_NAME = self.arg_groups[ComparatorCompareArgs].add_to_script(script, results_name=RESULTS_VAR_NAME)
 
-        cmd_run = Inline("' '.join(sys.argv)")
-        script.append_suffix(Script.format_str('# Report Results\ncmd_run={cmd}\nif {success}:\n{tab}G_LOGGER.finish("PASSED | Command: {{}}".format(cmd_run))\nelse:\n{tab}G_LOGGER.error("FAILED | Command: {{}}".format(cmd_run))', cmd=cmd_run, success=SUCCESS_VAR_NAME, tab=Inline(constants.TAB)))
-        script.append_suffix("sys.exit(0 if {success} else 1)".format(success=SUCCESS_VAR_NAME))
+        script.add_import(imports=["sys"])
 
-        return str(script)
+        cmd_run = inline(safe("' '.join(sys.argv)"))
+        exit_status = safe('# Report Results\n'
+                           'cmd_run = {cmd}\n'
+                           'if not {success}:\n'
+                           '\tG_LOGGER.exit("FAILED | Command: {{}}".format(cmd_run))\n'
+                           'G_LOGGER.finish("PASSED | Command: {{}}".format(cmd_run))\n',
+                           cmd=cmd_run, success=SUCCESS_VAR_NAME)
+        script.append_suffix(exit_status)
+
+        return script

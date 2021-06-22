@@ -13,3 +13,5 @@ an ONNX loader argument group may depend on model arguments.
 
 Tools can then subscribe to these argument groups via the `subscribe_args()` function defined in
 [tool.py](../base/tool.py).
+
+For details, see [the example](../../../examples/dev/01_writing_cli_tools).

@@ -13,4 +13,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.args.tf2onnx.loader import Tf2OnnxLoaderArgs
+from polygraphy.tools.args.tf2onnx.loader import *

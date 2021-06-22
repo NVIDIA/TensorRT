@@ -13,12 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import torch
+import time
+from collections import OrderedDict
+
+from polygraphy import func, mod, util
 from polygraphy.backend.base import BaseRunner
-from polygraphy.util import misc
+
+torch = mod.lazy_import("torch")
 
 
+@mod.export()
 class PytRunner(BaseRunner):
+    """
+    Runs inference using PyTorch.
+    """
     def __init__(self, model, input_metadata, output_names, name=None):
         """
         Args:
@@ -41,7 +49,7 @@ class PytRunner(BaseRunner):
 
 
     def activate_impl(self):
-        self.model, _ = misc.try_call(self._model)
+        self.model, _ = util.invoke_if_callable(self._model)
         self.model.eval()
 
 
@@ -58,5 +66,10 @@ class PytRunner(BaseRunner):
         return out_dict, end - start
 
 
-    def get_input_metadata(self):
+    def deactivate_impl(self):
+        del self.model
+
+
+    @func.constantmethod
+    def get_input_metadata_impl(self):
         return self.input_metadata

@@ -1,13 +1,17 @@
-from polygraphy.backend.tf.loader import OptimizeGraph, GraphFromKeras, GraphFromFrozen, GraphFromCkpt, UseTfTrt, ModifyGraph, SaveGraph, CreateConfig, SessionFromGraph
-from polygraphy.backend.tf.runner import TfRunner
+from polygraphy.backend.tf.loader import *
+from polygraphy.backend.tf.runner import *
 
 
-def register_callback():
-    from polygraphy.logger.logger import G_LOGGER
+def register_logger_callback():
+    from polygraphy.logger import G_LOGGER
 
     def set_tf_logging_level(sev):
         import os
-        import tensorflow as tf
+        from polygraphy import mod
+
+        tf = mod.lazy_import("tensorflow", version="<2.0")
+        if not mod.has_mod(tf, with_attr="__version__"):
+            return
 
         if sev > G_LOGGER.WARNING:
             tf_sev = tf.compat.v1.logging.ERROR
@@ -27,4 +31,4 @@ def register_callback():
 
     G_LOGGER.register_callback(set_tf_logging_level) # Will be registered when this runner is imported.
 
-register_callback()
+register_logger_callback()

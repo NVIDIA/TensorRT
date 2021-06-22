@@ -22,9 +22,9 @@ to modify an ONNX model.
     model inputs/outputs by specifying the existing inputs/outputs, but with different shapes/datatypes. This
     can be useful to make an input dimension dynamic, for example.
 
-- [EXPERIMENTAL] `insert` can insert a node into a model. Currently, this subtool does not support specifiying attributes.
+- `sanitize` can simplify and sanitize an ONNX model by removing unused nodes and folding constants.
 
-- [EXPERIMENTAL] `sanitize` can remove unused nodes, topologically sort, and fold constants in an ONNX model.
+- [EXPERIMENTAL] `insert` can insert a node into a model, optionally replacing existing subgraphs.
 
 
 ## Usage

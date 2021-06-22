@@ -13,6 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.args.tf.config import TfConfigArgs
-from polygraphy.tools.args.tf.loader import TfLoaderArgs
-from polygraphy.tools.args.tf.runner import TfRunnerArgs
+from polygraphy.tools.args.tf.config import *
+from polygraphy.tools.args.tf.loader import *
+from polygraphy.tools.args.tf.runner import *

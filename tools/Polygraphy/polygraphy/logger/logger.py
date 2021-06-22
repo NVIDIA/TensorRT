@@ -18,12 +18,7 @@ import inspect
 import os
 import sys
 import time
-
-try:
-    ModuleNotFoundError
-except:
-    ModuleNotFoundError = ImportError
-
+import traceback
 
 COLORED_MODULE_PRESENT = None
 def has_colors():
@@ -32,7 +27,7 @@ def has_colors():
         try:
             import colored
             COLORED_MODULE_PRESENT = True
-        except (ImportError, ModuleNotFoundError):
+        except:
             COLORED_MODULE_PRESENT = False
             print("[W] 'colored' module is not installed, will not use colors when logging. "
                   "To enable colors, please install the 'colored' module: python3 -m pip install colored")
@@ -70,8 +65,13 @@ class LoggerVerbosity(object):
 
 
 class LogMode(enum.IntEnum):
-    EACH = 0 # Log the message each time
-    ONCE = 1 # Log the message only once. The same message will not be logged again.
+    """
+    Specifies how messages should be logged.
+    """
+    EACH = 0
+    """Log the message each time"""
+    ONCE = 1
+    """Log the message only once. The same message will not be logged again."""
 
 
 class Logger(object):
@@ -100,10 +100,10 @@ class Logger(object):
     }
 
     SEVERITY_COLOR_MAPPING = {
-        ULTRA_VERBOSE: "dark_green",
-        SUPER_VERBOSE: "green",
-        EXTRA_VERBOSE: "cyan",
-        VERBOSE: "dark_gray",
+        ULTRA_VERBOSE: "dark_gray",
+        SUPER_VERBOSE: "medium_violet_red",
+        EXTRA_VERBOSE: "medium_purple",
+        VERBOSE: "light_magenta",
         INFO: None,
         START: "light_blue",
         FINISH: "light_green",
@@ -112,18 +112,33 @@ class Logger(object):
         CRITICAL: "light_red",
     }
 
-    def __init__(self, severity=INFO, colors=True, letter=True, timestamp=False, line_info=False, exit_on_errors=False):
+    def __init__(self, severity=INFO, colors=True, letter=True, timestamp=False, line_info=False):
         """
         Logger.
 
         Args:
-            severity (Logger.Severity): Messages below this severity are ignored.
-            colors (bool): Whether to use colored output.
-            letter (bool): Whether to prepend each logging message with a letter indicating it's severity. Defaults to True.
-            timestamp (bool): Whether to include a timestamp in the logging output. Defaults to False.
-            line_info (bool): Whether to include file and line number information in the logging output. Defaults to False.
+            severity (Logger.Severity):
+                    Messages below this severity are ignored.
+            colors (bool):
+                    Whether to use colored output.
+                    Defaults to True.
+            letter (bool):
+                    Whether to prepend each logging message with a letter indicating it's severity.
+                    Defaults to True.
+            timestamp (bool):
+                    Whether to include a timestamp in the logging output.
+                    Defaults to False.
+            line_info (bool):
+                    Whether to include file and line number information in the logging output.
+                    Defaults to False.
+            log_file (str):
+                    Path to a log file to write logging output from Polygraphy.
+                    This will not include logging messages from libraries used by Polygraphy, like
+                    TensorRT or ONNX-Runtime.
         """
         self._severity = severity
+        self._log_path = None
+        self._log_file = None
         self.logging_indent = 0
         self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir,  os.pardir))
         self.once_logged = set()
@@ -131,8 +146,22 @@ class Logger(object):
         self.letter = letter
         self.timestamp = timestamp
         self.line_info = line_info
-        self.exit_on_errors = exit_on_errors
         self.logger_callbacks = []
+
+
+    @property
+    def log_file(self):
+        return self._log_path
+
+
+    @log_file.setter
+    def log_file(self, value):
+        self._log_path = value
+        dir_path = os.path.dirname(self._log_path)
+        if dir_path:
+            dir_path = os.path.realpath(dir_path)
+            os.makedirs(dir_path, exist_ok=True)
+        self._log_file = open(self._log_path, "w")
 
 
     @property
@@ -177,9 +206,31 @@ class Logger(object):
         return LoggerVerbosity(self, severity)
 
 
-    # If once is True, the logger will only log this message a single time. Useful in loops.
-    # message may be a callable which returns a message. This way, only if the message needs to be logged is it ever generated.
-    def log(self, message, severity, mode=LogMode.EACH, stack_depth=2):
+    def log(self, message, severity, mode=LogMode.EACH, stack_depth=2, error_ok=False):
+        """
+        Logs a message to stdout.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            severity (Logger.Severity):
+                    The severity with which to log this message. If the severity is less than
+                    the logger's current severity, the message is suppressed. Provided callables
+                    will not be called in that case.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+            stack_depth (int):
+                    The stack depth to use to determine file and line information.
+                    Defaults to 2.
+            error_ok (bool):
+                    Whether to suppress errors encountered while logging.
+                    When this is True, in the event of an error, the message will not be
+                    logged, but the logger will recover and resume execution.
+                    When False, the logger will re-raise the exception.
+        """
+        from polygraphy import constants, config
+
         def process_message(message, stack_depth):
             def get_prefix():
                 def get_line_info():
@@ -208,8 +259,6 @@ class Logger(object):
 
 
             def apply_indentation(prefix, message):
-                from polygraphy.common import constants
-
                 message_lines = str(message).splitlines()
                 tab = constants.TAB * self.logging_indent
                 newline_tab = "\n" + tab + " " * len(prefix)
@@ -242,25 +291,52 @@ class Logger(object):
             return
 
         if callable(message):
-            message = message()
+            try:
+                message = message()
+            except Exception as err:
+                if not error_ok or config.INTERNAL_CORRECTNESS_CHECKS:
+                    raise
+                message = "<Error while logging this message: {:}>".format(str(err))
+
         message = str(message)
-        print(process_message(message, stack_depth=stack_depth))
+        message = message.replace("\t", constants.TAB)
+
+        # Use the warnings module in correctness checking mode so all warnings are
+        # visible in the test result summary.
+        if config.INTERNAL_CORRECTNESS_CHECKS and severity == Logger.WARNING:
+            import warnings
+            warnings.warn(message)
+
+        file = sys.stdout if severity < Logger.WARNING else sys.stderr
+        message = process_message(message, stack_depth=stack_depth)
+
+        if self._log_file is not None:
+            self._log_file.write(message + "\n")
+            self._log_file.flush()
+
+        print(message, file=file)
+
+
+    def backtrace(self, depth=0, limit=None, severity=ERROR):
+        limit = limit if limit is not None else (3 - self.severity // 10) * 2 # Info provides 1 stack frame
+        limit = max(limit, 0)
+        self.log(" ".join(traceback.format_stack(f=sys._getframe(depth + 2), limit=limit)), severity=severity)
 
 
     def ultra_verbose(self, message, mode=LogMode.EACH):
-        self.log(message, Logger.ULTRA_VERBOSE, mode=mode, stack_depth=3)
+        self.log(message, Logger.ULTRA_VERBOSE, mode=mode, stack_depth=3, error_ok=True)
 
 
     def super_verbose(self, message, mode=LogMode.EACH):
-        self.log(message, Logger.SUPER_VERBOSE, mode=mode, stack_depth=3)
+        self.log(message, Logger.SUPER_VERBOSE, mode=mode, stack_depth=3, error_ok=True)
 
 
     def extra_verbose(self, message, mode=LogMode.EACH):
-        self.log(message, Logger.EXTRA_VERBOSE, mode=mode, stack_depth=3)
+        self.log(message, Logger.EXTRA_VERBOSE, mode=mode, stack_depth=3, error_ok=True)
 
 
     def verbose(self, message, mode=LogMode.EACH):
-        self.log(message, Logger.VERBOSE, mode=mode, stack_depth=3)
+        self.log(message, Logger.VERBOSE, mode=mode, stack_depth=3, error_ok=True)
 
 
     def info(self, message, mode=LogMode.EACH):
@@ -283,14 +359,56 @@ class Logger(object):
         self.log(message, Logger.ERROR, mode=mode, stack_depth=3)
 
 
-    # Like error, but immediately exits.
     def critical(self, message):
         self.log(message, Logger.CRITICAL, stack_depth=3)
-        if self.exit_on_errors:
-            sys.exit(1)
-        else:
-            from polygraphy.common import PolygraphyException
-            raise PolygraphyException("Error encountered - see logging output for details") from None # Erase exception chain
+        from polygraphy.exception import PolygraphyException
+        raise PolygraphyException(message) from None
+
+
+    def internal_error(self, message):
+        self.log(message, Logger.CRITICAL, stack_depth=3)
+        from polygraphy.exception import PolygraphyInternalException
+        raise PolygraphyInternalException(message) from None
+
+
+    def exit(self, message):
+        self.log(message, Logger.CRITICAL, stack_depth=3)
+        sys.exit(1)
+
+
+    def _str_from_module_info(self, module, name=None):
+        ret = ""
+
+        def try_append(func):
+            nonlocal ret
+            try:
+                ret += func()
+            except:
+                pass
+
+        try_append(lambda: name or "Loaded Module: {:<18}".format(module.__name__))
+        try_append(lambda: " | Version: {:<8}".format(module.__version__))
+        try_append(lambda: " | Path: {:}".format(list(map(os.path.realpath, module.__path__))))
+        return ret
+
+
+    def module_info(self, module, name=None, severity=VERBOSE):
+        G_LOGGER.log(self._str_from_module_info(module, name), severity=severity, mode=LogMode.ONCE)
+
+
+    def log_exception(self, func):
+        """
+        Decorator that causes exceptions in a function to be logged.
+        This is useful in cases where the exception is caught by a caller, but should
+        still be logged.
+        """
+        def wrapped(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as err:
+                G_LOGGER.error(err)
+                raise
+        return wrapped
 
 
 global G_LOGGER

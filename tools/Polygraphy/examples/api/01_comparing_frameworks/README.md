@@ -21,3 +21,8 @@ on a model using ONNX Runtime and TensorRT, and then compare the results.
     ```bash
     python3 example.py
     ```
+
+3. **[Optional]** Inspect the inference outputs from the example:
+    ```bash
+    polygraphy inspect data inference_results.json
+    ```

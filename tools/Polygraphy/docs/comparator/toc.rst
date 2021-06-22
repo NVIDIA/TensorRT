@@ -2,6 +2,8 @@
 Comparing Results
 ==================
 
+Module: ``polygraphy.comparator``
+
 .. toctree::
     comparator
     data_structures

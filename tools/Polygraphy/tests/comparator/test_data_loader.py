@@ -13,19 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from collections import OrderedDict
+
+import numpy as np
+from polygraphy.common import TensorMetadata
 from polygraphy.comparator import DataLoader
 from polygraphy.comparator.data_loader import DataLoaderCache
-from polygraphy.common import TensorMetadata
-from polygraphy.util import misc
-from polygraphy.logger import G_LOGGER
-
 from tests.models.meta import ONNX_MODELS
+import pytest
 
-from collections import OrderedDict
-import numpy as np
 
+def meta(dtype):
+    return TensorMetadata().add(
+        "X", dtype=dtype, shape=(4, 4)).add(
+        "Y", dtype=dtype, shape=(5, 5))
 
 class TestDataLoader(object):
+    @pytest.mark.parametrize("dtype", [np.int32, np.bool, np.float32, np.int64])
+    def test_default_ranges(self, dtype):
+        data_loader = DataLoader(input_metadata=meta(dtype))
+        x, y = data_loader[0].values()
+        assert np.all((x >= 0) & (x <= 1))
+        assert np.all((y >= 0) & (y <= 1))
+
+
     def test_can_override_shape(self):
         model = ONNX_MODELS["dynamic_identity"]
 
@@ -39,12 +50,54 @@ class TestDataLoader(object):
         assert tuple(feed_dict["X"].shape) == shape
 
 
-    def test_range_min_max_equal(self):
-        RANGE_VAL = 1
-        data_loader = DataLoader(input_metadata=TensorMetadata().add("X", dtype=np.int32, shape=(1, 1)),
-                                 int_range=(RANGE_VAL, RANGE_VAL))
+    @pytest.mark.parametrize("dtype", [np.int32, np.bool, np.float32, np.int64])
+    @pytest.mark.parametrize("range_val", [0, 1])
+    def test_range_min_max_equal(self, dtype, range_val):
+        data_loader = DataLoader(input_metadata=meta(dtype),
+                                 val_range=(range_val, range_val))
         feed_dict = data_loader[0]
-        assert np.all(feed_dict["X"] == RANGE_VAL)
+        assert np.all(feed_dict["X"] == range_val)
+        assert np.all(feed_dict["Y"] == range_val)
+
+
+    @pytest.mark.parametrize("range", [
+        (0, 1, np.int32),
+        (5.0, 5.5, np.float32),
+        (0, 1, np.bool),
+    ])
+    def test_val_ranges(self, range):
+        min_val, max_val, dtype = range
+        data_loader = DataLoader(input_metadata=meta(dtype),
+                                 val_range=(min_val, max_val))
+        feed_dict = data_loader[0]
+        assert np.all((feed_dict["X"] >= min_val) & (feed_dict["X"] <= max_val))
+
+
+    @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
+    def test_val_range_dict(self, dtype):
+        val_range = {"X": (2, 5), "Y": (-1, 2)}
+        data_loader = DataLoader(input_metadata=meta(dtype), val_range=val_range)
+        feed_dict = data_loader[0]
+        assert np.all((feed_dict["X"] >= 2) & (feed_dict["X"] <= 5))
+        assert np.all((feed_dict["Y"] >= -1) & (feed_dict["Y"] <= 2))
+
+
+    @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
+    def test_val_range_dict_default(self, dtype):
+        val_range = {"": (6, 8), "Y": (-3, 4)}
+        data_loader = DataLoader(input_metadata=meta(dtype), val_range=val_range)
+        feed_dict = data_loader[0]
+        assert np.all((feed_dict["X"] >= 6) & (feed_dict["X"] <= 8))
+        assert np.all((feed_dict["Y"] >= -3) & (feed_dict["Y"] <= 4))
+
+
+    @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
+    def test_val_range_dict_fallback(self, dtype):
+        val_range = {"Y": (-3, 4)}
+        data_loader = DataLoader(input_metadata=meta(dtype), val_range=val_range)
+        feed_dict = data_loader[0]
+        assert np.all((feed_dict["X"] >= 0) & (feed_dict["X"] <= 1))
+        assert np.all((feed_dict["Y"] >= -3) & (feed_dict["Y"] <= 4))
 
 
     def test_shape_tensor_detected(self):

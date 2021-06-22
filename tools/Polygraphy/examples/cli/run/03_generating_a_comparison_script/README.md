@@ -8,7 +8,7 @@ to create a Python script that you can use as a starting point.
 First, generate a comparison script:
 
 ```bash
-polygraphy run ../../../models/identity.onnx --trt --onnxrt \
+polygraphy run identity.onnx --trt --onnxrt \
     --gen-script=compare_trt_onnxrt.py
 ```
 

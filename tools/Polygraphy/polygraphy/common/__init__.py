@@ -1,2 +1,2 @@
-from polygraphy.common.exception import PolygraphyException
-from polygraphy.common.struct import TensorMetadata
+from polygraphy.exception import *
+from polygraphy.common.struct import *

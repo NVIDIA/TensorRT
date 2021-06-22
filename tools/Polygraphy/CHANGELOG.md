@@ -3,6 +3,376 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.29.2 (2021-04-30)
+### Added
+- Added a `--log-file` option to CLI tools to store logging output to a file.
+- Added an `--iteration-info` argument to `debug` subtools so that `--check` commands can get information
+    about the current iteration.
+- Added an experimental `debug repeat` subtool, which is more generic than the existing `debug` subtools.
+
+
+## v0.29.1 (2021-04-28)
+### Changed
+- Swapping NumPy arrays to the disk is now disabled by default. It can be re-enabled by setting the
+    `POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB` environment variable.
+
+
+## v0.29.0 (2021-04-28)
+### Added
+- Added support for per-output `check_error_stat`, which allows different metrics to be checked for different outputs.
+
+### Changed
+- Moved JSON utilities into a separate `polygraphy.json` submodule. For backwards compatibility, they remain accessible
+    via `polygraphy.util` as well.
+- The `max` value for `check_error_stat` in `basic_compare_func` now only checks the maximum absolute/relative tolerances.
+    The previous behavior of checking the values element-wise is preserved in the `elemwise` option, which is now the default.
+
+### Fixed
+- Fixed a bug where data loader would not cast value ranges provided for `bool` input types, which could lead
+    to generating out-of-bound values.
+
+
+## v0.28.7 (2021-04-26)
+### Fixed
+- Fixed a bug where NumPy arrays smaller than 8 MiB would be serialized to disk unnecessarily.
+
+
+## v0.28.6 (2021-04-23)
+### Added
+- Added a `check_error_stat` option in `basic_compare_func` and corresponding `--check-error-stat` CLI option to control
+    which statistic (e.g. mean, median, max) of the error is used to determine whether outputs matched.
+
+### Changed
+- A histogram of output/error values will now be displayed at INFO severity on comparison failures.
+    Otherwise, it is displayed at VERBOSE severity.
+
+### Fixed
+- Fixed a bug where histogram display would wrap to subsequent lines.
+
+
+## v0.28.5 (2021-04-23)
+### Added
+- Added more information about absolute/relative difference in `basic_compare_func`. For example,
+    it will now print a histogram of the distribution of the outputs and errors.
+
+
+## v0.28.4 (2021-04-23)
+### Added
+- Added mean absolute/relative error to `OutputCompareResult`, which is returned by `Comparator.compare_accuracy`.
+    This makes it easier to programmatically access this information.
+
+### Changed
+- Several improvements to the quality of error messages and warnings.
+
+
+## v0.28.3 (2021-04-22)
+### Fixed
+- Fixed a bug where `basic_compare_func` and `DataLoader` would issue warnings when default
+    tolerances/value ranges were used.
+
+
+## v0.28.2 (2021-04-22)
+### Fixed
+- Fixed a bug where command-line tools would fail if a `--timing-cache` argument was provided
+    but the file did not exist.
+
+
+## v0.28.1 (2021-04-22)
+### Fixed
+- `basic_compare_func` will now issue warnings if `atol`/`rtol` contain invalid keys.
+- `DataLoader` will now issue warnings if `val_range` contains invalid keys.
+
+
+## v0.28.0 (2021-04-20)
+### Added
+- Added a `tactic_sources` parameter in `CreateConfig` to control TensorRT's tactic sources.
+- Added a `--tactic-sources` argument to CLI tools.
+- Added a `DeviceView` class in the `cuda` submodule to represent views of GPU memory.
+    `DeviceArray` is now a subclass of `DeviceView`.
+- Added support for accepting `DeviceView`s or device pointers in the `Calibrator`. This means that you can now
+    run calibration using data already on the GPU.
+- Added support for `DeviceView`s in `TrtRunner.infer()`. Note that `DeviceView`s cannot be used for input
+    shape-tensors, which must be allocated on the host.
+- Added support for using `trt.IInt8Calibrator` as the `BaseClass` of `Calibrator`.
+- Exposed some lower level functions like `malloc`, `free`, and `memcpy` in the Polygraphy CUDA wrapper.
+- Added a `set_profile()` method to `TrtRunner` to control the active optimization profile.
+- Added `-q`/`--quiet` option to CLI tools. This can be used to suppress logging output without eliminating
+    all output like `--silent` does.
+- Added a `to_trt()` method to `Profile` to convert it to a TensorRT `IOptimizationProfile`.
+- Added `--force-fallback-shape-inference` option to `debug reduce`.
+- Added `--fail-regex` option to `debug reduce` to distinguish among different types of falures based on command output.
+
+### Changed
+- Changed `TRT_LOGGER` to `get_trt_logger()` to make it work properly with lazy imports.
+- Further improved lazy imports such that no modules are required in order to import Polygraphy modules.
+    Using functionality from Polygraphy modules still requires dependencies.
+- Various submodules have been restructured. The old import structure is preserved for backwards compatibility.
+- Added `Profile.fill_defaults()` which makes it possible to automatically fill a TensorRT optimization profile
+    with sane default values.
+- It is now possible to provide TensorRT optimization profile shapes for a subset of the network inputs. In such
+    cases, the rest of the profile will be populated automatically with `Profile.fill_defaults()`
+- `surgeon extract` will no longer run shape inference unless it is required, e.g. if `auto` is specified for one of
+    the shape/data type arguments.
+- ONNX shape inference will now be skipped when `--force-fallback-shape-inference` is enabled in `surgeon extract/sanitize`.
+- `debug reduce` will now freeze intermediate shapes in the model if `--model-input-shapes` is provided.
+- `IterationResult`s now store `LazyNumpyArray` rather than `np.ndarray`.
+    The public interface for `IterationResult` will automatically pack or unpack `np.ndarray`s into/from `LazyNumpyArray`,
+    so the change is completely transparent.
+    This can significantly reduce memory usage for tools like `debug reduce` and `run`.
+
+### Fixed
+- Attempting to load a non-existent file will now cause a friendly error message to be displayed rather than crashing.
+- `surgeon sanitize` will no longer override shapes other than those specified in `--override-input-shapes`.
+
+### Removed
+- Removed optional `symbol` parameter from `lazy_import`.
+
+
+## v0.27.0 (2021-04-06)
+### Changed
+- For security reasons, all serialization/deserialization code in Polygraphy has been updated to use JSON
+    instead of `pickle`. Use the included `to-json` tool to convert data serialized with `pickle` to JSON
+    format.
+- Split `TacticReplayer` into separate `TacticRecorder` and `TacticReplayer` classes. This provides more
+    fine-grained control over whether to record or replay tactics.
+- Deprecated `--tactic-replay` in favor of `--save-tactics` and `--load-tactics`.
+- Changed `check_finite` parameter in `Comparator.validate()` to `check_inf`, since it checks whether
+    values are non-finite rather than the opposite.
+
+### Fixed
+- Polygraphy will now validate command-line arguments so that code-injection is not possible.
+- `debug diff-tactics` will now work correctly when replay files are in nested directories.
+
+
+## v0.26.1 (2021-04-01)
+### Added
+- Added `--force-fallback-shape-inference` option to `surgeon sanitize` in case ONNX shape inference doesn't work
+    well enough to allow for folding.
+- Added a `--calibration-base-class` option to allow changing base class for the TensorRT int8 calibrator.
+
+### Fixed
+- `FoldConstants` will no longer fail if a constant folding pass fails. Set `error_ok=False` to disable this behavior.
+
+
+## v0.26.0 (2021-03-30)
+### Added
+- Added support for saving/loading ONNX models with externally stored weights.
+- Added support for automatically installing dependencies as they are needed. This behavior can be enabled by
+    setting the `POLYGRAPHY_AUTOINSTALL_DEPS` environment variable to `1`.
+    When auto-install is enabled, Polygraphy can also automatically upgrade existing packages if a newer version is requested.
+- Added `error_ok` option in `InferShapes`, which can be set to `False` to make the loader raise an error when shape
+    inference fails.
+
+### Changed
+- `val_range` in the DataLoader now falls back to the default range if no range is specified for an input.
+- `atol` and `rtol` in `CompareFunc.basic_compare_func` now fall back to the default tolerance values
+    if no tolerance is specified for an output.
+- Folding shapes is now optional in `FoldConstants`.
+- `surgeon sanitize` now includes a `--no-fold-shapes` option to disable shape folding.
+
+### Fixed
+- Fixed a bug in `surgeon insert` where input tensors would be disconnected from all their consumers.
+    Previously, in a model with branches, if one entire branch was replaced by `surgeon insert`, the other branch
+    would be invalidated. This is no longer the case.
+- `run` will now attempt to avoid introducing a dependency on the `onnx` Python package when using an ONNX
+    model when `--trt` is the only specified runner.
+- When `--force-fallback-shape-inference` is set in `surgeon extract`, it will now correctly ignore shapes
+    already inferred in the model.
+- ONNX loaders will no longer make a copy of the model unnecessarily. If a copy is desired, the `copy` parameter can
+    be set to `True` for loaders that may modify the model.
+- `InferShapes`/`infer_shapes` will now work with ONNX models larger than 2 GiB if a path to the model is provided
+    instead of an `onnx.ModelProto`
+- Fixed a bug where `FoldConstants` would not count nodes within subgraphs.
+
+### Removed
+- Removed `OnnxTfRunner` and associated CLI options.
+
+
+## v0.25.1 (2021-03-15)
+### Added
+- Added `--partitioning` flag to `surgeon sanitize` to control how ONNX-GraphSurgeon partitions the graph during
+    constant folding.
+- Added `--cleanup` flag to `surgeon sanitize` to remove dead layers in ONNX models.
+
+### Changed
+- `ExtractSubgraph` loader will now fallback to using shapes/dtypes defined in the model when none are specified.
+
+### Fixed
+- `surgeon sanitize` no longer runs inference when the `--override-input-shapes` option is set. Instead, intermediate shapes are cleared.
+- `surgeon extract` will no longer override shapes or data types already set in the model when running fallback shape inference.
+
+
+## v0.25.0 (2021-03-01)
+### Added
+- Added support for list attributes in `surgeon insert`.
+- Added `val_range` parameter to data loader, which is more generic than `int_range`/`float_range`, which are now deprecated.
+- Added support for per-input data ranges to `val_range` parameter.
+- Added `--val-range` CLI option to set input ranges on the command-line.
+- Added `:` as a valid separator for various options and `[dim0,...,dimN]` as valid syntax for shapes.
+    For example, you can now optionally use:
+    ```bash
+    --inputs input0:[3,4]:int64 input1:[4,64,64]:float32
+    ```
+    instead of:
+    ```bash
+    --inputs input0,3x4,int64 input1,4x64x64,float32
+    ```
+    The new and old styles cannot be mixed.
+- Added support for specifying per-output top-k values to CLI tools.
+- Added `--trt-config-script` argument, which allows CLI tools to accept scripts that define functions that create TensorRT
+    builder configurations.
+- Added `--data-loader-script` argument, which allows CLI tools to accept scripts that define data loaders.
+- Added a new example for the `convert` CLI tool, which shows how to use a custom data loader for int8 calibration on the command-line.
+
+### Fixed
+- Fixed a bug where `debug reduce` would remove branches even if they were required to reproduce failures.
+
+
+## v0.24.2 (2021-02-25)
+### Added
+- Added support for string input types in `OnnxrtRunner`.
+- Added `reduce` subtool to `debug` which can reduce failing ONNX models to the smallest possible failing subgraph.
+
+### Fixed
+- ONNX loaders will no longer modify the original model provided, but instead make a shallow copy.
+
+
+## v0.24.1 (2021-02-22)
+### Added
+- Added an example to `dev/` showing how to write new command-line tools.
+
+### Fixed
+- Verbose TensorRT network logging will no longer fail to show attributes for layers on older versions of TensorRT.
+
+
+## v0.24.0 (2021-02-19)
+### Added
+- `convert` can now automatically determine the output model type based on the file extension.
+- Added immediately evaluated functional variants for all loaders exported by Polygraphy.
+    The variants use the same name as the loaders, except `snake_case` instead of `PascalCase`.
+    See [the example](./examples/api/06_immediate_eval_api) for details.
+
+### Changed
+- Polygraphy no longer has `numpy` as an install requirement.
+    Note however that most, but not all, APIs and CLI tools in Polygraphy still do require `numpy`.
+
+### Removed
+- Removed `func.invoke()` since immediately evaluated functions now supersede it.
+
+### Fixed
+- Fixed a bug where some `debug` subtools would write engines to the wrong path.
+
+
+## v0.23.4 (2021-02-15)
+### Added
+- Added `FoldConstants` loader for ONNX models.
+- Added `ExtractSubgraph` loader for ONNX models.
+
+### Changed
+- Moved `--fp-to-fp16` option to `convert`.
+
+
+## v0.23.3 (2021-02-13)
+### Added
+- Added `ConvertToFp16` as a separate loader for ONNX models.
+- Added `InferShapes` loader for ONNX models.
+
+### Changed
+- `surgeon sanitize` will now run shape inference by default.
+- `Modify<X>` loaders have been renamed to `Modify<X>Outputs` to better reflect their purpose.
+- `surgeon sanitize` can now run multiple passes of constant folding to deal with nodes that may not be folded
+    after the first pass (for example, `Shape` nodes in cases where ONNX shape inference does not complete).
+
+
+## v0.23.2 (2021-02-11)
+### Added
+- Added an experimental `debug` subtool, which includes `build` and `diff-tactics` (formerly part of `flaky`)
+    and `precision` (formerly a separate tool).
+
+### Changed
+- `flaky diff-tactics` will now only show layers that have potentially bad tactics.
+    To view an entire tactic replay, use `inspect tactics`
+- `flaky repeat` will now only log command `stderr` output with `ERROR` severity if the command failed.
+    Otherwise, `stderr` output is logged with `WARNING` severity.
+- `TacticReplayer` can now accept a `TacticReplayData` instance directly.
+- `TacticReplayData` can now be constructed manually instead of relying on TensorRT types.
+
+### Removed
+- `flaky` and `precision` tools have been removed and replaced by the `debug` subtool, which includes the
+    functionality of both.
+
+
+## v0.23.1 (2021-02-05)
+### Added
+- Added a `POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS` environment variable to enable internal correctness checks at runtime.
+    By default, these checks are disabled. A failure in such a check typically indicates a bug in Polygraphy.
+- Added context managers for CUDA helper classes. This helps ensure they are correctly freed.
+- Added `sparse_weights` parameter to `CreateConfig`, which enables TensorRT optimizations related to sparse weights.
+- Added a `--sparse-weights` option to various CLI tools.
+
+### Fixed
+- Added checks for cases where paths provided to `BytesFromPath` did not exist.
+
+
+## v0.23.0 (2021-02-02)
+### Added
+- Added `__enter__`/`__exit__` to `Calibrator` so that device buffers can be reliably freed after calibration using a context manager.
+- Added `fp_to_fp16` parameter to `ModifyOutputs` which will use `onnxmltools` to convert float tensors in the model to 16-bit floats.
+- Added `--fp-to-fp16` CLI argument to various tools.
+- Added support for `float`, `int`, and `str` attributes to `surgeon insert`.
+- Added `InvokeFromScript` loader, which can import and invoke a function from a Python script.
+- Added support for loading TensorRT networks from Python scripts to various CLI tools.
+    CLI tools can now accept a Python script in place of a model file.
+    The script should define a `load_network` function that takes no arguments and returns a TensorRT builder, network, and optionally parser.
+    See [the example](examples/cli/run/04_defining_a_trt_network_manually/) for details.
+- Added an experimental `template` tool that can generate template files.
+    - Added a `trt-network` subtool that can generate a template script for defining TensorRT networks using the network API.
+- Added a `SaveBytes` loader to facilitate writing bytes to a file between loaders.
+- Added an experimental `flaky` tool that can help debug flaky failures.
+    - Added `repeat` subtool, which will run a command repeatedly and sort artifacts into `good` and `bad` directories.
+    - Added `diff-tactics` subtool, which compares known-good and known-bad tactic replay files to determine which tactics may be the source of error.
+
+### Changed
+- `EngineFromNetwork` and `CreateConfig` no longer use the global timing cache by default.
+- Changed `--timing-cache` default in CLI tools to `None`.
+- Changed `timing_cache` parameter to `load_timing_cache` and `save_timing_cache` in `CreateConfig` and `EngineFromNetwork` respectively.
+- Runners will now raise errors in `infer` if the provided input data types or shapes do not match expected types and shapes.
+    This behavior can be disabled by setting `check_inputs=False`.
+- Changed `--toposort` default to off in `surgeon` tools as ONNX models are typically topologically sorted.
+- The logger will now log messages with `WARNING` or greater severity to `sys.stderr` instead of `sys.stdout`
+
+### Removed
+- Removed `CNTKRunner` and `--cntk` CLI option.
+- Removed experimental `--network-api` flag in CLI tools. This is superseded by the `template trt-network` subtool.
+
+### Fixed
+- Fixed memory leaks in `EngineFromNetwork`, `EngineFromBytes`, and `TrtRunner`.
+
+
+## v0.22.0 (2021-01-20)
+
+### Added
+- Added support for timing caches in `EngineFromNetwork` and `CreateConfig`.
+    The former can generate caches, while the latter can load them, resulting in much faster engine builds.
+    By default, Polygraphy will use a global timing cache in the temporary directory.
+- Added a `--timing-cache` option to various CLI tools.
+- Added an `EngineBytesFromNetwork` TensorRT loader to provide serialized engines directly.
+- Added a `BytesFromEngine` TensorRT loader to provide a means of in-memory engine serialization.
+- Added an experimental `convert` subtool, which can convert models to various other formats.
+- Added an `algorithm_selector` parameter to `CreateConfig` to allow the user to override TensorRT's tactic choices.
+- Added a `TacticReplayer` algorithm selector to allow for recording and replaying tactics in the TensorRT builder.
+    This makes it possible to make the TensorRT builder behave deterministically.
+- Added an experimental `--tactic-replay` option to various CLI tools to make it possible to record to and replay from tactic replay files.
+- Added an experimental `inspect` subtool, `tactics` which can display tactic replay files in a human readable format.
+
+### Changed
+- The `surgeon sanitize` subtool can now also modify model outputs.
+- `surgeon insert` will now preserve graph input and output names.
+
+### Fixed
+- Fixed a bug where the CUDA wrapper could not allocate buffers larger than 3GiB.
+
+
 ## v0.21.1 (2021-01-12)
 
 ### Added
@@ -84,14 +454,14 @@ Dates are in YYYY-MM-DD format.
 - Added new modes to `inspect model`, to control whether to show weights in the model.
 - Added `-s`/`--show-values` option to `inspect results` to display output values.
 - Added an experimental `--top-k` flag to `run`, which will apply a Top-K before comparing outputs.
-- Added `exclude_outputs` to `ModifyOnnx` and `ModifyNetwork`
+- Added `exclude_outputs` to `ModifyOutputs` and `ModifyNetworkOutputs`
 - Added an experimental `--onnx-exclude-outputs` and `--trt-exclude-outputs` to selectively unmark outputs.
 
 
 ## v0.20.5 (2020-09-16)
 ### Fixed
 - Fixed a bug in `inspect model` for ONNX models containing nodes with Tensor attributes.
-- Fixed a bug where `DeviceBuffer.copy_from` would segfault in rare cases.
+- Fixed a bug where `DeviceArray.copy_from` would segfault in rare cases.
 
 
 ## v0.20.4 (2020-09-14)
@@ -420,11 +790,11 @@ Dates are in YYYY-MM-DD format.
 
 ## v0.10.4 (2019-12-4)
 ### Added
-- Added `check_finite`, `check_nan`, and `fail_fast` options to `Comparator.validate()`
+- Added `check_inf`, `check_nan`, and `fail_fast` options to `Comparator.validate()`
 
 ### Changed
 - Cleans up `Buffers` implementation for `TrtRunner` - eliminates an unnecessary copy that was happening on the host input.
-- Improved logic for matching output names in `misc.find_in_dict()`
+- Improved logic for matching output names in `util.find_in_dict()`
 
 
 ## v0.10.3 (2019-11-18)

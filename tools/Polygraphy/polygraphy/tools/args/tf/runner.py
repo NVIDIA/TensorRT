@@ -13,20 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from polygraphy import mod
+from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
-from polygraphy.tools.util import misc as tools_util
-from polygraphy.tools.util.script import Script
+from polygraphy.tools.script import make_invocable
 
 
+@mod.export()
 class TfRunnerArgs(BaseArgs):
     def add_to_parser(self, parser):
-        tf_args = parser.add_argument_group("TensorFlow Inference", "Options for TensorFlow Inference")
+        tf_args = parser.add_argument_group("TensorFlow Runner", "Options for TensorFlow Inference")
         tf_args.add_argument("--save-timeline", help="[EXPERIMENTAL] Directory to save timeline JSON files for profiling inference (view at chrome://tracing)", default=None)
 
 
     def register(self, maker):
-        from polygraphy.tools.args.tf.loader import TfLoaderArgs
         from polygraphy.tools.args.tf.config import TfConfigArgs
+        from polygraphy.tools.args.tf.loader import TfLoaderArgs
 
         if isinstance(maker, TfLoaderArgs):
             self.tf_loader_args = maker
@@ -40,7 +43,7 @@ class TfRunnerArgs(BaseArgs):
 
 
     def parse(self, args):
-        self.timeline_path = tools_util.get(args, "save_timeline")
+        self.timeline_path = args_util.get(args, "save_timeline")
 
 
     def add_to_script(self, script):
@@ -50,8 +53,6 @@ class TfRunnerArgs(BaseArgs):
         config_name = self.tf_config_args.add_to_script(script)
 
         script.add_import(imports=["SessionFromGraph"], frm="polygraphy.backend.tf")
-        loader_name = script.add_loader(Script.invoke("SessionFromGraph", graph_name, config=config_name), "build_tf_session")
+        loader_name = script.add_loader(make_invocable("SessionFromGraph", graph_name, config=config_name), "build_tf_session")
 
-        runner_name = script.add_loader(Script.invoke("TfRunner", loader_name, timeline_path=self.timeline_path), "tf_runner")
-        script.add_runner(runner_name)
-        return runner_name
+        script.add_runner(make_invocable("TfRunner", loader_name, timeline_path=self.timeline_path))
