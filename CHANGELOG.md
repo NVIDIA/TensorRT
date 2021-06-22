@@ -1,5 +1,23 @@
 # TensorRT OSS Release Changelog
 
+## [21.06](https://github.com/NVIDIA/TensorRT/releases/tag/21.06) - 2021-06-23
+
+### Changed
+- Update to [Polygraphy v0.29.2](tools/Polygraphy/CHANGELOG.md#v0292-2021-04-30)
+- Update to [ONNX-GraphSurgeon v0.3.9](tools/onnx-graphsurgeon/CHANGELOG.md#v039-2021-04-20)
+- Add missing model.py in `uff_custom_plugin` sample
+- Fix numerical errors for float type in NMS/batchedNMS plugins
+- Update demoBERT input dimensions to match Triton requirement [#1051](https://github.com/NVIDIA/TensorRT/pull/1051)
+- Optimize TLT MaskRCNN plugins:
+  - enable fp16 precision in multilevelCropAndResizePlugin and multilevelProposeROIPlugin
+  - Algorithms optimization for NMS kernels and ROIAlign kernel
+  - Fix invalid cuda config issue when bs is larger than 32
+  - Fix issues found  on Jetson NANO
+
+### Removed
+- Removed fcplugin from demoBERT to improve latency
+
+
 ## [21.05](https://github.com/NVIDIA/TensorRT/releases/tag/21.05) - 2021-05-20
 ### Added
 - Extended support for ONNX operator `InstanceNormalization` to 5D tensors
@@ -22,7 +40,6 @@
 - SM86 kernels for BERT MHA plugin
 - Added opset13 support for `SoftMax`, `LogSoftmax`, `Squeeze`, and `Unsqueeze`.
 - Added support for the `EyeLike` and `GatherElements` operators.
-
 
 ### Changed
 - Updated TensorRT version to v7.2.3.4.
