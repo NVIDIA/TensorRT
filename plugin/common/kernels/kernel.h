@@ -43,7 +43,7 @@ pluginStatus_t detectionInference(cudaStream_t stream, int N, int C1, int C2, bo
     bool varianceEncodedInTarget, int backgroundLabelId, int numPredsPerClass, int numClasses, int topK, int keepTopK,
     float confidenceThreshold, float nmsThreshold, CodeTypeSSD codeType, DataType DT_BBOX, const void* locData,
     const void* priorData, DataType DT_SCORE, const void* confData, void* keepCount, void* topDetections,
-    void* workspace, bool isNormalized = true, bool confSigmoid = false, int scoreBits = 16);
+    void* workspace, bool isNormalized = true, bool confSigmoid = false, int scoreBits = 16, const bool isBatchAgnostic = true);
 
 pluginStatus_t nmsInference(cudaStream_t stream, int N, int boxesSize, int scoresSize, bool shareLocation,
     int backgroundLabelId, int numPredsPerClass, int numClasses, int topK, int keepTopK, float scoreThreshold,
@@ -84,7 +84,7 @@ size_t detectionForwardPostNMSSize(int N, int numClasses, int topK);
 
 pluginStatus_t decodeBBoxes(cudaStream_t stream, int nthreads, CodeTypeSSD code_type, bool variance_encoded_in_target,
     int num_priors, bool share_location, int num_loc_classes, int background_label_id, bool clip_bbox, DataType DT_BBOX,
-    const void* loc_data, const void* prior_data, void* bbox_data);
+    const void* loc_data, const void* prior_data, void* bbox_data, const bool batch_agnostic);
 
 size_t normalizePluginWorkspaceSize(bool acrossSpatial, int C, int H, int W);
 

@@ -177,6 +177,7 @@ enum class CodeTypeSSD : int32_t
 //! \param inputOrder Specifies the order of inputs {loc_data, conf_data, priorbox_data}.
 //! \param confSigmoid Set to true to calculate sigmoid of confidence scores.
 //! \param isNormalized Set to true if bounding box data is normalized by the network.
+//! \param isBatchAgnostic Defaults to true. Set to false if prior boxes are unique per batch
 //!
 struct DetectionOutputParameters
 {
@@ -187,6 +188,7 @@ struct DetectionOutputParameters
     int32_t inputOrder[3];
     bool confSigmoid;
     bool isNormalized;
+    bool isBatchAgnostic{true};
 };
 
 //!
