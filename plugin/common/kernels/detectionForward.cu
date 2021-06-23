@@ -41,7 +41,8 @@ pluginStatus_t detectionInference(
     void* workspace,
     bool isNormalized,
     bool confSigmoid,
-    int scoreBits)
+    int scoreBits,
+    const bool isBatchAgnostic)
 {
     // Batch size * number bbox per sample * 4 = total number of bounding boxes * 4
     const int locCount = N * C1;
@@ -70,7 +71,8 @@ pluginStatus_t detectionInference(
                                       DT_BBOX,
                                       locData,
                                       priorData,
-                                      bboxDataRaw);
+                                      bboxDataRaw,
+                                      isBatchAgnostic);
 
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
@@ -246,7 +248,8 @@ namespace plugin
     void* workspace,
     bool isNormalized,
     bool confSigmoid,
-    int scoreBits)
+    int scoreBits,
+    const bool isBatchAgnostic)
 {
     // Batch size * number bbox per sample * 4 = total number of bounding boxes * 4
     const int locCount = N * C1;
@@ -275,7 +278,8 @@ namespace plugin
                                       DT_BBOX,
                                       locData,
                                       priorData,
-                                      bboxDataRaw);
+                                      bboxDataRaw,
+                                      isBatchAgnostic);
 
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 

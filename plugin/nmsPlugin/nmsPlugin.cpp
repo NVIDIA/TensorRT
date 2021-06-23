@@ -567,6 +567,7 @@ NMSBasePluginCreator::NMSBasePluginCreator() noexcept
     mPluginAttributes.emplace_back(PluginField("isNormalized", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("codeType", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("scoreBits", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("isBatchAgnostic", nullptr, PluginFieldType::kINT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
@@ -683,6 +684,11 @@ IPluginV2Ext* NMSPluginCreator::createPlugin(const char* name, const PluginField
         {
             ASSERT(fields[i].type == PluginFieldType::kINT32);
             mScoreBits = *(static_cast<const int32_t*>(fields[i].data));
+        }
+        else if (!strcmp(attrName, "isBatchAgnostic"))
+        {
+            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            params.isBatchAgnostic = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
         }
     }
 

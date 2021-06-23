@@ -13,6 +13,7 @@
   - Algorithms optimization for NMS kernels and ROIAlign kernel
   - Fix invalid cuda config issue when bs is larger than 32
   - Fix issues found  on Jetson NANO
+- Add switch for batch-agnostic mode in NMS plugin
 
 ### Removed
 - Removed fcplugin from demoBERT to improve latency
