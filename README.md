@@ -179,7 +179,7 @@ For native builds, install the [prerequisite](#prerequisites) *System Packages*.
 	- `TRT_OUT_DIR`: Output directory where generated build artifacts will be copied.
 * Optional CMake build arguments:
 	- `CMAKE_BUILD_TYPE`: Specify if binaries generated are for release or debug (contain debug symbols). Values consists of [`Release`] | `Debug`
-	- `CUDA_VERISON`: The version of CUDA to target, for example [`11.1`].
+	- `CUDA_VERSION`: The version of CUDA to target, for example [`11.1`].
 	- `CUDNN_VERSION`: The version of cuDNN to target, for example [`8.0`].
 	- `NVCR_SUFFIX`: Optional nvcr/cuda image suffix. Set to "-rc" for CUDA11 RC builds until general availability. Blank by default.
 	- `PROTOBUF_VERSION`:  The version of Protobuf to use, for example [`3.0.0`]. Note: Changing this will not configure CMake to use a system version of Protobuf, it will configure CMake to download and try building that version.
