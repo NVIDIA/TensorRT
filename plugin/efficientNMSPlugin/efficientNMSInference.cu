@@ -319,7 +319,7 @@ cudaError_t EfficientNMSLauncher(EfficientNMSParameters& param, int* topNumData,
     const void* boxesInput, const void* anchorsInput, int* numDetectionsOutput, T* nmsScoresOutput,
     int* nmsClassesOutput, int* nmsIndicesOutput, void* nmsBoxesOutput, cudaStream_t stream)
 {
-    unsigned int tileSize = 1024;
+    unsigned int tileSize = param.numSelectedBoxes / 4;
     if (param.numSelectedBoxes <= 512)
     {
         tileSize = 512;
@@ -622,6 +622,12 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
         cudaMemsetAsync(nmsClassesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream);
     }
 
+    // Empty Inputs
+    if (param.numScoreElements < 1)
+    {
+        return STATUS_SUCCESS;
+    }
+
     // Counters Workspace
     size_t workspaceOffset = 0;
     int countersTotalSize = (3 + 1 + param.numClasses) * param.batchSize;
@@ -650,6 +656,22 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
     char* sortedWorkspaceData = EfficientNMSWorkspace<char>(workspace, workspaceOffset, sortedWorkspaceSize);
     cub::DoubleBuffer<T> scoresDB(topScoresData, sortedScoresData);
     cub::DoubleBuffer<int> indexDB(topIndexData, sortedIndexData);
+
+    // Device Specific Properties
+    int device;
+    cudaGetDevice(&device);
+    struct cudaDeviceProp properties;
+    cudaGetDeviceProperties(&properties, device);
+    if (properties.regsPerBlock >= 65536)
+    {
+        // Most Devices
+        param.numSelectedBoxes = 4096;
+    }
+    else
+    {
+        // Jetson TX1/TX2
+        param.numSelectedBoxes = 2048;
+    }
 
     // Kernels
     status = EfficientNMSFilterLauncher<T>(param, (T*) scoresInput, topNumData, topIndexData, topAnchorsData,
