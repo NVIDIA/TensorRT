@@ -14,17 +14,16 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool import (Build, DiffTactics, Precision,
-                                            Reduce, Repeat)
+from polygraphy.tools.debug.subtool import Build, DiffTactics, Precision, Reduce, Repeat
 
 
 class Debug(Tool):
     """
     [EXPERIMENTAL] Debug model accuracy issues.
     """
+
     def __init__(self):
         super().__init__("debug")
-
 
     def add_parser_args(self, parser):
         subparsers = parser.add_subparsers(title="Debug Subtools", dest="subtool")

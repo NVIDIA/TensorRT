@@ -101,26 +101,25 @@ inline std::ostream& operator<<(std::ostream& o, nvinfer1::DataType dt)
     case nvinfer1::DataType::kFLOAT: o << "Float"; break;
     case nvinfer1::DataType::kHALF: o << "Half"; break;
     case nvinfer1::DataType::kINT8: o << "Int8"; break;
+    case nvinfer1::DataType::kBOOL: o << "Bool"; break;
     }
     return o;
 }
 
-inline nvinfer1::DimsCHW getCHW(const nvinfer1::Dims& d)
+inline nvinfer1::Dims3 getCHW(const nvinfer1::Dims& d)
 {
     assert(d.nbDims >= 3);
-    return nvinfer1::DimsCHW(d.d[d.nbDims - 3], d.d[d.nbDims - 2], d.d[d.nbDims - 1]);
+    return nvinfer1::Dims3(d.d[d.nbDims - 3], d.d[d.nbDims - 2], d.d[d.nbDims - 1]);
 }
 
-inline nvinfer1::DimsCHW getCHWWithExpansion(const nvinfer1::Dims& d, int filler)
+inline int32_t getC(const nvinfer1::Dims& d)
 {
-    if (d.nbDims == 0)
-        return nvinfer1::DimsCHW(filler, filler, filler);
-    else if (d.nbDims == 1)
-        return nvinfer1::DimsCHW(filler, filler, d.d[0]);
-    else if (d.nbDims == 2)
-        return nvinfer1::DimsCHW(filler, d.d[0], d.d[1]);
-    else
-        return nvinfer1::DimsCHW(d.d[d.nbDims - 3], d.d[d.nbDims - 2], d.d[d.nbDims - 1]);
+    return getCHW(d).d[0];
+}
+
+inline nvinfer1::Dims toDims(int32_t w, int32_t h) noexcept
+{
+    return nvinfer1::Dims{2, {w, h}};
 }
 
 inline int combineIndexDimensions(int batchSize, const nvinfer1::Dims& d)

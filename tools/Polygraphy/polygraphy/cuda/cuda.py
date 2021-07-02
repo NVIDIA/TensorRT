@@ -30,6 +30,7 @@ class MemcpyKind(object):
     """
     Enumerates different kinds of copy operations.
     """
+
     HostToHost = ctypes.c_int(0)
     """Copies from host memory to host memory"""
     HostToDevice = ctypes.c_int(1)
@@ -49,18 +50,21 @@ class Cuda(object):
 
     Wrapper that exposes low-level CUDA functionality.
     """
+
     def __init__(self):
         self.handle = ctypes.CDLL("libcudart.so")
         if not self.handle:
             G_LOGGER.critical("Could not load the CUDA runtime library. Is it on your loader path?")
 
-
     @func.constantmethod
     def check(self, status):
         if status != 0:
-            G_LOGGER.critical("CUDA Error: {:}. To figure out what this means, refer to "
-                              "https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g3f51e3575c2178246db0a94a430e0038".format(status))
-
+            G_LOGGER.critical(
+                "CUDA Error: {:}. To figure out what this means, refer to "
+                "https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g3f51e3575c2178246db0a94a430e0038".format(
+                    status
+                )
+            )
 
     @func.constantmethod
     def create_stream(self):
@@ -69,18 +73,15 @@ class Cuda(object):
         self.check(self.handle.cudaStreamCreate(ctypes.byref(ptr)))
         return ptr.value
 
-
     @func.constantmethod
     def stream_synchronize(self, ptr):
         # Signature: int -> None
         self.check(self.handle.cudaStreamSynchronize(void_ptr(ptr)))
 
-
     @func.constantmethod
     def destroy_stream(self, ptr):
         # Signature: int -> None
         self.check(self.handle.cudaStreamDestroy(void_ptr(ptr)))
-
 
     @func.constantmethod
     def malloc(self, nbytes):
@@ -97,10 +98,9 @@ class Cuda(object):
             PolygraphyException: If an error was encountered during the allocation.
         """
         ptr = void_ptr()
-        nbytes = ctypes.c_size_t(nbytes) # Required to prevent overflow
+        nbytes = ctypes.c_size_t(nbytes)  # Required to prevent overflow
         self.check(self.handle.cudaMalloc(ctypes.byref(ptr), nbytes))
         return ptr.value
-
 
     @func.constantmethod
     def free(self, ptr):
@@ -114,7 +114,6 @@ class Cuda(object):
             PolygraphyException: If an error was encountered during the free.
         """
         self.check(self.handle.cudaFree(void_ptr(ptr)))
-
 
     @func.constantmethod
     def memcpy(self, dst, src, nbytes, kind, stream_ptr=None):
@@ -137,7 +136,7 @@ class Cuda(object):
         Raises:
             PolygraphyException: If an error was encountered during the copy.
         """
-        nbytes = ctypes.c_size_t(nbytes) # Required to prevent overflow
+        nbytes = ctypes.c_size_t(nbytes)  # Required to prevent overflow
         if stream_ptr is not None:
             self.check(self.handle.cudaMemcpyAsync(void_ptr(dst), void_ptr(src), nbytes, kind, void_ptr(stream_ptr)))
         else:
@@ -145,6 +144,8 @@ class Cuda(object):
 
 
 G_CUDA = None
+
+
 @mod.export()
 def wrapper():
     """
@@ -154,7 +155,8 @@ def wrapper():
         Cuda: The global CUDA wrapper.
     """
     global G_CUDA
-    G_CUDA = util.default(G_CUDA, Cuda())
+    if G_CUDA is None:
+        G_CUDA = Cuda()
     return G_CUDA
 
 
@@ -163,21 +165,19 @@ class Stream(object):
     """
     High-level wrapper for a CUDA stream.
     """
+
     def __init__(self):
         self.ptr = wrapper().create_stream()
         """int: The memory address of the underlying CUDA stream"""
 
-
     def __enter__(self):
         return self
-
 
     def __exit__(self, exc_type, exc_value, traceback):
         """
         Frees the underlying CUDA stream.
         """
         self.free()
-
 
     def free(self):
         """
@@ -192,7 +192,6 @@ class Stream(object):
         """
         wrapper().destroy_stream(self.ptr)
         self.handle = ctypes.c_void_p(None)
-
 
     def synchronize(self):
         """
@@ -212,6 +211,7 @@ class DeviceView(object):
     """
     A read-only view of a GPU memory region.
     """
+
     def __init__(self, ptr, shape, dtype):
         """
         Args:
@@ -227,12 +227,12 @@ class DeviceView(object):
         self.dtype = dtype
         """np.dtype: The data type of the device buffer"""
 
-
     def _check_dtype_matches(self, host_buffer):
         if host_buffer.dtype != self.dtype:
-            G_LOGGER.error("Host buffer type: {:} does not match the type of this device buffer: {:}. "
-                           "This may cause CUDA errors!".format(host_buffer.dtype, self.dtype))
-
+            G_LOGGER.error(
+                "Host buffer type: {:} does not match the type of this device buffer: {:}. "
+                "This may cause CUDA errors!".format(host_buffer.dtype, self.dtype)
+            )
 
     @property
     def nbytes(self):
@@ -240,7 +240,6 @@ class DeviceView(object):
         The number of bytes in the memory region.
         """
         return util.volume(self.shape) * np.dtype(self.dtype).itemsize
-
 
     @func.constantmethod
     def copy_to(self, host_buffer, stream=None):
@@ -266,21 +265,27 @@ class DeviceView(object):
             try:
                 host_buffer.resize(self.shape, refcheck=False)
             except ValueError as err:
-                G_LOGGER.warning("Could not resize host buffer to shape: {:}. Allocating a new buffer instead.\n"
-                                 "Note: Error was: {:}".format(self.shape, err))
+                G_LOGGER.warning(
+                    "Could not resize host buffer to shape: {:}. Allocating a new buffer instead.\n"
+                    "Note: Error was: {:}".format(self.shape, err)
+                )
                 host_buffer = np.empty(self.shape, dtype=np.dtype(self.dtype))
 
         if not self.nbytes:
             return host_buffer
 
         host_buffer = np.ascontiguousarray(host_buffer)
-        wrapper().memcpy(dst=host_buffer.ctypes.data, src=self.ptr, nbytes=self.nbytes,
-                         kind=MemcpyKind.DeviceToHost, stream_ptr=try_get_stream_handle(stream))
+        wrapper().memcpy(
+            dst=host_buffer.ctypes.data,
+            src=self.ptr,
+            nbytes=self.nbytes,
+            kind=MemcpyKind.DeviceToHost,
+            stream_ptr=try_get_stream_handle(stream),
+        )
 
         # Use resize instead of reshape since it operates in-place.
         host_buffer.resize(self.shape, refcheck=False)
         return host_buffer
-
 
     @func.constantmethod
     def numpy(self):
@@ -293,9 +298,10 @@ class DeviceView(object):
         arr = np.empty(self.shape, dtype=self.dtype)
         return self.copy_to(arr)
 
-
     def __str__(self):
-        return "DeviceView[(dtype={:}, shape={:}), ptr={:}]".format(np.dtype(self.dtype).name, self.shape, hex(self.ptr))
+        return "DeviceView[(dtype={:}, shape={:}), ptr={:}]".format(
+            np.dtype(self.dtype).name, self.shape, hex(self.ptr)
+        )
 
 
 @mod.export()
@@ -303,6 +309,7 @@ class DeviceArray(DeviceView):
     """
     An array on the GPU.
     """
+
     def __init__(self, shape=None, dtype=None):
         """
         Args:
@@ -313,10 +320,8 @@ class DeviceArray(DeviceView):
         self.allocated_nbytes = 0
         self.resize(self.shape)
 
-
     def __enter__(self):
         return self
-
 
     def __exit__(self, exc_type, exc_value, traceback):
         """
@@ -324,12 +329,10 @@ class DeviceArray(DeviceView):
         """
         self.free()
 
-
     def allocate(self, nbytes):
         if nbytes:
             self.ptr = wrapper().malloc(nbytes)
             self.allocated_nbytes = nbytes
-
 
     def free(self):
         """
@@ -346,7 +349,6 @@ class DeviceArray(DeviceView):
         self.allocated_nbytes = 0
         self.ptr = 0
 
-
     def resize(self, shape):
         """
         Resizes or reshapes the array to the specified shape.
@@ -362,7 +364,6 @@ class DeviceArray(DeviceView):
             self.free()
             self.allocate(nbytes)
         self.shape = shape
-
 
     def copy_from(self, host_buffer, stream=None):
         """
@@ -384,10 +385,16 @@ class DeviceArray(DeviceView):
             self._check_dtype_matches(host_buffer)
             self.resize(host_buffer.shape)
             host_buffer = np.ascontiguousarray(host_buffer.ravel())
-            wrapper().memcpy(dst=self.ptr, src=host_buffer.ctypes.data, nbytes=host_buffer.nbytes,
-                             kind=MemcpyKind.HostToDevice, stream_ptr=try_get_stream_handle(stream))
+            wrapper().memcpy(
+                dst=self.ptr,
+                src=host_buffer.ctypes.data,
+                nbytes=host_buffer.nbytes,
+                kind=MemcpyKind.HostToDevice,
+                stream_ptr=try_get_stream_handle(stream),
+            )
         return self
 
-
     def __str__(self):
-        return "DeviceArray[(dtype={:}, shape={:}), ptr={:}]".format(np.dtype(self.dtype).name, self.shape, hex(self.ptr))
+        return "DeviceArray[(dtype={:}, shape={:}), ptr={:}]".format(
+            np.dtype(self.dtype).name, self.shape, hex(self.ptr)
+        )

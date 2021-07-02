@@ -65,7 +65,7 @@ def check_identity_identity(runner):
 def check_dynamic_identity(runner, shapes):
     feed_dict = {"X": np.random.random_sample(size=shapes["X"]).astype(np.float32)}
     outputs = runner.infer(feed_dict)
-    assert np.all(outputs["Y"] == feed_dict["X"])
+    assert np.array_equal(outputs["Y"], feed_dict["X"])
 
 
 def check_empty_tensor_expand(runner, shapes):
@@ -88,22 +88,56 @@ def no_check_implemented(runner):
 
 
 ONNX_MODELS = {
-    "identity": Model(path=model_path("identity.onnx"), LoaderType=BytesFromPath, check_runner=check_identity,
-                     input_metadata=TensorMetadata().add("x", dtype=np.float32, shape=(1, 1, 2, 2))),
-    "identity_identity": Model(path=model_path("identity_identity.onnx"), LoaderType=BytesFromPath, check_runner=check_identity_identity),
-    "dynamic_identity": Model(path=model_path("dynamic_identity.onnx"), LoaderType=BytesFromPath, check_runner=check_dynamic_identity,
-                              input_metadata=TensorMetadata().add("X", dtype=np.float32, shape=(1, 1, -1, -1))),
-    "empty_tensor_expand": Model(path=model_path("empty_tensor_expand.onnx"), LoaderType=BytesFromPath, check_runner=check_empty_tensor_expand),
-
+    "identity": Model(
+        path=model_path("identity.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=check_identity,
+        input_metadata=TensorMetadata().add("x", dtype=np.float32, shape=(1, 1, 2, 2)),
+    ),
+    "identity_identity": Model(
+        path=model_path("identity_identity.onnx"), LoaderType=BytesFromPath, check_runner=check_identity_identity
+    ),
+    "dynamic_identity": Model(
+        path=model_path("dynamic_identity.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=check_dynamic_identity,
+        input_metadata=TensorMetadata().add("X", dtype=np.float32, shape=(1, 1, -1, -1)),
+    ),
+    "empty_tensor_expand": Model(
+        path=model_path("empty_tensor_expand.onnx"), LoaderType=BytesFromPath, check_runner=check_empty_tensor_expand
+    ),
     "and": Model(path=model_path("and.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
     "scan": Model(path=model_path("scan.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
-    "pow_scalar": Model(path=model_path("pow_scalar.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
+    "pow_scalar": Model(
+        path=model_path("pow_scalar.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
     "dim_param": Model(path=model_path("dim_param.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
-    "tensor_attr": Model(path=model_path("tensor_attr.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
-    "identity_with_initializer": Model(path=model_path("identity_with_initializer.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
-    "const_foldable": Model(path=model_path("const_foldable.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
+    "tensor_attr": Model(
+        path=model_path("tensor_attr.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "identity_with_initializer": Model(
+        path=model_path("identity_with_initializer.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "const_foldable": Model(
+        path=model_path("const_foldable.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
     "reshape": Model(path=model_path("reshape.onnx"), LoaderType=BytesFromPath, check_runner=check_reshape),
-    "reducable": Model(path=model_path("reducable.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented,
-                       input_metadata=TensorMetadata().add("X0", shape=(1, ), dtype=np.float32).add("Y0", shape=(1, ), dtype=np.float32)),
-    "ext_weights": Model(path=model_path("ext_weights.onnx"), LoaderType=OnnxFromPath, check_runner=no_check_implemented, ext_data=model_path("data")),
+    "reducable": Model(
+        path=model_path("reducable.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+        input_metadata=TensorMetadata().add("X0", shape=(1,), dtype=np.float32).add("Y0", shape=(1,), dtype=np.float32),
+    ),
+    "ext_weights": Model(
+        path=model_path("ext_weights.onnx"),
+        LoaderType=OnnxFromPath,
+        check_runner=no_check_implemented,
+        ext_data=model_path("data"),
+    ),
+    "ext_weights_same_dir": Model(
+        path=model_path(os.path.join("ext_weights_same_dir", "ext_weights.onnx")),
+        LoaderType=OnnxFromPath,
+        check_runner=no_check_implemented,
+        ext_data=model_path("ext_weights_same_dir"),
+    ),
 }

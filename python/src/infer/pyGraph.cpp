@@ -15,13 +15,11 @@
  */
 
 // This file contains all bindings related to TensorRT INetworkDefinition.
-#include "NvInfer.h"
-
-#include "infer/pyGraphDoc.h"
 #include "ForwardDeclarations.h"
 #include "utils.h"
-// For vector support
 #include <pybind11/stl.h>
+
+#include "infer/pyGraphDoc.h"
 
 // clang-format off
 namespace tensorrt
@@ -58,7 +56,7 @@ namespace tensorrt
         // For permutation
         static const auto permutation_vector_constructor = [] (const std::vector<int>& in) {
             // Static casts are required here, so that MAX_DIMS is resolved at compile/link time.
-            const int maxDims = static_cast<const int>(nvinfer1::Dims::MAX_DIMS);
+            const int maxDims = static_cast<const int>(Dims::MAX_DIMS);
             if (in.size() > maxDims || in.size() < 0)
                 throw std::length_error("Invalid input length. Max expected length is " + std::to_string(maxDims));
             Permutation* self = new Permutation{};
@@ -68,7 +66,7 @@ namespace tensorrt
         };
 
         static const auto permutation_to_str = [] (const Permutation& self) {
-            const int maxDims = static_cast<const int>(nvinfer1::Dims::MAX_DIMS);
+            const int maxDims = static_cast<const int>(Dims::MAX_DIMS);
             std::string temp = "(";
             for (int i = 0; i < maxDims - 1; ++i)
                 temp += std::to_string(self.order[i]) + ", ";
@@ -76,46 +74,37 @@ namespace tensorrt
             return temp;
         };
 
+        // TODO: Add slicing support?
         static const auto permutation_getter = [] (const Permutation& self, int pyIndex) {
-            size_t index = (pyIndex < 0) ? static_cast<const int>(nvinfer1::Dims::MAX_DIMS) + pyIndex : pyIndex;
+            size_t index = (pyIndex < 0) ? static_cast<const int>(Dims::MAX_DIMS) + pyIndex : pyIndex;
             // Static cast is REQUIRED here, or chaos ensues as MAX_DIMS is not pulled in at link time.
-            if (index >= static_cast<const size_t>(nvinfer1::Dims::MAX_DIMS)) throw py::index_error();
+            if (index >= static_cast<const size_t>(Dims::MAX_DIMS)) throw py::index_error();
             return self.order[index];
         };
 
         static const auto permutation_setter = [] (Permutation& self, int pyIndex, int item) {
-            size_t index = (pyIndex < 0) ? static_cast<const int>(nvinfer1::Dims::MAX_DIMS) + pyIndex : pyIndex;
+            size_t index = (pyIndex < 0) ? static_cast<const int>(Dims::MAX_DIMS) + pyIndex : pyIndex;
             // Static cast is REQUIRED here, or chaos ensues as MAX_DIMS is not pulled in at link time.
-            if (index >= static_cast<const size_t>(nvinfer1::Dims::MAX_DIMS)) throw py::index_error();
+            if (index >= static_cast<const size_t>(Dims::MAX_DIMS)) throw py::index_error();
             self.order[index] = item;
         };
 
         static const auto permutation_len = [] (const Permutation& self) {
-            return static_cast<const int>(nvinfer1::Dims::MAX_DIMS);
+            return static_cast<const int>(Dims::MAX_DIMS);
         };
 
         // For INetworkDefinition
         // Need a ptr to const-ptr to ITensor.
-        static const auto add_concatenation = [] (INetworkDefinition& self, const std::vector<nvinfer1::ITensor*>& inputs) {
+        static const auto add_concatenation = [] (INetworkDefinition& self, const std::vector<ITensor*>& inputs) {
             return self.addConcatenation(inputs.data(), inputs.size());
         };
 
         // Need a ptr to const-ptr to ITensor.
-        static const auto add_plugin = [] (INetworkDefinition& self, const std::vector<nvinfer1::ITensor*>& inputs, nvinfer1::IPlugin& plugin) {
-            return self.addPlugin(inputs.data(), inputs.size(), plugin);
-        };
-
-        // Need a ptr to const-ptr to ITensor.
-        static const auto add_plugin_ext = [] (INetworkDefinition& self, const std::vector<nvinfer1::ITensor*>& inputs, nvinfer1::IPluginExt& plugin) {
-            return self.addPluginExt(inputs.data(), inputs.size(), plugin);
-        };
-
-        // Need a ptr to const-ptr to ITensor.
-        static const auto add_plugin_v2 = [] (INetworkDefinition& self, const std::vector<nvinfer1::ITensor*>& inputs, nvinfer1::IPluginV2& plugin) {
+        static const auto add_plugin_v2 = [] (INetworkDefinition& self, const std::vector<ITensor*>& inputs, IPluginV2& plugin) {
             return self.addPluginV2(inputs.data(), inputs.size(), plugin);
         };
 
-        static const auto add_convolution = [](INetworkDefinition& self, ITensor& input, int numOutputMaps, DimsHW kernelSize, Weights kernel, Weights* bias)
+        IConvolutionLayer* add_convolution(INetworkDefinition& self, ITensor& input, int numOutputMaps, DimsHW kernelSize, Weights kernel, Weights* bias)
         {
             return self.addConvolution(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
@@ -140,7 +129,17 @@ namespace tensorrt
             return self.addScaleNd(input, mode, optionalWeights(shift), optionalWeights(scale), optionalWeights(power), channelAxis);
         };
 
-        static const auto add_deconvolution = [](INetworkDefinition& self, ITensor& input, int numOutputMaps, DimsHW kernelSize, Weights kernel, Weights* bias)
+        static const auto add_quantize = [](INetworkDefinition& self, ITensor& input, ITensor& scale)
+        {
+            return self.addQuantize(input, scale);
+        };
+
+        static const auto add_dequantize = [](INetworkDefinition& self, ITensor& input, ITensor& scale)
+        {
+            return self.addDequantize(input, scale);
+        };
+
+        IDeconvolutionLayer* add_deconvolution(INetworkDefinition& self, ITensor& input, int numOutputMaps, DimsHW kernelSize, Weights kernel, Weights* bias)
         {
             return self.addDeconvolution(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
@@ -150,6 +149,7 @@ namespace tensorrt
             return self.addDeconvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
 
+        // TODO: Need to ensure that these are returning by reference rather than by copy.
         // NumPy getters for layers.
         static const auto conv_get_kernel = [](IConvolutionLayer& self) { auto w = self.getKernelWeights(); return utils::weights_to_numpy(w); };
         static const auto conv_get_bias = [](IConvolutionLayer& self) { auto w = self.getBiasWeights(); return utils::weights_to_numpy(w); };
@@ -164,9 +164,6 @@ namespace tensorrt
         static const auto deconv_get_kernel = [](IDeconvolutionLayer& self) { auto w = self.getKernelWeights(); return utils::weights_to_numpy(w); };
         static const auto deconv_get_bias = [](IDeconvolutionLayer& self) { auto w = self.getBiasWeights(); return utils::weights_to_numpy(w); };
 
-        static const auto rnn_get_weights = [](IRNNLayer& self) { auto w = self.getWeights(); return utils::weights_to_numpy(w); };
-        static const auto rnn_get_bias = [](IRNNLayer& self) { auto w = self.getBias(); return utils::weights_to_numpy(w); };
-
         static const auto rnnv2_get_weights = [](IRNNv2Layer& self, int index, RNNGateType gate, bool isW) {
             auto w = self.getWeightsForGate(index, gate, isW); return utils::weights_to_numpy(w);
         };
@@ -176,6 +173,7 @@ namespace tensorrt
 
         static const auto constant_get_weights = [](IConstantLayer& self) { auto w = self.getWeights(); return utils::weights_to_numpy(w); };
 
+        // TODO: Add slicing support?
         static const auto network_getitem = [](INetworkDefinition& self, int pyIndex) {
             // Support python's negative indexing
             size_t index = (pyIndex < 0) ? self.getNbLayers() + pyIndex : pyIndex;
@@ -214,7 +212,6 @@ namespace tensorrt
             .value("CONCATENATION", LayerType::kCONCATENATION, LayerTypeDoc::CONCATENATION)
             .value("ELEMENTWISE", LayerType::kELEMENTWISE, LayerTypeDoc::ELEMENTWISE)
             .value("PLUGIN", LayerType::kPLUGIN, LayerTypeDoc::PLUGIN)
-            .value("RNN", LayerType::kRNN, LayerTypeDoc::RNN)
             .value("UNARY", LayerType::kUNARY, LayerTypeDoc::UNARY)
             .value("PADDING", LayerType::kPADDING, LayerTypeDoc::PADDING)
             .value("SHUFFLE", LayerType::kSHUFFLE, LayerTypeDoc::SHUFFLE)
@@ -237,6 +234,8 @@ namespace tensorrt
             .value("LOOP_OUTPUT", LayerType::kLOOP_OUTPUT, LayerTypeDoc::LOOP_OUTPUT)
             .value("SELECT", LayerType::kSELECT, LayerTypeDoc::SELECT)
             .value("FILL", LayerType::kFILL, LayerTypeDoc::FILL)
+            .value("QUANTIZE", LayerType::kQUANTIZE, LayerTypeDoc::QUANTIZE)
+            .value("DEQUANTIZE", LayerType::kDEQUANTIZE, LayerTypeDoc::DEQUANTIZE)
         ; // LayerType
 
         // Bind to a Python enum called TensorLocation.
@@ -257,6 +256,7 @@ namespace tensorrt
             .value("HWC", TensorFormat::kHWC, TensorFormatDoc::HWC)
             .value("DLA_LINEAR", TensorFormat::kDLA_LINEAR, TensorFormatDoc::DLA_LINEAR)
             .value("DLA_HWC4", TensorFormat::kDLA_HWC4, TensorFormatDoc::DLA_HWC4)
+            .value("HWC16", TensorFormat::kHWC16, TensorFormatDoc::HWC16)
         ; // TensorFormat
 
         // ITensor
@@ -274,7 +274,6 @@ namespace tensorrt
             .def_property("dynamic_range", lambdas::get_dynamic_range, lambdas::set_dynamic_range)
             .def_property("allowed_formats", &ITensor::getAllowedFormats, &ITensor::setAllowedFormats)
             .def("set_dynamic_range", &ITensor::setDynamicRange, "min"_a, "max"_a, ITensorDoc::set_dynamic_range)
-            .def("get_dynamic_range", &ITensor::getDynamicRange, ITensorDoc::get_dynamic_range)
             .def("reset_dynamic_range", &ITensor::resetDynamicRange, ITensorDoc::reset_dynamic_range)
         ;
 
@@ -305,10 +304,10 @@ namespace tensorrt
         ;
 
         py::class_<IConvolutionLayer, ILayer, std::unique_ptr<IConvolutionLayer, py::nodelete>>(m, "IConvolutionLayer", IConvolutionLayerDoc::descr)
-            .def_property("kernel_size", &IConvolutionLayer::getKernelSize, &IConvolutionLayer::setKernelSize)
+            .def_property("kernel_size", utils::deprecateMember(&IConvolutionLayer::getKernelSize, "kernel_size_nd"), utils::deprecateMember(&IConvolutionLayer::setKernelSize, "kernel_size_nd"))
             .def_property("num_output_maps", &IConvolutionLayer::getNbOutputMaps, &IConvolutionLayer::setNbOutputMaps)
-            .def_property("stride", &IConvolutionLayer::getStride, &IConvolutionLayer::setStride)
-            .def_property("padding", &IConvolutionLayer::getPadding, &IConvolutionLayer::setPadding)
+            .def_property("stride", utils::deprecateMember(&IConvolutionLayer::getStride, "stride_nd"), utils::deprecateMember(&IConvolutionLayer::setStride, "stride_nd"))
+            .def_property("padding", utils::deprecateMember(&IConvolutionLayer::getPadding, "padding_nd"), utils::deprecateMember(&IConvolutionLayer::setPadding, "padding_nd"))
             .def_property("pre_padding", &IConvolutionLayer::getPrePadding, &IConvolutionLayer::setPrePadding)
             .def_property("post_padding", &IConvolutionLayer::getPostPadding, &IConvolutionLayer::setPostPadding)
             .def_property("padding_mode", &IConvolutionLayer::getPaddingMode, &IConvolutionLayer::setPaddingMode)
@@ -316,7 +315,7 @@ namespace tensorrt
             // Return numpy arrays instead of weights.
             .def_property("kernel", lambdas::conv_get_kernel, py::cpp_function(&IConvolutionLayer::setKernelWeights, py::keep_alive<1, 2>{}))
             .def_property("bias", lambdas::conv_get_bias, py::cpp_function(&IConvolutionLayer::setBiasWeights, py::keep_alive<1, 2>{}))
-            .def_property("dilation", &IConvolutionLayer::getDilation, &IConvolutionLayer::setDilation)
+            .def_property("dilation", utils::deprecateMember(&IConvolutionLayer::getDilation, "dilation_nd"), utils::deprecateMember(&IConvolutionLayer::setDilation, "dilation_nd"))
             .def_property("kernel_size_nd", &IConvolutionLayer::getKernelSizeNd, &IConvolutionLayer::setKernelSizeNd)
             .def_property("stride_nd", &IConvolutionLayer::getStrideNd, &IConvolutionLayer::setStrideNd)
             .def_property("padding_nd", &IConvolutionLayer::getPaddingNd, &IConvolutionLayer::setPaddingNd)
@@ -360,9 +359,9 @@ namespace tensorrt
 
         py::class_<IPoolingLayer, ILayer, std::unique_ptr<IPoolingLayer, py::nodelete>>(m, "IPoolingLayer", IPoolingLayerDoc::descr)
             .def_property("type", &IPoolingLayer::getPoolingType, &IPoolingLayer::setPoolingType)
-            .def_property("window_size", &IPoolingLayer::getWindowSize, &IPoolingLayer::setWindowSize)
-            .def_property("stride", &IPoolingLayer::getStride, &IPoolingLayer::setStride)
-            .def_property("padding", &IPoolingLayer::getPadding, &IPoolingLayer::setPadding)
+            .def_property("window_size", utils::deprecateMember(&IPoolingLayer::getWindowSize, "windnow_size_nd"), utils::deprecateMember(&IPoolingLayer::setWindowSize, "windnow_size_nd"))
+            .def_property("stride", utils::deprecateMember(&IPoolingLayer::getStride, "stride_nd"), utils::deprecateMember(&IPoolingLayer::setStride, "stride_nd"))
+            .def_property("padding", utils::deprecateMember(&IPoolingLayer::getPadding, "padding_nd"), utils::deprecateMember(&IPoolingLayer::setPadding, "padding_nd"))
             .def_property("pre_padding", &IPoolingLayer::getPrePadding, &IPoolingLayer::setPrePadding)
             .def_property("post_padding", &IPoolingLayer::getPostPadding, &IPoolingLayer::setPostPadding)
             .def_property("padding_mode", &IPoolingLayer::getPaddingMode, &IPoolingLayer::setPaddingMode)
@@ -392,7 +391,15 @@ namespace tensorrt
             .def_property("shift", lambdas::scale_get_shift, py::cpp_function(&IScaleLayer::setShift, py::keep_alive<1, 2>{}))
             .def_property("scale", lambdas::scale_get_scale, py::cpp_function(&IScaleLayer::setScale, py::keep_alive<1, 2>{}))
             .def_property("power", lambdas::scale_get_power, py::cpp_function(&IScaleLayer::setPower, py::keep_alive<1, 2>{}))
-            .def_property_readonly("channel_axis", &IScaleLayer::getChannelAxis)
+            .def_property("channel_axis", &IScaleLayer::getChannelAxis, &IScaleLayer::setChannelAxis)
+        ;
+
+        py::class_<IQuantizeLayer, ILayer, std::unique_ptr<IQuantizeLayer, py::nodelete>>(m, "IQuantizeLayer", IQuantizeLayerDoc::descr)
+            .def_property("axis", &IQuantizeLayer::getAxis, &IQuantizeLayer::setAxis)
+        ;
+
+        py::class_<IDequantizeLayer, ILayer, std::unique_ptr<IDequantizeLayer, py::nodelete>>(m, "IDequantizeLayer", IDequantizeLayerDoc::descr)
+            .def_property("axis", &IDequantizeLayer::getAxis, &IDequantizeLayer::setAxis)
         ;
 
         py::class_<ISoftMaxLayer, ILayer, std::unique_ptr<ISoftMaxLayer, py::nodelete>>(m, "ISoftMaxLayer", ISoftMaxLayerDoc::descr)
@@ -404,10 +411,10 @@ namespace tensorrt
         ;
 
         py::class_<IDeconvolutionLayer, ILayer, std::unique_ptr<IDeconvolutionLayer, py::nodelete>>(m, "IDeconvolutionLayer", IDeconvolutionLayerDoc::descr)
-            .def_property("kernel_size", &IDeconvolutionLayer::getKernelSize, &IDeconvolutionLayer::setKernelSize)
+            .def_property("kernel_size", utils::deprecateMember(&IDeconvolutionLayer::getKernelSize, "kernel_size_nd"), utils::deprecateMember(&IDeconvolutionLayer::setKernelSize, "kernel_size_nd"))
+            .def_property("stride", utils::deprecateMember(&IDeconvolutionLayer::getStride, "stride_nd"), utils::deprecateMember(&IDeconvolutionLayer::setStride, "stride_nd"))
+            .def_property("padding", utils::deprecateMember(&IDeconvolutionLayer::getPadding, "padding_nd"), utils::deprecateMember(&IDeconvolutionLayer::setPadding, "padding_nd"))
             .def_property("num_output_maps", &IDeconvolutionLayer::getNbOutputMaps, &IDeconvolutionLayer::setNbOutputMaps)
-            .def_property("stride", &IDeconvolutionLayer::getStride, &IDeconvolutionLayer::setStride)
-            .def_property("padding", &IDeconvolutionLayer::getPadding, &IDeconvolutionLayer::setPadding)
             .def_property("pre_padding", &IDeconvolutionLayer::getPrePadding, &IDeconvolutionLayer::setPrePadding)
             .def_property("post_padding", &IDeconvolutionLayer::getPostPadding, &IDeconvolutionLayer::setPostPadding)
             .def_property("padding_mode", &IDeconvolutionLayer::getPaddingMode, &IDeconvolutionLayer::setPaddingMode)
@@ -464,20 +471,6 @@ namespace tensorrt
             .value("SKIP", RNNInputMode::kSKIP, RNNInputModeDoc::SKIP)
         ;
 
-        py::class_<IRNNLayer, ILayer, std::unique_ptr<IRNNLayer, py::nodelete>>(m, "IRNNLayer", IRNNLayerDoc::descr)
-            .def_property_readonly("num_layers", &IRNNLayer::getLayerCount)
-            .def_property_readonly("hidden_size", &IRNNLayer::getHiddenSize)
-            .def_property_readonly("max_seq_length", &IRNNLayer::getSeqLength)
-            .def_property("op", &IRNNLayer::getOperation, &IRNNLayer::setOperation)
-            .def_property("input_mode", &IRNNLayer::getInputMode, &IRNNLayer::setInputMode)
-            .def_property("direction", &IRNNLayer::getDirection, &IRNNLayer::setDirection)
-            .def_property("weights", lambdas::rnn_get_weights, py::cpp_function(&IRNNLayer::setWeights, py::keep_alive<1, 2>{}))
-            .def_property("bias", lambdas::rnn_get_bias, py::cpp_function(&IRNNLayer::setBias, py::keep_alive<1, 2>{}))
-            .def_property_readonly("data_length", &IRNNLayer::getDataLength)
-            .def_property("hidden_state", &IRNNLayer::getHiddenState, &IRNNLayer::setHiddenState)
-            .def_property("cell_state", &IRNNLayer::getCellState, &IRNNLayer::setCellState)
-        ;
-
         py::enum_<RNNGateType>(m, "RNNGateType", RNNGateTypeDoc::descr)
             .value("INPUT", RNNGateType::kINPUT, RNNGateTypeDoc::INPUT)
             .value("OUTPUT", RNNGateType::kOUTPUT, RNNGateTypeDoc::OUTPUT)
@@ -503,14 +496,6 @@ namespace tensorrt
             .def("get_bias_for_gate", lambdas::rnnv2_get_bias, "layer_index"_a, "gate"_a, "is_w"_a, IRNNv2LayerDoc::get_bias_for_gate)
             .def_property("hidden_state", &IRNNv2Layer::getHiddenState, py::cpp_function(&IRNNv2Layer::setHiddenState, py::keep_alive<1, 2>{}))
             .def_property("cell_state", &IRNNv2Layer::getCellState, py::cpp_function(&IRNNv2Layer::setCellState, py::keep_alive<1, 2>{}))
-        ;
-
-        py::class_<IOutputDimensionsFormula, std::unique_ptr<IOutputDimensionsFormula, py::nodelete>>(m, "IOutputDimensionsFormula", IOutputDimensionsFormulaDoc::descr)
-            .def("compute", &IOutputDimensionsFormula::compute, "input_shape"_a, "kernel_shape"_a, "stride"_a, "padding"_a, "dilation"_a, "layer_name"_a, IOutputDimensionsFormulaDoc::compute)
-        ;
-
-        py::class_<IPluginLayer, ILayer, std::unique_ptr<IPluginLayer, py::nodelete>>(m, "IPluginLayer", IPluginLayerDoc::descr)
-            .def_property_readonly("plugin", &IPluginLayer::getPlugin)
         ;
 
         py::class_<IPluginV2Layer, ILayer, std::unique_ptr<IPluginV2Layer, py::nodelete>>(m, "IPluginV2Layer", IPluginV2LayerDoc::descr)
@@ -560,8 +545,8 @@ namespace tensorrt
         ;
 
         py::class_<IPaddingLayer, ILayer, std::unique_ptr<IPaddingLayer, py::nodelete>>(m, "IPaddingLayer", IPaddingLayerDoc::descr)
-            .def_property("pre_padding", &IPaddingLayer::getPrePadding, &IPaddingLayer::setPrePadding)
-            .def_property("post_padding", &IPaddingLayer::getPostPadding, &IPaddingLayer::setPostPadding)
+            .def_property("pre_padding", utils::deprecateMember(&IPaddingLayer::getPrePadding, "pre_padding_nd"), utils::deprecateMember(&IPaddingLayer::setPrePadding, "pre_padding_nd"))
+            .def_property("post_padding", utils::deprecateMember(&IPaddingLayer::getPostPadding, "post_padding_nd"), utils::deprecateMember(&IPaddingLayer::setPostPadding, "post_padding_nd"))
             .def_property("pre_padding_nd", &IPaddingLayer::getPrePaddingNd, &IPaddingLayer::setPrePaddingNd)
             .def_property("post_padding_nd", &IPaddingLayer::getPostPaddingNd, &IPaddingLayer::setPostPaddingNd)
         ;
@@ -624,8 +609,6 @@ namespace tensorrt
         py::class_<IMatrixMultiplyLayer, ILayer, std::unique_ptr<IMatrixMultiplyLayer, py::nodelete>>(m, "IMatrixMultiplyLayer", IMatrixMultiplyLayerDoc::descr)
             .def_property("op0", [](IMatrixMultiplyLayer& self) {return self.getOperation(0);}, [](IMatrixMultiplyLayer& self, MatrixOperation op) {return self.setOperation(0, op);})
             .def_property("op1", [](IMatrixMultiplyLayer& self) {return self.getOperation(1);}, [](IMatrixMultiplyLayer& self, MatrixOperation op) {return self.setOperation(1, op);})
-            .def_property("transpose0", [](IMatrixMultiplyLayer& self) {return self.getTranspose(0);}, [](IMatrixMultiplyLayer& self, bool transpose) {return self.setTranspose(0, transpose);})
-            .def_property("transpose1", [](IMatrixMultiplyLayer& self) {return self.getTranspose(1);}, [](IMatrixMultiplyLayer& self, bool transpose) {return self.setTranspose(1, transpose);})
         ;
 
         py::class_<IRaggedSoftMaxLayer, ILayer, std::unique_ptr<IRaggedSoftMaxLayer, py::nodelete>>(m, "IRaggedSoftMaxLayer", IRaggedSoftMaxLayerDoc::descr);
@@ -645,11 +628,31 @@ namespace tensorrt
             .value("LINEAR", ResizeMode::kLINEAR, ResizeModeDoc::LINEAR)
         ; // ResizeMode
 
+        py::enum_<ResizeCoordinateTransformation>(m, "ResizeCoordinateTransformation", ResizeCoordinateTransformationDoc::descr)
+            .value("ALIGN_CORNERS", ResizeCoordinateTransformation::kALIGN_CORNERS, ResizeCoordinateTransformationDoc::ALIGN_CORNERS)
+            .value("ASYMMETRIC", ResizeCoordinateTransformation::kASYMMETRIC, ResizeCoordinateTransformationDoc::ASYMMETRIC)
+            .value("HALF_PIXEL", ResizeCoordinateTransformation::kHALF_PIXEL, ResizeCoordinateTransformationDoc::HALF_PIXEL)
+        ; // ResizeCoordinateTransformation
+
+        py::enum_<ResizeSelector>(m, "ResizeSelector", ResizeSelectorDoc::descr)
+            .value("FORMULA", ResizeSelector::kFORMULA,ResizeSelectorDoc::FORMULA)
+            .value("UPPER", ResizeSelector::kUPPER, ResizeSelectorDoc::UPPER)
+        ; // ResizeSelector
+
+        py::enum_<ResizeRoundMode>(m, "ResizeRoundMode", ResizeRoundModeDoc::descr)
+            .value("HALF_UP", ResizeRoundMode::kHALF_UP,ResizeRoundModeDoc::HALF_UP)
+            .value("HALF_DOWN", ResizeRoundMode::kHALF_DOWN, ResizeRoundModeDoc::HALF_DOWN)
+            .value("FLOOR", ResizeRoundMode::kFLOOR,ResizeRoundModeDoc::FLOOR)
+            .value("CEIL", ResizeRoundMode::kCEIL, ResizeRoundModeDoc::CEIL)
+        ; // ResizeRoundMode
+
         py::class_<IResizeLayer, ILayer, std::unique_ptr<IResizeLayer, py::nodelete>>(m, "IResizeLayer", IResizeLayerDoc::descr)
             .def_property("shape", &IResizeLayer::getOutputDimensions, &IResizeLayer::setOutputDimensions)
             .def_property("scales", lambdas::resize_get_scales, lambdas::resize_set_scales)
             .def_property("resize_mode", &IResizeLayer::getResizeMode, &IResizeLayer::setResizeMode)
-            .def_property("align_corners", &IResizeLayer::getAlignCorners, &IResizeLayer::setAlignCorners)
+            .def_property("coordinate_transformation", &IResizeLayer::getCoordinateTransformation, &IResizeLayer::setCoordinateTransformation)
+            .def_property("selector_for_single_pixel", &IResizeLayer::getSelectorForSinglePixel, &IResizeLayer::setSelectorForSinglePixel)
+            .def_property("nearest_rounding", &IResizeLayer::getNearestRounding, &IResizeLayer::setNearestRounding )
             .def("set_input", &IResizeLayer::setInput, "index"_a, "tensor"_a, IResizeLayerDoc::set_input)
         ;
 
@@ -684,7 +687,7 @@ namespace tensorrt
 
         py::class_<IIteratorLayer, ILoopBoundaryLayer, std::unique_ptr<IIteratorLayer, py::nodelete>>(m, "IIteratorLayer", IIteratorLayerDoc::descr)
             .def_property("axis", &IIteratorLayer::getAxis, &IIteratorLayer::setAxis)
-            .def_property("reverse", &IIteratorLayer::getReverse, &IIteratorLayer::getReverse)
+            .def_property("reverse", &IIteratorLayer::getReverse, &IIteratorLayer::setReverse)
         ;
 
         py::class_<ILoop, std::unique_ptr<ILoop, py::nodelete>>(m, "ILoop", ILoopDoc::descr)
@@ -713,22 +716,21 @@ namespace tensorrt
 
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
         // Additionally, we use reference_internal so that pybind11 does not free layers when they go out of scope.
-        py::class_<INetworkDefinition, std::unique_ptr<INetworkDefinition, py::nodelete> >(m, "INetworkDefinition", INetworkDefinitionDoc::descr)
+        py::class_<INetworkDefinition>(m, "INetworkDefinition", INetworkDefinitionDoc::descr)
             .def_property("name", &INetworkDefinition::getName, &INetworkDefinition::setName)
-            .def_property("pooling_output_dimensions_formula", &INetworkDefinition::getPoolingOutputDimensionsFormula, &INetworkDefinition::setPoolingOutputDimensionsFormula)
-            .def_property("convolution_output_dimensions_formula", &INetworkDefinition::getConvolutionOutputDimensionsFormula, &INetworkDefinition::setConvolutionOutputDimensionsFormula)
-            .def_property("deconvolution_output_dimensions_formula", &INetworkDefinition::getDeconvolutionOutputDimensionsFormula, &INetworkDefinition::setDeconvolutionOutputDimensionsFormula)
             .def_property_readonly("num_layers", &INetworkDefinition::getNbLayers)
             .def_property_readonly("num_inputs", &INetworkDefinition::getNbInputs)
             .def_property_readonly("num_outputs", &INetworkDefinition::getNbOutputs)
             .def_property_readonly("has_implicit_batch_dimension", &INetworkDefinition::hasImplicitBatchDimension)
             .def_property_readonly("has_explicit_precision", &INetworkDefinition::hasExplicitPrecision)
+            .def_property("error_recorder", &INetworkDefinition::getErrorRecorder,
+                py::cpp_function(&INetworkDefinition::setErrorRecorder, py::keep_alive<1, 2>{}))
             .def("mark_output", &INetworkDefinition::markOutput, "tensor"_a, INetworkDefinitionDoc::mark_output)
             // Layers
             .def("add_input", &INetworkDefinition::addInput, "name"_a, "dtype"_a, "shape"_a,
                 INetworkDefinitionDoc::add_input,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_convolution", lambdas::add_convolution, "input"_a, "num_output_maps"_a, "kernel_shape"_a,
+            .def("add_convolution", utils::deprecate(lambdas::add_convolution, "add_convolution_nd"), "input"_a, "num_output_maps"_a, "kernel_shape"_a,
                 "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{}, INetworkDefinitionDoc::add_convolution,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_convolution_nd", lambdas::add_convolution_nd, "input"_a, "num_output_maps"_a,
@@ -741,7 +743,7 @@ namespace tensorrt
             .def("add_activation", &INetworkDefinition::addActivation, "input"_a, "type"_a,
                 INetworkDefinitionDoc::add_activation,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_pooling", &INetworkDefinition::addPooling, "input"_a, "type"_a, "window_size"_a,
+            .def("add_pooling", utils::deprecateMember(&INetworkDefinition::addPooling, "add_pooling_nd"), "input"_a, "type"_a, "window_size"_a,
                 INetworkDefinitionDoc::add_pooling,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_pooling_nd", &INetworkDefinition::addPoolingNd, "input"_a, "type"_a, "window_size"_a,
@@ -760,7 +762,7 @@ namespace tensorrt
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_concatenation", lambdas::add_concatenation, "inputs"_a, INetworkDefinitionDoc::add_concatenation,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_deconvolution", lambdas::add_deconvolution, "input"_a, "num_output_maps"_a,
+            .def("add_deconvolution", utils::deprecate(lambdas::add_deconvolution, "add_deconvolution_nd"), "input"_a, "num_output_maps"_a,
                 "kernel_shape"_a, "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{},
                 INetworkDefinitionDoc::add_deconvolution,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
@@ -771,15 +773,9 @@ namespace tensorrt
             .def("add_elementwise", &INetworkDefinition::addElementWise, "input1"_a, "input2"_a, "op"_a,
                 INetworkDefinitionDoc::add_elementwise,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_rnn", &INetworkDefinition::addRNN, "input"_a, "layer_count"_a, "hidden_size"_a,
-                "max_seq_length"_a, "op"_a, "mode"_a, "direction"_a, "weights"_a, "bias"_a, py::keep_alive<1, 9>{},
-                py::keep_alive<1, 10>{}, INetworkDefinitionDoc::add_rnn,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_plugin", lambdas::add_plugin, "inputs"_a, "plugin"_a, INetworkDefinitionDoc::add_plugin,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_unary", &INetworkDefinition::addUnary, "input"_a, "op"_a, INetworkDefinitionDoc::add_unary,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_padding", &INetworkDefinition::addPadding, "input"_a, "pre_padding"_a, "post_padding"_a,
+            .def("add_padding", utils::deprecateMember(&INetworkDefinition::addPadding, "add_padding_nd"), "input"_a, "pre_padding"_a, "post_padding"_a,
                 INetworkDefinitionDoc::add_padding,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_padding_nd", &INetworkDefinition::addPaddingNd, "input"_a, "pre_padding"_a, "post_padding"_a,
@@ -806,19 +802,12 @@ namespace tensorrt
                 static_cast<IMatrixMultiplyLayer* (INetworkDefinition::*)(ITensor&, MatrixOperation, ITensor&, MatrixOperation)>(&INetworkDefinition::addMatrixMultiply),
                 "input0"_a, "op0"_a, "input1"_a, "op1"_a, INetworkDefinitionDoc::add_matrix_multiply,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_matrix_multiply_deprecated",
-                static_cast<IMatrixMultiplyLayer* (INetworkDefinition::*)(ITensor&, bool, ITensor&, bool)>(&INetworkDefinition::addMatrixMultiply), "input0"_a, "transpose0"_a, "input1"_a,
-                "transpose1"_a, INetworkDefinitionDoc::add_matrix_multiply_deprecated,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_constant", &INetworkDefinition::addConstant, "shape"_a, "weights"_a,
                 py::keep_alive<1, 3>{}, INetworkDefinitionDoc::add_constant,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_rnn_v2", &INetworkDefinition::addRNNv2, "input"_a, "layer_count"_a,
+            .def("add_rnn_v2", utils::deprecateMember(&INetworkDefinition::addRNNv2, "addLoop"), "input"_a, "layer_count"_a,
                 "hidden_size"_a, "max_seq_length"_a, "op"_a,
                 py::keep_alive<1, 0>{}, INetworkDefinitionDoc::add_rnn_v2)
-            .def("add_plugin_ext", lambdas::add_plugin_ext, "inputs"_a, "plugin"_a,
-                INetworkDefinitionDoc::add_plugin_ext,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_identity", &INetworkDefinition::addIdentity, "input"_a,
                 INetworkDefinitionDoc::add_identity,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
@@ -838,10 +827,17 @@ namespace tensorrt
                 "else_input"_a, INetworkDefinitionDoc::add_select,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_fill", &INetworkDefinition::addFill, "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
+            .def("add_quantize",  &INetworkDefinition::addQuantize, "input"_a, "scale"_a,
+                INetworkDefinitionDoc::add_quantize,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_dequantize", &INetworkDefinition::addDequantize, "input"_a, "scale"_a,
+                INetworkDefinitionDoc::add_dequantize,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
             .def("mark_output_for_shapes", &INetworkDefinition::markOutputForShapes, "tensor"_a, INetworkDefinitionDoc::mark_output_for_shapes)
             .def("unmark_output_for_shapes", &INetworkDefinition::unmarkOutputForShapes, "tensor"_a, INetworkDefinitionDoc::unmark_output_for_shapes)
+            .def("set_weights_name", &INetworkDefinition::setWeightsName, "weights"_a, "name"_a, INetworkDefinitionDoc::set_weights_name)
             // Getters
             .def("get_layer", &INetworkDefinition::getLayer, "index"_a, INetworkDefinitionDoc::get_layer,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
@@ -853,7 +849,7 @@ namespace tensorrt
             .def("__len__", &INetworkDefinition::getNbLayers)
             .def("__getitem__", lambdas::network_getitem, py::return_value_policy::reference_internal,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("__del__", &INetworkDefinition::destroy)
+            .def("__del__", &utils::doNothingDel<INetworkDefinition>)
         ;
 
     }

@@ -30,17 +30,20 @@ def is_dla():
 
 
 def get_requirements():
-    def get_version_range(envvar):
+    def get_version_range(envvar, needs_exact_minor=False):
         vers = os.environ.get(envvar).replace("cuda-", "")
         major, minor = map(int, vers.split("."))
-        return ">={major},<{major_next}".format(major=major, major_next=major + 1)
+        if needs_exact_minor:
+            return ">={major}.{minor},<{major}.{minor_next}".format(major=major, minor=minor, minor_next=minor + 1)
+        else:
+            return ">={major},<{major_next}".format(major=major, major_next=major + 1)
 
     if is_standalone():
         return [
             "nvidia-cuda-runtime" + get_version_range("CUDA"),
             "nvidia-cudnn" + get_version_range("CUDNN"),
             "nvidia-cublas" + get_version_range("CUDA"),
-            "nvidia-cuda-nvrtc" + get_version_range("CUDA"),
+            "nvidia-cuda-nvrtc" + get_version_range("CUDA", needs_exact_minor=True),
             ]
     return []
 

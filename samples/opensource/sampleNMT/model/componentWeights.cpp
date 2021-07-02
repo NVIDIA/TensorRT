@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+#include "common.h"
 #include "componentWeights.h"
-#include <cassert>
 #include <string>
 
 namespace nmtSample
@@ -34,7 +34,7 @@ std::istream& operator>>(std::istream& input, ComponentWeights& value)
 
     size_t metaDataCount = ((int32_t*) footer)[0];
     std::string str(footer + sizeof(int32_t), footer + footerSize);
-    assert(footerString.compare(str) == 0);
+    ASSERT(footerString.compare(str) == 0);
     free(footer);
 
     input.seekg(-(footerSize + metaDataCount * sizeof(int32_t)), std::ios::end);

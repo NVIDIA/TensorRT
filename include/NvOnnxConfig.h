@@ -44,24 +44,23 @@ namespace nvonnxparser
 //!
 class IOnnxConfig
 {
-protected:
-    virtual ~IOnnxConfig() {}
-
 public:
+    virtual ~IOnnxConfig() noexcept = default;
     //!
     //! \typedef Verbosity
     //! \brief Defines Verbosity level.
     //!
-    typedef int Verbosity;
+    typedef int32_t Verbosity;
 
     //!
     //! \brief Set the Model Data Type.
     //!
-    //! Sets the Model DataType, one of the following: float -d 32 (default), half precision -d 16, and int8 -d 8 data types.
+    //! Sets the Model DataType, one of the following: float -d 32 (default), half precision -d 16, and int8 -d 8 data
+    //! types.
     //!
     //! \see getModelDtype()
     //!
-    virtual void setModelDtype(const nvinfer1::DataType) TRTNOEXCEPT = 0;
+    virtual void setModelDtype(const nvinfer1::DataType) noexcept = 0;
 
     //!
     //! \brief Get the Model Data Type.
@@ -70,7 +69,7 @@ public:
     //!
     //! \see setModelDtype() and #DataType
     //!
-    virtual nvinfer1::DataType getModelDtype() const TRTNOEXCEPT = 0;
+    virtual nvinfer1::DataType getModelDtype() const noexcept = 0;
 
     //!
     //! \brief Get the Model FileName.
@@ -79,7 +78,7 @@ public:
     //!
     //! \see setModelFileName()
     //!
-    virtual const char* getModelFileName() const TRTNOEXCEPT = 0;
+    virtual const char* getModelFileName() const noexcept = 0;
 
     //!
     //! \brief Set the Model File Name.
@@ -92,7 +91,7 @@ public:
     //!
     //! \see getModelFileName()
     //!
-    virtual void setModelFileName(const char* onnxFilename) TRTNOEXCEPT = 0;
+    virtual void setModelFileName(const char* onnxFilename) noexcept = 0;
 
     //!
     //! \brief Get the Verbosity Level.
@@ -101,27 +100,40 @@ public:
     //!
     //! \see addVerbosity(), reduceVerbosity()
     //!
-    virtual Verbosity getVerbosityLevel() const TRTNOEXCEPT = 0;
+    virtual Verbosity getVerbosityLevel() const noexcept = 0;
 
     //!
     //! \brief Increase the Verbosity Level.
     //!
     //! \return The Verbosity Level.
     //!
-    //! \see addVerbosity(), reduceVerbosity(), setVerbosity(Verbosity)
+    //! \see reduceVerbosity(), setVerbosity(Verbosity)
     //!
-    virtual void addVerbosity() TRTNOEXCEPT = 0;               //!< Increase verbosity Level.
-    virtual void reduceVerbosity() TRTNOEXCEPT = 0;            //!< Decrease verbosity Level.
-    virtual void setVerbosityLevel(Verbosity) TRTNOEXCEPT = 0; //!< Set to specific verbosity Level.
+    virtual void addVerbosity() noexcept = 0;
+
+    //!
+    //! \brief Reduce the Verbosity Level.
+    //!
+    //! \see addVerbosity(), setVerbosity(Verbosity)
+    //!
+    virtual void reduceVerbosity() noexcept = 0;
+
+    //!
+    //! \brief Set to specific verbosity Level.
+    //!
+    //! \see addVerbosity(), reduceVerbosity()
+    //!
+    virtual void setVerbosityLevel(Verbosity) noexcept = 0;
 
     //!
     //! \brief Returns the File Name of the Network Description as a Text File.
     //!
-    //! \return Return the name of the file containing the network description converted to a plain text, used for debugging purposes.
+    //! \return Return the name of the file containing the network description converted to a plain text, used for
+    //! debugging purposes.
     //!
     //! \see setTextFilename()
     //!
-    virtual const char* getTextFileName() const TRTNOEXCEPT = 0;
+    virtual const char* getTextFileName() const noexcept = 0;
 
     //!
     //! \brief Set the File Name of the Network Description as a Text File.
@@ -134,16 +146,17 @@ public:
     //!
     //! \see getTextFilename()
     //!
-    virtual void setTextFileName(const char* textFileName) TRTNOEXCEPT = 0;
+    virtual void setTextFileName(const char* textFileName) noexcept = 0;
 
     //!
     //! \brief Get the File Name of the Network Description as a Text File, including the weights.
     //!
-    //! \return Return the name of the file containing the network description converted to a plain text, used for debugging purposes.
+    //! \return Return the name of the file containing the network description converted to a plain text, used for
+    //! debugging purposes.
     //!
     //! \see setFullTextFilename()
     //!
-    virtual const char* getFullTextFileName() const TRTNOEXCEPT = 0;
+    virtual const char* getFullTextFileName() const noexcept = 0;
 
     //!
     //! \brief Set the File Name of the Network Description as a Text File, including the weights.
@@ -156,7 +169,7 @@ public:
     //!
     //! \see getFullTextFilename()
     //!
-    virtual void setFullTextFileName(const char* fullTextFileName) TRTNOEXCEPT = 0;
+    virtual void setFullTextFileName(const char* fullTextFileName) noexcept = 0;
 
     //!
     //! \brief Get whether the layer information will be printed.
@@ -165,19 +178,23 @@ public:
     //!
     //! \see setPrintLayerInfo()
     //!
-    virtual bool getPrintLayerInfo() const TRTNOEXCEPT = 0;
+    virtual bool getPrintLayerInfo() const noexcept = 0;
 
     //!
     //! \brief Set whether the layer information will be printed.
     //!
     //! \see getPrintLayerInfo()
     //!
-    virtual void setPrintLayerInfo(bool) TRTNOEXCEPT = 0;
+    virtual void setPrintLayerInfo(bool) noexcept = 0;
 
     //!
     //! \brief Destroy IOnnxConfig object.
     //!
-    virtual void destroy() TRTNOEXCEPT = 0;
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //!
+    //! \warning Calling destroy on a managed pointer will result in a double-free error.
+    //!
+    TRT_DEPRECATED virtual void destroy() noexcept = 0;
 
 }; // class IOnnxConfig
 

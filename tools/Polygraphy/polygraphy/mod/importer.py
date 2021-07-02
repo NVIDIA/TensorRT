@@ -80,32 +80,38 @@ def lazy_import(name, log=True, version=None):
                 A lazily loaded module. When an attribute is first accessed,
                 the module will be imported.
     """
-    assert version is None or version == LATEST_VERSION or any(version.startswith(char) for char in ["=", ">", "<"]), "version must be formatted as a version string!"
+    assert (
+        version is None or version == LATEST_VERSION or any(version.startswith(char) for char in ["=", ">", "<"])
+    ), "version must be formatted as a version string!"
 
     if "polygraphy" not in name:
         _all_external_lazy_imports.add(name)
-
 
     def import_mod():
         from polygraphy import config
         from polygraphy.logger import G_LOGGER, LogMode
 
         def install_mod(raise_error=True):
-            pkg = _MODULE_TO_PKG_NAME.get(name, name)
-            extra_flags = _MODULE_EXTRA_FLAGS.get(name, [])
+            modname = name.split(".")[0]
+            pkg = _MODULE_TO_PKG_NAME.get(modname, modname)
+            extra_flags = _MODULE_EXTRA_FLAGS.get(modname, [])
 
             if version == LATEST_VERSION:
                 extra_flags.append("--upgrade")
             elif version is not None:
                 pkg += version
 
-            cmd = [sys.executable, "-m", "pip", "install", pkg] + extra_flags
-            G_LOGGER.info("{:} is required, but not installed. Attempting to install now.\n"
-                          "Running: {:}".format(pkg, " ".join(cmd)))
+            cmd = config.INSTALL_CMD + [pkg] + extra_flags
+            G_LOGGER.info(
+                "{:} is required, but not installed. Attempting to install now.\n"
+                "Running: {:}".format(pkg, " ".join(cmd))
+            )
             status = sp.run(cmd)
             if status.returncode != 0:
-                G_LOGGER.log("Could not automatically install required package: {:}. Please install it manually.".format(pkg),
-                             severity=G_LOGGER.CRITICAL if raise_error else G_LOGGER.WARNING)
+                G_LOGGER.log(
+                    "Could not automatically install required package: {:}. Please install it manually.".format(pkg),
+                    severity=G_LOGGER.CRITICAL if raise_error else G_LOGGER.WARNING,
+                )
 
             mod = importlib.import_module(name)
             return mod
@@ -117,25 +123,32 @@ def lazy_import(name, log=True, version=None):
             if config.AUTOINSTALL_DEPS:
                 mod = install_mod()
             else:
-                G_LOGGER.error("Module: {:} is required but could not be imported.\n"
-                               "You can try setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables "
-                               "to allow Polygraphy to automatically install missing packages.\n"
-                               "Note that this may cause existing packages to be overwritten - hence, it may be "
-                               "desirable to use a Python virtual environment or container. ".format(name))
+                G_LOGGER.error(
+                    "Module: {:} is required but could not be imported.\n"
+                    "You can try setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables "
+                    "to allow Polygraphy to automatically install missing packages.\n"
+                    "Note that this may cause existing packages to be overwritten - hence, it may be "
+                    "desirable to use a Python virtual environment or container. ".format(name)
+                )
                 raise
 
         # Auto-upgrade if necessary
         if version is not None and hasattr(mod, "__version__") and not _version_ok(mod.__version__, version):
             if config.AUTOINSTALL_DEPS:
-                G_LOGGER.info("Note: Package: '{name}' version {cur_ver} is installed, but version {rec_ver} is recommended.\n"
-                              "Upgrading...".format(name=name, cur_ver=mod.__version__, rec_ver=version))
-                mod = install_mod(raise_error=False) # We can try to use the other version if install fails.
+                G_LOGGER.info(
+                    "Note: Package: '{name}' version {cur_ver} is installed, but version {rec_ver} is recommended.\n"
+                    "Upgrading...".format(name=name, cur_ver=mod.__version__, rec_ver=version)
+                )
+                mod = install_mod(raise_error=False)  # We can try to use the other version if install fails.
             elif version != LATEST_VERSION:
-                G_LOGGER.warning("Package: '{name}' version {cur_ver} is installed, but version {rec_ver} is recommended.\n"
-                                 "Consider installing the recommended version or setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your "
-                                 "environment variables to do so automatically. ".format(
-                                     name=name, cur_ver=mod.__version__, rec_ver=version),
-                                 mode=LogMode.ONCE)
+                G_LOGGER.warning(
+                    "Package: '{name}' version {cur_ver} is installed, but version {rec_ver} is recommended.\n"
+                    "Consider installing the recommended version or setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your "
+                    "environment variables to do so automatically. ".format(
+                        name=name, cur_ver=mod.__version__, rec_ver=version
+                    ),
+                    mode=LogMode.ONCE,
+                )
 
         if log:
             G_LOGGER.module_info(mod)
@@ -146,7 +159,6 @@ def lazy_import(name, log=True, version=None):
         def __getattr__(self, name):
             self = import_mod()
             return getattr(self, name)
-
 
         def __setattr__(self, name, value):
             self = import_mod()
@@ -192,8 +204,10 @@ def import_from_script(path, name):
     sys.path.insert(0, dir)
 
     with contextlib.ExitStack() as stack:
+
         def reset_sys_path():
             del sys.path[0]
+
         stack.callback(reset_sys_path)
 
         mod = importlib.import_module(modname)
@@ -203,6 +217,8 @@ def import_from_script(path, name):
             ext = os.path.splitext(path)[1]
             err_msg = "Could not import symbol: {:} from script: {:}".format(name, path)
             if ext != ".py":
-                err_msg += "\nThis could be because the extension of the file is not '.py'. Note: The extension is: {:}".format(ext)
+                err_msg += "\nThis could be because the extension of the file is not '.py'. Note: The extension is: {:}".format(
+                    ext
+                )
             err_msg += "\nNote: Error was: {:}".format(err)
             G_LOGGER.critical(err_msg)

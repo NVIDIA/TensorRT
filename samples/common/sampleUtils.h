@@ -66,7 +66,8 @@ inline int volume(const nvinfer1::Dims& d)
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int>());
 }
 
-inline int volume(const nvinfer1::Dims& dims, const nvinfer1::Dims& strides, int vecDim, int comps, int batch)
+//! comps is the number of components in a vector. Ignored if vecDim < 0.
+inline int64_t volume(const nvinfer1::Dims& dims, const nvinfer1::Dims& strides, int vecDim, int comps, int batch)
 {
     int maxNbElems = 1;
     for (int i = 0; i < dims.nbDims; ++i)
@@ -84,10 +85,10 @@ inline int volume(const nvinfer1::Dims& dims, const nvinfer1::Dims& strides, int
         }
         maxNbElems = std::max(maxNbElems, d * strides.d[i]);
     }
-    return maxNbElems * batch * (vecDim < 0 ? 1 : comps);
+    return static_cast<int64_t>(maxNbElems) * batch * (vecDim < 0 ? 1 : comps);
 }
 
-inline int volume(nvinfer1::Dims dims, int vecDim, int comps, int batch)
+inline int64_t volume(nvinfer1::Dims dims, int vecDim, int comps, int batch)
 {
     if (vecDim != -1)
     {
@@ -104,16 +105,6 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
     }
     return os;
 }
-
-inline std::ostream& operator<<(std::ostream& os, const std::vector<int>& vec)
-{
-    for (int i = 0, e = static_cast<int>(vec.size()); i < e; ++i)
-    {
-        os << (i ? "x" : "") << vec[i];
-    }
-    return os;
-}
-
 inline std::ostream& operator<<(std::ostream& os, const nvinfer1::WeightsRole role)
 {
     switch (role)
@@ -143,8 +134,22 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::WeightsRole ro
         os << "Constant";
         break;
     }
+    case nvinfer1::WeightsRole::kANY:
+    {
+        os << "Any";
+        break;
+    }
     }
 
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const std::vector<int>& vec)
+{
+    for (int i = 0, e = static_cast<int>(vec.size()); i < e; ++i)
+    {
+        os << (i ? "x" : "") << vec[i];
+    }
     return os;
 }
 
@@ -156,13 +161,13 @@ inline nvinfer1::Dims toDims(const std::vector<int>& vec)
         sample::gLogWarning << "Vector too long, only first 8 elements are used in dimension." << std::endl;
     }
     // Pick first nvinfer1::Dims::MAX_DIMS elements
-    nvinfer1::Dims dims{std::min(static_cast<int>(vec.size()), limit), {}, {}};
+    nvinfer1::Dims dims{std::min(static_cast<int>(vec.size()), limit), {}};
     std::copy_n(vec.begin(), dims.nbDims, std::begin(dims.d));
     return dims;
 }
 
 template <typename T>
-inline void fillBuffer(void* buffer, int volume, T min, T max)
+inline void fillBuffer(void* buffer, int64_t volume, T min, T max)
 {
     T* typedBuffer = static_cast<T*>(buffer);
     std::default_random_engine engine;
@@ -182,7 +187,7 @@ inline void fillBuffer(void* buffer, int volume, T min, T max)
 
 // Specialization needed for custom type __half
 template <typename H>
-inline void fillBufferHalf(void* buffer, int volume, H min, H max)
+inline void fillBufferHalf(void* buffer, int64_t volume, H min, H max)
 {
     H* typedBuffer = static_cast<H*>(buffer);
     std::default_random_engine engine;
@@ -192,22 +197,41 @@ inline void fillBufferHalf(void* buffer, int volume, H min, H max)
 }
 template <>
 #if CUDA_VERSION < 10000
-inline void fillBuffer<half_float::half>(void* buffer, int volume, half_float::half min, half_float::half max)
+inline void fillBuffer<half_float::half>(void* buffer, int64_t volume, half_float::half min, half_float::half max)
 #else
-inline void fillBuffer<__half>(void* buffer, int volume, __half min, __half max)
+inline void fillBuffer<__half>(void* buffer, int64_t volume, __half min, __half max)
 #endif
 {
     fillBufferHalf(buffer, volume, min, max);
 }
 
 template <typename T>
-inline void dumpBuffer(const void* buffer, int volume, const std::string& separator, std::ostream& os)
+inline void dumpBuffer(const void* buffer, const std::string& separator, std::ostream& os, const Dims& dims,
+    const Dims& strides, int32_t vectorDim, int32_t spv)
 {
+    const int64_t volume = std::accumulate(dims.d, dims.d + dims.nbDims, 1, std::multiplies<int64_t>());
     const T* typedBuffer = static_cast<const T*>(buffer);
     std::string sep;
-    for (int v = 0; v < volume; ++v)
+    for (int64_t v = 0; v < volume; ++v)
     {
-        os << sep << typedBuffer[v];
+        int64_t curV = v;
+        int32_t dataOffset = 0;
+        for (int32_t dimIndex = dims.nbDims - 1; dimIndex >= 0; --dimIndex)
+        {
+            int32_t dimVal = curV % dims.d[dimIndex];
+            if (dimIndex == vectorDim)
+            {
+                dataOffset += (dimVal / spv) * strides.d[dimIndex] * spv + dimVal % spv;
+            }
+            else
+            {
+                dataOffset += dimVal * strides.d[dimIndex] * (vectorDim == -1 ? 1 : spv);
+            }
+            curV /= dims.d[dimIndex];
+            ASSERT(curV >= 0);
+        }
+
+        os << sep << typedBuffer[dataOffset];
         sep = separator;
     }
 }
@@ -216,7 +240,7 @@ struct Binding
 {
     bool isInput{false};
     MirroredBuffer buffer;
-    int volume{0};
+    int64_t volume{0};
     nvinfer1::DataType dataType{nvinfer1::DataType::kFLOAT};
 
     void fill(const std::string& fileName)
@@ -253,7 +277,8 @@ struct Binding
             fillBuffer<float>(buffer.getHostBuffer(), volume, -1.0, 1.0);
             break;
         }
-        case nvinfer1::DataType::kHALF: {
+        case nvinfer1::DataType::kHALF:
+        {
 #if CUDA_VERSION < 10000
             fillBuffer<half_float::half>(buffer.getHostBuffer(), volume, static_cast<half_float::half>(-1.0),
                 static_cast<half_float::half>(-1.0));
@@ -265,35 +290,37 @@ struct Binding
         }
     }
 
-    void dump(std::ostream& os, const std::string separator = " ") const
+    void dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim, int32_t spv,
+        const std::string separator = " ") const
     {
         switch (dataType)
         {
         case nvinfer1::DataType::kBOOL:
         {
-            dumpBuffer<bool>(buffer.getHostBuffer(), volume, separator, os);
+            dumpBuffer<bool>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
         case nvinfer1::DataType::kINT32:
         {
-            dumpBuffer<int32_t>(buffer.getHostBuffer(), volume, separator, os);
+            dumpBuffer<int32_t>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
         case nvinfer1::DataType::kINT8:
         {
-            dumpBuffer<int8_t>(buffer.getHostBuffer(), volume, separator, os);
+            dumpBuffer<int8_t>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
         case nvinfer1::DataType::kFLOAT:
         {
-            dumpBuffer<float>(buffer.getHostBuffer(), volume, separator, os);
+            dumpBuffer<float>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
-        case nvinfer1::DataType::kHALF: {
+        case nvinfer1::DataType::kHALF:
+        {
 #if CUDA_VERSION < 10000
-            dumpBuffer<half_float::half>(buffer.getHostBuffer(), volume, separator, os);
+            dumpBuffer<half_float::half>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
 #else
-            dumpBuffer<__half>(buffer.getHostBuffer(), volume, separator, os);
+            dumpBuffer<__half>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
 #endif
             break;
         }
@@ -304,7 +331,7 @@ struct Binding
 class Bindings
 {
 public:
-    void addBinding(int b, const std::string& name, bool isInput, int volume, nvinfer1::DataType dataType,
+    void addBinding(int b, const std::string& name, bool isInput, int64_t volume, nvinfer1::DataType dataType,
         const std::string& fileName = "")
     {
         while (mBindings.size() <= static_cast<size_t>(b))
@@ -314,7 +341,16 @@ public:
         }
         mNames[name] = b;
         mBindings[b].isInput = isInput;
-        mBindings[b].buffer.allocate(static_cast<size_t>(volume) * static_cast<size_t>(dataTypeSize(dataType)));
+        // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
+        // even for empty tensors, so allocate a dummy byte.
+        if (volume == 0)
+        {
+            mBindings[b].buffer.allocate(1);
+        }
+        else
+        {
+            mBindings[b].buffer.allocate(static_cast<size_t>(volume) * static_cast<size_t>(dataTypeSize(dataType)));
+        }
         mBindings[b].volume = volume;
         mBindings[b].dataType = dataType;
         mDevicePointers[b] = mBindings[b].buffer.getDeviceBuffer();
@@ -375,9 +411,37 @@ public:
         os << dims;
     }
 
-    void dumpBindingValues(int binding, std::ostream& os, const std::string& separator = " ") const
+    void dumpBindingValues(const nvinfer1::IExecutionContext& context, int binding, std::ostream& os,
+        const std::string& separator = " ", int32_t batch = 1) const
     {
-        mBindings[binding].dump(os, separator);
+        Dims dims = context.getBindingDimensions(binding);
+        Dims strides = context.getStrides(binding);
+        int32_t vectorDim = context.getEngine().getBindingVectorizedDim(binding);
+        const int32_t spv = context.getEngine().getBindingComponentsPerElement(binding);
+
+        if (context.getEngine().hasImplicitBatchDimension())
+        {
+            auto insertN = [](Dims& d, int32_t bs) {
+                const int32_t nbDims = d.nbDims;
+                ASSERT(nbDims < Dims::MAX_DIMS);
+                std::copy_backward(&d.d[0], &d.d[nbDims], &d.d[nbDims + 1]);
+                d.d[0] = bs;
+                d.nbDims = nbDims + 1;
+            };
+            int32_t batchStride = 0;
+            for (int32_t i = 0; i < strides.nbDims; ++i)
+            {
+                if (strides.d[i] * dims.d[i] > batchStride)
+                {
+                    batchStride = strides.d[i] * dims.d[i];
+                }
+            }
+            insertN(dims, batch);
+            insertN(strides, batchStride);
+            vectorDim = (vectorDim == -1) ? -1 : vectorDim + 1;
+        }
+
+        mBindings[binding].dump(os, dims, strides, vectorDim, spv, separator);
     }
 
     void dumpInputs(const nvinfer1::IExecutionContext& context, std::ostream& os) const
@@ -409,7 +473,8 @@ public:
                 os << n.first << ": (";
                 dumpBindingDimensions(binding, context, os);
                 os << ")" << std::endl;
-                dumpBindingValues(binding, os);
+
+                dumpBindingValues(context, binding, os);
                 os << std::endl;
             }
         }
@@ -483,6 +548,38 @@ inline bool broadcastIOFormats(const std::vector<IOFormat>& formats, size_t nbBi
         }
     }
     return broadcast;
+}
+
+inline std::vector<char> loadTimingCacheFile(const std::string inFileName)
+{
+    std::ifstream iFile(inFileName, std::ios::in | std::ios::binary);
+    if (!iFile)
+    {
+        sample::gLogWarning << "Could not read timing cache from: " << inFileName
+                            << ". A new timing cache will be generated and written." << std::endl;
+        return std::vector<char>();
+    }
+    iFile.seekg(0, std::ifstream::end);
+    size_t fsize = iFile.tellg();
+    iFile.seekg(0, std::ifstream::beg);
+    std::vector<char> content(fsize);
+    iFile.read(content.data(), fsize);
+    iFile.close();
+    sample::gLogInfo << "Loaded " << fsize << " bytes of timing cache from " << inFileName << std::endl;
+    return content;
+}
+
+inline void saveTimingCacheFile(const std::string outFileName, const IHostMemory* blob)
+{
+    std::ofstream oFile(outFileName, std::ios::out | std::ios::binary);
+    if (!oFile)
+    {
+        sample::gLogWarning << "Could not write timing cache to: " << outFileName << std::endl;
+        return;
+    }
+    oFile.write((char*) blob->data(), blob->size());
+    oFile.close();
+    sample::gLogInfo << "Saved " << blob->size() << " bytes of timing cache to " << outFileName << std::endl;
 }
 
 } // namespace sample

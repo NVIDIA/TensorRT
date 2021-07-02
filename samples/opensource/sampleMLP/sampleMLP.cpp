@@ -36,6 +36,8 @@
 #include <iostream>
 #include <sstream>
 
+using samplesCommon::SampleUniquePtr;
+
 const std::string gSampleName = "TensorRT.sample_mlp";
 
 //!
@@ -56,9 +58,6 @@ struct SampleMLPParams : public samplesCommon::SampleParams
 //!
 class SampleMLP
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleMLP(const SampleMLPParams& params)
         : mParams(params)
@@ -91,7 +90,7 @@ private:
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
-    std::vector<SampleUniquePtr<nvinfer1::IHostMemory>> weightsMemory; //!< Host weights memory holder
+    std::vector<std::unique_ptr<samplesCommon::HostMemory>> weightsMemory; //!< Host weights memory holder
 
     //!
     //! \brief Uses the API to create the MLP Network
@@ -149,7 +148,7 @@ bool SampleMLP::build()
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -167,13 +166,13 @@ bool SampleMLP::build()
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     auto inputDims = network->getInput(0)->getDimensions();
-    assert(inputDims.nbDims == 3);
+    ASSERT(inputDims.nbDims == 3);
 
-    assert(network->getNbOutputs() == 1);
+    ASSERT(network->getNbOutputs() == 1);
     auto outputDims = network->getOutput(0)->getDimensions();
-    assert(outputDims.nbDims == 3);
+    ASSERT(outputDims.nbDims == 3);
 
     return true;
 }
@@ -192,7 +191,7 @@ bool SampleMLP::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     // Currently the mnist example is only trained in FP32 mode.
     auto input = network->addInput(mParams.inputTensorNames[0].c_str(), nvinfer1::DataType::kFLOAT,
         nvinfer1::Dims3{(mParams.inputH * mParams.inputW), 1, 1});
-    assert(input != nullptr);
+    ASSERT(input != nullptr);
 
     for (int i = 0; i < 2; ++i)
     {
@@ -210,10 +209,10 @@ bool SampleMLP::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
 
     auto finalLayer = addMLPLayer(network.get(), *input, mParams.outputSize, mWeightMap["outputWeights"].second,
         mWeightMap["outputBias"].second, nvinfer1::ActivationType::kSIGMOID, -1);
-    assert(finalLayer != nullptr);
+    ASSERT(finalLayer != nullptr);
     // Run topK to get the final result
     auto topK = network->addTopK(*finalLayer->getOutput(0), nvinfer1::TopKOperation::kMAX, 1, 0x1);
-    assert(topK != nullptr);
+    ASSERT(topK != nullptr);
     topK->setName("OutputTopK");
     topK->getOutput(1)->setName(mParams.outputTensorNames[0].c_str());
     network->markOutput(*topK->getOutput(1));
@@ -222,8 +221,6 @@ bool SampleMLP::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     // Build engine
     builder->setMaxBatchSize(mParams.batchSize);
     config->setMaxWorkspaceSize(16_MiB);
-    builder->setFp16Mode(mParams.fp16);
-    builder->setInt8Mode(mParams.int8);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
@@ -231,13 +228,37 @@ bool SampleMLP::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
-        samplesCommon::setAllTensorScales(network.get(), 64.0f, 64.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 64.0f, 64.0f);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+    if (!mEngine)
+    {
+        return false;
+    }
     if (!mEngine)
     {
         return false;
@@ -264,7 +285,7 @@ bool SampleMLP::infer()
     }
 
     // Read the input data into the managed buffers
-    assert(mParams.inputTensorNames.size() == 1);
+    ASSERT(mParams.inputTensorNames.size() == 1);
     if (!processInput(buffers))
     {
         return false;
@@ -363,10 +384,10 @@ std::map<std::string, std::pair<nvinfer1::Dims, nvinfer1::Weights>> SampleMLP::l
 {
     std::map<std::string, std::pair<nvinfer1::Dims, nvinfer1::Weights>> weightMap;
     std::ifstream input(file, std::ios_base::binary);
-    assert(input.is_open() && "Unable to load weight file.");
+    ASSERT(input.is_open() && "Unable to load weight file.");
     int32_t count;
     input >> count;
-    assert(count > 0 && "Invalid weight map file.");
+    ASSERT(count > 0 && "Invalid weight map file.");
     while (count--)
     {
         std::pair<nvinfer1::Dims, nvinfer1::Weights> wt{};
@@ -376,12 +397,12 @@ std::map<std::string, std::pair<nvinfer1::Dims, nvinfer1::Weights>> SampleMLP::l
         wt.first = loadShape(input);
         wt.second.type = static_cast<nvinfer1::DataType>(type);
         wt.second.count = std::accumulate(wt.first.d, wt.first.d + wt.first.nbDims, 1, std::multiplies<int32_t>());
-        assert(wt.second.type == nvinfer1::DataType::kFLOAT);
+        ASSERT(wt.second.type == nvinfer1::DataType::kFLOAT);
 
         weightsMemory.emplace_back(new samplesCommon::FloatMemory(wt.second.count));
         auto value = weightsMemory.back()->data();
         input.read(static_cast<char*>(value), wt.second.count * sizeof(float));
-        assert(input.peek() == '\n');
+        ASSERT(input.peek() == '\n');
         // Consume the newline at the end of the data blob.
         input.get();
         wt.second.values = value;
@@ -406,15 +427,15 @@ nvinfer1::Dims SampleMLP::loadShape(std::ifstream& input)
         input >> tmp;
         shapeStr += tmp;
     } while (*shapeStr.rbegin() != ')');
-    assert(input.peek() == ' ');
+    ASSERT(input.peek() == ' ');
 
     // Consume the space between the shape and the data buffer.
     input.get();
 
     // Convert to "A,B,C,...,Y[,]"
-    assert(*shapeStr.begin() == '(');
+    ASSERT(*shapeStr.begin() == '(');
     shapeStr.erase(0, 1); //
-    assert(*shapeStr.rbegin() == ')');
+    ASSERT(*shapeStr.rbegin() == ')');
     shapeStr.pop_back();
 
     // Convert to "A,B,C,...,Y"
@@ -447,9 +468,9 @@ nvinfer1::Dims SampleMLP::loadShape(std::ifstream& input)
     }
 
     // Convert to {A, B, C,...,Y}
-    assert(shapeDim.size() <= shape.MAX_DIMS);
-    assert(shapeDim.size() > 0);
-    assert(shape.nbDims == 0);
+    ASSERT(shapeDim.size() <= shape.MAX_DIMS);
+    ASSERT(shapeDim.size() > 0);
+    ASSERT(shape.nbDims == 0);
     std::for_each(
         shapeDim.begin(), shapeDim.end(), [&](std::string& val) { shape.d[shape.nbDims++] = std::stoi(val); });
     return shape;
@@ -492,11 +513,11 @@ nvinfer1::ILayer* SampleMLP::addMLPLayer(nvinfer1::INetworkDefinition* network, 
 {
     std::string baseName("MLP Layer" + (idx == -1 ? "Output" : std::to_string(idx)));
     auto fc = network->addFullyConnected(inputTensor, hiddenSize, wts, bias);
-    assert(fc != nullptr);
+    ASSERT(fc != nullptr);
     std::string fcName = baseName + "FullyConnected";
     fc->setName(fcName.c_str());
     auto act = network->addActivation(*fc->getOutput(0), actType);
-    assert(act != nullptr);
+    ASSERT(act != nullptr);
     std::string actName = baseName + "Activation";
     act->setName(actName.c_str());
     return act;

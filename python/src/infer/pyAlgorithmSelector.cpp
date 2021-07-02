@@ -15,112 +15,162 @@
  */
 
 // This contains the fundamental types, i.e. Dims, Weights, dtype
-#include "NvInfer.h"
-#include "utils.h"
-#include "infer/pyAlgorithmSelectorDoc.h"
 #include "ForwardDeclarations.h"
-#include <cuda_runtime_api.h>
+#include "utils.h"
 #include <pybind11/stl.h>
 
-
+#include "infer/pyAlgorithmSelectorDoc.h"
+#include <cuda_runtime_api.h>
+#include <vector>
 
 namespace tensorrt
 {
-    using namespace nvinfer1;
+using namespace nvinfer1;
 
-    namespace lambda
+namespace lambdas
+{
+// For IAlgorithmContext
+static const auto get_shape = [](IAlgorithmContext& self, int32_t index) -> std::vector<Dims> {
+    std::vector<Dims> shapes{};
+    Dims minShape = self.getDimensions(index, OptProfileSelector::kMIN);
+    if (minShape.nbDims != -1)
     {
-        // For IAlgorithmContext
-        static const auto get_shape = [] (IAlgorithmContext& self, int32_t index) -> std::vector<Dims>
+        shapes.emplace_back(minShape);
+        shapes.emplace_back(self.getDimensions(index, OptProfileSelector::kOPT));
+        shapes.emplace_back(self.getDimensions(index, OptProfileSelector::kMAX));
+    }
+    return shapes;
+};
+} // namespace lambdas
+
+class IAlgorithmSelectorTrampoline : public IAlgorithmSelector
+{
+public:
+    using IAlgorithmSelector::IAlgorithmSelector;
+
+    virtual int32_t selectAlgorithms(const IAlgorithmContext& context, const IAlgorithm* const* choices,
+        int32_t nbChoices, int32_t* selection) noexcept override
+    {
+        py::gil_scoped_acquire gil{};
+
+        std::vector<const IAlgorithm*> choicesVector;
+        std::copy(choices, choices + nbChoices, std::back_inserter(choicesVector));
+
+        py::function pySelectAlgorithms
+            = utils::getOverload(static_cast<IAlgorithmSelector*>(this), "select_algorithms");
+        if (!pySelectAlgorithms)
         {
-            std::vector<Dims> shapes{};
-            Dims minShape = self.getDimensions(index, OptProfileSelector::kMIN);
-            if (minShape.nbDims != -1)
-            {
-                shapes.emplace_back(minShape);
-                shapes.emplace_back(self.getDimensions(index, OptProfileSelector::kOPT));
-                shapes.emplace_back(self.getDimensions(index, OptProfileSelector::kMAX));
-            }
-            return shapes;
-        };
+            return -1;
+        }
 
-        // For IAlgorithm
-        static const auto get_algorithm_io_info = [] (IAlgorithm& self, int32_t index) -> const IAlgorithmIOInfo&
+        py::object pyResult;
+        try
         {
-            return self.getAlgorithmIOInfo(index);
-        };
-    } //lambda
+            pyResult = pySelectAlgorithms(&context, choicesVector);
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in select_algorithms()" << std::endl;
+            return -1;
+        }
 
-    class IAlgorithmSelectorTrampoline : public IAlgorithmSelector
+        std::vector<int32_t> result;
+        try
+        {
+            result = pyResult.cast<decltype(result)>();
+        }
+        catch (const py::cast_error& e)
+        {
+            std::cerr << "[ERROR] Return value of select_algorithms() could not be interpreted as a List[int]"
+                      << std::endl;
+            return -1;
+        }
+
+        std::copy(result.data(), result.data() + result.size(), selection);
+        return static_cast<int32_t>(result.size());
+    }
+
+    virtual void reportAlgorithms(const IAlgorithmContext* const* algoContexts, const IAlgorithm* const* algoChoices,
+        int32_t size) noexcept override
     {
-        public:
-            using IAlgorithmSelector::IAlgorithmSelector;
+        py::gil_scoped_acquire gil{};
 
-            virtual int32_t selectAlgorithms(const IAlgorithmContext& context, const IAlgorithm* const* choices, int32_t nbChoices, int32_t* selection) override
-            {
-                py::gil_scoped_acquire gil{};
-                py::function pySelectAlgorithms = utils::getOverload(this, "select_algorithms");
-                std::vector<const IAlgorithm*> choices_vector;
-                std::copy(choices, choices + nbChoices, std::back_inserter(choices_vector));
+        std::vector<const IAlgorithmContext*> contexts;
+        std::copy(algoContexts, algoContexts + size, std::back_inserter(contexts));
+        std::vector<const IAlgorithm*> choices;
+        std::copy(algoChoices, algoChoices + size, std::back_inserter(choices));
 
-                py::object result_uncast = pySelectAlgorithms(&context, choices_vector);
+        py::function pyReportAlgorithms
+            = utils::getOverload(static_cast<IAlgorithmSelector*>(this), "report_algorithms");
+        if (!pyReportAlgorithms)
+        {
+            return;
+        }
 
-                std::pair<int32_t, std::vector<int32_t>> result = result_uncast.cast<std::pair<int32_t, std::vector<int32_t>>>();
+        try
+        {
+            pyReportAlgorithms(contexts, choices);
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in report_algorithms()" << std::endl;
+            return;
+        }
+    }
+}; // IAlgorithmSelectorTrampoline
 
-                int32_t ret_value = std::get<0>(result);
-                int32_t* selection_ptr = std::get<1>(result).data();
-                std::copy(selection_ptr, selection_ptr + std::get<1>(result).size(), selection);
-                return ret_value;
-            }
+// NOTE: Fake bindings are provided for some of the application-implemented functions here.
+// These are solely for documentation purposes. The user is meant to override these functions
+// in their own code, and the bindings here will never be called.
 
-            virtual void reportAlgorithms(const IAlgorithmContext* const* algoContexts, const IAlgorithm* const* algoChoices, int32_t size) override
-            {
-                py::gil_scoped_acquire gil{};
+std::vector<int32_t> select_algorithms(
+    IAlgorithmSelector&, const IAlgorithmContext&, const std::vector<const IAlgorithm*>&)
+{
+    return {};
+}
 
-                std::vector<const IAlgorithmContext*> contexts;
-                std::copy(algoContexts, algoContexts + size, std::back_inserter(contexts));
-                std::vector<const IAlgorithm*> choices;
-                std::copy(algoChoices, algoChoices + size, std::back_inserter(choices));
-                py::function pyReportAlgorithms = utils::getOverload(this, "report_algorithms");
-                pyReportAlgorithms(contexts, choices);
+void report_algorithms(
+    IAlgorithmSelector&, const std::vector<const IAlgorithmContext*>&, const std::vector<const IAlgorithm*>&)
+{
+}
 
-            }
-    }; // IAlgorithmSelectorTrampoline
+void bindAlgorithm(py::module& m)
+{
+    // IAlgorithmIOInfo
+    py::class_<IAlgorithmIOInfo, std::unique_ptr<IAlgorithmIOInfo, py::nodelete>>(
+        m, "IAlgorithmIOInfo", IAlgorithmIOInfoDOC::descr)
+        .def_property_readonly("tensor_format", &IAlgorithmIOInfo::getTensorFormat)
+        .def_property_readonly("dtype", &IAlgorithmIOInfo::getDataType)
+        .def_property_readonly("strides", &IAlgorithmIOInfo::getStrides);
 
-    void bindAlgorithm(py::module& m)
-    {
-        // IAlgorithmIOInfo
-        py::class_<IAlgorithmIOInfo, std::unique_ptr<IAlgorithmIOInfo, py::nodelete>>(m, "IAlgorithmIOInfo", IAlgorithmIOInfoDOC::descr)
-            .def_property_readonly("tensor_format", &IAlgorithmIOInfo::getTensorFormat)
-            .def_property_readonly("dtype", &IAlgorithmIOInfo::getDataType)
-            .def_property_readonly("strides", &IAlgorithmIOInfo::getStrides)
-        ;
+    // IAlgorithmVariant
+    py::class_<IAlgorithmVariant, std::unique_ptr<IAlgorithmVariant, py::nodelete>>(
+        m, "IAlgorithmVariant", IAlgorithmVariantDOC::descr)
+        .def_property_readonly("implementation", &IAlgorithmVariant::getImplementation)
+        .def_property_readonly("tactic", &IAlgorithmVariant::getTactic);
 
-        // IAlgorithmVariant
-        py::class_<IAlgorithmVariant, std::unique_ptr<IAlgorithmVariant, py::nodelete>>(m, "IAlgorithmVariant", IAlgorithmVariantDOC::descr)
-            .def_property_readonly("implementation", &IAlgorithmVariant::getImplementation)
-            .def_property_readonly("tactic", &IAlgorithmVariant::getTactic)
-        ;
+    // IAlgorithmContext
+    py::class_<IAlgorithmContext, std::unique_ptr<IAlgorithmContext, py::nodelete>>(
+        m, "IAlgorithmContext", IAlgorithmContextDoc::descr)
+        .def_property_readonly("name", &IAlgorithmContext::getName)
+        .def("get_shape", lambdas::get_shape, "index"_a, IAlgorithmContextDoc::get_shape)
+        .def_property_readonly("num_inputs", &IAlgorithmContext::getNbInputs)
+        .def_property_readonly("num_outputs", &IAlgorithmContext::getNbOutputs);
 
-        // IAlgorithmContext
-        py::class_<IAlgorithmContext, std::unique_ptr<IAlgorithmContext,  py::nodelete>>(m, "IAlgorithmContext",  IAlgorithmContextDoc::descr)
-            .def_property_readonly("name", &IAlgorithmContext::getName)
-            .def("get_shape", lambda::get_shape, "index"_a, IAlgorithmContextDoc::get_shape)
-            .def_property_readonly("num_inputs", &IAlgorithmContext::getNbInputs)
-            .def_property_readonly("num_outputs", &IAlgorithmContext::getNbOutputs)
-        ;
+    // IAlgorithm
+    py::class_<IAlgorithm, std::unique_ptr<IAlgorithm, py::nodelete>>(m, "IAlgorithm", IAlgorithmDoc::descr)
+        .def("get_algorithm_io_info", &IAlgorithm::getAlgorithmIOInfoByIndex, "index"_a,
+            IAlgorithmDoc::get_algorithm_io_info, py::return_value_policy::reference_internal)
+        .def_property_readonly("algorithm_variant", &IAlgorithm::getAlgorithmVariant)
+        .def_property_readonly("timing_msec", &IAlgorithm::getTimingMSec)
+        .def_property_readonly("workspace_size", &IAlgorithm::getWorkspaceSize);
 
-        // IAlgorithm
-        py::class_<IAlgorithm, std::unique_ptr<IAlgorithm,  py::nodelete>>(m, "IAlgorithm",  IAlgorithmDoc::descr)
-            .def("get_algorithm_io_info", lambda::get_algorithm_io_info, "index"_a, IAlgorithmDoc::get_algorithm_io_info)
-            .def_property_readonly("algorithm_variant", &IAlgorithm::getAlgorithmVariant)
-            .def_property_readonly("timing_msec", &IAlgorithm::getTimingMSec)
-            .def_property_readonly("workspace_size", &IAlgorithm::getWorkspaceSize)
-        ;
-
-        // IAlgorithmSelector
-        py::class_<IAlgorithmSelector, IAlgorithmSelectorTrampoline, std::unique_ptr<IAlgorithmSelector,  py::nodelete>>(m, "IAlgorithmSelector", IAlgorithmSelectorDoc::descr)
-            .def(py::init_alias<>())
-        ;
-    }// bindAlgorithm
-} /* tensorrt */
+    // IAlgorithmSelector
+    py::class_<IAlgorithmSelector, IAlgorithmSelectorTrampoline>(m, "IAlgorithmSelector", IAlgorithmSelectorDoc::descr)
+        .def(py::init_alias<>()) // Always initialize trampoline class.
+        .def(
+            "select_algorithms", &select_algorithms, "context"_a, "choices"_a, IAlgorithmSelectorDoc::select_algorithms)
+        .def("report_algorithms", &report_algorithms, "contexts"_a, "choices"_a,
+            IAlgorithmSelectorDoc::report_algorithms);
+} // bindAlgorithm
+} // namespace tensorrt

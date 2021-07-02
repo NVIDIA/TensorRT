@@ -21,7 +21,6 @@
 #include "argsParser.h"
 #include "common.h"
 #include <algorithm>
-#include <assert.h>
 #include <stdio.h>
 #include <vector>
 
@@ -200,16 +199,16 @@ public:
         , mDataDir(directories)
     {
         FILE* file = fopen(locateFile(mPrefix + std::string("0") + mSuffix, mDataDir).c_str(), "rb");
-        assert(file != nullptr);
+        ASSERT(file != nullptr);
         int d[4];
         size_t readSize = fread(d, sizeof(int), 4, file);
-        assert(readSize == 4);
+        ASSERT(readSize == 4);
         mDims.nbDims = 4;  // The number of dimensions.
         mDims.d[0] = d[0]; // Batch Size
         mDims.d[1] = d[1]; // Channels
         mDims.d[2] = d[2]; // Height
         mDims.d[3] = d[3]; // Width
-        assert(mDims.d[0] > 0 && mDims.d[1] > 0 && mDims.d[2] > 0 && mDims.d[3] > 0);
+        ASSERT(mDims.d[0] > 0 && mDims.d[1] > 0 && mDims.d[2] > 0 && mDims.d[3] > 0);
         fclose(file);
         mImageSize = mDims.d[1] * mDims.d[2] * mDims.d[3];
         mBatch.resize(mBatchSize * mImageSize, 0);
@@ -259,7 +258,7 @@ public:
 
         for (int csize = 1, batchPos = 0; batchPos < mBatchSize; batchPos += csize, mFileBatchPos += csize)
         {
-            assert(mFileBatchPos > 0 && mFileBatchPos <= mDims.d[0]);
+            ASSERT(mFileBatchPos > 0 && mFileBatchPos <= mDims.d[0]);
 
             if (mFileBatchPos == mDims.d[0] && !update())
             {
@@ -346,12 +345,12 @@ private:
 
             int d[4];
             size_t readSize = fread(d, sizeof(int), 4, file);
-            assert(readSize == 4);
-            assert(mDims.d[0] == d[0] && mDims.d[1] == d[1] && mDims.d[2] == d[2] && mDims.d[3] == d[3]);
+            ASSERT(readSize == 4);
+            ASSERT(mDims.d[0] == d[0] && mDims.d[1] == d[1] && mDims.d[2] == d[2] && mDims.d[3] == d[3]);
             size_t readInputCount = fread(getFileBatch(), sizeof(float), mDims.d[0] * mImageSize, file);
-            assert(readInputCount == size_t(mDims.d[0] * mImageSize));
+            ASSERT(readInputCount == size_t(mDims.d[0] * mImageSize));
             size_t readLabelCount = fread(getFileLabels(), sizeof(float), mDims.d[0], file);
-            assert(readLabelCount == 0 || readLabelCount == size_t(mDims.d[0]));
+            ASSERT(readLabelCount == 0 || readLabelCount == size_t(mDims.d[0]));
             fclose(file);
         }
         else
@@ -449,12 +448,12 @@ public:
         CHECK(cudaFree(mDeviceInput));
     }
 
-    int getBatchSize() const
+    int getBatchSize() const noexcept
     {
         return mStream.getBatchSize();
     }
 
-    bool getBatch(void* bindings[], const char* names[], int nbBindings)
+    bool getBatch(void* bindings[], const char* names[], int nbBindings) noexcept
     {
         if (!mStream.next())
         {
@@ -462,12 +461,12 @@ public:
         }
 
         CHECK(cudaMemcpy(mDeviceInput, mStream.getBatch(), mInputCount * sizeof(float), cudaMemcpyHostToDevice));
-        assert(!strcmp(names[0], mInputBlobName));
+        ASSERT(!strcmp(names[0], mInputBlobName));
         bindings[0] = mDeviceInput;
         return true;
     }
 
-    const void* readCalibrationCache(size_t& length)
+    const void* readCalibrationCache(size_t& length) noexcept
     {
         mCalibrationCache.clear();
         std::ifstream input(mCalibrationTableName, std::ios::binary);
@@ -483,7 +482,7 @@ public:
         return length ? mCalibrationCache.data() : nullptr;
     }
 
-    void writeCalibrationCache(const void* cache, size_t length)
+    void writeCalibrationCache(const void* cache, size_t length) noexcept
     {
         std::ofstream output(mCalibrationTableName, std::ios::binary);
         output.write(reinterpret_cast<const char*>(cache), length);
@@ -513,22 +512,22 @@ public:
     {
     }
 
-    int getBatchSize() const override
+    int getBatchSize() const noexcept override
     {
         return mImpl.getBatchSize();
     }
 
-    bool getBatch(void* bindings[], const char* names[], int nbBindings) override
+    bool getBatch(void* bindings[], const char* names[], int nbBindings) noexcept override
     {
         return mImpl.getBatch(bindings, names, nbBindings);
     }
 
-    const void* readCalibrationCache(size_t& length) override
+    const void* readCalibrationCache(size_t& length) noexcept override
     {
         return mImpl.readCalibrationCache(length);
     }
 
-    void writeCalibrationCache(const void* cache, size_t length) override
+    void writeCalibrationCache(const void* cache, size_t length) noexcept override
     {
         mImpl.writeCalibrationCache(cache, length);
     }

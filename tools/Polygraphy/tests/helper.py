@@ -20,5 +20,9 @@ def get_file_size(path):
     return os.stat(path).st_size
 
 
-def check_file_non_empty(path):
-    assert get_file_size(path) > 0
+def is_file_empty(path):
+    return get_file_size(path) == 0
+
+
+def is_file_non_empty(path):
+    return not is_file_empty(path)

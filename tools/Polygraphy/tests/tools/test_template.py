@@ -32,7 +32,6 @@ class TestTrtNetwork(object):
                 assert isinstance(builder, trt.Builder)
                 assert isinstance(network, trt.INetworkDefinition)
 
-
     def test_with_model_file(self):
         with tempfile.NamedTemporaryFile("w+", suffix=".py") as template:
             run_polygraphy_template(["trt-network", ONNX_MODELS["identity"].path, "-o", template.name])

@@ -36,61 +36,61 @@ public:
 
     ~GridAnchorGenerator() override;
 
-    int getNbOutputs() const override;
+    int getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) override;
+    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override;
 
-    int initialize() override;
+    int initialize() noexcept override;
 
-    void terminate() override;
+    void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const override;
+    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
 
-    int enqueue(
-        int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
+    int enqueue(int batchSize, const void* const* inputs, void* const* outputs, void* workspace,
+        cudaStream_t stream) noexcept override;
 
-    size_t getSerializationSize() const override;
+    size_t getSerializationSize() const noexcept override;
 
-    void serialize(void* buffer) const override;
+    void serialize(void* buffer) const noexcept override;
 
-    bool supportsFormat(DataType type, PluginFormat format) const override;
+    bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
-    const char* getPluginType() const override;
+    const char* getPluginType() const noexcept override;
 
-    const char* getPluginVersion() const override;
+    const char* getPluginVersion() const noexcept override;
 
-    void destroy() override;
+    void destroy() noexcept override;
 
-    IPluginV2Ext* clone() const override;
+    IPluginV2Ext* clone() const noexcept override;
 
-    void setPluginNamespace(const char* pluginNamespace) override;
+    void setPluginNamespace(const char* pluginNamespace) noexcept override;
 
-    const char* getPluginNamespace() const override;
+    const char* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
+    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const override;
+    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
     void attachToContext(
-        cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) override;
+        cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
     void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
         const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) override;
+        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
 
-    void detachFromContext() override;
+    void detachFromContext() noexcept override;
 
 protected:
     std::string mPluginName;
 
 private:
-    Weights copyToDevice(const void* hostData, size_t count);
+    Weights copyToDevice(const void* hostData, size_t count) noexcept;
 
-    void serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const;
+    void serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const noexcept;
 
-    Weights deserializeToDevice(const char*& hostBuffer, size_t count);
+    Weights deserializeToDevice(const char*& hostBuffer, size_t count) noexcept;
 
     int mNumLayers;
     std::vector<GridAnchorParameters> mParam;
@@ -106,15 +106,15 @@ public:
 
     ~GridAnchorBasePluginCreator() override = default;
 
-    const char* getPluginName() const override;
+    const char* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const override;
+    const char* getPluginVersion() const noexcept override;
 
-    const PluginFieldCollection* getFieldNames() override;
+    const PluginFieldCollection* getFieldNames() noexcept override;
 
-    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) override;
+    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
 
-    IPluginV2Ext* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
+    IPluginV2Ext* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
 
 protected:
     std::string mPluginName;

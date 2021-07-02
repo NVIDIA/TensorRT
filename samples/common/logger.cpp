@@ -15,8 +15,10 @@
  */
 
 #include "logger.h"
+#include "ErrorRecorder.h"
 #include "logging.h"
 
+SampleErrorRecorder gRecorder;
 namespace sample
 {
 Logger gLogger{Logger::Severity::kINFO};

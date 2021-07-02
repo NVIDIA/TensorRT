@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef SAMPLE_NMT_COMPONENT_WEIGHTS_
 #define SAMPLE_NMT_COMPONENT_WEIGHTS_
 

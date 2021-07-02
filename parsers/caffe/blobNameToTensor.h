@@ -33,7 +33,7 @@ public:
         mMap[name] = tensor;
     }
 
-    nvinfer1::ITensor* find(const char* name) const override
+    nvinfer1::ITensor* find(const char* name) const noexcept override
     {
         auto p = mMap.find(name);
         if (p == mMap.end())

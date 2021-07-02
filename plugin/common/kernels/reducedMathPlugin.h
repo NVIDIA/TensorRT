@@ -30,7 +30,7 @@ namespace plugin
 namespace detail
 {
 
-void find_divisor(int denom, unsigned int& mul_coeff, unsigned int& shift_coeff);
+void findDivisor(int denom, unsigned int& mul_coeff, unsigned int& shift_coeff);
 
 __host__ __device__ __forceinline__ unsigned int umulhi(unsigned int x, unsigned int y)
 {
@@ -58,7 +58,7 @@ public:
     __host__ __forceinline__ reduced_divisor(int _y)
         : y(_y)
     {
-        detail::find_divisor(y, mul_coeff, shift_coeff);
+        detail::findDivisor(y, mul_coeff, shift_coeff);
     }
     __host__ __device__ __forceinline__ reduced_divisor(unsigned _mul_coeff, unsigned _shift_coeff, int _y)
         : mul_coeff(_mul_coeff)
@@ -68,7 +68,7 @@ public:
     }
     __host__ __device__ __forceinline__ int div(int x) const
     {
-        // if dividing by 1, then find_divisor wouldn't have worked because
+        // if dividing by 1, then findDivisor wouldn't have worked because
         // mul_coeff would have had to be 2^32, which can't be represented,
         // so we have to special case that one.
         return (y != 1) ? detail::umulhi((unsigned int) x, mul_coeff) >> shift_coeff : x;

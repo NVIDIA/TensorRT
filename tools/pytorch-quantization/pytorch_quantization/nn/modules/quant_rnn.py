@@ -42,7 +42,7 @@ class QuantRNNBase(nn.Module, _utils.QuantMixin):
 
     def __init__(self, mode, input_size, hidden_size,
                  num_layers=1, bias=True, batch_first=False,
-                 dropout=0, bidirectional=False, **kwargs):
+                 dropout=0, bidirectional=False, proj_size=0, **kwargs):
         super(QuantRNNBase, self).__init__()
         self.mode = mode
         self.input_size = input_size
@@ -53,6 +53,7 @@ class QuantRNNBase(nn.Module, _utils.QuantMixin):
         self.dropout = dropout
         self.dropout_state = {}
         self.bidirectional = bidirectional
+        self.proj_size = proj_size
         num_directions = 2 if bidirectional else 1
 
         if not isinstance(dropout, numbers.Number) or not 0 <= dropout <= 1 or \
@@ -65,6 +66,11 @@ class QuantRNNBase(nn.Module, _utils.QuantMixin):
                           "recurrent layer, so non-zero dropout expects "
                           "num_layers greater than 1, but got dropout={} and "
                           "num_layers={}".format(dropout, num_layers))
+
+        if proj_size < 0:
+            raise ValueError("proj_size should be a positive integer or zero to disable projections")
+        if proj_size > 0:
+            raise ValueError("proj_size is not supported in pytorch-quantization yet")
 
         if mode == 'LSTM':
             gate_size = 4 * hidden_size
@@ -131,10 +137,10 @@ class QuantRNNBase(nn.Module, _utils.QuantMixin):
             with torch.no_grad():
                 # NB: this is an INPLACE function on weight_arr, that's why the
                 # no_grad() is necessary.
-                weight_buf = torch._cudnn_rnn_flatten_weight(
-                    weight_arr, weight_stride0,
-                    self.input_size, rnn.get_cudnn_mode(self.mode), self.hidden_size, self.num_layers,
-                    self.batch_first, bool(self.bidirectional))
+                weight_buf = torch._cudnn_rnn_flatten_weight(weight_arr, weight_stride0, self.input_size,
+                                                             rnn.get_cudnn_mode(self.mode), self.hidden_size,
+                                                             self.proj_size, self.num_layers, self.batch_first,
+                                                             bool(self.bidirectional))
 
             self._param_buf_size = weight_buf.size(0)
             self._data_ptrs = list(p.data.data_ptr() for p in self.parameters())
@@ -272,6 +278,8 @@ class QuantRNN(QuantRNNBase):
     """
 
     def __init__(self, *args, **kwargs):
+        if 'proj_size' in kwargs:
+            raise ValueError("proj_size argument is only supported for LSTM, not RNN or GRU")
         if 'nonlinearity' in kwargs:
             if kwargs['nonlinearity'] == 'tanh':
                 mode = 'RNN_TANH'

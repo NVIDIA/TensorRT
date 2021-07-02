@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef TRT_SPECIAL_SLICE_PLUGIN_H
 #define TRT_SPECIAL_SLICE_PLUGIN_H
 
@@ -57,8 +56,8 @@ public:
 
     size_t getWorkspaceSize(int) const noexcept override;
 
-    int enqueue(
-        int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept override;
+    int enqueue(int batch_size, const void* const* inputs, void* const* outputs, void* workspace,
+        cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 

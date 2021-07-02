@@ -23,8 +23,7 @@ from polygraphy.common import TensorMetadata
 from polygraphy.comparator import util as comp_util
 from polygraphy.comparator.compare import CompareFunc
 from polygraphy.comparator.data_loader import DataLoader, DataLoaderCache
-from polygraphy.comparator.struct import (AccuracyResult, IterationResult,
-                                          RunResults)
+from polygraphy.comparator.struct import AccuracyResult, IterationResult, RunResults
 from polygraphy.logger import G_LOGGER, LogMode
 
 np = mod.lazy_import("numpy")
@@ -35,10 +34,17 @@ class Comparator(object):
     """
     Compares inference outputs.
     """
+
     @staticmethod
-    def run(runners, data_loader=None, warm_up=None,
-            use_subprocess=None, subprocess_timeout=None,
-            subprocess_polling_interval=None, save_inputs_path=None):
+    def run(
+        runners,
+        data_loader=None,
+        warm_up=None,
+        use_subprocess=None,
+        subprocess_timeout=None,
+        subprocess_polling_interval=None,
+        save_inputs_path=None,
+    ):
         """
         Runs the supplied runners sequentially.
 
@@ -87,12 +93,12 @@ class Comparator(object):
         subprocess_polling_interval = util.default(subprocess_polling_interval, 30)
         loader_cache = DataLoaderCache(data_loader, save_inputs_path=save_inputs_path)
 
-
         def execute_runner(runner, loader_cache):
             with runner as active_runner:
                 input_metadata = active_runner.get_input_metadata()
-                G_LOGGER.info("{:35}\n---- Model Input(s) ----\n{:}".format(active_runner.name, input_metadata),
-                              mode=LogMode.ONCE)
+                G_LOGGER.info(
+                    "{:35}\n---- Model Input(s) ----\n{:}".format(active_runner.name, input_metadata), mode=LogMode.ONCE
+                )
 
                 # DataLoaderCache will ensure that the feed_dict does not contain any extra entries
                 # based on the provided input_metadata.
@@ -103,8 +109,10 @@ class Comparator(object):
                     try:
                         feed_dict = loader_cache[0]
                     except IndexError:
-                        G_LOGGER.warning("{:} warm-up run(s) were requested, but data loader did not supply any data. "
-                                         "Skipping warm-up run(s)".format(warm_up))
+                        G_LOGGER.warning(
+                            "{:} warm-up run(s) were requested, but data loader did not supply any data. "
+                            "Skipping warm-up run(s)".format(warm_up)
+                        )
                     else:
                         G_LOGGER.ultra_verbose("Warm-up Input Buffers:\n{:}".format(util.indent_block(feed_dict)))
                         # First do a few warm-up runs, and don't time them.
@@ -118,24 +126,37 @@ class Comparator(object):
 
                 total_runtime = 0
                 for index, feed_dict in enumerate(loader_cache):
-                    G_LOGGER.extra_verbose(lambda: "{:35} | Feeding inputs:\n{:}".format(active_runner.name, util.indent_block(feed_dict)))
+                    G_LOGGER.extra_verbose(
+                        lambda: "{:35} | Feeding inputs:\n{:}".format(active_runner.name, util.indent_block(feed_dict))
+                    )
                     outputs = active_runner.infer(feed_dict=feed_dict)
 
                     runtime = active_runner.last_inference_time()
                     total_runtime += runtime
                     # Without a deep copy here, outputs will always reference the output of the last run
-                    iteration_results.append(IterationResult(outputs=copy.deepcopy(outputs), runtime=runtime, runner_name=active_runner.name))
+                    iteration_results.append(
+                        IterationResult(outputs=copy.deepcopy(outputs), runtime=runtime, runner_name=active_runner.name)
+                    )
 
-                    G_LOGGER.info(lambda: "{:35}\n---- Model Output(s) ----\n{:}".format(
-                                            active_runner.name, TensorMetadata().from_feed_dict(outputs)),
-                                  mode=LogMode.ONCE)
-                    G_LOGGER.extra_verbose(lambda: "{:35} | Inference Time: {:.3f} ms | Received outputs:\n{:}".format(
-                                                        active_runner.name, runtime * 1000.0, util.indent_block(outputs)))
+                    G_LOGGER.info(
+                        "{:35}\n---- Model Output(s) ----\n{:}".format(
+                            active_runner.name, TensorMetadata().from_feed_dict(outputs)
+                        ),
+                        mode=LogMode.ONCE,
+                    )
+                    G_LOGGER.extra_verbose(
+                        lambda: "{:35} | Inference Time: {:.3f} ms | Received outputs:\n{:}".format(
+                            active_runner.name, runtime * 1000.0, util.indent_block(outputs)
+                        )
+                    )
 
                 total_runtime_ms = total_runtime * 1000.0
-                G_LOGGER.finish("{:35} | Completed {:} iteration(s) in {:.4g} ms | Average inference time: {:.4g} ms.".format(active_runner.name, index + 1, total_runtime_ms, total_runtime_ms / float(index + 1)))
+                G_LOGGER.finish(
+                    "{:35} | Completed {:} iteration(s) in {:.4g} ms | Average inference time: {:.4g} ms.".format(
+                        active_runner.name, index + 1, total_runtime_ms, total_runtime_ms / float(index + 1)
+                    )
+                )
                 return iteration_results
-
 
         # Wraps execute_runner to use a queue.
         def execute_runner_with_queue(runner_queue, runner, loader_cache):
@@ -149,13 +170,14 @@ class Comparator(object):
             # After finishing, send the updated loader_cache back.
             util.try_send_on_queue(runner_queue, loader_cache)
 
-
         # Do all inferences in one loop, then comparisons at a later stage.
         # We run each runner in a separate process so that we can provide exclusive GPU access for each runner.
         run_results = RunResults()
 
         if not runners:
-            G_LOGGER.warning("No runners were provided to Comparator.run(). Inference will not be run, and run results will be empty.")
+            G_LOGGER.warning(
+                "No runners were provided to Comparator.run(). Inference will not be run, and run results will be empty."
+            )
 
         for runner in runners:
             G_LOGGER.start("{:35} | Activating and starting inference".format(runner.name))
@@ -169,7 +191,9 @@ class Comparator(object):
                 iteration_results = None
                 while process.is_alive() and iteration_results is None:
                     try:
-                        iteration_results = util.try_receive_on_queue(runner_queue, timeout=subprocess_polling_interval / 2)
+                        iteration_results = util.try_receive_on_queue(
+                            runner_queue, timeout=subprocess_polling_interval / 2
+                        )
                         # Receive updated loader cache, or fall back if it could not be sent.
                         loader_cache = util.try_receive_on_queue(runner_queue, timeout=subprocess_polling_interval / 2)
                     except queue.Empty:
@@ -180,21 +204,24 @@ class Comparator(object):
                     run_results.append((runner.name, iteration_results))
                     process.join(subprocess_timeout)
                 except:
-                    G_LOGGER.critical("{:35} | Terminated prematurely. Check the exception logged above. "
-                                      "If there is no exception logged above, make sure not to use the --use-subprocess "
-                                      "flag or set use_subprocess=False in Comparator.run().".format(runner.name))
+                    G_LOGGER.critical(
+                        "{:35} | Terminated prematurely. Check the exception logged above. "
+                        "If there is no exception logged above, make sure not to use the --use-subprocess "
+                        "flag or set use_subprocess=False in Comparator.run().".format(runner.name)
+                    )
                 finally:
                     process.terminate()
 
                 if loader_cache is None:
-                    G_LOGGER.critical("Could not send data loader cache to runner subprocess. Please try disabling subprocesses "
-                                      "by removing the --use-subprocess flag, or setting use_subprocess=False in Comparator.run()")
+                    G_LOGGER.critical(
+                        "Could not send data loader cache to runner subprocess. Please try disabling subprocesses "
+                        "by removing the --use-subprocess flag, or setting use_subprocess=False in Comparator.run()"
+                    )
             else:
                 run_results.append((runner.name, execute_runner(runner, loader_cache)))
 
         G_LOGGER.verbose("Successfully ran: {:}".format([r.name for r in runners]))
         return run_results
-
 
     @staticmethod
     def postprocess(run_results, postprocess_func):
@@ -215,12 +242,10 @@ class Comparator(object):
                 iteration_results[index] = postprocess_func(iter_res)
         return run_results
 
-
     @staticmethod
     def default_comparisons(run_results):
         # Sets up default comparisons - which is to compare each runner to the subsequent one.
         return [(i, i + 1) for i in range(len(run_results) - 1)]
-
 
     @staticmethod
     def compare_accuracy(run_results, fail_fast=False, comparisons=None, compare_func=None):
@@ -246,6 +271,7 @@ class Comparator(object):
                     guaranteed to be the same as the order of `comparisons`. For more details, see the AccuracyResult
                     docstring (e.g. help(AccuracyResult)).
         """
+
         def find_mismatched(match_dict):
             return [name for name, matched in match_dict.items() if not bool(matched)]
 
@@ -275,19 +301,24 @@ class Comparator(object):
                         if fail_fast and mismatched_outputs:
                             return accuracy_result
 
-                G_LOGGER.extra_verbose("Finished comparing {:} with {:}".format(runner0_name, runner1_name,))
+                G_LOGGER.extra_verbose(
+                    "Finished comparing {:} with {:}".format(
+                        runner0_name,
+                        runner1_name,
+                    )
+                )
 
                 passed, _, total = accuracy_result.stats(runner_pair)
                 pass_rate = accuracy_result.percentage(runner_pair) * 100.0
                 if num_iters > 1 or len(comparisons) > 1:
                     msg = "Accuracy Summary | {:} vs. {:} | Passed: {:}/{:} iterations | Pass Rate: {:}%".format(
-                            runner0_name, runner1_name, passed, total, pass_rate)
+                        runner0_name, runner1_name, passed, total, pass_rate
+                    )
                     if passed == total:
                         G_LOGGER.finish(msg)
                     else:
                         G_LOGGER.error(msg)
         return accuracy_result
-
 
     @staticmethod
     def validate(run_results, check_inf=None, check_nan=None, fail_fast=None):
@@ -307,31 +338,37 @@ class Comparator(object):
         check_nan = util.default(check_nan, True)
         fail_fast = util.default(fail_fast, False)
 
-
         def is_finite(output):
             non_finite = np.logical_not(np.isfinite(output))
             if np.any(non_finite):
                 G_LOGGER.error("Inf Detected | One or more non-finite values were encountered in this output")
-                G_LOGGER.info("Note: Use -vv or set logging verbosity to EXTRA_VERBOSE to display non-finite values", mode=LogMode.ONCE)
+                G_LOGGER.info(
+                    "Note: Use -vv or set logging verbosity to EXTRA_VERBOSE to display non-finite values",
+                    mode=LogMode.ONCE,
+                )
                 G_LOGGER.extra_verbose("Note: non-finite values at:\n{:}".format(non_finite))
                 G_LOGGER.extra_verbose("Note: non-finite values:\n{:}".format(output[non_finite]))
                 return False
             return True
 
-
         def is_not_nan(output):
             nans = np.isnan(output)
             if np.any(nans):
                 G_LOGGER.error("NaN Detected | One or more NaNs were encountered in this output")
-                G_LOGGER.info("Note: Use -vv or set logging verbosity to EXTRA_VERBOSE to display locations of NaNs", mode=LogMode.ONCE)
+                G_LOGGER.info(
+                    "Note: Use -vv or set logging verbosity to EXTRA_VERBOSE to display locations of NaNs",
+                    mode=LogMode.ONCE,
+                )
                 G_LOGGER.extra_verbose("Note: NaNs at:\n{:}".format(nans))
                 return False
             return True
 
-
         def validate_output(runner_name, output_name, output):
-            G_LOGGER.start("{:35} | Validating output: {:} (check_inf={:}, check_nan={:})".format(
-                runner_name, output_name, check_inf, check_nan))
+            G_LOGGER.start(
+                "{:35} | Validating output: {:} (check_inf={:}, check_nan={:})".format(
+                    runner_name, output_name, check_inf, check_nan
+                )
+            )
             with G_LOGGER.indent():
                 comp_util.log_output_stats(output)
 
@@ -346,7 +383,6 @@ class Comparator(object):
                 else:
                     G_LOGGER.error("FAILED | Errors detected in output: {:}".format(output_name))
                 return output_valid
-
 
         all_valid = True
         G_LOGGER.start("Output Validation | Runners: {:}".format(list(run_results.keys())))

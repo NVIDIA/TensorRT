@@ -23,7 +23,7 @@ This will display something like:
     {y [dtype=float32, shape=(1, 1, 2, 2)]}
 
     ---- 1 Layer(s) ----
-    Layer 0    | (Unnamed Layer* 0) [Identity] [Op: LayerType.IDENTITY]
+    Layer 0    | node_of_y [Op: LayerType.IDENTITY]
         {x [dtype=float32, shape=(1, 1, 2, 2)]}
          -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
 ```

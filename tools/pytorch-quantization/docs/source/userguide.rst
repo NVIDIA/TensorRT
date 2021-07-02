@@ -145,16 +145,16 @@ be used as the following example:
     # Keep running the quantized model
     # ...
 
-Quantized Fine Tuning
+Quantization Aware Training
 ---------------------
 
-Quantized fine tuning is based on Straight Through Estimator (STE)
+Quantization Aware Training is based on Straight Through Estimator (STE)
 derivative approximation. It is some time known as “quantization aware
 training”. We don’t use the name because it doesn’t reflect the
 underneath assumption. If anything, it makes training being “unaware” of
 quantization because of the STE approximation.
 
-After calibration is done, quantized fine tuning is simply select a
+After calibration is done, Quantization Aware Training is simply select a
 training schedule and continue training the calibrated model. Usually,
 it doesn’t need to fine tune very long. We usually use around 10% of the
 original training schedule, starting at 1% of the initial training
@@ -166,7 +166,7 @@ learning rate).
 Some recommendations
 ~~~~~~~~~~~~~~~~~~~~
 
-Quantized fine tuning (Essentially a discrete numerical optimization
+Quantization Aware Training (Essentially a discrete numerical optimization
 problem) is not a solved problem mathematically. Based on our
 experience, here are some recommendations:
 

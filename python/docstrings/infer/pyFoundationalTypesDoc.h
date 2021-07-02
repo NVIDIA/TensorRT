@@ -19,161 +19,157 @@
 
 namespace tensorrt
 {
-    namespace DataTypeDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Represents data types.
+namespace DataTypeDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Represents data types.
 
-            :itemsize: :class:`int` The size in bytes of this :class:`DataType` .
-        )trtdoc";
+    :itemsize: :class:`int` The size in bytes of this :class:`DataType` .
+)trtdoc";
 
-        constexpr const char* float32 = R"trtdoc(Represents a 32-bit floating point number.)trtdoc";
-        constexpr const char* float16 = R"trtdoc(Represents a 16-bit floating point number.)trtdoc";
-        constexpr const char* int8 = R"trtdoc(Represents an 8-bit integer.)trtdoc";
-        constexpr const char* int32 = R"trtdoc(Represents a 32-bit integer.)trtdoc";
-        constexpr const char* boolean = R"trtdoc(Represents a boolean.)trtdoc";
+constexpr const char* float32 = R"trtdoc(Represents a 32-bit floating point number.)trtdoc";
+constexpr const char* float16 = R"trtdoc(Represents a 16-bit floating point number.)trtdoc";
+constexpr const char* int8 = R"trtdoc(Represents an 8-bit integer.)trtdoc";
+constexpr const char* int32 = R"trtdoc(Represents a 32-bit integer.)trtdoc";
+constexpr const char* boolean = R"trtdoc(Represents a boolean.)trtdoc";
 
-    } /* DataTypeDoc */
+} // namespace DataTypeDoc
 
-    namespace DimensionTypeDoc
-    {
-        constexpr const char* descr = R"trtdoc(The type of data encoded across this dimension.)trtdoc";
-        constexpr const char* SPATIAL = R"trtdoc(Elements correspond to different spatial data.)trtdoc";
-        constexpr const char* CHANNEL = R"trtdoc(Elements correspond to different channels.)trtdoc";
-        constexpr const char* INDEX = R"trtdoc(Elements correspond to different batch index.)trtdoc";
-        constexpr const char* SEQUENCE = R"trtdoc(Elements correspond to different sequence values.)trtdoc";
+namespace WeightsRoleDoc
+{
+constexpr const char* descr
+    = R"trtdoc(How a layer uses particular Weights. The power weights of an IScaleLayer are omitted.  Refitting those is not supported.)trtdoc";
+constexpr const char* KERNEL
+    = R"trtdoc(Kernel for :class:`IConvolutionLayer` , :class:`IDeconvolutionLayer` , or :class:`IFullyConnectedLayer` .)trtdoc";
+constexpr const char* BIAS
+    = R"trtdoc(Bias for :class:`IConvolutionLayer` , :class:`IDeconvolutionLayer` , or :class:`IFullyConnectedLayer` .)trtdoc";
+constexpr const char* SHIFT = R"trtdoc(Shift part of :class:`IScaleLayer` .)trtdoc";
+constexpr const char* SCALE = R"trtdoc(Scale part of :class:`IScaleLayer` .)trtdoc";
+constexpr const char* CONSTANT = R"trtdoc(Weights for :class:`IConstantLayer` .)trtdoc";
+constexpr const char* ANY = R"trtdoc(Any other weights role.)trtdoc";
 
-    } /* DimensionTypeDoc */
+} // namespace WeightsRoleDoc
 
-    namespace WeightsRoleDoc
-    {
-        constexpr const char* descr = R"trtdoc(How a layer uses particular Weights. The power weights of an IScaleLayer are omitted.  Refitting those is not supported.)trtdoc";
-        constexpr const char* KERNEL = R"trtdoc(Kernel for :class:`IConvolutionLayer` , :class:`IDeconvolutionLayer` , or :class:`IFullyConnectedLayer` .)trtdoc";
-        constexpr const char* BIAS = R"trtdoc(Bias for :class:`IConvolutionLayer` , :class:`IDeconvolutionLayer` , or :class:`IFullyConnectedLayer` .)trtdoc";
-        constexpr const char* SHIFT = R"trtdoc(Shift part of :class:`IScaleLayer` .)trtdoc";
-        constexpr const char* SCALE = R"trtdoc(Scale part of :class:`IScaleLayer` .)trtdoc";
-        constexpr const char* CONSTANT = R"trtdoc(Weights for :class:`IConstantLayer` .)trtdoc";
+namespace WeightsDoc
+{
+constexpr const char* descr = R"trtdoc(
+    An array of weights used as a layer parameter.
+    The weights are held by reference until the engine has been built - deep copies are not made automatically.
 
-    } /* WeightsRoleDoc */
+    :ivar dtype: :class:`DataType` The type of the weights.
+    :ivar size: :class:`int` The number of weights in the array.
+    :ivar nbytes: :class:`int` Total bytes consumed by the elements of the weights buffer.
+)trtdoc";
 
-    namespace WeightsDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            An array of weights used as a layer parameter.
-            The weights are held by reference until the engine has been built - deep copies are not made automatically.
+// FIXME: Weird bug occurring here. Cannot provide :arg:
+constexpr const char* init_type = R"trtdoc(
+    Initializes an empty (0-length) Weights object with the specified type.
 
-            :ivar dtype: :class:`DataType` The type of the weights.
-            :ivar size: :class:`int` The number of weights in the array.
-            :ivar nbytes: :class:`int` Total bytes consumed by the elements of the weights buffer.
-        )trtdoc";
+    :type: A type to initialize the weights with. Default: :class:`tensorrt.float32`
+)trtdoc";
 
-        constexpr const char* init_type = R"trtdoc(
-            Initializes an empty (0-length) Weights object with the specified type.
+// FIXME: Weird bug occurring here. Cannot provide :arg:
+constexpr const char* init_numpy = R"trtdoc(
+    :a: A numpy array whose values to use. No deep copies are made.
+)trtdoc";
 
-            :type: A type to initialize the weights with. Default: :class:`tensorrt.float32`
-        )trtdoc";
+constexpr const char* numpy = R"trtdoc(
+    Create a numpy array using the underlying buffer of this weights object.
 
-        constexpr const char* init_numpy = R"trtdoc(
-            :a: A numpy array whose values to use. No deep copies are made.
-        )trtdoc";
+    :returns: A new numpy array that holds a reference to this weight object's buffer - no deep copy is made.
+)trtdoc";
+} // namespace WeightsDoc
 
-        constexpr const char* numpy = R"trtdoc(
-            Create a numpy array using the underlying buffer of this weights object.
+namespace DimsDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Structure to define the dimensions of a tensor. :class:`Dims` and all derived classes behave like Python :class:`tuple` s. Furthermore, the TensorRT API can implicitly convert Python iterables to :class:`Dims` objects, so :class:`tuple` or :class:`list` can be used in place of this class.
+)trtdoc";
 
-            :returns: A new numpy array that holds a reference to this weight object's buffer - no deep copy is made.
-        )trtdoc";
-    } /* WeightsDoc */
+constexpr const char* volume = R"trtdoc(
+    Computes the total volume of the dimensions
 
-    namespace DimsDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Structure to define the dimensions of a tensor. :class:`Dims` and all derived classes behave like Python :class:`tuple` s. Furthermore, the TensorRT API can implicitly convert Python iterables to :class:`Dims` objects, so :class:`tuple` or :class:`list` can be used in place of this class.
-        )trtdoc";
+    :returns: Total volume. `0` for empty dimensions.
+)trtdoc";
 
-        constexpr const char* volume = R"trtdoc(
-            Computes the total volume of the dimensions
+constexpr const char* get_type = R"trtdoc(
+    Queries the type of a dimension.
 
-            :returns: Total volume. `0` for empty dimensions.
-        )trtdoc";
+    :returns: The type of the specified dimension.
+)trtdoc";
 
-        constexpr const char* get_type = R"trtdoc(
-            Queries the type of a dimension.
+constexpr const char* MAX_DIMS = R"trtdoc(
+    The maximum number of dimensions supported by :class:`Dims`.
+)trtdoc";
 
-            :returns: The type of the specified dimension.
-        )trtdoc";
+} // namespace DimsDoc
 
-        constexpr const char* MAX_DIMS = R"trtdoc(
-            The maximum number of dimensions supported by :class:`Dims`.
-        )trtdoc";
+namespace Dims2Doc
+{
+constexpr const char* descr = R"trtdoc(
+    Structure to define 2D shape.
+)trtdoc";
+} // namespace Dims2Doc
 
-    } /* DimsDoc */
+namespace DimsHWDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Structure to define 2D shape with height and width.
 
-    namespace Dims2Doc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Structure to define 2D shape.
-        )trtdoc";
-    } /* DimsDoc */
+    :ivar h: :class:`int` The first dimension (height).
+    :ivar w: :class:`int` The second dimension (width).
+)trtdoc";
+} // namespace DimsHWDoc
 
-    namespace DimsHWDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Structure to define 2D shape with height and width.
+namespace Dims3Doc
+{
+constexpr const char* descr = R"trtdoc(
+    Structure to define 3D shape.
+)trtdoc";
+} // namespace Dims3Doc
 
-            :ivar h: :class:`int` The first dimension (height).
-            :ivar w: :class:`int` The second dimension (width).
-        )trtdoc";
-    } /* DimsDoc */
+namespace DimsCHWDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Structure to define 3D tensor with a channel dimension, height, and width.
 
-    namespace Dims3Doc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Structure to define 3D shape.
-        )trtdoc";
-    } /* DimsDoc */
+    :ivar c: :class:`int` The first dimension (channel).
+    :ivar h: :class:`int` The second dimension (height).
+    :ivar w: :class:`int` The third dimension (width).
+)trtdoc";
+} // namespace DimsCHWDoc
 
-    namespace DimsCHWDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Structure to define 3D tensor with a channel dimension, height, and width.
+namespace Dims4Doc
+{
+constexpr const char* descr = R"trtdoc(
+    Structure to define 4D tensor.
+)trtdoc";
+} // namespace Dims4Doc
 
-            :ivar c: :class:`int` The first dimension (channel).
-            :ivar h: :class:`int` The second dimension (height).
-            :ivar w: :class:`int` The third dimension (width).
-        )trtdoc";
-    } /* DimsDoc */
+namespace DimsNCHWDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Structure to define 4D tensor with a batch dimension, a channel dimension, height and width.
 
-    namespace Dims4Doc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Structure to define 4D tensor.
-        )trtdoc";
-    } /* DimsDoc */
+    :ivar n: :class:`int` The first dimension (batch).
+    :ivar c: :class:`int` The second dimension (channel).
+    :ivar h: :class:`int` The third dimension (height).
+    :ivar w: :class:`int` The fourth dimension (width).
+)trtdoc";
+} // namespace DimsNCHWDoc
 
-    namespace DimsNCHWDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Structure to define 4D tensor with a batch dimension, a channel dimension, height and width.
+namespace IHostMemoryDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Handles library allocated memory that is accessible to the user.
 
-            :ivar n: :class:`int` The first dimension (batch).
-            :ivar c: :class:`int` The second dimension (channel).
-            :ivar h: :class:`int` The third dimension (height).
-            :ivar w: :class:`int` The fourth dimension (width).
-        )trtdoc";
-    } /* DimsDoc */
+    The memory allocated via the host memory object is owned by the library and will be de-allocated when object is destroyed.
 
-    namespace IHostMemoryDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Handles library allocated memory that is accessible to the user.
+    This class exposes a buffer interface using Python's buffer protocol.
 
-            The memory allocated via the host memory object is owned by the library and will be de-allocated when object is destroyed.
+    :ivar dtype: :class:`DataType` The data type of this buffer.
+    :ivar nbytes: :class:`int` Total bytes consumed by the elements of the buffer.
+)trtdoc";
+} // namespace IHostMemoryDoc
 
-            This class exposes a buffer interface using Python's buffer protocol.
-
-            :ivar dtype: :class:`DataType` The data type of this buffer.
-            :ivar nbytes: :class:`int` Total bytes consumed by the elements of the buffer.
-        )trtdoc";
-    } /* IHostMemoryDoc */
-
-} /* tensorrt */
+} // namespace tensorrt

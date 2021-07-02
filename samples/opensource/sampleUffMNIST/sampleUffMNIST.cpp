@@ -33,7 +33,6 @@
 #include <cuda_runtime_api.h>
 
 #include <algorithm>
-#include <cassert>
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
@@ -42,6 +41,8 @@
 #include <sys/stat.h>
 #include <unordered_map>
 #include <vector>
+
+using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_uff_mnist";
 
@@ -52,9 +53,6 @@ const std::string gSampleName = "TensorRT.sample_uff_mnist";
 //!
 class SampleUffMNIST
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleUffMNIST(const samplesCommon::UffSampleParams& params)
         : mParams(params)
@@ -119,7 +117,7 @@ bool SampleUffMNIST::build()
     {
         return false;
     }
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -149,16 +147,36 @@ bool SampleUffMNIST::build()
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
 
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
     }
-    assert(network->getNbInputs() == 1);
+
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 3);
 
     return true;
 }
@@ -174,8 +192,8 @@ void SampleUffMNIST::constructNetwork(
     SampleUniquePtr<nvuffparser::IUffParser>& parser, SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
 {
     // There should only be one input and one output tensor
-    assert(mParams.inputTensorNames.size() == 1);
-    assert(mParams.outputTensorNames.size() == 1);
+    ASSERT(mParams.inputTensorNames.size() == 1);
+    ASSERT(mParams.outputTensorNames.size() == 1);
 
     // Register tensorflow input
     parser->registerInput(
@@ -186,7 +204,7 @@ void SampleUffMNIST::constructNetwork(
 
     if (mParams.int8)
     {
-        samplesCommon::setAllTensorScales(network.get(), 127.0f, 127.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
     }
 }
 

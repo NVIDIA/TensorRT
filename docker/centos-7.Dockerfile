@@ -12,19 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG CUDA_VERSION=11.1
+ARG CUDA_VERSION=11.3.1
 ARG OS_VERSION=7
 
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-centos${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 7.2.3.4
+ENV TRT_VERSION 8.0.1.6
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
 ARG uid=1000
 ARG gid=1000
-RUN groupadd -r -f -g ${gid} trtuser && useradd -r -u ${uid} -g ${gid} -ms /bin/bash trtuser
+RUN groupadd -r -f -g ${gid} trtuser && useradd -o -r -u ${uid} -g ${gid} -ms /bin/bash trtuser
 RUN usermod -aG wheel trtuser
 RUN echo 'trtuser:nvidia' | chpasswd
 RUN mkdir -p /workspace && chown trtuser /workspace
@@ -44,23 +44,22 @@ RUN yum -y install \
     sudo
 
 # Install python3
-RUN cd /tmp &&\
-    curl -O https://www.python.org/ftp/python/3.8.3/Python-3.8.3.tgz &&\
-    tar -xzf Python-3.8.3.tgz && cd Python-3.8.3 &&\
-    ./configure --enable-optimizations && make altinstall &&\
-    rm -rf /tmp/Python-3.8.3
+RUN yum install -y python36 python3-devel
 
 # Install TensorRT
-RUN cd /tmp &&\
-    wget https://developer.download.nvidia.com/compute/machine-learning/repos/rhel7/x86_64/nvidia-machine-learning-repo-rhel7-1.0.0-1.x86_64.rpm &&\
-    rpm -Uvh nvidia-machine-learning-repo-*.rpm
-RUN yum install -y libnvinfer7 libnvparsers7 libnvinfer-plugin7 libnvonnxparsers7 libnvinfer-devel libnvparsers-devel libnvinfer-plugin-devel python3-libnvinfer
+RUN v="${TRT_VERSION%.*}-1.cuda${CUDA_VERSION%.*}" &&\
+    yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo &&\
+    yum -y install libnvinfer8-${v} libnvparsers8-${v} libnvonnxparsers8-${v} libnvinfer-plugin8-${v} \
+        libnvinfer-devel-${v} libnvparsers-devel-${v} libnvonnxparsers-devel-${v} libnvinfer-plugin-devel-${v} \
+        python3-libnvinfer-${v}
 
 # Install PyPI packages
 RUN pip3 install --upgrade pip
 RUN pip3 install setuptools>=41.0.0
+RUN pip3 install numpy
 COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
+RUN pip3 install jupyter jupyterlab
 
 # Install Cmake
 RUN cd /tmp && \
@@ -71,6 +70,8 @@ RUN cd /tmp && \
 
 # Download NGC client
 RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip && unzip ngccli_cat_linux.zip && chmod u+x ngc && rm ngccli_cat_linux.zip ngc.md5 && echo "no-apikey\nascii\n" | ngc config set
+
+RUN rm /usr/bin/python && ln -s /usr/bin/python3 /usr/bin/python
 
 # Set environment and working directory
 ENV TRT_LIBPATH /usr/lib/x86_64-linux-gnu

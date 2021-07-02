@@ -30,23 +30,23 @@ class DiffTactics(Tool):
     Determine potentially bad tactics given sets of good and bad tactic
     replay files.
     """
+
     def __init__(self):
         super().__init__("diff-tactics")
 
-
     def add_parser_args(self, parser):
-        parser.add_argument("--dir", help="A directory containing good and bad tactic replay files. "
-                            "By default, this tool will search for files in directories called 'good' and 'bad'",
-                            default="")
+        parser.add_argument(
+            "--dir",
+            help="A directory containing good and bad tactic replay files. "
+            "By default, this tool will search for files in directories called 'good' and 'bad'",
+            default="",
+        )
         parser.add_argument("--good", help="A directory containing good tactic replay files. ", default=None)
         parser.add_argument("--bad", help="A directory containing bad tactic replay files. ", default=None)
 
-
-
     def run(self, args):
         if args.dir is None and (args.good is None or args.bad is None):
-            G_LOGGER.exit("Either `--dir`, or both `--good` and `--bad` must be specified.")
-
+            G_LOGGER.critical("Either `--dir`, or both `--good` and `--bad` must be specified.")
 
         def load_tactics(dir):
             """
@@ -59,6 +59,7 @@ class DiffTactics(Tool):
                 dict[str, Set[polygraphy.backend.trt.algorithm_selector.Algorithm]]:
                         Maps layer names to the set of algorithms present in the tactic replays.
             """
+
             def try_load_replay(path):
                 try:
                     return algorithm_selector.TacticReplayData.load(path)
@@ -77,7 +78,6 @@ class DiffTactics(Tool):
                 for name, algo in replay.items():
                     tactics[name].add(algo)
             return tactics, replay_paths
-
 
         good_dir = util.default(args.good, os.path.join(args.dir, "good"))
         good_tactics, good_paths = load_tactics(good_dir)

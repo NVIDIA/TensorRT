@@ -27,17 +27,13 @@ import time
 import onnx
 import pycuda.autoinit
 
-# Tensorflow v1 compatibility mode
-try:
-    import tensorflow.compat.v1 as tf
-    tf.disable_v2_behavior()
-except ImportError as err:
-    sys.stderr.write("""Error: Failed to import tensorflow module ({})\n""".format(err))
-    sys.exit()
-
 # TensorRT
 import tensorrt as trt
 from helpers.calibrator import BertCalibrator as BertCalibrator
+from builder_utils import load_tf_weights, load_pytorch_weights_and_quant, load_onnx_weights_and_quant
+from builder_utils import WQKV, BQKV  # Attention Keys
+from builder_utils import W_AOUT, B_AOUT, W_MID, B_MID, W_LOUT, B_LOUT  # Transformer Keys
+from builder_utils import SQD_W, SQD_B  # SQuAD Output Keys
 
 """
 TensorRT Initialization
@@ -56,40 +52,8 @@ qkv2_plg_creator = plg_registry.get_plugin_creator("CustomQKVToContextPluginDyna
 skln_plg_creator = plg_registry.get_plugin_creator("CustomSkipLayerNormPluginDynamic", "1", "")
 fc_plg_creator = plg_registry.get_plugin_creator("CustomFCPluginDynamic", "1", "")
 
-"""
-Attentions Keys
-"""
-WQ = "self_query_kernel"
-BQ = "self_query_bias"
-WK = "self_key_kernel"
-BK = "self_key_bias"
-WV = "self_value_kernel"
-BV = "self_value_bias"
-WQKV = "self_qkv_kernel"
-BQKV = "self_qkv_bias"
-
-"""
-Transformer Keys
-"""
-W_AOUT = "attention_output_dense_kernel"
-B_AOUT = "attention_output_dense_bias"
-AOUT_LN_BETA = "attention_output_layernorm_beta"
-AOUT_LN_GAMMA = "attention_output_layernorm_gamma"
-W_MID = "intermediate_dense_kernel"
-B_MID = "intermediate_dense_bias"
-W_LOUT = "output_dense_kernel"
-B_LOUT = "output_dense_bias"
-LOUT_LN_BETA = "output_layernorm_beta"
-LOUT_LN_GAMMA = "output_layernorm_gamma"
-
-"""
-Squad Output Keys
-"""
-SQD_W = "squad_output_weights"
-SQD_B = "squad_output_bias"
-
 class BertConfig:
-    def __init__(self, bert_config_path, use_fp16, use_int8, use_strict, use_fc2_gemm, use_int8_skipln, use_int8_multihead, use_qat, timing_cache):
+    def __init__(self, bert_config_path, use_fp16, use_int8, use_strict, use_fc2_gemm, use_int8_skipln, use_int8_multihead, use_qat, use_sparsity, timing_cache):
         with open(bert_config_path, "r") as f:
             data = json.load(f)
             self.num_attention_heads = data["num_attention_heads"]
@@ -105,6 +69,7 @@ class BertConfig:
             self.use_int8_multihead = use_int8_multihead
             self.is_calib_mode = False
             self.use_qat = use_qat
+            self.use_sparsity = use_sparsity
             self.timing_cache = timing_cache
 
 def set_tensor_name(tensor, prefix, name):
@@ -139,7 +104,7 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, imask)
 
     # FC_attention
     if config.use_int8:
-        mult_all = network.add_convolution(input_tensor, 3 * hidden_size, (1, 1), Wall, Ball)
+        mult_all = network.add_convolution_nd(input_tensor, 3 * hidden_size, (1, 1), Wall, Ball)
     else:
         mult_all = network.add_fully_connected(input_tensor, 3 * hidden_size, Wall, Ball)
 
@@ -245,7 +210,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
     B_aout = init_dict[prefix + B_AOUT]
     if config.use_int8:
         W_aout = init_dict[prefix + W_AOUT]
-        attention_out_fc = network.add_convolution(attention_heads, hidden_size, (1, 1), W_aout, B_aout)
+        attention_out_fc = network.add_convolution_nd(attention_heads, hidden_size, (1, 1), W_aout, B_aout)
         B_aout = None
 
         if not config.use_int8_skipln:
@@ -268,7 +233,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
     B_mid = init_dict[prefix + B_MID]
     W_mid = init_dict[prefix + W_MID]
     if config.use_int8:
-        mid_dense = network.add_convolution(attention_ln, config.intermediate_size, (1, 1), W_mid, B_mid)
+        mid_dense = network.add_convolution_nd(attention_ln, config.intermediate_size, (1, 1), W_mid, B_mid)
     else:
         mid_dense = network.add_fully_connected(attention_ln, config.intermediate_size, W_mid, B_mid)
 
@@ -305,7 +270,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
     B_lout = init_dict[prefix + B_LOUT]
     if config.use_int8 and not config.use_fc2_gemm:
         W_lout = init_dict[prefix + W_LOUT]
-        out_dense = network.add_convolution(intermediate_act, hidden_size, (1, 1), W_lout, B_lout)
+        out_dense = network.add_convolution_nd(intermediate_act, hidden_size, (1, 1), W_lout, B_lout)
         B_lout = None
 
         if not config.use_int8_skipln:
@@ -358,176 +323,6 @@ def squad_output(prefix, config, init_dict, network, input_tensor):
     OUT.second_transpose = (1, 0, 2, 3, 4)
     set_output_name(OUT, prefix, "squad_logits")
     return OUT
-
-def load_tf_weights(inputbase, config):
-    """
-    Load the weights from the tensorflow checkpoint
-    """
-    weights_dict = dict()
-
-    try:
-        reader = tf.train.NewCheckpointReader(inputbase)
-        tensor_dict = reader.get_variable_to_shape_map()
-
-        # There might be training-related variables in the checkpoint that can be discarded
-        param_names = [key for key in sorted(tensor_dict) if "adam" not in key and "global_step" not in key and "pooler" not in key]
-        count = len(param_names)
-        TRT_LOGGER.log(TRT_LOGGER.INFO, "Found {:} entries in weight map".format(count))
-
-        for pn in param_names:
-            toks = pn.lower().split("/")
-            if "encoder" in pn:
-                assert ("layer" in pn)
-                l = (re.findall("\d+", pn))[0]
-                outname = "l{}_".format(l) + "_".join(toks[3:])
-            else:
-                outname = "_".join(toks)
-
-            tensor = reader.get_tensor(pn)
-            shape = tensor.shape
-            if pn.find("kernel") != -1:
-                weights_dict[outname + "_notrans"] = trt.Weights(np.ascontiguousarray(tensor).flatten())
-
-                TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Transposing {}\n".format(np))
-                tensor = np.transpose(tensor)
-
-            shape = tensor.shape
-            flat_tensor = tensor.flatten()
-            shape_str = "{} ".format(len(shape)) + " ".join([str(d) for d in shape])
-            weights_dict[outname] = trt.Weights(flat_tensor)
-
-            TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Original name: {:}, TensorRT name: {:}, shape: {:}".format(pn, outname, shape_str))
-
-        N = config.num_attention_heads
-        H = config.head_size
-
-        additional_dict = dict()
-        for key, value in weights_dict.items():
-            pos = key.find(BQ)
-            if pos != -1:
-                hidden_size = value.size
-                prefix = key[:pos]
-
-                Bq_ = value
-                Bk_ = weights_dict[prefix + BK]
-                Bv_ = weights_dict[prefix + BV]
-                Wq_ = weights_dict[prefix + WQ]
-                Wk_ = weights_dict[prefix + WK]
-                Wv_ = weights_dict[prefix + WV]
-
-                mat_size = hidden_size * hidden_size
-                wcount = 3 * mat_size
-                Wall = np.zeros(wcount, np.float32)
-                bcount = 3 * hidden_size
-                Ball = np.zeros(bcount, np.float32)
-                Wall[0:mat_size] = Wq_.numpy()[0:mat_size]
-                Wall[mat_size:2*mat_size] = Wk_.numpy()[0:mat_size]
-                Wall[2*mat_size:3*mat_size] = Wv_.numpy()[0:mat_size]
-                Ball[0:hidden_size] = Bq_.numpy()[0:hidden_size]
-                Ball[hidden_size:2*hidden_size] = Bk_.numpy()[0:hidden_size]
-                Ball[2*hidden_size:3*hidden_size] = Bv_.numpy()[0:hidden_size]
-
-                Wall = np.ascontiguousarray(Wall.reshape((3, N, H, N, H)).transpose((1, 0, 2, 3, 4)), dtype=np.float32)
-                Ball = np.ascontiguousarray(Ball.reshape((3, N, H)).transpose((1, 0, 2)), dtype=np.float32)
-
-                additional_dict[prefix + WQKV] = trt.Weights(Wall)
-                additional_dict[prefix + BQKV] = trt.Weights(Ball)
-
-                additional_dict[prefix + WQKV + "_notrans"] = trt.Weights(Wall.T)
-
-    except Exception as error:
-        TRT_LOGGER.log(TRT_LOGGER.ERROR, str(error))
-
-    weights_dict.update(additional_dict)
-    return weights_dict
-
-def onnx_to_trt_name(onnx_name):
-    """
-    Converting variables in the onnx checkpoint to names corresponding to the naming convention used in the TF version, expected by the builder
-    """
-    onnx_name = onnx_name.lower()
-    toks = [t.strip('_') for t in onnx_name.split('.')]
-    if toks[0] == 'bert': #embeddings or encoder
-        if toks[1] == 'encoder': #transformer
-
-            if toks[-2] == 'layernorm': #bias->beta, weight->gamma
-                toks[-1] = 'beta' if toks[-1] == 'bias' else 'gamma'
-            elif (toks[-2] == 'dense' or toks[-2] in {'key', 'value', 'query'}) and toks[-1] == 'weight':
-                toks[-1] = 'kernel'
-            elif (toks[-3] == 'dense' or toks[-3] in {'key', 'value', 'query'}) and toks[-1] == 'amax':
-                if toks[-2] == 'weight_quantizer':
-                    toks[-2] = 'kernel'
-                elif toks[-2] == 'input_quantizer':
-                    toks[-2] = 'input'
-
-            if 'final_input_quantizer' not in toks[2]:
-                toks = toks[3:]
-                toks[0] = 'l{}'.format(int(toks[0]))
-        else:
-            if toks[-2] == 'layernorm': #bias->beta, weight->gamma
-                toks[-1] = 'beta' if toks[-1] == 'bias' else 'gamma'
-            else: #embeddings: drop "_weight" suffix
-                if toks[-1] == 'amax':
-                    toks[-2] = 'amax'
-                toks = toks[:-1]
-    elif 'qa' in onnx_name:
-        name = 'cls_squad_output_bias' if toks[-1] == 'bias' else 'cls_squad_output_weights'
-        return name
-    else:
-        print("Encountered unknown case:", onnx_name)
-        assert(False)
-    parsed = '_'.join(toks)
-    return parsed
-
-def load_onnx_weights_and_quant(path, config):
-    """
-    Load the weights from the onnx checkpoint
-    """
-    N = config.num_attention_heads
-    H = config.head_size
-    hidden_size = config.hidden_size
-
-    model = onnx.load(path)
-    weights = model.graph.initializer
-    tensor_dict = dict([(onnx_to_trt_name(w.name), np.frombuffer(w.raw_data, np.float32).reshape(w.dims)) for w in weights])
-
-    weights_dict = dict()
-    for outname, tensor in tensor_dict.items():
-        if outname.find("_amax") != -1:
-            weights_dict[outname] = tensor
-        elif outname.find(BQ) != -1:
-            prefix = outname[:outname.find(BQ)]
-
-            Wqkv = np.zeros((3, hidden_size, hidden_size), np.float32)
-            Bqkv = np.zeros((3, hidden_size), np.float32)
-
-            Wqkv[0,:,:] = tensor_dict[prefix + WQ]
-            Wqkv[1,:,:] = tensor_dict[prefix + WK]
-            Wqkv[2,:,:] = tensor_dict[prefix + WV]
-            Bqkv[0,:] = tensor
-            Bqkv[1,:] = tensor_dict[prefix + BK]
-            Bqkv[2,:] = tensor_dict[prefix + BV]
-
-            Wqkv = np.ascontiguousarray(Wqkv.reshape((3, N, H, N, H)).transpose((1,0,2,3,4)))
-            Bqkv = np.ascontiguousarray(Bqkv.reshape((3, N, H)).transpose((1,0,2)))
-
-            weights_dict[prefix + WQKV] = trt.Weights(Wqkv)
-            weights_dict[prefix + BQKV] = trt.Weights(Bqkv)
-            weights_dict[prefix + WQKV + "_notrans"] = trt.Weights(Wqkv.T)
-
-        elif outname.find(BK) != -1 or outname.find(BV) != -1 or outname.find(WQ) != -1 or outname.find(WK) != -1 or outname.find(WV) != -1:
-            pass
-        else:
-            flat_tensor = np.ascontiguousarray(tensor).flatten()
-            weights_dict[outname] = trt.Weights(flat_tensor)
-
-            if outname.find("kernel") != -1:
-                tensor = np.transpose(tensor)
-                weights_dict[outname + "_notrans"] = trt.Weights(np.ascontiguousarray(tensor).flatten())
-
-
-    TRT_LOGGER.log(TRT_LOGGER.INFO, "Found {:} entries in weight map".format(len(weights_dict)))
-    return weights_dict
 
 def emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_lengths, batch_sizes):
     # int8 only support some of the sequence length, we dynamic on sequence length is not allowed.
@@ -600,6 +395,10 @@ def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_
                 builder_config.int8_calibrator = calibrator
         if config.use_strict:
             builder_config.set_flag(trt.BuilderFlag.STRICT_TYPES)
+    
+        if config.use_sparsity:
+            TRT_LOGGER.log(TRT_LOGGER.INFO, "Setting sparsity flag on builder_config.")
+            builder_config.set_flag(trt.BuilderFlag.SPARSE_WEIGHTS)
 
         # speed up the engine build for trt major version >= 8 
         # 1. disable cudnn tactic
@@ -678,6 +477,7 @@ def main():
     parser.add_argument("-m", "--ckpt", required=False,
                         help="The checkpoint file basename, e.g.: basename(model.ckpt-766908.data-00000-of-00001) is model.ckpt-766908")
     parser.add_argument("-x", "--onnx", required=False, help="The ONNX model file path.")
+    parser.add_argument("-pt", "--pytorch", required=False, help="The PyTorch checkpoint file path.")
     parser.add_argument("-o", "--output", required=True, default="bert_base_384.engine", help="The bert engine file, ex bert.engine")
     parser.add_argument("-b", "--batch-size", default=[], action="append", help="Batch size(s) to optimize for. The engine will be usable with any batch size below this, but may not be optimal for smaller sizes. Can be specified multiple times to optimize for more than one batch size.", type=int)
     parser.add_argument("-s", "--sequence-length", default=[], action="append", help="Sequence length of the BERT model", type=int)
@@ -694,6 +494,7 @@ def main():
     parser.add_argument("-g", "--force-fc2-gemm", action="store_true", help="Force use gemm to implement FC2 layer", required=False)
     parser.add_argument("-iln", "--force-int8-skipln", action="store_true", help="Run skip layernorm with INT8 (FP32 or FP16 by default) inputs and output", required=False)
     parser.add_argument("-imh", "--force-int8-multihead", action="store_true", help="Run multi-head attention with INT8 (FP32 or FP16 by default) input and output", required=False)
+    parser.add_argument("-sp", "--sparse", action="store_true", help="Indicates that model is sparse", required=False)
     parser.add_argument("-tcf", "--timing-cache-file", help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later", required=False)
 
     args, _ = parser.parse_known_args()
@@ -709,7 +510,7 @@ def main():
     bert_config_path = os.path.join(args.config_dir, "bert_config.json")
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Using configuration file: {:}".format(bert_config_path))
 
-    config = BertConfig(bert_config_path, args.fp16, args.int8, args.strict, args.force_fc2_gemm, args.force_int8_skipln, args.force_int8_multihead, args.int8 and args.onnx != None, args.timing_cache_file)
+    config = BertConfig(bert_config_path, args.fp16, args.int8, args.strict, args.force_fc2_gemm, args.force_int8_skipln, args.force_int8_multihead, args.int8 and args.onnx != None, args.sparse, args.timing_cache_file)
 
     if args.calib_path != None:
         calib_cache = args.calib_path
@@ -718,6 +519,8 @@ def main():
 
     if args.onnx != None:
         weights_dict = load_onnx_weights_and_quant(args.onnx, config)
+    elif args.pytorch != None:
+        weights_dict = load_pytorch_weights_and_quant(args.pytorch, config)
     elif args.ckpt != None:
         weights_dict = load_tf_weights(args.ckpt, config)
         generate_calibration_cache(args.sequence_length, args.workspace_size, config, weights_dict, args.squad_json, args.vocab_file, calib_cache, args.calib_num)

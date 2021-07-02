@@ -87,7 +87,7 @@ ILayer* parseBatchNormalization(INetworkDefinition& network, const trtcaffe::Lay
     const trtcaffe::BatchNormParameter& p = msg.batch_norm_param();
     bool nvCaffe = weightFactory.getBlobsSize(msg.name()) == 5;
 
-    int C = parserutils::getCHW(tensors[msg.bottom(0)]->getDimensions()).c();
+    int C = parserutils::getC(tensors[msg.bottom(0)]->getDimensions());
 
     Weights mean{DataType::kFLOAT, nullptr, 0},
         variance{DataType::kFLOAT, nullptr, 0},

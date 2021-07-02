@@ -127,7 +127,6 @@ def _parseArgs():
                         action='store_true', default=False)
     parser.add_argument('-v', '--verify', help="Verify if the data has been downloaded. Will not download if specified.",
                         action='store_true', default=False)
-    parser.add_argument('-V', '--verbose', help="Dump debug log", action='store_true', default=False)
 
     args, _ = parser.parse_known_args()
     data = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
@@ -150,7 +149,7 @@ def verifyChecksum(data_dir, yaml_path):
         fpath = os.path.join(data_dir, f.path)
         if os.path.exists(fpath):
             if _checkMD5(fpath, f.checksum):
-                logger.debug("MD5 match for local copy %s", fpath)
+                logger.info("MD5 match for local copy %s", fpath)
             else:
                 logger.error("Local file %s has a different checksum!", fpath)
                 allGood = False
@@ -163,9 +162,8 @@ def verifyChecksum(data_dir, yaml_path):
 
 def main():
     data, args = _parseArgs()
-    if args.verbose:
-        logging.basicConfig()
-        logger.setLevel(logging.DEBUG)
+    logging.basicConfig()
+    logger.setLevel(logging.INFO)
 
     ret = True
     if args.verify:
@@ -180,3 +178,26 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+TRT_DATA_DIR = None
+
+def getFilePath(path):
+    """Util to get the full path to the downloaded data files.
+
+    It only works when the sample doesn't have any other command line argument.
+    """
+    global TRT_DATA_DIR
+    if not TRT_DATA_DIR:
+        parser = argparse.ArgumentParser(description="Helper of data file download tool")
+        parser.add_argument('-d', '--data', help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.")
+        args, _ = parser.parse_known_args()
+        TRT_DATA_DIR = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
+    if TRT_DATA_DIR is None:
+        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
+
+    fullpath = os.path.join(TRT_DATA_DIR, path)
+    if not os.path.exists(fullpath):
+        raise ValueError("Data file %s doesn't exist!" % fullpath)
+
+    return fullpath

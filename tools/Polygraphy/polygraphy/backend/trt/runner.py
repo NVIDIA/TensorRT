@@ -35,15 +35,18 @@ class TrtRunner(BaseRunner):
     Note that runners are not designed for production deployment and should generally
     be used only for prototyping, testing, and debugging.
     """
+
     def __init__(self, engine, name=None):
         """
         Args:
             engine (Callable() -> Union[trt.ICudaEngine, trt.IExecutionContext]):
                     A callable that can supply either a TensorRT engine or execution context.
                     If an engine is provided, the runner will create a context automatically.
-                    Otherwise, it will use the provided context.
-                    If instead of a callable, the object is provided directly, then the runner
-                    will *not* take ownership of it, and therefore will not destroy it.
+                    This callable is invoked whenever the runner is activated.
+
+                    Alternatively, the engine or context may be supplied directly instead of
+                    through a callable, in which case the runner will *not* take ownership of it,
+                    and therefore will not destroy it.
 
 
             name (str):
@@ -53,13 +56,11 @@ class TrtRunner(BaseRunner):
         super().__init__(name=name, prefix="trt-runner")
         self._engine_or_context = engine
 
-
     @func.constantmethod
     def get_input_metadata_impl(self):
-        bindings_per_profile = trt_util.get_bindings_per_profile(self.context.engine)
+        start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
         # This function always uses binding names of the 0th profile.
-        return trt_util.get_input_metadata_from_engine(self.context.engine, start_binding=0, end_binding=bindings_per_profile)
-
+        return trt_util.get_input_metadata_from_engine(self.context.engine, start_binding, end_binding)
 
     def activate_impl(self):
         def make_buffers(engine):
@@ -79,7 +80,6 @@ class TrtRunner(BaseRunner):
             G_LOGGER.extra_verbose("Created device buffers: {:}".format(device_buffers))
             return device_buffers, host_output_buffers
 
-
         engine_or_context, owning = util.invoke_if_callable(self._engine_or_context)
 
         if isinstance(engine_or_context, trt.ICudaEngine):
@@ -95,25 +95,29 @@ class TrtRunner(BaseRunner):
             self.context = engine_or_context
             self.owns_context = owning
         else:
-            G_LOGGER.critical("Invalid Engine or Context. Please ensure the engine was built correctly. See error log for details.")
+            G_LOGGER.critical(
+                "Invalid Engine or Context. Please ensure the engine was built correctly. See error log for details."
+            )
 
         if not owning:
-            G_LOGGER.verbose("Object was provided directly instead of via a Callable. This runner will not assume ownership. "
-                             "Please ensure it is freed.")
-
+            G_LOGGER.verbose(
+                "Object was provided directly instead of via a Callable. This runner will not assume ownership. "
+                "Please ensure it is freed."
+            )
 
         self.device_buffers, self.host_output_buffers = make_buffers(self.context.engine)
         self.stream = cuda.Stream()
 
-
     def set_profile(self, index):
         """
         Sets the active optimization profile for this runner.
+        The runner must already be active (see ``__enter__()`` or ``activate()``).
+
         This only applies if your engine was built with multiple
         optimization profiles.
 
-        The profile will be set asynchronously using this runner's CUDA
-        stream (``runner.stream``).
+        In TensorRT 8.0 and newer, the profile will be set asynchronously
+        using this runner's CUDA stream (``runner.stream``).
 
         By default, the runner uses the first profile (profile 0).
 
@@ -121,13 +125,15 @@ class TrtRunner(BaseRunner):
             index (int):
                     The index of the optimization profile to use.
         """
+        if not self.is_active:
+            G_LOGGER.critical("{:35} | Must be activated prior to calling set_profile()".format(self.name))
+
         try:
             self.context.set_optimization_profile_async
         except AttributeError:
             self.context.active_optimization_profile = index
         else:
             self.context.set_optimization_profile_async(index, self.stream.ptr)
-
 
     def _set_shapes_from_feed_dict(self, feed_dict):
         """
@@ -143,6 +149,7 @@ class TrtRunner(BaseRunner):
         Returns:
             Tuple[int, int]: The start and end binding indices of the modified bindings.
         """
+
         def is_dynamic_shape_input(binding):
             try:
                 self.context.engine.get_profile_shape_input(0, binding)
@@ -155,11 +162,13 @@ class TrtRunner(BaseRunner):
             binding = start_binding + self.context.engine[name]
             # Only set shapes if required.
             # get_shape/get_binding_shape will return what a shape input/data input is currently set to.
-            if is_dynamic_shape_input(binding): # For input shape tensors
+            if is_dynamic_shape_input(binding):  # For input shape tensors
                 if isinstance(inp, cuda.DeviceView):
-                    G_LOGGER.critical("A DeviceView was provided for input: {:}, but since this is a "
-                                      "shape tensor, it must reside in host memory. "
-                                      "Please use a NumPy array instead. ".format(name))
+                    G_LOGGER.critical(
+                        "A DeviceView was provided for input: {:}, but since this is a "
+                        "shape tensor, it must reside in host memory. "
+                        "Please use a NumPy array instead. ".format(name)
+                    )
 
                 if tuple(self.context.get_shape(binding)) != tuple(inp):
                     G_LOGGER.verbose("Setting shape binding: {:} (index: {:}) to: {:}".format(name, binding, inp))
@@ -172,14 +181,17 @@ class TrtRunner(BaseRunner):
                     self.context.set_binding_shape(binding, shape)
 
         if not self.context.all_binding_shapes_specified:
-            G_LOGGER.critical("Some input shapes were not specified.\n"
-                              "Note: Network inputs are: {:}".format(self.get_input_metadata()))
+            G_LOGGER.critical(
+                "Some input shapes were not specified.\n"
+                "Note: Network inputs are: {:}".format(self.get_input_metadata())
+            )
         if not self.context.all_shape_inputs_specified:
-            G_LOGGER.critical("Some shape inputs were not specified.\n"
-                              "Note: Network inputs are: {:}".format(self.get_input_metadata()))
+            G_LOGGER.critical(
+                "Some shape inputs were not specified.\n"
+                "Note: Network inputs are: {:}".format(self.get_input_metadata())
+            )
 
         return start_binding, end_binding
-
 
     def infer_impl(self, feed_dict):
         start_binding, end_binding = self._set_shapes_from_feed_dict(feed_dict)
@@ -187,7 +199,7 @@ class TrtRunner(BaseRunner):
         # Resize output device buffers - host buffers will be automatically resized by copy_to
         for binding in range(start_binding, end_binding):
             if not self.context.engine.binding_is_input(binding):
-                name = self.context.engine[binding - start_binding] # Use profile 0 binding names for all buffers.
+                name = self.context.engine[binding - start_binding]  # Use profile 0 binding names for all buffers.
                 shape = tuple(self.context.get_binding_shape(binding))
                 self.device_buffers[name].resize(shape)
 
@@ -201,9 +213,10 @@ class TrtRunner(BaseRunner):
             elif isinstance(buffer, np.ndarray):
                 dev_bufs[name].copy_from(buffer, self.stream)
             else:
-                G_LOGGER.critical("Unrecognized type in feed_dict: {:} for input: {:}.\n"
-                                  "Please provide either a NumPy array or Polygraphy DeviceView. ".format(
-                                      type(buffer).__name__, name))
+                G_LOGGER.critical(
+                    "Unrecognized type in feed_dict: {:} for input: {:}.\n"
+                    "Please provide either a NumPy array or Polygraphy DeviceView. ".format(type(buffer).__name__, name)
+                )
 
         # Need to offset bindings in case the active profile is not 0.
         bindings = [0] * start_binding + [buf.ptr for buf in dev_bufs.values()]
@@ -221,7 +234,6 @@ class TrtRunner(BaseRunner):
 
         return self.host_output_buffers
 
-
     def deactivate_impl(self):
         with contextlib.ExitStack() as stack:
             if self.owns_engine:
@@ -232,9 +244,15 @@ class TrtRunner(BaseRunner):
             [buf.free() for buf in self.device_buffers.values()]
             self.stream.free()
 
-        del (self.engine, self.owns_engine, self.context, self.owns_context,
-             self.device_buffers, self.host_output_buffers, self.stream)
-
+        del (
+            self.engine,
+            self.owns_engine,
+            self.context,
+            self.owns_context,
+            self.device_buffers,
+            self.host_output_buffers,
+            self.stream,
+        )
 
     # Note: This can be removed once TRT 6 support is dropped.
     def infer(self, feed_dict, check_inputs=None):

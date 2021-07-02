@@ -24,13 +24,11 @@ class TestTopK(object):
         top_k = func(IterationResult({"x": arr}))
         assert np.all(top_k["x"] == [4, 3, 2])
 
-
     def test_k_can_exceed_array_len(self):
         arr = np.array([1, 2, 3, 4, 5], dtype=np.float32)
         func = PostprocessFunc.topk_func(k=10)
         top_k = func(IterationResult({"x": arr}))
         assert np.all(top_k["x"] == [4, 3, 2, 1, 0])
-
 
     def test_per_output_top_k(self):
         arr = np.array([1, 2, 3, 4, 5], dtype=np.float32)

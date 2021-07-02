@@ -80,8 +80,8 @@ endif()
 ############################################################################################
 # Dependencies
 
-set(DEFAULT_CUDA_VERSION 11.1)
-set(DEFAULT_CUDNN_VERSION 8.0)
+set(DEFAULT_CUDA_VERSION 11.3.1)
+set(DEFAULT_CUDNN_VERSION 8.2)
 set(DEFAULT_PROTOBUF_VERSION 3.0.0)
 set(DEFAULT_CUB_VERSION 1.8.0)
 

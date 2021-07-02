@@ -71,6 +71,11 @@ def gather(self, data, indices):
 
 
 @gs.Graph.register()
+def slice(self, data, starts, ends, axes, steps):
+    return self.layer(op="Slice", inputs=[data, starts, ends, axes, steps], outputs=["slice_out"])[0]
+
+
+@gs.Graph.register()
 def nested(self, inp, graph):
     return self.layer(op="Nested", inputs=[inp], outputs=["nested_out"], attrs={"body": graph})[0]
 
@@ -918,6 +923,33 @@ class TestFoldConstants(object):
 
         assert isinstance(graph.outputs[1], Variable)
         assert isinstance(graph.outputs[2], Variable)
+
+
+    @pytest.mark.parametrize("shape, starts, ends, axes, steps, expected", [
+        (("batch", 3, "height", "width"), 1, 2, 0, 1, [3]), # Scalar starts/ends case
+        (("batch", 3, "height", "width"), [1], [2], [0], [1], [3]),
+        (("batch", 3, 5, "width"), [1], [-1], [0], [1], [3, 5]), # Negative ends case
+        (("batch", 3, 5, 7), [1], [2000], [0], [1], [3, 5, 7]), # Past end, ends case
+        (("batch", 3, 5, 7), [-2], [4], [0], [1], [5, 7]), # Negative starts case
+        (("batch", 3, 5, 7), [-2], [4], [1], [1], None), # Non-zero axes case
+        (("batch", 3, 5, "width"), [-2], [4], [1], [1], None), # Dynamic case
+        (("batch", 3, 5, 7), [1], [4], [0], [2], [3, 7]), # Non-one steps case
+        (("batch", 3, 5, 7), [4], [0], [0], [-1], [7, 5, 3]), # Negative steps case
+    ]) 
+    def test_shape_slice(self, shape, starts, ends, axes, steps, expected):
+        inp = Variable("input", dtype=np.float32, shape=shape)
+        graph = Graph(inputs=[inp])
+
+        inp_shape = graph.shape(inp)
+        graph.outputs = [graph.slice(inp_shape, np.array(starts), np.array(ends), axes=np.array(axes), steps=np.array(steps))]
+
+        graph.fold_constants()
+
+        if expected:
+            assert isinstance(graph.outputs[0], Constant)
+            assert np.all(graph.outputs[0].values == expected)
+        else:
+            assert isinstance(graph.outputs[0], Variable)
 
 
     def test_with_nested_graph(self):

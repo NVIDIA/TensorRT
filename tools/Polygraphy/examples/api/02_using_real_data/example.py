@@ -20,15 +20,14 @@ This script uses the Polygraphy Runner API to validate the outputs
 of an identity model using a trivial dataset.
 """
 import numpy as np
-from polygraphy.backend.trt import (EngineFromNetwork, NetworkFromOnnxPath,
-                                    TrtRunner)
+from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
 
 REAL_DATASET = [
     np.ones((1, 1, 2, 2), dtype=np.float32),
     np.zeros((1, 1, 2, 2), dtype=np.float32),
     np.ones((1, 1, 2, 2), dtype=np.float32),
     np.zeros((1, 1, 2, 2), dtype=np.float32),
-] # Definitely real data
+]  # Definitely real data
 
 # For our identity network, the golden output values are the same as the input values.
 # Though this network appears to do nothing, it can be incredibly useful in some cases (like here!).
@@ -45,6 +44,8 @@ def main():
             outputs = runner.infer(feed_dict={"x": data})
 
             assert np.array_equal(outputs["y"], golden)
+
+        print("Validation succeeded!")
 
 
 if __name__ == "__main__":

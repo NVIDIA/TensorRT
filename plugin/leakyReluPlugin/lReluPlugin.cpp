@@ -13,13 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "lReluPlugin.h"
 #include "checkMacrosPlugin.h"
 #include "kernel.h"
 
 using namespace nvinfer1;
-using nvinfer1::PluginType;
 using nvinfer1::plugin::LReluPluginCreator;
 using nvinfer1::plugin::LReLU;
 
@@ -37,51 +35,51 @@ LReLU::LReLU(float negSlope)
 
 LReLU::LReLU(const void* buffer, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(buffer), *a = d;
+    const char *d = reinterpret_cast<const char *>(buffer), *a = d;
     mNegSlope = read<float>(d);
     mBatchDim = read<int>(d);
     ASSERT(d == a + length);
 }
 
-int LReLU::getNbOutputs() const
+int LReLU::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims LReLU::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims LReLU::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
     ASSERT(nbInputDims == 1);
     ASSERT(index == 0);
     return inputs[0];
 }
 
-int LReLU::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+int LReLU::enqueue(
+    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     const void* inputData = inputs[0];
     void* outputData = outputs[0];
     pluginStatus_t status = lReLUInference(stream, mBatchDim * batchSize, mNegSlope, inputData, outputData);
-    ASSERT(status == STATUS_SUCCESS);
     return status;
 }
 
-size_t LReLU::getSerializationSize() const
+size_t LReLU::getSerializationSize() const noexcept
 {
     // mNegSlope, mBatchDim
     return sizeof(float) + sizeof(int);
 }
 
-void LReLU::serialize(void* buffer) const
+void LReLU::serialize(void* buffer) const noexcept
 {
-    char *d = reinterpret_cast<char*>(buffer), *a = d;
+    char *d = reinterpret_cast<char *>(buffer), *a = d;
     write(d, mNegSlope);
     write(d, mBatchDim);
     ASSERT(d == a + getSerializationSize());
 }
 
 void LReLU::configureWithFormat(
-    const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type, PluginFormat format, int)
+    const Dims* inputDims, int /* nbInputs */, const Dims* /* outputDims */, int nbOutputs, DataType type, PluginFormat format, int) noexcept
 {
-    ASSERT(type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    ASSERT(type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
     ASSERT(mBatchDim == 1);
     ASSERT(nbOutputs == 1);
     for (int i = 0; i < inputDims[0].nbDims; ++i)
@@ -90,39 +88,39 @@ void LReLU::configureWithFormat(
     }
 }
 
-bool LReLU::supportsFormat(DataType type, PluginFormat format) const
+bool LReLU::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-int LReLU::initialize()
-{
-    return 0;
-}
-
-void LReLU::terminate() {}
-
-size_t LReLU::getWorkspaceSize(int maxBatchSize) const
+int LReLU::initialize() noexcept
 {
     return 0;
 }
 
-const char* LReLU::getPluginType() const
+void LReLU::terminate() noexcept {}
+
+size_t LReLU::getWorkspaceSize(int /* maxBatchSize */) const noexcept
+{
+    return 0;
+}
+
+const char* LReLU::getPluginType() const noexcept
 {
     return LRELU_PLUGIN_NAME;
 }
 
-const char* LReLU::getPluginVersion() const
+const char* LReLU::getPluginVersion() const noexcept
 {
     return LRELU_PLUGIN_VERSION;
 }
 
-void LReLU::destroy()
+void LReLU::destroy() noexcept
 {
     delete this;
 }
 
-IPluginV2* LReLU::clone() const
+IPluginV2* LReLU::clone() const noexcept
 {
     IPluginV2* plugin = new LReLU(mNegSlope);
     plugin->setPluginNamespace(mNamespace.c_str());
@@ -137,32 +135,32 @@ LReluPluginCreator::LReluPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* LReluPluginCreator::getPluginName() const
+const char* LReluPluginCreator::getPluginName() const noexcept
 {
     return LRELU_PLUGIN_NAME;
 }
 
-const char* LReluPluginCreator::getPluginVersion() const
+const char* LReluPluginCreator::getPluginVersion() const noexcept
 {
     return LRELU_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* LReluPluginCreator::getFieldNames()
+const PluginFieldCollection* LReluPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* LReluPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2* LReluPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     ASSERT(fc->nbFields == 1);
     ASSERT(fields[0].type == PluginFieldType::kFLOAT32);
-    negSlope = *(static_cast<const float*>(fields[0].data));
+    float negSlope = *(static_cast<const float*>(fields[0].data));
 
     return new LReLU(negSlope);
 }
 
-IPluginV2* LReluPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2* LReluPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call LReluPlugin::destroy()

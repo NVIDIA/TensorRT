@@ -28,7 +28,8 @@ from polygraphy.mod.importer import _version_ok
 
 class TestImporter(object):
     def test_import_from_script(self):
-        script = dedent("""
+        script = dedent(
+            """
         from polygraphy.backend.trt import CreateNetwork
         from polygraphy import func
         import tensorrt as trt
@@ -38,7 +39,8 @@ class TestImporter(object):
             inp = network.add_input("input", dtype=trt.float32, shape=(1, 1))
             out = network.add_identity(inp).get_output(0)
             network.mark_output(out)
-        """)
+        """
+        )
 
         with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
@@ -55,13 +57,13 @@ class TestImporter(object):
                 assert network.get_layer(0).type == trt.LayerType.IDENTITY
             assert sys.path == orig_sys_path
 
-
-
     def test_import_non_existent(self):
-        script = dedent("""
+        script = dedent(
+            """
         def example():
             pass
-        """)
+        """
+        )
 
         with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
@@ -78,19 +80,21 @@ class TestImporter(object):
                 mod.import_from_script(f.name, "non_existent")
             assert sys.path == orig_sys_path
 
-
-    @pytest.mark.parametrize("ver, pref, expected", [
-        ("0.0.0", "==0.0.0", True),
-        ("0.0.0", "== 0.0.1", False),
-        ("0.0.0", ">= 0.0.0", True),
-        ("0.0.0", ">=0.0.1", False),
-        ("0.0.0", "<= 0.0.0", True),
-        ("0.0.2", "<=0.0.1", False),
-        ("0.0.1", "> 0.0.0", True),
-        ("0.0.1", ">0.0.1", False),
-        ("0.0.0", "< 0.0.1", True),
-        ("0.0.0", "< 0.0.0", False),
-        ("0.2.0", mod.LATEST_VERSION, False),
-    ])
+    @pytest.mark.parametrize(
+        "ver, pref, expected",
+        [
+            ("0.0.0", "==0.0.0", True),
+            ("0.0.0", "== 0.0.1", False),
+            ("0.0.0", ">= 0.0.0", True),
+            ("0.0.0", ">=0.0.1", False),
+            ("0.0.0", "<= 0.0.0", True),
+            ("0.0.2", "<=0.0.1", False),
+            ("0.0.1", "> 0.0.0", True),
+            ("0.0.1", ">0.0.1", False),
+            ("0.0.0", "< 0.0.1", True),
+            ("0.0.0", "< 0.0.0", False),
+            ("0.2.0", mod.LATEST_VERSION, False),
+        ],
+    )
     def test_version_ok(self, ver, pref, expected):
         assert _version_ok(ver, pref) == expected

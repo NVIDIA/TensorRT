@@ -26,7 +26,7 @@ import pytest
 
 class TestClassificationFlow():
 
-    def test_resnet50(self, request, pytestconfig):
+    def test_resnet18(self, request, pytestconfig):
         dir_path = os.path.dirname(os.path.realpath(__file__))
         dataset_dir = pytestconfig.getoption('--data-dir')
 
@@ -56,7 +56,7 @@ class TestClassificationFlow():
             [
                 'python3', dir_path + '/../examples/torchvision/classification_flow.py',
                 '--data-dir', dataset_dir,
-                '--model', 'resnet50', '--pretrained',
+                '--model', 'resnet18', '--pretrained',
                 '-t', '0.5',
                 '--num-finetune-epochs', '1',
                 '--evaluate-onnx',

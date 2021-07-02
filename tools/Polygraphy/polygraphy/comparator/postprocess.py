@@ -17,6 +17,7 @@ from polygraphy import mod
 
 np = mod.lazy_import("numpy")
 
+
 @mod.export()
 class PostprocessFunc(object):
     """
@@ -55,7 +56,6 @@ class PostprocessFunc(object):
                     return k[""]
                 return None
 
-
             for name, output in iter_result.items():
                 k_val = get_k(name)
                 if k_val:
@@ -63,4 +63,5 @@ class PostprocessFunc(object):
                     axis_len = indices.shape[axis]
                     iter_result[name] = np.take(indices, np.arange(0, min(k_val, axis_len)), axis=axis)
             return iter_result
+
         return topk

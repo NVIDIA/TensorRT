@@ -20,6 +20,7 @@ import sys
 import time
 import argparse
 import warnings
+import collections
 
 import torch
 import torch.utils.data
@@ -38,11 +39,11 @@ from pytorch_quantization import quant_modules
 
 import onnxruntime
 import numpy as np
-import models 
+import models
 
 from prettytable import PrettyTable
 
-# The following path assumes running in nvcr.io/nvidia/pytorch:20.08-py3 
+# The following path assumes running in nvcr.io/nvidia/pytorch:20.08-py3
 sys.path.insert(0,"/opt/pytorch/vision/references/classification/")
 
 # Import functions from torchvision reference
@@ -168,11 +169,13 @@ def prepare_model(
     ## Prepare the data loaders
     traindir = os.path.join(data_dir, 'train')
     valdir = os.path.join(data_dir, 'val')
-    dataset, dataset_test, train_sampler, test_sampler = load_data(traindir, valdir, False, False)
+    _args = collections.namedtuple("mock_args", ["model", "distributed", "cache_dataset"])
+    dataset, dataset_test, train_sampler, test_sampler = load_data(
+        traindir, valdir, _args(model=model_name, distributed=False, cache_dataset=False))
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset, batch_size=batch_size_train,
-        sampler=train_sampler, num_workers=16, pin_memory=True)
+        sampler=train_sampler, num_workers=4, pin_memory=True)
 
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test, batch_size=batch_size_test,

@@ -28,7 +28,7 @@ ILayer* parseScale(INetworkDefinition& network, const trtcaffe::LayerParameter& 
     }
 
     const trtcaffe::ScaleParameter& p = msg.scale_param();
-    int C = parserutils::getCHW(tensors[msg.bottom(0)]->getDimensions()).c();
+    int C = parserutils::getC(tensors[msg.bottom(0)]->getDimensions());
 
     Weights scale = weightFactory.isInitialized() ? weightFactory(msg.name(), WeightType::kGENERIC) : weightFactory.allocateWeights(C, std::uniform_real_distribution<float>(0.9F, 1.1F));
     Weights shift = !p.has_bias_term() || p.bias_term() ? (weightFactory.isInitialized() ? weightFactory(msg.name(), WeightType::kBIAS) : weightFactory.allocateWeights(C)) : weightFactory.getNullWeights();

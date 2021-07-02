@@ -438,9 +438,9 @@ __device__ inline float myExp<float>(const float x)
     return __expf(x);
 }
 
-static inline __device__ uint32_t float4_to_char4(float x, 
-                                                  float y, 
-                                                  float z, 
+static inline __device__ uint32_t float4_to_char4(float x,
+                                                  float y,
+                                                  float z,
                                                   float w) {
   uint32_t dst;
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 720

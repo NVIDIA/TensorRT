@@ -17,19 +17,17 @@
 
 from __future__ import print_function
 from collections import OrderedDict
-import os.path
+import sys
+import os
 
 import onnx
 from onnx import helper
 from onnx import TensorProto
 import numpy as np
 
-import sys, os
 sys.path.insert(1, os.path.join(sys.path[0], os.path.pardir))
-import common
+from downloader import getFilePath
 
-sys.path.insert(1, os.path.join(sys.path[0], os.path.pardir))
-from common import retry_call
 
 class DarkNetParser(object):
     """Definition of a parser for DarkNet-based YOLOv3-608 (only tested for this topology)."""
@@ -708,12 +706,7 @@ class GraphBuilderONNX(object):
 
 def main():
     """Run the DarkNet-to-ONNX conversion for YOLOv3-608."""
-    # Download the config for YOLOv3 if not present yet, and analyze the checksum:
-    cfg_file_path = common.download_file(
-        'yolov3.cfg',
-        'https://raw.githubusercontent.com/pjreddie/darknet/f86901f6177dfc6116360a13cc06ab680e0c86b0/cfg/yolov3.cfg',
-        'b969a43a848bbf26901643b833cfb96c')
-
+    cfg_file_path = getFilePath('samples/python/yolov3_onnx/yolov3.cfg')
     # These are the only layers DarkNetParser will extract parameters from. The three layers of
     # type 'yolo' are not parsed in detail because they are included in the post-processing later:
     supported_layers = ['net', 'convolutional', 'shortcut',
@@ -736,12 +729,7 @@ def main():
     # Create a GraphBuilderONNX object with the known output tensor dimensions:
     builder = GraphBuilderONNX(output_tensor_dims)
 
-    # We want to populate our network with weights later, that's why we download those from
-    # the official mirror (and verify the checksum):
-    weights_file_path = common.download_file(
-        'yolov3.weights',
-        'https://master.dl.sourceforge.net/project/darknet-yolo.mirror/darknet_yolo_v3_optimal/yolov3.weights',
-        'c84e5b99d0e52cd466ae710cadf6d84c')
+    weights_file_path = getFilePath('samples/python/yolov3_onnx/yolov3.weights')
 
     # Now generate an ONNX graph with weights from the previously parsed layer configurations
     # and the weights file:

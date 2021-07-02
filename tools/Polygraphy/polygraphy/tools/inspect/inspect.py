@@ -21,9 +21,9 @@ class Inspect(Tool):
     """
     View information about various types of files.
     """
+
     def __init__(self):
         super().__init__("inspect")
-
 
     def add_parser_args(self, parser):
         subparsers = parser.add_subparsers(title="Inspection Subtools", dest="subtool")

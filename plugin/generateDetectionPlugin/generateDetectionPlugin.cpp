@@ -160,7 +160,7 @@ void GenerateDetection::destroy() noexcept
 
 bool GenerateDetection::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 };
 
 const char* GenerateDetection::getPluginType() const noexcept
@@ -270,8 +270,8 @@ Dims GenerateDetection::getOutputDimensions(int index, const Dims* inputs, int n
     return detections;
 }
 
-int GenerateDetection::enqueue(
-    int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t GenerateDetection::enqueue(
+    int32_t batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     void* detections = outputs[0];

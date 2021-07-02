@@ -19,137 +19,92 @@
 
 namespace tensorrt
 {
-    namespace ICaffeParserDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            This class is used for parsing Caffe models. It allows users to export models trained using Caffe to TRT.
+namespace ICaffeParserDoc
+{
+constexpr const char* descr = R"trtdoc(
+    This class is used for parsing Caffe models. It allows users to export models trained using Caffe to TRT.
 
-            :ivar plugin_factory: :class:`ICaffePluginFactory` The ICaffePluginFactory used to create the user defined plugins.
-            :ivar plugin_factory_ext: :class:`ICaffePluginFactoryExt` The ICaffePluginFactoryExt used to create the user defined pluginExts.
-            :ivar plugin_factory_v2: :class:`ICaffePluginFactoryV2` The ICaffePluginFactory used to create the user defined plugins.
-            :ivar plugin_namespace: :class:`str` The namespace used to lookup and create plugins in the network.
-            :ivar protobuf_buffer_size: :class:`int` The buffer size for the parsing and storage of the learned model.
-        )trtdoc";
+    :ivar plugin_factory_v2: :class:`ICaffePluginFactoryV2` The ICaffePluginFactory used to create the user defined plugins.
+    :ivar plugin_namespace: :class:`str` The namespace used to lookup and create plugins in the network.
+    :ivar protobuf_buffer_size: :class:`int` The buffer size for the parsing and storage of the learned model.
+    :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
+)trtdoc";
 
-        constexpr const char* parse = R"trtdoc(
-            Parse a prototxt file and a binaryproto Caffe model to extract network definition and weights associated with the network, respectively.
+constexpr const char* parse = R"trtdoc(
+    Parse a prototxt file and a binaryproto Caffe model to extract network definition and weights associated with the network, respectively.
 
-            :arg deploy: The plain text, prototxt file used to define the network definition.
-            :arg model:  The binaryproto Caffe model that contains the weights associated with the network.
-            :arg network: Network in which the CaffeParser will fill the layers.
-            :arg dtype: The type to which the weights will be transformed.
+    :arg deploy: The plain text, prototxt file used to define the network definition.
+    :arg model:  The binaryproto Caffe model that contains the weights associated with the network.
+    :arg network: Network in which the CaffeParser will fill the layers.
+    :arg dtype: The type to which the weights will be transformed.
 
-            :returns: An :class:`IBlobNameToTensor` object that contains the extracted data.
-        )trtdoc";
+    :returns: An :class:`IBlobNameToTensor` object that contains the extracted data.
+)trtdoc";
 
-        constexpr const char* parse_buffer = R"trtdoc(
-            Parse a prototxt file and a binaryproto Caffe model to extract network definition and weights associated with the network, respectively.
+constexpr const char* parse_buffer = R"trtdoc(
+    Parse a prototxt file and a binaryproto Caffe model to extract network definition and weights associated with the network, respectively.
 
-            :arg deploy_buffer: The memory buffer containing the plain text deploy prototxt used to define the network definition.
-            :arg model_buffer: The binaryproto Caffe memory buffer that contains the weights associated with the network.
-            :arg network: Network in which the CaffeParser will fill the layers.
-            :arg dtype: The type to which the weights will be transformed.
+    :arg deploy_buffer: The memory buffer containing the plain text deploy prototxt used to define the network definition.
+    :arg model_buffer: The binaryproto Caffe memory buffer that contains the weights associated with the network.
+    :arg network: Network in which the CaffeParser will fill the layers.
+    :arg dtype: The type to which the weights will be transformed.
 
-            :returns: An :class:`IBlobNameToTensor` object that contains the extracted data.
-        )trtdoc";
+    :returns: An :class:`IBlobNameToTensor` object that contains the extracted data.
+)trtdoc";
 
-        constexpr const char* parse_binary_proto = R"trtdoc(
-            Parse and extract data stored in binaryproto file. The binaryproto file contains data stored in a binary blob. :func:`parse_binary_proto` converts it to an :class:`numpy.ndarray` object.
+constexpr const char* parse_binary_proto = R"trtdoc(
+    Parse and extract data stored in binaryproto file. The binaryproto file contains data stored in a binary blob. :func:`parse_binary_proto` converts it to an :class:`numpy.ndarray` object.
 
-            :arg filename:  Path to file containing binary proto.
+    :arg filename:  Path to file containing binary proto.
 
-            :returns: :class:`numpy.ndarray` An array that contains the extracted data.
-        )trtdoc";
+    :returns: :class:`numpy.ndarray` An array that contains the extracted data.
+)trtdoc";
 
-    } /* ICaffeParserDoc */
+} // namespace ICaffeParserDoc
 
-    namespace IBlobNameToTensorDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            This class is used to store and query :class:`ITensor` s after they have been extracted from a Caffe model using the :class:`CaffeParser` .
-        )trtdoc";
+namespace IBlobNameToTensorDoc
+{
+constexpr const char* descr = R"trtdoc(
+    This class is used to store and query :class:`ITensor` s after they have been extracted from a Caffe model using the :class:`CaffeParser` .
+)trtdoc";
 
-        constexpr const char* find = R"trtdoc(
-            Given a blob name, this function returns an :class:`ITensor` object.
+constexpr const char* find = R"trtdoc(
+    Given a blob name, this function returns an :class:`ITensor` object.
 
-            :arg name: Caffe blob name for which the user wants the corresponding :class:`ITensor` .
+    :arg name: Caffe blob name for which the user wants the corresponding :class:`ITensor` .
 
-            :returns: A :class:`ITensor` object corresponding to the queried name. If no such :class:`ITensor` exists, then an empty object is returned.
-        )trtdoc";
-    } /* IBlobNameToTensorDoc */
+    :returns: A :class:`ITensor` object corresponding to the queried name. If no such :class:`ITensor` exists, then an empty object is returned.
+)trtdoc";
+} // namespace IBlobNameToTensorDoc
 
-    namespace ICaffePluginFactoryDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin factory used to configure plugins.
-        )trtdoc";
+namespace ICaffePluginFactoryV2Doc
+{
+constexpr const char* descr = R"trtdoc(
+    Plugin factory used to configure plugins.
+)trtdoc";
 
-        constexpr const char* is_plugin = R"trtdoc(
-            A user implemented function that determines if a layer configuration is provided by an :class:`IPlugin` .
+constexpr const char* is_plugin_v2 = R"trtdoc(
+    A user implemented function that determines if a layer configuration is provided by an :class:`IPluginV2` .
 
-            :arg layer_name: Name of the layer which the user wishes to validate.
+    :arg layer_name: Name of the layer which the user wishes to validate.
 
-            :returns: True if the the layer configuration is provided by an :class:`IPlugin` .
-        )trtdoc";
+    :returns: True if the the layer configuration is provided by an :class:`IPluginV2` .
+)trtdoc";
 
-        constexpr const char* create_plugin = R"trtdoc(
-            Creates a plugin.
+constexpr const char* create_plugin = R"trtdoc(
+    Creates a plugin.
 
-             :arg layer_name: Name of layer associated with the plugin.
-             :arg weights: Weights used for the layer.
+        :arg layer_name: Name of layer associated with the plugin.
+        :arg weights: Weights used for the layer.
 
-            :returns: The newly created :class:`IPlugin` .
-        )trtdoc";
-    } //IPluginFactoryExtDoc
+    :returns: The newly created :class:`IPluginV2` .
+)trtdoc";
+} // namespace ICaffePluginFactoryV2Doc
 
-    namespace ICaffePluginFactoryExtDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin factory used to configure plugins with added support for TRT versioning.
-        )trtdoc";
-
-        constexpr const char* is_plugin_ext = R"trtdoc(
-            A user implemented function that determines if a layer configuration is provided by an :class:`IPluginExt` .
-
-            :arg layer_name: Name of the layer which the user wishes to validate.
-
-            :returns: True if the the layer configuration is provided by an :class:`IPluginExt` .
-        )trtdoc";
-
-        constexpr const char* get_version = R"trtdoc(
-            Get the Tensorrt Version.
-        )trtdoc";
-    } //IPluginFactoryExtDoc
-
-    namespace ICaffePluginFactoryV2Doc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin factory used to configure plugins.
-        )trtdoc";
-
-        constexpr const char* is_plugin_v2 = R"trtdoc(
-            A user implemented function that determines if a layer configuration is provided by an :class:`IPluginV2` .
-
-            :arg layer_name: Name of the layer which the user wishes to validate.
-
-            :returns: True if the the layer configuration is provided by an :class:`IPluginV2` .
-        )trtdoc";
-
-        constexpr const char* create_plugin = R"trtdoc(
-            Creates a plugin.
-
-             :arg layer_name: Name of layer associated with the plugin.
-             :arg weights: Weights used for the layer.
-
-            :returns: The newly created :class:`IPluginV2` .
-        )trtdoc";
-    } //IPluginFactoryV2Doc
-
-
-    namespace FreeFunctionsDoc
-    {
-        constexpr const char* shutdown_protobuf_library = R"trtdoc(
-            Shuts down protocol buffers library.
-        )trtdoc";
-    }
-} /* tensorrt */
+namespace FreeFunctionsDoc
+{
+constexpr const char* shutdown_protobuf_library = R"trtdoc(
+    Shuts down protocol buffers library.
+)trtdoc";
+}
+} // namespace tensorrt

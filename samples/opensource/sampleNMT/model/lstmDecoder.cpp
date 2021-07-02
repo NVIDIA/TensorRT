@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
+#include "common.h"
 #include "lstmDecoder.h"
-
 #include "trtUtil.h"
-
-#include "debugUtil.h"
 #include <fstream>
-
-#include <cassert>
 #include <sstream>
 
 namespace nmtSample
@@ -30,9 +26,9 @@ LSTMDecoder::LSTMDecoder(ComponentWeights::ptr weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
-    assert(mWeights->mMetaData.size() >= 4);
+    ASSERT(mWeights->mMetaData.size() >= 4);
     nvinfer1::DataType dataType = static_cast<nvinfer1::DataType>(mWeights->mMetaData[0]);
-    assert(dataType == nvinfer1::DataType::kFLOAT);
+    ASSERT(dataType == nvinfer1::DataType::kFLOAT);
     mRNNKind = mWeights->mMetaData[1];
     mNumLayers = mWeights->mMetaData[2];
     mNumUnits = mWeights->mMetaData[3];
@@ -58,7 +54,7 @@ LSTMDecoder::LSTMDecoder(ComponentWeights::ptr weights)
             biasOffset = biasOffset + mNumUnits * elementSize;
         }
     }
-    assert(kernelOffset + biasOffset - biasStartOffset == mWeights->mWeights.size());
+    ASSERT(kernelOffset + biasOffset - biasStartOffset == mWeights->mWeights.size());
 }
 
 void LSTMDecoder::addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* inputEmbeddedData,
@@ -68,27 +64,24 @@ void LSTMDecoder::addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::IT
     int inputWidth;
     {
         auto dims = inputEmbeddedData->getDimensions();
-        assert(dims.nbDims == 2);
-        assert(dims.type[0] == nvinfer1::DimensionType::kINDEX);
+        ASSERT(dims.nbDims == 2);
         beamWidth = dims.d[0];
-        assert(dims.type[1] == nvinfer1::DimensionType::kCHANNEL);
         inputWidth = dims.d[1];
     }
 
     nvinfer1::ITensor* shuffledInput;
     {
         auto shuffleLayer = network->addShuffle(*inputEmbeddedData);
-        assert(shuffleLayer != nullptr);
+        ASSERT(shuffleLayer != nullptr);
         shuffleLayer->setName("Reshape input for LSTM decoder");
-        nvinfer1::Dims shuffleDims{3, {beamWidth, 1, inputWidth},
-            {nvinfer1::DimensionType::kINDEX, nvinfer1::DimensionType::kSEQUENCE, nvinfer1::DimensionType::kCHANNEL}};
+        nvinfer1::Dims shuffleDims{3, {beamWidth, 1, inputWidth}};
         shuffleLayer->setReshapeDimensions(shuffleDims);
         shuffledInput = shuffleLayer->getOutput(0);
-        assert(shuffledInput != nullptr);
+        ASSERT(shuffledInput != nullptr);
     }
 
     auto decoderLayer = network->addRNNv2(*shuffledInput, mNumLayers, mNumUnits, 1, nvinfer1::RNNOperation::kLSTM);
-    assert(decoderLayer != nullptr);
+    ASSERT(decoderLayer != nullptr);
     decoderLayer->setName("LSTM decoder");
 
     decoderLayer->setInputMode(nvinfer1::RNNInputMode::kLINEAR);
@@ -107,35 +100,32 @@ void LSTMDecoder::addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::IT
     decoderLayer->setHiddenState(*inputStates[0]);
     decoderLayer->setCellState(*inputStates[1]);
     *outputData = decoderLayer->getOutput(0);
-    assert(*outputData != nullptr);
+    ASSERT(*outputData != nullptr);
 
     {
         auto shuffleLayer = network->addShuffle(**outputData);
-        assert(shuffleLayer != nullptr);
+        ASSERT(shuffleLayer != nullptr);
         shuffleLayer->setName("Reshape output from LSTM decoder");
-        nvinfer1::Dims shuffleDims{
-            2, {beamWidth, mNumUnits}, {nvinfer1::DimensionType::kINDEX, nvinfer1::DimensionType::kCHANNEL}};
+        nvinfer1::Dims shuffleDims{2, {beamWidth, mNumUnits}};
         shuffleLayer->setReshapeDimensions(shuffleDims);
         auto shuffledOutput = shuffleLayer->getOutput(0);
-        assert(shuffledOutput != nullptr);
+        ASSERT(shuffledOutput != nullptr);
         *outputData = shuffledOutput;
     }
 
     // Per layer hidden output
     outputStates[0] = decoderLayer->getOutput(1);
-    assert(outputStates[0] != nullptr);
+    ASSERT(outputStates[0] != nullptr);
 
     // Per layer cell output
     outputStates[1] = decoderLayer->getOutput(2);
-    assert(outputStates[1] != nullptr);
+    ASSERT(outputStates[1] != nullptr);
 }
 
 std::vector<nvinfer1::Dims> LSTMDecoder::getStateSizes()
 {
-    nvinfer1::Dims hiddenStateDims{
-        2, {mNumLayers, mNumUnits}, {nvinfer1::DimensionType::kSPATIAL, nvinfer1::DimensionType::kCHANNEL}};
-    nvinfer1::Dims cellStateDims{
-        2, {mNumLayers, mNumUnits}, {nvinfer1::DimensionType::kSPATIAL, nvinfer1::DimensionType::kCHANNEL}};
+    nvinfer1::Dims hiddenStateDims{2, {mNumLayers, mNumUnits}};
+    nvinfer1::Dims cellStateDims{2, {mNumLayers, mNumUnits}};
     return std::vector<nvinfer1::Dims>({hiddenStateDims, cellStateDims});
 }
 

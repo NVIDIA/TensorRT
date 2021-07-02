@@ -21,9 +21,9 @@ class Template(Tool):
     """
     [EXPERIMENTAL] Generate template files.
     """
+
     def __init__(self):
         super().__init__("template")
-
 
     def add_parser_args(self, parser):
         subparsers = parser.add_subparsers(title="Template Subtools", dest="subtool")

@@ -37,6 +37,8 @@
 #include <iostream>
 #include <sstream>
 
+using samplesCommon::SampleUniquePtr;
+
 const std::string gSampleName = "TensorRT.sample_mnist_api";
 
 //!
@@ -58,9 +60,6 @@ struct SampleMNISTAPIParams : public samplesCommon::SampleParams
 //!
 class SampleMNISTAPI
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleMNISTAPI(const SampleMNISTAPIParams& params)
         : mParams(params)
@@ -90,7 +89,7 @@ private:
 
     std::map<std::string, nvinfer1::Weights> mWeightMap; //!< The weight name to weight value map
 
-    std::vector<SampleUniquePtr<nvinfer1::IHostMemory>> weightsMemory; //!< Host weights memory holder
+    std::vector<std::unique_ptr<samplesCommon::HostMemory>> weightsMemory; //!< Host weights memory holder
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
@@ -134,7 +133,7 @@ bool SampleMNISTAPI::build()
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -152,13 +151,13 @@ bool SampleMNISTAPI::build()
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     auto inputDims = network->getInput(0)->getDimensions();
-    assert(inputDims.nbDims == 3);
+    ASSERT(inputDims.nbDims == 3);
 
-    assert(network->getNbOutputs() == 1);
+    ASSERT(network->getNbOutputs() == 1);
     auto outputDims = network->getOutput(0)->getDimensions();
-    assert(outputDims.nbDims == 3);
+    ASSERT(outputDims.nbDims == 3);
 
     return true;
 }
@@ -176,7 +175,7 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     // Create input tensor of shape { 1, 1, 28, 28 }
     ITensor* data = network->addInput(
         mParams.inputTensorNames[0].c_str(), DataType::kFLOAT, Dims3{1, mParams.inputH, mParams.inputW});
-    assert(data);
+    ASSERT(data);
 
     // Create scale layer with default power/shift and specified scale parameter.
     const float scaleParam = 0.0125f;
@@ -184,47 +183,47 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     const Weights shift{DataType::kFLOAT, nullptr, 0};
     const Weights scale{DataType::kFLOAT, &scaleParam, 1};
     IScaleLayer* scale_1 = network->addScale(*data, ScaleMode::kUNIFORM, shift, scale, power);
-    assert(scale_1);
+    ASSERT(scale_1);
 
     // Add convolution layer with 20 outputs and a 5x5 filter.
     IConvolutionLayer* conv1 = network->addConvolutionNd(
-        *scale_1->getOutput(0), 20, Dims{2, {5, 5}, {}}, mWeightMap["conv1filter"], mWeightMap["conv1bias"]);
-    assert(conv1);
+        *scale_1->getOutput(0), 20, Dims{2, {5, 5}}, mWeightMap["conv1filter"], mWeightMap["conv1bias"]);
+    ASSERT(conv1);
     conv1->setStride(DimsHW{1, 1});
 
     // Add max pooling layer with stride of 2x2 and kernel size of 2x2.
-    IPoolingLayer* pool1 = network->addPoolingNd(*conv1->getOutput(0), PoolingType::kMAX, Dims{2, {2, 2}, {}});
-    assert(pool1);
+    IPoolingLayer* pool1 = network->addPoolingNd(*conv1->getOutput(0), PoolingType::kMAX, Dims{2, {2, 2}});
+    ASSERT(pool1);
     pool1->setStride(DimsHW{2, 2});
 
     // Add second convolution layer with 50 outputs and a 5x5 filter.
     IConvolutionLayer* conv2 = network->addConvolutionNd(
-        *pool1->getOutput(0), 50, Dims{2, {5, 5}, {}}, mWeightMap["conv2filter"], mWeightMap["conv2bias"]);
-    assert(conv2);
+        *pool1->getOutput(0), 50, Dims{2, {5, 5}}, mWeightMap["conv2filter"], mWeightMap["conv2bias"]);
+    ASSERT(conv2);
     conv2->setStride(DimsHW{1, 1});
 
     // Add second max pooling layer with stride of 2x2 and kernel size of 2x3>
-    IPoolingLayer* pool2 = network->addPoolingNd(*conv2->getOutput(0), PoolingType::kMAX, Dims{2, {2, 2}, {}});
-    assert(pool2);
+    IPoolingLayer* pool2 = network->addPoolingNd(*conv2->getOutput(0), PoolingType::kMAX, Dims{2, {2, 2}});
+    ASSERT(pool2);
     pool2->setStride(DimsHW{2, 2});
 
     // Add fully connected layer with 500 outputs.
     IFullyConnectedLayer* ip1
         = network->addFullyConnected(*pool2->getOutput(0), 500, mWeightMap["ip1filter"], mWeightMap["ip1bias"]);
-    assert(ip1);
+    ASSERT(ip1);
 
     // Add activation layer using the ReLU algorithm.
     IActivationLayer* relu1 = network->addActivation(*ip1->getOutput(0), ActivationType::kRELU);
-    assert(relu1);
+    ASSERT(relu1);
 
     // Add second fully connected layer with 20 outputs.
     IFullyConnectedLayer* ip2 = network->addFullyConnected(
         *relu1->getOutput(0), mParams.outputSize, mWeightMap["ip2filter"], mWeightMap["ip2bias"]);
-    assert(ip2);
+    ASSERT(ip2);
 
     // Add softmax layer to determine the probability.
     ISoftMaxLayer* prob = network->addSoftMax(*ip2->getOutput(0));
-    assert(prob);
+    ASSERT(prob);
     prob->getOutput(0)->setName(mParams.outputTensorNames[0].c_str());
     network->markOutput(*prob->getOutput(0));
 
@@ -238,13 +237,33 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
-        samplesCommon::setAllTensorScales(network.get(), 64.0f, 64.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 64.0f, 64.0f);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -271,7 +290,7 @@ bool SampleMNISTAPI::infer()
     }
 
     // Read the input data into the managed buffers
-    assert(mParams.inputTensorNames.size() == 1);
+    ASSERT(mParams.inputTensorNames.size() == 1);
     if (!processInput(buffers))
     {
         return false;
@@ -392,12 +411,12 @@ std::map<std::string, nvinfer1::Weights> SampleMNISTAPI::loadWeights(const std::
 
     // Open weights file
     std::ifstream input(file, std::ios::binary);
-    assert(input.is_open() && "Unable to load weight file.");
+    ASSERT(input.is_open() && "Unable to load weight file.");
 
     // Read number of weight blobs
     int32_t count;
     input >> count;
-    assert(count > 0 && "Invalid weight map file.");
+    ASSERT(count > 0 && "Invalid weight map file.");
 
     std::map<std::string, nvinfer1::Weights> weightMap;
     while (count--)

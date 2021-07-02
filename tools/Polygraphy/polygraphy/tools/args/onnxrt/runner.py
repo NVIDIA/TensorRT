@@ -29,11 +29,9 @@ class OnnxrtRunnerArgs(BaseArgs):
         if isinstance(maker, ModelArgs):
             self.model_args = maker
 
-
     def check_registered(self):
         assert self.onnx_loader_args is not None, "OnnxLoaderArgs is required!"
         assert self.model_args is not None, "ModelArgs is required!"
-
 
     def add_to_script(self, script):
         script.add_import(imports=["OnnxrtRunner"], frm="polygraphy.backend.onnxrt")

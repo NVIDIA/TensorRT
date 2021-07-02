@@ -22,7 +22,7 @@ from polygraphy.logger import G_LOGGER
 
 
 def make_iterable(obj):
-    return obj if type(obj) == tuple else (obj, )
+    return obj if type(obj) == tuple else (obj,)
 
 
 @mod.export()
@@ -79,6 +79,7 @@ def extend(extend_func):
     Args:
         extend_func (Callable): A callable to extend.
     """
+
     def extend_decorator(func):
         @functools.wraps(func)
         def extended_func(*args, **kwargs):
@@ -92,22 +93,30 @@ def extend(extend_func):
             elif len(extend_func_ret_tuple) == len(func_args):
                 func_retval = func(*extend_func_ret_tuple)
             else:
+
                 def try_get_name(fn):
                     try:
                         return fn.__name__
                     except:
                         return fn
 
-                G_LOGGER.critical("Function: {:} accepts {:} parameter(s), but "
-                                  "needs to accept {:} parameter(s) from: {:} instead.\nNote: Parameters should be: {:}".format(
-                                      try_get_name(func), len(func_args), len(extend_func_ret_tuple),
-                                      try_get_name(extend_func), tuple(map(type, extend_func_ret_tuple))))
+                G_LOGGER.critical(
+                    "Function: {:} accepts {:} parameter(s), but "
+                    "needs to accept {:} parameter(s) from: {:} instead.\nNote: Parameters should be: {:}".format(
+                        try_get_name(func),
+                        len(func_args),
+                        len(extend_func_ret_tuple),
+                        try_get_name(extend_func),
+                        tuple(map(type, extend_func_ret_tuple)),
+                    )
+                )
 
             if func_retval is not None:
                 return func_retval
             return extend_func_retval
 
         return extended_func
+
     return extend_decorator
 
 
@@ -148,7 +157,11 @@ def constantmethod(func):
             ret = func(self, *args, **kwargs)
         finally:
             if vars(self) != old_dict:
-                G_LOGGER.internal_error("{:} was mutated in a constant method! Note:\nOld state: {:}\nNew state: {:}".format(self, old_dict, vars(self)))
+                G_LOGGER.internal_error(
+                    "{:} was mutated in a constant method! Note:\nOld state: {:}\nNew state: {:}".format(
+                        self, old_dict, vars(self)
+                    )
+                )
         return ret
 
     return wrapper

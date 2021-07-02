@@ -73,30 +73,31 @@ void split_kernel(int nsegment,
   }
 }
 
-bool SplitPlugin::supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
+bool SplitPlugin::supportsFormatCombination(
+    int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-  ASSERT(inOut && pos < (nbInputs + nbOutputs));
-  return (inOut[pos].format == nvinfer1::PluginFormat::kNCHW);
+    ASSERT(inOut && pos < (nbInputs + nbOutputs));
+    return (inOut[pos].format == nvinfer1::PluginFormat::kLINEAR);
 }
 
-nvinfer1::DataType SplitPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+nvinfer1::DataType SplitPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
   ASSERT(inputTypes && nbInputs > 0);
   return inputTypes[0];
 }
 
-int SplitPlugin::initialize()
+int SplitPlugin::initialize() noexcept 
 {
   return 0;
 }
 
-void SplitPlugin::terminate()
+void SplitPlugin::terminate() noexcept
 {
 
 }
 
 void SplitPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-                                  const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs)
+                                  const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept
 {
   std::vector<int> segment_offsets(1, 0);
   for( int i = 0; i < nbOutputs; ++i )
@@ -130,9 +131,7 @@ void SplitPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, i
 }
 
 int SplitPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
-                         const void* const* inputs, void* const* outputs,
-                         void* workspace,
-                         cudaStream_t stream)
+                         const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
   int const* d_segment_offsets_ptr =
     thrust::raw_pointer_cast(&_d_segment_offsets[0]);
@@ -167,7 +166,7 @@ int SplitPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvin
   return cudaGetLastError() != cudaSuccess;
 }
 
-nvinfer1::DimsExprs SplitPlugin::getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder)
+nvinfer1::DimsExprs SplitPlugin::getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
   nvinfer1::DimsExprs output(inputs[0]);
   output.d[_axis] = exprBuilder.constant(_output_lengths[outputIndex]);

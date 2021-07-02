@@ -25,7 +25,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -46,6 +45,8 @@
 #include "cuda_runtime_api.h"
 #include "logger.h"
 #include "sampleEngines.h"
+
+using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_char_rnn";
 
@@ -142,13 +143,11 @@ struct SampleCharRNNParams : samplesCommon::SampleParams
 class SampleCharRNNBase
 {
 public:
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
     SampleCharRNNBase(const SampleCharRNNParams& params)
         : mParams(params)
     {
     }
+
     virtual ~SampleCharRNNBase() = default;
 
     //!
@@ -183,7 +182,7 @@ protected:
     nvinfer1::Weights convertRNNBias(nvinfer1::Weights input);
 
     std::map<std::string, nvinfer1::Weights> mWeightMap;
-    std::vector<SampleUniquePtr<nvinfer1::IHostMemory>> weightsMemory;
+    std::vector<std::unique_ptr<samplesCommon::HostMemory>> weightsMemory;
     SampleCharRNNParams mParams;
 
     nvinfer1::ITensor* addReshape(
@@ -232,7 +231,7 @@ protected:
     //!
     //! \brief Add inputs to the TensorRT network and configure LSTM layers using network definition API.
     //!
-    nvinfer1::ILayer* addLSTMLayers(SampleCharRNNBase::SampleUniquePtr<nvinfer1::INetworkDefinition>& network) final;
+    nvinfer1::ILayer* addLSTMLayers(SampleUniquePtr<nvinfer1::INetworkDefinition>& network) final;
 };
 
 class SampleCharRNNLoop : public SampleCharRNNBase
@@ -263,7 +262,7 @@ protected:
     //!
     //! \brief Add inputs to the TensorRT network and configure LSTM layers using network definition API.
     //!
-    nvinfer1::ILayer* addLSTMLayers(SampleCharRNNBase::SampleUniquePtr<nvinfer1::INetworkDefinition>& network) final;
+    nvinfer1::ILayer* addLSTMLayers(SampleUniquePtr<nvinfer1::INetworkDefinition>& network) final;
 
 private:
     nvinfer1::ILayer* addLSTMCell(SampleUniquePtr<nvinfer1::INetworkDefinition>& network, const LstmIO& inputTensors,
@@ -311,8 +310,16 @@ bool SampleCharRNNBase::build()
 
         mWeightMap = SampleCharRNNBase::loadWeights(mParams.weightFileName);
 
-        config->setMaxWorkspaceSize(32_MiB);
+        config->setMaxWorkspaceSize(40_MiB);
         config->setFlag(BuilderFlag::kGPU_FALLBACK);
+
+        // CUDA stream used for profiling by the builder.
+        auto profileStream = samplesCommon::makeCudaStream();
+        if (!profileStream)
+        {
+            return false;
+        }
+        config->setProfileStream(*profileStream);
 
         constructNetwork(builder, network, config);
     }
@@ -713,7 +720,9 @@ nvinfer1::ILayer* SampleCharRNNv2::addLSTMLayers(SampleUniquePtr<nvinfer1::INetw
     const float* wtsL1 = static_cast<const float*>(rnnwL1.values);
     const float* biasesL1 = static_cast<const float*>(rnnbL1.values);
     size_t kernelOffsetL0 = 0, kernelOffsetL1 = 0, biasOffset = 0;
-    for (int gateIndex = 0, numGates = gateOrder.size(); gateIndex < 2 * numGates; gateIndex++)
+    const int numGates = gateOrder.size();
+    ASSERT(numGates > 0);
+    for (int gateIndex = 0; gateIndex < 2 * numGates; gateIndex++)
     {
         bool isW = (gateIndex < numGates);
         int64_t weightCountL0 = (isW ? mParams.dataSize : mParams.hiddenSize) * mParams.hiddenSize;
@@ -773,7 +782,8 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
         nvinfer1::Dims2(mParams.vocabSize, mParams.hiddenSize), mWeightMap[mParams.weightNames.FCW_NAME]);
 
     // Add matrix multiplication layer for multiplying rnn output with FC weights
-    auto matrixMultLayer = network->addMatrixMultiply(*fcwts->getOutput(0), false, *rnn->getOutput(0), true);
+    auto matrixMultLayer = network->addMatrixMultiply(
+        *fcwts->getOutput(0), MatrixOperation::kNONE, *rnn->getOutput(0), MatrixOperation::kTRANSPOSE);
     ASSERT(matrixMultLayer != nullptr);
     matrixMultLayer->getOutput(0)->setName("Matrix Multiplicaton output");
 
@@ -796,8 +806,20 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
 
     sample::gLogInfo << "Done constructing network..." << std::endl;
 
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return;
+    }
+
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
 }
 
 //!

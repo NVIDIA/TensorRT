@@ -20,9 +20,7 @@ This script demonstrates how to use the Calibrator API provided by Polygraphy
 to calibrate a TensorRT engine to run in INT8 precision.
 """
 import numpy as np
-from polygraphy.backend.trt import (Calibrator, CreateConfig,
-                                    EngineFromNetwork, NetworkFromOnnxPath,
-                                    TrtRunner)
+from polygraphy.backend.trt import Calibrator, CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
 from polygraphy.logger import G_LOGGER
 
 
@@ -34,7 +32,7 @@ def calib_data():
         # (as `int`s) or Polygraphy `DeviceView`s  instead of NumPy arrays.
         #
         # For details on `DeviceView`, see `polygraphy/cuda/cuda.py`.
-        yield {"x": np.ones(shape=(1, 1, 2, 2), dtype=np.float32)} # Totally real data
+        yield {"x": np.ones(shape=(1, 1, 2, 2), dtype=np.float32)}  # Totally real data
 
 
 def main():
@@ -46,8 +44,9 @@ def main():
     calibrator = Calibrator(data_loader=calib_data(), cache="identity-calib.cache")
 
     # We must enable int8 mode in addition to providing the calibrator.
-    build_engine = EngineFromNetwork(NetworkFromOnnxPath("identity.onnx"),
-                                     config=CreateConfig(int8=True, calibrator=calibrator))
+    build_engine = EngineFromNetwork(
+        NetworkFromOnnxPath("identity.onnx"), config=CreateConfig(int8=True, calibrator=calibrator)
+    )
 
     # When we activate our runner, it will calibrate and build the engine. If we want to
     # see the logging output from TensorRT, we can temporarily increase logging verbosity:
@@ -59,7 +58,7 @@ def main():
         # Thus, if you want to store results from multiple inferences, you should use `copy.deepcopy()`.
         outputs = runner.infer({"x": inp_data})
 
-        assert np.all(outputs["y"] == inp_data) # It's an identity model!
+        assert np.array_equal(outputs["y"], inp_data)  # It's an identity model!
 
 
 if __name__ == "__main__":

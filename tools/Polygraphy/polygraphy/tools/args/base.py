@@ -16,14 +16,15 @@
 
 from polygraphy import util
 
+
 class BaseArgs(object):
     """
     Adds a arguments to a command-line parser, and provides capabilities to create
     Polygraphy objects based on the arguments.
     """
+
     def __init__(self, disable_abbrev=None):
         self.disable_abbrev = util.default(disable_abbrev, False)
-
 
     def add_to_parser(self, parser):
         """
@@ -34,7 +35,6 @@ class BaseArgs(object):
         """
         pass
 
-
     def parse(self, args):
         """
         Parses relevant arguments from command-line arguments.
@@ -43,7 +43,6 @@ class BaseArgs(object):
             args: Arguments provided by argparse.
         """
         pass
-
 
     def register(self, maker):
         """
@@ -54,7 +53,6 @@ class BaseArgs(object):
             maker (BaseArgs): Another argument group.
         """
         pass
-
 
     def check_registered(self):
         """

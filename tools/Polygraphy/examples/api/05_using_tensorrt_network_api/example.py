@@ -58,7 +58,9 @@ def main():
         # Thus, if you want to store results from multiple inferences, you should use `copy.deepcopy()`.
         outputs = runner.infer(feed_dict)
 
-        assert np.all(outputs[OUTPUT_NAME] == (feed_dict[INPUT_NAME] + 1))
+        assert np.array_equal(outputs[OUTPUT_NAME], (feed_dict[INPUT_NAME] + 1))
+
+        print("Inference succeeded!")
 
 
 if __name__ == "__main__":

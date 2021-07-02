@@ -33,7 +33,6 @@
 #include "NvInfer.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cuda_runtime_api.h>
 #include <fstream>
@@ -42,6 +41,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_algorithm_selector";
 const std::string gCacheFileName = "AlgorithmCache.txt";
@@ -59,10 +60,10 @@ public:
     //! If BuilderFlag::kSTRICT_TYPES is not set, just returning 0 forces default tactic selection.
     //!
     int32_t selectAlgorithms(const nvinfer1::IAlgorithmContext& context, const nvinfer1::IAlgorithm* const* choices,
-        int32_t nbChoices, int32_t* selection) override
+        int32_t nbChoices, int32_t* selection) noexcept override
     {
         // TensorRT always provides more than zero number of algorithms in selectAlgorithms.
-        assert(nbChoices > 0);
+        ASSERT(nbChoices > 0);
 
         std::iota(selection, selection + nbChoices, 0);
         return nbChoices;
@@ -98,8 +99,10 @@ public:
             // Write input and output formats.
             for (int32_t j = 0; j < nbInputs + nbOutputs; j++)
             {
-                algorithmFile << static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfo(j).getTensorFormat()) << "\n";
-                algorithmFile << static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfo(j).getDataType()) << "\n";
+                algorithmFile << static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getTensorFormat())
+                              << "\n";
+                algorithmFile << static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getDataType())
+                              << "\n";
             }
         }
         algorithmFile.close();
@@ -126,10 +129,10 @@ public:
     //! \details Use the map created from cache to select algorithms.
     //!
     int32_t selectAlgorithms(const nvinfer1::IAlgorithmContext& algoContext,
-        const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbChoices, int32_t* selection) override
+        const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbChoices, int32_t* selection) noexcept override
     {
         // TensorRT always provides more than zero number of algorithms in selectAlgorithms.
-        assert(nbChoices > 0);
+        ASSERT(nbChoices > 0);
 
         const std::string layerName(algoContext.getName());
         auto it = choiceMap.find(layerName);
@@ -137,11 +140,11 @@ public:
         // The layerName can be used as a unique identifier for a layer.
         // Since the network and config has not been changed (between the cache and cache read),
         // This map must contain layerName.
-        assert(it != choiceMap.end());
+        ASSERT(it != choiceMap.end());
         auto& algoItem = it->second;
 
-        assert(algoItem.nbInputs == algoContext.getNbInputs());
-        assert(algoItem.nbOutputs == algoContext.getNbOutputs());
+        ASSERT(algoItem.nbInputs == algoContext.getNbInputs());
+        ASSERT(algoItem.nbOutputs == algoContext.getNbOutputs());
 
         int32_t nbSelections = 0;
         for (auto i = 0; i < nbChoices; i++)
@@ -156,7 +159,7 @@ public:
         }
 
         //! There must be only one algorithm selected.
-        assert(nbSelections == 1);
+        ASSERT(nbSelections == 1);
         return nbSelections;
     }
 
@@ -166,24 +169,24 @@ public:
     //! \details Verifies that the algorithm used by TensorRT conform to the cache.
     //!
     void reportAlgorithms(const nvinfer1::IAlgorithmContext* const* algoContexts,
-        const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbAlgorithms) override
+        const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbAlgorithms) noexcept override
     {
         for (auto i = 0; i < nbAlgorithms; i++)
         {
             const std::string layerName(algoContexts[i]->getName());
-            assert(choiceMap.find(layerName) != choiceMap.end());
+            ASSERT(choiceMap.find(layerName) != choiceMap.end());
             const auto& algoItem = choiceMap[layerName];
-            assert(algoItem.nbInputs == algoContexts[i]->getNbInputs());
-            assert(algoItem.nbOutputs == algoContexts[i]->getNbOutputs());
-            assert(algoChoices[i]->getAlgorithmVariant().getImplementation() == algoItem.implementation);
-            assert(algoChoices[i]->getAlgorithmVariant().getTactic() == algoItem.tactic);
+            ASSERT(algoItem.nbInputs == algoContexts[i]->getNbInputs());
+            ASSERT(algoItem.nbOutputs == algoContexts[i]->getNbOutputs());
+            ASSERT(algoChoices[i]->getAlgorithmVariant().getImplementation() == algoItem.implementation);
+            ASSERT(algoChoices[i]->getAlgorithmVariant().getTactic() == algoItem.tactic);
             auto nbFormats = algoItem.nbInputs + algoItem.nbOutputs;
             for (auto j = 0; j < nbFormats; j++)
             {
-                assert(algoItem.formats[j].first
-                    == static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfo(j).getTensorFormat()));
-                assert(algoItem.formats[j].second
-                    == static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfo(j).getDataType()));
+                ASSERT(algoItem.formats[j].first
+                    == static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getTensorFormat()));
+                ASSERT(algoItem.formats[j].second
+                    == static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getDataType()));
             }
         }
     }
@@ -244,7 +247,7 @@ private:
 
     //! The combination of implementation, tactic and input/output formats is unique to an algorithm,
     //! and can be used to check if two algorithms are same.
-    static bool areSame(const AlgorithmCacheItem& algoCacheItem, const IAlgorithm& algoChoice)
+    static bool areSame(const AlgorithmCacheItem& algoCacheItem, const IAlgorithm& algoChoice) noexcept
     {
         if (algoChoice.getAlgorithmVariant().getImplementation() != algoCacheItem.implementation
             || algoChoice.getAlgorithmVariant().getTactic() != algoCacheItem.tactic)
@@ -257,9 +260,9 @@ private:
         for (auto j = 0; j < nbFormats; j++)
         {
             if (algoCacheItem.formats[j].first
-                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfo(j).getTensorFormat())
+                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getTensorFormat())
                 || algoCacheItem.formats[j].second
-                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfo(j).getDataType()))
+                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getDataType()))
             {
                 return false;
             }
@@ -281,12 +284,12 @@ public:
     //! \details Use the map created from cache to select algorithms.
     //!
     int32_t selectAlgorithms(const nvinfer1::IAlgorithmContext& algoContext,
-        const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbChoices, int32_t* selection) override
+        const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbChoices, int32_t* selection) noexcept override
     {
         // TensorRT always provides more than zero number of algorithms in selectAlgorithms.
-        assert(nbChoices > 0);
+        ASSERT(nbChoices > 0);
 
-        auto it = std::min_element(
+        const auto* it = std::min_element(
             algoChoices, algoChoices + nbChoices, [](const nvinfer1::IAlgorithm* x, const nvinfer1::IAlgorithm* y) {
                 return x->getWorkspaceSize() < y->getWorkspaceSize();
             });
@@ -298,7 +301,7 @@ public:
     //! \brief Called by TensorRT to report choices it made.
     //!
     void reportAlgorithms(const nvinfer1::IAlgorithmContext* const* algoContexts,
-        const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbAlgorithms) override
+        const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbAlgorithms) noexcept override
     {
         // do nothing
     }
@@ -311,9 +314,6 @@ public:
 //!
 class SampleAlgorithmSelector
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleAlgorithmSelector(const samplesCommon::CaffeSampleParams& params)
         : mParams(params)
@@ -380,7 +380,7 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -406,13 +406,7 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
     builder->setMaxBatchSize(mParams.batchSize);
     config->setMaxWorkspaceSize(16_MiB);
     config->setAlgorithmSelector(selector);
-    config->setFlag(BuilderFlag::kGPU_FALLBACK);
 
-    if (!mParams.int8)
-    {
-        // The sample fails for Int8 with kSTRICT_TYPES flag set.
-        config->setFlag(BuilderFlag::kSTRICT_TYPES);
-    }
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
@@ -422,18 +416,44 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
         config->setFlag(BuilderFlag::kINT8);
     }
 
-    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore, true /*GPUFallback*/);
 
+    if (mParams.int8)
+    {
+        // The sample fails for Int8 with kSTRICT_TYPES flag set.
+        config->clearFlag(BuilderFlag::kSTRICT_TYPES);
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 3);
 
     return true;
 }
@@ -480,7 +500,7 @@ bool SampleAlgorithmSelector::verifyOutput(
 
     // Print histogram of the output distribution.
     sample::gLogInfo << "Output:\n";
-    float val{0.0f};
+    float val{0.0F};
     int idx{0};
     const int kDIGITS = 10;
 
@@ -492,11 +512,11 @@ bool SampleAlgorithmSelector::verifyOutput(
             idx = i;
         }
 
-        sample::gLogInfo << i << ": " << std::string(int(std::floor(prob[i] * 10 + 0.5f)), '*') << "\n";
+        sample::gLogInfo << i << ": " << std::string(int(std::floor(prob[i] * 10 + 0.5F)), '*') << "\n";
     }
     sample::gLogInfo << std::endl;
 
-    return (idx == groundTruthDigit && val > 0.9f);
+    return (idx == groundTruthDigit && val > 0.9F);
 }
 
 //!
@@ -532,7 +552,7 @@ bool SampleAlgorithmSelector::constructNetwork(
     float maxMean
         = samplesCommon::getMaxValue(static_cast<const float*>(meanWeights.values), samplesCommon::volume(inputDims));
 
-    auto mean = network->addConstant(nvinfer1::Dims3(1, inputDims.d[1], inputDims.d[2]), meanWeights);
+    auto* mean = network->addConstant(nvinfer1::Dims3(1, inputDims.d[1], inputDims.d[2]), meanWeights);
     if (!mean->getOutput(0)->setDynamicRange(-maxMean, maxMean))
     {
         return false;
@@ -541,13 +561,13 @@ bool SampleAlgorithmSelector::constructNetwork(
     {
         return false;
     }
-    auto meanSub = network->addElementWise(*network->getInput(0), *mean->getOutput(0), ElementWiseOperation::kSUB);
+    auto* meanSub = network->addElementWise(*network->getInput(0), *mean->getOutput(0), ElementWiseOperation::kSUB);
     if (!meanSub->getOutput(0)->setDynamicRange(-maxMean, maxMean))
     {
         return false;
     }
     network->getLayer(0)->setInput(0, *meanSub->getOutput(0));
-    samplesCommon::setAllTensorScales(network.get(), 127.0f, 127.0f);
+    samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
 
     return true;
 }
@@ -575,7 +595,7 @@ bool SampleAlgorithmSelector::infer()
 
     // Read the input data into the managed buffers.
     // There should be just 1 input tensor.
-    assert(mParams.inputTensorNames.size() == 1);
+    ASSERT(mParams.inputTensorNames.size() == 1);
     if (!processInput(buffers, mParams.inputTensorNames[0], digit))
     {
         return false;
@@ -603,7 +623,7 @@ bool SampleAlgorithmSelector::infer()
 
     // Check and print the output of the inference.
     // There should be just one output tensor.
-    assert(mParams.outputTensorNames.size() == 1);
+    ASSERT(mParams.outputTensorNames.size() == 1);
     bool outputCorrect = verifyOutput(buffers, mParams.outputTensorNames[0], digit);
 
     return outputCorrect;
@@ -685,9 +705,9 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::Logger::defineTest(gSampleName, argc, argv);
 
-    sample::gLogger.reportTestStart(sampleTest);
+    sample::Logger::reportTestStart(sampleTest);
 
     samplesCommon::CaffeSampleParams params = initializeSampleParams(args);
 
@@ -701,12 +721,12 @@ int main(int argc, char** argv)
 
         if (!sampleAlgorithmSelector.build(&algorithmCacheWriter))
         {
-            return sample::gLogger.reportFail(sampleTest);
+            return sample::Logger::reportFail(sampleTest);
         }
 
         if (!sampleAlgorithmSelector.infer())
         {
-            return sample::gLogger.reportFail(sampleTest);
+            return sample::Logger::reportFail(sampleTest);
         }
     }
 
@@ -717,12 +737,12 @@ int main(int argc, char** argv)
 
         if (!sampleAlgorithmSelector.build(&algorithmCacheReader))
         {
-            return sample::gLogger.reportFail(sampleTest);
+            return sample::Logger::reportFail(sampleTest);
         }
 
         if (!sampleAlgorithmSelector.infer())
         {
-            return sample::gLogger.reportFail(sampleTest);
+            return sample::Logger::reportFail(sampleTest);
         }
     }
 
@@ -734,19 +754,19 @@ int main(int argc, char** argv)
         MinimumWorkspaceAlgorithmSelector minimumWorkspaceAlgorithmSelector;
         if (!sampleAlgorithmSelector.build(&minimumWorkspaceAlgorithmSelector))
         {
-            return sample::gLogger.reportFail(sampleTest);
+            return sample::Logger::reportFail(sampleTest);
         }
 
         if (!sampleAlgorithmSelector.infer())
         {
-            return sample::gLogger.reportFail(sampleTest);
+            return sample::Logger::reportFail(sampleTest);
         }
     }
 
     if (!sampleAlgorithmSelector.teardown())
     {
-        return sample::gLogger.reportFail(sampleTest);
+        return sample::Logger::reportFail(sampleTest);
     }
 
-    return sample::gLogger.reportPass(sampleTest);
+    return sample::Logger::reportPass(sampleTest);
 }

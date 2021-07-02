@@ -25,11 +25,13 @@ from polygraphy.logger import G_LOGGER
 
 tf = mod.lazy_import("tensorflow", version="<2.0")
 
+
 @mod.export()
 class TfRunner(BaseRunner):
     """
     Runs inference using a TensorFlow session.
     """
+
     def __init__(self, sess, timeline_dir=None, name=None):
         """
         Args:
@@ -59,27 +61,24 @@ class TfRunner(BaseRunner):
             self.run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             self.run_metadata = tf.RunMetadata()
 
-
     def activate_impl(self):
         (self.sess, self.output_names), _ = util.invoke_if_callable(self._sess)
-
 
     @func.constantmethod
     def get_input_metadata_impl(self):
         return tf_util.get_input_metadata(self.sess.graph)
-
 
     def deactivate_impl(self):
         self.sess.close()
         del (self.sess, self.output_names)
         self.num_inferences = 0
 
-
     def infer_impl(self, feed_dict):
         G_LOGGER.extra_verbose("Received feed_dict: {:}".format(feed_dict))
         start = time.time()
-        inference_outputs = self.sess.run(self.output_names, feed_dict=feed_dict, options=self.run_options,
-                                          run_metadata=self.run_metadata)
+        inference_outputs = self.sess.run(
+            self.output_names, feed_dict=feed_dict, options=self.run_options, run_metadata=self.run_metadata
+        )
         end = time.time()
 
         out_dict = OrderedDict()
@@ -89,11 +88,14 @@ class TfRunner(BaseRunner):
 
         if self.timeline_dir is not None:
             from tensorflow.python.client import timeline
+
             t1 = timeline.Timeline(self.run_metadata.step_stats)
 
-            util.save_file(contents=t1.generate_chrome_trace_format(),
-                            dest=os.path.join(self.timeline_dir, "run-{:}".format(self.num_inferences)),
-                            mode="w")
+            util.save_file(
+                contents=t1.generate_chrome_trace_format(),
+                dest=os.path.join(self.timeline_dir, "run-{:}".format(self.num_inferences)),
+                mode="w",
+            )
         self.num_inferences += 1
 
         return out_dict

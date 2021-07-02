@@ -23,8 +23,7 @@ to print the network name and enable FP16 mode.
 import numpy as np
 import tensorrt as trt
 from polygraphy import func
-from polygraphy.backend.trt import (CreateConfig, EngineFromNetwork,
-                                    NetworkFromOnnxPath, TrtRunner)
+from polygraphy.backend.trt import CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
 
 
 # TIP: The immediately evaluated functional API makes it very easy to interoperate
@@ -65,7 +64,9 @@ def main():
         # Thus, if you want to store results from multiple inferences, you should use `copy.deepcopy()`.
         outputs = runner.infer({"x": inp_data})
 
-        assert np.all(outputs["y"] == inp_data) # It's an identity model!
+        assert np.array_equal(outputs["y"], inp_data)  # It's an identity model!
+
+        print("Inference succeeded!")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ def zero_on_empty(func):
         if util.is_empty_shape(buffer.shape):
             return 0
         return func(buffer)
+
     return wrapped
 
 
@@ -69,7 +70,7 @@ def str_histogram(output, hist_range=None):
             return ""
 
         max_num_elems = compute_max(hist)
-        if not max_num_elems: # Empty tensor
+        if not max_num_elems:  # Empty tensor
             return
 
         bin_edges = ["{:.3g}".format(bin) for bin in bin_edges]
@@ -78,12 +79,19 @@ def str_histogram(output, hist_range=None):
 
         MAX_WIDTH = 40
         ret = "---- Histogram ----\n"
-        ret += "{:{width}}|  Num Elems | Visualization\n".format("Bin Range", width=max_start_bin_width + max_end_bin_width + 5)
+        ret += "{:{width}}|  Num Elems | Visualization\n".format(
+            "Bin Range", width=max_start_bin_width + max_end_bin_width + 5
+        )
         for num, bin_start, bin_end in zip(hist, bin_edges, bin_edges[1:]):
             bar = "#" * int(MAX_WIDTH * float(num) / float(max_num_elems))
             ret += "({:<{max_start_bin_width}}, {:<{max_end_bin_width}}) | {:10} | {:}\n".format(
-                    bin_start, bin_end, num, bar,
-                    max_start_bin_width=max_start_bin_width, max_end_bin_width=max_end_bin_width)
+                bin_start,
+                bin_end,
+                num,
+                bar,
+                max_start_bin_width=max_start_bin_width,
+                max_end_bin_width=max_end_bin_width,
+            )
         return ret
     except Exception as err:
         G_LOGGER.verbose("Could not generate histogram.\nNote: Error was: {:}".format(err))
@@ -100,10 +108,18 @@ def str_output_stats(output, runner_name=None):
     try:
         with np.testing.suppress_warnings() as sup:
             sup.filter(RuntimeWarning)
-            ret += "mean={:.5g}, std-dev={:.5g}, var={:.5g}, median={:.5g}, min={:.5g} at {:}, max={:.5g} at {:}\n".format(
-                compute_mean(output), compute_stddev(output), compute_variance(output), compute_median(output),
-                compute_min(output), compute_argmin(output),
-                compute_max(output), compute_argmax(output))
+            ret += (
+                "mean={:.5g}, std-dev={:.5g}, var={:.5g}, median={:.5g}, min={:.5g} at {:}, max={:.5g} at {:}\n".format(
+                    compute_mean(output),
+                    compute_stddev(output),
+                    compute_variance(output),
+                    compute_median(output),
+                    compute_min(output),
+                    compute_argmin(output),
+                    compute_max(output),
+                    compute_argmax(output),
+                )
+            )
     except Exception as err:
         G_LOGGER.verbose("Could not generate statistics.\nNote: Error was: {:}".format(err))
         ret += "<Error while computing statistics>"
@@ -117,4 +133,6 @@ def log_output_stats(output, info_hist=False, runner_name=None, hist_range=None)
     G_LOGGER.info(ret)
     with G_LOGGER.indent():
         # Show histogram on failures.
-        G_LOGGER.log(lambda: str_histogram(output, hist_range), severity=G_LOGGER.INFO if info_hist else G_LOGGER.VERBOSE)
+        G_LOGGER.log(
+            lambda: str_histogram(output, hist_range), severity=G_LOGGER.INFO if info_hist else G_LOGGER.VERBOSE
+        )

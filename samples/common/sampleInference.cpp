@@ -148,6 +148,15 @@ bool setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inferenc
             {
                 bindings->addBinding(b, name, isInput, vol, dataType);
             }
+
+            if (isInput)
+            {
+                sample::gLogInfo << "Created input binding for " << name << " with dimensions " << dims << std::endl;
+            }
+            else
+            {
+                sample::gLogInfo << "Created output binding for " << name << " with dimensions " << dims << std::endl;
+            }
         }
     }
 
@@ -198,9 +207,9 @@ public:
     {
     }
 
-    void operator()(TrtCudaStream& stream) const
+    bool operator()(TrtCudaStream& stream) const
     {
-        mContext.enqueue(mBatch, mBuffers, stream.get(), nullptr);
+        return mContext.enqueue(mBatch, mBuffers, stream.get(), nullptr);
     }
 
 private:
@@ -220,9 +229,9 @@ public:
     {
     }
 
-    void operator()(TrtCudaStream& stream) const
+    bool operator()(TrtCudaStream& stream) const
     {
-        mContext.enqueueV2(mBuffers, stream.get(), nullptr);
+        return mContext.enqueueV2(mBuffers, stream.get(), nullptr);
     }
 };
 
@@ -239,15 +248,15 @@ public:
     {
     }
 
-    void operator()(TrtCudaStream& stream) const
+    bool operator()(TrtCudaStream& stream) const
     {
-        mGraph.launch(stream);
+        return mGraph.launch(stream);
     }
 
     TrtCudaGraph& mGraph;
 };
 
-using EnqueueFunction = std::function<void(TrtCudaStream&)>;
+using EnqueueFunction = std::function<bool(TrtCudaStream&)>;
 
 enum class StreamType : int
 {
@@ -300,11 +309,11 @@ public:
         createEnqueueFunction(inference, context, bindings);
     }
 
-    void query(bool skipTransfers)
+    bool query(bool skipTransfers)
     {
         if (mActive[mNext])
         {
-            return;
+            return true;
         }
 
         if (!skipTransfers)
@@ -317,7 +326,10 @@ public:
 
         record(EventType::kCOMPUTE_S, StreamType::kCOMPUTE);
         recordEnqueueTime();
-        mEnqueue(getStream(StreamType::kCOMPUTE));
+        if (!mEnqueue(getStream(StreamType::kCOMPUTE)))
+        {
+            return false;
+        }
         recordEnqueueTime();
         record(EventType::kCOMPUTE_E, StreamType::kCOMPUTE);
 
@@ -331,6 +343,7 @@ public:
 
         mActive[mNext] = true;
         moveNext();
+        return true;
     }
 
     float sync(
@@ -425,6 +438,7 @@ private:
             = skipTransfers ? getEvent(EventType::kCOMPUTE_E) - gpuStart : getEvent(EventType::kOUTPUT_S) - gpuStart;
         float oe
             = skipTransfers ? getEvent(EventType::kCOMPUTE_E) - gpuStart : getEvent(EventType::kOUTPUT_E) - gpuStart;
+
         return InferenceTrace(mStreamId,
             std::chrono::duration<float, std::milli>(getEnqueueTime(true) - cpuStart).count(),
             std::chrono::duration<float, std::milli>(getEnqueueTime(false) - cpuStart).count(), is, ie,
@@ -445,12 +459,32 @@ private:
         if (inference.graph)
         {
             TrtCudaStream& stream = getStream(StreamType::kCOMPUTE);
-            mEnqueue(stream);
+            // Avoid capturing initialization calls by executing the enqueue function at least
+            // once before starting CUDA graph capture.
+            const auto ret = mEnqueue(stream);
+            assert(ret);
             stream.synchronize();
+
             mGraph.beginCapture(stream);
-            mEnqueue(stream);
-            mGraph.endCapture(stream);
-            mEnqueue = EnqueueFunction(EnqueueGraph(mGraph));
+            // The built TRT engine may contain operations that are not permitted under CUDA graph capture mode.
+            // When the stream is capturing, the enqueue call may return false if the current CUDA graph capture fails.
+            if (mEnqueue(stream))
+            {
+                mGraph.endCapture(stream);
+                mEnqueue = EnqueueFunction(EnqueueGraph(mGraph));
+            }
+            else
+            {
+                mGraph.endCaptureOnError(stream);
+                // Ensure any CUDA error has been cleaned up.
+                cudaCheck(cudaGetLastError());
+                sample::gLogWarning << "The built TensorRT engine contains operations that are not permitted under "
+                                       "CUDA graph capture mode."
+                                    << std::endl;
+                sample::gLogWarning << "The specified --useCudaGraph flag has been ignored. The inference will be "
+                                       "launched without using CUDA graph launch."
+                                    << std::endl;
+            }
         }
     }
 
@@ -473,7 +507,7 @@ private:
 
 using IterationStreams = std::vector<std::unique_ptr<Iteration>>;
 
-void inferenceLoop(IterationStreams& iStreams, const TimePoint& cpuStart, const TrtCudaEvent& gpuStart, int iterations,
+bool inferenceLoop(IterationStreams& iStreams, const TimePoint& cpuStart, const TrtCudaEvent& gpuStart, int iterations,
     float maxDurationMs, float warmupMs, std::vector<InferenceTrace>& trace, bool skipTransfers)
 {
     float durationMs = 0;
@@ -483,7 +517,10 @@ void inferenceLoop(IterationStreams& iStreams, const TimePoint& cpuStart, const 
     {
         for (auto& s : iStreams)
         {
-            s->query(skipTransfers);
+            if (!s->query(skipTransfers))
+            {
+                return false;
+            }
         }
         for (auto& s : iStreams)
         {
@@ -502,6 +539,7 @@ void inferenceLoop(IterationStreams& iStreams, const TimePoint& cpuStart, const 
     {
         s->syncAll(cpuStart, gpuStart, trace, skipTransfers);
     }
+    return true;
 }
 
 void inferenceExecution(const InferenceOptions& inference, InferenceEnvironment& iEnv, SyncStruct& sync, int offset,
@@ -529,8 +567,11 @@ void inferenceExecution(const InferenceOptions& inference, InferenceEnvironment&
     }
 
     std::vector<InferenceTrace> localTrace;
-    inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs, localTrace,
-        inference.skipTransfers);
+    if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs, localTrace,
+            inference.skipTransfers))
+    {
+        iEnv.error = true;
+    }
 
     if (inference.skipTransfers)
     {
@@ -554,7 +595,7 @@ inline std::thread makeThread(const InferenceOptions& inference, InferenceEnviro
 
 } // namespace
 
-void runInference(
+bool runInference(
     const InferenceOptions& inference, InferenceEnvironment& iEnv, int device, std::vector<InferenceTrace>& trace)
 {
     trace.resize(0);
@@ -578,8 +619,84 @@ void runInference(
         th.join();
     }
 
-    auto cmpTrace = [](const InferenceTrace& a, const InferenceTrace& b) { return a.inStart < b.inStart; };
+    auto cmpTrace = [](const InferenceTrace& a, const InferenceTrace& b) { return a.h2dStart < b.h2dStart; };
     std::sort(trace.begin(), trace.end(), cmpTrace);
-}
 
+    return !iEnv.error;
+}
+namespace
+{
+size_t reportGpuMemory()
+{
+    static size_t prevFree{0};
+    size_t free{0};
+    size_t total{0};
+    size_t newlyAllocated{0};
+    cudaCheck(cudaMemGetInfo(&free, &total));
+    sample::gLogInfo << "Free GPU memory = " << free / 1024.0_MiB << " GiB";
+    if (prevFree != 0)
+    {
+        newlyAllocated = (prevFree - free);
+        sample::gLogInfo << ", newly allocated GPU memory = " << newlyAllocated / 1024.0_MiB << " GiB";
+    }
+    sample::gLogInfo << ", total GPU memory = " << total / 1024.0_MiB << " GiB" << std::endl;
+    prevFree = free;
+    return newlyAllocated;
+}
+} // namespace
+
+//! Returns true if deserialization is slower than expected or fails.
+bool timeDeserialize(InferenceEnvironment& iEnv)
+{
+    TrtUniquePtr<IRuntime> rt{createInferRuntime(sample::gLogger.getTRTLogger())};
+    constexpr int32_t kNB_ITERS{20};
+    TrtUniquePtr<ICudaEngine> engine;
+    TrtUniquePtr<IHostMemory> serializedEngine{iEnv.engine->serialize()};
+
+    sample::gLogInfo << "Begin deserialization engine..." << std::endl;
+    auto startClock = std::chrono::high_resolution_clock::now();
+    engine.reset(rt->deserializeCudaEngine(serializedEngine->data(), serializedEngine->size(), nullptr));
+    auto endClock = std::chrono::high_resolution_clock::now();
+    auto const first = std::chrono::duration<float, std::milli>(endClock - startClock).count();
+    sample::gLogInfo << "First deserialization time = " << first << " milliseconds" << std::endl;
+
+    // Check if first deserialization suceeded.
+    if (engine == nullptr)
+    {
+        sample::gLogError << "Engine deserialization failed." << std::endl;
+        return true;
+    }
+
+    // Record initial gpu memory state.
+    reportGpuMemory();
+
+    float totalTime{0.F};
+    for (int32_t i = 0; i < kNB_ITERS; ++i)
+    {
+        engine.reset(nullptr);
+
+        startClock = std::chrono::high_resolution_clock::now();
+        engine.reset(rt->deserializeCudaEngine(serializedEngine->data(), serializedEngine->size(), nullptr));
+        endClock = std::chrono::high_resolution_clock::now();
+        totalTime += std::chrono::duration<float, std::milli>(endClock - startClock).count();
+    }
+    const auto averageTime = totalTime / kNB_ITERS;
+    // reportGpuMemory sometimes reports zero after a single deserialization of a small engine,
+    // so use the size of memory for all the iterations.
+    const auto totalEngineSizeGpu = reportGpuMemory();
+    sample::gLogInfo << "Total deserialization time = " << totalTime << " milliseconds, average time = " << averageTime
+                     << ", first time = " << first << "." << std::endl;
+    sample::gLogInfo << "Deserialization Bandwidth = " << 1E-6 * totalEngineSizeGpu / totalTime << " GB/s" << std::endl;
+
+    // If the first deserialization is more than tolerance slower than
+    // the average deserialization, return true, which means an error occurred.
+    const auto tolerance = 1.50F;
+    const bool isSlowerThanExpected = first > averageTime * tolerance;
+    if (isSlowerThanExpected)
+    {
+        sample::gLogInfo << "First deserialization time divided by average time is " << (first / averageTime)
+                         << ". Exceeds tolerance of " << tolerance << "x." << std::endl;
+    }
+    return isSlowerThanExpected;
+}
 } // namespace sample

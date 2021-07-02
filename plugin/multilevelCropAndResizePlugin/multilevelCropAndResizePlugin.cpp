@@ -47,17 +47,17 @@ MultilevelCropAndResizePluginCreator::MultilevelCropAndResizePluginCreator() noe
 const char* MultilevelCropAndResizePluginCreator::getPluginName() const noexcept
 {
     return MULTILEVELCROPANDRESIZE_PLUGIN_NAME;
-};
+}
 
 const char* MultilevelCropAndResizePluginCreator::getPluginVersion() const noexcept
 {
     return MULTILEVELCROPANDRESIZE_PLUGIN_VERSION;
-};
+}
 
 const PluginFieldCollection* MultilevelCropAndResizePluginCreator::getFieldNames() noexcept
 {
     return &mFC;
-};
+}
 
 IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
@@ -79,12 +79,12 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(const char* nam
         }
     }
     return new MultilevelCropAndResize(mPooledSize, image_size);
-};
+}
 
 IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
     return new MultilevelCropAndResize(data, length);
-};
+}
 
 MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1::Dims& image_size) noexcept
     : mPooledSize({pooled_size, pooled_size})
@@ -96,26 +96,26 @@ MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1
     mInputWidth = image_size.d[2];
     // Threshold to P3: Smaller -> P2
     mThresh = (224 * 224) / (4.0f);
-};
+}
 
 int MultilevelCropAndResize::getNbOutputs() const noexcept
 {
     return 1;
-};
+}
 
 int MultilevelCropAndResize::initialize() noexcept
 {
     return 0;
-};
+}
 
-void MultilevelCropAndResize::terminate() noexcept {
-
-};
+void MultilevelCropAndResize::terminate() noexcept
+{
+}
 
 void MultilevelCropAndResize::destroy() noexcept
 {
     delete this;
-};
+}
 
 size_t MultilevelCropAndResize::getWorkspaceSize(int) const noexcept
 {
@@ -124,28 +124,28 @@ size_t MultilevelCropAndResize::getWorkspaceSize(int) const noexcept
 
 bool MultilevelCropAndResize::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return ((type == DataType::kFLOAT || type == DataType::kHALF) && format == PluginFormat::kNCHW);
-};
+    return ((type == DataType::kFLOAT || type == DataType::kHALF) && format == PluginFormat::kLINEAR);
+}
 
 const char* MultilevelCropAndResize::getPluginType() const noexcept
 {
     return "MultilevelCropAndResize_TRT";
-};
+}
 
 const char* MultilevelCropAndResize::getPluginVersion() const noexcept
 {
     return "1";
-};
+}
 
 IPluginV2Ext* MultilevelCropAndResize::clone() const noexcept
 {
     return new MultilevelCropAndResize(*this);
-};
+}
 
 void MultilevelCropAndResize::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNameSpace = libNamespace;
-};
+}
 
 const char* MultilevelCropAndResize::getPluginNamespace() const noexcept
 {
@@ -191,10 +191,10 @@ Dims MultilevelCropAndResize::getOutputDimensions(int index, const Dims* inputs,
     result.d[3] = mPooledSize.x;
 
     return result;
-};
+}
 
-int MultilevelCropAndResize::enqueue(
-    int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t MultilevelCropAndResize::enqueue(
+    int32_t batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     void* pooled = outputs[0];
@@ -207,12 +207,12 @@ int MultilevelCropAndResize::enqueue(
 
     assert(status == cudaSuccess);
     return 0;
-};
+}
 
 size_t MultilevelCropAndResize::getSerializationSize() const noexcept
 {
     return sizeof(int) * 2 + sizeof(int) * 4 + sizeof(float) + sizeof(int) * 2 * mFeatureMapCount + sizeof(DataType);
-};
+}
 
 void MultilevelCropAndResize::serialize(void* buffer) const noexcept
 {
@@ -231,7 +231,7 @@ void MultilevelCropAndResize::serialize(void* buffer) const noexcept
     }
     write(d, mPrecision);
     assert(d == a + getSerializationSize());
-};
+}
 
 MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length) noexcept
 {
@@ -250,7 +250,7 @@ MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length
     mPrecision = read<DataType>(d);
 
     assert(d == a + length);
-};
+}
 
 // Return the DataType of the plugin output at the requested index
 DataType MultilevelCropAndResize::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
@@ -306,4 +306,6 @@ void MultilevelCropAndResize::attachToContext(
 }
 
 // Detach the plugin object from its execution context.
-void MultilevelCropAndResize::detachFromContext() noexcept {}
+void MultilevelCropAndResize::detachFromContext() noexcept
+{
+}

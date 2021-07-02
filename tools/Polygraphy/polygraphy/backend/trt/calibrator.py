@@ -24,9 +24,9 @@ np = mod.lazy_import("numpy")
 
 
 @mod.export()
-def Calibrator(data_loader, cache=None, BaseClass=None,
-               batch_size=None, quantile=None, regression_cutoff=None,
-               algo=None):
+def Calibrator(
+    data_loader, cache=None, BaseClass=None, batch_size=None, quantile=None, regression_cutoff=None, algo=None
+):
     """
     Supplies calibration data to TensorRT to calibrate the network for INT8 inference.
 
@@ -70,6 +70,7 @@ def Calibrator(data_loader, cache=None, BaseClass=None,
         """
         Calibrator that supplies calibration data to TensorRT to calibrate the network for INT8 inference.
         """
+
         def __init__(self):
             # Must explicitly initialize parent for any trampoline class! Will mysteriously segfault without this.
             BaseClass.__init__(self)
@@ -86,7 +87,6 @@ def Calibrator(data_loader, cache=None, BaseClass=None,
 
             # The function that constructed this instance
             self.make_func = Calibrator
-
 
         def reset(self, input_metadata=None):
             """
@@ -112,24 +112,26 @@ def Calibrator(data_loader, cache=None, BaseClass=None,
             self.cache_contents = None
             self.has_cached_scales = False
 
-
         def get_batch_size(self):
             return self.batch_size
 
-
         def get_batch(self, names):
             if not self.is_active:
-                G_LOGGER.error("Calibrator must be activated prior to use. Please use a context manager. "
-                               "For example:\nwith calibrator:\n\t# Use calibrator here")
+                G_LOGGER.error(
+                    "Calibrator must be activated prior to use. Please use a context manager. "
+                    "For example:\nwith calibrator:\n\t# Use calibrator here"
+                )
                 return None
 
             try:
                 buffers = next(self.data_loader_iter)
             except StopIteration:
                 if not self.num_batches:
-                    G_LOGGER.error("Calibrator data loader provided no data.\nPossible reasons for this include:\n(1) data loader "
-                                   "has no data to provide\n(2) data loader was a generator, and the calibrator is being "
-                                   "used multiple times (generators cannot be rewound)")
+                    G_LOGGER.error(
+                        "Calibrator data loader provided no data.\nPossible reasons for this include:\n(1) data loader "
+                        "has no data to provide\n(2) data loader was a generator, and the calibrator is being "
+                        "used multiple times (generators cannot be rewound)"
+                    )
                 return None
             else:
                 self.num_batches += 1
@@ -152,13 +154,15 @@ def Calibrator(data_loader, cache=None, BaseClass=None,
                 elif isinstance(buf, int):
                     ptrs.append(buf)
                 else:
-                    G_LOGGER.error("Calibration data loader provided an unrecognized type: {:} for input: {:}.\n"
-                                   "Please provide either a NumPy array, Polygraphy DeviceView, or GPU pointer. ".format(
-                                       type(buf).__name__, name))
+                    G_LOGGER.error(
+                        "Calibration data loader provided an unrecognized type: {:} for input: {:}.\n"
+                        "Please provide either a NumPy array, Polygraphy DeviceView, or GPU pointer. ".format(
+                            type(buf).__name__, name
+                        )
+                    )
                     return None
 
             return ptrs
-
 
         def read_calibration_cache(self):
             def load_from_cache():
@@ -167,10 +171,11 @@ def Calibrator(data_loader, cache=None, BaseClass=None,
 
                 try:
                     return util.load_file(self._cache, description="calibration cache")
-                except:
-                    G_LOGGER.warning("Could not read from calibration cache: {:}".format(self._cache))
+                except Exception as err:
+                    G_LOGGER.error(
+                        "Could not read from calibration cache: {:}\nNote: Error was: {:}".format(self._cache, err)
+                    )
                     return None
-
 
             # Only attempt to read from the cache once.
             if self.has_cached_scales:
@@ -180,15 +185,16 @@ def Calibrator(data_loader, cache=None, BaseClass=None,
 
             if not self.cache_contents:
                 if self.cache_contents is not None:
-                    G_LOGGER.warning("Calibration cache was provided, but is empty. "
-                                     "Will regenerate scales by running calibration.",
-                                     mode=LogMode.ONCE)
+                    G_LOGGER.warning(
+                        "Calibration cache was provided, but is empty. "
+                        "Will regenerate scales by running calibration.",
+                        mode=LogMode.ONCE,
+                    )
                 self.cache_contents = None
             else:
                 self.has_cached_scales = True
 
             return self.cache_contents
-
 
         def write_calibration_cache(self, cache):
             self.cache_contents = cache.tobytes()
@@ -199,47 +205,47 @@ def Calibrator(data_loader, cache=None, BaseClass=None,
 
             try:
                 util.save_file(contents=self.cache_contents, dest=self._cache, description="calibration cache")
-            except:
-                G_LOGGER.warning("Could not write to calibration cache: {:}".format(self._cache))
-
+            except Exception as err:
+                G_LOGGER.error(
+                    "Could not write to calibration cache: {:}.\nNote: Error was: {:}".format(self._cache, err)
+                )
 
         def __enter__(self):
             self.is_active = True
             return self
-
 
         def __exit__(self, exc_type, exc_value, traceback):
             self.is_active = False
             for device_buffer in self.device_buffers.values():
                 device_buffer.free()
 
-
         # IInt8LegacyCalibrator methods
         def get_quantile(self):
             return util.default(quantile, 0.5)
 
-
         def get_regression_cutoff(self):
             return util.default(regression_cutoff, 0.5)
-
 
         def read_histogram_cache(self, length):
             pass
 
-
         def write_histogram_cache(self, ptr, length):
             pass
-
 
         # IInt8Calibrator methods
         def get_algorithm(self):
             return util.default(algo, trt.CalibrationAlgoType.MINMAX_CALIBRATION)
 
-
         def __repr__(self):
-            return util.make_repr("Calibrator", data_loader, cache=cache, BaseClass=BaseClass,
-                                  batch_size=batch_size, quantile=quantile, regression_cutoff=regression_cutoff,
-                                  algo=algo)[0]
-
+            return util.make_repr(
+                "Calibrator",
+                data_loader,
+                cache=cache,
+                BaseClass=BaseClass,
+                batch_size=batch_size,
+                quantile=quantile,
+                regression_cutoff=regression_cutoff,
+                algo=algo,
+            )[0]
 
     return CalibratorClass()

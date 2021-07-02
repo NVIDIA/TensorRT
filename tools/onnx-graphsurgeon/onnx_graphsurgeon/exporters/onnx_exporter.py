@@ -113,9 +113,10 @@ def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto"
     """
     onnx_graph = OnnxExporter.export_graph(graph, do_type_check=do_type_check)
 
-    if graph.import_domains is None:
-        kwargs["opset_imports"] = [onnx.helper.make_opsetid("", graph.opset)]
-    else:
-        kwargs["opset_imports"] = graph.import_domains
+    if "opset_imports" not in kwargs:
+        if graph.import_domains is None:
+            kwargs["opset_imports"] = [onnx.helper.make_opsetid("", graph.opset)]
+        else:
+            kwargs["opset_imports"] = graph.import_domains
 
     return onnx.helper.make_model(onnx_graph, **kwargs)

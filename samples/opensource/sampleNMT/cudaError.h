@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef SAMPLE_NMT_CUDA_ERROR_
 #define SAMPLE_NMT_CUDA_ERROR_
 

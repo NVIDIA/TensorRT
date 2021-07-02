@@ -26,7 +26,7 @@ polygraphy = os.path.join(BIN_DIR, "polygraphy")
 
 def check_subprocess(status):
     if status.returncode:
-        G_LOGGER.exit(status.stdout + status.stderr)
+        G_LOGGER.critical(status.stdout + status.stderr)
 
 
 def run_polygraphy(additional_opts=[], *args, **kwargs):

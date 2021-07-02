@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef TENSORRT_BUFFERS_H
 #define TENSORRT_BUFFERS_H
 
@@ -455,7 +454,7 @@ private:
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine;              //!< The pointer to the engine
     int mBatchSize;                                              //!< The batch size for legacy networks, 0 otherwise.
     std::vector<std::unique_ptr<ManagedBuffer>> mManagedBuffers; //!< The vector of pointers to managed buffers
-    std::vector<void*> mDeviceBindings; //!< The vector of device buffers needed for engine execution
+    std::vector<void*> mDeviceBindings;                          //!< The vector of device buffers needed for engine execution
 };
 
 } // namespace samplesCommon

@@ -177,7 +177,7 @@ We can try different calibrations without recollecting the histograms, and see w
 
 MSE and entropy should both get over 76%. 99.9% clips too many values for resnet50 and will get slightly lower accuracy.
 
-Quantized fine tuning
+Quantization Aware Training
 ---------------------
 
 Optionally, we can fine-tune the calibrated model to improve accuracy further.
@@ -198,3 +198,120 @@ After one epoch of fine-tuning, we can achieve over 76.4% top-1 accuracy.
 Fine-tuning for more epochs with learning rate annealing can improve accuracy further.
 For example, fine-tuning for 15 epochs with cosine annealing starting with a learning rate of 0.001 can get over 76.7%.
 It should be noted that the same fine-tuning schedule will improve the accuracy of the unquantized model as well.
+
+Further optimization
+~~~~~~~~~~~~~~~~~~~~
+
+For efficient inference on TensorRT, we need know more details about the runtime optimization.
+TensorRT supports fusion of quantizing convolution and residual add.
+The new fused operator has two inputs. Let us call them conv-input and residual-input.
+Here the fused operator’s output precision must match the residual input precision.
+When there is another quantizing node after the fused operator,
+we can insert a pair of quantizing/dequantizing nodes between the residual-input and the Elementwise-Addition node,
+so that quantizing node after the Convolution node is fused with the Convolution node, and the Convolution node is completely quantized with INT8 input and output.
+We cannot use automatic monkey-patching to apply this optimization and we need to manually insert the quantizing/dequantizing nodes.
+
+First create a copy of resnet.py from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py,
+modify the constructor, add explicit bool flag ‘quantize’
+
+.. code:: python
+
+    def resnet50(pretrained: bool = False, progress: bool = True, quantize: bool = False, **kwargs: Any) -> ResNet:
+        return _resnet('resnet50', Bottleneck, [3, 4, 6, 3], pretrained, progress, quantize, **kwargs)
+    def _resnet(arch: str, block: Type[Union[BasicBlock, Bottleneck]], layers: List[int], pretrained: bool, progress: bool,
+                quantize: bool, **kwargs: Any) -> ResNet:
+        model = ResNet(block, layers, quantize, **kwargs)
+    class ResNet(nn.Module):
+        def __init__(self,
+                     block: Type[Union[BasicBlock, Bottleneck]],
+                     layers: List[int],
+                     quantize: bool = False,
+                     num_classes: int = 1000,
+                     zero_init_residual: bool = False,
+                     groups: int = 1,
+                     width_per_group: int = 64,
+                     replace_stride_with_dilation: Optional[List[bool]] = None,
+                     norm_layer: Optional[Callable[..., nn.Module]] = None) -> None:
+            super(ResNet, self).__init__()
+            self._quantize = quantize
+
+When this ``self._quantize`` flag is set to ``True``, we need replace all the ``nn.Conv2d`` with ``quant_nn.QuantConv2d``.
+
+
+.. code:: python
+
+    def conv3x3(in_planes: int,
+                out_planes: int,
+                stride: int = 1,
+                groups: int = 1,
+                dilation: int = 1,
+                quantize: bool = False) -> nn.Conv2d:
+        """3x3 convolution with padding"""
+        if quantize:
+            return quant_nn.QuantConv2d(in_planes,
+                                        out_planes,
+                                        kernel_size=3,
+                                        stride=stride,
+                                        padding=dilation,
+                                        groups=groups,
+                                        bias=False,
+                                        dilation=dilation)
+        else:
+            return nn.Conv2d(in_planes,
+                             out_planes,
+                             kernel_size=3,
+                             stride=stride,
+                             padding=dilation,
+                             groups=groups,
+                             bias=False,
+                             dilation=dilation)
+      def conv1x1(in_planes: int, out_planes: int, stride: int = 1, quantize: bool = False) -> nn.Conv2d:
+          """1x1 convolution"""
+          if quantize:
+              return quant_nn.QuantConv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+          else:
+              return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+
+
+The residual conv add can be find both in both ``BasicBlock`` and ``Bottleneck``.
+We need first declare quantization node in the ``__init__`` function.
+
+
+.. code:: python
+
+      def __init__(self,
+                   inplanes: int,
+                   planes: int,
+                   stride: int = 1,
+                   downsample: Optional[nn.Module] = None,
+                   groups: int = 1,
+                   base_width: int = 64,
+                   dilation: int = 1,
+                   norm_layer: Optional[Callable[..., nn.Module]] = None,
+                   quantize: bool = False) -> None:
+          # other code...
+          self._quantize = quantize
+          if self._quantize:
+              self.residual_quantizer = quant_nn.TensorQuantizer(quant_nn.QuantConv2d.default_quant_desc_input)
+
+
+Finally we need patch the ``forward`` function in both ``BasicBlock`` and ``Bottleneck``,
+inserting extra quantization/dequantization nodes here.
+
+
+.. code:: python
+
+      def forward(self, x: Tensor) -> Tensor:
+          # other code...
+          if self._quantize:
+              out += self.residual_quantizer(identity)
+          else:
+              out += identity
+          out = self.relu(out)
+
+          return out
+
+The final resnet code with residual quantized can be found in https://github.com/NVIDIA/TensorRT/blob/master/tools/pytorch-quantization/examples/torchvision/models/classification/resnet.py
+
+
+

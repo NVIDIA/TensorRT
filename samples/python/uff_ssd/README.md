@@ -24,7 +24,7 @@ This sample is based on the TensorFlow implementation of SSD. For more informati
 
 ## How does this sample work?
 
-The sample downloads a pretrained [ssd_inception_v2_coco_2017_11_17](http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz) model and uses it to perform inference. Additionally, it superimposes bounding boxes on the input image as a post-processing step.
+The sample uses a pretrained [ssd_inception_v2_coco_2017_11_17](http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz) model to perform inference. Additionally, it superimposes bounding boxes on the input image as a post-processing step.
 
 The SSD network performs the task of object detection and localization in a single forward pass of the network. The TensorFlow SSD network was trained on the InceptionV2 architecture using the [MSCOCO dataset](http://cocodataset.org/#home).
 
@@ -137,69 +137,99 @@ The outputs of the SSD network are human interpretable. The post-processing work
 
 1. Launch the [NVIDIA tf1 (Tensorflow 1.x)](https://docs.nvidia.com/deeplearning/frameworks/tensorflow-release-notes/running.html#running) container.
     ```bash
-    docker run --rm -it --gpus all -v `pwd`:/workspace nvcr.io/nvidia/tensorflow:20.12-tf1-py3 /bin/bash
+    docker run --rm -it --gpus all -v `pwd`:/workspace nvcr.io/nvidia/tensorflow:21.03-tf1-py3 /bin/bash
     ```
 
     Alternatively, install Tensorflow 1.15
-    `pip3 install tensorflow>=1.15.3,<2.0`
+    `pip3 install tensorflow>=1.15.5,<2.0`
+
+  NOTE:
+  - On PowerPC systems, you will need to manually install TensorFlow using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
+  - On Jetson boards, you will need to manually install TensorFlow by following the documentation for [Xavier](https://docs.nvidia.com/deeplearning/dgx/install-tf-xavier/index.html) or [TX2](https://docs.nvidia.com/deeplearning/dgx/install-tf-jetsontx2/index.html).
 
 2. Install the dependencies for Python.
    ```bash
    python3 -m pip install -r requirements.txt
    ```
 
-  NOTE:
-  - On PowerPC systems, you will need to manually install TensorFlow using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
-  - On Jetson boards, you will need to manually install TensorFlow by following the documentation for [Xavier](https://docs.nvidia.com/deeplearning/dgx/install-tf-xavier/index.html) or [TX2](https://docs.nvidia.com/deeplearning/dgx/install-tf-jetsontx2/index.html).
+3. Download the Tensorflow SSD model with inception backbone.
+   ```bash
+   wget http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz
+   ```
 
-2.  Optional: To evaluate the accuracy of the trained model using the VOC dataset, perform the following steps.
+4. Convert Tensorflow model to UFF.
+   ```bash
+   python3 model.py -d $PWD
+   ```
 
-  Download the VOC 2007 dataset. Run the following command from the sample root directory.
+Optional: To evaluate the accuracy of the trained model using the VOC dataset, perform the following steps.
+
+5.  Download the VOC 2007 dataset. Run the following command from the sample root directory.
    ```bash
    wget http://host.robots.ox.ac.uk/pascal/VOC/voc2007/VOCtest_06-Nov-2007.tar
-   tar xvf VOCtest_06-Nov-2007.tar
    ```
 
   The first command downloads the VOC dataset from the Oxford servers, and the second command unpacks the dataset.
 
-  **NOTE:** If the download link is broken, try alternate source http://vision.cs.utexas.edu/voc/VOC2007_test/. If you don’t want to save VOC in the sample root directory, you'll need to adjust the `--voc_dir` argument to `voc_evaluation.py` script before running it. The default value of this argument is `<SAMPLE_ROOT>/VOCdevkit/VOC2007`.
+  **NOTE:** If the download link is broken, try alternate source http://vision.cs.utexas.edu/voc/VOC2007_test/. If you don’t want to save VOC in the sample root directory, you'll need to adjust the `--voc_dir` argument to `voc_evaluation.py` script before running it. The default value of this argument is `$PWD/VOCdevkit/VOC2007`.
+
+6.  Run the VOC evaluation script for tensorflow.
+
+   ```bash
+   python3 voc_evaluation.py tensorflow -d $PWD
+   ```
 
 ## Running the sample
 
 Both the `detect_objects.py` and `voc_evaluation.py` scripts support separate advanced features, for example, lower precision inference, changing workspace directory and changing batch size.
 
-1.  Run the inference script:
+1. Return to the test container, install prerequisites and run the TensorRT inference script:
    ```bash
+   python3 -m pip install -r requirements.txt
    python3 detect_objects.py <IMAGE_PATH>
    ```
-  Where `<IMAGE_PATH>` contains the image you want to run inference on using the SSD network. The script should work for all popular image formats, like PNG, JPEG, and BMP. Since the model is trained for images of size 300 x 300, the input image will be resized to this size (using bilinear interpolation), if needed.
+   Where `<IMAGE_PATH>` contains the image you want to run inference on using the SSD network. The script should work for all popular image formats, like PNG, JPEG, and BMP. Since the model is trained for images of size 300 x 300, the input image will be resized to this size (using bilinear interpolation), if needed.
 
-  For example:
+   Example #1:
+   ```bash
+   python3 detect_objects.py images/image1.jpg
+   ```
+
+   Expected output:
+   ```
+   TensorRT inference engine settings:
+     * Inference precision - DataType.FLOAT
+     * Max batch size - 1
+
+   Loading cached TensorRT engine from workspace/engines/FLOAT/engine_bs_1.buf
+   TensorRT inference time: 309 ms
+   Detected dog with confidence 98%
+   Detected dog with confidence 93%
+   Detected person with confidence 75%
+   Total time taken for one image: 338 ms
+
+   Saved output image to: image_inferred.jpg
+   ```
+
+   Example #2:
    ```bash
    wget -nc http://images.cocodataset.org/val2017/000000252219.jpg -O test.jpg
    python3 detect_objects.py test.jpg
    ```
 
-  When the inference script is run for the first time, it will run the following things to prepare its workspace:
-  - The script downloads the pretrained `ssd_inception_v2_coco_2017_11_17` model from the TensorFlow object detection API. The script converts this model to TensorRT format, and the conversion is tailored to this specific version of the model.
-  - The script builds a TensorRT inference engine and saves it to a file. During this step, all TensorRT optimizations will be applied to frozen graph. This is a time consuming operation and it can take a few minutes.
+   When the inference script is run for the first time, the script builds a TensorRT inference engine and saves it to a file. During this step, all TensorRT optimizations will be applied to frozen graph. This is a time consuming operation and it can take a few minutes.
 
-  After the workspace is ready, the script launches inference on the input image and saves the results to a location that will be printed on standard output. You can then open the saved image file and visually confirm that the bounding boxes are correct.
+   After the workspace is ready, the script launches inference on the input image and saves the results to a location that will be printed on standard output. You can then open the saved image file and visually confirm that the bounding boxes are correct.
 
-2.  Run the VOC evaluation script.
+Optional: To evaluate the accuracy of the trained model using the VOC dataset, perform the following steps.
 
-  1. Run the script using TensorRT:
+2. Run the VOC evaluation script for TensorRT.
    ```bash
-   python3 voc_evaluation.py
-   ```
-
-  2. Run the script using TensorFlow:
-   ```bash
-   python3 voc_evaluation.py tensorflow
+   python3 voc_evaluation.py -d $PWD
    ```
   **NOTE:** Running the script using TensorFlow will much slower than the TensorRT evaluation.
 
-  3. AP and mAP metrics are displayed at the end of the script execution. The metrics for the TensorRT engine should match those of the original TensorFlow model.
+3. AP and mAP metrics are displayed at the end of the script execution. The metrics for the TensorRT engine should match those of the original TensorFlow model.
 
 ### Sample --help options
 

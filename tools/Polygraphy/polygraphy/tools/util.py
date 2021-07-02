@@ -35,7 +35,9 @@ def meta_from_gs_tensors(tensors):
 def override_input_shapes(graph, user_input_metadata):
     """
     Overrides input shapes in the model according to the provided input metadata.
-    Inputs omitted from user_input_metadata are not changed
+    Inputs omitted from user_input_metadata are not changed.
+
+    Shapes of intermediate tensors are cleared.
     """
     # We can leverage extract_subgraph if we make sure all the current graph inputs are preserved.
     # We need to be careful to preserve the order of graph inputs here.

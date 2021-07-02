@@ -15,9 +15,7 @@
  */
 
 #include "softmaxLikelihood.h"
-
-#include <cassert>
-
+#include "common.h"
 #include <math.h>
 
 namespace nmtSample
@@ -27,56 +25,56 @@ void SoftmaxLikelihood::addToModel(nvinfer1::INetworkDefinition* network, int be
     nvinfer1::ITensor** newRayOptionIndices, nvinfer1::ITensor** newVocabularyIndices)
 {
     auto softmaxLayer = network->addSoftMax(*inputLogits);
-    assert(softmaxLayer != nullptr);
+    ASSERT(softmaxLayer != nullptr);
     softmaxLayer->setName("Softmax in likelihood calculation");
     softmaxLayer->setAxes(2);
     auto softmaxTensor = softmaxLayer->getOutput(0);
-    assert(softmaxTensor != nullptr);
+    ASSERT(softmaxTensor != nullptr);
 
     auto topKLayer = network->addTopK(*softmaxTensor, nvinfer1::TopKOperation::kMAX, beamWidth, 2);
-    assert(topKLayer != nullptr);
+    ASSERT(topKLayer != nullptr);
     topKLayer->setName("TopK 1st in likelihood calculation");
     auto newLikelihoods = topKLayer->getOutput(0);
-    assert(newLikelihoods != nullptr);
+    ASSERT(newLikelihoods != nullptr);
     auto vocabularyIndices = topKLayer->getOutput(1);
-    assert(vocabularyIndices != nullptr);
+    ASSERT(vocabularyIndices != nullptr);
 
     auto eltWiseLayer
         = network->addElementWise(*newLikelihoods, *inputLikelihoods, nvinfer1::ElementWiseOperation::kPROD);
-    assert(eltWiseLayer != nullptr);
+    ASSERT(eltWiseLayer != nullptr);
     eltWiseLayer->setName("EltWise multiplication in likelihood calculation");
     auto combinedLikelihoods = eltWiseLayer->getOutput(0);
-    assert(combinedLikelihoods != nullptr);
+    ASSERT(combinedLikelihoods != nullptr);
 
     auto shuffleLayer = network->addShuffle(*combinedLikelihoods);
-    assert(shuffleLayer != nullptr);
+    ASSERT(shuffleLayer != nullptr);
     shuffleLayer->setName("Reshape combined likelihoods");
-    nvinfer1::Dims shuffleDims{1, {beamWidth * beamWidth}, {nvinfer1::DimensionType::kCHANNEL}};
+    nvinfer1::Dims shuffleDims{1, {beamWidth * beamWidth}};
     shuffleLayer->setReshapeDimensions(shuffleDims);
     auto reshapedCombinedLikelihoods = shuffleLayer->getOutput(0);
-    assert(reshapedCombinedLikelihoods != nullptr);
+    ASSERT(reshapedCombinedLikelihoods != nullptr);
 
     auto topKLayer2 = network->addTopK(*reshapedCombinedLikelihoods, nvinfer1::TopKOperation::kMAX, beamWidth, 1);
-    assert(topKLayer2 != nullptr);
+    ASSERT(topKLayer2 != nullptr);
     topKLayer2->setName("TopK 2nd in likelihood calculation");
     *newCombinedLikelihoods = topKLayer2->getOutput(0);
-    assert(*newCombinedLikelihoods != nullptr);
+    ASSERT(*newCombinedLikelihoods != nullptr);
     *newRayOptionIndices = topKLayer2->getOutput(1);
-    assert(*newRayOptionIndices != nullptr);
+    ASSERT(*newRayOptionIndices != nullptr);
 
     auto shuffleLayer2 = network->addShuffle(*vocabularyIndices);
-    assert(shuffleLayer2 != nullptr);
+    ASSERT(shuffleLayer2 != nullptr);
     shuffleLayer2->setName("Reshape vocabulary indices");
-    nvinfer1::Dims shuffleDims2{1, {beamWidth * beamWidth}, {nvinfer1::DimensionType::kCHANNEL}};
+    nvinfer1::Dims shuffleDims2{1, {beamWidth * beamWidth}};
     shuffleLayer2->setReshapeDimensions(shuffleDims2);
     auto reshapedVocabularyIndices = shuffleLayer2->getOutput(0);
-    assert(reshapedVocabularyIndices != nullptr);
+    ASSERT(reshapedVocabularyIndices != nullptr);
 
     auto gatherLayer = network->addGather(*reshapedVocabularyIndices, **newRayOptionIndices, 0);
-    assert(gatherLayer != nullptr);
+    ASSERT(gatherLayer != nullptr);
     gatherLayer->setName("Shuffle vocabulary indices");
     *newVocabularyIndices = gatherLayer->getOutput(0);
-    assert(*newVocabularyIndices != nullptr);
+    ASSERT(*newVocabularyIndices != nullptr);
 }
 
 float SoftmaxLikelihood::SoftmaxLikelihoodCombinationOperator::combine(

@@ -25,6 +25,7 @@ import onnx_graphsurgeon as gs
 
 CURDIR = os.path.dirname(__file__)
 
+
 @gs.Graph.register()
 def identity(self, inp):
     return self.layer(op="Identity", inputs=[inp], outputs=["identity_out"])[0]
@@ -44,7 +45,7 @@ def add(self, a, b):
 #      /  \
 #    Z1    Z2
 DTYPE = np.float32
-SHAPE = (1, )
+SHAPE = (1,)
 
 X0 = gs.Variable("X0", dtype=DTYPE, shape=SHAPE)
 Y0 = gs.Variable("Y0", dtype=DTYPE, shape=SHAPE)

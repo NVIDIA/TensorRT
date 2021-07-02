@@ -28,24 +28,26 @@ class TestComparatorCompare(object):
 
         assert arg_group.check_error_stat == {"": check_error_stat}
 
-
-    @pytest.mark.parametrize("args, expected", [
-        (["mean", "output0:median", "output1:max"],
-         {"": "mean", "output0": "median", "output1": "max"}),
-        (["output0:median", "output1:elemwise"],
-         {"output0": "median", "output1": "elemwise"}),
-    ])
+    @pytest.mark.parametrize(
+        "args, expected",
+        [
+            (["mean", "output0:median", "output1:max"], {"": "mean", "output0": "median", "output1": "max"}),
+            (["output0:median", "output1:elemwise"], {"output0": "median", "output1": "elemwise"}),
+        ],
+    )
     def test_error_stat_per_output(self, args, expected):
         arg_group = ArgGroupTestHelper(ComparatorCompareArgs())
         arg_group.parse_args(["--check-error-stat"] + args)
 
         assert arg_group.check_error_stat == expected
 
-
-    @pytest.mark.parametrize("args", [
-        ["not-a-stat"],
-        ["output0:fake"],
-    ])
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["not-a-stat"],
+            ["output0:fake"],
+        ],
+    )
     def test_invalid_error_stat(self, args):
         with pytest.raises(PolygraphyException, match="Invalid choice"):
             arg_group = ArgGroupTestHelper(ComparatorCompareArgs())

@@ -13,11 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "resizeNearestPlugin.h"
 #include "plugin.h"
-#include <algorithm>
 #include <cuda_runtime_api.h>
+#include <algorithm>
 #include <iostream>
 
 #define DEBUG 0
@@ -116,7 +115,9 @@ int ResizeNearest::initialize() noexcept
     return 0;
 }
 
-void ResizeNearest::terminate() noexcept {}
+void ResizeNearest::terminate() noexcept
+{
+}
 
 void ResizeNearest::destroy() noexcept
 {
@@ -191,11 +192,11 @@ const char* ResizeNearest::getPluginNamespace() const noexcept
 
 bool ResizeNearest::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
 int ResizeNearest::enqueue(
-    int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept
+    int batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     int nchan = mOutputDims.d[0];

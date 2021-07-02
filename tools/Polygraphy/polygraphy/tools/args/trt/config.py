@@ -21,8 +21,7 @@ from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
-from polygraphy.tools.script import (assert_identifier, inline, make_invocable,
-                                     make_invocable_if_nondefault, safe)
+from polygraphy.tools.script import assert_identifier, inline, make_invocable, make_invocable_if_nondefault, safe
 
 
 def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
@@ -37,6 +36,7 @@ def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
             A list of profiles with each profile comprised of three dictionaries
             (min, opt, max) mapping input names to shapes.
     """
+
     def get_shapes(lst, idx):
         nonlocal default_shapes
         default_shapes = copy.copy(default_shapes)
@@ -47,11 +47,15 @@ def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
         shapes = {name: util.override_dynamic_shape(shape) for name, (_, shape) in default_shapes.items()}
 
         for name, shape in shapes.items():
-            if tuple(shapes[name]) != tuple(shape):
-                G_LOGGER.warning("Input tensor: {:} | For TensorRT profile, overriding shape: {:} to: {:}".format(name, shape, shapes[name]), mode=LogMode.ONCE)
+            if tuple(default_shapes[name].shape) != tuple(shape):
+                G_LOGGER.warning(
+                    "Input tensor: {:} | For TensorRT profile, overriding dynamic shape: {:} to: {:}".format(
+                        name, default_shapes[name].shape, shape
+                    ),
+                    mode=LogMode.ONCE,
+                )
 
         return shapes
-
 
     num_profiles = max(len(min_args), len(opt_args), len(max_args))
 
@@ -65,11 +69,15 @@ def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
         opt_shapes = get_shapes(opt_args, idx)
         max_shapes = get_shapes(max_args, idx)
         if sorted(min_shapes.keys()) != sorted(opt_shapes.keys()):
-            G_LOGGER.exit("Mismatch in input names between minimum shapes ({:}) and optimum shapes "
-                            "({:})".format(list(min_shapes.keys()), list(opt_shapes.keys())))
+            G_LOGGER.critical(
+                "Mismatch in input names between minimum shapes ({:}) and optimum shapes "
+                "({:})".format(list(min_shapes.keys()), list(opt_shapes.keys()))
+            )
         elif sorted(opt_shapes.keys()) != sorted(max_shapes.keys()):
-            G_LOGGER.exit("Mismatch in input names between optimum shapes ({:}) and maximum shapes "
-                            "({:})".format(list(opt_shapes.keys()), list(max_shapes.keys())))
+            G_LOGGER.critical(
+                "Mismatch in input names between optimum shapes ({:}) and maximum shapes "
+                "({:})".format(list(opt_shapes.keys()), list(max_shapes.keys()))
+            )
 
         profiles.append((min_shapes, opt_shapes, max_shapes))
     return profiles
@@ -77,84 +85,177 @@ def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
 
 @mod.export()
 class TrtConfigArgs(BaseArgs):
-    def __init__(self, force_strict_types=None):
+    def __init__(self, strict_types_default=None):
         super().__init__()
         self.model_args = None
         self.data_loader_args = None
-        self._force_strict_types = force_strict_types
-
+        self._strict_types_default = strict_types_default
 
     def add_to_parser(self, parser):
-        trt_config_args = parser.add_argument_group("TensorRT Builder Configuration", "Options for TensorRT Builder Configuration")
-        trt_config_args.add_argument("--trt-min-shapes", action='append', help="The minimum shapes the optimization profile(s) will support. "
-                                     "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
-                                     "Format: --trt-min-shapes <input0>:[D0,D1,..,DN] .. <inputN>:[D0,D1,..,DN]", nargs="+", default=[])
-        trt_config_args.add_argument("--trt-opt-shapes", action='append', help="The shapes for which the optimization profile(s) will be most performant. "
-                                     "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
-                                     "Format: --trt-opt-shapes <input0>:[D0,D1,..,DN] .. <inputN>:[D0,D1,..,DN]", nargs="+", default=[])
-        trt_config_args.add_argument("--trt-max-shapes", action='append', help="The maximum shapes the optimization profile(s) will support. "
-                                     "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
-                                     "Format: --trt-max-shapes <input0>:[D0,D1,..,DN] .. <inputN>:[D0,D1,..,DN]", nargs="+", default=[])
+        trt_config_args = parser.add_argument_group(
+            "TensorRT Builder Configuration", "Options for TensorRT Builder Configuration"
+        )
+        trt_config_args.add_argument(
+            "--trt-min-shapes",
+            action="append",
+            help="The minimum shapes the optimization profile(s) will support. "
+            "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
+            "Format: --trt-min-shapes <input0>:[D0,D1,..,DN] .. <inputN>:[D0,D1,..,DN]",
+            nargs="+",
+            default=[],
+        )
+        trt_config_args.add_argument(
+            "--trt-opt-shapes",
+            action="append",
+            help="The shapes for which the optimization profile(s) will be most performant. "
+            "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
+            "Format: --trt-opt-shapes <input0>:[D0,D1,..,DN] .. <inputN>:[D0,D1,..,DN]",
+            nargs="+",
+            default=[],
+        )
+        trt_config_args.add_argument(
+            "--trt-max-shapes",
+            action="append",
+            help="The maximum shapes the optimization profile(s) will support. "
+            "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
+            "Format: --trt-max-shapes <input0>:[D0,D1,..,DN] .. <inputN>:[D0,D1,..,DN]",
+            nargs="+",
+            default=[],
+        )
 
-        trt_config_args.add_argument("--tf32", help="Enable tf32 precision in TensorRT", action="store_true", default=None)
-        trt_config_args.add_argument("--fp16", help="Enable fp16 precision in TensorRT", action="store_true", default=None)
-        trt_config_args.add_argument("--int8", help="Enable int8 precision in TensorRT. "
-                                     "If no calibration cache is provided, this option will cause TensorRT to run int8 calibration "
-                                     "using the Polygraphy data loader to provide calibration data. ", action="store_true", default=None)
-        if not self._force_strict_types:
-            trt_config_args.add_argument("--strict-types", help="Enable strict types in TensorRT, forcing it to choose tactics based on the "
-                                         "layer precision set, even if another precision is faster.", action="store_true",
-                                         default=None)
-        trt_config_args.add_argument("--sparse-weights", help="Enable optimizations for sparse weights in TensorRT", action="store_true", default=None)
+        trt_config_args.add_argument(
+            "--tf32", help="Enable tf32 precision in TensorRT", action="store_true", default=None
+        )
+        trt_config_args.add_argument(
+            "--fp16", help="Enable fp16 precision in TensorRT", action="store_true", default=None
+        )
+        trt_config_args.add_argument(
+            "--int8",
+            help="Enable int8 precision in TensorRT. "
+            "If no calibration cache is provided, this option will cause TensorRT to run int8 calibration "
+            "using the Polygraphy data loader to provide calibration data. ",
+            action="store_true",
+            default=None,
+        )
+        if self._strict_types_default:
+            trt_config_args.add_argument(
+                "--no-strict-types",
+                help="Disables strict types in TensorRT, allowing it to choose tactics outside the "
+                "layer precision set.",
+                action="store_false",
+                default=True,
+                dest="strict_types",
+            )
+        else:
+            trt_config_args.add_argument(
+                "--strict-types",
+                help="Enable strict types in TensorRT, forcing it to choose tactics based on the "
+                "layer precision set, even if another precision is faster.",
+                action="store_true",
+                default=None,
+                dest="strict_types",
+            )
+
+        trt_config_args.add_argument(
+            "--sparse-weights",
+            help="Enable optimizations for sparse weights in TensorRT",
+            action="store_true",
+            default=None,
+        )
 
         # Workspace uses float to enable scientific notation (e.g. 1e9)
-        trt_config_args.add_argument("--workspace", metavar="BYTES", help="Memory in bytes to allocate for the TensorRT builder's workspace", type=float, default=None)
-        trt_config_args.add_argument("--calibration-cache", help="Path to load/save a calibration cache. "
-                                     "Used to store calibration scales to speed up the process of int8 calibration. "
-                                     "If the provided path does not yet exist, int8 calibration scales will be calculated and written to it during engine building. "
-                                     "If the provided path does exist, it will be read and int8 calibration will be skipped during engine building. ",
-                                     default=None)
-        trt_config_args.add_argument("--calib-base-cls", "--calibration-base-class", dest="calibration_base_class",
-                                     help="The name of the calibration base class to use. For example, 'IInt8MinMaxCalibrator'. ",
-                                     default=None)
-        trt_config_args.add_argument("--quantile", type=float,
-                                     help="The quantile to use for IInt8LegacyCalibrator. Has no effect for other calibrator types.",
-                                     default=None)
-        trt_config_args.add_argument("--regression-cutoff", type=float,
-                                     help="The regression cutoff to use for IInt8LegacyCalibrator. Has no effect for other calibrator types.",
-                                     default=None)
+        trt_config_args.add_argument(
+            "--workspace",
+            metavar="BYTES",
+            help="Memory in bytes to allocate for the TensorRT builder's workspace",
+            type=float,
+            default=None,
+        )
+        trt_config_args.add_argument(
+            "--calibration-cache",
+            help="Path to load/save a calibration cache. "
+            "Used to store calibration scales to speed up the process of int8 calibration. "
+            "If the provided path does not yet exist, int8 calibration scales will be calculated and written to it during engine building. "
+            "If the provided path does exist, it will be read and int8 calibration will be skipped during engine building. ",
+            default=None,
+        )
+        trt_config_args.add_argument(
+            "--calib-base-cls",
+            "--calibration-base-class",
+            dest="calibration_base_class",
+            help="The name of the calibration base class to use. For example, 'IInt8MinMaxCalibrator'. ",
+            default=None,
+        )
+        trt_config_args.add_argument(
+            "--quantile",
+            type=float,
+            help="The quantile to use for IInt8LegacyCalibrator. Has no effect for other calibrator types.",
+            default=None,
+        )
+        trt_config_args.add_argument(
+            "--regression-cutoff",
+            type=float,
+            help="The regression cutoff to use for IInt8LegacyCalibrator. Has no effect for other calibrator types.",
+            default=None,
+        )
 
-        trt_config_args.add_argument("--timing-cache", help="Path to load/save tactic timing cache. "
-                                     "Used to cache tactic timing information to speed up the engine building process. "
-                                     "Existing caches will be appended to with any new timing information gathered. ",
-                                     default=None)
+        trt_config_args.add_argument(
+            "--timing-cache",
+            help="Path to load/save tactic timing cache. "
+            "Used to cache tactic timing information to speed up the engine building process. "
+            "Existing caches will be appended to with any new timing information gathered. ",
+            default=None,
+        )
 
         replay = trt_config_args.add_mutually_exclusive_group()
-        replay.add_argument("--tactic-replay", help="[DEPRECATED - use --load/save-tactics] Path to load/save a tactic replay file. "
-                            "Used to record and replay tactics selected by TensorRT to provide deterministic engine builds. "
-                            "If the provided path does not yet exist, tactics will be recorded and written to it. "
-                            "If the provided path does exist, it will be read and used to replay previously recorded tactics. ",
-                            default=None)
-        replay.add_argument("--save-tactics", help="Path to save a tactic replay file. "
-                            "Tactics selected by TensorRT will be recorded and stored at this location. ",
-                            default=None)
-        replay.add_argument("--load-tactics", help="Path to load a tactic replay file. "
-                            "The tactics specified in the file will be used to override TensorRT's default selections. ",
-                            default=None)
+        replay.add_argument(
+            "--tactic-replay",
+            help="[DEPRECATED - use --load/save-tactics] Path to load/save a tactic replay file. "
+            "Used to record and replay tactics selected by TensorRT to provide deterministic engine builds. "
+            "If the provided path does not yet exist, tactics will be recorded and written to it. "
+            "If the provided path does exist, it will be read and used to replay previously recorded tactics. ",
+            default=None,
+        )
+        replay.add_argument(
+            "--save-tactics",
+            help="Path to save a tactic replay file. "
+            "Tactics selected by TensorRT will be recorded and stored at this location. ",
+            default=None,
+        )
+        replay.add_argument(
+            "--load-tactics",
+            help="Path to load a tactic replay file. "
+            "The tactics specified in the file will be used to override TensorRT's default selections. ",
+            default=None,
+        )
 
-        trt_config_args.add_argument("--tactic-sources", help="Tactic sources to enable. This controls which libraries "
-                                     "(e.g. cudnn, cublas, etc.) TensorRT is allowed to load tactics from. "
-                                     "Values come from the names of the values in the trt.TacticSource enum, and are case-insensitive. "
-                                     "If no arguments are provided, e.g. '--tactic-sources', then all tactic sources are disabled.",
-                                     nargs="*", default=None)
+        trt_config_args.add_argument(
+            "--tactic-sources",
+            help="Tactic sources to enable. This controls which libraries "
+            "(e.g. cudnn, cublas, etc.) TensorRT is allowed to load tactics from. "
+            "Values come from the names of the values in the trt.TacticSource enum, and are case-insensitive. "
+            "If no arguments are provided, e.g. '--tactic-sources', then all tactic sources are disabled.",
+            nargs="*",
+            default=None,
+        )
 
-        trt_config_args.add_argument("--trt-config-script", help="Path to a Python script that defines a function that creates a "
-                                     "TensorRT IBuilderConfig. The function should take a builder and network as parameters and return a "
-                                     "TensorRT builder configuration. When this option is specified, all other config arguments are ignored. ",
-                                     default=None)
-        trt_config_args.add_argument("--trt-config-func-name", help="When using a trt-config-script, this specifies the name of the function "
-                                     "that creates the config. Defaults to `load_config`. ", default="load_config")
-
+        trt_config_args.add_argument(
+            "--trt-config-script",
+            help="Path to a Python script that defines a function that creates a "
+            "TensorRT IBuilderConfig. The function should take a builder and network as parameters and return a "
+            "TensorRT builder configuration. When this option is specified, all other config arguments are ignored. ",
+            default=None,
+        )
+        trt_config_args.add_argument(
+            "--trt-config-func-name",
+            help="When using a trt-config-script, this specifies the name of the function "
+            "that creates the config. Defaults to `load_config`. ",
+            default="load_config",
+        )
+        trt_config_args.add_argument(
+            "--trt-safety-restricted", help="Enable safety scope checking in TensorRT", action="store_true", default=None,
+            dest="restricted",
+        )
 
     def register(self, maker):
         from polygraphy.tools.args.data_loader import DataLoaderArgs
@@ -164,7 +265,6 @@ class TrtConfigArgs(BaseArgs):
             self.model_args = maker
         if isinstance(maker, DataLoaderArgs):
             self.data_loader_args = maker
-
 
     def parse(self, args):
         trt_min_shapes = util.default(args_util.get(args, "trt_min_shapes"), [])
@@ -184,7 +284,8 @@ class TrtConfigArgs(BaseArgs):
         self.tf32 = args_util.get(args, "tf32")
         self.fp16 = args_util.get(args, "fp16")
         self.int8 = args_util.get(args, "int8")
-        self.strict_types = args_util.get(args, "strict_types") if not self._force_strict_types else True
+        self.strict_types = args_util.get(args, "strict_types")
+        self.restricted = args_util.get(args, "restricted")
 
         self.calibration_cache = args_util.get(args, "calibration_cache")
         calib_base = args_util.get(args, "calibration_base_class")
@@ -222,13 +323,14 @@ class TrtConfigArgs(BaseArgs):
         self.trt_config_script = args_util.get(args, "trt_config_script")
         self.trt_config_func_name = args_util.get(args, "trt_config_func_name")
 
-
     def add_trt_config_loader(self, script):
         profiles = []
         for (min_shape, opt_shape, max_shape) in self.profile_dicts:
             profile_str = "Profile()"
             for name in min_shape.keys():
-                profile_str += safe(".add({:}, min={:}, opt={:}, max={:})", name, min_shape[name], opt_shape[name], max_shape[name]).unwrap()
+                profile_str += safe(
+                    ".add({:}, min={:}, opt={:}, max={:})", name, min_shape[name], opt_shape[name], max_shape[name]
+                ).unwrap()
             profiles.append(profile_str)
         if profiles:
             script.add_import(imports=["Profile"], frm="polygraphy.backend.trt")
@@ -239,19 +341,26 @@ class TrtConfigArgs(BaseArgs):
 
         calibrator = None
         if any(arg is not None for arg in [self.calibration_cache, self.calibration_base_class]) and not self.int8:
-            G_LOGGER.warning("Some int8 calibrator options were set, but int8 precision is not enabled. "
-                             "Calibration options will be ignored. Please set --int8 to enable calibration. ")
+            G_LOGGER.warning(
+                "Some int8 calibrator options were set, but int8 precision is not enabled. "
+                "Calibration options will be ignored. Please set --int8 to enable calibration. "
+            )
 
-        if self.int8 and self.data_loader_args is not None: # We cannot do calibration if there is no data loader.
+        if self.int8 and self.data_loader_args is not None:  # We cannot do calibration if there is no data loader.
             script.add_import(imports=["Calibrator"], frm="polygraphy.backend.trt")
             script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")
-            data_loader_name = self.data_loader_args.add_to_script(script)
+            data_loader_name = self.data_loader_args.add_data_loader(script)
             if self.calibration_base_class:
                 script.add_import(imports=["tensorrt as trt"])
 
-            calibrator = make_invocable("Calibrator", data_loader=data_loader_name if data_loader_name else inline(safe("DataLoader()")),
-                                        cache=self.calibration_cache, BaseClass=self.calibration_base_class,
-                                        quantile=self.quantile, regression_cutoff=self.regression_cutoff)
+            calibrator = make_invocable(
+                "Calibrator",
+                data_loader=data_loader_name if data_loader_name else inline(safe("DataLoader()")),
+                cache=self.calibration_cache,
+                BaseClass=self.calibration_base_class,
+                quantile=self.quantile,
+                regression_cutoff=self.regression_cutoff,
+            )
 
         algo_selector = None
         if self.load_tactics is not None:
@@ -266,14 +375,27 @@ class TrtConfigArgs(BaseArgs):
 
         if self.trt_config_script is not None:
             script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
-            config_loader_str = make_invocable("InvokeFromScript", self.trt_config_script, name=self.trt_config_func_name)
+            config_loader_str = make_invocable(
+                "InvokeFromScript", self.trt_config_script, name=self.trt_config_func_name
+            )
         else:
-            config_loader_str = make_invocable_if_nondefault("CreateTrtConfig", max_workspace_size=self.workspace, tf32=self.tf32,
-                                                             fp16=self.fp16, int8=self.int8, strict_types=self.strict_types,
-                                                             profiles=profile_name, calibrator=calibrator,
-                                                             load_timing_cache=(self.timing_cache if self.timing_cache and os.path.exists(self.timing_cache) else None),
-                                                             algorithm_selector=algo_selector,
-                                                             sparse_weights=self.sparse_weights, tactic_sources=self.tactic_sources)
+            config_loader_str = make_invocable_if_nondefault(
+                "CreateTrtConfig",
+                max_workspace_size=self.workspace,
+                tf32=self.tf32,
+                fp16=self.fp16,
+                int8=self.int8,
+                strict_types=self.strict_types,
+                restricted=self.restricted,
+                profiles=profile_name,
+                calibrator=calibrator,
+                load_timing_cache=(
+                    self.timing_cache if self.timing_cache and os.path.exists(self.timing_cache) else None
+                ),
+                algorithm_selector=algo_selector,
+                sparse_weights=self.sparse_weights,
+                tactic_sources=self.tactic_sources,
+            )
             if config_loader_str is not None:
                 script.add_import(imports=["CreateConfig as CreateTrtConfig"], frm="polygraphy.backend.trt")
 
@@ -283,8 +405,8 @@ class TrtConfigArgs(BaseArgs):
             config_loader_name = None
         return config_loader_name
 
-
     def create_config(self, builder, network):
         from polygraphy.backend.trt import CreateConfig
+
         loader = util.default(args_util.run_script(self.add_trt_config_loader), CreateConfig())
         return loader(builder, network)

@@ -95,7 +95,6 @@ __global__ void skiplnDQQ(const int ld, const int8_t* input, const int8_t* skip,
     }
 
     copy<sizeof(int8_t) * VPT>(out_local, &output[idx]);
-
 }
 
 template <typename T, int TPB, int VPT, bool hasBias>

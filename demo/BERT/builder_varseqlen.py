@@ -29,12 +29,10 @@ import pycuda.autoinit
 
 # TensorRT
 import tensorrt as trt
-
-try:
-    from tensorflow.python import pywrap_tensorflow as pyTF
-except ImportError as err:
-    sys.stderr.write("""Error: Failed to import tensorflow module ({})\n""".format(err))
-    sys.exit()
+from builder_utils import load_tf_weights, load_pytorch_weights_and_quant, load_onnx_weights_and_quant, load_megatron_pickle_weights
+from builder_utils import WQKV, BQKV  # Attention Keys
+from builder_utils import W_AOUT, B_AOUT, W_MID, B_MID, W_LOUT, B_LOUT  # Transformer Keys
+from builder_utils import SQD_W, SQD_B  # SQuAD Output Keys
 
 """
 TensorRT Initialization
@@ -55,40 +53,12 @@ skln_plg_creator2 = plg_registry.get_plugin_creator("CustomSkipLayerNormPluginDy
 mha_plg_creator3 = plg_registry.get_plugin_creator("CustomQKVToContextPluginDynamic", "3", "")
 skln_plg_creator3 = plg_registry.get_plugin_creator("CustomSkipLayerNormPluginDynamic", "3", "")
 
-"""
-Attentions Keys
-"""
-WQ = "self_query_kernel"
-BQ = "self_query_bias"
-WK = "self_key_kernel"
-BK = "self_key_bias"
-WV = "self_value_kernel"
-BV = "self_value_bias"
-WQKV = "self_qkv_kernel"
-BQKV = "self_qkv_bias"
-
-"""
-Transformer Keys
-"""
-W_AOUT = "attention_output_dense_kernel"
-B_AOUT = "attention_output_dense_bias"
-AOUT_LN_BETA = "attention_output_layernorm_beta"
-AOUT_LN_GAMMA = "attention_output_layernorm_gamma"
-W_MID = "intermediate_dense_kernel"
-B_MID = "intermediate_dense_bias"
-W_LOUT = "output_dense_kernel"
-B_LOUT = "output_dense_bias"
-LOUT_LN_BETA = "output_layernorm_beta"
-LOUT_LN_GAMMA = "output_layernorm_gamma"
-
-"""
-Squad Output Keys
-"""
-SQD_W = "squad_output_weights"
-SQD_B = "squad_output_bias"
+# Megatron Plugins
+emln_plg_creator3 = plg_registry.get_plugin_creator("CustomEmbLayerNormPluginDynamic", "3", "")
+skln_plg_creator4 = plg_registry.get_plugin_creator("CustomSkipLayerNormPluginDynamic", "4", "")
 
 class BertConfig:
-    def __init__(self, bert_config_path, use_fp16, use_int8, use_qat, interleaved, timing_cache):
+    def __init__(self, bert_config_path, use_fp16, use_int8, use_qat, interleaved, timing_cache, use_sparsity, use_megatron):
         with open(bert_config_path, "r") as f:
             data = json.load(f)
             self.num_attention_heads = data["num_attention_heads"]
@@ -101,6 +71,8 @@ class BertConfig:
             self.use_qat = use_qat
             self.interleaved = interleaved
             self.timing_cache = timing_cache
+            self.use_sparsity = use_sparsity
+            self.use_megatron = use_megatron
 
     def get_trt_dtype(self):
         dtype = trt.float32
@@ -132,7 +104,7 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, mask_i
 
     # FC_attention
     if config.use_int8:
-        mult_all = network.add_convolution(input_tensor, 3 * hidden_size, (1, 1), Wall, Ball)
+        mult_all = network.add_convolution_nd(input_tensor, 3 * hidden_size, (1, 1), Wall, Ball)
     else:
         mult_all = network.add_fully_connected(input_tensor, 3 * hidden_size, Wall, Ball)
 
@@ -182,7 +154,7 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, mask_i
     set_output_name(qkv2ctx, prefix, "context_layer")
     return qkv2ctx
 
-def skipln(prefix, config, init_dict, network, input_tensor, skip):
+def skipln(prefix, config, init_dict, network, input_tensor, skip, is_last_skipln=False):
     """
     Add the skip layer
     """
@@ -198,7 +170,8 @@ def skipln(prefix, config, init_dict, network, input_tensor, skip):
 
     if config.use_int8 and config.interleaved:
         pfc = trt.PluginFieldCollection([pf_beta, pf_gamma])
-        skipln_plug = skln_plg_creator3.create_plugin("skipln", pfc)
+        creator = skln_plg_creator3 if not config.use_megatron or is_last_skipln else skln_plg_creator4
+        skipln_plug = creator.create_plugin("skipln", pfc)
     else:
         pfc = trt.PluginFieldCollection([pf_ld, pf_beta, pf_gamma, pf_type])
         skipln_plug = skln_plg_creator2.create_plugin("skipln", pfc)
@@ -207,7 +180,7 @@ def skipln(prefix, config, init_dict, network, input_tensor, skip):
     layer = network.add_plugin_v2(skipln_inputs, skipln_plug)
     return layer
 
-def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, mask_idx, cu_seqlens, max_seqlen):
+def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, residual, mask_idx, cu_seqlens, max_seqlen):
     """
     Add the transformer layer
     """
@@ -226,14 +199,20 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, mask
     B_aout = init_dict[prefix + B_AOUT]
     W_aout = init_dict[prefix + W_AOUT]
     if config.use_int8:
-        attention_out_fc = network.add_convolution(attention_heads, hidden_size, (1, 1), W_aout, B_aout)
+        attention_out_fc = network.add_convolution_nd(attention_heads, hidden_size, (1, 1), W_aout, B_aout)
     else:
         attention_out_fc = network.add_fully_connected(attention_heads, hidden_size, W_aout, B_aout)
     if config.use_int8 and config.use_qat:
         dr_fc_aout = init_dict[prefix + 'attention_output_add_local_input_quantizer_amax']
         set_output_range(attention_out_fc, dr_fc_aout)
 
-    skiplayer = skipln(prefix + "attention_output_layernorm_", config, init_dict, network, attention_out_fc.get_output(0), input_tensor)
+    if config.use_megatron:
+        dr_skln1_res_in = init_dict[prefix + "attention_output_add_residual_input_quantizer_amax"]
+        residual.set_dynamic_range(-dr_skln1_res_in, dr_skln1_res_in)
+        skip = residual
+    else:
+        skip = input_tensor
+    skiplayer = skipln(prefix + "attention_output_layernorm_", config, init_dict, network, attention_out_fc.get_output(0), skip)
     attention_ln = skiplayer.get_output(0)
     if config.use_qat:
         dr_skln1 = init_dict[prefix + 'intermediate_dense_input_amax']
@@ -243,27 +222,11 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, mask
     B_mid = init_dict[prefix + B_MID]
     W_mid = init_dict[prefix + W_MID]
     if config.use_int8:
-        mid_dense = network.add_convolution(attention_ln, config.intermediate_size, (1, 1), W_mid, B_mid)
+        mid_dense = network.add_convolution_nd(attention_ln, config.intermediate_size, (1, 1), W_mid, B_mid)
     else:
         mid_dense = network.add_fully_connected(attention_ln, config.intermediate_size, W_mid, B_mid)
 
-    mid_dense_out = mid_dense.get_output(0)
-    POW = network.add_constant((1,) * len(mid_dense_out.shape), trt.Weights(np.ascontiguousarray([3.0], dtype=np.float32)))
-    MULTIPLY = network.add_constant((1,) * len(mid_dense_out.shape), trt.Weights(np.ascontiguousarray([0.044715], dtype=np.float32)))
-    SQRT = network.add_constant((1,) * len(mid_dense_out.shape), trt.Weights((np.ascontiguousarray([0.79788456080286535587989211986876], dtype=np.float32))))
-    ONE = network.add_constant((1,) * len(mid_dense_out.shape), trt.Weights((np.ascontiguousarray([1.0], dtype=np.float32))))
-    HALF = network.add_constant((1,) * len(mid_dense_out.shape), trt.Weights((np.ascontiguousarray([0.5], dtype=np.float32))))
-    X_pow = network.add_elementwise(mid_dense_out, POW.get_output(0), trt.ElementWiseOperation.POW)
-    X_pow_t = X_pow.get_output(0)
-    X_mul = network.add_elementwise(X_pow_t, MULTIPLY.get_output(0), trt.ElementWiseOperation.PROD)
-    X_add = network.add_elementwise(mid_dense_out, X_mul.get_output(0), trt.ElementWiseOperation.SUM)
-    X_sqrt = network.add_elementwise(X_add.get_output(0), SQRT.get_output(0), trt.ElementWiseOperation.PROD)
-    X_sqrt_tensor = X_sqrt.get_output(0)
-    X_tanh = network.add_activation(X_sqrt_tensor, trt.ActivationType.TANH)
-    X_tanh_tensor = X_tanh.get_output(0)
-    X_one = network.add_elementwise(X_tanh_tensor, ONE.get_output(0), trt.ElementWiseOperation.SUM)
-    CDF = network.add_elementwise(X_one.get_output(0), HALF.get_output(0), trt.ElementWiseOperation.PROD)
-    gelu_layer = network.add_elementwise(CDF.get_output(0), mid_dense_out, trt.ElementWiseOperation.PROD)
+    gelu_layer = add_gelu(network, mid_dense.get_output(0))
 
     intermediate_act = gelu_layer.get_output(0)
     set_tensor_name(intermediate_act, prefix, "gelu")
@@ -281,7 +244,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, mask
     W_lout = init_dict[prefix + W_LOUT]
 
     if config.use_int8:
-        out_dense = network.add_convolution(intermediate_act, hidden_size, (1, 1), W_lout, B_lout)
+        out_dense = network.add_convolution_nd(intermediate_act, hidden_size, (1, 1), W_lout, B_lout)
     else:
         out_dense = network.add_fully_connected(intermediate_act, hidden_size, W_lout, B_lout)
     if config.use_int8 and config.use_qat:
@@ -289,25 +252,79 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, mask
         set_output_range(out_dense, dr_fc_out)
     set_output_name(out_dense, prefix + "output_", "dense")
 
-    out_layer = skipln(prefix + "output_layernorm_", config, init_dict, network, out_dense.get_output(0), attention_ln)
+    if config.use_megatron:
+        dr_skln2_res_in = init_dict[prefix + 'output_add_residual_input_quantizer_amax']
+        set_output_range(skiplayer, dr_skln2_res_in, out_idx=1)
+        skip = skiplayer.get_output(1)
+    else:
+        skip = attention_ln
+
+    is_last_skipln = prefix.startswith('l{}'.format(config.num_hidden_layers-1))
+    out_layer = skipln(prefix + "output_layernorm_", config, init_dict, network, out_dense.get_output(0), skip, is_last_skipln)
     set_output_name(out_layer, prefix + "output_", "reshape")
 
     return out_layer
 
-def bert_model(config, init_dict, network, input_tensor, mask_idx, cu_seqlens, max_seqlen):
+def add_gelu(network, input_tensor):
+    """
+    Adds elementwise GELU, and will trigger FC+GELU fusion in TRT
+    """
+    shape = (1, ) * len(input_tensor.shape)
+    POW = network.add_constant(shape, trt.Weights(np.ascontiguousarray([3.0], dtype=np.float32)))
+    MULTIPLY = network.add_constant(shape, trt.Weights(np.ascontiguousarray([0.044715], dtype=np.float32)))
+    SQRT = network.add_constant(shape, trt.Weights((np.ascontiguousarray([0.79788456080286535587989211986876], dtype=np.float32))))
+    ONE = network.add_constant(shape, trt.Weights((np.ascontiguousarray([1.0], dtype=np.float32))))
+    HALF = network.add_constant(shape, trt.Weights((np.ascontiguousarray([0.5], dtype=np.float32))))
+    X_pow = network.add_elementwise(input_tensor, POW.get_output(0), trt.ElementWiseOperation.POW)
+    X_pow_t = X_pow.get_output(0)
+    X_mul = network.add_elementwise(X_pow_t, MULTIPLY.get_output(0), trt.ElementWiseOperation.PROD)
+    X_add = network.add_elementwise(input_tensor, X_mul.get_output(0), trt.ElementWiseOperation.SUM)
+    X_sqrt = network.add_elementwise(X_add.get_output(0), SQRT.get_output(0), trt.ElementWiseOperation.PROD)
+    X_sqrt_tensor = X_sqrt.get_output(0)
+    X_tanh = network.add_activation(X_sqrt_tensor, trt.ActivationType.TANH)
+    X_tanh_tensor = X_tanh.get_output(0)
+    X_one = network.add_elementwise(X_tanh_tensor, ONE.get_output(0), trt.ElementWiseOperation.SUM)
+    CDF = network.add_elementwise(X_one.get_output(0), HALF.get_output(0), trt.ElementWiseOperation.PROD)
+    gelu_layer = network.add_elementwise(CDF.get_output(0), input_tensor, trt.ElementWiseOperation.PROD)
+
+    # enable elementwise fusing for int8 && fp16
+    POW.precision = trt.DataType.FLOAT
+    MULTIPLY.precision = trt.DataType.FLOAT
+    SQRT.precision = trt.DataType.FLOAT
+    ONE.precision = trt.DataType.FLOAT
+    HALF.precision = trt.DataType.FLOAT
+    X_pow.precision = trt.DataType.FLOAT
+    X_mul.precision = trt.DataType.FLOAT
+    X_add.precision = trt.DataType.FLOAT
+    X_sqrt.precision = trt.DataType.FLOAT
+    X_tanh.precision = trt.DataType.FLOAT
+    X_one.precision = trt.DataType.FLOAT
+    CDF.precision = trt.DataType.FLOAT
+    gelu_layer.precision = trt.DataType.FLOAT
+    return gelu_layer
+
+
+def bert_model(config, init_dict, network, input_tensor, residual, mask_idx, cu_seqlens, max_seqlen):
     """
     Create the bert model
     """
     prev_input = input_tensor
     for layer in range(0, config.num_hidden_layers):
         ss = "l{}_".format(layer)
-        out_layer = transformer_layer_opt(ss, config, init_dict, network, prev_input, mask_idx, cu_seqlens, max_seqlen)
+        out_layer = transformer_layer_opt(ss, config, init_dict, network, prev_input, residual, mask_idx, cu_seqlens, max_seqlen)
         prev_input = out_layer.get_output(0)
+        # Skip reading residual from final layer
+        if config.use_megatron and (layer != config.num_hidden_layers - 1):
+            residual = out_layer.get_output(1)
 
     if config.use_qat:
         dr_out = init_dict["bert_encoder_final_input_quantizer_amax"]
         set_output_range(out_layer, dr_out)
-    return prev_input
+
+    squad_logits = squad_output("cls_", config, init_dict, network, prev_input)
+    squad_logits_out = squad_logits.get_output(0)
+    network.mark_output(squad_logits_out)
+
 
 def squad_output(prefix, config, init_dict, network, input_tensor):
     """
@@ -319,7 +336,7 @@ def squad_output(prefix, config, init_dict, network, input_tensor):
     B_out = init_dict[prefix + SQD_B]
 
     if config.use_int8:
-        dense = network.add_convolution(input_tensor, 2, (1, 1), W_out, B_out)
+        dense = network.add_convolution_nd(input_tensor, 2, (1, 1), W_out, B_out)
     else:
         dense = network.add_fully_connected(input_tensor, 2, W_out, B_out)
 
@@ -330,184 +347,6 @@ def squad_output(prefix, config, init_dict, network, input_tensor):
         OUT.second_transpose = (1, 0, 2, 3)
     set_output_name(OUT, prefix, "squad_logits")
     return OUT
-
-def load_tf_weights(inputbase, config):
-    """
-    Load the weights from the tensorflow checkpoint
-    """
-    weights_dict = dict()
-
-    try:
-        reader = pyTF.NewCheckpointReader(inputbase)
-        tensor_dict = reader.get_variable_to_shape_map()
-
-        # There might be training-related variables in the checkpoint that can be discarded
-        param_names = [key for key in sorted(tensor_dict) if "adam" not in key and "global_step" not in key and "pooler" not in key]
-        count = len(param_names)
-        TRT_LOGGER.log(TRT_LOGGER.INFO, "Found {:} entries in weight map".format(count))
-
-        for pn in param_names:
-            toks = pn.lower().split("/")
-            if "encoder" in pn:
-                assert ("layer" in pn)
-                l = (re.findall("\d+", pn))[0]
-                outname = "l{}_".format(l) + "_".join(toks[3:])
-            else:
-                outname = "_".join(toks)
-
-            tensor = reader.get_tensor(pn)
-            shape = tensor.shape
-            if pn.find("kernel") != -1:
-                weights_dict[outname + "_notrans"] = trt.Weights(np.ascontiguousarray(tensor).flatten())
-
-                TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Transposing {}\n".format(np))
-                tensor = np.transpose(tensor)
-
-            shape = tensor.shape
-            flat_tensor = tensor.flatten()
-            shape_str = "{} ".format(len(shape)) + " ".join([str(d) for d in shape])
-            weights_dict[outname] = trt.Weights(flat_tensor)
-
-            TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Original name: {:}, TensorRT name: {:}, shape: {:}".format(pn, outname, shape_str))
-
-        N = config.num_attention_heads
-        H = config.head_size
-
-        additional_dict = dict()
-        for key, value in weights_dict.items():
-            pos = key.find(BQ)
-            if pos != -1:
-                hidden_size = value.size
-                prefix = key[:pos]
-
-                Bq_ = value
-                Bk_ = weights_dict[prefix + BK]
-                Bv_ = weights_dict[prefix + BV]
-                Wq_ = weights_dict[prefix + WQ]
-                Wk_ = weights_dict[prefix + WK]
-                Wv_ = weights_dict[prefix + WV]
-
-                mat_size = hidden_size * hidden_size
-                wcount = 3 * mat_size
-                Wall = np.zeros(wcount, np.float32)
-                bcount = 3 * hidden_size
-                Ball = np.zeros(bcount, np.float32)
-                Wall[0:mat_size] = Wq_.numpy()[0:mat_size]
-                Wall[mat_size:2*mat_size] = Wk_.numpy()[0:mat_size]
-                Wall[2*mat_size:3*mat_size] = Wv_.numpy()[0:mat_size]
-                Ball[0:hidden_size] = Bq_.numpy()[0:hidden_size]
-                Ball[hidden_size:2*hidden_size] = Bk_.numpy()[0:hidden_size]
-                Ball[2*hidden_size:3*hidden_size] = Bv_.numpy()[0:hidden_size]
-
-                if config.use_int8 and config.interleaved:
-                    Wall = np.ascontiguousarray(Wall.reshape((3, N, H, N, H)), dtype=np.float32)
-                    Ball = np.ascontiguousarray(Ball.reshape((3, N, H)), dtype=np.float32)
-                else:
-                    Wall = np.ascontiguousarray(Wall.reshape((3, N, H, N, H)).transpose((1, 0, 2, 3, 4)), dtype=np.float32)
-                    Ball = np.ascontiguousarray(Ball.reshape((3, N, H)).transpose((1, 0, 2)), dtype=np.float32)
-
-                additional_dict[prefix + WQKV] = trt.Weights(Wall)
-                additional_dict[prefix + BQKV] = trt.Weights(Ball)
-
-                additional_dict[prefix + WQKV + "_notrans"] = trt.Weights(Wall.T)
-
-    except Exception as error:
-        TRT_LOGGER.log(TRT_LOGGER.ERROR, str(error))
-
-    weights_dict.update(additional_dict)
-    return weights_dict
-
-def onnx_to_trt_name(onnx_name):
-    """
-    Converting variables in the onnx checkpoint to names corresponding to the naming convention used in the TF version, expected by the builder
-    """
-    onnx_name = onnx_name.lower()
-    toks = [t.strip('_') for t in onnx_name.split('.')]
-    if toks[0] == 'bert': #embeddings or encoder
-        if toks[1] == 'encoder': #transformer
-
-            if toks[-2] == 'layernorm': #bias->beta, weight->gamma
-                toks[-1] = 'beta' if toks[-1] == 'bias' else 'gamma'
-            elif (toks[-2] == 'dense' or toks[-2] in {'key', 'value', 'query'}) and toks[-1] == 'weight':
-                toks[-1] = 'kernel'
-            elif (toks[-3] == 'dense' or toks[-3] in {'key', 'value', 'query'}) and toks[-1] == 'amax':
-                if toks[-2] == 'weight_quantizer':
-                    toks[-2] = 'kernel'
-                elif toks[-2] == 'input_quantizer':
-                    toks[-2] = 'input'
-
-            if 'final_input_quantizer' not in toks[2]:
-                toks = toks[3:]
-                toks[0] = 'l{}'.format(int(toks[0]))
-        else:
-            if toks[-2] == 'layernorm': #bias->beta, weight->gamma
-                toks[-1] = 'beta' if toks[-1] == 'bias' else 'gamma'
-            else: #embeddings: drop "_weight" suffix
-                if toks[-1] == 'amax':
-                    toks[-2] = 'amax'
-                toks = toks[:-1]
-    elif 'qa' in onnx_name:
-        name = 'cls_squad_output_bias' if toks[-1] == 'bias' else 'cls_squad_output_weights'
-        return name
-    else:
-        print("Encountered unknown case:", onnx_name)
-        assert(False)
-    parsed = '_'.join(toks)
-    return parsed
-
-def load_onnx_weights_and_quant(path, config):
-    """
-    Load the weights from the onnx checkpoint
-    """
-    N = config.num_attention_heads
-    H = config.head_size
-    hidden_size = config.hidden_size
-
-    model = onnx.load(path)
-    weights = model.graph.initializer
-    tensor_dict = dict([(onnx_to_trt_name(w.name), np.frombuffer(w.raw_data, np.float32).reshape(w.dims)) for w in weights])
-
-    weights_dict = dict()
-    for outname, tensor in tensor_dict.items():
-        if outname.find("_amax") != -1:
-            weights_dict[outname] = tensor
-        elif outname.find(BQ) != -1:
-            prefix = outname[:outname.find(BQ)]
-
-            Wqkv = np.zeros((3, hidden_size, hidden_size), np.float32)
-            Bqkv = np.zeros((3, hidden_size), np.float32)
-
-            Wqkv[0,:,:] = tensor_dict[prefix + WQ]
-            Wqkv[1,:,:] = tensor_dict[prefix + WK]
-            Wqkv[2,:,:] = tensor_dict[prefix + WV]
-            Bqkv[0,:] = tensor
-            Bqkv[1,:] = tensor_dict[prefix + BK]
-            Bqkv[2,:] = tensor_dict[prefix + BV]
-
-            if config.use_int8 and config.interleaved:
-                Wqkv = np.ascontiguousarray(Wqkv.reshape((3, N, H, N, H)))
-                Bqkv = np.ascontiguousarray(Bqkv.reshape((3, N, H)))
-            else:
-                Wqkv = np.ascontiguousarray(Wqkv.reshape((3, N, H, N, H)).transpose((1,0,2,3,4)))
-                Bqkv = np.ascontiguousarray(Bqkv.reshape((3, N, H)).transpose((1,0,2)))
-
-            weights_dict[prefix + WQKV] = trt.Weights(Wqkv)
-            weights_dict[prefix + BQKV] = trt.Weights(Bqkv)
-            weights_dict[prefix + WQKV + "_notrans"] = trt.Weights(Wqkv.T)
-
-        elif outname.find(BK) != -1 or outname.find(BV) != -1 or outname.find(WQ) != -1 or outname.find(WK) != -1 or outname.find(WV) != -1:
-            pass
-        else:
-            flat_tensor = np.ascontiguousarray(tensor).flatten()
-            weights_dict[outname] = trt.Weights(flat_tensor)
-
-            if outname.find("kernel") != -1:
-                tensor = np.transpose(tensor)
-                weights_dict[outname + "_notrans"] = trt.Weights(np.ascontiguousarray(tensor).flatten())
-
-
-    TRT_LOGGER.log(TRT_LOGGER.INFO, "Found {:} entries in weight map".format(len(weights_dict)))
-    return weights_dict
 
 def emb_layernorm(builder, network, config, weights_dict, builder_config, max_sequence_length, max_batch_size):
     input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1,))
@@ -530,18 +369,22 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, max_se
     wwordemb = trt.PluginField("bert_embeddings_word_embeddings", weights_dict["bert_embeddings_word_embeddings"].numpy(), trt.PluginFieldType.FLOAT32)
     wtokemb = trt.PluginField("bert_embeddings_token_type_embeddings", weights_dict["bert_embeddings_token_type_embeddings"].numpy(), trt.PluginFieldType.FLOAT32)
     wposemb = trt.PluginField("bert_embeddings_position_embeddings", weights_dict["bert_embeddings_position_embeddings"].numpy(), trt.PluginFieldType.FLOAT32)
-
     output_fp16 = trt.PluginField("output_fp16", np.array([1 if config.use_fp16 or config.use_int8 else 0]).astype(np.int32), trt.PluginFieldType.INT32)
 
     pfc = trt.PluginFieldCollection([wbeta, wgamma, wwordemb, wtokemb, wposemb, output_fp16])
-    fn = emln_plg_creator2.create_plugin("embeddings", pfc)
+    fn = (emln_plg_creator3 if config.use_megatron else emln_plg_creator2).create_plugin("embeddings", pfc)
 
     inputs = [input_ids, segment_ids, cu_seqlens, max_seqlen]
     emb_layer = network.add_plugin_v2(inputs, fn)
 
     if config.use_int8 and config.use_qat:
         dr_input = weights_dict['l0_attention_self_query_input_amax']
-        set_output_range(emb_layer, dr_input)
+        set_output_range(emb_layer, dr_input, out_idx=0)
+        
+        if config.use_megatron:
+            dr_skln1_res_in = weights_dict['l0_attention_output_add_residual_input_quantizer_amax']
+            set_output_range(emb_layer, dr_skln1_res_in, out_idx=1)
+    
     set_output_name(emb_layer, "embeddings_", "output")
     return emb_layer, cu_seqlens, max_seqlen
 
@@ -572,6 +415,9 @@ def build_engine(batch_size, workspace_size, sequence_length, config, weights_di
                     cache = builder_config.create_timing_cache(b"")
                     builder_config.set_timing_cache(cache, ignore_mismatch = False)
 
+        if config.use_sparsity:
+            TRT_LOGGER.log(TRT_LOGGER.INFO, "Setting sparsity flag on builder_config.")
+            builder_config.set_flag(trt.BuilderFlag.SPARSE_WEIGHTS)
 
         # Create the network
         emb_layer, cu_seqlens, max_seqlen = emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_length, batch_size)
@@ -583,12 +429,20 @@ def build_engine(batch_size, workspace_size, sequence_length, config, weights_di
             mask_idx = None
         else:
             mask_idx = emb_layer.get_output(1)
+            
+        if config.use_megatron:  # megatron currently only supports int8 and interleaved
+            shuffler = network.add_shuffle(emb_layer.get_output(1))
+            shuffler.second_transpose = (2, 1, 0, 3)
+            residual = shuffler.get_output(0)
 
-        bert_out = bert_model(config, weights_dict, network, embeddings, mask_idx, cu_seqlens, max_seqlen)
+            dr_emb = weights_dict['l0_attention_self_query_input_amax']
+            embeddings.set_dynamic_range(-dr_emb, dr_emb)
+            dr_skln1_res_in = weights_dict['l0_attention_output_add_residual_input_quantizer_amax']
+            residual.set_dynamic_range(-dr_skln1_res_in, dr_skln1_res_in)
+        else:
+            residual = None
 
-        squad_logits = squad_output("cls_", config, weights_dict, network, bert_out)
-        squad_logits_out = squad_logits.get_output(0)
-        network.mark_output(squad_logits_out)
+        bert_model(config, weights_dict, network, embeddings, residual, mask_idx, cu_seqlens, max_seqlen)
 
         build_start_time = time.time()
         engine = builder.build_engine(network, builder_config)
@@ -611,6 +465,8 @@ def main():
     parser.add_argument("-m", "--ckpt", required=False,
                         help="The checkpoint file basename, e.g.: basename(model.ckpt-766908.data-00000-of-00001) is model.ckpt-766908")
     parser.add_argument("-x", "--onnx", required=False, help="The ONNX model file path.")
+    parser.add_argument("-pt", "--pytorch", required=False, help="The PyTorch checkpoint file path.")
+    parser.add_argument("-pkl", "--pickle", required=False, help="The Pickle weights dictionary file path for the Megatron variant of BERT.")
     parser.add_argument("-o", "--output", required=True, default="bert_base_384.engine", help="The bert engine file, ex bert.engine")
     parser.add_argument("-b", "--max-batch-size", default=1, help="Max batch size. The engine will be usable with any input with (batch-size * sequence-length) below (max-batch-size * max-sequence-length).", type=int)
     parser.add_argument("-s", "--max-sequence-length", default=128, help="Max sequence length of the BERT model. The engine will be usable with any input with (batch-size * sequence-length) below (max-batch-size * max-sequence-length).", type=int)
@@ -625,17 +481,25 @@ def main():
     parser.add_argument("-p", "--calib-path", help="calibration cache path", required=False)
     parser.add_argument("-il", "--interleaved", action="store_true", help="use interleaved format, only valid in INT8 precision", required=False)
     parser.add_argument("-tcf", "--timing-cache-file", help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later", required=False)
+    parser.add_argument("-sp", "--sparse", action="store_true", help="Indicates that model is sparse", required=False)
+    parser.add_argument("--megatron", action="store_true", help="Indicates that model is the Megatron-style architecture", required=False)
 
     args, _ = parser.parse_known_args()
 
     cc = pycuda.autoinit.device.compute_capability()
     if cc[0] * 10 + cc[1] < 72:
         raise RuntimeError("This variable-length BERT demo only support Xavier+ GPU.")
+        
+    if args.megatron: 
+        if not (args.interleaved and args.int8):
+            raise RuntimeError("Megatron BERT currently only supports int8 and interleaved.")
+        if not args.pickle:
+            raise RuntimeError("Megatron BERT currently only supports loading a pickle weights dictionary.")
 
     bert_config_path = os.path.join(args.config_dir, "bert_config.json")
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Using configuration file: {:}".format(bert_config_path))
 
-    config = BertConfig(bert_config_path, args.fp16, args.int8, args.int8 and args.onnx != None, args.interleaved, args.timing_cache_file)
+    config = BertConfig(bert_config_path, args.fp16, args.int8, args.int8 and (args.onnx or args.pytorch or args.pickle), args.interleaved, args.timing_cache_file, args.sparse, args.megatron)
 
     if args.calib_path != None:
         calib_cache = args.calib_path
@@ -644,10 +508,16 @@ def main():
 
     if args.onnx != None:
         weights_dict = load_onnx_weights_and_quant(args.onnx, config)
+    elif args.pytorch != None:
+        weights_dict = load_pytorch_weights_and_quant(args.pytorch, config)
     elif args.ckpt != None:
         weights_dict = load_tf_weights(args.ckpt, config)
+    elif args.pickle != None:
+        weights_dict =  load_megatron_pickle_weights(args.pickle, config)
     else:
-        raise RuntimeError("You need either specify TF checkpoint using option --ckpt or ONNX using option --onnx to build TRT BERT model.")
+        raise RuntimeError("You need either specify TF checkpoint using option --ckpt, ONNX using option --onnx, "
+                           "PyTorch using option --pytorch, or Pickle weight dictionary using option --pickle "
+                           "to build TRT BERT model.")
 
     with build_engine(args.max_batch_size, args.workspace_size, args.max_sequence_length, config, weights_dict, args.squad_json, args.vocab_file, calib_cache, args.calib_num) as engine:
         TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Serializing Engine...")

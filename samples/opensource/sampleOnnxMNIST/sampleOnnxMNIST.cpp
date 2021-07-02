@@ -37,6 +37,8 @@
 #include <iostream>
 #include <sstream>
 
+using samplesCommon::SampleUniquePtr;
+
 const std::string gSampleName = "TensorRT.sample_onnx_mnist";
 
 //! \brief  The SampleOnnxMNIST class implements the ONNX MNIST sample
@@ -45,9 +47,6 @@ const std::string gSampleName = "TensorRT.sample_onnx_mnist";
 //!
 class SampleOnnxMNIST
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params)
         : mParams(params)
@@ -134,20 +133,40 @@ bool SampleOnnxMNIST::build()
         return false;
     }
 
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 4);
+    ASSERT(mInputDims.nbDims == 4);
 
-    assert(network->getNbOutputs() == 1);
+    ASSERT(network->getNbOutputs() == 1);
     mOutputDims = network->getOutput(0)->getDimensions();
-    assert(mOutputDims.nbDims == 2);
+    ASSERT(mOutputDims.nbDims == 2);
 
     return true;
 }
@@ -179,7 +198,7 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
-        samplesCommon::setAllTensorScales(network.get(), 127.0f, 127.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
@@ -205,7 +224,7 @@ bool SampleOnnxMNIST::infer()
     }
 
     // Read the input data into the managed buffers
-    assert(mParams.inputTensorNames.size() == 1);
+    ASSERT(mParams.inputTensorNames.size() == 1);
     if (!processInput(buffers))
     {
         return false;

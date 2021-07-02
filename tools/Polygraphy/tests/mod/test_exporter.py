@@ -21,6 +21,7 @@ from polygraphy.backend.base import BaseLoader
 # For test_funcify_with_collision
 functor2 = None
 
+
 class TestExporter(object):
     def test_func(self):
         @mod.export()
@@ -29,32 +30,31 @@ class TestExporter(object):
 
         assert "test_func0" in __all__
 
-
     def test_class(self):
         @mod.export()
-        class TestClass0():
+        class TestClass0:
             pass
 
         assert "TestClass0" in __all__
 
-
     def test_funcify_func_fails(self):
         with pytest.raises(AssertionError, match="must be a loader"):
+
             @mod.export(funcify=True)
             def test_func1():
                 pass
 
-
     def test_funcify_non_base_loader_class(self):
         with pytest.raises(AssertionError, match="must derive from BaseLoader"):
+
             @mod.export(funcify=True)
             class NonFunctor0(object):
                 def __init__(self, x):
                     self.x = x
 
-
     def test_funcify_duplicate_parameters_in_call_init(self):
         with pytest.raises(AssertionError, match="call_impl and __init__ have the same argument names"):
+
             @mod.export(funcify=True)
             class DupArgs(BaseLoader):
                 def __init__(self, x):
@@ -63,11 +63,11 @@ class TestExporter(object):
                 def call_impl(self, x):
                     self.x = x
 
-
     def test_funcify_takes_docstring(self):
         @mod.export(funcify=True)
         class DocstringFunctor(BaseLoader):
             """This is a docstring"""
+
             def __init__(self):
                 pass
 
@@ -77,8 +77,7 @@ class TestExporter(object):
         assert "DocstringFunctor" in __all__
         assert "docstring_functor" in __all__
 
-        assert docstring_functor.__doc__ == "Immediately evaluated functional variant of DocstringFunctor.\n"
-
+        assert docstring_functor.__doc__ == "Immediately evaluated functional variant of :class:`DocstringFunctor` .\n"
 
     def test_funcify_functor_no_call_args(self):
         @mod.export(funcify=True)
@@ -92,7 +91,6 @@ class TestExporter(object):
         assert "Functor0" in __all__
         assert "functor0" in __all__
         assert functor0(0) == 0
-
 
     def test_funcify_functor_with_call_args(self):
         @mod.export(funcify=True)
@@ -114,7 +112,6 @@ class TestExporter(object):
         x, y, z = functor1(y=1, x=0, z=-1)
         assert (x, y, z) == (0, 1, -1)
 
-
     def test_funcify_functor_with_call_args(self):
         @mod.export(funcify=True)
         class FunctorWithCallArgs(BaseLoader):
@@ -135,9 +132,9 @@ class TestExporter(object):
         x, y, z = functor_with_call_args(y=1)
         assert (x, y, z) == (0, 1, -1)
 
-
     def test_funcify_with_collision(self):
         with pytest.raises(AssertionError, match="symbol is already defined"):
+
             @mod.export(funcify=True)
             class Functor2(BaseLoader):
                 def __init__(self, x):
@@ -145,7 +142,6 @@ class TestExporter(object):
 
                 def call_impl(self, y, z):
                     return self.x, y, z
-
 
     def test_funcify_functor_with_dynamic_call_args_kwargs(self):
         @mod.export(funcify=True)
@@ -166,12 +162,10 @@ class TestExporter(object):
 
         assert functor3(f, 1, 2, arg2=4) == 7
 
-
     def test_funcify_with_inherited_init(self):
         class BaseFunctor4(BaseLoader):
             def __init__(self, x):
                 self.x = x
-
 
         @mod.export(funcify=True)
         class Functor4(BaseFunctor4):
@@ -182,7 +176,6 @@ class TestExporter(object):
         assert "functor4" in __all__
 
         assert functor4(-1) == -1
-
 
     def test_funcify_functor_with_default_vals(self):
         @mod.export(funcify=True)
@@ -200,8 +193,8 @@ class TestExporter(object):
         # Since x and z have default values, the arguments will be interlaced into:
         # w, y, x, z
         # __init__ parameters take precedence, and call_impl parameters follow.
-        w, x, y, z = functor_with_defaults(-1, -2) # Set just w, y
+        w, x, y, z = functor_with_defaults(-1, -2)  # Set just w, y
         assert (w, x, y, z) == (-1, 1, -2, 3)
 
-        w, x, y, z = functor_with_defaults(0, 1, 2, 3) # Set all
+        w, x, y, z = functor_with_defaults(0, 1, 2, 3)  # Set all
         assert (w, x, y, z) == (0, 2, 1, 3)

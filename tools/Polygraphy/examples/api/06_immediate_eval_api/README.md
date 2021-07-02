@@ -50,8 +50,7 @@ config = create_config(builder, network, fp16=True, tf32=True)
 engine = engine_from_network((builder, network), config)
 ```
 
-The script included with this example showcases basic usage of the immediately
-evaluated functional API.
+`example.py` showcases basic usage of the immediately evaluated functional API.
 
 ## Running the Example
 

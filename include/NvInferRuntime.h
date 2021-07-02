@@ -23,44 +23,86 @@
 //! This is the top-level API file for TensorRT extended runtime library.
 //!
 
+#include "NvInferImpl.h"
 #include "NvInferRuntimeCommon.h"
 
 namespace nvinfer1
 {
 
 class IExecutionContext; //!< Forward declaration of IExecutionContext for use by other interfaces.
-class ICudaEngine; //!< Forward declaration of ICudaENgine for use by other interfaces.
-class IPluginFactory; //!< Forward declaration of IPluginFactory for use by other interfaces.
+class ICudaEngine;       //!< Forward declaration of ICudaEngine for use by other interfaces.
+class IPluginFactory;    //!< Forward declaration of IPluginFactory for use by other interfaces.
+
+//!
+//! \class INoCopy
+//!
+//! \brief Base class for all TensorRT interfaces that are implemented by the TensorRT libraries
+//!
+//! Objects of such classes are not movable or copyable, and should only be manipulated
+//! via pointers.
+//!
+
+class INoCopy
+{
+protected:
+    INoCopy() = default;
+    virtual ~INoCopy() = default;
+    INoCopy(const INoCopy& other) = delete;
+    INoCopy& operator=(const INoCopy& other) = delete;
+    INoCopy(INoCopy&& other) = delete;
+    INoCopy& operator=(INoCopy&& other) = delete;
+};
 
 //!
 //! \enum EngineCapability
 //!
 //! \brief List of supported engine capability flows.
 //!
-//! The EngineCapability determines the restrictions of a network during build time for what can be executed
-//! at runtime. EngineCapability::kDEFAULT does not provide any restrictions on functionality and the
-//! resulting serialized engine can be executed with TensorRT's standard runtime APIs in the nvinfer1 namespace.
-//! EngineCapabiltiy::kSAFE_GPU provides a restricted subset of network operations that are safety certified and
-//! the resulting serialized engine can be executed with TensorRT's safe runtime APIs in the nvinfer1::safe namespace.
-//! EngineCapability::kSAFE_DLA provides a restricted subset of network operations that are DLA compatible and
-//! the resulting serialized engine can be executed using NvMediaDLA's runtime APIs. See sampleNvmedia for an
-//! example of integrating NvMediaDLA APIs with TensorRT APIs.
+//! \details The EngineCapability determines the restrictions of a network during build time and what runtime
+//! it targets. When BuilderFlag::kSAFETY_SCOPE is not set (by default), EngineCapability::kSTANDARD does not provide
+//! any restrictions on functionality and the resulting serialized engine can be executed with TensorRT's standard
+//! runtime APIs in the nvinfer1 namespace. EngineCapability::kSAFETY provides a restricted subset of network
+//! operations that are safety certified and the resulting serialized engine can be executed with TensorRT's safe
+//! runtime APIs in the nvinfer1::safe namespace. EngineCapability::kDLA_STANDALONE provides a restricted subset of
+//! network operations that are DLA compatible and the resulting serialized engine can be executed using standalone
+//! DLA runtime APIs. See sampleNvmedia for an example of integrating NvMediaDLA APIs with TensorRT APIs.
 //!
+
 enum class EngineCapability : int32_t
 {
-    kDEFAULT = 0,  //!< Full capability, TensorRT mode without any restrictions using TensorRT nvinfer1 APIs.
-    kSAFE_GPU = 1, //!< Safety restricted capability, TensorRT flow that can only run on GPU devices via TensorRT
-                   //!< nvinfer1::safe APIs.
-    kSAFE_DLA = 2, //!< Safety restricted capability, TensorRT flow that can only run on DLA devices via
-                   //!< NvMediaDLA APIs.
+    //!
+    //! Standard: TensorRT flow without targeting the safety runtime.
+    //! This flow supports both DeviceType::kGPU and DeviceType::kDLA.
+    //!
+    kSTANDARD = 0,
+    kDEFAULT TRT_DEPRECATED_ENUM = kSTANDARD,
+
+    //!
+    //! Safety: TensorRT flow with restrictions targeting the safety runtime.
+    //! See safety documentation for list of supported layers and formats.
+    //! This flow supports only DeviceType::kGPU.
+    //!
+    kSAFETY = 1,
+    kSAFE_GPU TRT_DEPRECATED_ENUM = kSAFETY,
+
+    //!
+    //! DLA Standalone: TensorRT flow with restrictions targeting external, to TensorRT, DLA runtimes.
+    //! See DLA documentation for list of supported layers and formats.
+    //! This flow supports only DeviceType::kDLA.
+    //!
+    kDLA_STANDALONE = 2,
+    kSAFE_DLA TRT_DEPRECATED_ENUM = kDLA_STANDALONE,
 };
 
+namespace impl
+{
 //! Maximum number of elements in EngineCapability enum. \see EngineCapability
 template <>
-constexpr inline int32_t EnumMax<EngineCapability>()
+struct EnumMaxImpl<EngineCapability>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
+} // namespace impl
 
 //!
 //! \class Weights
@@ -92,194 +134,42 @@ public:
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IHostMemory
+class IHostMemory : public INoCopy
 {
 public:
-    virtual void* data() const noexcept = 0;       //!< A pointer to the raw data that is owned by the library.
-    virtual std::size_t size() const noexcept = 0; //!< The size in bytes of the data that was allocated.
-    virtual DataType type() const noexcept = 0;    //!< The type of the memory that was allocated.
-    virtual void destroy() noexcept = 0;           //!< Destroy the allocated memory.
-protected:
-    virtual ~IHostMemory() {}
-};
+    virtual ~IHostMemory() noexcept = default;
 
-//! \class IPlugin
-//!
-//! \brief Plugin class for user-implemented layers.
-//!
-//! Plugins are a mechanism for applications to implement custom layers. Each plugin is owned by the application, and its lifetime
-//! must span any use of it by TensorRT
-//!
-class IPlugin
-{
-public:
-    //!
-    //! \brief Get the number of outputs from the layer.
-    //!
-    //! \return The number of outputs.
-    //!
-    //! This function is called by the implementations of INetworkDefinition and IBuilder. In particular, it is called
-    //! prior to any call to initialize().
-    //!
-    virtual int32_t getNbOutputs() const TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Get the dimension of an output tensor.
-    //!
-    //! \param index The index of the output tensor.
-    //! \param inputs The input tensors.
-    //! \param nbInputDims The number of input tensors.
-    //!
-    //! This function is called by the implementations of INetworkDefinition and IBuilder. In particular, it is called
-    //! prior to any call to initialize().
-    //!
-    virtual Dims getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims) TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Configure the layer.
-    //!
-    //! This function is called by the builder prior to initialize(). It provides an opportunity for the layer to make
-    //! algorithm choices on the basis of its weights, dimensions, and maximum batch size. The type is assumed to be
-    //! FP32 and format NCHW.
-    //!
-    //! \param inputDims The input tensor dimensions.
-    //! \param nbInputs The number of inputs.
-    //! \param outputDims The output tensor dimensions.
-    //! \param nbOutputs The number of outputs.
-    //! \param maxBatchSize The maximum batch size.
-    //!
-    //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be
-    //! 3-dimensional CHW dimensions).
-    //!
-    //! This method is not called for PluginExt classes, configureWithFormat is called instead.
-    //!
-    virtual void configure(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
-        int32_t maxBatchSize) TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Initialize the layer for execution. This is called when the engine is created.
-    //!
-    //! \return 0 for success, else non-zero (which will cause engine termination).
-    //!
-    virtual int32_t initialize() TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Release resources acquired during plugin layer initialization. This is called when the engine is
-    //! destroyed. \see initialize()
-    //!
-    virtual void terminate() TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Find the workspace size required by the layer.
-    //!
-    //! This function is called during engine startup, after initialize(). The workspace size returned should be
-    //! sufficient for any batch size up to the maximum.
-    //!
-    //! \return The workspace size.
-    //!
-    virtual size_t getWorkspaceSize(int32_t maxBatchSize) const TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Execute the layer.
-    //!
-    //! \param batchSize The number of inputs in the batch.
-    //! \param inputs The memory for the input tensors.
-    //! \param outputs The memory for the output tensors.
-    //! \param workspace Workspace for execution.
-    //! \param stream The stream in which to execute the kernels.
-    //!
-    //! \return 0 for success, else non-zero (which will cause engine termination).
-    //!
-    virtual int32_t enqueue(int32_t batchSize, const void* const* inputs, void** outputs, void* workspace,
-        cudaStream_t stream) TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Find the size of the serialization buffer required.
-    //!
-    //! \return The size of the serialization buffer.
-    //!
-    virtual size_t getSerializationSize() TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Serialize the layer.
-    //!
-    //! \param buffer A pointer to a buffer of size at least that returned by getSerializationSize().
-    //!
-    //! \see getSerializationSize()
-    //!
-    virtual void serialize(void* buffer) TRTNOEXCEPT = 0;
-
-    virtual ~IPlugin() {}
-};
-
-//!
-//! \class IPluginExt
-//!
-//! \brief Plugin class for user-implemented layers.
-//!
-//! Plugins are a mechanism for applications to implement custom layers. Each plugin is owned by the application, and its lifetime
-//! must span any use of it by TensorRT.
-//!
-class IPluginExt : public IPlugin
-{
-public:
-    //!
-    //! \brief Return the API version with which this plugin was built.
-    //!
-    //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with
-    //! plugins.
-    //!
-    virtual int32_t getTensorRTVersion() const TRTNOEXCEPT
+    //! A pointer to the raw data that is owned by the library.
+    void* data() const noexcept
     {
-        return NV_TENSORRT_VERSION;
+        return mImpl->data();
     }
 
-    //!
-    //! \brief Check format support.
-    //!
-    //! \param type DataType requested.
-    //! \param format PluginFormat requested.
-    //! \return true if the plugin supports the type-format combination.
-    //!
-    //! This function is called by the implementations of INetworkDefinition, IBuilder, and ICudaEngine.
-    //! In particular, it is called when creating an engine and when deserializing an engine.
-    //!
-    //! \warning DataType:kBOOL not supported.
-    //!
-    virtual bool supportsFormat(DataType type, PluginFormat format) const TRTNOEXCEPT = 0;
+    //! The size in bytes of the data that was allocated.
+    std::size_t size() const noexcept
+    {
+        return mImpl->size();
+    }
 
+    //! The type of the memory that was allocated.
+    DataType type() const noexcept
+    {
+        return mImpl->type();
+    }
     //!
-    //! \brief Configure the layer.
+    //! Destroy the allocated memory.
     //!
-    //! This function is called by the builder prior to initialize(). It provides an opportunity for the layer to make
-    //! algorithm choices on the basis of its weights, dimensions, and maximum batch size.
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
     //!
-    //! \param inputDims The input tensor dimensions.
-    //! \param nbInputs The number of inputs.
-    //! \param outputDims The output tensor dimensions.
-    //! \param nbOutputs The number of outputs.
-    //! \param type The data type selected for the engine.
-    //! \param format The format selected for the engine.
-    //! \param maxBatchSize The maximum batch size.
+    //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
-    //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be
-    //! 3-dimensional CHW dimensions).
-    //!
-    //! \warning DataType:kBOOL not supported.
-    //!
-    virtual void configureWithFormat(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
-        DataType type, PluginFormat format, int32_t maxBatchSize) TRTNOEXCEPT = 0;
-
-    virtual ~IPluginExt() {}
+    TRT_DEPRECATED void destroy() noexcept
+    {
+        delete this;
+    }
 
 protected:
-    //!
-    //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
-    //!
-    void configure(const Dims* /*inputDims*/, int32_t /*nbInputs*/, const Dims* /*outputDims*/, int32_t /*nbOutputs*/,
-        int32_t /*maxBatchSize*/) _TENSORRT_FINAL TRTNOEXCEPT
-    {
-    }
+    apiv::VHostMemory* mImpl;
 };
 
 //!
@@ -307,10 +197,30 @@ enum class DimensionOperation : int32_t
 
 //! Maximum number of elements in DimensionOperation enum. \see DimensionOperation
 template <>
-constexpr inline int32_t EnumMax<DimensionOperation>()
+constexpr inline int32_t EnumMax<DimensionOperation>() noexcept
 {
     return 9;
 }
+
+//!
+//! \enum TensorLocation
+//! \brief The location for tensor data storage, device or host.
+//!
+enum class TensorLocation : int32_t
+{
+    kDEVICE = 0, //!< Data stored on device.
+    kHOST = 1,   //!< Data stored on host.
+};
+
+namespace impl
+{
+//! Maximum number of elements in TensorLocation enum. \see TensorLocation
+template <>
+struct EnumMaxImpl<TensorLocation>
+{
+    static constexpr int32_t kVALUE = 2;
+};
+} // namespace impl
 
 //!
 //! \class IDimensionExpr
@@ -320,20 +230,29 @@ constexpr inline int32_t EnumMax<DimensionOperation>()
 //! in overrides of IPluginV2DynamicExt::getOutputDimensions to define output
 //! dimensions in terms of input dimensions.
 //!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
 //! \see DimensionOperation, IPluginV2DynamicExt::getOutputDimensions
 //!
-class IDimensionExpr
+class IDimensionExpr : public INoCopy
 {
 public:
     //! Return true if expression is a build-time constant.
-    virtual bool isConstant() const = 0;
+    bool isConstant() const noexcept
+    {
+        return mImpl->isConstant();
+    }
 
     //! If isConstant(), returns value of the constant.
     //! If !isConstant(), return std::numeric_limits<int32_t>::min().
-    virtual int32_t getConstantValue() const = 0;
+    int32_t getConstantValue() const noexcept
+    {
+        return mImpl->getConstantValue();
+    }
 
 protected:
-    virtual ~IDimensionExpr() {}
+    apiv::VDimensionExpr* mImpl;
+    virtual ~IDimensionExpr() noexcept = default;
 };
 
 //!
@@ -353,18 +272,26 @@ protected:
 //!
 //! \see IDimensionExpr
 //!
-class IExprBuilder
+class IExprBuilder : public INoCopy
 {
 public:
     //! Return pointer to IDimensionExp for given value.
-    virtual const IDimensionExpr* constant(int32_t value) = 0;
+    const IDimensionExpr* constant(int32_t value) noexcept
+    {
+        return mImpl->constant(value);
+    }
 
     //! Return pointer to IDimensionExp that represents the given operation applied to first and second.
     //! Returns nullptr if op is not a valid DimensionOperation.
-    virtual const IDimensionExpr* operation(DimensionOperation op, const IDimensionExpr& first, const IDimensionExpr& second) = 0;
+    const IDimensionExpr* operation(
+        DimensionOperation op, const IDimensionExpr& first, const IDimensionExpr& second) noexcept
+    {
+        return mImpl->operation(op, first, second);
+    }
 
 protected:
-    virtual ~IExprBuilder() {}
+    apiv::VExprBuilder* mImpl;
+    virtual ~IExprBuilder() noexcept = default;
 };
 
 //!
@@ -403,12 +330,12 @@ struct DynamicPluginTensorDesc
 //!
 //! Clients should override the public methods, including the following inherited methods:
 //!
-//!     virtual int32_t getNbOutputs() const TRTNOEXCEPT = 0;
+//!     virtual int32_t getNbOutputs() const noexcept = 0;
 //!     virtual nvinfer1::DataType getOutputDataType(int32_t index, const nvinfer1::DataType* inputTypes, int32_t
-//!     nbInputs) const TRTNOEXCEPT = 0; virtual size_t getSerializationSize() const TRTNOEXCEPT = 0; virtual void
-//!     serialize(void* buffer) const TRTNOEXCEPT = 0; virtual void destroy() TRTNOEXCEPT = 0; virtual void
-//!     setPluginNamespace(const char* pluginNamespace) TRTNOEXCEPT = 0; virtual const char* getPluginNamespace() const
-//!     TRTNOEXCEPT = 0;
+//!     nbInputs) const noexcept = 0; virtual size_t getSerializationSize() const noexcept = 0; virtual void
+//!     serialize(void* buffer) const noexcept = 0; virtual void destroy() noexcept = 0; virtual void
+//!     setPluginNamespace(const char* pluginNamespace) noexcept = 0; virtual const char* getPluginNamespace() const
+//!     noexcept = 0;
 //!
 //! For getOutputDataType, the inputTypes will always be DataType::kFLOAT or DataType::kINT32,
 //! and the returned type is canonicalized to DataType::kFLOAT if it is DataType::kHALF or DataType:kINT8.
@@ -417,14 +344,14 @@ struct DynamicPluginTensorDesc
 class IPluginV2DynamicExt : public nvinfer1::IPluginV2Ext
 {
 public:
-    IPluginV2DynamicExt* clone() const _TENSORRT_OVERRIDE TRTNOEXCEPT = 0;
+    IPluginV2DynamicExt* clone() const noexcept override = 0;
 
     //!
     //! \brief Get expressions for computing dimensions of an output tensor from dimensions of the input tensors.
     //!
     //! \param outputIndex The index of the output tensor
     //! \param inputs Expressions for dimensions of the input tensors
-    //! \param nbInputDims The number of input tensors
+    //! \param nbInputs The number of input tensors
     //! \param exprBuilder Object for generating new expressions
     //!
     //! This function is called by the implementations of IBuilder during analysis of the network.
@@ -444,7 +371,7 @@ public:
     //!     return output;
     //!
     virtual DimsExprs getOutputDimensions(
-        int32_t outputIndex, const DimsExprs* inputs, int32_t nbInputs, IExprBuilder& exprBuilder)
+        int32_t outputIndex, const DimsExprs* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
         = 0;
 
     //!
@@ -485,15 +412,41 @@ public:
     //! Warning: TensorRT will stop asking for formats once it finds kFORMAT_COMBINATION_LIMIT on combinations.
     //!
     virtual bool supportsFormatCombination(
-        int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) TRTNOEXCEPT = 0;
+        int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+        = 0;
 
     //!
-    //! \brief Configure the layer.
+    //! \brief Configure the plugin.
     //!
-    //! This function is called by the builder prior to initialize().  It provides an opportunity for the layer to make
-    //! algorithm choices on the basis of bounds on the input and output tensors, and the target value.
+    //! configurePlugin() can be called multiple times in both the build and execution phases. The build phase happens
+    //! before initialize() is called and only occurs during creation of an engine by IBuilder. The execution phase
+    //! happens after initialize() is called and occurs during both creation of an engine by IBuilder and execution
+    //! of an engine by IExecutionContext.
     //!
-    //! This function is also called once when the resource requirements are changed based on the optimization profiles.
+    //! Build phase:
+    //! IPluginV2DynamicExt->configurePlugin is called when a plugin is being prepared for profiling but not for any
+    //! specific input size. This provides an opportunity for the plugin to make algorithmic choices on the basis of
+    //! input and output formats, along with the bound of possible dimensions. The min and max value of the
+    //! DynamicPluginTensorDesc correspond to the kMIN and kMAX value of the current profile that the plugin is being
+    //! profiled for, with the desc.dims field corresponding to the dimensions of plugin specified at network creation.
+    //! Wildcard dimensions will exist during this phase in the desc.dims field.
+    //!
+    //! Execution phase:
+    //! IPluginV2DynamicExt->configurePlugin is called when a plugin is being prepared for executing the plugin for a
+    //! specific dimensions. This provides an opportunity for the plugin to change algorithmic choices based on the
+    //! explicit input dimensions stored in desc.dims field.
+    //!  * IBuilder will call this function once per profile, with desc.dims resolved to the values specified by the
+    //!  kOPT
+    //!    field of the current profile. Wildcard dimensions will not exist during this phase.
+    //!  * IExecutionContext will call this during the next subsequent instance enqueue[V2]() or execute[V2]() if:
+    //!    - The batch size is changed from previous call of execute()/enqueue() if hasImplicitBatchDimension() returns
+    //!    true.
+    //!    - The optimization profile is changed via setOptimizationProfile() or setOptimizationProfileAsync().
+    //!    - An input shape binding is changed via setInputShapeBinding().
+    //!    - An input execution binding is changed via setBindingDimensions().
+    //! \warning The execution phase is timing critical during IExecutionContext but is not part of the timing loop when
+    //! called from IBuilder. Performance bottlenecks of configurePlugin won't show up during engine building but will
+    //! be visible during execution after calling functions that trigger layer resource updates.
     //!
     //! \param in The input tensors attributes that are used for configuration.
     //! \param nbInputs Number of input tensors.
@@ -501,7 +454,8 @@ public:
     //! \param nbOutputs Number of output tensors.
     //!
     virtual void configurePlugin(const DynamicPluginTensorDesc* in, int32_t nbInputs,
-        const DynamicPluginTensorDesc* out, int32_t nbOutputs) TRTNOEXCEPT = 0;
+        const DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept
+        = 0;
 
     //!
     //! \brief Find the workspace size required by the layer.
@@ -513,7 +467,8 @@ public:
     //! \return The workspace size.
     //!
     virtual size_t getWorkspaceSize(const PluginTensorDesc* inputs, int32_t nbInputs, const PluginTensorDesc* outputs,
-        int32_t nbOutputs) const TRTNOEXCEPT = 0;
+        int32_t nbOutputs) const noexcept
+        = 0;
 
     //!
     //! \brief Execute the layer.
@@ -528,125 +483,58 @@ public:
     //! \return 0 for success, else non-zero (which will cause engine termination).
     //!
     virtual int32_t enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) TRTNOEXCEPT = 0;
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+        = 0;
 
 protected:
-    int32_t getTensorRTVersion() const _TENSORRT_OVERRIDE TRTNOEXCEPT
+    //!
+    //! \brief Return the API version with which this plugin was built. The
+    //!  upper byte reserved by TensorRT and is used to differentiate this from IPluginV2.
+    //!
+    //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with
+    //! plugins.
+    //!
+    int32_t getTensorRTVersion() const noexcept override
     {
         return (static_cast<int32_t>(PluginVersion::kV2_DYNAMICEXT) << 24 | (NV_TENSORRT_VERSION & 0xFFFFFF));
     }
 
-    virtual ~IPluginV2DynamicExt() {}
+    virtual ~IPluginV2DynamicExt() noexcept {}
 
-    // Rest of the methods below are obsolete inherited methods, and marked final when using a C++11 compiler.
-    // Derived classes should not override them.
+private:
+    // Following are obsolete base class methods, and must not be implemented or used.
 
-    //!
-    //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
-    //!
-    //! Instead, derived classes should override the overload of getOutputDimensions that returns DimsExprs.
-    //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
-    //!
-    TRT_DEPRECATED
-    Dims getOutputDimensions(
-        int32_t /*index*/, const Dims* /*inputs*/, int32_t /*nbInputDims*/) _TENSORRT_FINAL TRTNOEXCEPT
+    void configurePlugin(Dims const*, int32_t, Dims const*, int32_t, DataType const*, DataType const*, bool const*,
+        bool const*, PluginFormat, int32_t) noexcept override final
     {
-        return Dims{-1, {}, {}};
     }
 
-    //!
-    //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
-    //!
-    //! This method is not used because with dynamic shapes there is no implicit batch dimension to broadcast across.
-    //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
-    //!
-    TRT_DEPRECATED
-    bool isOutputBroadcastAcrossBatch(int32_t /*outputIndex*/, const bool* /*inputIsBroadcasted*/,
-        int32_t /*nbInputs*/) const _TENSORRT_FINAL TRTNOEXCEPT
+    bool supportsFormat(DataType, PluginFormat) const noexcept override final
     {
         return false;
     }
 
-    //!
-    //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
-    //!
-    //! This method is not used because with dynamic shapes there is no implicit batch dimension to broadcast across.
-    //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
-    //!
-    TRT_DEPRECATED
-    bool canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const _TENSORRT_FINAL TRTNOEXCEPT
+    Dims getOutputDimensions(int32_t, Dims const*, int32_t) noexcept override final
+    {
+        return Dims{-1, {}};
+    }
+
+    bool isOutputBroadcastAcrossBatch(int32_t, bool const*, int32_t) const noexcept override final
+    {
+        return false;
+    }
+
+    bool canBroadcastInputAcrossBatch(int32_t) const noexcept override final
     {
         return true;
     }
 
-    //!
-    //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
-    //!
-    //! This method is not used because it does not allow a plugin to specify mixed formats.
-    //!
-    //! Instead, derived classes should override supportsFormatCombination, which allows plugins
-    //! to express mixed formats.
-    //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
-    //!
-    TRT_DEPRECATED
-    bool supportsFormat(DataType /*type*/, PluginFormat /*format*/) const _TENSORRT_FINAL TRTNOEXCEPT
-    {
-        return false;
-    }
-
-    //!
-    //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
-    //!
-    //! This method is not used because tensors with dynamic shapes do not have an implicit batch dimension,
-    //! input dimensions might be variable, and outputs might have different floating-point formats.
-    //!
-    //! Instead, derived classes should override the overload of configurePlugin that takes poiners to
-    //! DynamicPluginTensorDesc.
-    //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
-    //!
-    TRT_DEPRECATED
-    void configurePlugin(const Dims* /*inputDims*/, int32_t /*nbInputs*/, const Dims* /*outputDims*/,
-        int32_t /*nbOutputs*/, const DataType* /*inputTypes*/, const DataType* /*outputTypes*/,
-        const bool* /*inputIsBroadcast*/, const bool* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/,
-        int32_t /*maxBatchSize*/) _TENSORRT_FINAL TRTNOEXCEPT
-    {
-    }
-
-    //!
-    //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
-    //!
-    //! This method is not used because tensors with dynamic shapes do not have an implicit batch dimension,
-    //! and the other dimensions might not be build-time constants.
-    //!
-    //! Instead, derived classes should override the overload of getWorkspaceSize that takes pointers to
-    //! PluginTensorDesc. The arguments to that overload provide maximum bounds on all dimensions.
-    //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
-    //!
-    TRT_DEPRECATED
-    size_t getWorkspaceSize(int32_t /*maxBatchSize*/) const _TENSORRT_FINAL TRTNOEXCEPT
+    size_t getWorkspaceSize(int32_t) const noexcept override final
     {
         return 0;
     }
 
-    //!
-    //! \brief Derived classes should not implement this. In a C++11 API it would be override final.
-    //!
-    //! This method is not used because tensors with dynamic shapes can have different sizes in different execution
-    //! contexts.
-    //!
-    //! Instead, derived classes should override the overload of enqueue that takes pointers to PluginTensorDesc.
-    //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
-    //!
-    TRT_DEPRECATED
-    int32_t enqueue(int32_t /*batchSize*/, const void* const* /*inputs*/, void** /*outputs*/, void* /*workspace*/,
-        cudaStream_t /*stream*/) _TENSORRT_FINAL TRTNOEXCEPT
+    int32_t enqueue(int32_t, const void* const*, void* const*, void*, cudaStream_t) noexcept override final
     {
         return 1;
     }
@@ -671,9 +559,9 @@ public:
     //! \param layerName The name of the layer, set when constructing the network definition.
     //! \param ms The time in milliseconds to execute the layer.
     //!
-    virtual void reportLayerTime(const char* layerName, float ms) TRTNOEXCEPT = 0;
+    virtual void reportLayerTime(const char* layerName, float ms) noexcept = 0;
 
-    virtual ~IProfiler() {}
+    virtual ~IProfiler() noexcept {}
 };
 
 //!
@@ -689,13 +577,14 @@ enum class WeightsRole : int32_t
     kSHIFT = 2,    //!< shift part of IScaleLayer
     kSCALE = 3,    //!< scale part of IScaleLayer
     kCONSTANT = 4, //!< weights for IConstantLayer
+    kANY = 5,      //!< Any other weights role
 };
 
 //! Maximum number of elements in WeightsRole enum. \see WeightsRole
 template <>
-constexpr inline int32_t EnumMax<WeightsRole>()
+constexpr inline int32_t EnumMax<WeightsRole>() noexcept
 {
-    return 5;
+    return 6;
 }
 
 //!
@@ -711,7 +600,7 @@ enum class DeviceType : int32_t
 
 //! Maximum number of elements in DeviceType enum. \see DeviceType
 template <>
-constexpr inline int32_t EnumMax<DeviceType>()
+constexpr inline int32_t EnumMax<DeviceType>() noexcept
 {
     return 2;
 }
@@ -723,19 +612,31 @@ constexpr inline int32_t EnumMax<DeviceType>()
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IRuntime
+class IRuntime : public INoCopy
 {
 public:
+    virtual ~IRuntime() noexcept = default;
+
     //!
     //! \brief Deserialize an engine from a stream.
     //!
+    //! If an error recorder has been set for the runtime, it will also be passed to the engine.
+    //!
     //! \param blob The memory that holds the serialized engine.
-    //! \param size The size of the memory.
+    //! \param size The size of the memory in bytes.
     //! \param pluginFactory The plugin factory, if any plugins are used by the network, otherwise nullptr.
     //!
     //! \return The engine, or nullptr if it could not be deserialized.
     //!
-    virtual nvinfer1::ICudaEngine* deserializeCudaEngine(const void* blob, std::size_t size, IPluginFactory* pluginFactory) noexcept = 0;
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //!
+    //! \warning IPluginFactory is no longer supported, therefore pluginFactory must be a nullptr.
+    //!
+    TRT_DEPRECATED nvinfer1::ICudaEngine* deserializeCudaEngine(
+        const void* blob, std::size_t size, IPluginFactory* pluginFactory) noexcept
+    {
+        return mImpl->deserializeCudaEngine(blob, size, nullptr);
+    }
 
     //!
     //! \brief Set the DLA core that the deserialized engine must execute on.
@@ -744,7 +645,10 @@ public:
     //!
     //! \warning Starting with TensorRT 8, the default value will be -1 if the DLA is not specified or unused.
     //!
-    virtual void setDLACore(int32_t dlaCore) noexcept = 0;
+    void setDLACore(int32_t dlaCore) noexcept
+    {
+        mImpl->setDLACore(dlaCore);
+    }
 
     //!
     //! \brief Get the DLA core that the engine executes on.
@@ -752,31 +656,44 @@ public:
     //!
     //! \warning Starting with TensorRT 8, the default value will be -1 if the DLA is not specified or unused.
     //!
-    virtual int32_t getDLACore() const noexcept = 0;
+    int32_t getDLACore() const noexcept
+    {
+        return mImpl->getDLACore();
+    }
 
     //!
     //! \brief Returns number of DLA hardware cores accessible.
     //!
-    virtual int32_t getNbDLACores() const noexcept = 0;
+    int32_t getNbDLACores() const noexcept
+    {
+        return mImpl->getNbDLACores();
+    }
 
     //!
     //! \brief Destroy this object.
     //!
-    virtual void destroy() noexcept = 0;
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //!
+    //! \warning Calling destroy on a managed pointer will result in a double-free error.
+    //!
+    TRT_DEPRECATED void destroy() noexcept
+    {
+        delete this;
+    }
 
-protected:
-    virtual ~IRuntime() {}
-
-public:
     //!
     //! \brief Set the GPU allocator.
-    //! \param allocator Set the GPU allocator to be used by the runtime. All GPU memory acquired will use this allocator. If NULL is passed, the default allocator will be used.
+    //! \param allocator Set the GPU allocator to be used by the runtime. All GPU memory acquired will use this
+    //! allocator. If NULL is passed, the default allocator will be used.
     //!
     //! Default: uses cudaMalloc/cudaFree.
     //!
     //! If nullptr is passed, the default allocator will be used.
     //!
-    virtual void setGpuAllocator(IGpuAllocator* allocator) noexcept = 0;
+    void setGpuAllocator(IGpuAllocator* allocator) noexcept
+    {
+        mImpl->setGpuAllocator(allocator);
+    }
 
     //!
     //! \brief Set the ErrorRecorder for this interface
@@ -786,26 +703,34 @@ public:
     //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
     //! a recorder has been registered.
     //!
+    //! If an error recorder is not set, messages will be sent to the global log stream.
+    //!
     //! \param recorder The error recorder to register with this interface.
     //
-    //! \see getErrorRecorder
+    //! \see getErrorRecorder()
     //!
-    virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
+    void setErrorRecorder(IErrorRecorder* recorder) noexcept
+    {
+        mImpl->setErrorRecorder(recorder);
+    }
 
     //!
     //! \brief get the ErrorRecorder assigned to this interface.
     //!
-    //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
-    //! so a nullptr will be returned if setErrorRecorder has not been called.
+    //! Retrieves the assigned error recorder object for the given class. A nullptr will be returned if
+    //! an error handler has not been set.
     //!
     //! \return A pointer to the IErrorRecorder object that has been registered.
     //!
-    //! \see setErrorRecorder
+    //! \see setErrorRecorder()
     //!
-    virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
+    IErrorRecorder* getErrorRecorder() const noexcept
+    {
+        return mImpl->getErrorRecorder();
+    }
 
     //!
-    //! \brief Deserialize an engine from a stream when plugin factory is not used.
+    //! \brief Deserialize an engine from a stream.
     //!
     //! \param blob The memory that holds the serialized engine.
     //! \param size The size of the memory.
@@ -814,8 +739,11 @@ public:
     //!
     nvinfer1::ICudaEngine* deserializeCudaEngine(const void* blob, std::size_t size) noexcept
     {
-        return deserializeCudaEngine(blob, size, nullptr);
+        return mImpl->deserializeCudaEngine(blob, size, nullptr);
     }
+
+protected:
+    apiv::VRuntime* mImpl;
 };
 
 //!
@@ -825,9 +753,11 @@ public:
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IRefitter
+class IRefitter : public INoCopy
 {
 public:
+    virtual ~IRefitter() noexcept = default;
+
     //!
     //! \brief Specify new weights for a layer of given name.
     //! Returns true on success, or false if new weights are rejected.
@@ -838,14 +768,25 @@ public:
     //! * The number of weights is inconsistent with the layer’s original specification.
     //!
     //! Modifying the weights before method refit() completes will result in undefined behavior.
-    virtual bool setWeights(const char* layerName, WeightsRole role, Weights weights) TRTNOEXCEPT = 0;
+    bool setWeights(const char* layerName, WeightsRole role, Weights weights) noexcept
+    {
+        return mImpl->setWeights(layerName, role, weights);
+    }
 
     //!
     //! \brief Updates associated engine.  Return true if successful.
     //!
     //! Failure occurs if getMissing() != 0 before the call.
     //!
-    virtual bool refitCudaEngine() TRTNOEXCEPT = 0;
+    //! The behavior is undefined if the engine has pending enqueued work.
+    //!
+    //! Extant IExecutionContexts associated with the engine should not be used afterwards.
+    //! Instead, create new IExecutionContexts after refitting.
+    //!
+    bool refitCudaEngine() noexcept
+    {
+        return mImpl->refitCudaEngine();
+    }
 
     //!
     //! \brief Get description of missing weights.
@@ -861,9 +802,12 @@ public:
     //! \return The number of missing Weights.
     //!
     //! If layerNames!=nullptr, each written pointer points to a string owned by
-    //! the engine being refitted, and becomes invalid when the engine is destroyed.
+    //! the engine being refit, and becomes invalid when the engine is destroyed.
     //!
-    virtual int32_t getMissing(int32_t size, const char** layerNames, WeightsRole* roles) TRTNOEXCEPT = 0;
+    int32_t getMissing(int32_t size, const char** layerNames, WeightsRole* roles) noexcept
+    {
+        return mImpl->getMissing(size, layerNames, roles);
+    }
 
     //!
     //! \brief Get description of all weights that could be refit.
@@ -875,16 +819,23 @@ public:
     //! \return The number of Weights that could be refit.
     //!
     //! If layerNames!=nullptr, each written pointer points to a string owned by
-    //! the engine being refitted, and becomes invalid when the engine is destroyed.
+    //! the engine being refit, and becomes invalid when the engine is destroyed.
     //!
-    virtual int32_t getAll(int32_t size, const char** layerNames, WeightsRole* roles) TRTNOEXCEPT = 0;
+    int32_t getAll(int32_t size, const char** layerNames, WeightsRole* roles) noexcept
+    {
+        return mImpl->getAll(size, layerNames, roles);
+    }
 
-    virtual void destroy() TRTNOEXCEPT = 0;
+    //!
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //!
+    //! \warning Calling destroy on a managed pointer will result in a double-free error.
+    //!
+    TRT_DEPRECATED void destroy() noexcept
+    {
+        delete this;
+    }
 
-protected:
-    virtual ~IRefitter() {}
-
-public:
     //!
     //! Update dynamic range for a tensor.
     //!
@@ -897,7 +848,10 @@ public:
     //! Returns false if there is no Int8 engine tensor derived from
     //! a network tensor of that name.  If successful, then getMissing
     //! may report that some weights need to be supplied.
-    virtual bool setDynamicRange(const char* tensorName, float min, float max) TRTNOEXCEPT = 0;
+    bool setDynamicRange(const char* tensorName, float min, float max) noexcept
+    {
+        return mImpl->setDynamicRange(tensorName, min, max);
+    }
 
     //!
     //! \brief Get minimum of dynamic range.
@@ -906,7 +860,10 @@ public:
     //!
     //! If the dynamic range was never set, returns the minimum computed during calibration.
     //!
-    virtual float getDynamicRangeMin(const char* tensorName) const TRTNOEXCEPT = 0;
+    float getDynamicRangeMin(const char* tensorName) const noexcept
+    {
+        return mImpl->getDynamicRangeMin(tensorName);
+    }
 
     //!
     //! \brief Get maximum of dynamic range.
@@ -915,7 +872,10 @@ public:
     //!
     //! If the dynamic range was never set, returns the maximum computed during calibration.
     //!
-    virtual float getDynamicRangeMax(const char* tensorName) const TRTNOEXCEPT = 0;
+    float getDynamicRangeMax(const char* tensorName) const noexcept
+    {
+        return mImpl->getDynamicRangeMax(tensorName);
+    }
 
     //!
     //! \brief Get names of all tensors that have refittable dynamic ranges.
@@ -926,9 +886,12 @@ public:
     //! \return The number of Weights that could be refit.
     //!
     //! If tensorNames!=nullptr, each written pointer points to a string owned by
-    //! the engine being refitted, and becomes invalid when the engine is destroyed.
+    //! the engine being refit, and becomes invalid when the engine is destroyed.
     //!
-    virtual int32_t getTensorsWithDynamicRange(int32_t size, const char** tensorNames) const TRTNOEXCEPT = 0;
+    int32_t getTensorsWithDynamicRange(int32_t size, const char** tensorNames) const noexcept
+    {
+        return mImpl->getTensorsWithDynamicRange(size, tensorNames);
+    }
 
     //!
     //! \brief Set the ErrorRecorder for this interface
@@ -938,51 +901,88 @@ public:
     //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
     //! a recorder has been registered.
     //!
+    //! If an error recorder is not set, messages will be sent to the global log stream.
+    //!
     //! \param recorder The error recorder to register with this interface.
     //
-    //! \see getErrorRecorder
+    //! \see getErrorRecorder()
     //!
-    virtual void setErrorRecorder(IErrorRecorder* recorder) TRTNOEXCEPT = 0;
+    void setErrorRecorder(IErrorRecorder* recorder) noexcept
+    {
+        mImpl->setErrorRecorder(recorder);
+    }
 
     //!
-    //! \brief get the ErrorRecorder assigned to this interface.
+    //! \brief Get the ErrorRecorder assigned to this interface.
     //!
-    //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
-    //! so a nullptr will be returned if setErrorRecorder has not been called.
+    //! Retrieves the assigned error recorder object for the given class. A nullptr will be returned if
+    //! an error handler has not been set.
     //!
     //! \return A pointer to the IErrorRecorder object that has been registered.
     //!
-    //! \see setErrorRecorder
+    //! \see setErrorRecorder()
     //!
-    virtual IErrorRecorder* getErrorRecorder() const TRTNOEXCEPT = 0;
-};
+    IErrorRecorder* getErrorRecorder() const noexcept
+    {
+        return mImpl->getErrorRecorder();
+    }
 
-//!
-//! \class IPluginFactory
-//!
-//! \brief Plugin factory for deserialization.
-//!
-//! This Interface is guaranteed not to change for the same major version of TensorRT.
-class IPluginFactory
-{
-public:
     //!
-    //! \brief Create a plugin from serialized data.
+    //! \brief Specify new weights of given name.
     //!
-    //! Responsibility of destroying this plugin lies with the application.
-    //! It can be done anytime after consumers of this plugin are destroyed.
+    //! \param name The name of the weights to be refit.
+    //! \param weights The new weights to associate with the name.
     //!
-    //! \param layerName The name of the layer.
-    //! \param serialData The serialized data.
-    //! \param serialLength The length of the serialized data.
+    //! Returns true on success, or false if new weights are rejected.
+    //! Possible reasons for rejection are:
     //!
-    //! \return The plugin.
+    //! * The name of weights is nullptr or does not correspond to any refittable weights.
+    //! * The number of weights is inconsistent with the original specification.
     //!
-    //! \see IPlugin::serialize()
-    //!
-    virtual IPlugin* createPlugin(const char* layerName, const void* serialData, size_t serialLength) TRTNOEXCEPT = 0;
+    //! Modifying the weights before method refitCudaEngine() completes will result in undefined behavior.
+    bool setNamedWeights(const char* name, Weights weights) noexcept
+    {
+        return mImpl->setNamedWeights(name, weights);
+    }
 
-    virtual ~IPluginFactory() {}
+    //!
+    //! \brief Get names of missing weights.
+    //!
+    //! For example, if some Weights have been set, but the engine was optimized
+    //! in a way that combines weights, any unsupplied Weights in the combination
+    //! are considered missing.
+    //!
+    //! \param size The number of weights names that can be safely written to.
+    //! \param weightsNames The names of the weights to be updated, or nullptr for unnamed weights.
+    //!
+    //! \return The number of missing Weights.
+    //!
+    //! If layerNames!=nullptr, each written pointer points to a string owned by
+    //! the engine being refit, and becomes invalid when the engine is destroyed.
+    //!
+    int32_t getMissingWeights(int32_t size, const char** weightsNames) noexcept
+    {
+        return mImpl->getMissingWeights(size, weightsNames);
+    }
+
+    //!
+    //! \brief Get names of all weights that could be refit.
+    //!
+    //! \param size The number of weights names that can be safely written to.
+    //! \param weightsNames The names of the weights to be updated, or nullptr for unnamed weights.
+    //!
+    //! \return The number of Weights that could be refit.
+    //!
+    //! If layerNames!=nullptr, each written pointer points to a string owned by
+    //! the engine being refit, and becomes invalid when the engine is destroyed.
+    //!
+    int32_t getAllWeights(int32_t size, const char** weightsNames) noexcept
+    {
+        return mImpl->getAllWeights(size, weightsNames);
+    }
+
+protected:
+    apiv::VRefitter* mImpl;
 };
 
 //!
@@ -1004,7 +1004,7 @@ enum class OptProfileSelector : int32_t
 
 //!< Number of different values of OptProfileSelector enum. \see OptProfileSelector
 template <>
-constexpr inline int32_t EnumMax<OptProfileSelector>()
+constexpr inline int32_t EnumMax<OptProfileSelector>() noexcept
 {
     return 3;
 }
@@ -1031,7 +1031,7 @@ constexpr inline int32_t EnumMax<OptProfileSelector>()
 //!
 //! \see IBuilderConfig::addOptimizationProfile()
 //!
-class IOptimizationProfile
+class IOptimizationProfile : public INoCopy
 {
 public:
     //!
@@ -1059,14 +1059,20 @@ public:
     //!
     //! \warning If run on DLA, minimum, optimum, and maximum dimensions must to be the same.
     //!
-    virtual bool setDimensions(const char* inputName, OptProfileSelector select, Dims dims) noexcept = 0;
+    bool setDimensions(const char* inputName, OptProfileSelector select, Dims dims) noexcept
+    {
+        return mImpl->setDimensions(inputName, select, dims);
+    }
 
     //!
     //! \brief Get the minimum / optimum / maximum dimensions for a dynamic input tensor.
     //!
     //! If the dimensions have not been previously set via setDimensions(), return an invalid Dims with nbDims == -1.
     //!
-    virtual Dims getDimensions(const char* inputName, OptProfileSelector select) const noexcept = 0;
+    Dims getDimensions(const char* inputName, OptProfileSelector select) const noexcept
+    {
+        return mImpl->getDimensions(inputName, select);
+    }
 
     //!
     //! \brief Set the minimum / optimum / maximum values for an input shape tensor.
@@ -1075,10 +1081,25 @@ public:
     //! This implies that the datatype of t is DataType::kINT32, the rank is either 0 or 1, and the dimensions of t
     //! are fixed at network definition time. This function must not be called for any input tensor that is not a
     //! shape tensor.
+    //!
     //! Each time this function is called for the same input tensor, the same nbValues must be supplied (either 1
     //! if the tensor rank is 0, or dims.d[0] if the rank is 1). Furthermore, if minVals, optVals, maxVals are the
     //! minimum, optimum, and maximum values, it must be true that minVals[i] <= optVals[i] <= maxVals[i] for
-    //! i = 0, ..., nbValues - 1.
+    //! i = 0, ..., nbValues - 1. Execution of the network must be valid for the optVals.
+    //!
+    //! Shape tensors are tensors that contribute to shape calculations in some way, and can contain
+    //! any int32_t values appropriate for the network. Examples:
+    //!
+    //! * A shape tensor used as the second input to IShuffleLayer can contain a -1 wildcard.
+    //!   The corresponding minVal[i] should be -1.
+    //!
+    //! * A shape tensor used as the stride input to ISliceLayer can contain any valid strides.
+    //!   The values could be positive, negative, or zero.
+    //!
+    //! * A shape tensor subtracted from zero to compute the size input of an ISliceLayer can
+    //!   contain any non-positive values that yield a valid slice operation.
+    //!
+    //! Tightening the minVals and maxVals bounds to cover only values that are necessary may help optimization.
     //!
     //! \param inputName The input tensor name
     //! \param select Whether to set the minimum, optimum, or maximum input values.
@@ -1091,9 +1112,11 @@ public:
     //!
     //! \warning If run on DLA, minimum, optimum, and maximum shape values must to be the same.
     //!
-    virtual bool setShapeValues(
+    bool setShapeValues(
         const char* inputName, OptProfileSelector select, const int32_t* values, int32_t nbValues) noexcept
-        = 0;
+    {
+        return mImpl->setShapeValues(inputName, select, values, nbValues);
+    }
 
     //!
     //! \brief Get the number of values for an input shape tensor.
@@ -1101,14 +1124,20 @@ public:
     //! This will return the number of shape values if setShapeValues() has been called before for this input tensor.
     //! Otherwise, return -1.
     //!
-    virtual int32_t getNbShapeValues(const char* inputName) const noexcept = 0;
+    int32_t getNbShapeValues(const char* inputName) const noexcept
+    {
+        return mImpl->getNbShapeValues(inputName);
+    }
 
     //!
     //! \brief Get the minimum / optimum / maximum values for an input shape tensor.
     //!
     //! If the shape values have not been set previously with setShapeValues(), this returns nullptr.
     //!
-    virtual const int32_t* getShapeValues(const char* inputName, OptProfileSelector select) const noexcept = 0;
+    int32_t const* getShapeValues(const char* inputName, OptProfileSelector select) const noexcept
+    {
+        return mImpl->getShapeValues(inputName, select);
+    }
 
     //!
     //! \brief Set a target for extra GPU memory that may be used by this profile.
@@ -1123,12 +1152,18 @@ public:
     //!
     //! \return true if the input is in the valid range (between 0 and 1 inclusive), else false
     //!
-    virtual bool setExtraMemoryTarget(float target) noexcept = 0;
+    bool setExtraMemoryTarget(float target) noexcept
+    {
+        return mImpl->setExtraMemoryTarget(target);
+    }
 
     //!
     //! \brief Get the extra memory target that has been defined for this profile.
     //!
-    virtual float getExtraMemoryTarget() const noexcept = 0;
+    float getExtraMemoryTarget() const noexcept
+    {
+        return mImpl->getExtraMemoryTarget();
+    }
 
     //!
     //! \brief Check whether the optimization profile can be passed to an IBuilderConfig object.
@@ -1141,11 +1176,44 @@ public:
     //!
     //! \return true if the optimization profile is valid and may be passed to an IBuilderConfig, else false
     //!
-    virtual bool isValid() const noexcept = 0;
+    bool isValid() const noexcept
+    {
+        return mImpl->isValid();
+    }
 
 protected:
-    ~IOptimizationProfile() noexcept = default;
+    apiv::VOptimizationProfile* mImpl;
+    virtual ~IOptimizationProfile() noexcept = default;
 };
+
+//!
+//! \enum TacticSource
+//!
+//! \brief List of tactic sources for TensorRT.
+//!
+//! \see TacticSources, IBuilderConfig::setTacticSources(), IBuilderConfig::getTacticSources()
+//!
+enum class TacticSource : int32_t
+{
+    //! \note Disabling kCUBLAS will cause the cublas handle passed to plugins in attachToContext to be null.
+    kCUBLAS = 0,    //!< cuBLAS tactics.
+    kCUBLAS_LT = 1, //!< cuBLAS LT tactics
+    kCUDNN = 2      //!< cuDNN tactics
+};
+
+template <>
+constexpr inline int32_t EnumMax<TacticSource>() noexcept
+{
+    return 3;
+} //!< Maximum number of tactic sources in TacticSource enum. \see TacticSource
+
+//!
+//! \brief Represents a collection of one or more TacticSource values
+//! combine using bitwise-OR operations.
+//!
+//! \see IBuilderConfig::setTacticSources(), IBuilderConfig::getTacticSources()
+//!
+using TacticSources = uint32_t;
 
 //!
 //! \class ICudaEngine
@@ -1154,9 +1222,11 @@ protected:
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class ICudaEngine
+class ICudaEngine : public INoCopy
 {
 public:
+    virtual ~ICudaEngine() noexcept = default;
+
     //!
     //! \brief Get the number of binding indices.
     //!
@@ -1167,7 +1237,10 @@ public:
     //!
     //! \see getBindingIndex();
     //!
-    virtual int32_t getNbBindings() const noexcept = 0;
+    int32_t getNbBindings() const noexcept
+    {
+        return mImpl->getNbBindings();
+    }
 
     //!
     //! \brief Retrieve the binding index for a named tensor.
@@ -1186,7 +1259,10 @@ public:
     //!
     //! \see getNbBindings() getBindingName()
     //!
-    virtual int32_t getBindingIndex(const char* name) const noexcept = 0;
+    int32_t getBindingIndex(const char* name) const noexcept
+    {
+        return mImpl->getBindingIndex(name);
+    }
 
     //!
     //! \brief Retrieve the name corresponding to a binding index.
@@ -1203,7 +1279,10 @@ public:
     //!
     //! \see getBindingIndex()
     //!
-    virtual const char* getBindingName(int32_t bindingIndex) const noexcept = 0;
+    const char* getBindingName(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingName(bindingIndex);
+    }
 
     //!
     //! \brief Determine whether a binding is an input binding.
@@ -1213,7 +1292,10 @@ public:
     //!
     //! \see getBindingIndex()
     //!
-    virtual bool bindingIsInput(int32_t bindingIndex) const noexcept = 0;
+    bool bindingIsInput(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->bindingIsInput(bindingIndex);
+    }
 
     //!
     //! \brief Get the dimensions of a binding.
@@ -1235,7 +1317,10 @@ public:
     //!
     //! \see getBindingIndex()
     //!
-    virtual Dims getBindingDimensions(int32_t bindingIndex) const noexcept = 0;
+    Dims getBindingDimensions(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingDimensions(bindingIndex);
+    }
 
     //!
     //! \brief Determine the required data type for a buffer from its binding index.
@@ -1245,7 +1330,10 @@ public:
     //!
     //! \see getBindingIndex()
     //!
-    virtual DataType getBindingDataType(int32_t bindingIndex) const noexcept = 0;
+    DataType getBindingDataType(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingDataType(bindingIndex);
+    }
 
     //!
     //! \brief Get the maximum batch size which can be used for inference.
@@ -1254,7 +1342,10 @@ public:
     //!
     //! \return The maximum batch size for this engine.
     //!
-    virtual int32_t getMaxBatchSize() const noexcept = 0;
+    int32_t getMaxBatchSize() const noexcept
+    {
+        return mImpl->getMaxBatchSize();
+    }
 
     //!
     //! \brief Get the number of layers in the network.
@@ -1265,32 +1356,24 @@ public:
     //!
     //! \return The number of layers in the network.
     //!
-    virtual int32_t getNbLayers() const noexcept = 0;
-
-    //!
-    //! \brief Get the amount of workspace the engine uses.
-    //!
-    //! The workspace size will be no greater than the value provided to the builder when the engine was built, and will
-    //! typically be smaller. Workspace will be allocated for each execution context.
-    //!
-    //! This method is not used because getDeviceMemorySize returns the total amount of device memory required by an
-    //! execution context.
-    //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 8.0.
-    //!
-    TRT_DEPRECATED
-    virtual std::size_t getWorkspaceSize() const noexcept = 0;
+    int32_t getNbLayers() const noexcept
+    {
+        return mImpl->getNbLayers();
+    }
 
     //!
     //! \brief Serialize the network to a stream.
     //!
     //! \return A IHostMemory object that contains the serialized engine.
     //!
-    //! The network may be deserialized with IRuntime::deserializeCudaEngine() and also safe::IRuntime::deserializeCudaEngine() if only functional-safe features are used in the engine.
+    //! The network may be deserialized with IRuntime::deserializeCudaEngine().
     //!
-    //! \see IRuntime::deserializeCudaEngine() safe::IRuntime::deserializeCudaEngine()
+    //! \see IRuntime::deserializeCudaEngine()
     //!
-    virtual IHostMemory* serialize() const noexcept = 0;
+    IHostMemory* serialize() const noexcept
+    {
+        return mImpl->serialize();
+    }
 
     //!
     //! \brief Create an execution context.
@@ -1298,16 +1381,27 @@ public:
     //! If the engine supports dynamic shapes, each execution context in concurrent use must use a separate optimization
     //! profile. The first execution context created will call setOptimizationProfile(0) implicitly. For other execution
     //! contexts, setOptimizationProfile() must be called with unique profile index before calling execute or enqueue.
+    //! If an error recorder has been set for the engine, it will also be passed to the execution context.
     //!
     //! \see IExecutionContext.
     //! \see IExecutionContext::setOptimizationProfile()
     //!
-    virtual IExecutionContext* createExecutionContext() noexcept = 0;
+    IExecutionContext* createExecutionContext() noexcept
+    {
+        return mImpl->createExecutionContext();
+    }
 
     //!
     //! \brief Destroy this object;
     //!
-    virtual void destroy() noexcept = 0;
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //!
+    //! \warning Calling destroy on a managed pointer will result in a double-free error.
+    //!
+    TRT_DEPRECATED void destroy() noexcept
+    {
+        delete this;
+    }
 
     //!
     //! \brief Get location of binding
@@ -1319,33 +1413,39 @@ public:
     //! \param bindingIndex The binding index.
     //! \return The location of the bound tensor with given index.
     //!
-    virtual TensorLocation getLocation(int32_t bindingIndex) const noexcept = 0;
+    TensorLocation getLocation(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getLocation(bindingIndex);
+    }
 
-protected:
-    virtual ~ICudaEngine() {}
-
-public:
     //! \brief create an execution context without any device memory allocated
     //!
     //! The memory for execution of this device context must be supplied by the application.
     //!
-    //! \see getDeviceMemorySize() IExecutionContext::setDeviceMemory()
-    //!
-    virtual IExecutionContext* createExecutionContextWithoutDeviceMemory() noexcept = 0;
+    IExecutionContext* createExecutionContextWithoutDeviceMemory() noexcept
+    {
+        return mImpl->createExecutionContextWithoutDeviceMemory();
+    }
 
     //!
     //! \brief Return the amount of device memory required by an execution context.
     //!
     //! \see IExecutionContext::setDeviceMemory()
     //!
-    virtual size_t getDeviceMemorySize() const noexcept = 0;
+    size_t getDeviceMemorySize() const noexcept
+    {
+        return mImpl->getDeviceMemorySize();
+    }
 
     //!
-    //! \brief Return true if engine can be refit.
+    //! \brief Return true if an engine can be refit.
     //!
     //! \see nvinfer1::createInferRefitter()
     //!
-    virtual bool isRefittable() const noexcept = 0;
+    bool isRefittable() const noexcept
+    {
+        return mImpl->isRefittable();
+    }
 
     //!
     //! \brief Return the number of bytes per component of an element.
@@ -1356,7 +1456,10 @@ public:
     //!
     //! \see ICudaEngine::getBindingVectorizedDim()
     //!
-    virtual int32_t getBindingBytesPerComponent(int32_t bindingIndex) const noexcept = 0;
+    int32_t getBindingBytesPerComponent(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingBytesPerComponent(bindingIndex);
+    }
 
     //!
     //! \brief Return the number of components included in one element.
@@ -1367,14 +1470,20 @@ public:
     //!
     //! \see ICudaEngine::getBindingVectorizedDim()
     //!
-    virtual int32_t getBindingComponentsPerElement(int32_t bindingIndex) const noexcept = 0;
+    int32_t getBindingComponentsPerElement(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingComponentsPerElement(bindingIndex);
+    }
 
     //!
     //! \brief Return the binding format.
     //!
     //! \param bindingIndex The binding Index.
     //!
-    virtual TensorFormat getBindingFormat(int32_t bindingIndex) const noexcept = 0;
+    TensorFormat getBindingFormat(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingFormat(bindingIndex);
+    }
 
     //!
     //! \brief Return the human readable description of the tensor format.
@@ -1390,7 +1499,10 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
-    virtual const char* getBindingFormatDesc(int32_t bindingIndex) const noexcept = 0;
+    const char* getBindingFormatDesc(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingFormatDesc(bindingIndex);
+    }
 
     //!
     //! \brief Return the dimension index that the buffer is vectorized.
@@ -1399,7 +1511,10 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
-    virtual int32_t getBindingVectorizedDim(int32_t bindingIndex) const noexcept = 0;
+    int32_t getBindingVectorizedDim(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingVectorizedDim(bindingIndex);
+    }
 
     //!
     //! \brief Returns the name of the network associated with the engine.
@@ -1411,7 +1526,10 @@ public:
     //!
     //! \return A zero delimited C-style string representing the name of the network.
     //!
-    virtual const char* getName() const noexcept = 0;
+    const char* getName() const noexcept
+    {
+        return mImpl->getName();
+    }
 
     //!
     //! \brief Get the number of optimization profiles defined for this engine.
@@ -1419,7 +1537,10 @@ public:
     //! \return Number of optimization profiles. It is always at least 1.
     //!
     //! \see IExecutionContext::setOptimizationProfile()
-    virtual int32_t getNbOptimizationProfiles() const noexcept = 0;
+    int32_t getNbOptimizationProfiles() const noexcept
+    {
+        return mImpl->getNbOptimizationProfiles();
+    }
 
     //!
     //! \brief Get the minimum / optimum / maximum dimensions for a particular binding under an optimization profile.
@@ -1443,9 +1564,10 @@ public:
     //!
     //! Otherwise the bindingIndex is considered invalid.
     //!
-    virtual Dims getProfileDimensions(int32_t bindingIndex, int32_t profileIndex, OptProfileSelector select) const
-        noexcept
-        = 0;
+    Dims getProfileDimensions(int32_t bindingIndex, int32_t profileIndex, OptProfileSelector select) const noexcept
+    {
+        return mImpl->getProfileDimensions(bindingIndex, profileIndex, select);
+    }
 
     //!
     //! \brief Get minimum / optimum / maximum values for an input shape binding under an optimization profile.
@@ -1468,9 +1590,11 @@ public:
     //!
     //! \see ICudaEngine::getProfileDimensions
     //!
-    virtual const int32_t* getProfileShapeValues(
-        int32_t profileIndex, int32_t inputIndex, OptProfileSelector select) const noexcept
-        = 0;
+    const int32_t* getProfileShapeValues(int32_t profileIndex, int32_t inputIndex, OptProfileSelector select) const
+        noexcept
+    {
+        return mImpl->getProfileShapeValues(profileIndex, inputIndex, select);
+    }
 
     //!
     //! \brief True if tensor is required as input for shape calculations or output from them.
@@ -1503,7 +1627,10 @@ public:
     //!
     //! \see isExecutionBinding()
     //!
-    virtual bool isShapeBinding(int32_t bindingIndex) const noexcept = 0;
+    bool isShapeBinding(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->isShapeBinding(bindingIndex);
+    }
 
     //!
     //! \brief True if pointer to tensor data is required for execution phase, false if nullptr can be supplied.
@@ -1514,19 +1641,25 @@ public:
     //!
     //! \see isShapeBinding()
     //!
-    virtual bool isExecutionBinding(int32_t bindingIndex) const noexcept = 0;
+    bool isExecutionBinding(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->isExecutionBinding(bindingIndex);
+    }
 
     //!
-    //! \brief determine that execution capability this engine has.
+    //! \brief Determine what execution capability this engine has.
     //!
-    //! If the engine has EngineCapability::kDEFAULT, then all engine functionality is valid..
-    //! If the engine has EngineCapability::kSAFE_GPU, then only the functionality in safe::ICudaEngine is valid.
-    //! If the engine has EngineCapability::kSAFE_DLA, then only serialize, destroy, and const-accessor functions are
+    //! If the engine has EngineCapability::kSTANDARD, then all engine functionality is valid.
+    //! If the engine has EngineCapability::kSAFETY, then only the functionality in safe engine is valid.
+    //! If the engine has EngineCapability::kDLA_STANDALONE, then only serialize, destroy, and const-accessor functions are
     //! valid.
     //!
     //! \return The EngineCapability flag that the engine was built for.
     //!
-    virtual EngineCapability getEngineCapability() const noexcept = 0;
+    EngineCapability getEngineCapability() const noexcept
+    {
+        return mImpl->getEngineCapability();
+    }
 
     //! \brief Set the ErrorRecorder for this interface
     //!
@@ -1535,23 +1668,31 @@ public:
     //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
     //! a recorder has been registered.
     //!
+    //! If an error recorder is not set, messages will be sent to the global log stream.
+    //!
     //! \param recorder The error recorder to register with this interface.
     //
-    //! \see getErrorRecorder
+    //! \see getErrorRecorder()
     //!
-    virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
+    void setErrorRecorder(IErrorRecorder* recorder) noexcept
+    {
+        return mImpl->setErrorRecorder(recorder);
+    }
 
     //!
-    //! \brief get the ErrorRecorder assigned to this interface.
+    //! \brief Get the ErrorRecorder assigned to this interface.
     //!
-    //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
-    //! so a nullptr will be returned if setErrorRecorder has not been called.
+    //! Retrieves the assigned error recorder object for the given class. A nullptr will be returned if
+    //! an error handler has not been set.
     //!
     //! \return A pointer to the IErrorRecorder object that has been registered.
     //!
-    //! \see setErrorRecorder
+    //! \see setErrorRecorder()
     //!
-    virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
+    IErrorRecorder* getErrorRecorder() const noexcept
+    {
+        return mImpl->getErrorRecorder();
+    }
 
     //!
     //! \brief Query whether the engine was built with an implicit batch dimension.
@@ -1567,7 +1708,22 @@ public:
     //!
     //! \see createNetworkV2
     //!
-    virtual bool hasImplicitBatchDimension() const TRTNOEXCEPT = 0;
+    bool hasImplicitBatchDimension() const noexcept
+    {
+        return mImpl->hasImplicitBatchDimension();
+    }
+
+    //! \brief return the tactic sources required by this engine
+    //!
+    //! \see IBuilderConfig::setTacticSources()
+    //!
+    TacticSources getTacticSources() const noexcept
+    {
+        return mImpl->getTacticSources();
+    }
+
+protected:
+    apiv::VCudaEngine* mImpl;
 };
 
 //!
@@ -1580,38 +1736,61 @@ public:
 //! dynamic shapes, each execution context in concurrent use must use a separate optimization profile.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
-class IExecutionContext
+class IExecutionContext : public INoCopy
 {
 public:
+    virtual ~IExecutionContext() noexcept = default;
+
     //!
     //! \brief Synchronously execute inference on a batch.
     //!
-    //! This method requires an array of input and output buffers. The mapping from tensor names to indices can be
-    //! queried using ICudaEngine::getBindingIndex() \param batchSize The batch size. This is at most the value supplied
-    //! when the engine was built. \param bindings An array of pointers to input and output buffers for the network.
+    //! This method requires an array of input and output buffers. The mapping from tensor names to indices
+    //! can be queried using ICudaEngine::getBindingIndex()
+    //!
+    //! \param batchSize The batch size. This is at most the value supplied when the engine was built.
+    //! \param bindings An array of pointers to input and output buffers for the network.
     //!
     //! \return True if execution succeeded.
     //!
+    //! \warning This function will trigger layer resource updates if hasImplicitBatchDimension()
+    //!          returns true and batchSize changes between subsequent calls, possibly resulting
+    //!          in performance bottlenecks.
+    //!
     //! \see ICudaEngine::getBindingIndex() ICudaEngine::getMaxBatchSize()
     //!
-    virtual bool execute(int32_t batchSize, void** bindings) noexcept = 0;
+    bool execute(int32_t batchSize, void* const* bindings) noexcept
+    {
+        return mImpl->execute(batchSize, bindings);
+    }
 
     //!
     //! \brief Asynchronously execute inference on a batch.
     //!
     //! This method requires an array of input and output buffers. The mapping from tensor names to indices can be
     //! queried using ICudaEngine::getBindingIndex() \param batchSize The batch size. This is at most the value supplied
-    //! when the engine was built. \param bindings An array of pointers to input and output buffers for the network.
-    //! \param stream A cuda stream on which the inference kernels will be enqueued
+    //! when the engine was built.
+    //!
+    //! \param bindings An array of pointers to input and output buffers for the network.
+    //! \param stream A cuda stream on which the inference kernels will be enqueued.
     //! \param inputConsumed An optional event which will be signaled when the input buffers can be refilled with new
-    //! data
+    //! data.
     //!
     //! \return True if the kernels were enqueued successfully.
     //!
     //! \see ICudaEngine::getBindingIndex() ICudaEngine::getMaxBatchSize()
     //!
-    virtual bool enqueue(int32_t batchSize, void** bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept
-        = 0;
+    //! \warning Calling enqueue() in from the same IExecutionContext object with different CUDA streams concurrently
+    //!          results in undefined behavior. To perform inference concurrently in multiple streams, use one execution
+    //!          context per stream.
+    //!
+    //! \warning This function will trigger layer resource updates if hasImplicitBatchDimension()
+    //!          returns true and batchSize changes between subsequent calls, possibly resulting in performance
+    //!          bottlenecks.
+    //!
+    bool enqueue(int32_t batchSize, void* const* bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept
+    {
+        return mImpl->enqueue(batchSize, bindings, stream, inputConsumed);
+    }
 
     //!
     //! \brief Set the debug sync flag.
@@ -1621,45 +1800,63 @@ public:
     //!
     //! \see getDebugSync()
     //!
-    virtual void setDebugSync(bool sync) noexcept = 0;
+    void setDebugSync(bool sync) noexcept
+    {
+        mImpl->setDebugSync(sync);
+    }
 
     //!
     //! \brief Get the debug sync flag.
     //!
     //! \see setDebugSync()
     //!
-    virtual bool getDebugSync() const noexcept = 0;
+    bool getDebugSync() const noexcept
+    {
+        return mImpl->getDebugSync();
+    }
 
     //!
     //! \brief Set the profiler.
     //!
     //! \see IProfiler getProfiler()
     //!
-    virtual void setProfiler(IProfiler*) noexcept = 0;
+    void setProfiler(IProfiler* profiler) noexcept
+    {
+        mImpl->setProfiler(profiler);
+    }
 
     //!
     //! \brief Get the profiler.
     //!
     //! \see IProfiler setProfiler()
     //!
-    virtual IProfiler* getProfiler() const noexcept = 0;
+    IProfiler* getProfiler() const noexcept
+    {
+        return mImpl->getProfiler();
+    }
 
     //!
     //! \brief Get the associated engine.
     //!
     //! \see ICudaEngine
     //!
-    virtual const ICudaEngine& getEngine() const noexcept = 0;
+    const ICudaEngine& getEngine() const noexcept
+    {
+        return mImpl->getEngine();
+    }
 
     //!
     //! \brief Destroy this object.
     //!
-    virtual void destroy() noexcept = 0;
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //!
+    //! \warning Calling destroy on a managed pointer will result in a double-free error.
+    //!
+    TRT_DEPRECATED void destroy() noexcept
+    {
+        delete this;
+    }
 
-protected:
-    virtual ~IExecutionContext() noexcept {}
-
-public:
     //!
     //! \brief Set the name of the execution context.
     //!
@@ -1667,14 +1864,20 @@ public:
     //!
     //! \see getName()
     //!
-    virtual void setName(const char* name) noexcept = 0;
+    void setName(const char* name) noexcept
+    {
+        mImpl->setName(name);
+    }
 
     //!
     //! \brief Return the name of the execution context.
     //!
     //! \see setName()
     //!
-    virtual const char* getName() const noexcept = 0;
+    const char* getName() const noexcept
+    {
+        return mImpl->getName();
+    }
 
     //!
     //! \brief Set the device memory for use by this execution context.
@@ -1687,7 +1890,12 @@ public:
     //!
     //! \see ICudaEngine::getDeviceMemorySize() ICudaEngine::createExecutionContextWithoutDeviceMemory()
     //!
-    virtual void setDeviceMemory(void* memory) noexcept = 0;
+
+    TRT_DEPRECATED
+    void setDeviceMemory(void* memory) noexcept
+    {
+        mImpl->setDeviceMemory(memory);
+    }
 
     //!
     //! \brief Return the strides of the buffer for the given binding.
@@ -1705,7 +1913,10 @@ public:
     //!
     //! \see getBindingComponentsPerElement
     //!
-    virtual Dims getStrides(int32_t bindingIndex) const noexcept = 0;
+    Dims getStrides(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getStrides(bindingIndex);
+    }
 
 public:
     //!
@@ -1734,6 +1945,9 @@ public:
     //! setInputShapeBinding() for all dynamic input tensors or input shape tensors, which in
     //! turn must be called before either execute() or enqueue().
     //!
+    //! \warning This function will trigger layer resource updates on the next
+    //!          call of enqueue[V2]()/execute[V2](), possibly resulting in performance bottlenecks.
+    //!
     //! \return true if the call succeeded, else false (e.g. input out of range)
     //!
     //! \deprecated This API is superseded by setOptimizationProfileAsync and will be removed in TensorRT 9.0.
@@ -1741,7 +1955,10 @@ public:
     //! \see ICudaEngine::getNbOptimizationProfiles() IExecutionContext::setOptimizationProfileAsync()
     //!
     TRT_DEPRECATED
-    virtual bool setOptimizationProfile(int32_t profileIndex) noexcept = 0;
+    bool setOptimizationProfile(int32_t profileIndex) noexcept
+    {
+        return mImpl->setOptimizationProfile(profileIndex);
+    }
 
     //!
     //! \brief Get the index of the currently selected optimization profile.
@@ -1750,18 +1967,23 @@ public:
     //! to be created, or explicitly for all subsequent contexts), an invalid value of -1 will be returned
     //! and all calls to enqueue() or execute() will fail until a valid profile index has been set.
     //!
-    virtual int32_t getOptimizationProfile() const noexcept = 0;
+    int32_t getOptimizationProfile() const noexcept
+    {
+        return mImpl->getOptimizationProfile();
+    }
 
     //!
     //! \brief Set the dynamic dimensions of a binding
     //!
-    //! Requires the engine to be built without an implicit batch dimension.
-    //! The binding must be an input tensor, and all dimensions must be compatible with
-    //! the network definition (i.e. only the wildcard dimension -1 can be replaced with a
-    //! new dimension > 0). Furthermore, the dimensions must be in the valid range for the
-    //! currently selected optimization profile, and the corresponding engine must not be
-    //! safety-certified.
+    //! \param bindingIndex index of an input tensor whose dimensions must be compatible with
+    //!        the network definition (i.e. only the wildcard dimension -1 can be replaced with a
+    //!        new dimension >= 0).
     //!
+    //! \param dimensions specifies the dimensions of the input tensor. It must be in the valid
+    //!        range for the currently selected optimization profile, and the corresponding engine must
+    //!        not be safety-certified.
+    //!
+    //! This method requires the engine to be built without an implicit batch dimension.
     //! This method will fail unless a valid optimization profile is defined for the current
     //! execution context (getOptimizationProfile() must not be -1).
     //!
@@ -1769,11 +1991,23 @@ public:
     //! this method needs to be called before either enqueue() or execute() may be called.
     //! This can be checked using the method allInputDimensionsSpecified().
     //!
-    //! \return false if an error occurs (e.g. index out of range), else true
+    //! \warning This function will trigger layer resource updates on the next
+    //!          call of enqueue[V2]()/execute[V2](), possibly resulting in performance bottlenecks,
+    //!          if the dimensions are different than the previous set dimensions.
+    //!
+    //! \return false if an error occurs (e.g. bindingIndex is out of range for the currently selected
+    //!         optimization profile or binding dimension is inconsistent with min-max range of the
+    //!         optimization profile), else true. Note that the network can still be invalid for certain
+    //!         combinations of input shapes that lead to invalid output shapes. To confirm the correctness
+    //!         of the network input shapes, check whether the output binding has valid
+    //!         dimensions using getBindingDimensions() on the output bindingIndex.
     //!
     //! \see ICudaEngine::getBindingIndex
     //!
-    virtual bool setBindingDimensions(int32_t bindingIndex, Dims dimensions) noexcept = 0;
+    bool setBindingDimensions(int32_t bindingIndex, Dims dimensions) noexcept
+    {
+        return mImpl->setBindingDimensions(bindingIndex, dimensions);
+    }
 
     //!
     //! \brief Get the dynamic dimensions of a binding
@@ -1800,7 +2034,10 @@ public:
     //!
     //! \see ICudaEngine::getProfileDimensions
     //!
-    virtual Dims getBindingDimensions(int32_t bindingIndex) const noexcept = 0;
+    Dims getBindingDimensions(int32_t bindingIndex) const noexcept
+    {
+        return mImpl->getBindingDimensions(bindingIndex);
+    }
 
     //!
     //! \brief Set values of input tensor required by shape calculations.
@@ -1817,7 +2054,20 @@ public:
     //! This method will fail unless a valid optimization profile is defined for the current
     //! execution context (getOptimizationProfile() must not be -1).
     //!
-    virtual bool setInputShapeBinding(int32_t bindingIndex, const int32_t* data) noexcept = 0;
+    //! \warning This function will trigger layer resource updates on the next call of
+    //!          enqueue[V2]()/execute[V2](), possibly resulting in performance bottlenecks, if the
+    //!          shapes are different than the previous set shapes.
+    //!
+    //! \return false if an error occurs (e.g. bindingIndex is out of range for the currently selected
+    //!         optimization profile or shape data is inconsistent with min-max range of the
+    //!         optimization profile), else true. Note that the network can still be invalid for certain
+    //!         combinations of input shapes that lead to invalid output shapes. To confirm the correctness
+    //!         of the network input shapes, check whether the output binding has valid
+    //!         dimensions using getBindingDimensions() on the output bindingIndex.
+    bool setInputShapeBinding(int32_t bindingIndex, int32_t const* data) noexcept
+    {
+        return mImpl->setInputShapeBinding(bindingIndex, data);
+    }
 
     //!
     //! \brief Get values of an input tensor required for shape calculations or an output tensor produced by shape
@@ -1836,7 +2086,10 @@ public:
     //!
     //! \see isShapeBinding(bindingIndex)
     //!
-    virtual bool getShapeBinding(int32_t bindingIndex, int32_t* data) const noexcept = 0;
+    bool getShapeBinding(int32_t bindingIndex, int32_t* data) const noexcept
+    {
+        return mImpl->getShapeBinding(bindingIndex, data);
+    }
 
     //!
     //! \brief Whether all dynamic dimensions of input tensors have been specified
@@ -1848,7 +2101,10 @@ public:
     //!
     //! \see setBindingDimensions(bindingIndex,dimensions)
     //!
-    virtual bool allInputDimensionsSpecified() const noexcept = 0;
+    bool allInputDimensionsSpecified() const noexcept
+    {
+        return mImpl->allInputDimensionsSpecified();
+    }
 
     //!
     //! \brief Whether all input shape bindings have been specified
@@ -1859,7 +2115,11 @@ public:
     //!
     //! \see isShapeBinding(bindingIndex)
     //!
-    virtual bool allInputShapesSpecified() const noexcept = 0;
+    bool allInputShapesSpecified() const noexcept
+
+    {
+        return mImpl->allInputShapesSpecified();
+    }
 
     //!
     //! \brief Set the ErrorRecorder for this interface
@@ -1869,23 +2129,31 @@ public:
     //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
     //! a recorder has been registered.
     //!
+    //! If an error recorder is not set, messages will be sent to the global log stream.
+    //!
     //! \param recorder The error recorder to register with this interface.
     //
-    //! \see getErrorRecorder
+    //! \see getErrorRecorder()
     //!
-    virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
+    void setErrorRecorder(IErrorRecorder* recorder) noexcept
+    {
+        mImpl->setErrorRecorder(recorder);
+    }
 
     //!
-    //! \brief get the ErrorRecorder assigned to this interface.
+    //! \brief Get the ErrorRecorder assigned to this interface.
     //!
-    //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
-    //! so a nullptr will be returned if setErrorRecorder has not been called.
+    //! Retrieves the assigned error recorder object for the given class. A nullptr will be returned if
+    //! an error handler has not been set.
     //!
     //! \return A pointer to the IErrorRecorder object that has been registered.
     //!
-    //! \see setErrorRecorder
+    //! \see setErrorRecorder()
     //!
-    virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
+    IErrorRecorder* getErrorRecorder() const noexcept
+    {
+        return mImpl->getErrorRecorder();
+    }
 
     //!
     //! \brief Synchronously execute inference a network.
@@ -1899,7 +2167,10 @@ public:
     //!
     //! \see ICudaEngine::getBindingIndex() ICudaEngine::getMaxBatchSize()
     //!
-    virtual bool executeV2(void** bindings) noexcept = 0;
+    bool executeV2(void* const* bindings) noexcept
+    {
+        return mImpl->executeV2(bindings);
+    }
 
     //!
     //! \brief Asynchronously execute inference.
@@ -1920,13 +2191,20 @@ public:
     //!       used, the first enqueueV2() call after a setInputShapeBinding() call will cause failure in stream capture
     //!       due to resource allocation. Please call enqueueV2() once before capturing the graph.
     //!
-    virtual bool enqueueV2(void** bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept = 0;
+    //! \warning Calling enqueueV2() in from the same IExecutionContext object with different CUDA streams concurrently
+    //!          results in undefined behavior. To perform inference concurrently in multiple streams, use one execution
+    //!          context per stream.
+    //!
+    bool enqueueV2(void* const* bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept
+    {
+        return mImpl->enqueueV2(bindings, stream, inputConsumed);
+    }
 
     //!
     //! \brief Select an optimization profile for the current context with async
     //! semantics.
     //!
-    //! \param profileIndex Index of the profile. It must lie between 0 and
+    //! \param profileIndex Index of the profile. The value must lie between 0 and
     //!        getEngine().getNbOptimizationProfiles() - 1
     //!
     //! \param stream A cuda stream on which the cudaMemcpyAsyncs may be
@@ -1954,6 +2232,9 @@ public:
     //! tensors or input shape tensors, which in turn must be called before
     //! either execute() or enqueue().
     //!
+    //! \warning This function will trigger layer resource updates on the next call of
+    //!          enqueue[V2]()/execute[V2](), possibly resulting in performance bottlenecks.
+    //!
     //! \warning Not synchronizing the stream used at enqueue with the stream
     //! used to set optimization profile asynchronously using this API will
     //! result in undefined behavior.
@@ -1961,8 +2242,14 @@ public:
     //! \return true if the call succeeded, else false (e.g. input out of range)
     //!
     //! \see ICudaEngine::getNbOptimizationProfiles()
-    //! IExecutionContext::setOptimizationProfile()
-    virtual bool setOptimizationProfileAsync(int32_t profileIndex, cudaStream_t stream) noexcept = 0;
+    //! \see IExecutionContext::setOptimizationProfile()
+    bool setOptimizationProfileAsync(int32_t profileIndex, cudaStream_t stream) noexcept
+    {
+        return mImpl->setOptimizationProfileAsync(profileIndex, stream);
+    }
+
+protected:
+    apiv::VExecutionContext* mImpl;
 }; // class IExecutionContext
 } // namespace nvinfer1
 
@@ -1970,24 +2257,35 @@ public:
 //! Internal C entry point for creating IRuntime.
 //! @private
 //!
-extern "C" TENSORRTAPI void* createInferRuntime_INTERNAL(void* logger, int32_t version);
+extern "C" TENSORRTAPI void* createInferRuntime_INTERNAL(void* logger, int32_t version) noexcept;
 
 //!
 //! Internal C entry point for creating IRefitter.
 //! @private
 //!
-extern "C" TENSORRTAPI void* createInferRefitter_INTERNAL(void* engine, void* logger, int32_t version);
+extern "C" TENSORRTAPI void* createInferRefitter_INTERNAL(void* engine, void* logger, int32_t version) noexcept;
+
+//!
+//! \brief Return the plugin registry
+//!
+extern "C" TENSORRTAPI nvinfer1::IPluginRegistry* getPluginRegistry() noexcept;
+
+//!
+//! \brief Return the logger object.
+//!
+extern "C" TENSORRTAPI nvinfer1::ILogger* getLogger() noexcept;
 
 namespace nvinfer1
 {
-namespace // unnamed namespace avoids linkage surprises when linking objects built with different versions of this header.
+namespace // unnamed namespace avoids linkage surprises when linking objects built with different versions of this
+          // header.
 {
 //!
 //! \brief Create an instance of an IRuntime class.
 //!
 //! This class is the logging class for the runtime.
 //!
-inline IRuntime* createInferRuntime(ILogger& logger)
+inline IRuntime* createInferRuntime(ILogger& logger) noexcept
 {
     return static_cast<IRuntime*>(createInferRuntime_INTERNAL(&logger, NV_TENSORRT_VERSION));
 }
@@ -1995,13 +2293,42 @@ inline IRuntime* createInferRuntime(ILogger& logger)
 //!
 //! \brief Create an instance of an IRefitter class.
 //!
-//! This class is the logging class for the refitter.
+//! This is the logging class for the refitter.
 //!
-inline IRefitter* createInferRefitter(ICudaEngine& engine, ILogger& logger)
+inline IRefitter* createInferRefitter(ICudaEngine& engine, ILogger& logger) noexcept
 {
     return static_cast<IRefitter*>(createInferRefitter_INTERNAL(&engine, &logger, NV_TENSORRT_VERSION));
 }
-}
-}
 
+} // namespace
+
+//!
+//! \brief Register the plugin creator to the registry
+//! The static registry object will be instantiated when the plugin library is
+//! loaded. This static object will register all creators available in the
+//! library to the registry.
+//!
+//! \warning Statically registering plugins should be avoided in the automotive
+//!  safety context as the application developer should first register an error recorder
+//!  with the plugin registry via IPluginRegistry::setErrorRecorder() before using
+//!  IPluginRegistry::registerCreator() or other methods.
+//!
+template <typename T>
+class PluginRegistrar
+{
+public:
+    PluginRegistrar()
+    {
+        getPluginRegistry()->registerCreator(instance, "");
+    }
+
+private:
+    //! Plugin instance.
+    T instance{};
+};
+
+} // namespace nvinfer1
+
+#define REGISTER_TENSORRT_PLUGIN(name)                                                                                 \
+    static nvinfer1::PluginRegistrar<name> pluginRegistrar##name {}
 #endif // NV_INFER_RUNTIME_H

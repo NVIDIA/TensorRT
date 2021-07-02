@@ -33,7 +33,7 @@ def load_code_blocks_from_readme(readme, ignore_block):
         return "pip" in cmd
 
     commands = []
-    with open(readme, 'r') as f:
+    with open(readme, "r") as f:
         in_command_block = False
         block = []
         for line in f.readlines():
@@ -59,11 +59,9 @@ class Example(object):
         self.artifacts = [os.path.join(self.path, name) for name in artifact_names]
         self.ignore_block = util.default(ignore_block, lambda block: False)
 
-
     def __enter__(self):
         readme = os.path.join(self.path, "README.md")
         return load_code_blocks_from_readme(readme, self.ignore_block)
-
 
     def run(self, command):
         G_LOGGER.info("Running: {:} from cwd: {:}".format(command, self.path))
@@ -79,7 +77,6 @@ class Example(object):
         assert status.returncode == 0, status.stdout + "\n" + status.stderr
         return status
 
-
     def __exit__(self, exc_type, exc_value, traceback):
         """
         Checks for and removes artifacts expected by this example
@@ -91,7 +88,6 @@ class Example(object):
                 shutil.rmtree(artifact)
             else:
                 os.remove(artifact)
-
 
     def __str__(self):
         return os.path.relpath(self.path, EXAMPLES_ROOT)
@@ -105,11 +101,20 @@ API_EXAMPLES = [
     Example(["api", "04_int8_calibration_in_tensorrt"], artifact_names=["identity-calib.cache"]),
     Example(["api", "05_using_tensorrt_network_api"]),
     Example(["api", "06_immediate_eval_api"], ignore_block=lambda block: "```python" in block[0]),
+    Example(
+        ["api", "07_tensorrt_and_dynamic_shapes"],
+        artifact_names=["dynamic_identity.engine"],
+        ignore_block=lambda block: "```python" in block[0],
+    ),
 ]
+
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
 @pytest.mark.parametrize("example", API_EXAMPLES, ids=lambda case: str(case))
 def test_api_examples(example):
+    if mod.version(trt.__version__) < mod.version("8.0") and (example.path.endswith("07_tensorrt_and_dynamic_shapes")):
+        pytest.skip("Not intended for older versions of TRT")
+
     with example as commands:
         for command in commands:
             example.run(command)
@@ -120,9 +125,14 @@ CLI_EXAMPLES = [
     Example(["cli", "run", "01_comparing_frameworks"]),
     Example(["cli", "run", "02_comparing_across_runs"], artifact_names=["system_a_results.json"]),
     Example(["cli", "run", "03_generating_a_comparison_script"], artifact_names=["compare_trt_onnxrt.py"]),
-    Example(["cli", "run", "04_defining_a_trt_network_manually"]),
+    Example(["cli", "run", "04_defining_a_tensorrt_network_manually"]),
     # Convert
     Example(["cli", "convert", "01_int8_calibration_in_tensorrt"], artifact_names=["identity.engine"]),
+    Example(
+        ["cli", "convert", "02_deterministic_engine_builds_in_tensorrt"],
+        artifact_names=["0.engine", "1.engine", "replay.json"],
+    ),
+    Example(["cli", "convert", "03_dynamic_shapes_in_tensorrt"], artifact_names=["dynamic_identity.engine"]),
     # Surgeon
     Example(["cli", "surgeon", "01_isolating_subgraphs"], artifact_names=["subgraph.onnx"]),
     Example(["cli", "surgeon", "02_folding_constants"], artifact_names=["folded.onnx"]),
@@ -130,10 +140,14 @@ CLI_EXAMPLES = [
     Example(["cli", "debug", "01_debugging_flaky_trt_tactics"], artifact_names=["replays", "golden.json"]),
 ]
 
+
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
 @pytest.mark.parametrize("example", CLI_EXAMPLES, ids=lambda case: str(case))
 def test_cli_examples(example):
-    if mod.version(trt.__version__) < mod.version("8.0") and example.path.endswith("01_debugging_flaky_trt_tactics"):
+    if mod.version(trt.__version__) < mod.version("8.0") and (
+        example.path.endswith("01_debugging_flaky_trt_tactics")
+        or example.path.endswith("02_deterministic_engine_builds_in_tensorrt")
+    ):
         pytest.skip("Tactic replays are not supported on older versions of TRT")
 
     with example as commands:
@@ -155,6 +169,7 @@ if mod.version(trt.__version__) >= mod.version("8.0"):
         Example(["cli", "inspect", "07_inspecting_tactic_replays"], artifact_names=["replay.json"]),
     ]
 
+
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
 @pytest.mark.parametrize("example", CLI_INSPECT_EXAMPLES, ids=lambda case: str(case))
 def test_cli_inspect_examples(example):
@@ -166,7 +181,8 @@ def test_cli_inspect_examples(example):
 
     print(actual_output)
     # Makes reading the diff way easier
-    actual_lines = [line for line in actual_output.splitlines() if "[I] Loading " not in line]
+    actual_lines = [line for line in actual_output.splitlines() if "[I] Loading " not in line and "[W] " not in line]
+
     expected_lines = expected_output.splitlines()
     assert len(actual_lines) == len(expected_lines)
 
@@ -183,6 +199,7 @@ def test_cli_inspect_examples(example):
 DEV_EXAMPLES = [
     Example(["dev", "01_writing_cli_tools"], artifact_names=["data.json"]),
 ]
+
 
 @pytest.mark.parametrize("example", DEV_EXAMPLES, ids=lambda case: str(case))
 def test_dev_examples(example):

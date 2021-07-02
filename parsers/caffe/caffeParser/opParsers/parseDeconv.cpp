@@ -40,7 +40,7 @@ ILayer* parseDeconvolution(INetworkDefinition& network, const trtcaffe::LayerPar
 
     int kernelW = p.has_kernel_w() ? p.kernel_w() : p.kernel_size(0);
     int kernelH = p.has_kernel_h() ? p.kernel_h() : p.kernel_size_size() > 1 ? p.kernel_size(1) : p.kernel_size(0);
-    int C = parserutils::getCHW(tensors[msg.bottom(0)]->getDimensions()).c();
+    int C = parserutils::getC(tensors[msg.bottom(0)]->getDimensions());
 
     float std_dev = 1.0F / sqrtf(kernelW * kernelH * sqrtf(C * nbOutputs));
     Weights kernelWeights = weightFactory.isInitialized() ? weightFactory(msg.name(), WeightType::kGENERIC) : weightFactory.allocateWeights(kernelW * kernelH * C * nbOutputs / nbGroups, std::normal_distribution<float>(0.0F, std_dev));

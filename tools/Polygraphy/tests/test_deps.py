@@ -37,21 +37,28 @@ def virtualenv_with_poly(virtualenv):
 
 
 def is_submodule(path):
-    return os.path.isdir(path) and os.path.isfile(os.path.join(path, "__init__.py"))
+    file_mod = os.path.isfile(path) and path.endswith(".py") and os.path.basename(path) != "__init__.py"
+    dir_mod = os.path.isdir(path) and os.path.isfile(os.path.join(path, "__init__.py"))
+    return file_mod or dir_mod
+
 
 MODULE_PATH = os.path.join(ROOT_DIR, "polygraphy")
-SUBMODULE_PATHS = [os.path.relpath(path, ROOT_DIR) for path in glob.iglob(os.path.join(MODULE_PATH, "**"), recursive=True) if is_submodule(path)]
+SUBMODULE_PATHS = [
+    os.path.relpath(os.path.splitext(path)[0], ROOT_DIR)
+    for path in glob.iglob(os.path.join(MODULE_PATH, "**"), recursive=True)
+    if is_submodule(path)
+]
+
 
 class TestPublicImports(object):
-    # Submodules should not require any extra dependencies to import.
-    @pytest.mark.parametrize("submodule_path", SUBMODULE_PATHS)
-    def test_no_extra_submodule_dependencies_required(self, virtualenv_with_poly, submodule_path):
-        submodule_name = ".".join(submodule_path.split(os.path.sep))
-        cmd = ["python3", "-c", "from {:} import *".format(submodule_name)]
-        print(" ".join(cmd))
-        output = virtualenv_with_poly.run(cmd, capture=True)
-        print(output)
-
+    def test_no_extra_submodule_dependencies_required(self, virtualenv_with_poly):
+        # Submodules should not require any extra dependencies to import.
+        for submodule_path in SUBMODULE_PATHS:
+            submodule_name = ".".join(submodule_path.split(os.path.sep))
+            cmd = ["python3", "-c", "from {:} import *".format(submodule_name)]
+            print(" ".join(cmd))
+            output = virtualenv_with_poly.run(cmd, capture=True)
+            print(output)
 
     def test_can_json_without_numpy(self, virtualenv_with_poly):
         cmd = ["python3", "-c", "from polygraphy.json import to_json, from_json; x = to_json(1); x = from_json(x)"]
@@ -69,6 +76,7 @@ TOOLS = {
     "template": ["trt-network"],
     "debug": ["build", "precision", "diff-tactics", "reduce", "repeat"],
 }
+
 
 class TestToolImports(object):
     # We should be able to at least launch tools with no dependencies installed.
@@ -90,12 +98,21 @@ class TestToolImports(object):
 
 
 class TestAutoinstallDeps(object):
-    @pytest.mark.parametrize("cmd", [
-        ["run", ONNX_MODELS["identity"].path, "--onnxrt"],
-        ["run", ONNX_MODELS["identity"].path, "--trt"],
-        ["surgeon", "sanitize", "--fold-constants", ONNX_MODELS["const_foldable"].path,
-         "-o", tempfile.NamedTemporaryFile().name],
-    ])
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            ["run", ONNX_MODELS["identity"].path, "--onnxrt"],
+            ["run", ONNX_MODELS["identity"].path, "--trt"],
+            [
+                "surgeon",
+                "sanitize",
+                "--fold-constants",
+                ONNX_MODELS["const_foldable"].path,
+                "-o",
+                tempfile.NamedTemporaryFile().name,
+            ],
+        ],
+    )
     def test_can_automatically_install_deps(self, virtualenv_with_poly, cmd):
         if "--trt" in cmd and mod.version(trt.__version__) < mod.version("7.0"):
             pytest.skip("TRT 6 container has an old version of CUDA")
@@ -106,11 +123,13 @@ class TestAutoinstallDeps(object):
         print(output)
         assert "is required, but not installed. Attempting to install now" in output
 
-
-    @pytest.mark.parametrize("new_ver, expected", [
-        ("==1.4.2", "==1.4.2"),
-        (mod.LATEST_VERSION, ">=1.4.2"),
-    ])
+    @pytest.mark.parametrize(
+        "new_ver, expected",
+        [
+            ("==1.4.2", "==1.4.2"),
+            (mod.LATEST_VERSION, ">=1.4.2"),
+        ],
+    )
     def test_can_automatically_upgrade_deps(self, virtualenv_with_poly, new_ver, expected):
         virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
 
@@ -121,12 +140,32 @@ class TestAutoinstallDeps(object):
         assert get_colored_version() == "1.4.0"
 
         # Insert our own preferred version to make sure it upgrades.
-        virtualenv_with_poly.run(["python3", "-c",
-                            "from polygraphy import mod; "
-                            "colored = mod.lazy_import('colored', version='{:}'); "
-                            "print(colored.__version__)".format(new_ver)])
+        virtualenv_with_poly.run(
+            [
+                "python3",
+                "-c",
+                "from polygraphy import mod; "
+                "colored = mod.lazy_import('colored', version='{:}'); "
+                "print(colored.__version__)".format(new_ver),
+            ]
+        )
         assert _version_ok(get_colored_version(), expected)
 
+    # We can import inner modules, and Polygraphy should still autoinstall the outermost one.
+    def test_can_install_for_nested_import(self, virtualenv_with_poly):
+        virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
+
+        virtualenv_with_poly.run(
+            [
+                "python3",
+                "-c",
+                "from polygraphy import mod; "
+                "shape_inference = mod.lazy_import('onnx.shape_inference'); "
+                "print(shape_inference.infer_shapes)",
+            ]
+        )
+
+        assert "onnx" in virtualenv_with_poly.installed_packages()
 
     def test_all_lazy_imports(self):
         # NOTE: If this test fails, it means a new lazy dependency has been

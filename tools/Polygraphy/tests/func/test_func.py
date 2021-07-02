@@ -31,7 +31,6 @@ class TestExtend(object):
 
         assert y() == 2
 
-
     def test_extend_named_parameters(self):
         def x(arg0, arg1):
             return arg0, arg1
@@ -44,7 +43,6 @@ class TestExtend(object):
         assert arg0 == 0
         assert arg1 == 1
 
-
     def test_extend_0_args_1_rv(self):
         def x():
             return 1
@@ -54,7 +52,6 @@ class TestExtend(object):
             assert elem == 1
 
         assert y() == 1
-
 
     def test_extend_0_args_2_rv(self):
         def x():
@@ -67,7 +64,6 @@ class TestExtend(object):
 
         assert y() == (1, 2)
 
-
     def test_extend_1_args_0_rv(self):
         def x(arg0):
             pass
@@ -77,7 +73,6 @@ class TestExtend(object):
             pass
 
         y(1)
-
 
     def test_extend_1_args_1_rv(self):
         def x(arg0):
@@ -89,7 +84,6 @@ class TestExtend(object):
             assert elem == 3
 
         assert y(1) == 3
-
 
     def test_extend_2_args_2_rv(self):
         def x(arg0, arg1):
@@ -104,7 +98,6 @@ class TestExtend(object):
 
         assert y(-1, -1) == (1, 2)
 
-
     def test_extend_can_modify_rv(self):
         def x():
             return []
@@ -116,12 +109,10 @@ class TestExtend(object):
         assert x() == []
         assert y() == [1, 2, 3]
 
-
     def test_extend_can_modify_rv_objects(self):
         class ModifiableObj(object):
             def __init__(self):
                 self.value = 0
-
 
         def x():
             return ModifiableObj()
@@ -133,12 +124,14 @@ class TestExtend(object):
         assert x().value == 0
         assert y().value == 1
 
-
     def test_extend_incorrect_num_args(self):
         def x():
             return 1, 2
 
-        with pytest.raises(PolygraphyException, match=r"Function: y accepts 1 parameter\(s\), but needs to accept 2 parameter\(s\)"):
+        with pytest.raises(
+            PolygraphyException, match=r"Function: y accepts 1 parameter\(s\), but needs to accept 2 parameter\(s\)"
+        ):
+
             @func.extend(x)
             def y(elem0):
                 assert elem0 == 1
@@ -159,7 +152,6 @@ class TestConstantMethod(object):
         d = Dummy()
         with pytest.raises(PolygraphyInternalException, match="was mutated in a constant method"):
             d.modify_x()
-
 
     def test_cannot_add_attrs(self):
         class Dummy(object):

@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 from __future__ import print_function
 
 import numpy as np
@@ -28,6 +27,7 @@ from data_processing import PreprocessYOLO, PostprocessYOLO, ALL_CATEGORIES
 import sys, os
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
 import common
+from downloader import getFilePath
 
 TRT_LOGGER = trt.Logger()
 
@@ -63,7 +63,7 @@ def get_engine(onnx_file_path, engine_file_path=""):
     """Attempts to load a serialized engine if available, otherwise builds a new TensorRT engine and saves it."""
     def build_engine():
         """Takes an ONNX file and creates a TensorRT engine to run inference with"""
-        with trt.Builder(TRT_LOGGER) as builder, builder.create_network(common.EXPLICIT_BATCH) as network, builder.create_builder_config() as config, trt.OnnxParser(network, TRT_LOGGER) as parser:
+        with trt.Builder(TRT_LOGGER) as builder, builder.create_network(common.EXPLICIT_BATCH) as network, builder.create_builder_config() as config, trt.OnnxParser(network, TRT_LOGGER) as parser, trt.Runtime(TRT_LOGGER) as runtime:
             config.max_workspace_size = 1 << 28 # 256MiB
             builder.max_batch_size = 1
             # Parse model file
@@ -82,10 +82,11 @@ def get_engine(onnx_file_path, engine_file_path=""):
             network.get_input(0).shape = [1, 3, 608, 608]
             print('Completed parsing of ONNX file')
             print('Building an engine from file {}; this may take a while...'.format(onnx_file_path))
-            engine = builder.build_engine(network, config)
+            plan = builder.build_serialized_network(network, config)
+            engine = runtime.deserialize_cuda_engine(plan)
             print("Completed creating Engine")
             with open(engine_file_path, "wb") as f:
-                f.write(engine.serialize())
+                f.write(plan)
             return engine
 
     if os.path.exists(engine_file_path):
@@ -103,9 +104,7 @@ def main():
     onnx_file_path = 'yolov3.onnx'
     engine_file_path = "yolov3.trt"
     # Download a dog image and save it to the following file path:
-    input_image_path = common.download_file('dog.jpg',
-        'https://github.com/pjreddie/darknet/raw/f86901f6177dfc6116360a13cc06ab680e0c86b0/data/dog.jpg', checksum_reference=None)
-
+    input_image_path = getFilePath('samples/python/yolov3_onnx/dog.jpg')
     # Two-dimensional tuple with the target network's (spatial) input resolution in HW ordered
     input_resolution_yolov3_HW = (608, 608)
     # Create a pre-processor object by specifying the required input resolution for YOLOv3

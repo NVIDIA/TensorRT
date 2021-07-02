@@ -23,9 +23,7 @@ run inference.
 """
 import numpy as np
 
-from polygraphy.backend.trt import (TrtRunner, create_config,
-                                    engine_from_network,
-                                    network_from_onnx_path)
+from polygraphy.backend.trt import TrtRunner, create_config, engine_from_network, network_from_onnx_path
 
 
 def main():
@@ -59,7 +57,9 @@ def main():
         # Thus, if you want to store results from multiple inferences, you should use `copy.deepcopy()`.
         outputs = runner.infer(feed_dict={"x": inp_data})
 
-        assert np.all(outputs["output"] == inp_data) # It's an identity model!
+        assert np.array_equal(outputs["output"], inp_data)  # It's an identity model!
+
+        print("Inference succeeded!")
 
 
 if __name__ == "__main__":

@@ -48,32 +48,37 @@ Software version configuration tested for the instructions that follow:
 
 	```bash
 	mkdir -p output
-    python3 exports/export_tacotron2_onnx.py --tacotron2 checkpoints/tacotron2_pyt_ckpt_amp_v19.09.0/nvidia_tacotron2pyt_fp16_20190427 -o output/ --fp16
+	python tensorrt/convert_tacotron22onnx.py --tacotron2 ./checkpoints/nvidia_tacotron2pyt_fp16_20190427 -o output/ --fp16
 	```
 
-    Export WaveGlow to ONNX IR:
+    Convert WaveGlow to ONNX IR:
 
 	```bash
-    python3 exports/export_waveglow_onnx.py --waveglow checkpoints/waveglow_ckpt_amp_256_v19.10.0/nvidia_waveglow256pyt_fp16 --wn-channels 256 -o output/ --fp16
-	```
+	python tensorrt/convert_waveglow2onnx.py --waveglow ./checkpoints/nvidia_waveglow256pyt_fp16 --config-file config.json --wn-channels 256 -o output/ --fp16
+    ```
 
 	After running the above commands, there should be four new ONNX files in `./output/` directory:
-    `encoder.onnx`, `decoder_iter.onnx`, `postnet.onnx`, and `waveglow.onnx`.
+    `encoder.onnx`, `decoder_iter.onnx`, `postnet.onnx`, and `waveglow.onnx`. If TensorRT 8.0+ is being used and the `--no-loop` option is not specified, `decoder.onnx` will also be created.
 
 6. Export the ONNX IRs to TensorRT engines with fp16 mode enabled:
 
-	```bash
-	python3 trt/export_onnx2trt.py --encoder output/encoder.onnx --decoder output/decoder_iter.onnx --postnet output/postnet.onnx --waveglow output/waveglow.onnx -o output/ --fp16
+		```bash
+	python tensorrt/convert_onnx2trt.py --encoder output/encoder.onnx --decoder output/decoder_iter.onnx --postnet output/postnet.onnx --waveglow output/waveglow.onnx -o output/ --fp16
 	```
 
 	After running the command, there should be four new engine files in `./output/` directory:
     `encoder_fp16.engine`, `decoder_iter_fp16.engine`, `postnet_fp16.engine`, and `waveglow_fp16.engine`.
 
+    For TensorRT 8.0+, use `output/decoder.onnx` for the decoder, which will output `decoder_with_outer_loop_fp16.engine`.
+
 7. Run TTS inference pipeline with fp16:
 
+	
 	```bash
-	python3 trt/inference_trt.py -i phrases/phrase.txt --encoder output/encoder_fp16.engine --decoder output/decoder_iter_fp16.engine --postnet output/postnet_fp16.engine --waveglow output/waveglow_fp16.engine -o output/ --fp16
+	python tensorrt/inference_trt.py -i phrases/phrase.txt --encoder output/encoder_fp16.engine --decoder output/decoder_iter_fp16.engine --postnet output/postnet_fp16.engine --waveglow output/waveglow_fp16.engine -o output/ --fp16
 	```
+
+    For TensorRT 8.0+, use `decoder_with_outer_loop_fp16.engine` for the decoder. 
 
 ## Performance
 

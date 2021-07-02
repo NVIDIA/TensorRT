@@ -20,39 +20,89 @@ from collections import namedtuple
 import pytest
 import tensorrt as trt
 from polygraphy import mod
-from polygraphy.backend.trt import (Algorithm, TacticRecorder,
-                                    TacticReplayData, TacticReplayer)
+from polygraphy.backend.trt import Algorithm, TacticRecorder, TacticReplayData, TacticReplayer
 from polygraphy.exception import PolygraphyException
 
 ALGO_EQ_CASES = [
-    (Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     True), # Same
-    (Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     Algorithm(7, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     False), # Different implementation
-    (Algorithm(6, 2, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     False), # Different tactic
-    (Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     Algorithm(6, 1, inputs=[(trt.TensorFormat.CHW32, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     False), # Different input format
-    (Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.int8)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     False), # Different input data type
-    (Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.CHW32, trt.float32)]),
-     False), # Different output format
-    (Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.int8)]),
-     False), # Different output data type
-    (Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)] * 2, outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     False), # Different number of inputs
-    (Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)] * 2),
-     Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-     False), # Different number of outputs
+    (
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        True,
+    ),  # Same
+    (
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        Algorithm(
+            7, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        False,
+    ),  # Different implementation
+    (
+        Algorithm(
+            6, 2, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        False,
+    ),  # Different tactic
+    (
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.CHW32, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        False,
+    ),  # Different input format
+    (
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.int8)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
+        False,
+    ),  # Different input data type
+    (
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.CHW32, trt.float32)]
+        ),
+        False,
+    ),  # Different output format
+    (
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.int8)]),
+        False,
+    ),  # Different output data type
+    (
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)] * 2, outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        False,
+    ),  # Different number of inputs
+    (
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)] * 2
+        ),
+        Algorithm(
+            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
+        ),
+        False,
+    ),  # Different number of outputs
 ]
+
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestAlgorithm(object):
@@ -128,14 +178,13 @@ class TestReplayer(object):
         selected = replayer.select_algorithms(context, [fake_algo(implementation=2), algo, fake_algo(tactic=1)])
         assert selected == [1]
 
-
     def test_new_layer_falls_back(self, replay):
         _, _, _, replay_data, _ = replay
         replayer = TacticReplayer(replay_data)
-        selected = replayer.select_algorithms(fake_context(name="new_layer"),
-                                              [fake_algo(2, 1), fake_algo(3, 4), fake_algo(5, 6)])
+        selected = replayer.select_algorithms(
+            fake_context(name="new_layer"), [fake_algo(2, 1), fake_algo(3, 4), fake_algo(5, 6)]
+        )
         assert selected == [0, 1, 2]
-
 
     def test_missing_algo_fails(self, replay):
         context, _, _, replay_data, _ = replay
@@ -143,21 +192,22 @@ class TestReplayer(object):
         with pytest.raises(PolygraphyException, match="was not provided by TensorRT as a choice"):
             assert replayer.select_algorithms(context, [fake_algo(2, 1)]) == [0]
 
-
-    @pytest.mark.parametrize("algo", [
-        fake_algo(2),
-        fake_algo(tactic=2),
-        fake_algo(io=[(trt.TensorFormat.CHW32, trt.float32), (trt.TensorFormat.LINEAR, trt.float32)]),
-        fake_algo(io=[(trt.TensorFormat.LINEAR, trt.int8), (trt.TensorFormat.LINEAR, trt.float32)]),
-        fake_algo(io=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.CHW32, trt.float32)]),
-        fake_algo(io=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.LINEAR, trt.int32)]),
-    ])
+    @pytest.mark.parametrize(
+        "algo",
+        [
+            fake_algo(2),
+            fake_algo(tactic=2),
+            fake_algo(io=[(trt.TensorFormat.CHW32, trt.float32), (trt.TensorFormat.LINEAR, trt.float32)]),
+            fake_algo(io=[(trt.TensorFormat.LINEAR, trt.int8), (trt.TensorFormat.LINEAR, trt.float32)]),
+            fake_algo(io=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.CHW32, trt.float32)]),
+            fake_algo(io=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.LINEAR, trt.int32)]),
+        ],
+    )
     def test_different_algo_fails(self, replay, algo):
         context, _, _, replay_data, _ = replay
         replayer = TacticReplayer(replay_data)
         with pytest.raises(PolygraphyException, match="was not provided by TensorRT as a choice"):
             assert replayer.select_algorithms(context, [algo]) == [0]
-
 
     def test_fails_if_wrong_selected(self, replay):
         context, _, _, replay_data, _ = replay

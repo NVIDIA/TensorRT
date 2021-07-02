@@ -45,7 +45,7 @@ defaultMetrics = ",".join(allMetrics)
 descriptions = ['start input', 'end input', 'start compute', 'end compute', 'start output',
                 'end output', 'input', 'compute', 'output', 'latency', 'end to end latency']
 
-metricsDescription = pu.combineDescriptions('Possible metrics (all in ms) are:',
+metricsDescription = pu.combine_descriptions('Possible metrics (all in ms) are:',
                                              allMetrics, descriptions)
 
 
@@ -112,7 +112,7 @@ def main():
     args = parser.parse_args()
 
     metrics = args.metrics.split(',')
-    count = args.gp and (not hasTimestamp(metricts) or len(metrics) == 1)
+    count = args.gp and (not hasTimestamp(metrics) or len(metrics) == 1)
 
     if not args.no_header:
         pu.printHeader(allMetrics, metrics, args.gp, count)

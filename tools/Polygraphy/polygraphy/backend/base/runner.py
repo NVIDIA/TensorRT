@@ -22,11 +22,13 @@ from polygraphy.logger import G_LOGGER, LogMode
 
 np = mod.lazy_import("numpy")
 
+
 @mod.export()
 class BaseRunner(object):
     """
     Base class for Polygraphy runners. All runners should override the functions and attributes specified here.
     """
+
     RUNNER_COUNTS = defaultdict(int)
 
     def __init__(self, name=None, prefix=None):
@@ -50,9 +52,6 @@ class BaseRunner(object):
         self.is_active = False
         """bool: Whether this runner has been activated, either via context manager, or by calling ``activate()``."""
 
-        self._cached_input_metadata = None
-
-
     @func.constantmethod
     def last_inference_time(self):
         """
@@ -62,12 +61,14 @@ class BaseRunner(object):
             float: The time in seconds, or None if runtime was not measured by the runner.
         """
         if self.inference_time is None:
-            G_LOGGER.warning("{:35} | inference_time was not set. Inference time will be incorrect!"
-                             "To correctly compare runtimes, please set the inference_time property in the"
-                             "infer() function".format(self.name), mode=LogMode.ONCE)
+            G_LOGGER.warning(
+                "{:35} | inference_time was not set. Inference time will be incorrect!"
+                "To correctly compare runtimes, please set the inference_time property in the"
+                "infer() function".format(self.name),
+                mode=LogMode.ONCE,
+            )
             return None
         return self.inference_time
-
 
     def __enter__(self):
         """
@@ -75,7 +76,6 @@ class BaseRunner(object):
         """
         self.activate()
         return self
-
 
     def __exit__(self, exc_type, exc_value, traceback):
         """
@@ -86,14 +86,12 @@ class BaseRunner(object):
         """
         self.deactivate()
 
-
     def activate_impl(self):
         """
         Implementation for runner activation. Derived classes should override this function
         rather than ``activate()``.
         """
         pass
-
 
     def activate(self):
         """
@@ -107,8 +105,10 @@ class BaseRunner(object):
                 runner.infer(...)
         """
         if self.is_active:
-            G_LOGGER.warning("{:35} | Already active; will not activate again. If you really want to "
-                             "activate this runner again, call activate_impl() directly".format(self.name))
+            G_LOGGER.warning(
+                "{:35} | Already active; will not activate again. If you really want to "
+                "activate this runner again, call activate_impl() directly".format(self.name)
+            )
             return
 
         if config.INTERNAL_CORRECTNESS_CHECKS:
@@ -117,14 +117,12 @@ class BaseRunner(object):
         self.activate_impl()
         self.is_active = True
 
-
     def infer_impl(self, feed_dict):
         """
         Implementation for runner inference. Derived classes should override this function
         rather than ``infer()``
         """
         raise NotImplementedError("BaseRunner is an abstract class")
-
 
     def infer(self, feed_dict, check_inputs=True):
         """
@@ -152,20 +150,25 @@ class BaseRunner(object):
             input_metadata = self.get_input_metadata()
             G_LOGGER.verbose("Runner input metadata is: {:}".format(input_metadata))
 
-            util.check_dict_contains(feed_dict, input_metadata.keys(), dict_name="feed_dict", log_func=G_LOGGER.critical)
+            util.check_dict_contains(
+                feed_dict, input_metadata.keys(), dict_name="feed_dict", log_func=G_LOGGER.critical
+            )
 
             for name, inp in feed_dict.items():
                 meta = input_metadata[name]
                 if not np.issubdtype(inp.dtype, meta.dtype):
-                    G_LOGGER.critical("Input tensor: {:} | Received unexpected dtype: {:}.\n"
-                                      "Note: Expected type: {:}".format(name, inp.dtype, meta.dtype))
+                    G_LOGGER.critical(
+                        "Input tensor: {:} | Received unexpected dtype: {:}.\n"
+                        "Note: Expected type: {:}".format(name, inp.dtype, meta.dtype)
+                    )
 
                 if not util.is_valid_shape_override(inp.shape, meta.shape):
-                    G_LOGGER.critical("Input tensor: {:} | Received incompatible shape: {:}.\n"
-                                      "Note: Expected a shape compatible with: {:}".format(name, inp.shape, meta.shape))
+                    G_LOGGER.critical(
+                        "Input tensor: {:} | Received incompatible shape: {:}.\n"
+                        "Note: Expected a shape compatible with: {:}".format(name, inp.shape, meta.shape)
+                    )
 
         return self.infer_impl(feed_dict)
-
 
     @func.constantmethod
     def get_input_metadata_impl(self):
@@ -174,7 +177,6 @@ class BaseRunner(object):
         rather than `get_input_metadata`.
         """
         raise NotImplementedError("BaseRunner is an abstract class")
-
 
     def get_input_metadata(self):
         """
@@ -185,10 +187,7 @@ class BaseRunner(object):
         Returns:
             TensorMetadata: Input names, shapes, and data types.
         """
-        if self._cached_input_metadata is None:
-            self._cached_input_metadata = self.get_input_metadata_impl()
-        return self._cached_input_metadata
-
+        return self.get_input_metadata_impl()
 
     def deactivate_impl(self):
         """
@@ -196,7 +195,6 @@ class BaseRunner(object):
         rather than ``deactivate()``.
         """
         pass
-
 
     def deactivate(self):
         """
@@ -213,28 +211,29 @@ class BaseRunner(object):
                 runner.infer(...)
         """
         if not self.is_active:
-            G_LOGGER.warning("{:35} | Not active; will not deactivate. If you really want to "
-                             "deactivate this runner, call deactivate_impl() directly".format(self.name))
+            G_LOGGER.warning(
+                "{:35} | Not active; will not deactivate. If you really want to "
+                "deactivate this runner, call deactivate_impl() directly".format(self.name)
+            )
             return
 
         self.inference_time = None
-        self._cached_input_metadata = None
         self.is_active = None
 
         try:
             self.deactivate_impl()
         except:
-            raise # Needed so we can have the else clause
+            raise  # Needed so we can have the else clause
         else:
             self.is_active = False
             if config.INTERNAL_CORRECTNESS_CHECKS:
                 old_state = self._pre_activate_runner_state
                 del self._pre_activate_runner_state
                 if old_state != vars(self):
-                    G_LOGGER.internal_error("Runner state was not reset after deactivation. "
-                                            "Note:\nOld state: {:}\nNew state: {:}".format(old_state, vars(self)))
-
-
+                    G_LOGGER.internal_error(
+                        "Runner state was not reset after deactivation. "
+                        "Note:\nOld state: {:}\nNew state: {:}".format(old_state, vars(self))
+                    )
 
     def __del__(self):
         if self.is_active:

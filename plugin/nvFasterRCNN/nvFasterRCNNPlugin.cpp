@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "nvFasterRCNNPlugin.h"
 #include <cstdio>
 #include <cstring>
@@ -114,38 +113,39 @@ RPROIPlugin::~RPROIPlugin()
     }
 }
 
-int RPROIPlugin::initialize()
+int RPROIPlugin::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
-int RPROIPlugin::getNbOutputs() const
+int RPROIPlugin::getNbOutputs() const noexcept
 {
     return 2;
 }
 
-Dims RPROIPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims RPROIPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
     ASSERT(index >= 0 && index < 2);
     ASSERT(nbInputDims == 4);
     ASSERT(inputs[0].nbDims == 3 && inputs[1].nbDims == 3 && inputs[2].nbDims == 3 && inputs[3].nbDims == 3);
     if (index == 0) // rois
     {
-        return DimsCHW(1, params.nmsMaxOut, 4);
+        return Dims3(1, params.nmsMaxOut, 4);
     }
     // Feature map of each ROI after ROI Pooling
     else // pool5
     {
-        return DimsNCHW(params.nmsMaxOut, inputs[2].d[0], params.poolingH, params.poolingW);
+        return Dims4(params.nmsMaxOut, inputs[2].d[0], params.poolingH, params.poolingW);
     }
 }
 
-size_t RPROIPlugin::getWorkspaceSize(int maxBatchSize) const
+size_t RPROIPlugin::getWorkspaceSize(int maxBatchSize) const noexcept
 {
     return RPROIInferenceFusedWorkspaceSize(maxBatchSize, A, H, W, params.nmsMaxOut);
 }
 
-int RPROIPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+int RPROIPlugin::enqueue(
+    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     // Bounding box (region proposal) objectness scores.
     const void* const scores = inputs[0];
@@ -165,12 +165,11 @@ int RPROIPlugin::enqueue(int batchSize, const void* const* inputs, void** output
         params.featureStride, params.preNmsTop, params.nmsMaxOut, params.iouThreshold, params.minBoxSize,
         params.spatialScale, (const float*) iinfo, this->anchorsDev, nvinfer1::DataType::kFLOAT, NCHW, scores,
         nvinfer1::DataType::kFLOAT, NCHW, deltas, nvinfer1::DataType::kFLOAT, NCHW, fmap, workspace,
-        nvinfer1::DataType::kFLOAT, rois, nvinfer1::DataType::kFLOAT, NCHW, pfmap);
-    ASSERT(status == STATUS_SUCCESS);
-    return 0;
+        nvinfer1::DataType::kFLOAT, rois, nvinfer1::DataType::kFLOAT, NCHW, pfmap);    
+    return status;
 }
 
-size_t RPROIPlugin::getSerializationSize() const
+size_t RPROIPlugin::getSerializationSize() const noexcept
 {
     size_t paramSize = sizeof(RPROIParams);
     size_t intSize = sizeof(int) * 4;
@@ -179,7 +178,7 @@ size_t RPROIPlugin::getSerializationSize() const
     return paramSize + intSize + ratiosSize + scalesSize;
 }
 
-void RPROIPlugin::serialize(void* buffer) const
+void RPROIPlugin::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     *reinterpret_cast<RPROIParams*>(d) = params;
@@ -197,7 +196,7 @@ void RPROIPlugin::serialize(void* buffer) const
     ASSERT(d == a + getSerializationSize());
 }
 
-float* RPROIPlugin::copyToHost(const void* srcHostData, int count)
+float* RPROIPlugin::copyToHost(const void* srcHostData, int count) noexcept
 {
     float* dstHostPtr = nullptr;
     CHECK(cudaMallocHost(&dstHostPtr, count * sizeof(float)));
@@ -205,35 +204,35 @@ float* RPROIPlugin::copyToHost(const void* srcHostData, int count)
     return dstHostPtr;
 }
 
-int RPROIPlugin::copyFromHost(char* dstHostBuffer, const void* source, int count) const
+int RPROIPlugin::copyFromHost(char* dstHostBuffer, const void* source, int count) const noexcept
 {
     cudaMemcpy(dstHostBuffer, source, count * sizeof(float), cudaMemcpyHostToHost);
     return count * sizeof(float);
 }
 
-bool RPROIPlugin::supportsFormat(DataType type, PluginFormat format) const
+bool RPROIPlugin::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-const char* RPROIPlugin::getPluginType() const
+const char* RPROIPlugin::getPluginType() const noexcept
 {
     return RPROI_PLUGIN_NAME;
 }
 
-const char* RPROIPlugin::getPluginVersion() const
+const char* RPROIPlugin::getPluginVersion() const noexcept
 {
     return RPROI_PLUGIN_VERSION;
 }
 
-void RPROIPlugin::terminate() {}
+void RPROIPlugin::terminate() noexcept {}
 
-void RPROIPlugin::destroy()
+void RPROIPlugin::destroy() noexcept
 {
     delete this;
 }
 
-IPluginV2Ext* RPROIPlugin::clone() const
+IPluginV2Ext* RPROIPlugin::clone() const noexcept
 {
     IPluginV2Ext* plugin = new RPROIPlugin(params, anchorsRatiosHost, anchorsScalesHost, A, C, H, W, anchorsDev);
     plugin->setPluginNamespace(mPluginNamespace.c_str());
@@ -241,31 +240,31 @@ IPluginV2Ext* RPROIPlugin::clone() const
 }
 
 // Set plugin namespace
-void RPROIPlugin::setPluginNamespace(const char* pluginNamespace)
+void RPROIPlugin::setPluginNamespace(const char* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* RPROIPlugin::getPluginNamespace() const
+const char* RPROIPlugin::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index.
-DataType RPROIPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+DataType RPROIPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // Two outputs
     ASSERT(index == 0 || index == 1);
     return DataType::kFLOAT;
 }
 // Return true if output tensor is broadcast across a batch.
-bool RPROIPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool RPROIPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool RPROIPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
+bool RPROIPlugin::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 {
     return false;
 }
@@ -280,9 +279,9 @@ bool RPROIPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
 // maxbatchSize: maximum batch size for the plugin layer
 void RPROIPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
+    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kNCHW);
+    ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
 
     A = params.anchorsRatioCount * params.anchorsScaleCount;
     C = inputDims[2].d[0];
@@ -301,12 +300,12 @@ void RPROIPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dim
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void RPROIPlugin::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator)
+void RPROIPlugin::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
 {
 }
 
 // Detach the plugin object from its execution context.
-void RPROIPlugin::detachFromContext() {}
+void RPROIPlugin::detachFromContext() noexcept {}
 
 RPROIPluginCreator::RPROIPluginCreator()
 {
@@ -336,22 +335,22 @@ RPROIPluginCreator::~RPROIPluginCreator()
     // Free allocated memory (if any) here
 }
 
-const char* RPROIPluginCreator::getPluginName() const
+const char* RPROIPluginCreator::getPluginName() const noexcept
 {
     return RPROI_PLUGIN_NAME;
 }
 
-const char* RPROIPluginCreator::getPluginVersion() const
+const char* RPROIPluginCreator::getPluginVersion() const noexcept
 {
     return RPROI_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* RPROIPluginCreator::getFieldNames()
+const PluginFieldCollection* RPROIPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* RPROIPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* RPROIPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     int nbFields = fc->nbFields;
@@ -440,7 +439,7 @@ IPluginV2Ext* RPROIPluginCreator::createPlugin(const char* name, const PluginFie
     return plugin;
 }
 
-IPluginV2Ext* RPROIPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2Ext* RPROIPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call RPROIPlugin::terminate()

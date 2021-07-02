@@ -91,6 +91,8 @@ size_t normalizePluginWorkspaceSize(bool acrossSpatial, int C, int H, int W);
 pluginStatus_t normalizeInference(cudaStream_t stream, cublasHandle_t handle, bool acrossSpatial, bool channelShared,
     int N, int C, int H, int W, float eps, const void* scale, const void* inputData, void* outputData, void* workspace);
 
+pluginStatus_t scatterNDInference(cudaStream_t stream, int* outputDims, int nOutputDims, int sliceRank, int nRows, int rowSize, int CopySize, int sizeOfElementInBytes, const void* index, const void* updates, const void* data, void* output, void* workspace);
+
 pluginStatus_t priorBoxInference(cudaStream_t stream, PriorBoxParameters param, int H, int W, int numPriors,
     int numAspectRatios, const void* minSize, const void* maxSize, const void* aspectRatios, void* outputData);
 

@@ -74,67 +74,67 @@ protected:
     }
 
 public:
-    virtual void setModelDtype(const nvinfer1::DataType modelDtype)
+    virtual void setModelDtype(const nvinfer1::DataType modelDtype) noexcept
     {
         mModelDtype = modelDtype;
     }
 
-    virtual nvinfer1::DataType getModelDtype() const
+    virtual nvinfer1::DataType getModelDtype() const noexcept
     {
         return mModelDtype;
     }
 
-    virtual const char* getModelFileName() const
+    virtual const char* getModelFileName() const noexcept
     {
         return mModelFilename.c_str();
     }
-    virtual void setModelFileName(const char* onnxFilename)
+    virtual void setModelFileName(const char* onnxFilename) noexcept
     {
         mModelFilename = string(onnxFilename);
     }
-    virtual nvonnxparser::IOnnxConfig::Verbosity getVerbosityLevel() const
+    virtual nvonnxparser::IOnnxConfig::Verbosity getVerbosityLevel() const noexcept
     {
         return mVerbosity;
     }
-    virtual void addVerbosity()
+    virtual void addVerbosity() noexcept
     {
         ++mVerbosity;
     }
-    virtual void reduceVerbosity()
+    virtual void reduceVerbosity() noexcept
     {
         --mVerbosity;
     }
-    virtual void setVerbosityLevel(nvonnxparser::IOnnxConfig::Verbosity verbosity)
+    virtual void setVerbosityLevel(nvonnxparser::IOnnxConfig::Verbosity verbosity) noexcept
     {
         mVerbosity = verbosity;
     }
 
-    virtual const char* getTextFileName() const
+    virtual const char* getTextFileName() const noexcept
     {
         return mTextFilename.c_str();
     }
-    virtual void setTextFileName(const char* textFilename)
+    virtual void setTextFileName(const char* textFilename) noexcept
     {
         mTextFilename = string(textFilename);
     }
-    virtual const char* getFullTextFileName() const
+    virtual const char* getFullTextFileName() const noexcept
     {
         return mFullTextFilename.c_str();
     }
-    virtual void setFullTextFileName(const char* fullTextFilename)
+    virtual void setFullTextFileName(const char* fullTextFilename) noexcept
     {
         mFullTextFilename = string(fullTextFilename);
     }
-    virtual bool getPrintLayerInfo() const
+    virtual bool getPrintLayerInfo() const noexcept
     {
         return mPrintLayercInfo;
     }
-    virtual void setPrintLayerInfo(bool src)
+    virtual void setPrintLayerInfo(bool src) noexcept
     {
         mPrintLayercInfo = src;
     } //!< get the boolean variable corresponding to the Layer Info, see getPrintLayerInfo()
 
-    virtual bool isDebug() const
+    virtual bool isDebug() const noexcept
     {
 #if ONNX_DEBUG
         return (std::getenv("ONNX_DEBUG") ? true : false);
@@ -143,7 +143,7 @@ public:
 #endif
     }
 
-    virtual void destroy()
+    virtual void destroy() noexcept
     {
         delete this;
     }

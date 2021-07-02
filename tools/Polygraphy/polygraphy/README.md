@@ -22,8 +22,8 @@ may be made in future versions.
 The Polygraphy API consists broadly of two major components:
 [`Backend`s](#backends) and the [`Comparator`](#comparator).
 
-**NOTE:** To help you get started with the API, you can use the [`run`](./tools/run/) tool to
-with the `--gen-script` auto-generate template scripts that use the Polygraphy API.
+**NOTE:** To help you get started with the API, you can use the [`run`](./tools/run/) tool
+with the `--gen-script` option to auto-generate template scripts that use the Polygraphy API.
 
 Also see the [Polygraphy API documentation](https://docs.nvidia.com/deeplearning/tensorrt/polygraphy/docs/index.html).
 

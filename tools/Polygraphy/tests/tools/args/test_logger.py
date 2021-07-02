@@ -14,11 +14,13 @@
 # limitations under the License.
 #
 
+import os
+import tempfile
+
+import pytest
 from polygraphy.logger.logger import G_LOGGER
 from polygraphy.tools.args import LoggerArgs
 from tests.tools.args.helper import ArgGroupTestHelper
-import pytest
-
 
 VERBOSITY_CASES = {
     "--silent": G_LOGGER.CRITICAL,
@@ -33,6 +35,7 @@ VERBOSITY_CASES = {
     "-vvvv": G_LOGGER.ULTRA_VERBOSE,
 }
 
+
 class TestLoggerArgs(object):
     @pytest.mark.parametrize("case", VERBOSITY_CASES.items())
     def test_get_logger_verbosities(self, case):
@@ -44,10 +47,11 @@ class TestLoggerArgs(object):
 
         assert logger.severity == sev
 
-
     def test_logger_log_file(self):
         arg_group = ArgGroupTestHelper(LoggerArgs())
 
-        arg_group.parse_args(["--log-file=fake_log_file.log"])
-        logger = arg_group.get_logger()
-        assert logger.log_file == "fake_log_file.log"
+        with tempfile.TemporaryDirectory() as dirname:
+            log_path = os.path.join(dirname, "fake_log_file.log")
+            arg_group.parse_args(["--log-file", log_path])
+            logger = arg_group.get_logger()
+            assert logger.log_file == log_path

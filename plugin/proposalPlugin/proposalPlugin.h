@@ -61,7 +61,7 @@ public:
 
     size_t getWorkspaceSize(int) const noexcept override;
 
-    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace,
+    int enqueue(int batchSize, const void* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;

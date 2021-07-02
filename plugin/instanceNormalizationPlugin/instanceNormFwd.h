@@ -17,7 +17,7 @@
 #ifndef INSTANCE_NORM_FWD_H
 #define INSTANCE_NORM_FWD_H
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
@@ -44,32 +44,29 @@ namespace instance_norm_impl
         }                                                                                                              \
     } while (0)
 
-// typedef __half GMEM_SUMS_TYPE;
 typedef float GMEM_SUMS_TYPE;
 
-#define DISABLE_MEAN_VAR_OUTPUT 0
+#define ACCUM_MEAN_VAR_IN_FLOAT 1
 
-
-template <typename StorageType, int SM>
-constexpr int get_pixels_per_thread_in_registers()
+template <typename StorageType, int32_t SM>
+constexpr int32_t getPixelsPerThreadInRegisters()
 {
     return (sizeof(StorageType) == 4 || sizeof(StorageType) == 2)
         ? 6 - sizeof(StorageType)
         : (SM < 800 ? (SM == 750 ? 16 : 8) : (SM == 860 ? 16 : 24));
 }
 
-
-template <typename StorageType, int SM>
-constexpr int get_pixels_per_thread_in_smem()
+template <typename StorageType, int32_t SM>
+constexpr int32_t getPixelsPerThreadInSmem()
 {
     return (sizeof(StorageType) == 4 || sizeof(StorageType) == 2)
         ? (sizeof(StorageType) == 4 ? 4 : 8)
         : (SM < 800 ? (SM == 750 ? 7 : 8) : (SM == 860 ? 16 : 24));
 }
 
-
 template <typename Input_Data_Type_ = uint16_t, typename Output_Data_Type_ = uint16_t, typename StorageType_ = float,
-    int THREADS_PER_CTA_ = 512, int THREADS_PER_PIXEL_ = 16, int C_ELEMENTS_PER_CTA_ = 64, int SM_ = 700>
+    int32_t THREADS_PER_CTA_ = 512, int32_t THREADS_PER_PIXEL_ = 16, int32_t C_ELEMENTS_PER_CTA_ = 64,
+    int32_t SM_ = 700>
 struct Instance_norm_kernel_params
 {
     enum
@@ -95,11 +92,11 @@ struct Instance_norm_kernel_params
     typedef StorageType_ StorageType;
     enum
     {
-        PIXELS_PER_THREAD_IN_REGISTERS = get_pixels_per_thread_in_registers<StorageType, SM>()
+        PIXELS_PER_THREAD_IN_REGISTERS = getPixelsPerThreadInRegisters<StorageType, SM>()
     };
     enum
     {
-        PIXELS_PER_THREAD_IN_SMEM = get_pixels_per_thread_in_smem<StorageType, SM>()
+        PIXELS_PER_THREAD_IN_SMEM = getPixelsPerThreadInSmem<StorageType, SM>()
     };
 
     enum
@@ -122,16 +119,15 @@ struct Instance_norm_kernel_params
     };
 };
 
-
 struct InstanceNormFwdContext
 {
     InstanceNormFwdContext()
         : sm_count(0)
         , sm_shared_size(0)
         , sm_version(0){};
-    int sm_count;
-    int sm_shared_size;
-    int sm_version;
+    int32_t sm_count;
+    int32_t sm_shared_size;
+    int32_t sm_version;
 };
 
 struct InstanceNormFwdParams
@@ -149,37 +145,37 @@ struct InstanceNormFwdParams
     float* gmem_saved_mean;
     float* gmem_saved_var;
     // The dimensions.
-    int nhw;
-    int c;
-    int n;
+    int32_t nhw;
+    int32_t c;
+    int32_t n;
     // The buffer to do the reduction for mean, stddev and count.
     GMEM_SUMS_TYPE* gmem_sums;
     // The buffer to count items in the different CTAs.
-    int* gmem_counts;
+    int32_t* gmem_counts;
     // The counters of retired CTAs.
-    int* gmem_retired_ctas;
+    int32_t* gmem_retired_ctas;
     // The epsilon to apply to the computation of the variance.
     float var_eps;
     // outer loop count
-    int outer_loops;
+    int32_t outer_loops;
     // exponential average factor
     float exp_avg_factor;
     bool use_relu;
     float relu_alpha;
 
-    int c_blks;
+    int32_t c_blks;
 
     float in_scale;
 
     float out_scale;
 };
 
-void instance_norm_buffer_sizes_dispatch(const InstanceNormFwdContext& context, const InstanceNormFwdParams& params,
-    size_t& size_sums, size_t& size_counts, size_t& size_retired_ctas, int input_data_type = 1,
-    int output_data_type = 1);
+void instanceNormBufferSizesDispatch(const InstanceNormFwdContext& context, const InstanceNormFwdParams& params,
+    size_t& size_sums, size_t& size_counts, size_t& size_retired_ctas, int32_t input_data_type = 1,
+    int32_t output_data_type = 1);
 
-int instance_norm_fwd_dispatch(const InstanceNormFwdContext& context, InstanceNormFwdParams& params,
-    cudaStream_t stream, int input_data_type = 1, int output_data_type = 1);
+int32_t instanceNormFwdDispatch(const InstanceNormFwdContext& context, InstanceNormFwdParams& params,
+    cudaStream_t stream, int32_t input_data_type = 1, int32_t output_data_type = 1);
 
 } // namespace instance_norm_impl
 

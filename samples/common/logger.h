@@ -19,6 +19,8 @@
 
 #include "logging.h"
 
+class SampleErrorRecorder;
+extern SampleErrorRecorder gRecorder;
 namespace sample
 {
 extern Logger gLogger;

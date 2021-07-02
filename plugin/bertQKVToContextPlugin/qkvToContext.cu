@@ -333,7 +333,8 @@ int computeMaskedScaledSoftmax(cudaStream_t stream, const int ld, const int B, c
     return 0;
 }
 
-std::pair<int, int> tuneBatchedGemm(const int B, const int S, const int numHeads, const int headSize)
+std::pair<int, int> tuneBatchedGemm(
+    const int B, const int S, const int numHeads, const int headSize, const int smVersion)
 {
     const int nruns = 500;
     cublasHandle_t cublas;
@@ -378,6 +379,8 @@ std::pair<int, int> tuneBatchedGemm(const int B, const int S, const int numHeads
     int best2 = startAlgo;
     float ms1 = 1000000;
     float ms2 = 1000000;
+
+    ASSERT(smVersion >= kSM_53);
     for (int a = startAlgo; a <= endAlgo; a++)
     {
         cublasGemmAlgo_t algo = static_cast<cublasGemmAlgo_t>(a);
@@ -439,12 +442,12 @@ template int computeMaskedScaledSoftmax<float>(cudaStream_t stream, const int ld
 template int computeMaskedScaledSoftmax<half>(cudaStream_t stream, const int ld, const int B, const int N,
     const float rsqrtHeadSize, const int* maskIdx, const half* input, half* output);
 
-size_t MHARunner::getSerializationSize() const
+size_t MHARunner::getSerializationSize() const noexcept
 {
     return sizeof(mS) + sizeof(mB);
 }
 
-void MHARunner::serialize(void* buffer) const
+void MHARunner::serialize(void* buffer) const noexcept
 {
     serialize_value(&buffer, mS);
     serialize_value(&buffer, mB);
@@ -457,11 +460,12 @@ void MHARunner::deserialize(const void* data, size_t length)
     setup(mS, mB);
 }
 
-UnfusedMHARunner::UnfusedMHARunner(const nvinfer1::DataType type, const int numHeads, const int headSize)
+UnfusedMHARunner::UnfusedMHARunner(const nvinfer1::DataType type, const int numHeads, const int headSize, const int sm)
     : MHARunner(type, numHeads, headSize)
     , mIsBestAlgoFound(false)
     , mAlgoBatchedEx1(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
     , mAlgoBatchedEx2(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
+    , mSm(sm)
 {
     CUBLASASSERT(cublasCreate(&mCublas));
 }
@@ -471,12 +475,12 @@ UnfusedMHARunner::~UnfusedMHARunner()
     CUBLASASSERT(cublasDestroy(mCublas));
 }
 
-size_t UnfusedMHARunner::getSerializationSize() const
+size_t UnfusedMHARunner::getSerializationSize() const noexcept
 {
     return sizeof(mAlgoBatchedEx1) + sizeof(mAlgoBatchedEx2) + MHARunner::getSerializationSize();
 }
 
-void UnfusedMHARunner::serialize(void* buffer) const
+void UnfusedMHARunner::serialize(void* buffer) const noexcept
 {
     serialize_value(&buffer, mAlgoBatchedEx1);
     serialize_value(&buffer, mAlgoBatchedEx2);
@@ -496,7 +500,7 @@ void UnfusedMHARunner::setup(const int S, const int B)
     MHARunner::setup(S, B);
     if (mType == DataType::kHALF && !mIsBestAlgoFound)
     {
-        std::tie(mAlgoBatchedEx1, mAlgoBatchedEx2) = tuneBatchedGemm(B, S, mNumHeads, mHeadSize);
+        std::tie(mAlgoBatchedEx1, mAlgoBatchedEx2) = tuneBatchedGemm(B, S, mNumHeads, mHeadSize, mSm);
         mIsBestAlgoFound = true;
 
         gLogVerbose << "QKV Plugin - Selected Algos for batch gemms: " << mAlgoBatchedEx1 << ", " << mAlgoBatchedEx2

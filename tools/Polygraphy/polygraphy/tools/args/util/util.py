@@ -40,12 +40,12 @@ def cast(val):
         return [cast(elem) for elem in val.strip("[]").split(",")]
 
     try:
-        return int(val) # This fails for float strings like '0.0'
+        return int(val)  # This fails for float strings like '0.0'
     except:
         pass
 
     try:
-        return float(val) # This fails for non-numerical strings like 'isildur'
+        return float(val)  # This fails for non-numerical strings like 'isildur'
     except:
         pass
     return val.strip("\"'")
@@ -146,8 +146,10 @@ def np_type_from_str(dt_str):
     try:
         return {np.dtype(dtype).name: np.dtype(dtype) for dtype in np.sctypeDict.values()}[dt_str]
     except KeyError:
-        G_LOGGER.error("Could not understand data type: {:}. Did you forget to specify a data type? "
-                         "Please use one of: {:} or `auto`.".format(dt_str, np_types()))
+        G_LOGGER.error(
+            "Could not understand data type: {:}. Did you forget to specify a data type? "
+            "Please use one of: {:} or `auto`.".format(dt_str, np_types())
+        )
         raise
 
 
@@ -172,7 +174,6 @@ def parse_dict_with_default(arg_lst, cast_to=None, sep=None):
     """
     sep = util.default(sep, ":")
 
-
     if arg_lst is None:
         return
 
@@ -186,7 +187,11 @@ def parse_dict_with_default(arg_lst, cast_to=None, sep=None):
     return arg_map
 
 
-@mod.deprecate(remove_in="0.35.0", use_instead=": as a separator and write shapes in the form [dim0,...,dimN]", name="Using , as a separator")
+@mod.deprecate(
+    remove_in="0.35.0",
+    use_instead=": as a separator and write shapes in the form [dim0,...,dimN]",
+    name="Using , as a separator",
+)
 def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
     """
     Parses a list of tensor metadata arguments of the form "<name>,<shape>,<dtype>"
@@ -210,21 +215,22 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
             nonlocal tensor_meta_arg
             tensor_meta_arg, _, val = tensor_meta_arg.rpartition(SEP)
             if not tensor_meta_arg:
-                G_LOGGER.exit("Could not parse {:} from argument: {:}. Is it separated by a comma "
-                                    "(,) from the tensor name?".format(name, orig_tensor_meta_arg))
+                G_LOGGER.critical(
+                    "Could not parse {:} from argument: {:}. Is it separated by a comma "
+                    "(,) from the tensor name?".format(name, orig_tensor_meta_arg)
+                )
             if val.lower() == "auto":
                 val = None
             return val
-
 
         def parse_dtype(dtype):
             if dtype is not None:
                 dtype = np_type_from_str(dtype)
             return dtype
 
-
         def parse_shape(shape):
             if shape is not None:
+
                 def parse_shape_dim(buf):
                     try:
                         buf = int(buf)
@@ -232,13 +238,12 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
                         pass
                     return buf
 
-
                 parsed_shape = []
                 # Allow for quoted strings in shape dimensions
                 in_quotes = False
                 buf = ""
                 for char in shape.lower():
-                    if char in ["\"", "'"]:
+                    if char in ['"', "'"]:
                         in_quotes = not in_quotes
                     elif not in_quotes and char == SHAPE_SEP:
                         parsed_shape.append(parse_shape_dim(buf))
@@ -250,7 +255,6 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
                     parsed_shape.append(parse_shape_dim(buf))
                 shape = tuple(parsed_shape)
             return shape
-
 
         name = None
         dtype = None

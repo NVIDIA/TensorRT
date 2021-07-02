@@ -19,8 +19,7 @@ from collections import OrderedDict
 
 from polygraphy import mod, util, config
 from polygraphy.common.interface import TypedDict, TypedList
-from polygraphy.json import (Decoder, Encoder, add_json_methods, load_json,
-                             save_json)
+from polygraphy.json import Decoder, Encoder, add_json_methods, load_json, save_json
 from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
@@ -42,12 +41,14 @@ class LazyNumpyArray(object):
         self.tmpfile = None
         if config.ARRAY_SWAP_THRESHOLD_MB >= 0 and arr.nbytes > (config.ARRAY_SWAP_THRESHOLD_MB << 20):
             self.tmpfile = tempfile.NamedTemporaryFile(mode="w+", suffix=".json")
-            G_LOGGER.extra_verbose("Evicting large array ({:.3f} MiB) from memory and saving to {:}".format(
-                                        arr.nbytes / (1024.0 ** 2), self.tmpfile.name))
+            G_LOGGER.extra_verbose(
+                "Evicting large array ({:.3f} MiB) from memory and saving to {:}".format(
+                    arr.nbytes / (1024.0 ** 2), self.tmpfile.name
+                )
+            )
             save_json(arr, self.tmpfile)
         else:
             self.arr = arr
-
 
     def numpy(self):
         """
@@ -88,12 +89,12 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
     Also includes additional fields indicating the name of the runner which produced the
     outputs, and the time required to do so.
     """
+
     @staticmethod
     def _to_lazy(nparray):
         if isinstance(nparray, LazyNumpyArray):
             return nparray
         return LazyNumpyArray(nparray)
-
 
     @staticmethod
     def _to_lazy_dict(nparray_dict):
@@ -105,7 +106,6 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
         for name, out in nparray_dict.items():
             lazy[name] = IterationResult._to_lazy(out)
         return lazy
-
 
     def __init__(self, outputs=None, runtime=None, runner_name=None):
         """
@@ -119,37 +119,33 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
         if outputs and config.ARRAY_SWAP_THRESHOLD_MB < 0:
             total_size_gb = sum(arr.nbytes for arr in outputs.values() if isinstance(arr, np.ndarray)) / (1024.0 ** 3)
             if total_size_gb >= 1:
-                G_LOGGER.warning("It looks like the outputs of this network are very large ({:.3f} GiB).\n"
-                                 "To reduce memory usage, you may want to allow Polygraphy to swap these arrays to the disk using "
-                                 "the POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB environment variable.".format(total_size_gb))
+                G_LOGGER.warning(
+                    "It looks like the outputs of this network are very large ({:.3f} GiB).\n"
+                    "To reduce memory usage, you may want to allow Polygraphy to swap these arrays to the disk using "
+                    "the POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB environment variable.".format(total_size_gb)
+                )
 
         super().__init__(IterationResult._to_lazy_dict(outputs))
         self.runtime = runtime
         self.runner_name = util.default(runner_name, "")
 
-
     # Convenience methods to preserve np.ndarray in the interface.
     def update(self, other):
         return super().update(IterationResult._to_lazy_dict(other))
 
-
     def __setitem__(self, name, arr):
         return super().__setitem__(name, IterationResult._to_lazy(arr))
-
 
     def values(self):
         for arr in super().values():
             yield arr.numpy()
 
-
     def items(self):
         for name, arr in super().items():
             yield name, arr.numpy()
 
-
     def __getitem__(self, name):
         return super().__getitem__(name).numpy()
-
 
     def __eq__(self, other):
         if self.runtime != other.runtime or self.runner_name != other.runner_name:
@@ -188,6 +184,7 @@ class RunResults(TypedList(lambda: tuple)):
     Note: Technically, this is a ``List[Tuple[str, List[IterationResult]]]``, but includes
     helpers that make it behave like an OrderedDict that can contain duplicates.
     """
+
     def items(self):
         """
         Creates a generator that yields ``Tuple[str, List[IterationResult]]`` - runner names
@@ -196,7 +193,6 @@ class RunResults(TypedList(lambda: tuple)):
         for name, iteration_results in self.lst:
             yield name, iteration_results
 
-
     def keys(self):
         """
         Creates a generator that yields runner names (str).
@@ -204,14 +200,12 @@ class RunResults(TypedList(lambda: tuple)):
         for name, _ in self.lst:
             yield name
 
-
     def values(self):
         """
         Creates a generator that yields runner outputs (List[IterationResult]).
         """
         for _, iteration_results in self.lst:
             yield iteration_results
-
 
     def update(self, other):
         """
@@ -225,7 +219,6 @@ class RunResults(TypedList(lambda: tuple)):
             self.lst[name] = iteration_results
         return self
 
-
     def __getitem__(self, key):
         if isinstance(key, int):
             return self.lst[key]
@@ -234,9 +227,11 @@ class RunResults(TypedList(lambda: tuple)):
             if name == key:
                 return iteration_results
 
-        G_LOGGER.critical("{:35} does not exist in this RunResults instance. Note: Available runners: {:}".format(
-                        key, list(self.keys())))
-
+        G_LOGGER.critical(
+            "{:35} does not exist in this RunResults instance. Note: Available runners: {:}".format(
+                key, list(self.keys())
+            )
+        )
 
     def __setitem__(self, key, value):
         if isinstance(key, int):
@@ -250,12 +245,10 @@ class RunResults(TypedList(lambda: tuple)):
         else:
             self.append((key, value))
 
-
     def __contains__(self, val):
         if isinstance(val, str) or isinstance(val, bytes):
             return val in list(self.keys())
         return val in self.lst
-
 
     def __eq__(self, other):
         for (r0, its0), (r1, its1) in zip(self.lst, other.lst):
@@ -304,6 +297,7 @@ class AccuracyResult(TypedDict(lambda: tuple, lambda: list)):
         runner0_output = run_results["runner0"][iteration][output_name]
         runner1_output = run_results["runner1"][iteration][output_name]
     """
+
     def __bool__(self):
         """
         Whether all outputs matched for every iteration.
@@ -318,10 +312,8 @@ class AccuracyResult(TypedDict(lambda: tuple, lambda: list)):
         """
         return all([bool(match) for outs in self.values() for out in outs for match in out.values()])
 
-
     def _get_runner_pair(self, runner_pair):
         return util.default(runner_pair, list(self.keys())[0])
-
 
     def percentage(self, runner_pair=None):
         """
@@ -336,13 +328,12 @@ class AccuracyResult(TypedDict(lambda: tuple, lambda: list)):
                     Defaults to the first pair in the dictionary.
         """
         if not list(self.keys()):
-            return 1.0 # No data in this result.
+            return 1.0  # No data in this result.
 
         matched, _, total = self.stats(runner_pair)
         if not total:
-            return 1.0 # No iterations
+            return 1.0  # No iterations
         return float(matched) / float(total)
-
 
     def stats(self, runner_pair=None):
         """

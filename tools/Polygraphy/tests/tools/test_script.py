@@ -1,4 +1,3 @@
-
 #
 # Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
@@ -17,48 +16,51 @@
 
 import pytest
 from polygraphy.exception import PolygraphyInternalException
-from polygraphy.tools.script import (Script, inline, make_invocable,
-                                     make_invocable_if_nondefault)
+from polygraphy.tools.script import Script, inline, make_invocable, make_invocable_if_nondefault
 
 
 def make_test_string():
     return Script.String("test")
 
+
 class TestScript(object):
-    @pytest.mark.parametrize("func", [
-        lambda _: inline(make_test_string()),
-        lambda s: s.add_loader(make_test_string(), make_test_string()),
-        lambda s: s.add_runner(make_test_string()),
-        lambda s: s.append_preimport(make_test_string()),
-        lambda s: s.append_suffix(make_test_string()),
-        lambda s: s.set_data_loader(make_test_string()),
-    ])
+    @pytest.mark.parametrize(
+        "func",
+        [
+            lambda _: inline(make_test_string()),
+            lambda s: s.add_loader(make_test_string(), make_test_string()),
+            lambda s: s.add_runner(make_test_string()),
+            lambda s: s.append_preimport(make_test_string()),
+            lambda s: s.append_suffix(make_test_string()),
+            lambda s: s.set_data_loader(make_test_string()),
+        ],
+    )
     def test_add_funcs_fail_on_unsafe(self, func):
         script = Script()
         with pytest.raises(PolygraphyInternalException, match="was not checked for safety"):
             func(script)
 
-
-    @pytest.mark.parametrize("case, expected", [
-        ("should_become_raw", "'should_become_raw'"),
-        ("parens))", r"'parens))'"),
-        ("'squotes'", "\"'squotes'\""),
-        ('"dquotes"', '\'"dquotes"\''),
-        (r"braces{}{})", r"'braces{}{})'"),
-        ("commas, ,", r"'commas, ,'"),
-        ("escape_quote_with_backslash\'", "\"escape_quote_with_backslash\'\""),
-        ("unterm_in_quotes_ok))", r"'unterm_in_quotes_ok))'"),
-    ])
+    @pytest.mark.parametrize(
+        "case, expected",
+        [
+            ("should_become_raw", "'should_become_raw'"),
+            ("parens))", r"'parens))'"),
+            ("'squotes'", "\"'squotes'\""),
+            ('"dquotes"', "'\"dquotes\"'"),
+            (r"braces{}{})", r"'braces{}{})'"),
+            ("commas, ,", r"'commas, ,'"),
+            ("escape_quote_with_backslash'", '"escape_quote_with_backslash\'"'),
+            ("unterm_in_quotes_ok))", r"'unterm_in_quotes_ok))'"),
+        ],
+    )
     def test_non_inlined_strings_escaped(self, case, expected):
         out = make_invocable("Dummy", case, x=case)
         ex_out = "Dummy({:}, x={:})".format(expected, expected)
         assert out.unwrap() == ex_out
 
-
     def test_invoke_none_args(self):
         assert make_invocable("Dummy", None).unwrap() == "Dummy(None)"
         assert make_invocable("Dummy", x=None).unwrap() == "Dummy()"
-
 
     def test_invoke_if_nondefault_none_args(self):
         assert make_invocable_if_nondefault("Dummy", None) is None

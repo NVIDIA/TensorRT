@@ -24,6 +24,7 @@ class ShapeTuple(object):
     """
     Represents a set of shapes for a single binding in a profile.
     """
+
     def __init__(self, min, opt, max):
         """
         Args:
@@ -35,13 +36,14 @@ class ShapeTuple(object):
         self.opt = opt
         self.max = max
 
-
     def __str__(self):
         return "(min={:}, opt={:}, max={:})".format(self.min, self.opt, self.max)
 
-
     def __repr__(self):
         return type(self).__name__ + self.__str__()
+
+    def __iter__(self):
+        yield from [self.min, self.opt, self.max]
 
 
 @mod.export()
@@ -53,6 +55,7 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
     More specifically, this is a OrderedDict[str, ShapeTuple] which maps binding
     names to a set of min/opt/max shapes.
     """
+
     def add(self, name, min, opt, max):
         """
         A convenience function to add shapes for a single binding.
@@ -71,7 +74,6 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
         self[name] = ShapeTuple(min, opt, max)
         return self
 
-
     def __getitem__(self, key):
         """
         Retrieves the shapes registered for a given input name.
@@ -84,7 +86,6 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
         if key not in self:
             G_LOGGER.critical("Binding: {:} does not have shapes set in this profile".format(key))
         return super().__getitem__(key)
-
 
     def fill_defaults(self, network, default_shape_value=None):
         """
@@ -109,26 +110,39 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
             if inp.name in self:
                 continue
 
-            with G_LOGGER.verbosity(G_LOGGER.CRITICAL): # WAR for spam from TRT
+            with G_LOGGER.verbosity(G_LOGGER.CRITICAL):  # WAR for spam from TRT
                 is_shape_tensor = inp.is_shape_tensor
             if is_shape_tensor:
                 rank = inp.shape[0]
-                shape = (default_shape_value, ) * rank
-                G_LOGGER.warning("{:} | No values provided; Will use input values: {:} for min/opt/max in profile.\n".format(
-                                    trt_util.str_from_tensor(inp, is_shape_tensor), shape, rank), mode=LogMode.ONCE)
-                G_LOGGER.warning("This will cause the shape-tensor to have static values. If this is incorrect, please "
-                                 "set the range of values for this input shape-tensor.", mode=LogMode.ONCE)
+                shape = (default_shape_value,) * rank
+                G_LOGGER.warning(
+                    "{:} | No values provided; Will use input values: {:} for min/opt/max in profile.\n".format(
+                        trt_util.str_from_tensor(inp, is_shape_tensor), shape, rank
+                    ),
+                    mode=LogMode.ONCE,
+                )
+                G_LOGGER.warning(
+                    "This will cause the shape-tensor to have static values. If this is incorrect, please "
+                    "set the range of values for this input shape-tensor.",
+                    mode=LogMode.ONCE,
+                )
             else:
                 shape = util.override_dynamic_shape(inp.shape, default_shape_value)
                 if shape != inp.shape:
-                    G_LOGGER.warning("{:} | No shapes provided; Will use shape: {:} for min/opt/max in profile.\n".format(
-                                        trt_util.str_from_tensor(inp, is_shape_tensor), shape), mode=LogMode.ONCE)
-                    G_LOGGER.warning("This will cause the tensor to have a static shape. If this is incorrect, please "
-                                     "set the range of shapes for this input tensor.", mode=LogMode.ONCE)
+                    G_LOGGER.warning(
+                        "{:} | No shapes provided; Will use shape: {:} for min/opt/max in profile.\n".format(
+                            trt_util.str_from_tensor(inp, is_shape_tensor), shape
+                        ),
+                        mode=LogMode.ONCE,
+                    )
+                    G_LOGGER.warning(
+                        "This will cause the tensor to have a static shape. If this is incorrect, please "
+                        "set the range of shapes for this input tensor.",
+                        mode=LogMode.ONCE,
+                    )
 
             self.add(inp.name, shape, shape, shape)
         return self
-
 
     def to_trt(self, builder, network):
         """
@@ -152,28 +166,53 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
                 unused_keys.remove(inp.name)
             available_inputs.add(inp.name)
 
-            with G_LOGGER.verbosity(): # WAR for spam from TRT
+            with G_LOGGER.verbosity():  # WAR for spam from TRT
                 is_shape_tensor = inp.is_shape_tensor
 
             if is_shape_tensor:
                 if inp.name in self:
                     shapes = self[inp.name]
                     trt_profile.set_shape_input(inp.name, shapes.min, shapes.opt, shapes.max)
-                    G_LOGGER.verbose("{:} | Setting input shape-tensor value range to: {:}".format(
-                                        trt_util.str_from_tensor(inp, is_shape_tensor), shapes))
+                    G_LOGGER.verbose(
+                        "{:} | Setting input shape-tensor value range to: {:}".format(
+                            trt_util.str_from_tensor(inp, is_shape_tensor), shapes
+                        )
+                    )
                 else:
-                    G_LOGGER.warning("{:} | No values provided. "
-                                     "Assuming this is not a dynamic shape-tensor.".format(
-                                        trt_util.str_from_tensor(inp, is_shape_tensor)), mode=LogMode.ONCE)
+                    G_LOGGER.warning(
+                        "{:} | No values provided. "
+                        "Assuming this is not a dynamic shape-tensor.".format(
+                            trt_util.str_from_tensor(inp, is_shape_tensor)
+                        ),
+                        mode=LogMode.ONCE,
+                    )
             else:
                 shapes = self[inp.name]
                 trt_profile.set_shape(inp.name, shapes.min, shapes.opt, shapes.max)
-                G_LOGGER.verbose("{:} | Setting input tensor shapes to: {:}".format(
-                                    trt_util.str_from_tensor(inp, is_shape_tensor), shapes))
+                G_LOGGER.verbose(
+                    "{:} | Setting input tensor shapes to: {:}".format(
+                        trt_util.str_from_tensor(inp, is_shape_tensor), shapes
+                    )
+                )
 
         if unused_keys:
-            G_LOGGER.error("Invalid inputs were provided to the optimization profile: {:}\n"
-                            "Note: Inputs available in the TensorRT network are: {:}".format(
-                              unused_keys, available_inputs))
+            G_LOGGER.error(
+                "Invalid inputs were provided to the optimization profile: {:}\n"
+                "Note: Inputs available in the TensorRT network are: {:}".format(unused_keys, available_inputs)
+            )
 
         return trt_util.check_profile(trt_profile)
+
+    def __repr__(self):
+        ret = "Profile()"
+        for name, (min, opt, max) in self.items():
+            ret += ".add({:}, min={:}, opt={:}, max={:})".format(name, min, opt, max)
+        return ret
+
+    def __str__(self):
+        elems = []
+        for name, (min, opt, max) in self.items():
+            elems.append("{:} [min={:}, opt={:}, max={:}]".format(name, min, opt, max))
+
+        sep = ",\n "
+        return "{" + sep.join(elems) + "}"

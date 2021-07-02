@@ -3,6 +3,75 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.30.3 (2021-06-25)
+### Fixed
+- Fixed various typos, added more details to some tool READMEs.
+
+
+## v0.30.2 (2021-06-15)
+### Changed
+- Added `polygraphy.config` as a top-level import so that it no longer needs to be imported separately
+    (i.e. `from polygraphy import config`).
+
+### Fixed
+- Fixed a bug where `surgeon sanitize` would not re-run shape inference after overriding model input
+    shapes, causing constant folding to be sub-optimal.
+
+
+## v0.30.1 (2021-06-07)
+### Changed
+- CLI tools will no longer print long stack traces on user error.
+
+### Fixed
+- Fixed a bug where `surgeon` subtools would not work with ONNX models without an `.onnx` extension.
+- Fixed a bug where `surgeon insert` would not correctly run shape inference if the inserted node replaced
+    the graph outputs.
+- Fixed a bug where `POLYGRAPHY_AUTOINSTALL_DEPS` would not work correctly for nested modules,
+    e.g. `mod.lazy_import("onnx.shape_inference")`.
+
+
+## v0.30.0 (2021-05-26)
+### Added
+- Added an `--ignore-fail-code` option to `debug` subtools to ignore certain types of failures.
+- Added a highly experimental `OnnxLikeFromNetwork` loader that can generate a file using the ONNX
+    format based on a TensorRT network. The resulting model is **not** valid ONNX, but is useful for visualization.
+- Added a `onnx-like-trt-network` type in `convert` to generate ONNX-like models from TensorRT networks.
+- Added support for custom installation commands during dependency autoinstall.
+    This can be configured using `config.INSTALL_CMD` or by setting the `POLYGRAPHY_INSTALL_CMD` environment variable.
+- Added support for loading external data in `InferShapes`.
+- Added a `--no-per-pass-shape-inference` argument to `surgeon sanitize` to disable shape inference
+    between constant-folding passes.
+- Added a `--external-data-size-threshold` CLI option for saving external data for ONNX models.
+- Added a `--no-save-all-tensors-to-one-file` CLI option to avoid saving ONNX external data to a single file.
+
+### Changed
+- Improved logic for auto-permuting tensors in `basic_compare_func`. The new logic can handle
+    an arbitrary number of dimensions. For example, if two tensors with shapes `(1, 3, 45, 45, 45)`
+    and `(1, 45, 45, 45, 3)` are being compared, `basic_compare_func` will now guess that the latter
+    should be transposed using a permutation of `(0, 4, 1, 2, 3)` to match the former.
+- Improved display of `Profile` in logging messages.
+- Updated NumPy array encoding to use `base64`. In some cases, this can reduce file sizes by a factor of 4.
+- Updated `debug precision` default direction to `forward` as this typically leads to better results.
+- Added a `--no-strict-types` flag to `debug precision` in case strict types needs to be disabled for any reason.
+- `FoldConstants` will no longer run shape inference if shape folding is disabled.
+- `InferShapes` will now automatically write large models to the disk to work around the 2 GiB protobuf size limitation.
+    The threshold can be configured using the `save_to_disk_threshold_bytes` parameter.
+
+### Fixed
+- Fixed a bug in `inspect model` where engine output bindings would all be printed on one line.
+- Fixed a bug where using `set_profile` in the `TrtRunner` would sometimes cause input shape
+    checks in `infer` to fail even when shapes were valid.
+- Fixed a bug in `inspect model` where engine output bindings would display the wrong shapes
+    for profiles after the first.
+- Fixed a bug where `debug precision` would incorrectly mark constant layer outputs and non-execution tensors
+    to run in higher precision.
+- Fixed a bug where `debug precision` would crash if engine building failed. It now continues to the next iteration,
+    counting the previous one as a failure.
+- Fixed a bug where `InferShapes` would require `--external-data-dir` to be set even if the external data
+    were in the same directory as the model.
+- Fixed a bug where `--data-loader-script` would not provide data in the `run` tool if int8 calibration were enabled in TensorRT.
+
+
 ## v0.29.2 (2021-04-30)
 ### Added
 - Added a `--log-file` option to CLI tools to store logging output to a file.

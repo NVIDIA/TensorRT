@@ -16,9 +16,7 @@
 
 #include "NvInfer.h"
 #include "NvUffParser.h"
-#include <cassert>
 #include <chrono>
-#include <cstring>
 #include <cudnn.h>
 #include <iostream>
 #include <map>
@@ -42,39 +40,39 @@ samplesCommon::Args gArgs;
 template <DataType in, DataType out>
 void transform(const void* src, void* dst, int count)
 {
-    assert(in == out);
+    ASSERT(in == out);
     memcpy(dst, src, count * elementSize(in));
 }
 
 template <>
 void transform<DataType::kHALF, DataType::kFLOAT>(const void* src, void* dst, int count)
 {
-    auto srcPtr = static_cast<const half_float::half*>(src);
-    auto dstPtr = static_cast<float*>(dst);
+    const auto* srcPtr = static_cast<const half_float::half*>(src);
+    auto* dstPtr = static_cast<float*>(dst);
     std::transform(srcPtr, srcPtr + count, dstPtr, [](half_float::half in) { return static_cast<float>(in); });
 }
 
 template <>
 void transform<DataType::kINT8, DataType::kFLOAT>(const void* src, void* dst, int count)
 {
-    auto srcPtr = static_cast<const int8_t*>(src);
-    auto dstPtr = static_cast<float*>(dst);
+    const auto* srcPtr = static_cast<const int8_t*>(src);
+    auto* dstPtr = static_cast<float*>(dst);
     std::transform(srcPtr, srcPtr + count, dstPtr, [](int8_t in) { return static_cast<float>(in); });
 }
 
 template <>
 void transform<DataType::kFLOAT, DataType::kHALF>(const void* src, void* dst, int count)
 {
-    auto srcPtr = static_cast<const float*>(src);
-    auto dstPtr = static_cast<half_float::half*>(dst);
+    const auto* srcPtr = static_cast<const float*>(src);
+    auto* dstPtr = static_cast<half_float::half*>(dst);
     std::transform(srcPtr, srcPtr + count, dstPtr, [](float in) { return static_cast<half_float::half>(in); });
 }
 
 template <>
 void transform<DataType::kFLOAT, DataType::kINT8>(const void* src, void* dst, int count)
 {
-    auto srcPtr = static_cast<const float*>(src);
-    auto dstPtr = static_cast<int8_t*>(dst);
+    const auto* srcPtr = static_cast<const float*>(src);
+    auto* dstPtr = static_cast<int8_t*>(dst);
     std::transform(srcPtr, srcPtr + count, dstPtr, [](float x) {
         x = std::max(x, float(INT8_MIN));
         x = std::min(x, float(INT8_MAX));
@@ -109,8 +107,8 @@ std::vector<std::pair<size_t, DataType>> calculateBindingBufferSizes(
 void* createMnistCudaBuffer(int64_t eltCount, DataType dtype, int num)
 {
     // in that specific case, eltCount == INPUT_H * INPUT_W
-    assert(eltCount == INPUT_H * INPUT_W);
-    assert(elementSize(dtype) == sizeof(float));
+    ASSERT(eltCount == INPUT_H * INPUT_W);
+    ASSERT(elementSize(dtype) == sizeof(float));
 
     size_t memSize = eltCount * elementSize(dtype);
     std::vector<float> inputs(eltCount);
@@ -141,7 +139,7 @@ void* createMnistCudaBuffer(int64_t eltCount, DataType dtype, int num)
 
 bool verifyOutput(int64_t eltCount, DataType dtype, void* buffer, int num)
 {
-    assert(elementSize(dtype) == sizeof(float));
+    ASSERT(elementSize(dtype) == sizeof(float));
 
     bool pass = false;
 
@@ -161,7 +159,7 @@ bool verifyOutput(int64_t eltCount, DataType dtype, void* buffer, int num)
         if (eltIdx == maxIdx)
         {
             sample::gLogInfo << "***";
-            pass = eltIdx == num ? true : false;
+            pass = eltIdx == num;
         }
         sample::gLogInfo << "\n";
     }
@@ -189,9 +187,6 @@ struct PoolParameters
 class SampleUffPluginV2Ext
 {
 public:
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
     explicit SampleUffPluginV2Ext(const UffSampleParams& params)
         : mParams(params)
     {
@@ -213,7 +208,7 @@ public:
             return false;
         }
 
-        SampleUniquePtr<INetworkDefinition> network{builder->createNetwork()};
+        SampleUniquePtr<INetworkDefinition> network{builder->createNetworkV2(0)};
         if (!network.get())
         {
             sample::gLogError << "Failed to create network. " << std::endl;
@@ -228,7 +223,7 @@ public:
 
         if (gArgs.runInInt8)
         {
-            samplesCommon::setAllTensorScales(network.get(), 25.0f, 25.0f);
+            samplesCommon::setAllDynamicRanges(network.get(), 25.0F, 25.0F);
         }
 
         SampleUniquePtr<IBuilderConfig> networkConfig{builder->createBuilderConfig()};
@@ -251,7 +246,29 @@ public:
         builder->setMaxBatchSize(maxBatchSize);
         samplesCommon::enableDLA(builder.get(), networkConfig.get(), gArgs.useDLACore);
 
-        mEngine.reset(builder->buildEngineWithConfig(*network, *networkConfig));
+        // CUDA stream used for profiling by the builder.
+        auto profileStream = samplesCommon::makeCudaStream();
+        if (!profileStream)
+        {
+            return false;
+        }
+        networkConfig->setProfileStream(*profileStream);
+
+        SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *networkConfig)};
+        if (!plan)
+        {
+            sample::gLogError << "Unable to create serialized engine. " << std::endl;
+            return false;
+        }
+
+        SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+        if (!runtime)
+        {
+            sample::gLogError << "Unable to create runtime. " << std::endl;
+            return false;
+        }
+
+        mEngine.reset(runtime->deserializeCudaEngine(plan->data(), plan->size()));
         if (!mEngine.get())
         {
             sample::gLogError << "Unable to create engine. " << std::endl;
@@ -270,7 +287,7 @@ public:
 
         const int batchSize{1};
         const int nbBindings = mEngine->getNbBindings();
-        assert(nbBindings == 2);
+        ASSERT(nbBindings == 2);
 
         std::vector<void*> buffers(nbBindings);
         auto buffersSizes = calculateBindingBufferSizes(*mEngine, nbBindings, batchSize);
@@ -286,7 +303,7 @@ public:
         const int numberRun{10};
         for (int i = 0; i < iterations; i++)
         {
-            float total{0.0f}, ms{0.0f};
+            float total{0.0F}, ms{0.0F};
             for (int num = 0; num < numberRun; num++)
             {
                 buffers[bindingIdxInput] = createMnistCudaBuffer(bufferSizesInput.first, bufferSizesInput.second, num);
@@ -375,7 +392,7 @@ public:
             mInHostScale = read<float>(d);
             mOutHostScale = read<float>(d);
         }
-        assert(d == a + length);
+        ASSERT(d == a + length);
     }
 
     // It makes no sense to construct UffPoolPluginV2 without arguments.
@@ -384,21 +401,21 @@ public:
     virtual ~UffPoolPluginV2() {}
 
 public:
-    int getNbOutputs() const override
+    int getNbOutputs() const noexcept override
     {
         return 1;
     }
 
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) override
+    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override
     {
-        assert(index == 0 && nbInputDims == 1 && inputs[0].nbDims == 3);
+        ASSERT(index == 0 && nbInputDims == 1 && inputs[0].nbDims == 3);
         int height = (inputs[0].d[1] + mPoolingParams.pH * 2 - mPoolingParams.mR) / mPoolingParams.mU + 1;
         int width = (inputs[0].d[2] + mPoolingParams.pW * 2 - mPoolingParams.mS) / mPoolingParams.mV + 1;
         DimsHW outDims(height, width);
         return Dims3(inputs[0].d[0], outDims.h(), outDims.w());
     }
 
-    int initialize() override
+    int initialize() noexcept override
     {
         CHECK(cudnnCreate(&mCudnn));
         CHECK(cudnnCreateTensorDescriptor(&mSrcDescriptor));
@@ -409,7 +426,7 @@ public:
         return 0;
     }
 
-    void terminate() override
+    void terminate() noexcept override
     {
         CHECK(cudnnDestroyTensorDescriptor(mSrcDescriptor));
         CHECK(cudnnDestroyTensorDescriptor(mDstDescriptor));
@@ -417,21 +434,22 @@ public:
         CHECK(cudnnDestroy(mCudnn));
     }
 
-    size_t getWorkspaceSize(int maxBatchSize) const override
+    size_t getWorkspaceSize(int maxBatchSize) const noexcept override
     {
         return 0;
     }
 
-    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override
+    int enqueue(int batchSize, const void* const* inputs, void* const* outputs, void* workspace,
+        cudaStream_t stream) noexcept override
     {
-        const float kONE = 1.0f, kZERO = 0.0f;
+        const float kONE = 1.0F, kZERO = 0.0F;
         cudnnSetStream(mCudnn, stream);
 
         const int N = 1;
         // Use float to simulate int8 calculation
         std::map<DataType, cudnnDataType_t> typeMap = {{DataType::kFLOAT, CUDNN_DATA_FLOAT},
             {DataType::kHALF, CUDNN_DATA_HALF}, {DataType::kINT8, CUDNN_DATA_FLOAT}};
-        assert(mDataType != DataType::kINT32);
+        ASSERT(mDataType != DataType::kINT32);
         CHECK(cudnnSetTensor4dDescriptor(mSrcDescriptor, CUDNN_TENSOR_NCHW, typeMap[mDataType], N, mPoolingParams.mC,
             mPoolingParams.mH, mPoolingParams.mW));
         CHECK(cudnnSetTensor4dDescriptor(mDstDescriptor, CUDNN_TENSOR_NCHW, typeMap[mDataType], N, mPoolingParams.mC,
@@ -457,7 +475,7 @@ public:
         return 0;
     }
 
-    size_t getSerializationSize() const override
+    size_t getSerializationSize() const noexcept override
     {
         size_t serializationSize = 0;
         serializationSize += sizeof(mPoolingParams);
@@ -473,19 +491,19 @@ public:
         return serializationSize;
     }
 
-    void serialize(void* buffer) const override
+    void serialize(void* buffer) const noexcept override
     {
         char* d = static_cast<char*>(buffer);
         const char* const a = d;
         write(d, mPoolingParams);
         write(d, mInputDims.nbDims);
-        assert(mInputDims.nbDims <= mInputDims.MAX_DIMS);
+        ASSERT(mInputDims.nbDims <= mInputDims.MAX_DIMS);
         for (int i = 0; i < mInputDims.nbDims; ++i)
         {
             write(d, mInputDims.d[i]);
         }
         write(d, mOutputDims.nbDims);
-        assert(mOutputDims.nbDims <= mOutputDims.MAX_DIMS);
+        ASSERT(mOutputDims.nbDims <= mOutputDims.MAX_DIMS);
         for (int i = 0; i < mOutputDims.nbDims; ++i)
         {
             write(d, mOutputDims.d[i]);
@@ -496,15 +514,15 @@ public:
             write(d, mInHostScale);
             write(d, mOutHostScale);
         }
-        assert(d == a + getSerializationSize());
+        ASSERT(d == a + getSerializationSize());
     }
 
-    void configurePlugin(const PluginTensorDesc* in, int nbInput, const PluginTensorDesc* out, int nbOutput) override
+    void configurePlugin(const PluginTensorDesc* in, int nbInput, const PluginTensorDesc* out, int nbOutput) noexcept override
     {
-        assert(in && nbInput == 1);
-        assert(out && nbOutput == 1);
-        assert(in[0].type == out[0].type);
-        assert(in[0].format == TensorFormat::kLINEAR && out[0].format == TensorFormat::kLINEAR);
+        ASSERT(in && nbInput == 1);
+        ASSERT(out && nbOutput == 1);
+        ASSERT(in[0].type == out[0].type);
+        ASSERT(in[0].format == TensorFormat::kLINEAR && out[0].format == TensorFormat::kLINEAR);
 
         mDataType = in[0].type;
         mInputDims = in[0].dims;
@@ -514,88 +532,87 @@ public:
         mPoolingParams.mW = mInputDims.d[2];
         mPoolingParams.mP = mOutputDims.d[1];
         mPoolingParams.mQ = mOutputDims.d[2];
-        mInHostScale = in[0].scale >= 0.0f ? in[0].scale : -1.0f;
-        mOutHostScale = out[0].scale >= 0.0f ? out[0].scale : -1.0f;
+        mInHostScale = in[0].scale >= 0.0F ? in[0].scale : -1.0F;
+        mOutHostScale = out[0].scale >= 0.0F ? out[0].scale : -1.0F;
     }
 
     //! The combination of kLINEAR + kINT8/kHALF/kFLOAT is supported.
-    bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override
+    bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const noexcept override
     {
-        assert(nbInputs == 1 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
+        ASSERT(nbInputs == 1 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
         bool condition = inOut[pos].format == TensorFormat::kLINEAR;
         condition &= inOut[pos].type != DataType::kINT32;
         condition &= inOut[pos].type == inOut[0].type;
         return condition;
     }
 
-    DataType getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const override
+    DataType getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept override
     {
-        assert(inputTypes && nbInputs == 1);
+        ASSERT(inputTypes && nbInputs == 1);
         (void) index;
         return inputTypes[0];
     }
 
-    const char* getPluginType() const override
+    const char* getPluginType() const noexcept override
     {
         return "MaxPool";
     }
 
-    const char* getPluginVersion() const override
+    const char* getPluginVersion() const noexcept override
     {
         return "2";
     }
 
-    void destroy() override
+    void destroy() noexcept override
     {
         delete this;
     }
 
-    IPluginV2Ext* clone() const override
+    IPluginV2Ext* clone() const noexcept override
     {
         auto* plugin = new UffPoolPluginV2(*this);
         return plugin;
     }
 
-    void setPluginNamespace(const char* libNamespace) override
+    void setPluginNamespace(const char* libNamespace) noexcept override
     {
         mNamespace = libNamespace;
     }
 
-    const char* getPluginNamespace() const override
+    const char* getPluginNamespace() const noexcept override
     {
         return mNamespace.data();
     }
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const override
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override
     {
         return false;
     }
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const override
+    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override
     {
         return false;
     }
 
 private:
     template <typename T>
-    void write(char*& buffer, const T& val) const
+    void write(char*& buffer, const T& val) const noexcept
     {
-        std::memcpy(buffer, &val, sizeof(T));
+        *reinterpret_cast<T*>(buffer) = val;
         buffer += sizeof(T);
     }
 
     template <typename T>
-    T read(const char*& buffer) const
+    T read(const char*& buffer) const noexcept
     {
-        T val{};
-        std::memcpy(&val, buffer, sizeof(T));
+        T val = *reinterpret_cast<const T*>(buffer);
         buffer += sizeof(T);
         return val;
     }
 
-    void copyDeviceInputToFP32(const void* src, void*& dst)
+    void copyDeviceInputToFP32(const void* src, void*& dst) noexcept
     {
-        assert(mDataType == DataType::kINT8);
+        ASSERT(mDataType == DataType::kINT8);
         size_t inCount = getC(mInputDims) * getH(mInputDims) * getW(mInputDims);
         std::vector<char> inputTmp(inCount * elementSize(mDataType));
         CHECK(cudaMemcpy(inputTmp.data(), src, inCount * elementSize(mDataType), cudaMemcpyDeviceToHost));
@@ -612,7 +629,7 @@ private:
         CHECK(cudaMemcpy(dst, inputFP32.data(), inCount * elementSize(DataType::kFLOAT), cudaMemcpyHostToDevice));
     }
 
-    void copyDeviceToInt8Output(const void* src, void* dst)
+    void copyDeviceToInt8Output(const void* src, void* dst) noexcept
     {
         size_t outCount = getC(mOutputDims) * getH(mOutputDims) * getW(mOutputDims);
         std::vector<float> outTmp(outCount);
@@ -639,50 +656,50 @@ private:
 
     Dims mInputDims;
     Dims mOutputDims;
-    float mInHostScale{-1.0f};
-    float mOutHostScale{-1.0f};
+    float mInHostScale{-1.0F};
+    float mOutHostScale{-1.0F};
     std::string mNamespace;
 };
 
 class UffPoolPluginV2Creator : public IPluginCreator
 {
 public:
-    const char* getPluginName() const override
+    const char* getPluginName() const noexcept override
     {
         return "MaxPool";
     }
 
-    const char* getPluginVersion() const override
+    const char* getPluginVersion() const noexcept override
     {
         return "2";
     }
 
-    const PluginFieldCollection* getFieldNames() override
+    const PluginFieldCollection* getFieldNames() noexcept override
     {
         return &mFieldCollection;
     }
 
-    IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) override
+    IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override
     {
-        auto plugin = new UffPoolPluginV2(*fc);
+        auto* plugin = new UffPoolPluginV2(*fc);
         mFieldCollection = *fc;
         mPluginName = name;
         return plugin;
     }
 
-    IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override
+    IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override
     {
-        auto plugin = new UffPoolPluginV2(serialData, serialLength);
+        auto* plugin = new UffPoolPluginV2(serialData, serialLength);
         mPluginName = name;
         return plugin;
     }
 
-    void setPluginNamespace(const char* libNamespace) override
+    void setPluginNamespace(const char* libNamespace) noexcept override
     {
         mNamespace = libNamespace;
     }
 
-    const char* getPluginNamespace() const override
+    const char* getPluginNamespace() const noexcept override
     {
         return mNamespace.c_str();
     }
@@ -730,9 +747,9 @@ int main(int argc, char** argv)
     {
         gArgs.dataDirs = std::vector<std::string>{"data/samples/mnist/", "data/mnist/"};
     }
-    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
+    auto sampleTest = sample::Logger::defineTest(gSampleName, argc, argv);
 
-    sample::gLogger.reportTestStart(sampleTest);
+    sample::Logger::reportTestStart(sampleTest);
 
     samplesCommon::UffSampleParams params;
     params.uffFileName = locateFile("lenet5_custom_pool.uff", gArgs.dataDirs);
@@ -741,18 +758,18 @@ int main(int argc, char** argv)
 
     if (!sample.build())
     {
-        return sample::gLogger.reportFail(sampleTest);
+        return sample::Logger::reportFail(sampleTest);
     }
 
     if (!sample.infer())
     {
-        return sample::gLogger.reportFail(sampleTest);
+        return sample::Logger::reportFail(sampleTest);
     }
 
     if (!sample.teardown())
     {
-        return sample::gLogger.reportFail(sampleTest);
+        return sample::Logger::reportFail(sampleTest);
     }
 
-    return sample::gLogger.reportPass(sampleTest);
+    return sample::Logger::reportPass(sampleTest);
 }

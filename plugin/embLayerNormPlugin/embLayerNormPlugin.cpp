@@ -31,8 +31,8 @@ namespace bert
 {
 namespace
 {
-static const char* EMB_LAYER_NORM_VERSION{"1"};
-static const char* EMB_LAYER_NORM_NAME{"CustomEmbLayerNormPluginDynamic"};
+const char* EMB_LAYER_NORM_VERSION{"1"};
+const char* EMB_LAYER_NORM_NAME{"CustomEmbLayerNormPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
@@ -82,7 +82,7 @@ EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(const std::string& name, co
     , mTokEmbDev(nullptr)
     , mPosEmbDev(nullptr)
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic deserialize\n";
+    gLogVerbose << "EmbLayerNormPluginDynamic deserialize." << std::endl;
 
     // Deserialize in the same order as serialization
     deserialize_value(&data, &length, &mType);
@@ -110,95 +110,111 @@ EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(const std::string& name, co
 }
 
 // IPluginV2DynamicExt Methods
-IPluginV2DynamicExt* EmbLayerNormPluginDynamic::clone() const
+IPluginV2DynamicExt* EmbLayerNormPluginDynamic::clone() const noexcept
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic clone\n";
+    try
+    {
+        gLogVerbose << "EmbLayerNormPluginDynamic clone." << std::endl;
 
-    auto p = new EmbLayerNormPluginDynamic(
-        mLayerName, mType, mMhaType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb, mUseFullMask);
-    p->mS = mS;
-    p->setPluginNamespace(mNamespace.c_str());
+        auto p = new EmbLayerNormPluginDynamic(
+            mLayerName, mType, mMhaType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb, mUseFullMask);
+        p->mS = mS;
+        p->setPluginNamespace(mNamespace.c_str());
 
-    return p;
+        return p;
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
-    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder)
+    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
-    // Input should be input ids and token ids and the input mask
-    // Output should be the embeddings tensor and mask indices
-    assert(nbInputs == 3);
-
-    assert(inputs[0].nbDims == 2); // BxS
-    assert(inputs[0].nbDims == inputs[1].nbDims);
-    assert(inputs[0].nbDims == inputs[2].nbDims);
-
-    assert(outputIndex == 0 || outputIndex == 1);
-
-    if (outputIndex == 0)
+    try
     {
-        DimsExprs ret;
-        ret.nbDims = 5;
-        ret.d[0] = inputs[0].d[0];
-        ret.d[1] = inputs[0].d[1];
-        ret.d[2] = exprBuilder.constant(mLd);
-        ret.d[3] = exprBuilder.constant(1);
-        ret.d[4] = exprBuilder.constant(1);
-        return ret;
-    }
+        // Input should be input ids and token ids and the input mask
+        // Output should be the embeddings tensor and mask indices
+        assert(nbInputs == 3);
 
-    DimsExprs ret;
-    ret.nbDims = 2;
-    ret.d[0] = inputs[0].d[BDIM];
-    auto cms0 = exprBuilder.constant(unfusedMaskSize);
+        assert(inputs[0].nbDims == 2); // BxS
+        assert(inputs[0].nbDims == inputs[1].nbDims);
+        assert(inputs[0].nbDims == inputs[2].nbDims);
 
-    // this code must match getMHAMaskPackedSize in bertCommon.h
-    bool isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86);
-    bool isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
-    if (mUseFullMask || (isSmOK && isPrecisionOK))
-    {
-        // support 128, 384 in both int8 and fp16
-        auto cms128 = exprBuilder.constant(packedMaskSize128);
-        auto cms384 = exprBuilder.constant(packedMaskSize384);
-        auto c128 = exprBuilder.constant(128);
-        auto c384 = exprBuilder.constant(384);
-        auto is128 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c128);
-        auto is384 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c384);
-        auto sel128 = exprBuilder.operation(DimensionOperation::kPROD, *is128, *cms128);
-        auto sel384 = exprBuilder.operation(DimensionOperation::kPROD, *is384, *cms384);
-        auto maskSize = exprBuilder.operation(DimensionOperation::kSUM, *sel384, *sel128);
+        assert(outputIndex == 0 || outputIndex == 1);
 
-        if (mMhaType == nvinfer1::DataType::kHALF)
+        if (outputIndex == 0)
         {
-            // support 64, 96 only in fp16
-            auto cms64 = exprBuilder.constant(packedMaskSize64);
-            auto cms96 = exprBuilder.constant(packedMaskSize96);
-            auto c64 = exprBuilder.constant(64);
-            auto c96 = exprBuilder.constant(96);
-
-            auto is64 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c64);
-            auto is96 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c96);
-            auto sel64 = exprBuilder.operation(DimensionOperation::kPROD, *is64, *cms64);
-            auto sel96 = exprBuilder.operation(DimensionOperation::kPROD, *is96, *cms96);
-            auto maskSize2 = exprBuilder.operation(DimensionOperation::kSUM, *sel64, *sel96);
-            maskSize = exprBuilder.operation(DimensionOperation::kSUM, *maskSize, *maskSize2);
+            DimsExprs ret;
+            ret.nbDims = 5;
+            ret.d[0] = inputs[0].d[0];
+            ret.d[1] = inputs[0].d[1];
+            ret.d[2] = exprBuilder.constant(mLd);
+            ret.d[3] = exprBuilder.constant(1);
+            ret.d[4] = exprBuilder.constant(1);
+            return ret;
         }
 
-        auto is0 = exprBuilder.operation(DimensionOperation::kEQUAL, *maskSize, *exprBuilder.constant(0));
-        auto sel0 = exprBuilder.operation(DimensionOperation::kPROD, *is0, *cms0);
-        auto combinedMaskSize = exprBuilder.operation(DimensionOperation::kSUM, *maskSize, *sel0);
-        ret.d[1] = combinedMaskSize;
-    }
-    else
-    {
-        ret.d[1] = cms0;
-    }
+        DimsExprs ret;
+        ret.nbDims = 2;
+        ret.d[0] = inputs[0].d[BDIM];
+        auto cms0 = exprBuilder.constant(unfusedMaskSize);
 
-    return ret;
+        // this code must match getMHAMaskPackedSize in bertCommon.h
+        bool isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86);
+        bool isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
+        if (mUseFullMask || (isSmOK && isPrecisionOK))
+        {
+            // support 128, 384 in both int8 and fp16
+            auto cms128 = exprBuilder.constant(packedMaskSize128);
+            auto cms384 = exprBuilder.constant(packedMaskSize384);
+            auto c128 = exprBuilder.constant(128);
+            auto c384 = exprBuilder.constant(384);
+            auto is128 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c128);
+            auto is384 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c384);
+            auto sel128 = exprBuilder.operation(DimensionOperation::kPROD, *is128, *cms128);
+            auto sel384 = exprBuilder.operation(DimensionOperation::kPROD, *is384, *cms384);
+            auto maskSize = exprBuilder.operation(DimensionOperation::kSUM, *sel384, *sel128);
+
+            if (mMhaType == nvinfer1::DataType::kHALF)
+            {
+                // support 64, 96 only in fp16
+                auto cms64 = exprBuilder.constant(packedMaskSize64);
+                auto cms96 = exprBuilder.constant(packedMaskSize96);
+                auto c64 = exprBuilder.constant(64);
+                auto c96 = exprBuilder.constant(96);
+
+                auto is64 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c64);
+                auto is96 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c96);
+                auto sel64 = exprBuilder.operation(DimensionOperation::kPROD, *is64, *cms64);
+                auto sel96 = exprBuilder.operation(DimensionOperation::kPROD, *is96, *cms96);
+                auto maskSize2 = exprBuilder.operation(DimensionOperation::kSUM, *sel64, *sel96);
+                maskSize = exprBuilder.operation(DimensionOperation::kSUM, *maskSize, *maskSize2);
+            }
+
+            auto is0 = exprBuilder.operation(DimensionOperation::kEQUAL, *maskSize, *exprBuilder.constant(0));
+            auto sel0 = exprBuilder.operation(DimensionOperation::kPROD, *is0, *cms0);
+            auto combinedMaskSize = exprBuilder.operation(DimensionOperation::kSUM, *maskSize, *sel0);
+            ret.d[1] = combinedMaskSize;
+        }
+        else
+        {
+            ret.d[1] = cms0;
+        }
+
+        return ret;
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return DimsExprs{};
 }
 
 bool EmbLayerNormPluginDynamic::supportsFormatCombination(
-    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
+    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
     // 3 inputs of size BxS
     assert(nbInputs == 3);
@@ -232,9 +248,9 @@ bool EmbLayerNormPluginDynamic::supportsFormatCombination(
 }
 
 void EmbLayerNormPluginDynamic::configurePlugin(
-    const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs)
+    const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs) noexcept
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic configurePlugin\n";
+    gLogVerbose << "EmbLayerNormPluginDynamic configurePlugin." << std::endl;
 
     // Validate input arguments
     assert(nbOutputs == 2);
@@ -286,81 +302,98 @@ void EmbLayerNormPluginDynamic::configurePlugin(
 }
 
 size_t EmbLayerNormPluginDynamic::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const
+    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
     return 0;
 }
 
 int EmbLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    const int batchSize = inputDesc->dims.d[BDIM];
-    const int S = inputDesc->dims.d[SDIM];
-    int status = -1;
-
-    // Our plugin outputs only one tensor
-    const auto inputIds = static_cast<const int*>(inputs[0]);
-    const auto segmentIds = static_cast<const int*>(inputs[1]);
-    const auto inputMask = static_cast<const int*>(inputs[2]);
-
-    const float* beta = mBetaDev.get();
-    const float* gamma = mGammaDev.get();
-    if (mType == DataType::kFLOAT)
+    try
     {
-        auto output = static_cast<float*>(outputs[0]);
-        const auto wordEmb = static_cast<const float*>(mWordEmbDev.get());
-        const auto tokEmb = static_cast<const float*>(mTokEmbDev.get());
-        const auto posEmb = static_cast<const float*>(mPosEmbDev.get());
-        embSkipLayerNorm<float>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta, gamma, wordEmb,
-            posEmb, tokEmb, output);
-    }
-    else if (mType == DataType::kHALF)
-    {
-        auto output = static_cast<half*>(outputs[0]);
-        const auto wordEmb = static_cast<const half*>(mWordEmbDev.get());
-        const auto tokEmb = static_cast<const half*>(mTokEmbDev.get());
-        const auto posEmb = static_cast<const half*>(mPosEmbDev.get());
-        embSkipLayerNorm<half>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta, gamma, wordEmb,
-            posEmb, tokEmb, output);
-    }
-    else
-    {
-        gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType)
-                  << std::endl;
-        assert(false);
-    }
+        const int batchSize = inputDesc->dims.d[BDIM];
+        const int S = inputDesc->dims.d[SDIM];
+        int status = STATUS_FAILURE;
 
-    CHECK(cudaPeekAtLastError());
+        // Our plugin outputs only one tensor
+        const auto inputIds = static_cast<const int*>(inputs[0]);
+        const auto segmentIds = static_cast<const int*>(inputs[1]);
+        const auto inputMask = static_cast<const int*>(inputs[2]);
 
-    // check mha use fused kernel
-    if (mUseFullMask || unfusedMaskSize != getMHAMaskPackedSize(mSM, mMhaType, S))
-    {
-        size_t warps_m = 0, warps_n = 0, warps_k = 1;
-        if (S == 64 || S == 96 || S == 128)
+        const float* beta = mBetaDev.get();
+        const float* gamma = mGammaDev.get();
+        if (mType == DataType::kFLOAT)
         {
-            warps_m = 2;
-            warps_n = 2;
+            auto output = static_cast<float*>(outputs[0]);
+            const auto wordEmb = static_cast<const float*>(mWordEmbDev.get());
+            const auto tokEmb = static_cast<const float*>(mTokEmbDev.get());
+            const auto posEmb = static_cast<const float*>(mPosEmbDev.get());
+            status = embSkipLayerNorm<float>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta, gamma,
+                wordEmb, posEmb, tokEmb, output);
+
+            if (status != cudaSuccess)
+            {
+                return status;
+            }
         }
-        else if (S == 384)
+        else if (mType == DataType::kHALF)
         {
-            warps_m = 1;
-            warps_n = 8;
+            auto output = static_cast<half*>(outputs[0]);
+            const auto wordEmb = static_cast<const half*>(mWordEmbDev.get());
+            const auto tokEmb = static_cast<const half*>(mTokEmbDev.get());
+            const auto posEmb = static_cast<const half*>(mPosEmbDev.get());
+            status =  embSkipLayerNorm<half>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta, gamma,
+                wordEmb, posEmb, tokEmb, output);
+
+            if (status != cudaSuccess)
+            {
+                return status;
+            }
         }
-        uint32_t* inputMaskX = static_cast<uint32_t*>(outputs[1]);
+        else
+        {
+            gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType)
+                      << std::endl;
 
-        convertMask(S, batchSize, warps_m, warps_n, warps_k, inputMask, inputMaskX, stream);
+            return STATUS_NOT_SUPPORTED;
+        }
+
+        // check mha use fused kernel
+        if (mUseFullMask || unfusedMaskSize != getMHAMaskPackedSize(mSM, mMhaType, S))
+        {
+            size_t warps_m = 0, warps_n = 0, warps_k = 1;
+            if (S == 64 || S == 96 || S == 128)
+            {
+                warps_m = 2;
+                warps_n = 2;
+            }
+            else if (S == 384)
+            {
+                warps_m = 1;
+                warps_n = 8;
+            }
+            uint32_t* inputMaskX = static_cast<uint32_t*>(outputs[1]);
+
+            status = convertMask(S, batchSize, warps_m, warps_n, warps_k, inputMask, inputMaskX, stream);
+        }
+        else
+        {
+            int* maskIdx = static_cast<int*>(outputs[1]);
+            status = computeMaskIdx(stream, S, batchSize, inputMask, maskIdx);
+        }
+
+        return status;
     }
-    else
+    catch (const std::exception& e)
     {
-        int* maskIdx = static_cast<int*>(outputs[1]);
-        computeMaskIdx(stream, S, batchSize, inputMask, maskIdx);
+        caughtError(e);
     }
-
-    return status;
+    return STATUS_FAILURE;
 }
 
 // IPluginV2Ext Methods
-DataType EmbLayerNormPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const
+DataType EmbLayerNormPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept
 {
 
     assert(index == 0 || index == 1);
@@ -373,32 +406,32 @@ DataType EmbLayerNormPluginDynamic::getOutputDataType(int index, const DataType*
 }
 
 // IPluginV2 Methods
-const char* EmbLayerNormPluginDynamic::getPluginType() const
+const char* EmbLayerNormPluginDynamic::getPluginType() const noexcept
 {
     return EMB_LAYER_NORM_NAME;
 }
 
-const char* EmbLayerNormPluginDynamic::getPluginVersion() const
+const char* EmbLayerNormPluginDynamic::getPluginVersion() const noexcept
 {
     return EMB_LAYER_NORM_VERSION;
 }
 
-int EmbLayerNormPluginDynamic::getNbOutputs() const
+int EmbLayerNormPluginDynamic::getNbOutputs() const noexcept
 {
     return 2;
 }
 
-int EmbLayerNormPluginDynamic::initialize()
+int EmbLayerNormPluginDynamic::initialize() noexcept
 {
     return 0;
 }
 
-void EmbLayerNormPluginDynamic::terminate()
+void EmbLayerNormPluginDynamic::terminate() noexcept
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic terminate\n";
+    gLogVerbose << "EmbLayerNormPluginDynamic terminate." << std::endl;
 }
 
-size_t EmbLayerNormPluginDynamic::getSerializationSize() const
+size_t EmbLayerNormPluginDynamic::getSerializationSize() const noexcept
 {
     const size_t wordSize = getElementSize(mType);
     return sizeof(mType)                  // type
@@ -413,7 +446,7 @@ size_t EmbLayerNormPluginDynamic::getSerializationSize() const
         ;
 }
 
-void EmbLayerNormPluginDynamic::serialize(void* buffer) const
+void EmbLayerNormPluginDynamic::serialize(void* buffer) const noexcept
 {
     serialize_value(&buffer, mType);
     serialize_value(&buffer, mMhaType);
@@ -434,24 +467,31 @@ void EmbLayerNormPluginDynamic::serialize(void* buffer) const
     serFromDev(d, static_cast<char*>(mTokEmbDev.get()), mLd * mTokVocabSize * wordSize);
 }
 
-void EmbLayerNormPluginDynamic::destroy()
+void EmbLayerNormPluginDynamic::destroy() noexcept
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic destroy\n";
+    gLogVerbose << "EmbLayerNormPluginDynamic destroy." << std::endl;
     // This gets called when the network containing plugin is destroyed
-    mGammaDev.release();
-    mBetaDev.release();
-    mWordEmbDev.release();
-    mPosEmbDev.release();
-    mTokEmbDev.release();
+    mGammaDev.reset(nullptr);
+    mBetaDev.reset(nullptr);
+    mWordEmbDev.reset(nullptr);
+    mPosEmbDev.reset(nullptr);
+    mTokEmbDev.reset(nullptr);
     delete this;
 }
 
-void EmbLayerNormPluginDynamic::setPluginNamespace(const char* libNamespace)
+void EmbLayerNormPluginDynamic::setPluginNamespace(const char* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        mNamespace = libNamespace;
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
 }
 
-const char* EmbLayerNormPluginDynamic::getPluginNamespace() const
+const char* EmbLayerNormPluginDynamic::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -464,116 +504,140 @@ EmbLayerNormPluginDynamicCreator::EmbLayerNormPluginDynamicCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* EmbLayerNormPluginDynamicCreator::getPluginName() const
+const char* EmbLayerNormPluginDynamicCreator::getPluginName() const noexcept
 {
     return EMB_LAYER_NORM_NAME;
 }
 
-const char* EmbLayerNormPluginDynamicCreator::getPluginVersion() const
+const char* EmbLayerNormPluginDynamicCreator::getPluginVersion() const noexcept
 {
     return EMB_LAYER_NORM_VERSION;
 }
 
-const PluginFieldCollection* EmbLayerNormPluginDynamicCreator::getFieldNames()
+const PluginFieldCollection* EmbLayerNormPluginDynamicCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic createPlugin\n";
-
-    bool output_fp16 = false;
-    bool useFullMask = false;
-    Weights beta;
-    Weights gamma;
-    Weights word_emb;
-    Weights pos_emb;
-    Weights tok_emb;
-    int mhaTypeId = 0;
-    for (int i = 0; i < fc->nbFields; i++)
+    try
     {
-        std::string field_name(fc->fields[i].name);
-        if (field_name.compare("bert_embeddings_layernorm_beta") == 0)
+        gLogVerbose << "EmbLayerNormPluginDynamic createPlugin." << std::endl;
+
+        bool output_fp16 = false;
+        bool useFullMask = false;
+        Weights beta;
+        Weights gamma;
+        Weights word_emb;
+        Weights pos_emb;
+        Weights tok_emb;
+        int mhaTypeId = 0;
+        for (int i = 0; i < fc->nbFields; i++)
         {
-            gLogVerbose << "Building bert_embeddings_layernorm_beta...\n";
-            beta.values = fc->fields[i].data;
-            beta.count = fc->fields[i].length;
-            beta.type = fieldTypeToDataType(fc->fields[i].type);
+            std::string field_name(fc->fields[i].name);
+            if (field_name.compare("bert_embeddings_layernorm_beta") == 0)
+            {
+                gLogVerbose << "Building bert_embeddings_layernorm_beta..." << std::endl;
+                beta.values = fc->fields[i].data;
+                beta.count = fc->fields[i].length;
+                beta.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+
+            if (field_name.compare("bert_embeddings_layernorm_gamma") == 0)
+            {
+                gLogVerbose << "Building bert_embeddings_layernorm_gamma..." << std::endl;
+                gamma.values = fc->fields[i].data;
+                gamma.count = fc->fields[i].length;
+                gamma.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+
+            if (field_name.compare("bert_embeddings_word_embeddings") == 0)
+            {
+                gLogVerbose << "Building bert_embeddings_word_embeddings..." << std::endl;
+                word_emb.values = fc->fields[i].data;
+                word_emb.count = fc->fields[i].length;
+                word_emb.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+
+            if (field_name.compare("bert_embeddings_token_type_embeddings") == 0)
+            {
+                gLogVerbose << "Building bert_embeddings_token_type_embeddings..." << std::endl;
+                tok_emb.values = fc->fields[i].data;
+                tok_emb.count = fc->fields[i].length;
+                tok_emb.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+
+            if (field_name.compare("bert_embeddings_position_embeddings") == 0)
+            {
+                gLogVerbose << "Building bert_embeddings_position_embeddings..." << std::endl;
+                pos_emb.values = fc->fields[i].data;
+                pos_emb.count = fc->fields[i].length;
+                pos_emb.type = fieldTypeToDataType(fc->fields[i].type);
+            }
+            if (field_name.compare("output_fp16") == 0)
+            {
+                gLogVerbose << "Building output_fp16..." << std::endl;
+                assert(fc->fields[i].type == PluginFieldType::kINT32);
+                output_fp16 = static_cast<const int*>(fc->fields[i].data)[0] != 0;
+            }
+            if (field_name.compare("full_mask") == 0)
+            {
+                gLogVerbose << "Building full_mask..." << std::endl;
+                assert(fc->fields[i].type == PluginFieldType::kINT32);
+                useFullMask = static_cast<const int*>(fc->fields[i].data)[0] != 0;
+            }
+            if (field_name.compare("mha_type_id") == 0)
+            {
+                mhaTypeId = *static_cast<const int*>(fc->fields[i].data);
+                ASSERT(mhaTypeId >= 0 && mhaTypeId <= 3);
+                gLogVerbose << "Building mha typeId: " << mhaTypeId << std::endl;
+            }
         }
 
-        if (field_name.compare("bert_embeddings_layernorm_gamma") == 0)
-        {
-            gLogVerbose << "Building bert_embeddings_layernorm_gamma...\n";
-            gamma.values = fc->fields[i].data;
-            gamma.count = fc->fields[i].length;
-            gamma.type = fieldTypeToDataType(fc->fields[i].type);
-        }
-
-        if (field_name.compare("bert_embeddings_word_embeddings") == 0)
-        {
-            gLogVerbose << "Building bert_embeddings_word_embeddings...\n";
-            word_emb.values = fc->fields[i].data;
-            word_emb.count = fc->fields[i].length;
-            word_emb.type = fieldTypeToDataType(fc->fields[i].type);
-        }
-
-        if (field_name.compare("bert_embeddings_token_type_embeddings") == 0)
-        {
-            gLogVerbose << "Building bert_embeddings_token_type_embeddings...\n";
-            tok_emb.values = fc->fields[i].data;
-            tok_emb.count = fc->fields[i].length;
-            tok_emb.type = fieldTypeToDataType(fc->fields[i].type);
-        }
-
-        if (field_name.compare("bert_embeddings_position_embeddings") == 0)
-        {
-            gLogVerbose << "Building bert_embeddings_position_embeddings...\n";
-            pos_emb.values = fc->fields[i].data;
-            pos_emb.count = fc->fields[i].length;
-            pos_emb.type = fieldTypeToDataType(fc->fields[i].type);
-        }
-        if (field_name.compare("output_fp16") == 0)
-        {
-            gLogVerbose << "Building output_fp16...\n";
-            assert(fc->fields[i].type == PluginFieldType::kINT32);
-            output_fp16 = static_cast<const int*>(fc->fields[i].data)[0] != 0;
-        }
-        if (field_name.compare("full_mask") == 0)
-        {
-            gLogVerbose << "Building full_mask...\n";
-            assert(fc->fields[i].type == PluginFieldType::kINT32);
-            useFullMask = static_cast<const int*>(fc->fields[i].data)[0] != 0;
-        }
-        if (field_name.compare("mha_type_id") == 0)
-        {
-            mhaTypeId = *static_cast<const int*>(fc->fields[i].data);
-            ASSERT(mhaTypeId >= 0 && mhaTypeId <= 3);
-            gLogVerbose << "Building mha typeId: " << mhaTypeId << std::endl;
-        }
+        gLogVerbose << "Building the Plugin..." << std::endl;
+        DataType mhaType = static_cast<DataType>(mhaTypeId);
+        EmbLayerNormPluginDynamic* p
+            = new EmbLayerNormPluginDynamic(name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, mhaType, beta,
+                gamma, word_emb, pos_emb, tok_emb, useFullMask);
+        return p;
     }
-
-    gLogVerbose << "Building the Plugin...\n";
-    DataType mhaType = static_cast<DataType>(mhaTypeId);
-    EmbLayerNormPluginDynamic* p = new EmbLayerNormPluginDynamic(name, output_fp16 ? DataType::kHALF : DataType::kFLOAT,
-        mhaType, beta, gamma, word_emb, pos_emb, tok_emb, useFullMask);
-    return p;
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2* EmbLayerNormPluginDynamicCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed, which will
-    // call EmbLayerNormPluginDynamic::destroy()
-    return new EmbLayerNormPluginDynamic(name, serialData, serialLength);
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call EmbLayerNormPluginDynamic::destroy()
+        return new EmbLayerNormPluginDynamic(name, serialData, serialLength);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-void EmbLayerNormPluginDynamicCreator::setPluginNamespace(const char* libNamespace)
+void EmbLayerNormPluginDynamicCreator::setPluginNamespace(const char* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        mNamespace = libNamespace;
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
 }
 
-const char* EmbLayerNormPluginDynamicCreator::getPluginNamespace() const
+const char* EmbLayerNormPluginDynamicCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }

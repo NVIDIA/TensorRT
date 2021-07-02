@@ -17,10 +17,15 @@ import contextlib
 
 from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import (ModelArgs, OnnxLoaderArgs,
-                                   OnnxShapeInferenceArgs, TfLoaderArgs,
-                                   TrtEngineLoaderArgs, TrtNetworkLoaderArgs,
-                                   TrtPluginLoaderArgs)
+from polygraphy.tools.args import (
+    ModelArgs,
+    OnnxLoaderArgs,
+    OnnxShapeInferenceArgs,
+    TfLoaderArgs,
+    TrtEngineLoaderArgs,
+    TrtNetworkLoaderArgs,
+    TrtPluginLoaderArgs,
+)
 from polygraphy.tools.base import Tool
 
 trt_util = mod.lazy_import("polygraphy.backend.trt.util")
@@ -32,6 +37,7 @@ class Model(Tool):
     """
     Display information about a model, including inputs and outputs, as well as layers and their attributes.
     """
+
     def __init__(self):
         super().__init__("model")
         self.subscribe_args(ModelArgs(model_required=True, inputs=None))
@@ -42,19 +48,27 @@ class Model(Tool):
         self.subscribe_args(TrtNetworkLoaderArgs(outputs=False))
         self.subscribe_args(TrtEngineLoaderArgs())
 
-
     def add_parser_args(self, parser):
-        parser.add_argument("--convert-to", "--display-as",
-                            help="Try to convert the model to the specified format before displaying",
-                            choices=["trt"], dest="display_as")
-        parser.add_argument("--mode", "--layer-info", help="Display layers: {{"
-                            "'none': Display no layer information, "
-                            "'basic': Display layer inputs and outputs, "
-                            "'attrs': Display layer inputs, outputs and attributes, "
-                            "'full': Display layer inputs, outputs, attributes, and weights"
-                            "}}",
-                            choices=["none", "basic", "attrs", "full"], dest="mode", default="none")
-
+        parser.add_argument(
+            "--convert-to",
+            "--display-as",
+            help="Try to convert the model to the specified format before displaying",
+            choices=["trt"],
+            dest="display_as",
+        )
+        parser.add_argument(
+            "--mode",
+            "--layer-info",
+            help="Display layers: {{"
+            "'none': Display no layer information, "
+            "'basic': Display layer inputs and outputs, "
+            "'attrs': Display layer inputs, outputs and attributes, "
+            "'full': Display layer inputs, outputs, attributes, and weights"
+            "}}",
+            choices=["none", "basic", "attrs", "full"],
+            dest="mode",
+            default="none",
+        )
 
     def run(self, args):
         func = None
@@ -69,10 +83,9 @@ class Model(Tool):
             func = self.inspect_trt
 
         if func is None:
-            G_LOGGER.exit("Could not determine how to display this model. Maybe you need to specify --display-as?")
+            G_LOGGER.critical("Could not determine how to display this model. Maybe you need to specify --display-as?")
 
         func(args)
-
 
     def inspect_trt(self, args):
         if self.arg_groups[ModelArgs].model_type == "engine":
@@ -92,12 +105,10 @@ class Model(Tool):
                 network_str = trt_util.str_from_network(network, mode=args.mode).strip()
                 G_LOGGER.info("==== TensorRT Network ====\n{:}".format(network_str))
 
-
     def inspect_onnx(self, args):
         onnx_model = self.arg_groups[OnnxLoaderArgs].load_onnx()
         model_str = onnx_util.str_from_onnx(onnx_model, mode=args.mode).strip()
         G_LOGGER.info("==== ONNX Model ====\n{:}".format(model_str))
-
 
     def inspect_tf(self, args):
         tf_graph, _ = self.arg_groups[TfLoaderArgs].load_graph()

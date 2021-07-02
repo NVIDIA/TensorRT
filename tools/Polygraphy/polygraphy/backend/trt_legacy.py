@@ -54,10 +54,11 @@ class ConvertToUff(BaseLoader):
     def call_impl(self):
         """
 
-            save_uff (bool): Whether to write the generated UFF and corresponding PBTXT files.
+        save_uff (bool): Whether to write the generated UFF and corresponding PBTXT files.
         """
         import uff
         from polygraphy.backend.tf import util as tf_util
+
         G_LOGGER.module_info(uff)
 
         graph, output_names = self.tf_loader()
@@ -66,11 +67,16 @@ class ConvertToUff(BaseLoader):
         output_filename = None if not self.uff_path else "out.uff"
 
         # Generate the UFF model and get information about the input_buffers/output_buffers.
-        uff_model, input_nodes, _ = uff.from_tensorflow(graph.as_graph_def(), return_graph_info=True,
-                                                        quiet=(G_LOGGER.severity > G_LOGGER.VERBOSE),
-                                                        debug_mode=(G_LOGGER.severity == G_LOGGER.EXTRA_VERBOSE), text=self.uff_path,
-                                                        save_preprocessed=self.uff_path, output_filename=output_filename,
-                                                        preprocessor=self.preprocessor)
+        uff_model, input_nodes, _ = uff.from_tensorflow(
+            graph.as_graph_def(),
+            return_graph_info=True,
+            quiet=(G_LOGGER.severity > G_LOGGER.VERBOSE),
+            debug_mode=(G_LOGGER.severity == G_LOGGER.EXTRA_VERBOSE),
+            text=self.uff_path,
+            save_preprocessed=self.uff_path,
+            output_filename=output_filename,
+            preprocessor=self.preprocessor,
+        )
 
         input_names = [node.name for node in input_nodes]
         input_shapes = [tuple(int(dim.size) for dim in node.attr["shape"].shape.dim) for node in input_nodes]
@@ -99,7 +105,9 @@ class LoadNetworkFromUff(BaseLoader):
                 if FormatManager.determine_format(shape) == DataFormat.NHWC:
                     input_order = trt.UffInputOrder.NHWC
             shape = shape[1:]
-            G_LOGGER.verbose("Registering UFF input: {:} with shape: {:} and input order: {:}".format(name, shape, input_order))
+            G_LOGGER.verbose(
+                "Registering UFF input: {:} with shape: {:} and input order: {:}".format(name, shape, input_order)
+            )
             parser.register_input(name, shape, input_order)
 
         if output_names and output_names != constants.MARK_ALL:
@@ -126,7 +134,6 @@ class ParseNetworkFromOnnxLegacy(BaseNetworkFromOnnx):
         super().__init__(explicit_precision=False, explicit_batch=False)
         self.onnx_loader = onnx_loader
 
-
     def call_impl(self):
         from polygraphy.backend.onnx import util as onnx_util
 
@@ -145,12 +152,16 @@ class LoadNetworkFromCaffe(object):
         self.deploy = deploy
         self.model = model
         if not self.model:
-            G_LOGGER.warning("No model file provided for Caffe model, random weights will be used. To avoid this, "
-                             "please set the model paramater, or --model")
+            G_LOGGER.warning(
+                "No model file provided for Caffe model, random weights will be used. To avoid this, "
+                "please set the model paramater, or --model"
+            )
 
         if not outputs:
-            G_LOGGER.critical("Please set Caffe model outputs using the outputs parameter, or --trt-outputs. "
-                              "Note: To determine possible outputs, try running: tail -n50 {:}".format(deploy))
+            G_LOGGER.critical(
+                "Please set Caffe model outputs using the outputs parameter, or --trt-outputs. "
+                "Note: To determine possible outputs, try running: tail -n50 {:}".format(deploy)
+            )
 
         self.outputs = outputs
         self.dtype = util.default(dtype, trt.float32)
@@ -175,6 +186,7 @@ class TrtLegacyRunner(BaseRunner):
     """
     A runner that can perform inference on a single TensorRT engine.
     """
+
     # Simple helper data class that's a little nicer to use than a 2-tuple.
     class HostDeviceMem(object):
         def __init__(self, host_mem, device_mem):
@@ -184,8 +196,19 @@ class TrtLegacyRunner(BaseRunner):
         def __str__(self):
             return "Host:" + str(self.host) + ", Device:" + str(self.device)
 
-    def __init__(self, network_loader=None, max_workspace_size=None, max_batch_size=None, fp16=None,
-                 tf32=None, load_engine=None, save_engine=None, layerwise=False, plugins=[], name=None):
+    def __init__(
+        self,
+        network_loader=None,
+        max_workspace_size=None,
+        max_batch_size=None,
+        fp16=None,
+        tf32=None,
+        load_engine=None,
+        save_engine=None,
+        layerwise=False,
+        plugins=[],
+        name=None,
+    ):
         """
         Creates a runner that manages a single TensorRT engine.
 
@@ -204,6 +227,7 @@ class TrtLegacyRunner(BaseRunner):
         # Load any user-supplied plugin libraries. This must happen before everything else, including engine deserialization.
         if plugins:
             import ctypes
+
             for plugin in plugins:
                 path = os.path.abspath(plugin)
                 G_LOGGER.info("Loading plugin library: {:}".format(path))
@@ -214,7 +238,7 @@ class TrtLegacyRunner(BaseRunner):
 
         # Save parameters for activate and deactivate.
         self.network_loader = network_loader
-        self.max_workspace_size = util.default(max_workspace_size, 1<<24)
+        self.max_workspace_size = util.default(max_workspace_size, 1 << 24)
         self.fp16 = util.default(fp16, False)
         self.tf32 = util.default(tf32, False)
         self.load_engine = load_engine
@@ -223,7 +247,6 @@ class TrtLegacyRunner(BaseRunner):
 
         self.layerwise = layerwise
         self.max_batch_size = max_batch_size
-
 
     def activate_impl(self):
         """
@@ -249,12 +272,11 @@ class TrtLegacyRunner(BaseRunner):
             stream = cuda.Stream()
             G_LOGGER.verbose("Using batch size: " + str(engine.max_batch_size) + " during buffer allocation")
             for binding in engine:
-                shape = (engine.max_batch_size, ) + tuple(engine.get_binding_shape(binding))
+                shape = (engine.max_batch_size,) + tuple(engine.get_binding_shape(binding))
                 dtype = engine.get_binding_dtype(binding)
 
                 device_mem = cuda.DeviceArray(shape=shape, dtype=trt.nptype(dtype))
-                G_LOGGER.extra_verbose("Tensor: "
-                               "{:35} | Allocated: {:}".format(binding, device_mem))
+                G_LOGGER.extra_verbose("Tensor: " "{:35} | Allocated: {:}".format(binding, device_mem))
 
                 if engine.binding_is_input(binding):
                     input_buffers[binding] = TrtLegacyRunner.HostDeviceMem(None, device_mem)
@@ -277,14 +299,14 @@ class TrtLegacyRunner(BaseRunner):
                 config.max_workspace_size = int(self.max_workspace_size)
 
                 if not self.tf32:
-                    with contextlib.suppress(AttributeError): config.clear_flag(trt.BuilderFlag.TF32)
+                    with contextlib.suppress(AttributeError):
+                        config.clear_flag(trt.BuilderFlag.TF32)
                 if self.fp16:
                     config.flags = 1 << int(trt.BuilderFlag.FP16)
 
                 if not network:
                     G_LOGGER.critical("Invalid network")
                 G_LOGGER.super_verbose(lambda: trt_util.str_from_network(network) or "Finished logging network")
-
 
                 if self.layerwise:
                     # In layerwise mode, every layer becomes an output.
@@ -295,10 +317,11 @@ class TrtLegacyRunner(BaseRunner):
                             if not out.is_network_output:
                                 network.mark_output(out)
 
-                G_LOGGER.info("Building engine: max workspace size={:} bytes, max batch size={:}, fp16={:}, "
-                              "tf32={:}".format(config.max_workspace_size, builder.max_batch_size, self.fp16, self.tf32))
+                G_LOGGER.info(
+                    "Building engine: max workspace size={:} bytes, max batch size={:}, fp16={:}, "
+                    "tf32={:}".format(config.max_workspace_size, builder.max_batch_size, self.fp16, self.tf32)
+                )
                 self.engine = builder.build_engine(network, config)
-
 
         if not self.engine:
             G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
@@ -311,16 +334,18 @@ class TrtLegacyRunner(BaseRunner):
         self.context = self.engine.create_execution_context()
         self.input_buffers, self.output_buffers, self.stream = allocate_buffers(self.engine)
 
-
     def get_input_metadata_impl(self):
         inputs = TensorMetadata()
 
         for binding in self.engine:
             if self.engine.binding_is_input(binding):
                 # Always prepend a dynamic batch dimension
-                inputs.add(binding, trt.nptype(self.engine.get_binding_dtype(binding)), [-1] + list(self.engine.get_binding_shape(binding)))
+                inputs.add(
+                    binding,
+                    trt.nptype(self.engine.get_binding_dtype(binding)),
+                    [-1] + list(self.engine.get_binding_shape(binding)),
+                )
         return inputs
-
 
     def deactivate_impl(self):
         # Destroy the engine and context.
@@ -332,14 +357,16 @@ class TrtLegacyRunner(BaseRunner):
 
         del (self.engine, self.context, self.input_buffers, self.output_buffers, self.stream)
 
-
     def infer_impl(self, feed_dict):
         start = time.time()
         [self.input_buffers[name].device.copy_from(buffer, self.stream) for name, buffer in feed_dict.items()]
         # We will not run with smaller batch sizes than whatever the builder chose.
-        bindings = [buf.device.ptr for buf in self.input_buffers.values()] + [buf.device.ptr for buf in self.output_buffers.values()]
-        status = self.context.execute_async(batch_size=self.context.engine.max_batch_size, bindings=bindings,
-                                            stream_handle=self.stream.ptr)
+        bindings = [buf.device.ptr for buf in self.input_buffers.values()] + [
+            buf.device.ptr for buf in self.output_buffers.values()
+        ]
+        status = self.context.execute_async(
+            batch_size=self.context.engine.max_batch_size, bindings=bindings, stream_handle=self.stream.ptr
+        )
         if not status:
             G_LOGGER.critical("Model execution failed. Please see the log messages above for details")
 

@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
+#include "common.h"
 #include "contextNMT.h"
-
-#include <cassert>
 #include <sstream>
 
 namespace nmtSample
@@ -25,16 +24,17 @@ void Context::addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::ITenso
     nvinfer1::ITensor* memoryStates, nvinfer1::ITensor* alignmentScores, nvinfer1::ITensor** contextOutput)
 {
     auto raggedSoftmaxLayer = network->addRaggedSoftMax(*alignmentScores, *actualInputSequenceLengths);
-    assert(raggedSoftmaxLayer != nullptr);
+    ASSERT(raggedSoftmaxLayer != nullptr);
     raggedSoftmaxLayer->setName("Context Ragged Softmax");
     auto softmaxTensor = raggedSoftmaxLayer->getOutput(0);
-    assert(softmaxTensor != nullptr);
+    ASSERT(softmaxTensor != nullptr);
 
-    auto mmLayer = network->addMatrixMultiply(*softmaxTensor, false, *memoryStates, false);
-    assert(mmLayer != nullptr);
+    auto mmLayer
+        = network->addMatrixMultiply(*softmaxTensor, MatrixOperation::kNONE, *memoryStates, MatrixOperation::kNONE);
+    ASSERT(mmLayer != nullptr);
     mmLayer->setName("Context Matrix Multiply");
     *contextOutput = mmLayer->getOutput(0);
-    assert(*contextOutput != nullptr);
+    ASSERT(*contextOutput != nullptr);
 }
 
 std::string Context::getInfo()

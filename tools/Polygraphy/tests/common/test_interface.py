@@ -33,11 +33,9 @@ class TestTypedDict(object):
         with pytest.raises(PolygraphyException, match="Unsupported value type"):
             int_to_float[0] = "hi"
 
-
     def test_wrong_type_set_item_key(self, int_to_float):
         with pytest.raises(PolygraphyException, match="Unsupported key type"):
             int_to_float["hi"] = 1.0
-
 
     def test_wrong_type_update(self, int_to_float):
         with pytest.raises(PolygraphyException, match="Unsupported key type"):
@@ -57,16 +55,13 @@ class TestTypedList(object):
         with pytest.raises(PolygraphyException, match="Unsupported element type"):
             ints.append(1.0)
 
-
     def test_wrong_type_extend(self, ints):
         with pytest.raises(PolygraphyException, match="Unsupported element type"):
             ints.extend([0, 1, 2, 3, "surprise"])
 
-
     def test_wrong_type_iadd(self, ints):
         with pytest.raises(PolygraphyException, match="Unsupported element type"):
             ints += [0, 1.0]
-
 
     def test_wrong_type_setitem(self, ints):
         ints.append(0)

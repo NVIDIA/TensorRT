@@ -30,8 +30,10 @@ def assert_identifier(inp):
     Raises a PolygraphyException if it can't.
     """
     if not inp.isidentifier():
-        G_LOGGER.exit("This argument must be a valid identifier. "
-                      "Provided argument cannot be a Python identifier: {:}".format(inp))
+        G_LOGGER.critical(
+            "This argument must be a valid identifier. "
+            "Provided argument cannot be a Python identifier: {:}".format(inp)
+        )
     return inp
 
 
@@ -59,12 +61,12 @@ def ensure_safe(inp):
     """
     Ensures that the input is marked as a safe string (i.e. Script.String(safe=True)).
     """
-    if config.INTERNAL_CORRECTNESS_CHECKS:
-        if not isinstance(inp, Script.String):
-            G_LOGGER.internal_error("Input to ensure_safe must be of type Script.String, but was: {:}".format(inp))
-        elif not inp.safe:
-            G_LOGGER.internal_error("Input string: {:} was not checked for safety. "
-                                    "This is a potential security risk!".format(inp))
+    if not isinstance(inp, Script.String):
+        G_LOGGER.internal_error("Input to ensure_safe must be of type Script.String, but was: {:}".format(inp))
+    elif not inp.safe:
+        G_LOGGER.internal_error(
+            "Input string: {:} was not checked for safety. " "This is a potential security risk!".format(inp)
+        )
     return inp
 
 
@@ -146,8 +148,10 @@ def make_invocable_if_nondefault(type_str, *args, **kwargs):
         return None
     return obj_str
 
+
 ################################# SCRIPT ##################################
 # Used to generate a script that uses the Polygraphy API.
+
 
 class Script(object):
     class String(object):
@@ -157,15 +161,14 @@ class Script(object):
         This can be spoofed easily - the purpose is to check Polygraphy's implementations,
         not external ones.
         """
+
         def __init__(self, s, safe=False, inline=False):
             self.s = s
             self.safe = safe
             self.inline = inline
 
-
         def __str__(self):
             return str(self.s)
-
 
         def __repr__(self):
             if self.inline:
@@ -174,23 +177,20 @@ class Script(object):
                 return str(self.s)
             return repr(self.s)
 
-
         def __iadd__(self, other):
-            if config.INTERNAL_CORRECTNESS_CHECKS:
-                if not isinstance(other, Script.String):
-                    G_LOGGER.critical("Cannot concatenate str and Script.String. Note: str was: {:}".format(other))
-                elif self.safe != other.safe:
-                    G_LOGGER.critical("Cannot concatenate unsafe string ({:}) to safe string ({:})!".format(other, self.s))
+            if not isinstance(other, Script.String):
+                G_LOGGER.internal_error("Cannot concatenate str and Script.String. Note: str was: {:}".format(other))
+            elif self.safe != other.safe:
+                G_LOGGER.internal_error(
+                    "Cannot concatenate unsafe string ({:}) to safe string ({:})!".format(other, self.s)
+                )
             self.s += other.s
             return self
-
 
         def unwrap(self):
             return self.s
 
-
     DATA_LOADER_NAME = String("data_loader", safe=True, inline=True)
-
 
     def __init__(self, summary=None, always_create_runners=True):
         """
@@ -203,16 +203,15 @@ class Script(object):
                     Whether to create the list of runners even if it would be empty.
         """
         self.imports = set()
-        self.from_imports = defaultdict(set) # Dict[str, List[str]] Maps from module to imported components
-        self.loaders = OrderedDict() # Dict[str, str] Maps a string constructing a loader to a name.
-        self.loader_count = defaultdict(int) # Dict[str, int] Maps loader_id to the number of loaders sharing that ID
-        self.runners = [] # List[str]
-        self.preimport = [] # List[str]
-        self.suffix = [] # List[str]
-        self.data_loader = "" # str Contains the DataLoader constructor
+        self.from_imports = defaultdict(set)  # Dict[str, List[str]] Maps from module to imported components
+        self.loaders = OrderedDict()  # Dict[str, str] Maps a string constructing a loader to a name.
+        self.loader_count = defaultdict(int)  # Dict[str, int] Maps loader_id to the number of loaders sharing that ID
+        self.runners = []  # List[str]
+        self.preimport = []  # List[str]
+        self.suffix = []  # List[str]
+        self.data_loader = ""  # str Contains the DataLoader constructor
         self.summary = summary
         self.always_create_runners = always_create_runners
-
 
     def add_import(self, imports, frm=None):
         """
@@ -226,7 +225,6 @@ class Script(object):
             self.from_imports[frm].update(imports)
         else:
             self.imports.update(imports)
-
 
     def set_data_loader(self, data_loader_str):
         """
@@ -247,7 +245,6 @@ class Script(object):
 
         self.data_loader = data_loader_str
         return Script.DATA_LOADER_NAME
-
 
     def add_loader(self, loader_str, loader_id, suffix=None):
         """
@@ -279,10 +276,8 @@ class Script(object):
         self.loaders[loader_str] = unique_name
         return unique_name
 
-
     def get_runners(self):
         return Script.String("runners", safe=True, inline=True)
-
 
     def add_runner(self, runner_str):
         """
@@ -294,7 +289,6 @@ class Script(object):
         runner_str = ensure_safe(runner_str).unwrap()
         self.runners.append(runner_str)
 
-
     def append_preimport(self, line):
         """
         Append a line to the pre-import prefix of the script.
@@ -304,7 +298,6 @@ class Script(object):
         """
         line = ensure_safe(line).unwrap()
         self.preimport.append(line)
-
 
     def append_suffix(self, line):
         """
@@ -316,11 +309,11 @@ class Script(object):
         line = ensure_safe(line).unwrap()
         self.suffix.append(line)
 
-
     def __str__(self):
         script = "#!/usr/bin/env python3\n"
         script += "# Template auto-generated by polygraphy [v{:}] on {:} at {:}\n".format(
-                    polygraphy.__version__, time.strftime("%D"), time.strftime("%H:%M:%S"))
+            polygraphy.__version__, time.strftime("%D"), time.strftime("%H:%M:%S")
+        )
         script += "# Generation Command: {:}\n".format(" ".join(sys.argv))
         if self.summary:
             script += "# " + "\n# ".join(self.summary.splitlines()) + "\n"
@@ -359,7 +352,6 @@ class Script(object):
 
         G_LOGGER.super_verbose("Created script:\n{:}".format(script))
         return script
-
 
     def save(self, dest):
         """

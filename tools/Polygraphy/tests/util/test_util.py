@@ -17,11 +17,13 @@ import numpy as np
 import pytest
 from polygraphy import util
 
+
 VOLUME_CASES = [
     ((1, 1, 1), 1),
     ((2, 3, 4), 24),
     (tuple(), 1),
 ]
+
 
 @pytest.mark.parametrize("case", VOLUME_CASES)
 def test_volume(case):
@@ -36,10 +38,22 @@ class FindInDictCase(object):
         self.index = index
         self.expected = expected
 
+
 FIND_IN_DICT_CASES = [
-    FindInDictCase("resnet50_v1.5/output/Softmax:0", map={"resnet50_v1.5/output/Softmax:0": "x"}, index=None, expected="resnet50_v1.5/output/Softmax:0"),
-    FindInDictCase("resnet50_v1.5/output/Softmax:0", map={"resnet50_v1.5/output/softmax:0": "x"}, index=None, expected="resnet50_v1.5/output/softmax:0"),
+    FindInDictCase(
+        "resnet50_v1.5/output/Softmax:0",
+        map={"resnet50_v1.5/output/Softmax:0": "x"},
+        index=None,
+        expected="resnet50_v1.5/output/Softmax:0",
+    ),
+    FindInDictCase(
+        "resnet50_v1.5/output/Softmax:0",
+        map={"resnet50_v1.5/output/softmax:0": "x"},
+        index=None,
+        expected="resnet50_v1.5/output/softmax:0",
+    ),
 ]
+
 
 @pytest.mark.parametrize("case", FIND_IN_DICT_CASES)
 def test_find_in_dict(case):
@@ -51,34 +65,43 @@ SHAPE_OVERRIDE_CASES = [
     ((1, 3, 224, 224), (None, 3, 224, 224), True),
 ]
 
+
 @pytest.mark.parametrize("case", SHAPE_OVERRIDE_CASES)
 def test_is_valid_shape_override(case):
     override, shape, expected = case
     assert util.is_valid_shape_override(new_shape=override, original_shape=shape) == expected
 
 
+def arange(shape):
+    return np.arange(util.volume(shape)).reshape(shape)
+
+
 SHAPE_MATCHING_CASES = [
-    (np.zeros((1, 1, 3, 3)), (3, 3), (3, 3)), # Squeeze array shape
-    (np.zeros((1, 3, 3, 1)), (1, 1, 3, 3), (1, 1, 3, 3)), # Permute
-    (np.zeros((3, 3)), (1, 1, 3, 3), (3, 3)), # Squeeze specified shape
-    (np.zeros((3, 3)), (-1, 3), (3, 3)), # Infer dynamic
-    (np.zeros((3 * 224 * 224)), (None, 3, 224, 224), (1, 3, 224, 224)), # Reshape and Permute
-    (np.zeros((1, 3, 224, 224)), (None, 224, 224, 3), (1, 224, 224, 3)), # Permute
+    (arange((1, 1, 3, 3)), (3, 3), arange((3, 3))),  # Squeeze array shape
+    (
+        arange((1, 3, 3, 1)),
+        (1, 1, 3, 3),
+        arange((1, 1, 3, 3)),
+    ),  # Permutation should make no difference as other dimensions are 1s
+    (arange((3, 3)), (1, 1, 3, 3), arange((1, 1, 3, 3))),  # Unsqueeze where needed
+    (arange((3, 3)), (-1, 3), arange((3, 3))),  # Infer dynamic
+    (arange((3 * 2 * 2,)), (None, 3, 2, 2), arange((1, 3, 2, 2))),  # Reshape with inferred dimension
+    (arange((1, 3, 2, 2)), (None, 2, 2, 3), np.transpose(arange((1, 3, 2, 2)), [0, 2, 3, 1])),  # Permute
 ]
 
-@pytest.mark.parametrize("case", SHAPE_MATCHING_CASES)
-def test_shape_matching(case):
-    out, shape, expected_shape = case
-    out = util.try_match_shape(out, shape)
-    assert out.shape == expected_shape
 
+@pytest.mark.parametrize("arr, shape, expected", SHAPE_MATCHING_CASES)
+def test_shape_matching(arr, shape, expected):
+    arr = util.try_match_shape(arr, shape)
+    assert np.array_equal(arr, expected)
 
 
 UNPACK_ARGS_CASES = [
-    ((0, 1, 2), 3, (0, 1, 2)), # no extras
-    ((0, 1, 2), 4, (0, 1, 2, None)), # 1 extra
-    ((0, 1, 2), 2, (0, 1)), # 1 fewer
+    ((0, 1, 2), 3, (0, 1, 2)),  # no extras
+    ((0, 1, 2), 4, (0, 1, 2, None)),  # 1 extra
+    ((0, 1, 2), 2, (0, 1)),  # 1 fewer
 ]
+
 
 @pytest.mark.parametrize("case", UNPACK_ARGS_CASES)
 def test_unpack_args(case):
@@ -93,6 +116,7 @@ UNIQUE_LIST_CASES = [
     ([0, 0, 0, 0, 1, 0, 0], [0, 1]),
     ([5, 5, 5, 5, 5], [5]),
 ]
+
 
 @pytest.mark.parametrize("case", UNIQUE_LIST_CASES)
 def test_unique_list(case):

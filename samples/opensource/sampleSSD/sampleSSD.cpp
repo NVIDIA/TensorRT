@@ -38,6 +38,8 @@
 #include <iostream>
 #include <sstream>
 
+using samplesCommon::SampleUniquePtr;
+
 const std::string gSampleName = "TensorRT.sample_ssd";
 
 //!
@@ -59,9 +61,6 @@ struct SampleSSDParams : public samplesCommon::CaffeSampleParams
 //!
 class SampleSSD
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleSSD(const SampleSSDParams& params)
         : mParams(params)
@@ -129,7 +128,7 @@ bool SampleSSD::build()
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -153,9 +152,9 @@ bool SampleSSD::build()
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 3);
 
     return true;
 }
@@ -203,8 +202,29 @@ bool SampleSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
+
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -231,7 +251,7 @@ bool SampleSSD::infer()
     }
 
     // Read the input data into the managed buffers
-    assert(mParams.inputTensorNames.size() == 1);
+    ASSERT(mParams.inputTensorNames.size() == 1);
     if (!processInput(buffers))
     {
         return false;
@@ -283,7 +303,7 @@ bool SampleSSD::processInput(const samplesCommon::BufferManager& buffers)
     // Available images
     std::vector<std::string> imageList = {"bus.ppm"};
     mPPMs.resize(batchSize);
-    assert(mPPMs.size() <= imageList.size());
+    ASSERT(mPPMs.size() <= imageList.size());
     for (int i = 0; i < batchSize; ++i)
     {
         readPPMFile(locateFile(imageList[i], mParams.dataDirs), mPPMs[i]);
@@ -343,7 +363,7 @@ bool SampleSSD::verifyOutput(const samplesCommon::BufferManager& buffers)
             {
                 continue;
             }
-            assert((int) det[1] < outputClsSize);
+            ASSERT((int) det[1] < outputClsSize);
             std::string storeName = classes[(int) det[1]] + "-" + std::to_string(det[2]) + ".ppm";
 
             numDetections++;

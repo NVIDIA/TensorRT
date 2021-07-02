@@ -24,16 +24,19 @@ class Repeat(Tool):
     [EXPERIMENTAL] Run an arbitrary command repeatedly, sorting generated artifacts
     into `good` and `bad` directories.
     """
+
     def __init__(self):
         super().__init__("repeat")
         self.subscribe_args(ArtifactSorterArgs(enable_iter_art=False))
 
-
     def add_parser_args(self, parser):
-        parser.add_argument("--until", required=True, help="Controls when to stop running. "
-                            "Choices are: ['good', 'bad', int]. 'good' will keep running until the first 'good' run. "
-                            "'bad' will run until the first 'bad' run. An integer can be specified to run a set number of iterations. ")
-
+        parser.add_argument(
+            "--until",
+            required=True,
+            help="Controls when to stop running. "
+            "Choices are: ['good', 'bad', int]. 'good' will keep running until the first 'good' run. "
+            "'bad' will run until the first 'bad' run. An integer can be specified to run a set number of iterations. ",
+        )
 
     def run(self, args):
         try:
@@ -41,8 +44,7 @@ class Repeat(Tool):
         except:
             until = args.until
             if until not in ["good", "bad"]:
-                G_LOGGER.exit("--until value must be an integer, 'good', or 'bad', but was: {:}".format(args.until))
-
+                G_LOGGER.critical("--until value must be an integer, 'good', or 'bad', but was: {:}".format(args.until))
 
         def stop(index, success):
             if until == "good":
@@ -52,14 +54,13 @@ class Repeat(Tool):
 
             return index >= until
 
-
         G_LOGGER.start("Starting iterations")
 
         num_passed = 0
         num_total = 0
 
         success = True
-        MAX_COUNT = 100000 # We don't want to loop forever. This many iterations ought to be enough for anybody.
+        MAX_COUNT = 100000  # We don't want to loop forever. This many iterations ought to be enough for anybody.
         for iteration in range(MAX_COUNT):
             G_LOGGER.start("RUNNING | Iteration {:}".format(iteration + 1))
 
@@ -72,8 +73,13 @@ class Repeat(Tool):
             if stop(iteration, success):
                 break
         else:
-            G_LOGGER.warning("Maximum number of iterations reached: {:}.\n"
-                                "Iteration has been halted to prevent an infinite loop!".format(MAX_COUNT))
+            G_LOGGER.warning(
+                "Maximum number of iterations reached: {:}.\n"
+                "Iteration has been halted to prevent an infinite loop!".format(MAX_COUNT)
+            )
 
-        G_LOGGER.finish("Finished {:} iteration(s) | Passed: {:}/{:} | Pass Rate: {:}%".format(
-                            iteration + 1, num_passed, num_total, float(num_passed) * 100 / float(num_total)))
+        G_LOGGER.finish(
+            "Finished {:} iteration(s) | Passed: {:}/{:} | Pass Rate: {:}%".format(
+                iteration + 1, num_passed, num_total, float(num_passed) * 100 / float(num_total)
+            )
+        )

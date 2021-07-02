@@ -36,6 +36,8 @@
 #include <iostream>
 #include <sstream>
 
+using samplesCommon::SampleUniquePtr;
+
 const std::string gSampleName = "TensorRT.sample_fasterRCNN";
 
 //!
@@ -54,9 +56,6 @@ struct SampleFasterRCNNParams : public samplesCommon::CaffeSampleParams
 //!
 class SampleFasterRCNN
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleFasterRCNN(const SampleFasterRCNNParams& params)
         : mParams(params)
@@ -137,7 +136,7 @@ bool SampleFasterRCNN::build()
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -154,18 +153,39 @@ bool SampleFasterRCNN::build()
     {
         return false;
     }
+
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
     constructNetwork(parser, builder, network, config);
 
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
     }
 
-    assert(network->getNbInputs() == 2);
+    ASSERT(network->getNbInputs() == 2);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 3);
 
     return true;
 }
@@ -214,7 +234,7 @@ bool SampleFasterRCNN::infer()
     }
 
     // Read the input data into the managed buffers
-    assert(mParams.inputTensorNames.size() == 2);
+    ASSERT(mParams.inputTensorNames.size() == 2);
     if (!processInput(buffers))
     {
         return false;
@@ -266,7 +286,7 @@ bool SampleFasterRCNN::processInput(const samplesCommon::BufferManager& buffers)
     // Available images
     const std::vector<std::string> imageList = {"000456.ppm", "000542.ppm", "001150.ppm", "001763.ppm", "004545.ppm"};
     mPPMs.resize(batchSize);
-    assert(mPPMs.size() <= imageList.size());
+    ASSERT(mPPMs.size() <= imageList.size());
 
     // Fill im_info buffer
     float* hostImInfoBuffer = static_cast<float*>(buffers.getHostBuffer("im_info"));

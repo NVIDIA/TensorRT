@@ -19,15 +19,15 @@
 This script runs an identity model with TensorRT with FP16 precision enabled.
 """
 import numpy as np
-from polygraphy.backend.trt import (CreateConfig, EngineFromNetwork,
-                                    NetworkFromOnnxPath, SaveEngine, TrtRunner)
+from polygraphy.backend.trt import CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, SaveEngine, TrtRunner
 
 
 def main():
     # We can compose multiple lazy loaders together to get the desired conversion.
     # In this case, we want ONNX -> TensorRT Network -> TensorRT engine (w/ fp16).
-    build_engine = EngineFromNetwork(NetworkFromOnnxPath("identity.onnx"),
-                                     config=CreateConfig(fp16=True)) # Note that config is an optional argument.
+    build_engine = EngineFromNetwork(
+        NetworkFromOnnxPath("identity.onnx"), config=CreateConfig(fp16=True)
+    )  # Note that config is an optional argument.
 
     # To reuse the engine elsewhere, we can serialize and save it to a file.
     # The `SaveEngine` lazy loader will return the TensorRT engine, which allows us to chain
@@ -46,7 +46,9 @@ def main():
         # Thus, if you want to store results from multiple inferences, you should use `copy.deepcopy()`.
         outputs = runner.infer(feed_dict={"x": inp_data})
 
-        assert np.array_equal(outputs["y"], inp_data) # It's an identity model!
+        assert np.array_equal(outputs["y"], inp_data)  # It's an identity model!
+
+        print("Inference succeeded!")
 
 
 if __name__ == "__main__":

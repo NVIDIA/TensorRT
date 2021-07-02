@@ -79,26 +79,38 @@ python3 -m pip install colored
 
 ### Installing Dependencies
 
-Each `backend` directory includes a `requirements.txt` file that specifies the minimum set of packages
-it depends on. You can install the requirements for whichever backends you're interested in
-using:
+Polygraphy has no hard-dependencies on other Python packages. However, much of the functionality included
+does require other Python packages.
 
+#### Automatically Installing Dependencies
+
+It's non-trivial to determine all the packages that will be required ahead of time,
+since it depends on exactly what functionality is being used.
+
+To make this easier, Polygraphy can optionally automatically install or upgrade dependencies at runtime, as they are needed.
+To enable this behavior, set the `POLYGRAPHY_AUTOINSTALL_DEPS` environment variable to `1` or
+`polygraphy.config.AUTOINSTALL_DEPS = True` using the Python API.
+
+NOTE: By default, dependencies will be installed using the current interpreter, and may overwrite existing
+packages. The default installation command, which is `python3 -m pip install`, can be overriden by setting
+the `POLYGRAPHY_INSTALL_CMD` environment variable, or setting `polygraphy.config.INSTALL_CMD = "..."` using the Python API.
+
+#### Installing Manually
+
+Each `backend` directory includes a `requirements.txt` file that specifies the minimum set of packages
+it depends on. This does not necessarily include all packages required for all the functionality provided
+by the backend, but does serve as a good starting point.
+
+You can install the requirements for whichever backends you're interested in with:
 ```bash
 python3 -m pip install -r polygraphy/backend/<name>/requirements.txt
 ```
 
-#### Automatically Installing Dependencies
-
-Polygraphy has no hard-dependencies on other Python packages. However, much of the functionality included
-does require other Python packages. It's non-trivial to determine what packages will be required
-ahead of time, since it depends on exactly what functionality is being used.
-
-To make this easier, Polygraphy can optionally automatically install or upgrade dependencies as they are needed.
-To enable this behavior, set the `POLYGRAPHY_AUTOINSTALL_DEPS` environment variable to `1`.
-
-NOTE: The dependencies will be installed using the current interpreter, and may overwrite existing
-packages. Thus, it may be desirable to use this feature in a Python virtual environment or container.
-
+If additional packages are required, warnings or errors will be logged.
+You can install the additional packages manually with:
+```bash
+python3 -m pip install <package_name>
+```
 
 ## Usage
 
@@ -143,7 +155,8 @@ To view the docs, open `build/docs/index.html` in a browser or HTML viewer.
 
 Polygraphy includes various runtime checks for internal correctness, which are
 disabled by default. These checks can be enabled by setting the `POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS`
-environment variable to `1`. A failure in this type of check indicates a bug in Polygraphy.
+environment variable to `1` or `polygraphy.config.INTERNAL_CORRECTNESS_CHECKS = True` in the Python API.
+A failure in this type of check indicates a bug in Polygraphy.
 
 When the checks are enabled, Polygraphy will ensure, for example, that loaders do not
 modify their state when they are called, and that runners will reset their state correctly in

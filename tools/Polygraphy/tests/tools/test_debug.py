@@ -53,6 +53,7 @@ def replay_dir(request):
         return TacticReplayData().add("layer0", Algorithm.from_trt(fake_context("layer0"), fake_algo(0, tactic)))
 
     with tempfile.TemporaryDirectory() as dir:
+
         def make_path(prefix, *args):
             path = os.path.join(dir, prefix)
             if request.param:
@@ -68,27 +69,29 @@ def replay_dir(request):
         save_json(make_replay(1), make_path("bad", "0.json"))
         save_json(make_replay(2), make_path("bad", "1.json"))
 
-        EXPECTED_OUTPUT = dedent("""
+        EXPECTED_OUTPUT = dedent(
+            """
         [I] Loaded 2 good tactic replays.
         [I] Loaded 2 bad tactic replays.
         [I] Found potentially bad tactics:
         [I] Layer: layer0
                 Algorithms: ["(Implementation: 0, Tactic: 2) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),)"]
-        """)
+        """
+        )
         yield dir, EXPECTED_OUTPUT
 
 
 class TestDiffTactics(object):
     def check_output(self, status, expected_output):
-        output = "\n".join(line for line in status.stdout.strip().splitlines() if "Loading tactic replay file from " not in line)
+        output = "\n".join(
+            line for line in status.stdout.strip().splitlines() if "Loading tactic replay file from " not in line
+        )
         assert output == expected_output.strip()
-
 
     def test_dir(self, replay_dir):
         replay_dir, expected_output = replay_dir
         status = run_polygraphy_debug(["diff-tactics", "--dir", replay_dir], disable_verbose=True)
         self.check_output(status, expected_output)
-
 
     def test_good_bad(self, replay_dir):
         replay_dir, expected_output = replay_dir
@@ -104,17 +107,39 @@ class TestBuild(object):
     def test_good_bad(self):
         with tempfile.TemporaryDirectory() as outdir:
             # Also includes --show-output sanity test
-            status = run_polygraphy_debug(["build", ONNX_MODELS["identity"].path, "--save-tactics=replay.json", "--show-output",
-                                           "--artifacts-dir", outdir, "--until=good", "--artifacts", "replay.json",
-                                           "--check", "true"],
-                                           cwd=outdir)
+            status = run_polygraphy_debug(
+                [
+                    "build",
+                    ONNX_MODELS["identity"].path,
+                    "--save-tactics=replay.json",
+                    "--show-output",
+                    "--artifacts-dir",
+                    outdir,
+                    "--until=good",
+                    "--artifacts",
+                    "replay.json",
+                    "--check",
+                    "true",
+                ],
+                cwd=outdir,
+            )
             assert "Passed: 1/1 | Pass Rate: 100.0%" in status.stdout
 
-
-            status = run_polygraphy_debug(["build", ONNX_MODELS["identity"].path, "--save-tactics=replay.json",
-                                           "--artifacts-dir", outdir, "--until=bad", "--artifacts", "replay.json",
-                                           "--check", "false"],
-                                           cwd=outdir)
+            status = run_polygraphy_debug(
+                [
+                    "build",
+                    ONNX_MODELS["identity"].path,
+                    "--save-tactics=replay.json",
+                    "--artifacts-dir",
+                    outdir,
+                    "--until=bad",
+                    "--artifacts",
+                    "replay.json",
+                    "--check",
+                    "false",
+                ],
+                cwd=outdir,
+            )
             assert "Passed: 0/1 | Pass Rate: 0.0%" in status.stdout
 
             def check_outdir(subdir):
@@ -132,26 +157,60 @@ class TestPrecision(object):
     @pytest.mark.parametrize("check_status", ["true", "false"])
     @pytest.mark.parametrize("mode", ["bisect", "linear"])
     @pytest.mark.parametrize("direction", ["forward", "reverse"])
-    def test_sanity(self, mode, direction, check_status):
+    @pytest.mark.parametrize("model", ["reducable", "const_foldable"])
+    def test_sanity(self, mode, direction, check_status, model):
         with tempfile.TemporaryDirectory() as outdir:
-            run_polygraphy_debug(["precision", "--mode", mode, "--direction", direction, ONNX_MODELS["identity_identity"].path, "--int8",
-                                  "--check", check_status],
-                                 cwd=outdir)
+            run_polygraphy_debug(
+                [
+                    "precision",
+                    "--mode",
+                    mode,
+                    "--direction",
+                    direction,
+                    ONNX_MODELS[model].path,
+                    "--int8",
+                    "--check",
+                    check_status,
+                ],
+                cwd=outdir,
+            )
 
 
 class TestReduce(object):
     FAKE_REDUCE_CHECKER = os.path.join(os.path.dirname(__file__), "fake_reduce_checker.py")
 
     # Test left branch, right branch, at the point of branching, and after the branch.
-    @pytest.mark.parametrize("fail_node", ["onnx_graphsurgeon_node_1", "onnx_graphsurgeon_node_3", "onnx_graphsurgeon_node_5",
-                                           "onnx_graphsurgeon_node_7", "onnx_graphsurgeon_node_9"])
+    @pytest.mark.parametrize(
+        "fail_node",
+        [
+            "onnx_graphsurgeon_node_1",
+            "onnx_graphsurgeon_node_3",
+            "onnx_graphsurgeon_node_5",
+            "onnx_graphsurgeon_node_7",
+            "onnx_graphsurgeon_node_9",
+        ],
+    )
     @pytest.mark.parametrize("mode", ["linear", "bisect"])
     def test_can_isolate_node(self, fail_node, mode):
         with tempfile.TemporaryDirectory() as outdir:
-            run_polygraphy_debug(["reduce", ONNX_MODELS["reducable"].path, "--output=reduced.onnx", "--mode", mode, "--show-output",
-                                  "--min-good=good_reduced.onnx",
-                                  "--check", TestReduce.FAKE_REDUCE_CHECKER, "polygraphy_debug.onnx", "--fail-node", fail_node],
-                                 disable_verbose=True, cwd=outdir)
+            run_polygraphy_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["reducable"].path,
+                    "--output=reduced.onnx",
+                    "--mode",
+                    mode,
+                    "--show-output",
+                    "--min-good=good_reduced.onnx",
+                    "--check",
+                    TestReduce.FAKE_REDUCE_CHECKER,
+                    "polygraphy_debug.onnx",
+                    "--fail-node",
+                    fail_node,
+                ],
+                disable_verbose=True,
+                cwd=outdir,
+            )
 
             model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
 
@@ -177,14 +236,27 @@ class TestReduce(object):
             if good_model:
                 assert model != good_model
 
-
     # Run a test where the last node in the model is failing.
     # If we're not reducing inputs, then only the outputs should change
     def test_no_reduce_inputs(self):
         with tempfile.TemporaryDirectory() as outdir:
-            run_polygraphy_debug(["reduce", ONNX_MODELS["reducable"].path, "--output=reduced.onnx", "--show-output", "--no-reduce-inputs", "--mode=linear",
-                                    "--check", TestReduce.FAKE_REDUCE_CHECKER, "polygraphy_debug.onnx", "--fail-node", "onnx_graphsurgeon_node_7"],
-                                    disable_verbose=True, cwd=outdir)
+            run_polygraphy_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["reducable"].path,
+                    "--output=reduced.onnx",
+                    "--show-output",
+                    "--no-reduce-inputs",
+                    "--mode=linear",
+                    "--check",
+                    TestReduce.FAKE_REDUCE_CHECKER,
+                    "polygraphy_debug.onnx",
+                    "--fail-node",
+                    "onnx_graphsurgeon_node_7",
+                ],
+                disable_verbose=True,
+                cwd=outdir,
+            )
 
             model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
             assert len(model.graph.node) == 4
@@ -195,14 +267,27 @@ class TestReduce(object):
             node_names = [node.name for node in model.graph.node]
             assert "onnx_graphsurgeon_node_7" in node_names
 
-
     # Run a test where an input node in the model is failing.
     # If we're not reducing outputs, then only the inputs should change
     def test_no_reduce_outputs(self):
         with tempfile.TemporaryDirectory() as outdir:
-            run_polygraphy_debug(["reduce", ONNX_MODELS["reducable"].path, "--output=reduced.onnx", "--show-output", "--no-reduce-outputs", "--mode=linear",
-                                    "--check", TestReduce.FAKE_REDUCE_CHECKER, "polygraphy_debug.onnx", "--fail-node", "onnx_graphsurgeon_node_3"],
-                                    disable_verbose=True, cwd=outdir)
+            run_polygraphy_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["reducable"].path,
+                    "--output=reduced.onnx",
+                    "--show-output",
+                    "--no-reduce-outputs",
+                    "--mode=linear",
+                    "--check",
+                    TestReduce.FAKE_REDUCE_CHECKER,
+                    "polygraphy_debug.onnx",
+                    "--fail-node",
+                    "onnx_graphsurgeon_node_3",
+                ],
+                disable_verbose=True,
+                cwd=outdir,
+            )
 
             model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
             assert len(model.graph.node) == 4
@@ -213,68 +298,119 @@ class TestReduce(object):
             node_names = [node.name for node in model.graph.node]
             assert "onnx_graphsurgeon_node_7" in node_names
 
-
     # In this test, we set up the checker to return 1 for the bad node, but 2 in other cases.
     # We want to ignore '2's and treat them as successes
     def test_reduce_custom_return_code(self):
         with tempfile.TemporaryDirectory() as outdir:
-            run_polygraphy_debug(["reduce", ONNX_MODELS["reducable"].path, "--output=reduced.onnx", "--show-output", "--fail-code=1", # Only 1s are real failures.
-                            "--check", TestReduce.FAKE_REDUCE_CHECKER, "polygraphy_debug.onnx", "--fail-node", "onnx_graphsurgeon_node_5", "--default-return-code=2"],
-                            disable_verbose=True, cwd=outdir)
+            run_polygraphy_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["reducable"].path,
+                    "--output=reduced.onnx",
+                    "--show-output",
+                    "--fail-code=1",  # Only 1s are real failures.
+                    "--check",
+                    TestReduce.FAKE_REDUCE_CHECKER,
+                    "polygraphy_debug.onnx",
+                    "--fail-node",
+                    "onnx_graphsurgeon_node_5",
+                    "--default-return-code=2",
+                ],
+                disable_verbose=True,
+                cwd=outdir,
+            )
 
             model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
             assert len(model.graph.node) == 1
             assert model.graph.node[0].name == "onnx_graphsurgeon_node_5"
-
 
     # Here we set the failure return code to 0, which would normally mark succeeding cases as failing.
     # However, since we also set the --fail-regex, it will only regard as failures those runs which print the error message.
-    @pytest.mark.parametrize("fail_code_arg", [
-        [],
-        ["--fail-code=0"],
-    ])
+    @pytest.mark.parametrize(
+        "fail_code_arg",
+        [
+            [],
+            ["--fail-code=0"],
+        ],
+    )
     def test_reduce_custom_fail_message(self, fail_code_arg):
         with tempfile.TemporaryDirectory() as outdir:
             # fake_reduce_checker will alternate error messages based on whether an arbitrary node is present in the model.
-            run_polygraphy_debug(["reduce", ONNX_MODELS["reducable"].path, "--output=reduced.onnx", "--show-output", "--fail-regex", "REALLY BAD", "BAD NODE"]
-                            + fail_code_arg
-                            + ["--check", TestReduce.FAKE_REDUCE_CHECKER, "polygraphy_debug.onnx", "--fail-node", "onnx_graphsurgeon_node_5", "--fail-return-code=0"],
-                            disable_verbose=True, cwd=outdir)
+            run_polygraphy_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["reducable"].path,
+                    "--output=reduced.onnx",
+                    "--show-output",
+                    "--fail-regex",
+                    "REALLY BAD",
+                    "BAD NODE",
+                ]
+                + fail_code_arg
+                + [
+                    "--check",
+                    TestReduce.FAKE_REDUCE_CHECKER,
+                    "polygraphy_debug.onnx",
+                    "--fail-node",
+                    "onnx_graphsurgeon_node_5",
+                    "--fail-return-code=0",
+                ],
+                disable_verbose=True,
+                cwd=outdir,
+            )
 
             model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
             assert len(model.graph.node) == 1
             assert model.graph.node[0].name == "onnx_graphsurgeon_node_5"
 
-
     # In cases where both sides of a branch are required to reproduce the failure,
     # reduce should not remove the branch.
-    @pytest.mark.parametrize("fail_nodes", [
-        ["onnx_graphsurgeon_node_1", "onnx_graphsurgeon_node_3"],
-        ["onnx_graphsurgeon_node_7", "onnx_graphsurgeon_node_9"]
-    ])
+    @pytest.mark.parametrize(
+        "fail_nodes",
+        [
+            ["onnx_graphsurgeon_node_1", "onnx_graphsurgeon_node_3"],
+            ["onnx_graphsurgeon_node_7", "onnx_graphsurgeon_node_9"],
+        ],
+    )
     def test_no_reduce_required_branches(self, fail_nodes):
         with tempfile.TemporaryDirectory() as outdir:
-            run_polygraphy_debug(["reduce", ONNX_MODELS["reducable"].path, "--output=reduced.onnx", "--show-output",
-                            "--check", TestReduce.FAKE_REDUCE_CHECKER, "polygraphy_debug.onnx",
-                            "--fail-node"] + fail_nodes,
-                            disable_verbose=True, cwd=outdir)
+            run_polygraphy_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["reducable"].path,
+                    "--output=reduced.onnx",
+                    "--show-output",
+                    "--check",
+                    TestReduce.FAKE_REDUCE_CHECKER,
+                    "polygraphy_debug.onnx",
+                    "--fail-node",
+                ]
+                + fail_nodes,
+                disable_verbose=True,
+                cwd=outdir,
+            )
 
             model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
             node_names = [node.name for node in model.graph.node]
             assert all(fail_node in node_names for fail_node in fail_nodes)
-            assert len(model.graph.node) <= 3 # The branch on the opposite side of the model should be removed.
+            assert len(model.graph.node) <= 3  # The branch on the opposite side of the model should be removed.
 
-
-    @pytest.mark.parametrize("opts", [
-        [],
-        ["--force-fallback-shape-inference"]
-    ])
+    @pytest.mark.parametrize("opts", [[], ["--force-fallback-shape-inference"]])
     def test_reduce_shape_inference(self, opts):
         with tempfile.TemporaryDirectory() as outdir:
-            status = run_polygraphy_debug(["reduce", ONNX_MODELS["dynamic_identity"].path, "--output=reduced.onnx",
-                                           "--show-output", "--model-input-shapes=X:[1,2,5,5]"] + opts
-                                           + ["--check", "false"],
-                                           disable_verbose=True, cwd=outdir)
+            status = run_polygraphy_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["dynamic_identity"].path,
+                    "--output=reduced.onnx",
+                    "--show-output",
+                    "--model-input-shapes=X:[1,2,5,5]",
+                ]
+                + opts
+                + ["--check", "false"],
+                disable_verbose=True,
+                cwd=outdir,
+            )
             model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
             graph = gs.import_onnx(model)
             assert tuple(graph.inputs[0].shape) == (1, 2, 5, 5)
@@ -282,15 +418,17 @@ class TestReduce(object):
 
 
 class TestRepeat(object):
-    @pytest.mark.parametrize("until, check, expected_iters", [
-        ("good", "true", 1),
-        ("bad", "false", 1),
-        ("5", "false", 5),
-    ])
+    @pytest.mark.parametrize(
+        "until, check, expected_iters",
+        [
+            ("good", "true", 1),
+            ("bad", "false", 1),
+            ("5", "false", 5),
+        ],
+    )
     def test_until(self, until, check, expected_iters):
         status = run_polygraphy_debug(["repeat", "--until", until, "--check", check])
         assert "Finished {:} iteration(s)".format(expected_iters) in status.stdout
-
 
     def test_iteration_info(self):
         with tempfile.TemporaryDirectory() as outdir:
@@ -310,15 +448,39 @@ class TestRepeat(object):
             assert not os.path.exists(path)
             with open(path, "w") as f:
                 f.write("File")
-            """.format(iter_info)
+            """.format(
+                iter_info
+            )
 
             with open(check_script, "w") as f:
                 f.write(dedent(check_num))
 
-            status = run_polygraphy_debug(["repeat", "--until=5", "--iteration-info", iter_info, "--show-output",
-                                           "--check", sys.executable, check_script], cwd=outdir)
+            status = run_polygraphy_debug(
+                [
+                    "repeat",
+                    "--until=5",
+                    "--iteration-info",
+                    iter_info,
+                    "--show-output",
+                    "--check",
+                    sys.executable,
+                    check_script,
+                ],
+                cwd=outdir,
+            )
             assert "FAILED" not in status.stdout
             assert "Passed: 5/5 | Pass Rate: 100.0%" in status.stdout
 
             # Iteration info should be cleaned up afterwards
             assert not os.path.exists(iter_info)
+
+    def test_ignore_fail_code(self):
+        # Sanity check to make sure the command normally fails.
+        status = run_polygraphy_debug(["repeat", "--until=5", "--check", "false"])
+        assert "Passed: 0/5 | Pass Rate: 0.0%" in status.stdout
+
+        status = run_polygraphy_debug(["repeat", "--until=5", "--ignore-fail-code=2", "--check", "false"])
+        assert "Passed: 0/5 | Pass Rate: 0.0%" in status.stdout
+
+        status = run_polygraphy_debug(["repeat", "--until=5", "--ignore-fail-code=1", "--check", "false"])
+        assert "Passed: 5/5 | Pass Rate: 100.0%" in status.stdout

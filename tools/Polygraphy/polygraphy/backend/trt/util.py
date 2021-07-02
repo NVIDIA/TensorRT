@@ -24,6 +24,8 @@ np = mod.lazy_import("numpy")
 
 
 TRT_LOGGER = None
+
+
 @mod.export()
 def get_trt_logger():
     """
@@ -50,8 +52,7 @@ def check_onnx_parser_errors(parser, success):
         G_LOGGER.critical("Could not parse ONNX correctly")
 
     if not success:
-        G_LOGGER.critical("Failed to parse ONNX model. "
-                          "Does the model file exist and contain a valid ONNX model?")
+        G_LOGGER.critical("Failed to parse ONNX model. Does the model file exist and contain a valid ONNX model?")
 
 
 def get_layer_class_mapping():
@@ -63,10 +64,11 @@ def get_layer_class_mapping():
             layer_cls = getattr(trt, layer_cls)
         except AttributeError:
             if config.INTERNAL_CORRECTNESS_CHECKS:
-                G_LOGGER.warning("Could not find one or more of layer type: {:} or layer class: {:}".format(layer_type, layer_cls))
+                G_LOGGER.warning(
+                    "Could not find one or more of layer type: {:} or layer class: {:}".format(layer_type, layer_cls)
+                )
         else:
             layer_class_mapping[layer_type] = layer_cls
-
 
     try_add("CONVOLUTION", "IConvolutionLayer")
     try_add("FULLY_CONNECTED", "IFullyConnectedLayer")
@@ -112,7 +114,7 @@ def np_dtype_from_trt(trt_dtype):
     return np.dtype(trt.nptype(trt_dtype))
 
 
-def get_input_metadata(network):
+def get_network_input_metadata(network):
     inputs = TensorMetadata()
     for i in range(network.num_inputs):
         tensor = network.get_input(i)
@@ -120,7 +122,7 @@ def get_input_metadata(network):
     return inputs
 
 
-def get_output_metadata(network):
+def get_network_output_metadata(network):
     outputs = TensorMetadata()
     for i in range(network.num_outputs):
         tensor = network.get_output(i)
@@ -128,27 +130,56 @@ def get_output_metadata(network):
     return outputs
 
 
+def get_layer_input_metadata(layer):
+    meta = TensorMetadata()
+    for i in range(layer.num_inputs):
+        inp = layer.get_input(i)
+        if inp:
+            meta.add(inp.name, np_dtype_from_trt(inp.dtype), inp.shape)
+    return meta
+
+
+def get_layer_output_metadata(layer):
+    meta = TensorMetadata()
+    for i in range(layer.num_outputs):
+        outp = layer.get_output(i)
+        if outp:
+            meta.add(outp.name, np_dtype_from_trt(outp.dtype), outp.shape)
+    return meta
+
+
 def str_from_layer(layer, index):
-    def get_layer_input_metadata(layer):
-        meta = TensorMetadata()
-        for i in range(layer.num_inputs):
-            inp = layer.get_input(i)
-            if inp:
-                meta.add(inp.name, np_dtype_from_trt(inp.dtype), inp.shape)
-        return meta
-
-    def get_layer_output_metadata(layer):
-        meta = TensorMetadata()
-        for i in range(layer.num_outputs):
-            outp = layer.get_output(i)
-            if outp:
-                meta.add(outp.name, np_dtype_from_trt(outp.dtype), outp.shape)
-        return meta
-
     input_info = get_layer_input_metadata(layer)
     output_info = get_layer_output_metadata(layer)
-
     return util.str_from_layer("Layer", index, layer.name, layer.type, input_info, output_info)
+
+
+def get_layer_attribute_names(layer):
+    def is_special_attribute(attr):
+        return attr.startswith("__") and attr.endswith("__")
+
+    def is_valid_attribute(attr, layer):
+        if (
+            type(layer) == trt.IPoolingLayer
+            or type(layer) == trt.IConvolutionLayer
+            or type(layer) == trt.IDeconvolutionLayer
+        ):
+            if len(layer.get_input(0).shape) > 4:
+                # 3D pooling uses padding_nd
+                return attr not in ["padding", "stride", "window_size"]
+        if type(layer) == trt.IResizeLayer:
+            if layer.num_inputs > 1:
+                return attr not in ["scales"]
+        if type(layer) == trt.ISliceLayer:
+            if layer.num_inputs > 1:
+                return attr not in ["shape", "start", "stride"]
+        return True
+
+    return [
+        attr
+        for attr in dir(layer)
+        if not is_special_attribute(attr) and not hasattr(trt.ILayer, attr) and is_valid_attribute(attr, layer)
+    ]
 
 
 def str_from_network(network, mode="full"):
@@ -164,31 +195,20 @@ def str_from_network(network, mode="full"):
     """
     LAYER_TYPE_CLASS_MAPPING = get_layer_class_mapping()
 
-    def is_special_attribute(attr):
-        return attr.startswith("__") and attr.endswith("__")
-
-    def is_valid_attribute(attr, layer):
-        if type(layer) == trt.IPoolingLayer or type(layer) == trt.IConvolutionLayer or type(layer) == trt.IDeconvolutionLayer:
-            if len(layer.get_input(0).shape) > 4:
-                # 3D pooling uses padding_nd
-                return attr not in ["padding", "stride", "window_size"]
-        if type(layer) == trt.IResizeLayer:
-            if layer.num_inputs > 1:
-                return attr not in ["scales"]
-        if type(layer) == trt.ISliceLayer:
-            if layer.num_inputs > 1:
-                return attr not in ["shape", "start", "stride"]
-        return True
-
-
-    network_str = "Name: {:} | {:} Batch Network{:}\n".format(network.name,
-                    "Implicit" if hasattr(network, "has_implicit_batch_dimension") and network.has_implicit_batch_dimension else "Explicit",
-                    " with Explicit Precision " if hasattr(network, "has_explicit_precision") and network.has_explicit_precision else "")
+    network_str = "Name: {:} | {:} Batch Network{:}\n".format(
+        network.name,
+        "Implicit"
+        if hasattr(network, "has_implicit_batch_dimension") and network.has_implicit_batch_dimension
+        else "Explicit",
+        " with Explicit Precision "
+        if hasattr(network, "has_explicit_precision") and network.has_explicit_precision
+        else "",
+    )
     network_str += "\n"
 
-    input_metadata = get_input_metadata(network)
+    input_metadata = get_network_input_metadata(network)
     network_str += "---- {:} Network Input(s) ----\n{:}\n\n".format(len(input_metadata), input_metadata)
-    output_metadata = get_output_metadata(network)
+    output_metadata = get_network_output_metadata(network)
     network_str += "---- {:} Network Output(s) ----\n{:}\n\n".format(len(output_metadata), output_metadata)
     network_str += "---- {:} Layer(s) ----\n".format(network.num_layers)
     if mode != "none":
@@ -200,7 +220,7 @@ def str_from_network(network, mode="full"):
 
             if mode in ["attrs", "full"]:
                 # Exclude special attributes, as well as any attributes of the base layer class (those can be displayed above).
-                attrs = [attr for attr in dir(layer) if not is_special_attribute(attr) and not hasattr(trt.ILayer, attr) and is_valid_attribute(attr, layer)]
+                attrs = get_layer_attribute_names(layer)
                 if attrs:
                     network_str += util.indent_block("---- Attributes ----") + "\n"
                 for attr in attrs:
@@ -223,8 +243,10 @@ def _get_network_outputs(network):
 def check_outputs_not_found(not_found, available_outputs):
     if not_found:
         available_outputs = util.unique_list(available_outputs)
-        G_LOGGER.critical("The following outputs: {:} were not found. "
-                          "Note: Available tensors: {:}".format(not_found, available_outputs))
+        G_LOGGER.critical(
+            "The following outputs were not found: {:}.\n"
+            "Note: Available tensors:\n\t{:}".format(not_found, "\n\t".join(available_outputs))
+        )
 
 
 def mark_outputs(network, outputs):
@@ -266,8 +288,11 @@ def mark_layerwise(network):
     in_loop = False
     for layer in network:
         if layer.type in LOOP_START_LAYERS:
-            G_LOGGER.warning("Loop detected. Please ensure the network is topologically sorted so that layers within "
-                             "the loop body are not marked as network outputs in layerwise mode", mode=LogMode.ONCE)
+            G_LOGGER.warning(
+                "Loop detected. Please ensure the network is topologically sorted so that layers within "
+                "the loop body are not marked as network outputs in layerwise mode",
+                mode=LogMode.ONCE,
+            )
             in_loop = True
         elif layer.type in LOOP_END_LAYERS:
             in_loop = False
@@ -297,26 +322,36 @@ def unmark_outputs(network, outputs):
 
 
 def str_from_config(config):
-    config_str = "{:15} | {:} bytes ({:.2f} MiB)\n".format("Workspace", config.max_workspace_size, config.max_workspace_size / (1024.0 ** 2))
-    config_str += "{:15} | ".format("Precision")
+    config_str = "{:20} | {:} bytes ({:.2f} MiB)\n".format(
+        "Workspace", config.max_workspace_size, config.max_workspace_size / (1024.0 ** 2)
+    )
+    config_str += "{:20} | ".format("Precision")
     with contextlib.suppress(AttributeError):
         config_str += "TF32: {:}, ".format(config.get_flag(trt.BuilderFlag.TF32))
-    config_str += "FP16: {:}, INT8: {:}, Strict Types: {:}\n".format(config.get_flag(trt.BuilderFlag.FP16),
-                        config.get_flag(trt.BuilderFlag.INT8), config.get_flag(trt.BuilderFlag.STRICT_TYPES))
+    config_str += "FP16: {:}, INT8: {:}, Strict Types: {:}\n".format(
+        config.get_flag(trt.BuilderFlag.FP16),
+        config.get_flag(trt.BuilderFlag.INT8),
+        config.get_flag(trt.BuilderFlag.STRICT_TYPES),
+    )
 
     with contextlib.suppress(AttributeError):
-        source_vals = [val.name for val in trt.TacticSource.__members__.values() if (1 << int(val)) & config.get_tactic_sources()]
-        config_str += "{:15} | {:}\n".format("Tactic Sources", source_vals)
+        source_vals = [
+            val.name for val in trt.TacticSource.__members__.values() if (1 << int(val)) & config.get_tactic_sources()
+        ]
+        config_str += "{:20} | {:}\n".format("Tactic Sources", source_vals)
+
+    with contextlib.suppress(AttributeError):
+        config_str += "{:20}: {:}\n".format("Safety Restricted", config.get_flag(trt.BuilderFlag.SAFETY_SCOPE))
 
     if config.int8_calibrator:
-        config_str += "{:15} | {:}\n".format("Calibrator", config.int8_calibrator)
-    config_str += "{:15} | {:} profile(s)".format("Profiles", config.num_optimization_profiles)
+        config_str += "{:20} | {:}\n".format("Calibrator", config.int8_calibrator)
+    config_str += "{:20} | {:} profile(s)".format("Profiles", config.num_optimization_profiles)
     return config_str
 
 
 def check_profile(profile):
     if not bool(profile):
-        G_LOGGER.critical("Profile is not valid, please provide profile data. Note: profile was: {:}".format(profile))
+        G_LOGGER.critical("Profile is not valid, please provide profile data.\nNote: profile was: {:}".format(profile))
     return profile
 
 
@@ -354,44 +389,52 @@ def get_input_metadata_from_profile(profile, network):
             shapes = profile.get_shape(tensor.name)
 
         if tuple(shapes[0]) != tuple(shapes[2]):
-            G_LOGGER.warning("Will use `opt` shapes from profile 0 for calibration. "
-                             "Note that even though `min` != `max` in this profile, calibration "
-                             "will use fixed input shapes (this is not necessarily an issue).")
+            G_LOGGER.warning(
+                "Will use `opt` shapes from profile 0 for calibration. "
+                "Note that even though `min` != `max` in this profile, calibration "
+                "will use fixed input shapes (this is not necessarily an issue)."
+            )
         # Always use opt shape
         input_metadata.add(name=tensor.name, dtype=trt.nptype(tensor.dtype), shape=shapes[1])
     return input_metadata
 
 
-def add_binding_to_metadata(engine, binding, metadata):
+def add_binding_to_metadata(engine, binding, metadata, name_binding):
+    # name_binding always comes from profile 0, since that's where we
+    # get all binding names in the runner
     metadata.add(
-        name=engine[binding],
+        name=engine[name_binding],
         dtype=trt.nptype(engine.get_binding_dtype(binding)),
-        shape=list(engine.get_binding_shape(binding))
+        shape=list(engine.get_binding_shape(binding)),
     )
 
 
 def get_input_metadata_from_engine(engine, start_binding, end_binding):
     inputs = TensorMetadata()
-    for binding in range(start_binding, end_binding):
+    for index, binding in enumerate(range(start_binding, end_binding)):
         if engine.binding_is_input(binding):
-            add_binding_to_metadata(engine, binding, inputs)
+            add_binding_to_metadata(engine, binding, inputs, name_binding=index)
     return inputs
 
 
 def get_output_metadata_from_engine(engine, start_binding, end_binding):
     outputs = TensorMetadata()
-    for binding in range(start_binding, end_binding):
+    for index, binding in enumerate(range(start_binding, end_binding)):
         if not engine.binding_is_input(binding):
-            add_binding_to_metadata(engine, binding, outputs)
+            add_binding_to_metadata(engine, binding, outputs, name_binding=index)
     return outputs
 
 
 def str_from_engine(engine):
     bindings_per_profile = get_bindings_per_profile(engine)
-    engine_str = "Name: {:} | {:}{:} Batch Engine ({:} layers)\n".format(engine.name,
-                        "Refittable " if engine.refittable else "",
-                        "Implicit" if hasattr(engine, "has_implicit_batch_dimension") and engine.has_implicit_batch_dimension else "Explicit",
-                        engine.num_layers)
+    engine_str = "Name: {:} | {:}{:} Batch Engine ({:} layers)\n".format(
+        engine.name,
+        "Refittable " if engine.refittable else "",
+        "Implicit"
+        if hasattr(engine, "has_implicit_batch_dimension") and engine.has_implicit_batch_dimension
+        else "Explicit",
+        engine.num_layers,
+    )
     engine_str += "\n"
 
     # Show metadata for the first profile (i.e. the dynamic shapes)
@@ -402,16 +445,21 @@ def str_from_engine(engine):
 
     engine_str += "---- Memory ----\nDevice Memory: {:} bytes\n\n".format(engine.device_memory_size)
 
-    engine_str += "---- {:} Profile(s) ({:} Binding(s) Each) ----\n".format(engine.num_optimization_profiles, bindings_per_profile)
+    engine_str += "---- {:} Profile(s) ({:} Binding(s) Each) ----\n".format(
+        engine.num_optimization_profiles, bindings_per_profile
+    )
     for profile_index in range(engine.num_optimization_profiles):
         engine_str += "- Profile: {:}\n".format(profile_index)
 
         max_width = max([len(binding) for binding in engine]) + 8
         for offset in range(bindings_per_profile):
             binding = profile_index * bindings_per_profile + offset
-            name =  "[Name: {:}]".format(engine.get_binding_name(binding))
-            engine_str += util.indent_block("Binding Index: {:} {:} {:<{max_width}}".format(
-                                binding, "(Input) " if engine.binding_is_input(binding) else "(Output)", name, max_width=max_width))
+            name = "[Name: {:}]".format(engine.get_binding_name(binding))
+            engine_str += util.indent_block(
+                "Binding Index: {:} {:} {:<{max_width}}".format(
+                    binding, "(Input) " if engine.binding_is_input(binding) else "(Output)", name, max_width=max_width
+                )
+            )
 
             if engine.binding_is_input(binding):
                 if engine.is_shape_binding(binding):
@@ -420,7 +468,7 @@ def str_from_engine(engine):
                     min_shape, opt_shape, max_shape = engine.get_profile_shape(profile_index, binding)
                 engine_str += " | Shapes: min={:}, opt={:}, max={:}\n".format(min_shape, opt_shape, max_shape)
             else:
-                engine_str += " | Shape: {:}".format(tuple(output_metadata[engine[offset]].shape))
+                engine_str += " | Shape: {:}\n".format(engine.get_binding_shape(binding))
         engine_str += "\n"
     return util.indent_block(engine_str, level=0)
 
@@ -446,8 +494,10 @@ def get_active_profile_bindings(context):
     start_binding = bindings_per_profile * active_profile
     end_binding = start_binding + bindings_per_profile
 
-    G_LOGGER.ultra_verbose("Total # of Profiles: {:}, Bindings Per Profile: {:}, Active Profile: {:}, "
-                           "Start Binding: {:}, End Binding: {:}".format(
-                                context.engine.num_optimization_profiles, bindings_per_profile,
-                                active_profile, start_binding, end_binding))
+    G_LOGGER.ultra_verbose(
+        "Total # of Profiles: {:}, Bindings Per Profile: {:}, Active Profile: {:}, "
+        "Start Binding: {:}, End Binding: {:}".format(
+            context.engine.num_optimization_profiles, bindings_per_profile, active_profile, start_binding, end_binding
+        )
+    )
     return start_binding, end_binding

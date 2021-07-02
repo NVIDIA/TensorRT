@@ -29,14 +29,19 @@ ARG_CASES = [
     (["--seed=123"], ["seed"], [123]),
     (["--int-min=23", "--int-max=94"], ["int_range"], [(23, 94)]),
     (["--float-min=2.3", "--float-max=9.4"], ["float_range"], [(2.3, 9.4)]),
-    ([], ["val_range"], [None], [(0.0, 1.0)]), # When not specified, this should default to None.
+    ([], ["val_range"], [None], [(0.0, 1.0)]),  # When not specified, this should default to None.
     (["--val-range", "[0.0,2.3]"], ["val_range"], [{"": (0.0, 2.3)}]),
     (["--val-range", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"], ["val_range"], [{"inp0": (0.0, 2.3), "inp1": (4.5, 9.6)}]),
-    (["--val-range", "[-1,0]", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"], ["val_range"], [{"": (-1, 0), "inp0": (0.0, 2.3), "inp1": (4.5, 9.6)}]),
+    (
+        ["--val-range", "[-1,0]", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"],
+        ["val_range"],
+        [{"": (-1, 0), "inp0": (0.0, 2.3), "inp1": (4.5, 9.6)}],
+    ),
     (["--val-range", "))):[0.0,2.3]"], ["val_range"], [{")))": (0.0, 2.3)}]),
     (["--val-range", "'\"':[0.0,2.3]"], ["val_range"], [{"'\"'": (0.0, 2.3)}]),
     (["--iterations=12"], ["iterations"], [12]),
 ]
+
 
 class TestDataLoaderArgs(object):
     @pytest.mark.parametrize("case", ARG_CASES, ids=lambda c: c[1][0])
@@ -52,7 +57,6 @@ class TestDataLoaderArgs(object):
             assert getattr(arg_group, attr) == exp
             assert getattr(data_loader, attr) == exp_dl
 
-
     def test_input_metadata(self):
         arg_group = ArgGroupTestHelper(DataLoaderArgs(), deps=[ModelArgs()])
         arg_group.parse_args(["--input-shapes", "test0:[1,1,1]", "test1:[2,32,2]"])
@@ -62,27 +66,31 @@ class TestDataLoaderArgs(object):
             assert feed_dict["test0"].shape == (1, 1, 1)
             assert feed_dict["test1"].shape == (2, 32, 2)
 
-
     def test_override_input_metadata(self):
         arg_group = ArgGroupTestHelper(DataLoaderArgs(), deps=[ModelArgs()])
         arg_group.parse_args([])
-        data_loader = arg_group.get_data_loader(user_input_metadata=TensorMetadata().add("test0", dtype=np.float32, shape=(4, 4)))
+        data_loader = arg_group.get_data_loader(
+            user_input_metadata=TensorMetadata().add("test0", dtype=np.float32, shape=(4, 4))
+        )
 
         for feed_dict in data_loader:
             assert feed_dict["test0"].shape == (4, 4)
-
 
     def test_data_loader_script(self):
         arg_group = ArgGroupTestHelper(DataLoaderArgs())
 
         with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
-            f.write(dedent("""
-                import numpy as np
+            f.write(
+                dedent(
+                    """
+                    import numpy as np
 
-                def my_load_data():
-                    for _ in range(5):
-                        yield {"inp": np.ones((3, 5), dtype=np.float32) * 6.4341}
-            """))
+                    def my_load_data():
+                        for _ in range(5):
+                            yield {"inp": np.ones((3, 5), dtype=np.float32) * 6.4341}
+                    """
+                )
+            )
             f.flush()
 
             arg_group.parse_args(["--data-loader-script", f.name, "--data-loader-func-name=my_load_data"])

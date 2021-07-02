@@ -17,7 +17,7 @@
 //! sampleINT8API.cpp
 //! This file contains implementation showcasing usage of INT8 calibration and precision APIs.
 //! It creates classification networks such as mobilenet, vgg19, resnet-50 from onnx model file.
-//! This sample showcae setting per tensor dynamic range overriding calibrator generated scales if it exists.
+//! This sample showcae setting per-tensor dynamic range overriding calibrator generated scales if it exists.
 //! This sample showcase how to set computation precision of layer. It involves forcing output tensor type of the layer
 //! to particular precision. It can be run with the following command line: Command: ./sample_int8_api [-h or --help]
 //! [-m modelfile] [-s per_tensor_dynamic_range_file] [-i image_file] [-r reference_file] [-d path/to/data/dir]
@@ -38,6 +38,8 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+
+using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_int8_api";
 
@@ -127,7 +129,7 @@ private:
     bool verifyOutput(const samplesCommon::BufferManager& buffers) const;
 
     //!
-    //! \brief Populate per tensor dynamic range values
+    //! \brief Populate per-tensor dynamic range values
     //!
     bool readPerTensorDynamicRangeValues();
 
@@ -153,7 +155,7 @@ private:
 void SampleINT8API::getInputOutputNames()
 {
     int nbindings = mEngine.get()->getNbBindings();
-    assert(nbindings == 2);
+    ASSERT(nbindings == 2);
     for (int b = 0; b < nbindings; ++b)
     {
         nvinfer1::Dims dims = mEngine.get()->getBindingDimensions(b);
@@ -179,14 +181,14 @@ void SampleINT8API::getInputOutputNames()
 }
 
 //!
-//! \brief Populate per tensor dyanamic range values
+//! \brief Populate per-tensor dyanamic range values
 //!
 bool SampleINT8API::readPerTensorDynamicRangeValues()
 {
     std::ifstream iDynamicRangeStream(mParams.dynamicRangeFileName);
     if (!iDynamicRangeStream)
     {
-        sample::gLogError << "Could not find per tensor scales file: " << mParams.dynamicRangeFileName << std::endl;
+        sample::gLogError << "Could not find per-tensor scales file: " << mParams.dynamicRangeFileName << std::endl;
         return false;
     }
 
@@ -251,11 +253,10 @@ void SampleINT8API::setLayerPrecision(SampleUniquePtr<nvinfer1::INetworkDefiniti
 //!
 void SampleINT8API::writeNetworkTensorNames(const SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
 {
-    sample::gLogInfo << "Sample requires to run with per tensor dynamic range." << std::endl;
-    sample::gLogInfo
-        << "In order to run Int8 inference without calibration, user will need to provide dynamic range for all "
-           "the network tensors."
-        << std::endl;
+    sample::gLogInfo << "Sample requires to run with per-tensor dynamic range." << std::endl;
+    sample::gLogInfo << "In order to run Int8 inference without calibration, user will need to provide dynamic range for all "
+                "the network tensors."
+             << std::endl;
 
     std::ofstream tensorsFile{mParams.networkTensorsFileName};
 
@@ -298,7 +299,7 @@ void SampleINT8API::writeNetworkTensorNames(const SampleUniquePtr<nvinfer1::INet
 //!
 bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
 {
-    // populate per tensor dynamic range
+    // populate per-tensor dynamic range
     if (!readPerTensorDynamicRangeValues())
     {
         return false;
@@ -307,14 +308,12 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
     sample::gLogInfo << "Setting Per Tensor Dynamic Range" << std::endl;
     if (mParams.verbose)
     {
-        sample::gLogInfo
-            << "If dynamic range for a tensor is missing, TensorRT will run inference assuming dynamic range for "
-               "the tensor as optional."
-            << std::endl;
-        sample::gLogInfo
-            << "If dynamic range for a tensor is required then inference will fail. Follow README.md to generate "
-               "missing per tensor dynamic range."
-            << std::endl;
+        sample::gLogInfo << "If dynamic range for a tensor is missing, TensorRT will run inference assuming dynamic range for "
+                    "the tensor as optional."
+                 << std::endl;
+        sample::gLogInfo << "If dynamic range for a tensor is required then inference will fail. Follow README.md to generate "
+                    "missing per-tensor dynamic range."
+                 << std::endl;
     }
     // set dynamic range for network input tensors
     for (int i = 0; i < network->getNbInputs(); ++i)
@@ -422,7 +421,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
     std::vector<uint8_t> fileData(channels * height * width);
 
     std::ifstream infile(mParams.imageFileName, std::ifstream::binary);
-    assert(infile.is_open() && "Attempting to read from a file that is not open.");
+    ASSERT(infile.is_open() && "Attempting to read from a file that is not open.");
     infile >> magic >> width >> height >> max;
     infile.seekg(1, infile.cur);
     infile.read(reinterpret_cast<char*>(fileData.data()), width * height * channels);
@@ -496,6 +495,12 @@ sample::Logger::TestResult SampleINT8API::build()
         return sample::Logger::TestResult::kFAILED;
     }
 
+    if (!builder->platformHasFastInt8())
+    {
+        sample::gLogError << "Platform does not support INT8 inference. sampleINT8API can only run in INT8 Mode." << std::endl;
+        return sample::Logger::TestResult::kWAIVED;
+    }
+
     const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
     auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
     if (!network)
@@ -533,18 +538,11 @@ sample::Logger::TestResult SampleINT8API::build()
         return sample::Logger::TestResult::kWAIVED;
     }
 
-    if (!builder->platformHasFastInt8())
-    {
-        sample::gLogError << "Platform does not support INT8 inference. sampleINT8API can only run in INT8 Mode."
-                          << std::endl;
-        return sample::Logger::TestResult::kWAIVED;
-    }
-
     // Configure buider
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
     config->setMaxWorkspaceSize(1_GiB);
 
-    // Enable INT8 model. Required to set custom per tensor dynamic range or INT8 Calibration
+    // Enable INT8 model. Required to set custom per-tensor dynamic range or INT8 Calibration
     config->setFlag(BuilderFlag::kINT8);
     // Mark calibrator as null. As user provides dynamic range for each tensor, no calibrator is required
     config->setInt8Calibrator(nullptr);
@@ -555,13 +553,35 @@ sample::Logger::TestResult SampleINT8API::build()
     // set INT8 Per Tensor Dynamic range
     if (!setDynamicRange(network))
     {
-        sample::gLogError << "Unable to set per tensor dynamic range." << std::endl;
+        sample::gLogError << "Unable to set per-tensor dynamic range." << std::endl;
+        return sample::Logger::TestResult::kFAILED;
+    }
+
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return sample::Logger::TestResult::kFAILED;
+    }
+    config->setProfileStream(*profileStream);
+
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        sample::gLogError << "Unable to build serialized plan." << std::endl;
+        return sample::Logger::TestResult::kFAILED;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        sample::gLogError << "Unable to create runtime." << std::endl;
         return sample::Logger::TestResult::kFAILED;
     }
 
     // build TRT engine
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         sample::gLogError << "Unable to build cuda engine." << std::endl;
@@ -789,7 +809,7 @@ void printHelpInfo()
     std::cout << "--reference=reference.txt or /absolute/path/to/reference.txt. Reference labels file. Defaults to "
                  "reference_labels.txt"
               << std::endl;
-    std::cout << "--ranges=ranges.txt or /absolute/path/to/ranges.txt. Specify custom per tensor dynamic range for the "
+    std::cout << "--ranges=ranges.txt or /absolute/path/to/ranges.txt. Specify custom per-tensor dynamic range for the "
                  "network. Defaults to resnet50_per_tensor_dynamic_range.txt"
               << std::endl;
     std::cout << "--write_tensors. Option to generate file containing network tensors name. By default writes to "
@@ -807,7 +827,7 @@ void printHelpInfo()
     std::cout << "--useDLACore=N. Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
                  "where n is the number of DLA engines on the platform."
               << std::endl;
-    std::cout << "--verbose. Outputs per tensor dynamic range and layer precision info for the network" << std::endl;
+    std::cout << "--verbose. Outputs per-tensor dynamic range and layer precision info for the network" << std::endl;
 }
 
 int main(int argc, char** argv)

@@ -43,7 +43,7 @@ __global__ void scaleShiftChannelsInplaceKernel(T* inOut, const int ld, const fl
 }
 
 template <typename T>
-void scaleShiftChannelsInplace(T* inOut, const int B, const int C, const int channelVolume, const float* beta,
+cudaError_t scaleShiftChannelsInplace(T* inOut, const int B, const int C, const int channelVolume, const float* beta,
     const float* gamma, cudaStream_t stream)
 {
 
@@ -53,10 +53,10 @@ void scaleShiftChannelsInplace(T* inOut, const int B, const int C, const int cha
 
     scaleShiftChannelsInplaceKernel<T, TPB><<<grid, TPB, 0, stream>>>(inOut, channelVolume, beta, gamma);
 
-    CUASSERT(cudaPeekAtLastError());
+    return cudaPeekAtLastError();
 }
 
-template void scaleShiftChannelsInplace<float>(float* inOut, const int B, const int C, const int channelVolume, const float* beta,
+template cudaError_t scaleShiftChannelsInplace<float>(float* inOut, const int B, const int C, const int channelVolume, const float* beta,
     const float* gamma, cudaStream_t stream);
 } /* plugin */
 } /* nvinfer1 */

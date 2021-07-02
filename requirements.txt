@@ -1,7 +1,8 @@
-onnx==1.7.0
-onnxruntime==1.6.0
-tensorflow-gpu>=2.2
-Pillow>=8.1.2
-pycuda
+onnx==1.8.1
+onnxruntime==1.7.0
+tensorflow-gpu==2.4.1
+torch==1.8.1
+Pillow==8.1.2
 numpy
+pycuda<2020.1
 pytest

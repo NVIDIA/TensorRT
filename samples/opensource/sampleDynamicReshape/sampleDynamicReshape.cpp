@@ -35,6 +35,8 @@
 #include <cuda_runtime_api.h>
 #include <random>
 
+using samplesCommon::SampleUniquePtr;
+
 const std::string gSampleName = "TensorRT.sample_dynamic_reshape";
 
 //! \brief The SampleDynamicReshape class implementes the dynamic reshape sample.
@@ -44,9 +46,6 @@ const std::string gSampleName = "TensorRT.sample_dynamic_reshape";
 //!
 class SampleDynamicReshape
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleDynamicReshape(const samplesCommon::OnnxSampleParams& params)
         : mParams(params)
@@ -69,8 +68,10 @@ public:
     bool infer();
 
 private:
-    bool buildPreprocessorEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder);
-    bool buildPredictionEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder);
+    bool buildPreprocessorEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
+        const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream);
+    bool buildPredictionEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
+        const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream);
 
     Dims loadPGMFile(const std::string& fileName);
     bool validateOutput(int digit);
@@ -80,7 +81,7 @@ private:
     nvinfer1::Dims mPredictionInputDims;  //!< The dimensions of the input of the MNIST model.
     nvinfer1::Dims mPredictionOutputDims; //!< The dimensions of the output of the MNIST model.
 
-    // Engines used for inference. The first is used for resizing inputs, the second for prediction.
+    // Engine plan files used for inference. One for resizing inputs, another for prediction.
     SampleUniquePtr<nvinfer1::ICudaEngine> mPreprocessorEngine{nullptr}, mPredictionEngine{nullptr};
 
     SampleUniquePtr<nvinfer1::IExecutionContext> mPreprocessorContext{nullptr}, mPredictionContext{nullptr};
@@ -114,9 +115,34 @@ bool SampleDynamicReshape::build()
         sample::gLogError << "Create inference builder failed." << std::endl;
         return false;
     }
+
+    auto runtime = makeUnique(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
+    if (!runtime)
+    {
+        sample::gLogError << "Runtime object creation failed." << std::endl;
+        return false;
+    }
+
     // This function will also set mPredictionInputDims and mPredictionOutputDims,
     // so it needs to be called before building the preprocessor.
-    return buildPredictionEngine(builder) && buildPreprocessorEngine(builder);
+    try
+    {
+        // CUDA stream used for profiling by the builder.
+        auto profileStream = samplesCommon::makeCudaStream();
+        if (!profileStream)
+        {
+            return false;
+        }
+
+        bool result = buildPredictionEngine(builder, runtime, *profileStream)
+            && buildPreprocessorEngine(builder, runtime, *profileStream);
+        return result;
+    }
+    catch (std::runtime_error& e)
+    {
+        sample::gLogError << e.what()  << std::endl;
+        return false;
+    }
 }
 
 //!
@@ -124,7 +150,8 @@ bool SampleDynamicReshape::build()
 //!
 //! \return Ruturns false if error in build preprocessor engine.
 //!
-bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder)
+bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
+    const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream)
 {
     // Create the preprocessor engine using a network that supports full dimensions (createNetworkV2).
     auto preprocessorNetwork = makeUnique(
@@ -167,6 +194,7 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
     profileCalib->setDimensions(input->getName(), OptProfileSelector::kOPT, Dims4{calibBatchSize, 1, 28, 28});
     profileCalib->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims4{calibBatchSize, 1, 28, 28});
     preprocessorConfig->setCalibrationProfile(profileCalib);
+    preprocessorConfig->setProfileStream(profileStream);
 
     std::unique_ptr<IInt8Calibrator> calibrator;
     if (mParams.int8)
@@ -180,12 +208,22 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
         preprocessorConfig->setInt8Calibrator(calibrator.get());
     }
 
-    mPreprocessorEngine = makeUnique(builder->buildEngineWithConfig(*preprocessorNetwork, *preprocessorConfig));
-    if (!mPreprocessorEngine)
+    SampleUniquePtr<nvinfer1::IHostMemory> preprocessorPlan = makeUnique(
+        builder->buildSerializedNetwork(*preprocessorNetwork, *preprocessorConfig));
+    if (!preprocessorPlan)
     {
-        sample::gLogError << "Preprocessor engine build failed." << std::endl;
+        sample::gLogError << "Preprocessor serialized engine build failed." << std::endl;
         return false;
     }
+
+    mPreprocessorEngine = makeUnique(
+        runtime->deserializeCudaEngine(preprocessorPlan->data(), preprocessorPlan->size()));
+    if (!mPreprocessorEngine)
+    {
+        sample::gLogError << "Preprocessor engine deserialization failed." << std::endl;
+        return false;
+    }
+
     sample::gLogInfo << "Profile dimensions in preprocessor engine:" << std::endl;
     sample::gLogInfo << "    Minimum = " << mPreprocessorEngine->getProfileDimensions(0, 0, OptProfileSelector::kMIN)
                      << std::endl;
@@ -193,6 +231,8 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
                      << std::endl;
     sample::gLogInfo << "    Maximum = " << mPreprocessorEngine->getProfileDimensions(0, 0, OptProfileSelector::kMAX)
                      << std::endl;
+
+
     return true;
 }
 
@@ -205,7 +245,8 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
 //!
 //! \return Ruturns false if error in build prediction engine.
 //!
-bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder)
+bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
+    const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream)
 {
     // Create a network using the parser.
     const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
@@ -248,6 +289,7 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     {
         config->setFlag(BuilderFlag::kFP16);
     }
+    config->setProfileStream(profileStream);
 
     auto profileCalib = builder->createOptimizationProfile();
     const auto inputName = mParams.inputTensorNames[0].c_str();
@@ -270,12 +312,21 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
         config->setInt8Calibrator(calibrator.get());
     }
     // Build the prediciton engine.
-    mPredictionEngine = makeUnique(builder->buildEngineWithConfig(*network, *config));
-    if (!mPredictionEngine)
+    SampleUniquePtr<nvinfer1::IHostMemory> predictionPlan = makeUnique(builder->buildSerializedNetwork(*network, *config));
+    if (!predictionPlan)
     {
-        sample::gLogError << "Prediction engine build failed." << std::endl;
+        sample::gLogError << "Prediction serialized engine build failed." << std::endl;
         return false;
     }
+
+    mPredictionEngine = makeUnique(
+        runtime->deserializeCudaEngine(predictionPlan->data(), predictionPlan->size()));
+    if (!mPredictionEngine)
+    {
+        sample::gLogError << "Prediction engine deserialization failed." << std::endl;
+        return false;
+    }
+
     return true;
 }
 
@@ -296,6 +347,7 @@ bool SampleDynamicReshape::prepare()
         sample::gLogError << "Preprocessor context build failed." << std::endl;
         return false;
     }
+
 
     mPredictionContext = makeUnique(mPredictionEngine->createExecutionContext());
     if (!mPredictionContext)
@@ -371,7 +423,7 @@ bool SampleDynamicReshape::infer()
 Dims SampleDynamicReshape::loadPGMFile(const std::string& fileName)
 {
     std::ifstream infile(fileName, std::ifstream::binary);
-    assert(infile.is_open() && "Attempting to read from a file that is not open.");
+    ASSERT(infile.is_open() && "Attempting to read from a file that is not open.");
 
     std::string magic;
     int h, w, max;
@@ -494,6 +546,5 @@ int main(int argc, char** argv)
     {
         return sample::gLogger.reportFail(sampleTest);
     }
-
     return sample::gLogger.reportPass(sampleTest);
 }

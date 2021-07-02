@@ -25,7 +25,9 @@ from tests.tools.common import run_polygraphy_inspect, run_polygraphy_run
 
 @pytest.fixture(scope="session", params=["none", "basic", "attrs", "full"])
 def run_inspect_model(request):
-    yield lambda additional_opts: run_polygraphy_inspect(["model"] + ["--mode={:}".format(request.param)] + additional_opts)
+    yield lambda additional_opts: run_polygraphy_inspect(
+        ["model"] + ["--mode={:}".format(request.param)] + additional_opts
+    )
 
 
 @pytest.fixture(scope="session")
@@ -35,7 +37,7 @@ def identity_engine():
         yield outpath.name
 
 
-def check_lines_match(actual, expected):
+def check_lines_match(actual, expected, should_check_line=lambda x: True):
     print("Actual output:\n{:}".format(actual))
 
     actual = [line for line in actual.splitlines() if "Loading" not in line]
@@ -47,12 +49,15 @@ def check_lines_match(actual, expected):
         exline = exline.rstrip()
         print("Checking line : {:}".format(acline))
         print("Expecting line: {:}".format(exline))
-        assert acline == exline
+        if should_check_line(exline):
+            assert acline == exline
 
 
 # ONNX cases
 ONNX_CASES = [
-    ["identity", "none",
+    [
+        "identity",
+        "none",
         r"""
         [I] ==== ONNX Model ====
             Name: test_identity | Opset: 8
@@ -66,9 +71,11 @@ ONNX_CASES = [
             ---- 0 Initializer(s) ----
 
             ---- 1 Node(s) ----
-        """
+        """,
     ],
-    ["identity", "basic",
+    [
+        "identity",
+        "basic",
         r"""
         [I] ==== ONNX Model ====
             Name: test_identity | Opset: 8
@@ -86,9 +93,11 @@ ONNX_CASES = [
             Node 0    |  [Op: Identity]
                 {x [dtype=float32, shape=(1, 1, 2, 2)]}
                  -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
-        """
+        """,
     ],
-    ["identity_with_initializer", "basic",
+    [
+        "identity_with_initializer",
+        "basic",
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -106,9 +115,11 @@ ONNX_CASES = [
             Node 0    |  [Op: Identity]
                 {Initializer | X [dtype=float32, shape=(2, 2)]}
                  -> {Y [dtype=float32, shape=(2, 2)]}
-        """
+        """,
     ],
-    ["identity_with_initializer", "full",
+    [
+        "identity_with_initializer",
+        "full",
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -128,9 +139,11 @@ ONNX_CASES = [
             Node 0    |  [Op: Identity]
                 {Initializer | X [dtype=float32, shape=(2, 2)]}
                  -> {Y [dtype=float32, shape=(2, 2)]}
-        """
+        """,
     ],
-    ["tensor_attr", "basic",
+    [
+        "tensor_attr",
+        "basic",
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -147,9 +160,11 @@ ONNX_CASES = [
             ---- 1 Node(s) ----
             Node 0    |  [Op: Constant]
                 {} -> {const_out [dtype=float32, shape=(14, 14)]}
-        """
+        """,
     ],
-    ["tensor_attr", "attrs",
+    [
+        "tensor_attr",
+        "attrs",
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -168,9 +183,11 @@ ONNX_CASES = [
                 {} -> {const_out [dtype=float32, shape=(14, 14)]}
                 ---- Attributes ----
                 value = Tensor: [dtype=float32, shape=[14, 14]]
-        """
+        """,
     ],
-    ["tensor_attr", "full",
+    [
+        "tensor_attr",
+        "full",
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -203,9 +220,11 @@ ONNX_CASES = [
                      [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.]
                      [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.]
                      [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.]]
-        """
+        """,
     ],
-    ["scan", "full",
+    [
+        "scan",
+        "full",
         r"""
         [I] ==== ONNX Model ====
             Name: graph | Opset: 10
@@ -251,9 +270,11 @@ ONNX_CASES = [
                              -> {scan_out [dtype=float32, shape=(2,)]}
 
                 num_scan_inputs = 1
-        """
+        """,
     ],
-    ["dim_param", "basic",
+    [
+        "dim_param",
+        "basic",
         r"""
         [I] ==== ONNX Model ====
             Name: tf2onnx | Opset: 10
@@ -271,7 +292,7 @@ ONNX_CASES = [
             Node 0    |  [Op: Identity]
                 {Input:0 [dtype=float32, shape=('dim0', 16, 128)]}
                  -> {Output:0 [dtype=float32, shape=('dim0', 16, 128)]}
-        """
+        """,
     ],
 ]
 
@@ -280,13 +301,14 @@ class TestInspectModel(object):
     @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: "{:}-{:}".format(case[0], case[1]))
     def test_model_onnx(self, case):
         model, mode, expected = case
-        status = run_polygraphy_inspect(["model", ONNX_MODELS[model].path, "--mode={:}".format(mode)], disable_verbose=True)
+        status = run_polygraphy_inspect(
+            ["model", ONNX_MODELS[model].path, "--mode={:}".format(mode)], disable_verbose=True
+        )
 
         expected = dedent(expected).strip()
-        actual = "\n".join(status.stdout.splitlines()[1:]) # Ignore loading message
+        actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
 
         check_lines_match(actual, expected)
-
 
     @pytest.mark.parametrize("model", ["identity", "scan", "tensor_attr"])
     def test_model_trt_sanity(self, run_inspect_model, model):
@@ -300,9 +322,9 @@ class TestInspectModel(object):
 
         run_inspect_model([ONNX_MODELS[model].path, "--display-as=trt"])
 
-
     def test_model_trt_network_script(self):
-        script = dedent("""
+        script = dedent(
+            """
             from polygraphy.backend.trt import CreateNetwork
             from polygraphy import func
             import tensorrt as trt
@@ -312,7 +334,8 @@ class TestInspectModel(object):
                 inp = network.add_input("input", dtype=trt.float32, shape=(1, 1))
                 out = network.add_identity(inp).get_output(0)
                 network.mark_output(out)
-        """)
+        """
+        )
 
         with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
@@ -320,10 +343,8 @@ class TestInspectModel(object):
 
             run_polygraphy_inspect(["model", f.name])
 
-
     def test_model_trt_engine_sanity(self, run_inspect_model, identity_engine):
         run_inspect_model([identity_engine, "--model-type=engine"])
-
 
     def test_model_tf_sanity(self, run_inspect_model):
         run_inspect_model([TF_MODELS["identity"].path, "--model-type=frozen"])
@@ -336,7 +357,6 @@ class TestInspectData(object):
             run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", outpath.name])
             run_polygraphy_inspect(["data", outpath.name] + opts)
 
-
     @pytest.mark.parametrize("opts", [[], ["--show-values"]])
     def test_inputs(self, opts):
         with tempfile.NamedTemporaryFile() as outpath:
@@ -345,13 +365,15 @@ class TestInspectData(object):
 
 
 TACTIC_REPLAY_CASES = [
-    ["identity",
+    [
+        "identity",
         r"""
         [I] Layer: node_of_y
                 Algorithm: (Implementation: -2147483642, Tactic: 0) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),)
-        """
+        """,
     ],
 ]
+
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestInspectTactics(object):
@@ -366,4 +388,4 @@ class TestInspectTactics(object):
             expected = dedent(expected).strip()
             actual = status.stdout
 
-            check_lines_match(actual, expected)
+            check_lines_match(actual, expected, should_check_line=lambda line: "Algorithm: " not in line)

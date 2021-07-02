@@ -16,7 +16,7 @@
 
 PYTHON_MAJOR_VERSION=${PYTHON_MAJOR_VERSION:-3}
 PYTHON_MINOR_VERSION=${PYTHON_MINOR_VERSION:-8}
-TARGET_ARCHITECTURE=${TARGET_ARCHITECTURE:-x86_64}
+TARGET=${TARGET:-x86_64}
 ROOT_PATH=${TRT_OSSPATH:-/workspace/TensorRT}
 EXT_PATH=${EXT_PATH:-/tmp/external}
 WHEEL_OUTPUT_DIR=${ROOT_PATH}/python/build
@@ -27,7 +27,7 @@ pushd ${WHEEL_OUTPUT_DIR}
 # Generate tensorrt.so
 echo $(ls ${ROOT_PATH}/python/include)
 cmake .. -DCMAKE_BUILD_TYPE=Release \
-         -DTARGET_ARCHITECTURE=${TARGET_ARCHITECTURE} \
+         -DTARGET=${TARGET} \
          -DPYTHON_MAJOR_VERSION=${PYTHON_MAJOR_VERSION} \
          -DPYTHON_MINOR_VERSION=${PYTHON_MINOR_VERSION} \
          -DEXT_PATH=${EXT_PATH} \
@@ -57,6 +57,6 @@ pushd ${ROOT_PATH}/python/packaging
 for dir in $(find . -type d); do mkdir -p ${WHEEL_OUTPUT_DIR}/$dir; done
 for file in $(find . -type f); do expand_vars_cp $file ${WHEEL_OUTPUT_DIR}/${file}; done
 popd
-python3 setup.py -q bdist_wheel --python-tag=cp${PYTHON_MAJOR_VERSION}${PYTHON_MINOR_VERSION} --plat-name=linux_${TARGET_ARCHITECTURE}
+python3 setup.py -q bdist_wheel --python-tag=cp${PYTHON_MAJOR_VERSION}${PYTHON_MINOR_VERSION} --plat-name=linux_${TARGET}
 
 popd

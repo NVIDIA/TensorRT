@@ -30,7 +30,6 @@
 #include "frcnnUtils.h"
 #include "logger.h"
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <cuda_runtime_api.h>
@@ -43,6 +42,7 @@
 #include <time.h>
 
 using namespace samplesCommon;
+using samplesCommon::SampleUniquePtr;
 
 //! \brief Define the PPM objects as global variable.
 //!
@@ -92,9 +92,6 @@ struct SampleUffFasterRcnnParams : public samplesCommon::SampleParams
 //!
 class SampleUffFasterRcnn
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleUffFasterRcnn(const SampleUffFasterRcnnParams& params)
         : mParams(params)
@@ -201,18 +198,12 @@ bool SampleUffFasterRcnn::build()
 
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
 
-    if (mParams.dlaCore >= 0)
-    {
-        builder->setDefaultDeviceType(nvinfer1::DeviceType::kDLA);
-        builder->setDLACore(mParams.dlaCore);
-        builder->allowGPUFallback(true);
-    }
     if (!builder)
     {
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
 
     if (!network)
     {
@@ -233,18 +224,20 @@ bool SampleUffFasterRcnn::build()
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
-    assert(network->getNbOutputs() == 3);
+    ASSERT(mInputDims.nbDims == 3);
+    ASSERT(network->getNbOutputs() == 3);
     return true;
 }
 
 bool SampleUffFasterRcnn::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvuffparser::IUffParser>& parser)
 {
+    SampleUniquePtr<IBuilderConfig> config{builder->createBuilderConfig()};
+
     parser->registerInput(mParams.inputNodeName.c_str(),
-        DimsCHW(mParams.inputChannels, mParams.inputHeight, mParams.inputWidth), nvuffparser::UffInputOrder::kNCHW);
+        Dims3(mParams.inputChannels, mParams.inputHeight, mParams.inputWidth), nvuffparser::UffInputOrder::kNCHW);
     parser->registerOutput(mParams.outputRegName.c_str());
     parser->registerOutput(mParams.outputClsName.c_str());
     parser->registerOutput(mParams.outputProposalName.c_str());
@@ -256,10 +249,18 @@ bool SampleUffFasterRcnn::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& 
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(2_GiB);
+    config->setMaxWorkspaceSize(2_GiB);
+
+    if (mParams.dlaCore >= 0)
+    {
+        config->setDefaultDeviceType(nvinfer1::DeviceType::kDLA);
+        config->setDLACore(mParams.dlaCore);
+        config->setFlag(BuilderFlag::kGPU_FALLBACK);
+    }
+
     if (mParams.fp16)
     {
-        builder->setFp16Mode(true);
+        config->setFlag(BuilderFlag::kFP16);
     }
     // Calibrator life time needs to last until after the engine is built.
     std::unique_ptr<IInt8Calibrator> calibrator;
@@ -271,25 +272,44 @@ bool SampleUffFasterRcnn::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& 
         const int imageC = 3;
         const int imageH = mParams.inputHeight;
         const int imageW = mParams.inputWidth;
-        nvinfer1::DimsNCHW imageDims{mParams.calBatchSize, imageC, imageH, imageW};
+        nvinfer1::Dims4 imageDims{mParams.calBatchSize, imageC, imageH, imageW};
         // To prevent compiler initialization warning with some versions of gcc
         for (int i = imageDims.nbDims; i < Dims::MAX_DIMS; ++i)
         {
             imageDims.d[i] = 0;
-            imageDims.type[i] = DimensionType::kSPATIAL;
         }
         BatchStream calibrationStream(
             mParams.calBatchSize, mParams.nbCalBatches, imageDims, listFileName, mParams.dataDirs);
         calibrator.reset(
             new Int8EntropyCalibrator2(calibrationStream, 0, "UffFasterRcnn", mParams.inputNodeName.c_str()));
-        builder->setInt8Mode(true);
+        config->setFlag(BuilderFlag::kINT8);
         // Fallback to FP16 if there is no INT8 kernels.
-        builder->setFp16Mode(true);
-        builder->setInt8Calibrator(calibrator.get());
+        config->setFlag(BuilderFlag::kFP16);
+        config->setInt8Calibrator(calibrator.get());
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
 
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -303,7 +323,7 @@ bool SampleUffFasterRcnn::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& 
             return false;
         }
         nvinfer1::IHostMemory* ptr = mEngine->serialize();
-        assert(ptr);
+        ASSERT(ptr);
         p.write(reinterpret_cast<const char*>(ptr->data()), ptr->size());
         ptr->destroy();
         p.close();
@@ -383,7 +403,7 @@ bool SampleUffFasterRcnn::processInput(const samplesCommon::BufferManager& buffe
     const int batchSize = mParams.batchSize;
     std::vector<std::string> imageList = mParams.inputImages;
     ppms.resize(batchSize);
-    assert(ppms.size() <= imageList.size());
+    ASSERT(ppms.size() <= imageList.size());
 
     for (int i = 0; i < batchSize; ++i)
     {
@@ -451,7 +471,7 @@ SampleUffFasterRcnnParams initializeSampleParams(const FrcnnArgs& args)
         params.dataDirs.push_back("data/samples/faster-rcnn/");
     }
 
-    assert(args.batchSize == static_cast<int>(args.inputImages.size()));
+    ASSERT(args.batchSize == static_cast<int>(args.inputImages.size()));
     params.inputImages = args.inputImages;
     params.uffFileName = "faster_rcnn.uff";
     params.inputNodeName = "input_1";
