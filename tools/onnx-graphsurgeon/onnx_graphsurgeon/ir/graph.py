@@ -588,9 +588,53 @@ class Graph(object):
             return np.array(shape, dtype=np.int64)
 
 
+        def handle_shape_slice(tensor):
+            slice = get_producer(tensor, "Slice")
+            if slice is None:
+                return None
+
+            data = slice.inputs[0]
+            starts, ends = slice.inputs[1:3]
+
+            inp = get_input(get_producer(data, "Shape"))
+            if inp is None or inp.shape is None:
+                return None
+
+            if any(not isinstance(t, Constant) for t in [starts, ends]):
+                return None
+
+            def get_value(tensor): # Gets the integer value of a tensor with a single item
+                if not tensor.shape:
+                    return tensor.values
+                else:
+                    return list(tensor.values)[0]
+
+            if len(slice.inputs) > 3:
+                axes = slice.inputs[3]
+                if not isinstance(axes, Constant):
+                    return None
+
+                if get_value(axes) != 0:
+                    return None
+
+            steps = 1
+            if len(slice.inputs) > 4:
+                steps = slice.inputs[4]
+                if not isinstance(steps, Constant):
+                    return None
+
+                steps = get_value(steps)
+
+            shape = inp.shape[get_value(starts):get_value(ends):steps]
+            if misc.is_dynamic_shape(shape):
+                return None
+            
+            return np.array(shape, dtype=np.int64)
+
+
         # Finds the static shape of a shape node output if possible, otherwise returns None.
         def lower_shape(tensor):
-            SHAPE_FOLD_FUNCS = [handle_shape, handle_shape_gather]
+            SHAPE_FOLD_FUNCS = [handle_shape_gather, handle_shape_slice, handle_shape]
             for fold_func in SHAPE_FOLD_FUNCS:
                 shape = fold_func(tensor)
                 if shape is not None:

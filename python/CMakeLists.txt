@@ -32,58 +32,34 @@ endfunction()
 
 # -------- CMAKE OPTIONS --------
 
-# Need libs in their own folder.
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tensorrt/)
-# Set C++11 as standard for the whole project
-set(CMAKE_CXX_STANDARD 11)
-# pybind11 defaults to c++14.
-set(PYBIND11_CPP_STANDARD -std=c++11)
+set(CPP_STANDARD 11 CACHE STRING "CPP Standard Version")
+set(CMAKE_CXX_STANDARD ${CPP_STANDARD})
 # This allows us to use TRT libs shipped with the wheel.
 set(CMAKE_SHARED_LINKER_FLAGS -Wl,-rpath=$ORIGIN)
-# Bindings library. The module name MUST MATCH the module name specified in python/src/pyTensorRT.cpp
 set(PY_MODULE_NAME tensorrt)
 
 # -------- PATHS --------
 
 set_ifndef(TENSORRT_ROOT ../)
 # Convert to an absolute path.
-set_ifndef(ONNX_INC_DIR ${TENSORRT_ROOT}/parsers/onnx/)
+set_ifndef(ONNX_INC_DIR ${TENSORRT_ROOT}/parsers/)
 set_ifndef(PYBIND11_DIR ${EXT_PATH}/pybind11/)
 
 # Source Files
 file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 
 # Find headers
-find_path(PY_INCLUDE Python.h
-    HINTS ${EXT_PATH}/python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION}
-    PATH_SUFFIXES include
-)
+find_path(PY_INCLUDE Python.h HINTS ${EXT_PATH}/python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION} PATH_SUFFIXES include)
 
-set(PY_TARGET_DIR ${TARGET_ARCHITECTURE}-linux-gnu)
-if (${TARGET_ARCHITECTURE} STREQUAL ppc64le)
-    set(PY_TARGET_DIR powerpc64le-linux-gnu)
-endif()
-
-find_path(PY_CONFIG_INCLUDE pyconfig.h
-    HINTS ${PY_INCLUDE}
-    PATH_SUFFIXES ${PY_TARGET_DIR}/python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION}
-)
+set(PY_TARGET_DIR ${TARGET}-linux-gnu)
+find_path(PY_CONFIG_INCLUDE pyconfig.h HINTS ${PY_INCLUDE} PATH_SUFFIXES ${PY_TARGET_DIR}/python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION})
 
 # -------- GLOBAL COMPILE OPTIONS --------
 
-# Add include directories
-include_directories(${TENSORRT_ROOT}/include
-    ${PROJECT_SOURCE_DIR}/include
-    ${CUDA_INCLUDE_DIRS}
-    ${PROJECT_SOURCE_DIR}/docstrings
-    ${ONNX_INC_DIR}
-    ${PYBIND11_DIR}/include
-)
-
-# And lib directories.
+include_directories(${TENSORRT_ROOT}/include ${PROJECT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/docstrings ${ONNX_INC_DIR} ${PYBIND11_DIR}/include)
 link_directories(${TENSORRT_BUILD})
-# Enable link-time optimizations
-set(CMAKE_CXX_FLAGS "-fvisibility=hidden -std=c++11 -flto -fno-fat-lto-objects -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "-fvisibility=hidden -std=c++${CPP_STANDARD} -Wno-deprecated-declarations")
 
 # -------- START BUILD PROCESS --------
 

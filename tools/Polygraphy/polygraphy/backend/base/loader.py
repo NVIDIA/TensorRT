@@ -22,13 +22,13 @@ class BaseLoader(object):
     """
     Base class for Polygraphy Loaders.
     """
+
     def call_impl(self, *args, **kwargs):
         """
         Implementation for ``__call__``. Derived classes should implement this
         method rather than ``__call__``.
         """
         raise NotImplementedError("BaseLoader is an abstract class")
-
 
     @func.constantmethod
     def __call__(self, *args, **kwargs):

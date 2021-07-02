@@ -21,4 +21,4 @@ from tests.models.meta import ONNX_MODELS
 
 def test_get_num_nodes():
     model = onnx_from_path(ONNX_MODELS["scan"].path)
-    assert onnx_util.get_num_nodes(model) == 3 # Should count subgraph nodes.
+    assert onnx_util.get_num_nodes(model) == 3  # Should count subgraph nodes.

@@ -15,12 +15,12 @@
  */
 
 #include "beamSearchPolicy.h"
+#include "common.h"
 #ifdef _MSC_VER
 // Macro definition needed to avoid name collision with std::min/max and Windows.h min/max
 #define NOMINMAX
 #endif
 #include <algorithm>
-#include <cassert>
 #include <limits>
 #include <sstream>
 
@@ -142,7 +142,7 @@ void BeamSearchPolicy::readGeneratedResult(
         else
         {
             // We don't have a finished sequence generated, will output the unfinished one with the highest likelihood
-            assert(mValidSamples[sampleId]);
+            ASSERT(mValidSamples[sampleId]);
             backtrack(mTimestepId - 1, sampleId, 0, hOutputData + sampleId * maxOutputSequenceLength,
                 maxOutputSequenceLength - 1);
             hActualOutputSequenceLengths[sampleId] = mTimestepId;

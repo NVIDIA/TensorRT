@@ -33,7 +33,6 @@
 #include "NvInfer.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cuda_runtime_api.h>
 #include <fstream>
@@ -45,6 +44,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_reformat_free_io";
 
@@ -203,9 +204,6 @@ public:
 //!
 class SampleReformatFreeIO
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleReformatFreeIO(const samplesCommon::CaffeSampleParams& params)
         : mParams(params)
@@ -288,7 +286,7 @@ bool SampleReformatFreeIO::build(int dataWidth)
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -332,21 +330,40 @@ bool SampleReformatFreeIO::build(int dataWidth)
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
     config->setFlag(BuilderFlag::kSTRICT_TYPES);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
 
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 3);
 
-    assert(network->getNbOutputs() == 1);
+    ASSERT(network->getNbOutputs() == 1);
     mOutputDims = network->getOutput(0)->getDimensions();
-    assert(mOutputDims.nbDims == 3);
+    ASSERT(mOutputDims.nbDims == 3);
 
     return true;
 }
@@ -381,7 +398,7 @@ void SampleReformatFreeIO::constructNetwork(
     auto mean = network->addConstant(nvinfer1::Dims3(1, inputDims.d[1], inputDims.d[2]), meanWeights);
     auto meanSub = network->addElementWise(*network->getInput(0), *mean->getOutput(0), ElementWiseOperation::kSUB);
     network->getLayer(0)->setInput(0, *meanSub->getOutput(0));
-    samplesCommon::setAllTensorScales(network.get(), maxMean / maxMean * 128, 128);
+    samplesCommon::setAllDynamicRanges(network.get(), maxMean / maxMean * 128, 128);
 }
 
 //!

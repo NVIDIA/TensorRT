@@ -29,61 +29,56 @@ After inference, post-processing including bounding-box clustering is applied. T
 For specific software versions, see the [TensorRT Installation Guide](https://docs.nvidia.com/deeplearning/sdk/tensorrt-archived/index.html).
 
 1.  Install the dependencies for Python.
-   ```bash
-   python3 -m pip install -r requirements.txt
-   ```
+    ```sh
+    python3 -m pip install -r requirements.txt
+    ```
+
+2.  Download sample data. See the "Download Sample Data" section of [the general setup guide](../README.md).
+
 
 ## Running the sample
 
-1.  Create an ONNX version of YOLOv3 with the following command. The Python script will also download all necessary files from the official mirrors (only once).
+The data directory needs to be specified (either via `-d /path/to/data` or environment varaiable `TRT_DATA_DIR`)
+when running these scripts. An error will be thrown if not.
 
-   ```bash
-   python3 yolov3_to_onnx.py
-   ```
+1.  Create an ONNX version of YOLOv3 with the following command.
+    ```sh
+    python3 yolov3_to_onnx.py
+    ```
+    When running the above command for the first time, the output should look similar to the following:
+    ```
+    [...]
+    %106_convolutional = Conv[auto_pad = u'SAME_LOWER', dilations = [1, 1], kernel_shape = [1, 1], strides = [1, 1]]
+    (%105_convolutional_lrelu, %106_convolutional_conv_weights, %106_convolutional_conv_bias)
+    return %082_convolutional, %094_convolutional,%106_convolutional
+    }
+    ```
 
-  When running the above command for the first time, the output should look similar to the following:
-   ```
-   Downloading from https://raw.githubusercontent.com/pjreddie/darknet/f86901f6177dfc6116360a13cc06ab680e0c86b0/cfg/yolov3.cfg, this may take a while...
-   100% [................................................................................] 8342 / 8342
-   Downloading from master.dl.sourceforge.net/project/darknet-yolo.mirror/darknet_yolo_v3_optimal/yolov3.weights, this may take a while...
-   100% [................................................................................] 248007048 / 248007048
-   [...]
-   %106_convolutional = Conv[auto_pad = u'SAME_LOWER', dilations = [1, 1], kernel_shape = [1, 1], strides = [1, 1]]
-   (%105_convolutional_lrelu, %106_convolutional_conv_weights, %106_convolutional_conv_bias)
-   return %082_convolutional, %094_convolutional,%106_convolutional
-   }
-   ```
-
-2.  Build a TensorRT engine from the generated ONNX file and run inference on a sample image, which will also be downloaded during the first run.
-   ```bash
-   python3 onnx_to_tensorrt.py
-   ```
-
-  When running the above command for the first time, the output should look similar to the following:
-   ```
-   Downloading from https://github.com/pjreddie/darknet/raw/f86901f6177dfc6116360a13cc06ab680e0c86b0/data/dog.jpg, this may take a while...
-   100% [................................................................................] 163759 / 163759
-   Building an engine from file yolov3.onnx, this may take a while...
-   Running inference on image dog.jpg...
-   Saved image with bounding boxes of detected objects to dog_bboxes.jpg.
-   ```
+2.  Build a TensorRT engine from the generated ONNX file and run inference on a sample image
+    ```sh
+    python3 onnx_to_tensorrt.py
+    ```
+    When running the above command for the first time, the output should look similar to the following:
+    ```
+    Building an engine from file yolov3.onnx, this may take a while...
+    Running inference on image dog.jpg...
+    Saved image with bounding boxes of detected objects to dog_bboxes.jpg.
+    ```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
-   ```
-   Downloading from https://github.com/pjreddie/darknet/raw/f86901f6177dfc6116360a13cc06ab680e0c86b0/data/dog.jpg, this may take a while…
-   100% [......................................................................] 163759 / 163759
-   Loading ONNX file from path yolov3.onnx...
-   Beginning ONNX file parsing
-   Completed parsing of ONNX file
-   Building an engine from file yolov3.onnx; this may take a while...
-   Completed creating Engine
-   Running inference on image dog.jpg...
-   [[135.14841333 219.59879284 184.30209195 324.0265199 ]
-     [ 98.30805074 135.72613533 499.71263299 299.25579652]
-     [478.00605802 81.25702449 210.57787895 86.91502688]] [0.99854713 0.99880403 0.93829258] [16 1 7]
-   Saved image with bounding boxes of detected objects to dog_bboxes.png.
-   ```
-	You should be able to visually confirm whether the detection was correct.
+    ```
+    Loading ONNX file from path yolov3.onnx...
+    Beginning ONNX file parsing
+    Completed parsing of ONNX file
+    Building an engine from file yolov3.onnx; this may take a while...
+    Completed creating Engine
+    Running inference on image dog.jpg...
+    [[135.14841333 219.59879284 184.30209195 324.0265199 ]
+      [ 98.30805074 135.72613533 499.71263299 299.25579652]
+      [478.00605802 81.25702449 210.57787895 86.91502688]] [0.99854713 0.99880403 0.93829258] [16 1 7]
+    Saved image with bounding boxes of detected objects to dog_bboxes.png.
+    ```
+    You should be able to visually confirm whether the detection was correct.
 
 # Additional resources
 

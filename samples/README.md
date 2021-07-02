@@ -14,12 +14,9 @@
 | [sampleMLP](opensource/sampleMLP) | C++ | INetwork | “Hello World” For Multilayer Perceptron (MLP) |
 | [sampleMNIST](opensource/sampleMNIST) | C++ | Caffe | “Hello World” For TensorRT |
 | [sampleMNISTAPI](opensource/sampleMNISTAPI) | C++ | INetwork | Building a Simple MNIST Network Layer by Layer |
-| [sampleMovieLens](opensource/sampleMovieLens) | C++ | UFF | Movie Recommendation Using Neural Collaborative Filter |
-| [sampleMovieLensMPS](opensource/sampleMovieLensMPS) | C++ | UFF | Movie Recommendation With MPS (Multi-Process Service) |
 | [sampleNMT](opensource/sampleNMT) | C++ | INetwork | Neural Machine Translation Using A seq2seq Model |
 | [sampleOnnxMNIST](opensource/sampleOnnxMNIST) | C++ | ONNX | “Hello World” For TensorRT With ONNX |
 | [sampleOnnxMnistCoordConvAC](opensource/sampleOnnxMnistCoordConvAC) | C++ | ONNX | Implementing CoordConv with a custom plugin |
-| [samplePlugin](opensource/samplePlugin) | C++ | Caffe | Adding A Custom Layer In TensorRT |
 | [sampleReformatFreeIO](opensource/sampleReformatFreeIO) | C++ | Caffe | Specifying I/O Formats Via Reformat-Free-I/O API |
 | [sampleSSD](opensource/sampleSSD) | C++ | Caffe | Object Detection With SSD |
 | [sampleUffFasterRCNN](opensource/sampleUffFasterRCNN) | C++ | UFF | Object Detection With A TensorFlow FasterRCNN Network |
@@ -28,6 +25,8 @@
 | [sampleUffPluginV2Ext](opensource/sampleUffPluginV2Ext) | C++ | UFF | Adding A Custom Layer That Supports INT8 I/O To Your Network |
 | [sampleUffSSD](opensource/sampleUffSSD) | C++ | UFF | Object Detection With A TensorFlow SSD Network |
 | [trtexec](opensource/trtexec) | C++ | All | TensorRT Command-Line Wrapper: trtexec |
+| [efficientdet](python/efficientdet) | Python | ONNX | EfficientDet Object Detection with TensorRT |
+| [efficientnet](python/efficientnet) | Python | ONNX | EfficientNet V1 and V2 Classification with TensorRT |
 | [end_to_end_tensorflow_mnist](python/end_to_end_tensorflow_mnist) | Python | UFF | “Hello World” For TensorRT Using TensorFlow |
 | [engine_refit_mnist](python/engine_refit_mnist) | Python | INetwork | Refitting A TensorRT Engine |
 | [int8_caffe_mnist](python/int8_caffe_mnist) | Python | Caffe | INT8 Calibration |

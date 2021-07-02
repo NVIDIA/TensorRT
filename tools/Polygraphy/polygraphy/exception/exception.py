@@ -17,14 +17,17 @@
 from polygraphy import mod
 
 
+# Do not raise this exception manually. Instead, use G_LOGGER.critical().
 @mod.export()
 class PolygraphyException(Exception):
     """
     An exception raised by Polygraphy.
     """
+
     pass
 
 
+# Do not raise this exception manually. Instead, use G_LOGGER.internal_error().
 @mod.export()
 class PolygraphyInternalException(Exception):
     """
@@ -34,4 +37,5 @@ class PolygraphyInternalException(Exception):
     This is *not* a child class of PolygraphyException because it
     indicates a bug in Polygraphy itself.
     """
+
     pass

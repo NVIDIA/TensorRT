@@ -37,21 +37,26 @@ def TypedDict(key_type_func, value_type_func):
         value_type_func (Callable() -> type):
                 A callable that returns the expected value type.
     """
+
     class Interface(object):
         def __init__(self, dct=None):
             self.dct = OrderedDict(util.default(dct, {}))
             self.key_type = key_type_func()
             self.value_type = value_type_func()
 
-
         def _check_types(self, key, val):
             if not isinstance(key, self.key_type):
-                G_LOGGER.critical("Unsupported key type in {:}. Key: {:} is type `{:}` but {:} expects type `{:}`".format(
-                                      self, repr(key), type(key).__name__, type(self).__name__, self.key_type.__name__))
+                G_LOGGER.critical(
+                    "Unsupported key type in {:}. Key: {:} is type `{:}` but {:} expects type `{:}`".format(
+                        self, repr(key), type(key).__name__, type(self).__name__, self.key_type.__name__
+                    )
+                )
             if not isinstance(val, self.value_type):
-                G_LOGGER.critical("Unsupported value type in {:}. Value: {:} for key: {:} is type `{:}` but {:} expects type `{:}`".format(
-                                      self, repr(val), repr(key), type(val).__name__, type(self).__name__, self.value_type.__name__))
-
+                G_LOGGER.critical(
+                    "Unsupported value type in {:}. Value: {:} for key: {:} is type `{:}` but {:} expects type `{:}`".format(
+                        self, repr(val), repr(key), type(val).__name__, type(self).__name__, self.value_type.__name__
+                    )
+                )
 
         def keys(self):
             return self.dct.keys()
@@ -125,12 +130,13 @@ def TypedList(elem_type_func):
             self.lst = util.default(lst, [])
             self.elem_type = elem_type_func()
 
-
         def _check_type(self, elem):
             if not isinstance(elem, self.elem_type):
-                G_LOGGER.critical("Unsupported element type type in {:}. Element: {:} is type: {:} but type: {:} was expected".format(
-                                      type(self).__name__, repr(elem), type(elem).__name__, self.elem_type.__name__))
-
+                G_LOGGER.critical(
+                    "Unsupported element type type in {:}. Element: {:} is type: {:} but type: {:} was expected".format(
+                        type(self).__name__, repr(elem), type(elem).__name__, self.elem_type.__name__
+                    )
+                )
 
         def __contains__(self, key):
             return key in self.lst

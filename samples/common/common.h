@@ -59,7 +59,7 @@ using namespace plugin;
 #define FN_NAME __func__
 #endif
 
-#if (!defined(__ANDROID__) && defined(__aarch64__)) || defined(__QNX__)
+#if defined(__aarch64__) || defined(__QNX__)
 #define ENABLE_DLA_API 1
 #endif
 
@@ -79,21 +79,23 @@ using namespace plugin;
     {                                                                                                                  \
         if (!(status))                                                                                                 \
         {                                                                                                              \
-            sample::gLogError << errMsg << " Error in " << __FILE__ << ", function " << FN_NAME << "(), line "         \
-                              << __LINE__ << std::endl;                                                                \
+            sample::gLogError << errMsg << " Error in " << __FILE__ << ", function " << FN_NAME << "(), line " << __LINE__     \
+                      << std::endl;                                                                                    \
             return val;                                                                                                \
         }                                                                                                              \
     } while (0)
 
-#define ASSERT(condition)                                                                                              \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (!(condition))                                                                                              \
-        {                                                                                                              \
-            sample::gLogError << "Assertion failure: " << #condition << std::endl;                                     \
-            abort();                                                                                                   \
-        }                                                                                                              \
+#undef ASSERT
+#define ASSERT(condition)                                                   \
+    do                                                                      \
+    {                                                                       \
+        if (!(condition))                                                   \
+        {                                                                   \
+            sample::gLogError << "Assertion failure: " << #condition << std::endl;  \
+            abort();                                                        \
+        }                                                                   \
     } while (0)
+
 
 #define CHECK_RETURN(status, val) CHECK_RETURN_W_MSG(status, val, "")
 
@@ -123,15 +125,15 @@ constexpr long double operator"" _KiB(long double val)
 
 // These is necessary if we want to be able to write 1_GiB instead of 1.0_GiB.
 // Since the return type is signed, -1_GiB will work as expected.
-constexpr long long int operator"" _GiB(long long unsigned int val)
+constexpr long long int operator"" _GiB(unsigned long long val)
 {
     return val * (1 << 30);
 }
-constexpr long long int operator"" _MiB(long long unsigned int val)
+constexpr long long int operator"" _MiB(unsigned long long val)
 {
     return val * (1 << 20);
 }
-constexpr long long int operator"" _KiB(long long unsigned int val)
+constexpr long long int operator"" _KiB(unsigned long long val)
 {
     return val * (1 << 10);
 }
@@ -144,7 +146,7 @@ struct SimpleProfiler : public nvinfer1::IProfiler
         int count{0};
     };
 
-    virtual void reportLayerTime(const char* layerName, float ms)
+    virtual void reportLayerTime(const char* layerName, float ms) noexcept
     {
         mProfile[layerName].count++;
         mProfile[layerName].time += ms;
@@ -224,7 +226,8 @@ private:
 
 //! Locate path to file, given its filename or filepath suffix and possible dirs it might lie in.
 //! Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path.
-inline std::string locateFile(const std::string& filepathSuffix, const std::vector<std::string>& directories)
+inline std::string locateFile(
+    const std::string& filepathSuffix, const std::vector<std::string>& directories, bool reportError = true)
 {
     const int MAX_DEPTH{10};
     bool found{false};
@@ -271,8 +274,12 @@ inline std::string locateFile(const std::string& filepathSuffix, const std::vect
         const std::string dirList = std::accumulate(directories.begin() + 1, directories.end(), directories.front(),
             [](const std::string& a, const std::string& b) { return a + "\n\t" + b; });
         std::cout << "Could not find " << filepathSuffix << " in data directories:\n\t" << dirList << std::endl;
-        std::cout << "&&&& FAILED" << std::endl;
-        exit(EXIT_FAILURE);
+
+        if (reportError)
+        {
+            std::cout << "&&&& FAILED" << std::endl;
+            exit(EXIT_FAILURE);
+        }
     }
 
     return filepath;
@@ -303,22 +310,23 @@ inline T swapEndianness(const T& value)
     return *reinterpret_cast<T*>(bytes);
 }
 
-class HostMemory : public IHostMemory
+class HostMemory
 {
 public:
     HostMemory() = delete;
-    void* data() const noexcept override
+    virtual void* data() const noexcept
     {
         return mData;
     }
-    std::size_t size() const noexcept override
+    virtual std::size_t size() const noexcept
     {
         return mSize;
     }
-    DataType type() const noexcept override
+    virtual DataType type() const noexcept
     {
         return mType;
     }
+    virtual ~HostMemory() {}
 
 protected:
     HostMemory(std::size_t size, DataType type)
@@ -340,10 +348,9 @@ public:
     {
         mData = new ElemType[size];
     };
-    void destroy() noexcept override
+    ~TypedHostMemory() noexcept
     {
         delete[](ElemType*) mData;
-        delete this;
     }
     ElemType* raw() noexcept
     {
@@ -377,21 +384,41 @@ struct InferDeleter
     template <typename T>
     void operator()(T* obj) const
     {
-        if (obj)
-        {
-            obj->destroy();
-        }
+        delete obj;
     }
 };
+
+template <typename T>
+using SampleUniquePtr = std::unique_ptr<T, InferDeleter>;
+
+static auto StreamDeleter = [](cudaStream_t* pStream)
+    {
+        if (pStream)
+        {
+            cudaStreamDestroy(*pStream);
+            delete pStream;
+        }
+    };
+
+inline std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> makeCudaStream()
+{
+    std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> pStream(new cudaStream_t, StreamDeleter);
+    if (cudaStreamCreate(pStream.get()) != cudaSuccess)
+    {
+        pStream.reset(nullptr);
+    }
+
+    return pStream;
+}
 
 template <typename T>
 std::shared_ptr<T> infer_object(T* obj)
 {
     if (!obj)
     {
-        throw std::runtime_error("Failed to create object");
+        throw std::runtime_error(std::string("Failed to create object"));
     }
-    return std::shared_ptr<T>(obj, InferDeleter());
+    return std::shared_ptr<T>(obj);
 }
 
 //! Return vector of indices that puts magnitudes of sequence in descending order.
@@ -400,8 +427,7 @@ std::vector<size_t> argMagnitudeSort(Iter begin, Iter end)
 {
     std::vector<size_t> indices(end - begin);
     std::iota(indices.begin(), indices.end(), 0);
-    std::sort(indices.begin(), indices.end(),
-        [&begin](size_t i, size_t j) { return std::abs(begin[j]) < std::abs(begin[i]); });
+    std::sort(indices.begin(), indices.end(), [&begin](size_t i, size_t j) { return std::abs(begin[j]) < std::abs(begin[i]); });
     return indices;
 }
 
@@ -529,7 +555,7 @@ inline void setAllTensorScales(INetworkDefinition* network, float inScales = 2.0
             // Optional inputs are nullptr here and are from RNN layers.
             if (input != nullptr && !input->dynamicRangeIsSet())
             {
-                ASSERT(input->setDynamicRange(-inScales, inScales));
+                input->setDynamicRange(-inScales, inScales);
             }
         }
     }
@@ -549,26 +575,31 @@ inline void setAllTensorScales(INetworkDefinition* network, float inScales = 2.0
                 // Pooling must have the same input and output scales.
                 if (layer->getType() == LayerType::kPOOLING)
                 {
-                    ASSERT(output->setDynamicRange(-inScales, inScales));
+                    output->setDynamicRange(-inScales, inScales);
                 }
                 else
                 {
-                    ASSERT(output->setDynamicRange(-outScales, outScales));
+                    output->setDynamicRange(-outScales, outScales);
                 }
             }
         }
     }
 }
 
-inline void setDummyInt8Scales(const IBuilderConfig* c, INetworkDefinition* n)
+inline void setAllDynamicRanges(INetworkDefinition* network, float inRange = 2.0f, float outRange = 4.0f)
 {
-    // Set dummy tensor scales if Int8 mode is requested.
+    return setAllTensorScales(network, inRange, outRange);
+}
+
+inline void setDummyInt8DynamicRanges(const IBuilderConfig* c, INetworkDefinition* n)
+{
+    // Set dummy per-tensor dynamic range if Int8 mode is requested.
     if (c->getFlag(BuilderFlag::kINT8))
     {
         sample::gLogWarning
-            << "Int8 calibrator not provided. Generating dummy per tensor scales. Int8 accuracy is not guaranteed."
+            << "Int8 calibrator not provided. Generating dummy per-tensor dynamic range. Int8 accuracy is not guaranteed."
             << std::endl;
-        setAllTensorScales(n);
+        setAllDynamicRanges(n);
     }
 }
 
@@ -586,11 +617,10 @@ inline void enableDLA(IBuilder* builder, IBuilderConfig* config, int useDLACore,
         {
             config->setFlag(BuilderFlag::kGPU_FALLBACK);
         }
-        if (!builder->getInt8Mode() && !config->getFlag(BuilderFlag::kINT8))
+        if (!config->getFlag(BuilderFlag::kINT8))
         {
             // User has not requested INT8 Mode.
             // By default run in FP16 mode. FP32 mode is not permitted.
-            builder->setFp16Mode(true);
             config->setFlag(BuilderFlag::kFP16);
         }
         config->setDefaultDeviceType(DeviceType::kDLA);
@@ -610,7 +640,7 @@ inline int parseDLA(int argc, char** argv)
     return -1;
 }
 
-inline unsigned int getElementSize(nvinfer1::DataType t)
+inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
 {
     switch (t)
     {
@@ -620,7 +650,6 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kINT8: return 1;
     }
-    throw std::runtime_error("Invalid DataType.");
     return 0;
 }
 
@@ -629,7 +658,7 @@ inline int64_t volume(const nvinfer1::Dims& d)
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
 }
 
-inline unsigned int elementSize(DataType t)
+inline uint32_t elementSize(DataType t) noexcept
 {
     switch (t)
     {
@@ -910,6 +939,23 @@ inline void loadLibrary(const std::string& path)
     }
 }
 
+inline int32_t getSMVersion()
+{
+    int32_t deviceIndex = 0;
+    CHECK(cudaGetDevice(&deviceIndex));
+
+    int32_t major, minor;
+    CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
+    CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
+
+    return ((major << 8) | minor);
+}
+
+inline bool isSMSafe()
+{
+    const int32_t smVersion = getSMVersion();
+    return smVersion == 0x0700 || smVersion == 0x0702 || smVersion == 0x0705;
+}
 } // namespace samplesCommon
 
 inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)

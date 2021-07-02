@@ -19,15 +19,21 @@ import numpy as np
 import onnx_graphsurgeon as gs
 import pytest
 from polygraphy import constants
-from polygraphy.backend.onnx import (ConvertToFp16, FoldConstants,
-                                     ModifyOutputs, OnnxFromPath,
-                                     OnnxFromTfGraph, SaveOnnx,
-                                     extract_subgraph, infer_shapes,
-                                     onnx_from_path)
+from polygraphy.backend.onnx import (
+    ConvertToFp16,
+    FoldConstants,
+    ModifyOutputs,
+    OnnxFromPath,
+    OnnxFromTfGraph,
+    SaveOnnx,
+    extract_subgraph,
+    infer_shapes,
+    onnx_from_path,
+)
 from polygraphy.common import TensorMetadata
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
-from tests.helper import check_file_non_empty
+from tests.helper import is_file_non_empty
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
 import onnx
@@ -42,20 +48,18 @@ class TestLoggerCallbacks(object):
 class TestOnnxFileLoader(object):
     def test_basic(self):
         loader = OnnxFromPath(ONNX_MODELS["identity"].path)
-        assert isinstance(loader() , onnx.ModelProto)
-
+        assert isinstance(loader(), onnx.ModelProto)
 
     def test_external_data(self):
         model = ONNX_MODELS["ext_weights"]
         loader = OnnxFromPath(model.path, model.ext_data)
-        assert isinstance(loader() , onnx.ModelProto)
+        assert isinstance(loader(), onnx.ModelProto)
 
 
 class TestExportOnnxFromTf(object):
     def test_no_optimize(self):
         loader = OnnxFromTfGraph(TF_MODELS["identity"].loader, optimize=False, fold_constant=False)
         model = loader()
-
 
     def test_opset(self):
         loader = OnnxFromTfGraph(TF_MODELS["identity"].loader, opset=9)
@@ -72,16 +76,18 @@ class TestModifyOnnx(object):
         assert len(original_model.graph.output) == 1 or not copy
         assert len(model.graph.output) == 2
 
-
     def test_custom_outputs(self):
         loader = ModifyOutputs(OnnxFromPath(ONNX_MODELS["identity_identity"].path), outputs=["identity_out_0"])
         model = loader()
         assert len(model.graph.output) == 1
         assert model.graph.output[0].name == "identity_out_0"
 
-
     def test_exclude_outputs_with_layerwise(self):
-        loader = ModifyOutputs(OnnxFromPath(ONNX_MODELS["identity_identity"].path), outputs=constants.MARK_ALL, exclude_outputs=["identity_out_2"])
+        loader = ModifyOutputs(
+            OnnxFromPath(ONNX_MODELS["identity_identity"].path),
+            outputs=constants.MARK_ALL,
+            exclude_outputs=["identity_out_2"],
+        )
         model = loader()
         assert len(model.graph.output) == 1
         assert model.graph.output[0].name == "identity_out_0"
@@ -89,18 +95,34 @@ class TestModifyOnnx(object):
 
 class TestInferShapes(object):
     def check_model(self, model):
-        for output in model.graph.output:
-            assert output.type.tensor_type.HasField("shape")
+        # Find all intermediate tensors to check if they have shapes.
+        tensors = set()
+        for node in model.graph.node:
+            tensors.update(node.output)
+        tensors -= {out.name for out in model.graph.output}
 
+        assert len(model.graph.value_info) == len(tensors)
+        for val in model.graph.value_info:
+            assert val.type.tensor_type.HasField("shape")
 
     def test_model(self):
         original_model = onnx_from_path(ONNX_MODELS["identity_identity"].path)
         model = infer_shapes(original_model)
         self.check_model(model)
 
-
     def test_path(self):
         model = infer_shapes(ONNX_MODELS["identity_identity"].path)
+        self.check_model(model)
+
+    @pytest.mark.parametrize("set_data_dir", [True, False])
+    def test_external_data(self, set_data_dir):
+        model = ONNX_MODELS["ext_weights_same_dir"]
+        model = infer_shapes(model.path, external_data_dir=model.ext_data if set_data_dir else None)
+        self.check_model(model)
+
+    def test_save_to_disk_on_size_threshold(self):
+        model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
+        model = infer_shapes(model, save_to_disk_threshold_bytes=0)
         self.check_model(model)
 
 
@@ -132,16 +154,15 @@ class TestSaveOnnx(object):
         with tempfile.NamedTemporaryFile() as outpath:
             loader = SaveOnnx(OnnxFromPath(ONNX_MODELS["identity"].path), path=outpath.name)
             loader()
-            check_file_non_empty(outpath.name)
-
+            assert is_file_non_empty(outpath.name)
 
     def test_external_data(self):
         with tempfile.NamedTemporaryFile() as path, tempfile.NamedTemporaryFile() as data:
             model = OnnxFromPath(ONNX_MODELS["const_foldable"].path)
             loader = SaveOnnx(model, path.name, external_data_path=data.name, size_threshold=0)
             loader()
-            check_file_non_empty(path.name)
-            check_file_non_empty(data.name)
+            assert is_file_non_empty(path.name)
+            assert is_file_non_empty(data.name)
 
 
 @pytest.fixture()
@@ -165,7 +186,6 @@ class TestExtractSubgraph(object):
         assert graph.outputs[0].name == "identity_out_0"
         assert graph.outputs[0].dtype is not None
 
-
     def test_extract_onnx_model(self, extract_model):
         original_model, input_meta, output_meta = extract_model
         model = extract_subgraph(original_model, input_meta, output_meta)
@@ -173,18 +193,15 @@ class TestExtractSubgraph(object):
         assert original_model.graph.output[0].name == "identity_out_2"
         self.check_model(model)
 
-
     def test_extract_onnx_model_no_input_meta(self, extract_model):
         model, _, output_meta = extract_model
         model = extract_subgraph(model, output_metadata=output_meta)
         self.check_model(model)
 
-
     def test_extract_onnx_model_no_output_meta(self, extract_model):
         model, input_meta, _ = extract_model
         model = extract_subgraph(model, input_metadata=input_meta)
         assert model.graph.output[0].name == "identity_out_2"
-
 
     def test_extract_onnx_gs_graph(self, extract_model):
         model, input_meta, output_meta = extract_model
@@ -199,20 +216,17 @@ class TestExtractSubgraph(object):
         assert len(graph.outputs) == 1
         assert graph.outputs[0].name == "identity_out_0"
 
-
     def test_extract_passes_no_input_shape(self, extract_model):
         model, input_meta, output_meta = extract_model
         input_meta["X"].shape = None
         model = extract_subgraph(model, input_meta, output_meta)
         self.check_model(model)
 
-
     def test_extract_passes_no_input_dtype(self, extract_model):
         model, input_meta, output_meta = extract_model
         input_meta["X"].dtype = None
         model = extract_subgraph(model, input_meta, output_meta)
         self.check_model(model)
-
 
     def test_extract_passes_no_output_shape(self, extract_model):
         model, input_meta, output_meta = extract_model

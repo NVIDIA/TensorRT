@@ -23,21 +23,34 @@ from polygraphy.tools.script import make_invocable_if_nondefault
 @mod.export()
 class TfConfigArgs(BaseArgs):
     def add_to_parser(self, parser):
-        tf_args = parser.add_argument_group("TensorFlow Session Configuration", "Options for the TensorFlow Session Configuration")
-        tf_args.add_argument("--gpu-memory-fraction", help="Maximum percentage of GPU memory TensorFlow can allocate per process", type=float, default=None)
-        tf_args.add_argument("--allow-growth", help="Allow GPU memory allocated by TensorFlow to grow", action="store_true", default=None)
-        tf_args.add_argument("--xla", help="[EXPERIMENTAL] Attempt to run graph with xla", action="store_true", default=None)
-
+        tf_args = parser.add_argument_group(
+            "TensorFlow Session Configuration", "Options for the TensorFlow Session Configuration"
+        )
+        tf_args.add_argument(
+            "--gpu-memory-fraction",
+            help="Maximum percentage of GPU memory TensorFlow can allocate per process",
+            type=float,
+            default=None,
+        )
+        tf_args.add_argument(
+            "--allow-growth", help="Allow GPU memory allocated by TensorFlow to grow", action="store_true", default=None
+        )
+        tf_args.add_argument(
+            "--xla", help="[EXPERIMENTAL] Attempt to run graph with xla", action="store_true", default=None
+        )
 
     def parse(self, args):
         self.gpu_memory_fraction = args_util.get(args, "gpu_memory_fraction")
         self.allow_growth = args_util.get(args, "allow_growth")
         self.xla = args_util.get(args, "xla")
 
-
     def add_to_script(self, script):
-        config_loader_str = make_invocable_if_nondefault("CreateConfig", gpu_memory_fraction=self.gpu_memory_fraction,
-                                allow_growth=self.allow_growth, use_xla=self.xla)
+        config_loader_str = make_invocable_if_nondefault(
+            "CreateConfig",
+            gpu_memory_fraction=self.gpu_memory_fraction,
+            allow_growth=self.allow_growth,
+            use_xla=self.xla,
+        )
         if config_loader_str is not None:
             script.add_import(imports=["CreateConfig"], frm="polygraphy.backend.tf")
             config_loader_name = script.add_loader(config_loader_str, "create_tf_config")

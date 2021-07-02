@@ -26,7 +26,8 @@ from polygraphy.exception import PolygraphyException
 class TestImporter(object):
     @pytest.mark.parametrize("loader", [InvokeFromScript, invoke_from_script])
     def test_import_from_script(self, loader):
-        script = dedent("""
+        script = dedent(
+            """
         from polygraphy.backend.trt import CreateNetwork
         from polygraphy import func
         import tensorrt as trt
@@ -36,7 +37,8 @@ class TestImporter(object):
             inp = network.add_input("input", dtype=trt.float32, shape=(1, 1))
             out = network.add_identity(inp).get_output(0)
             network.mark_output(out)
-        """)
+        """
+        )
 
         with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
@@ -53,12 +55,13 @@ class TestImporter(object):
                 assert network.num_layers == 1
                 assert network.get_layer(0).type == trt.LayerType.IDENTITY
 
-
     def test_import_non_existent(self):
-        script = dedent("""
+        script = dedent(
+            """
         def example():
             pass
-        """)
+        """
+        )
 
         with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)

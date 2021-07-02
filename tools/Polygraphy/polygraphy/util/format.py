@@ -27,6 +27,7 @@ class DataFormat(enum.IntEnum):
     NHWC = 4
     NCHW = 5
 
+
 # This class is responsible for deducing the format of a shape,
 # and converting it to the desired format (specified as a DataFormat).
 class FormatManager(object):
@@ -88,8 +89,11 @@ class FormatManager(object):
         elif len(shape) == 2:
             return DataFormat.NW
         else:
-            G_LOGGER.warning("Cannot determine format for " + str(shape) +
-                ". Currently only implemented for input_buffers with 1-3 non-batch dimensions. Please update this function!")
+            G_LOGGER.warning(
+                "Cannot determine format for "
+                + str(shape)
+                + ". Currently only implemented for input_buffers with 1-3 non-batch dimensions. Please update this function!"
+            )
             return DataFormat.UNKNOWN
 
     # Get the permutation required to transpose old_format to new_format

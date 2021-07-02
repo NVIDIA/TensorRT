@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
+#include "common.h"
 #include "trtUtil.h"
-
-#include <cassert>
 #include <functional>
 #include <numeric>
 
@@ -28,10 +27,10 @@ int inferTypeToBytes(nvinfer1::DataType t)
     {
     case nvinfer1::DataType::kFLOAT: return sizeof(float); break;
     case nvinfer1::DataType::kHALF: return sizeof(int16_t); break;
-    default: assert(0); break;
+    default: ASSERT(0); break;
     }
     return 0;
-};
+}
 
 int getVolume(nvinfer1::Dims dims)
 {

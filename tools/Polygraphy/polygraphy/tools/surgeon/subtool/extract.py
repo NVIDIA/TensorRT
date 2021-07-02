@@ -19,8 +19,7 @@ from polygraphy import mod
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools import util as tools_util
-from polygraphy.tools.args import (DataLoaderArgs, ModelArgs, OnnxLoaderArgs,
-                                   OnnxSaveArgs, OnnxShapeInferenceArgs)
+from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.surgeon.subtool.base import BaseSurgeonSubtool
 
@@ -32,6 +31,7 @@ class Extract(BaseSurgeonSubtool):
     """
     Extract a subgraph based on the specified inputs and outputs.
     """
+
     def __init__(self):
         super().__init__("extract")
         self.subscribe_args(ModelArgs(model_required=True, inputs="--model-inputs", model_type="onnx"))
@@ -40,24 +40,32 @@ class Extract(BaseSurgeonSubtool):
         self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
         self.subscribe_args(OnnxSaveArgs(required=True))
 
-
     def add_parser_args(self, parser):
-        parser.add_argument("--inputs", dest="input_meta", help="Input metadata for subgraph (names, shapes, and data types). "
-                            "Use 'auto' to make `extract` determine these automatically. Format: "
-                            "--inputs <name>:<shape>:<dtype>. "
-                            "For example: --inputs input0:[1,3,224,224]:float32 input1:auto:auto. "
-                            "If omitted, uses the current model inputs. ",
-                            nargs="+", default=[])
+        parser.add_argument(
+            "--inputs",
+            dest="input_meta",
+            help="Input metadata for subgraph (names, shapes, and data types). "
+            "Use 'auto' to make `extract` determine these automatically. Format: "
+            "--inputs <name>:<shape>:<dtype>. "
+            "For example: --inputs input0:[1,3,224,224]:float32 input1:auto:auto. "
+            "If omitted, uses the current model inputs. ",
+            nargs="+",
+            default=[],
+        )
 
-        parser.add_argument("--outputs", dest="output_meta", help="Output metadata for subgraph (names and data types). "
-                            "Use 'auto' to make `extract` determine these automatically. Format: "
-                            "--outputs <name>:<dtype>. "
-                            "For example: --outputs output0:float32 output1:auto. "
-                            "If omitted, uses the current model outputs. ",
-                            nargs="+", default=[])
+        parser.add_argument(
+            "--outputs",
+            dest="output_meta",
+            help="Output metadata for subgraph (names and data types). "
+            "Use 'auto' to make `extract` determine these automatically. Format: "
+            "--outputs <name>:<dtype>. "
+            "For example: --outputs output0:float32 output1:auto. "
+            "If omitted, uses the current model outputs. ",
+            nargs="+",
+            default=[],
+        )
 
         super().add_parser_args(parser)
-
 
     def run_impl(self, args):
         def missing_meta_tensors(input_metadata, output_metadata):
@@ -69,7 +77,6 @@ class Extract(BaseSurgeonSubtool):
                 if dtype is None:
                     missing.add(name, dtype, shape)
             return missing
-
 
         model = super().load_model()
 
@@ -83,7 +90,7 @@ class Extract(BaseSurgeonSubtool):
 
             def get_tensor(name):
                 if name not in TENSOR_MAP:
-                    G_LOGGER.exit("Tensor: {:} does not exist in the model.".format(name))
+                    G_LOGGER.critical("Tensor: {:} does not exist in the model.".format(name))
                 return TENSOR_MAP[name]
 
             # Makes a TensorMetadata for inputs/outputs using either the user provided information
@@ -102,28 +109,32 @@ class Extract(BaseSurgeonSubtool):
             output_metadata = make_io_meta(user_output_metadata, graph.outputs)
             return graph, input_metadata, output_metadata
 
-
         graph, input_metadata, output_metadata = load_graph_and_io_meta(model)
 
         # If we've already done ONNX shape inference, we should not do it again here.
-        skip_shape_inference = self.arg_groups[OnnxShapeInferenceArgs].force_fallback or self.arg_groups[OnnxShapeInferenceArgs].do_shape_inference
+        skip_shape_inference = (
+            self.arg_groups[OnnxShapeInferenceArgs].force_fallback
+            or self.arg_groups[OnnxShapeInferenceArgs].do_shape_inference
+        )
         if missing_meta_tensors(input_metadata, output_metadata) and not skip_shape_inference:
-            G_LOGGER.info("Running ONNX shape inference to derive shapes and/or data types for `auto` arguments.\n"
-                          "To avoid this, you can specify the shapes and data types explicitly.")
+            G_LOGGER.info(
+                "Running ONNX shape inference to derive shapes and/or data types for `auto` arguments.\n"
+                "To avoid this, you can specify the shapes and data types explicitly."
+            )
             model = onnx_backend.infer_shapes(model)
             graph, input_metadata, output_metadata = load_graph_and_io_meta(model)
-
 
         missing_tensors = missing_meta_tensors(input_metadata, output_metadata)
         if missing_tensors or self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
             # Use ONNX runtime with static shapes to infer shapes when all else fails
             # Returns a TensorMetadata for all tensors in the graph.
             if not self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
-                G_LOGGER.warning("Some tensor shapes or dtypes are missing in the model. Note: Tensors with missing information:\n{:}\n"
-                                 "Will run inference to determine shapes. This may cause some dynamic "
-                                 "dimensions to become static.\n"
-                                 "To avoid this, please provide metadata on the command-line. "
-                                    .format(missing_tensors))
+                G_LOGGER.warning(
+                    "Some tensor shapes or dtypes are missing in the model. Note: Tensors with missing information:\n{:}\n"
+                    "Will run inference to determine shapes. This may cause some dynamic "
+                    "dimensions to become static.\n"
+                    "To avoid this, please provide metadata on the command-line. ".format(missing_tensors)
+                )
             else:
                 G_LOGGER.info("Forcing fallback shape inference. This will cause dynamic dimensions to become static.")
 
@@ -150,9 +161,9 @@ class Extract(BaseSurgeonSubtool):
                 return meta
 
             input_metadata = update_meta_from_layerwise(input_metadata, user_input_metadata)
-            output_metadata = update_meta_from_layerwise(output_metadata, user_output_metadata,
-                                                         set_shapes=self.arg_groups[OnnxShapeInferenceArgs].force_fallback)
-
+            output_metadata = update_meta_from_layerwise(
+                output_metadata, user_output_metadata, set_shapes=self.arg_groups[OnnxShapeInferenceArgs].force_fallback
+            )
 
         graph = onnx_backend.extract_subgraph(graph, input_metadata, output_metadata)
         super().save_model(super().export_graph(graph))

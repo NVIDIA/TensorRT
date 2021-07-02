@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "priorBoxPlugin.h"
 #include <cmath>
 #include <cstring>
@@ -37,15 +36,31 @@ PluginFieldCollection PriorBoxPluginCreator::mFC{};
 std::vector<PluginField> PriorBoxPluginCreator::mPluginAttributes;
 
 // Constructor
-PriorBox::PriorBox(PriorBoxParameters param, int H, int W)
+PriorBox::PriorBox(PriorBoxParameters param, int32_t H, int32_t W)
     : mParam(param)
     , mH(H)
     , mW(W)
 {
+    // each obj should manage its copy of param
+    auto copyParamData = [](float*& dest, const float* src, const size_t size) {
+        if (size > 0)
+        {
+            dest = new float[size];
+            std::copy_n(src, size, dest);
+        }
+        else
+        {
+            ASSERT(dest == nullptr);
+        }
+    };
+    copyParamData(mParam.minSize, param.minSize, param.numMinSize);
+    copyParamData(mParam.maxSize, param.maxSize, param.numMaxSize);
+    copyParamData(mParam.aspectRatios, param.aspectRatios, param.numAspectRatios);
+
     setupDeviceMemory();
 }
 
-void PriorBox::setupDeviceMemory()
+void PriorBox::setupDeviceMemory() noexcept
 {
     auto copyToDevice = [](const void* hostData, size_t count) -> Weights {
         void* deviceData = nullptr;
@@ -56,7 +71,7 @@ void PriorBox::setupDeviceMemory()
 
     // minSize is required and needs to be non-negative
     ASSERT(mParam.numMinSize > 0 && mParam.minSize != nullptr);
-    for (int i = 0; i < mParam.numMinSize; ++i)
+    for (auto i = 0; i < mParam.numMinSize; ++i)
     {
         ASSERT(mParam.minSize[i] > 0 && "minSize must be positive");
     }
@@ -65,7 +80,7 @@ void PriorBox::setupDeviceMemory()
     ASSERT(mParam.numAspectRatios >= 0 && mParam.aspectRatios != nullptr);
     // Aspect ratio of 1.0 is built in.
     std::vector<float> tmpAR(1, 1);
-    for (int i = 0; i < mParam.numAspectRatios; ++i)
+    for (auto i = 0; i < mParam.numAspectRatios; ++i)
     {
         float ar = mParam.aspectRatios[i];
         bool alreadyExist = false;
@@ -107,7 +122,7 @@ void PriorBox::setupDeviceMemory()
     if (mParam.numMaxSize > 0)
     {
         ASSERT(mParam.numMinSize == mParam.numMaxSize && mParam.maxSize != nullptr);
-        for (int i = 0; i < mParam.numMaxSize; ++i)
+        for (auto i = 0; i < mParam.numMaxSize; ++i)
         {
             // maxSize should be greater than minSize
             ASSERT(mParam.maxSize[i] > mParam.minSize[i] && "maxSize must be greater than minSize");
@@ -122,11 +137,11 @@ PriorBox::PriorBox(const void* data, size_t length)
     const char *d = static_cast<const char*>(data), *a = d;
     mParam = read<PriorBoxParameters>(d);
 
-    auto readArray = [&d](const int size, float*& array) {
+    auto readArray = [&d](const int32_t size, float*& array) {
         if (size > 0)
         {
             array = new float[size];
-            for (int i = 0; i < size; i++)
+            for (auto i = 0; i < size; i++)
             {
                 array[i] = read<float>(d);
             }
@@ -149,14 +164,14 @@ PriorBox::PriorBox(const void* data, size_t length)
 }
 
 // Returns the number of output from the plugin layer
-int PriorBox::getNbOutputs() const
+int32_t PriorBox::getNbOutputs() const noexcept
 {
     // Number of outputs from the plugin layer is 1
     return 1;
 }
 
 // Computes and returns the output dimensions
-Dims PriorBox::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims PriorBox::getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims) noexcept
 {
     ASSERT(nbInputDims == 2);
     // Only one output from the plugin layer
@@ -166,45 +181,44 @@ Dims PriorBox::getOutputDimensions(int index, const Dims* inputs, int nbInputDim
     // workaround for TRT
     // The first channel is for prior box coordinates.
     // The second channel is for prior box scaling factors, which is simply a copy of the variance provided.
-    return DimsCHW(2, mH * mW * mNumPriors * 4, 1);
+    return Dims3(2, mH * mW * mNumPriors * 4, 1);
 }
 
-int PriorBox::initialize()
+int32_t PriorBox::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
-size_t PriorBox::getWorkspaceSize(int /*maxBatchSize*/) const
+size_t PriorBox::getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept
 {
     return 0;
 }
 
-int PriorBox::enqueue(
-    int /*batchSize*/, const void* const* /*inputs*/, void** outputs, void* /*workspace*/, cudaStream_t stream)
+int32_t PriorBox::enqueue(int32_t /*batchSize*/, const void* const* /*inputs*/, void* const* outputs, void* /*workspace*/,
+    cudaStream_t stream) noexcept
 {
     void* outputData = outputs[0];
     pluginStatus_t status = priorBoxInference(stream, mParam, mH, mW, mNumPriors, aspectRatios.count, minSize.values,
         maxSize.values, aspectRatios.values, outputData);
-    ASSERT(status == STATUS_SUCCESS);
 
-    return 0;
+    return status;
 }
 
 // Returns the size of serialized parameters
-size_t PriorBox::getSerializationSize() const
+size_t PriorBox::getSerializationSize() const noexcept
 {
     // PriorBoxParameters, minSize, maxSize, aspectRatios, mH, mW - the construct parameters
     return sizeof(PriorBoxParameters) + sizeof(float) * (mParam.numMinSize + mParam.numMaxSize + mParam.numAspectRatios)
         + sizeof(int) * 2;
 }
 
-void PriorBox::serialize(void* buffer) const
+void PriorBox::serialize(void* buffer) const noexcept
 {
     char *d = static_cast<char*>(buffer), *a = d;
     write(d, mParam);
 
-    auto writeArray = [&d](const int size, const float* array) {
-        for (int i = 0; i < size; i++)
+    auto writeArray = [&d](const int32_t size, const float* array) {
+        for (auto i = 0; i < size; i++)
         {
             write(d, array[i]);
         }
@@ -219,22 +233,22 @@ void PriorBox::serialize(void* buffer) const
     ASSERT(d == a + getSerializationSize());
 }
 
-bool PriorBox::supportsFormat(DataType type, PluginFormat format) const
+bool PriorBox::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-const char* PriorBox::getPluginType() const
+const char* PriorBox::getPluginType() const noexcept
 {
     return PRIOR_BOX_PLUGIN_NAME;
 }
 
-const char* PriorBox::getPluginVersion() const
+const char* PriorBox::getPluginVersion() const noexcept
 {
     return PRIOR_BOX_PLUGIN_VERSION;
 }
 
-void PriorBox::destroy()
+void PriorBox::destroy() noexcept
 {
     CUASSERT(cudaFree(const_cast<void*>(minSize.values)));
     if (mParam.numMaxSize > 0)
@@ -252,43 +266,26 @@ void PriorBox::destroy()
     delete this;
 }
 
-IPluginV2Ext* PriorBox::clone() const
+IPluginV2Ext* PriorBox::clone() const noexcept
 {
-    // each obj should manage its copy of param
-    PriorBoxParameters params = mParam;
-    auto copyParamData = [](float*& dest, const float* src, const size_t size) {
-        if (size > 0)
-        {
-            dest = new float[size];
-            std::copy_n(src, size, dest);
-        }
-        else
-        {
-            ASSERT(dest == nullptr);
-        }
-    };
-    copyParamData(params.minSize, mParam.minSize, mParam.numMinSize);
-    copyParamData(params.maxSize, mParam.maxSize, mParam.numMaxSize);
-    copyParamData(params.aspectRatios, mParam.aspectRatios, mParam.numAspectRatios);
-
-    PriorBox* obj = new PriorBox(params, mH, mW);
+    PriorBox* obj = new PriorBox(mParam, mH, mW);
     obj->setPluginNamespace(mPluginNamespace.c_str());
     return obj;
 }
 
 // Set plugin namespace
-void PriorBox::setPluginNamespace(const char* pluginNamespace)
+void PriorBox::setPluginNamespace(const char* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* PriorBox::getPluginNamespace() const
+const char* PriorBox::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index.
-DataType PriorBox::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+DataType PriorBox::getOutputDataType(int32_t index, const nvinfer1::DataType* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Two outputs
     ASSERT(index == 0 || index == 1);
@@ -296,23 +293,23 @@ DataType PriorBox::getOutputDataType(int index, const nvinfer1::DataType* inputT
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool PriorBox::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool PriorBox::isOutputBroadcastAcrossBatch(int32_t /*outputIndex*/, const bool* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool PriorBox::canBroadcastInputAcrossBatch(int inputIndex) const
+bool PriorBox::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void PriorBox::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
+void PriorBox::configurePlugin(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
+    const DataType* inputTypes, const DataType* /*outputTypes*/, const bool* /*inputIsBroadcast*/,
+    const bool* /*outputIsBroadcast*/, PluginFormat floatFormat, int32_t /*maxBatchSize*/) noexcept
 {
-    ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kNCHW);
+    ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     ASSERT(nbInputs == 2);
     ASSERT(nbOutputs == 1);
     ASSERT(inputDims[0].nbDims == 3);
@@ -334,10 +331,10 @@ void PriorBox::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* 
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void PriorBox::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) {}
+void PriorBox::attachToContext(cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept {}
 
 // Detach the plugin object from its execution context.
-void PriorBox::detachFromContext() {}
+void PriorBox::detachFromContext() noexcept {}
 
 PriorBoxPluginCreator::PriorBoxPluginCreator()
 {
@@ -362,82 +359,101 @@ PriorBoxPluginCreator::~PriorBoxPluginCreator()
     // Free allocated memory (if any) here
 }
 
-const char* PriorBoxPluginCreator::getPluginName() const
+const char* PriorBoxPluginCreator::getPluginName() const noexcept
 {
     return PRIOR_BOX_PLUGIN_NAME;
 }
 
-const char* PriorBoxPluginCreator::getPluginVersion() const
+const char* PriorBoxPluginCreator::getPluginVersion() const noexcept
 {
     return PRIOR_BOX_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* PriorBoxPluginCreator::getFieldNames()
+const PluginFieldCollection* PriorBoxPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* PriorBoxPluginCreator::createPlugin(const char* /*name*/, const PluginFieldCollection* fc)
+IPluginV2Ext* PriorBoxPluginCreator::createPlugin(const char* /*name*/, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
 
     PriorBoxParameters params;
-    for (int i = 0; i < fc->nbFields; ++i)
+    std::unique_ptr<float[]> minSize;
+    std::unique_ptr<float[]> maxSize;
+    std::unique_ptr<float[]> aspectRatios;
+    for (auto i = 0; i < fc->nbFields; ++i)
     {
         const char* attrName = fields[i].name;
         if (!strcmp(attrName, "minSize"))
         {
             ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            int size = fields[i].length;
-            params.minSize = new float[size];
-            const auto* minS = static_cast<const float*>(fields[i].data);
-            for (int j = 0; j < size; j++)
-            {
-                params.minSize[j] = *minS;
-                minS++;
-            }
+            const int32_t size = fields[i].length;
             params.numMinSize = size;
+            if (size > 0)
+            {
+                minSize.reset(new float[size]);
+                params.minSize = minSize.get();
+                const auto* minS = static_cast<const float*>(fields[i].data);
+                for (auto j = 0; j < size; j++)
+                {
+                    params.minSize[j] = *minS;
+                    minS++;
+                }
+            }
+            else
+            {
+                params.minSize = nullptr;
+            }
         }
         else if (!strcmp(attrName, "maxSize"))
         {
             ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            int size = fields[i].length;
+            const int32_t size = fields[i].length;
             params.numMaxSize = size;
-            params.maxSize = nullptr;
             if (size > 0)
             {
-                params.maxSize = new float[size];
+                maxSize.reset(new float[size]);
+                params.maxSize = maxSize.get();
                 const auto* maxS = static_cast<const float*>(fields[i].data);
-                for (int j = 0; j < size; j++)
+                for (auto j = 0; j < size; j++)
                 {
                     params.maxSize[j] = *maxS;
                     maxS++;
                 }
             }
+            else
+            {
+                params.maxSize = nullptr;
+            }
         }
         else if (!strcmp(attrName, "aspectRatios"))
         {
             ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            int size = fields[i].length;
+            const int32_t size = fields[i].length;
             params.numAspectRatios = size;
-            params.aspectRatios = nullptr;
             if (size > 0)
             {
-                params.aspectRatios = new float[size];
+                aspectRatios.reset(new float[size]);
+                params.aspectRatios = aspectRatios.get();
                 const auto* aR = static_cast<const float*>(fields[i].data);
-                for (int j = 0; j < size; j++)
+                for (auto j = 0; j < size; j++)
                 {
                     params.aspectRatios[j] = *aR;
                     aR++;
                 }
             }
+            else
+            {
+                params.aspectRatios = nullptr;
+            }
         }
         else if (!strcmp(attrName, "variance"))
         {
             ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            int size = fields[i].length;
+            const int32_t size = fields[i].length;
             const auto* lVar = static_cast<const float*>(fields[i].data);
-            for (int j = 0; j < size; j++)
+            for (auto j = 0; j < size; j++)
             {
                 params.variance[j] = (*lVar);
                 lVar++;
@@ -485,7 +501,7 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(const char* /*name*/, const Pl
 }
 
 IPluginV2Ext* PriorBoxPluginCreator::deserializePlugin(
-    const char* /*name*/, const void* serialData, size_t serialLength)
+    const char* /*name*/, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call PriorBox::destroy()

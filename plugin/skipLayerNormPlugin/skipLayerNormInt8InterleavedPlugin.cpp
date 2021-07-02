@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#include "skipLayerNormInt8InterleavedPlugin.h"
+#include <cuda.h>
 #include "NvInfer.h"
 #include "serialize.hpp"
-#include <cuda.h>
+#include "skipLayerNormInt8InterleavedPlugin.h"
 
 #include <cstring>
 #include <vector>
@@ -27,26 +27,36 @@ using namespace nvinfer1;
 namespace bert
 {
 
-void launch_small(cudaStream_t stream, const int ld, const int total, const int8_t* input, const int8_t* skip,
-    const half* beta, const half* gamma, int8_t* output, const float dqScaleIn, const float dqScaleSkip,
-    const float qScale);
+int32_t launch_small_hface(cudaStream_t stream, const int32_t ld, const int32_t total, const int8_t* input,
+    const int8_t* skip, const half* beta, const half* gamma, int8_t* output, const float dqScaleIn,
+    const float dqScaleSkip, const float qScale);
 
-void launch_large(cudaStream_t stream, const int ld, const int total, const int8_t* input, const int8_t* skip,
-    const half* beta, const half* gamma, int8_t* output, const float dqScaleIn, const float dqScaleSkip,
-    const float qScale);
+int32_t launch_large_hface(cudaStream_t stream, const int32_t ld, const int32_t total, const int8_t* input,
+    const int8_t* skip, const half* beta, const half* gamma, int8_t* output, const float dqScaleIn,
+    const float dqScaleSkip, const float qScale);
+
+int32_t launch_small_mtron(cudaStream_t stream, const int32_t ld, const int32_t total, const int8_t* input,
+    const int8_t* skip, const half* beta, const half* gamma, int8_t* output, int8_t* preln, const float dqScaleIn,
+    const float dqScaleSkip, const float qScale, const float qSkipScale);
+
+int32_t launch_large_mtron(cudaStream_t stream, const int32_t ld, const int32_t total, const int8_t* input,
+    const int8_t* skip, const half* beta, const half* gamma, int8_t* output, int8_t* preln, const float dqScaleIn,
+    const float dqScaleSkip, const float qScale, const float qSkipScale);
 
 // Clip plugin specific constants
 namespace
 {
-static const char* SKIP_LAYER_NORM_INTERLEAVED_VERSION{"3"};
-static const char* SKIP_LAYER_NORM_INTERLEAVED_NAME{"CustomSkipLayerNormPluginDynamic"};
+const char* SKIP_LAYER_NORM_INTERLEAVED_VERSION_HFACE{"3"};
+const char* SKIP_LAYER_NORM_INTERLEAVED_VERSION_MTRON{"4"};
+const char* SKIP_LAYER_NORM_INTERLEAVED_NAME{"CustomSkipLayerNormPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
-PluginFieldCollection SkipLayerNormInterleavedPluginCreator::mFC{};
-std::vector<PluginField> SkipLayerNormInterleavedPluginCreator::mPluginAttributes;
+PluginFieldCollection SkipLayerNormInterleavedPluginBaseCreator::mFC{};
+std::vector<PluginField> SkipLayerNormInterleavedPluginBaseCreator::mPluginAttributes;
 
-REGISTER_TENSORRT_PLUGIN(SkipLayerNormInterleavedPluginCreator);
+REGISTER_TENSORRT_PLUGIN(SkipLayerNormInterleavedPluginHFaceCreator);
+REGISTER_TENSORRT_PLUGIN(SkipLayerNormInterleavedPluginMTronCreator);
 
 constexpr auto param_type = DataType::kHALF;
 
@@ -60,7 +70,7 @@ static inline DataType getParamWordType(DataType cfgType)
     return cfgType;
 }
 
-SkipLayerNormInterleavedPlugin::SkipLayerNormInterleavedPlugin(
+SkipLayerNormInterleavedPluginBase::SkipLayerNormInterleavedPluginBase(
     const std::string name, const Weights& beta, const Weights& gamma)
     : mLayerName(name)
     , mGammaDev(nullptr)
@@ -78,14 +88,25 @@ SkipLayerNormInterleavedPlugin::SkipLayerNormInterleavedPlugin(
     mGamma.convertAndCopy(gamma, param_type);
 }
 
-SkipLayerNormInterleavedPlugin::SkipLayerNormInterleavedPlugin(const std::string name, const void* data, size_t length)
+SkipLayerNormInterleavedPluginHFace::SkipLayerNormInterleavedPluginHFace(
+    const std::string name, const Weights& beta, const Weights& gamma)
+    : SkipLayerNormInterleavedPluginBase(name, beta, gamma)
+{
+}
+
+SkipLayerNormInterleavedPluginMTron::SkipLayerNormInterleavedPluginMTron(
+    const std::string name, const Weights& beta, const Weights& gamma)
+    : SkipLayerNormInterleavedPluginBase(name, beta, gamma)
+{
+}
+
+SkipLayerNormInterleavedPluginBase::SkipLayerNormInterleavedPluginBase(
+    const std::string name, const void* data, size_t length)
     : mLayerName(name)
     , mGammaDev(nullptr)
     , mBetaDev(nullptr)
     , mParamsOnDevice(false)
 {
-    gLogVerbose << "SkipLayerNormInterleavedPlugin deserialize\n";
-
     // Deserialize in the same order as serialization
     deserialize_value(&data, &length, &mLd);
 
@@ -96,41 +117,65 @@ SkipLayerNormInterleavedPlugin::SkipLayerNormInterleavedPlugin(const std::string
     mGamma.convertAndCopy(d, mLd, param_type);
 }
 
-// IPluginV2DynamicExt Methods
-IPluginV2DynamicExt* SkipLayerNormInterleavedPlugin::clone() const
+SkipLayerNormInterleavedPluginHFace::SkipLayerNormInterleavedPluginHFace(
+    const std::string name, const void* data, size_t length)
+    : SkipLayerNormInterleavedPluginBase(name, data, length)
 {
-    gLogVerbose << "SkipLayerNormInterleavedPlugin clone\n";
+    gLogVerbose << "SkipLayerNormInterleavedPluginHFace deserialize\n";
+}
 
-    auto p = new SkipLayerNormInterleavedPlugin(mLayerName, mBeta, mGamma);
+SkipLayerNormInterleavedPluginMTron::SkipLayerNormInterleavedPluginMTron(
+    const std::string name, const void* data, size_t length)
+    : SkipLayerNormInterleavedPluginBase(name, data, length)
+{
+    gLogVerbose << "SkipLayerNormInterleavedPluginMTron deserialize\n";
+}
+
+// IPluginV2DynamicExt Methods
+IPluginV2DynamicExt* SkipLayerNormInterleavedPluginHFace::clone() const noexcept
+{
+    gLogVerbose << "SkipLayerNormInterleavedPluginHFace clone\n";
+
+    auto* p = new SkipLayerNormInterleavedPluginHFace(mLayerName, mBeta, mGamma);
     p->initialize();
     p->setPluginNamespace(mNamespace.c_str());
     return p;
 }
 
-DimsExprs SkipLayerNormInterleavedPlugin::getOutputDimensions(
-    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder)
+IPluginV2DynamicExt* SkipLayerNormInterleavedPluginMTron::clone() const noexcept
+{
+    gLogVerbose << "SkipLayerNormInterleavedPluginMTron clone\n";
+
+    auto* p = new SkipLayerNormInterleavedPluginMTron(mLayerName, mBeta, mGamma);
+    p->initialize();
+    p->setPluginNamespace(mNamespace.c_str());
+    return p;
+}
+
+DimsExprs SkipLayerNormInterleavedPluginBase::getOutputDimensions(
+    int32_t outputIndex, const DimsExprs* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     ASSERT(nbInputs == 2);
-    ASSERT(outputIndex == 0);
+    ASSERT(outputIndex >= 0 && outputIndex < getNbOutputs());
     ASSERT(inputs[0].nbDims == inputs[1].nbDims);
     return inputs[0];
 }
 
-bool SkipLayerNormInterleavedPlugin::supportsFormatCombination(
-    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs)
+bool SkipLayerNormInterleavedPluginBase::supportsFormatCombination(
+    int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     ASSERT(nbInputs == 2);
-    ASSERT(nbOutputs == 1);
+    ASSERT(nbOutputs == getNbOutputs());
 
     const PluginTensorDesc& desc = inOut[pos];
     return desc.type == DataType::kINT8 && desc.format == TensorFormat::kCHW32;
 }
 
-void SkipLayerNormInterleavedPlugin::configurePlugin(
-    const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs)
+void SkipLayerNormInterleavedPluginBase::configurePlugin(const DynamicPluginTensorDesc* inputs, int32_t nbInputs,
+    const DynamicPluginTensorDesc* outputs, int32_t nbOutputs) noexcept
 {
     // Validate input arguments
-    ASSERT(nbOutputs == 1);
+    ASSERT(nbOutputs == getNbOutputs());
     ASSERT(nbInputs == 2);
     ASSERT(DataType::kINT8 == inputs[0].desc.type);
     ASSERT(DataType::kINT8 == inputs[1].desc.type);
@@ -152,19 +197,14 @@ void SkipLayerNormInterleavedPlugin::configurePlugin(
     }
 }
 
-size_t SkipLayerNormInterleavedPlugin::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const
+size_t SkipLayerNormInterleavedPluginBase::getWorkspaceSize(
+    const PluginTensorDesc* inputs, int32_t nbInputs, const PluginTensorDesc* outputs, int32_t nbOutputs) const noexcept
 {
     return 0;
 }
 
-int SkipLayerNormInterleavedPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+void checkDescs(const PluginTensorDesc& iDesc, const PluginTensorDesc& sDesc, const PluginTensorDesc& oDesc)
 {
-    // Input shape: 1x(hxd)xtotalx1
-    const auto iDesc = inputDesc[0];
-    const auto sDesc = inputDesc[1];
-    const auto oDesc = outputDesc[0];
     ASSERT(iDesc.dims.nbDims == 4);
     ASSERT(iDesc.dims.nbDims == sDesc.dims.nbDims);
     ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, sDesc.dims.d));
@@ -177,11 +217,22 @@ int SkipLayerNormInterleavedPlugin::enqueue(const PluginTensorDesc* inputDesc, c
     ASSERT(iDesc.format == oDesc.format);
     ASSERT(iDesc.type == sDesc.type);
     ASSERT(iDesc.type == oDesc.type);
-    const int ld = iDesc.dims.d[1];
-    const int total = iDesc.dims.d[2];
+}
+
+int32_t SkipLayerNormInterleavedPluginHFace::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+{
+    // Input shape: 1x(hxd)xtotalx1
+    const auto iDesc = inputDesc[0];
+    const auto sDesc = inputDesc[1];
+    const auto oDesc = outputDesc[0];
+    checkDescs(iDesc, sDesc, oDesc);
+
+    const int32_t ld = iDesc.dims.d[1];
+    const int32_t total = iDesc.dims.d[2];
     const float dqScaleIn = iDesc.scale;
     const float dqScaleSkip = sDesc.scale;
-    const float qScale = 1.f / oDesc.scale;
+    const float qScale = 1.F / oDesc.scale;
     const int8_t* input = static_cast<const int8_t*>(inputs[0]);
     const int8_t* skip = static_cast<const int8_t*>(inputs[1]);
     int8_t* output = static_cast<int8_t*>(outputs[0]);
@@ -190,56 +241,115 @@ int SkipLayerNormInterleavedPlugin::enqueue(const PluginTensorDesc* inputDesc, c
 
     if (total < 4096)
     {
-        launch_small(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
+        return launch_small_hface(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
     }
     else
     {
-        launch_large(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
+        return launch_large_hface(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
+    }
+}
+
+int32_t SkipLayerNormInterleavedPluginMTron::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+{
+    // Input shape: 1x(hxd)xtotalx1
+    const auto iDesc = inputDesc[0];
+    const auto sDesc = inputDesc[1];
+    const auto oDesc = outputDesc[0];
+    const auto pDesc = outputDesc[1];
+    checkDescs(iDesc, sDesc, oDesc);
+    ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, pDesc.dims.d));
+
+    const int32_t ld = iDesc.dims.d[1];
+    const int32_t total = iDesc.dims.d[2];
+    const float dqScaleIn = iDesc.scale;
+    const float dqScaleSkip = sDesc.scale;
+    const float qScale = 1.F / oDesc.scale;
+    const float qSkipScale = 1.F / pDesc.scale;
+    const int8_t* input = static_cast<const int8_t*>(inputs[0]);
+    const int8_t* skip = static_cast<const int8_t*>(inputs[1]);
+    int8_t* output = static_cast<int8_t*>(outputs[0]);
+    int8_t* preln = static_cast<int8_t*>(outputs[1]);
+    const half* gamma = static_cast<const half*>(mGammaDev.get());
+    const half* beta = static_cast<const half*>(mBetaDev.get());
+
+    if (total < 4096)
+    {
+        return launch_small_mtron(
+            stream, ld, total, input, skip, beta, gamma, output, preln, dqScaleIn, dqScaleSkip, qScale, qSkipScale);
+    }
+    else
+    {
+        return launch_large_mtron(
+            stream, ld, total, input, skip, beta, gamma, output, preln, dqScaleIn, dqScaleSkip, qScale, qSkipScale);
     }
 
     return 0;
 }
 
 // IPluginV2Ext Methods
-DataType SkipLayerNormInterleavedPlugin::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const
+DataType SkipLayerNormInterleavedPluginBase::getOutputDataType(
+    int32_t index, const DataType* inputTypes, int32_t nbInputs) const noexcept
 {
-    ASSERT(index == 0);
+    ASSERT(index >= 0 && index < getNbOutputs());
     ASSERT(nbInputs == 2);
     return inputTypes[0];
 }
 
 // IPluginV2 Methods
-const char* SkipLayerNormInterleavedPlugin::getPluginType() const
+const char* SkipLayerNormInterleavedPluginBase::getPluginType() const noexcept
 {
     return SKIP_LAYER_NORM_INTERLEAVED_NAME;
 }
 
-const char* SkipLayerNormInterleavedPlugin::getPluginVersion() const
+const char* SkipLayerNormInterleavedPluginHFace::getPluginVersion() const noexcept
 {
-    return SKIP_LAYER_NORM_INTERLEAVED_VERSION;
+    return SKIP_LAYER_NORM_INTERLEAVED_VERSION_HFACE;
 }
 
-int SkipLayerNormInterleavedPlugin::getNbOutputs() const
+const char* SkipLayerNormInterleavedPluginMTron::getPluginVersion() const noexcept
+{
+    return SKIP_LAYER_NORM_INTERLEAVED_VERSION_MTRON;
+}
+
+int32_t SkipLayerNormInterleavedPluginHFace::getNbOutputs() const noexcept
 {
     return 1;
 }
-int SkipLayerNormInterleavedPlugin::initialize()
+
+int32_t SkipLayerNormInterleavedPluginMTron::getNbOutputs() const noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPlugin initialize\n";
+    return 2;
+}
+
+int32_t SkipLayerNormInterleavedPluginHFace::initialize() noexcept
+{
+    gLogVerbose << "SkipLayerNormInterleavedPluginHFace initialize\n";
     return 0;
 }
 
-void SkipLayerNormInterleavedPlugin::terminate()
+int32_t SkipLayerNormInterleavedPluginMTron::initialize() noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPlugin terminate\n";
+    gLogVerbose << "SkipLayerNormInterleavedPluginMTron initialize\n";
+    return 0;
 }
 
-size_t SkipLayerNormInterleavedPlugin::getSerializationSize() const
+void SkipLayerNormInterleavedPluginHFace::terminate() noexcept
+{
+    gLogVerbose << "SkipLayerNormInterleavedPluginHFace terminate\n";
+}
+
+void SkipLayerNormInterleavedPluginMTron::terminate() noexcept
+{
+    gLogVerbose << "SkipLayerNormInterleavedPluginMTron terminate\n";
+}
+
+size_t SkipLayerNormInterleavedPluginBase::getSerializationSize() const noexcept
 {
     return 2 * mParamWordsize * mLd + sizeof(mLd);
 }
 
-void SkipLayerNormInterleavedPlugin::serialize(void* buffer) const
+void SkipLayerNormInterleavedPluginBase::serialize(void* buffer) const noexcept
 {
     serialize_value(&buffer, mLd);
 
@@ -248,56 +358,77 @@ void SkipLayerNormInterleavedPlugin::serialize(void* buffer) const
     serFromDev(d, static_cast<char*>(mGammaDev.get()), mLd * mParamWordsize);
 }
 
-void SkipLayerNormInterleavedPlugin::destroy()
+void SkipLayerNormInterleavedPluginBase::destroy() noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPlugin destroy\n";
     // This gets called when the network containing plugin is destroyed
-    mGammaDev.release();
-    mBetaDev.release();
+    mGammaDev.reset(nullptr);
+    mBetaDev.reset(nullptr);
     delete this;
 }
 
-void SkipLayerNormInterleavedPlugin::setPluginNamespace(const char* libNamespace)
+void SkipLayerNormInterleavedPluginHFace::destroy() noexcept
+{
+    gLogVerbose << "SkipLayerNormInterleavedPluginHFace destroy\n";
+    SkipLayerNormInterleavedPluginBase::destroy();
+}
+
+void SkipLayerNormInterleavedPluginMTron::destroy() noexcept
+{
+    gLogVerbose << "SkipLayerNormInterleavedPluginMTron destroy\n";
+    SkipLayerNormInterleavedPluginBase::destroy();
+}
+
+void SkipLayerNormInterleavedPluginBase::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* SkipLayerNormInterleavedPlugin::getPluginNamespace() const
+const char* SkipLayerNormInterleavedPluginBase::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
 
 /////////////////////////////////////////////////////////
 
-SkipLayerNormInterleavedPluginCreator::SkipLayerNormInterleavedPluginCreator()
+SkipLayerNormInterleavedPluginBaseCreator::SkipLayerNormInterleavedPluginBaseCreator()
 {
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* SkipLayerNormInterleavedPluginCreator::getPluginName() const
+SkipLayerNormInterleavedPluginHFaceCreator::SkipLayerNormInterleavedPluginHFaceCreator()
+    : SkipLayerNormInterleavedPluginBaseCreator()
+{
+}
+
+SkipLayerNormInterleavedPluginMTronCreator::SkipLayerNormInterleavedPluginMTronCreator()
+    : SkipLayerNormInterleavedPluginBaseCreator()
+{
+}
+
+const char* SkipLayerNormInterleavedPluginBaseCreator::getPluginName() const noexcept
 {
     return SKIP_LAYER_NORM_INTERLEAVED_NAME;
 }
 
-const char* SkipLayerNormInterleavedPluginCreator::getPluginVersion() const
+const char* SkipLayerNormInterleavedPluginHFaceCreator::getPluginVersion() const noexcept
 {
-    return SKIP_LAYER_NORM_INTERLEAVED_VERSION;
+    return SKIP_LAYER_NORM_INTERLEAVED_VERSION_HFACE;
 }
 
-const PluginFieldCollection* SkipLayerNormInterleavedPluginCreator::getFieldNames()
+const char* SkipLayerNormInterleavedPluginMTronCreator::getPluginVersion() const noexcept
+{
+    return SKIP_LAYER_NORM_INTERLEAVED_VERSION_MTRON;
+}
+
+const PluginFieldCollection* SkipLayerNormInterleavedPluginBaseCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* SkipLayerNormInterleavedPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+void buildBetaAndGamma(const PluginFieldCollection* fc, Weights& beta, Weights& gamma)
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginCreator createPlugin\n";
-
-    Weights beta{DataType::kFLOAT, nullptr, 0};
-    Weights gamma{DataType::kFLOAT, nullptr, 0};
-
-    for (int i = 0; i < fc->nbFields; i++)
+    for (int32_t i = 0; i < fc->nbFields; i++)
     {
         std::string field_name(fc->fields[i].name);
 
@@ -327,24 +458,88 @@ IPluginV2* SkipLayerNormInterleavedPluginCreator::createPlugin(const char* name,
     {
         gLogError << "SkipLayerNorm: invalid gamma" << std::endl;
     }
-
-    return new SkipLayerNormInterleavedPlugin(name, beta, gamma);
 }
 
-IPluginV2* SkipLayerNormInterleavedPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)
+IPluginV2* SkipLayerNormInterleavedPluginHFaceCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
+{
+    try
+    {
+        gLogVerbose << "SkipLayerNormInterleavedPluginHFaceCreator createPlugin\n";
+
+        Weights beta{DataType::kFLOAT, nullptr, 0};
+        Weights gamma{DataType::kFLOAT, nullptr, 0};
+        buildBetaAndGamma(fc, beta, gamma);
+
+        return new SkipLayerNormInterleavedPluginHFace(name, beta, gamma);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+IPluginV2* SkipLayerNormInterleavedPluginMTronCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
+{
+    try
+    {
+        gLogVerbose << "SkipLayerNormInterleavedPluginMTronCreator createPlugin\n";
+
+        Weights beta{DataType::kFLOAT, nullptr, 0};
+        Weights gamma{DataType::kFLOAT, nullptr, 0};
+        buildBetaAndGamma(fc, beta, gamma);
+
+        return new SkipLayerNormInterleavedPluginMTron(name, beta, gamma);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+IPluginV2* SkipLayerNormInterleavedPluginHFaceCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call SkipLayerNormInterleavedPlugin::destroy()
-    return new SkipLayerNormInterleavedPlugin(name, serialData, serialLength);
+    try
+    {
+        gLogVerbose << "SkipLayerNormInterleavedPluginHFaceCreator deserializePlugin\n";
+        return new SkipLayerNormInterleavedPluginHFace(name, serialData, serialLength);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-void SkipLayerNormInterleavedPluginCreator::setPluginNamespace(const char* libNamespace)
+IPluginV2* SkipLayerNormInterleavedPluginMTronCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
+{
+    // This object will be deleted when the network is destroyed, which will
+    // call SkipLayerNormInterleavedPlugin::destroy()
+    try
+    {
+        gLogVerbose << "SkipLayerNormInterleavedPluginMTronCreator deserializePlugin\n";
+        return new SkipLayerNormInterleavedPluginMTron(name, serialData, serialLength);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+void SkipLayerNormInterleavedPluginBaseCreator::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* SkipLayerNormInterleavedPluginCreator::getPluginNamespace() const
+const char* SkipLayerNormInterleavedPluginBaseCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }

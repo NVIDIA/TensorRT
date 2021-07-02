@@ -78,8 +78,9 @@ def main():
 
         bench_times = {}
 
+        stream = cuda.Stream()
         for idx, batch_size in enumerate(sorted(args.batch_size)):
-            context.active_optimization_profile = idx
+            context.set_optimization_profile_async(idx, stream.handle)
 
             # Each profile has unique bindings
             binding_idx_offset = idx * num_binding_per_profile
@@ -99,7 +100,6 @@ def main():
             total_time = 0
             start = cuda.Event()
             end = cuda.Event()
-            stream = cuda.Stream()
 
             # Warmup
             for _ in range(args.warm_up_runs):

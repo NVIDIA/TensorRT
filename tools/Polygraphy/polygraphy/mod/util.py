@@ -1,4 +1,3 @@
-
 #
 # Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
@@ -14,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 
 def version(version_str):
     return tuple([int(num) for num in version_str.split(".")])

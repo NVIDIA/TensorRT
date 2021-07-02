@@ -14,20 +14,20 @@
 # limitations under the License.
 #
 
+import os
 # This sample uses an ONNX ResNet50 Model to create a TensorRT Inference Engine
 import random
-from PIL import Image
-import numpy as np
+import sys
 
-import pycuda.driver as cuda
+import numpy as np
 # This import causes pycuda to automatically manage CUDA context creation and cleanup.
 import pycuda.autoinit
-
 import tensorrt as trt
+from PIL import Image
 
-import sys, os
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
 import common
+
 
 class ModelData(object):
     MODEL_PATH = "ResNet50.onnx"
@@ -40,16 +40,21 @@ TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
 # The Onnx path is used for Onnx models.
 def build_engine_onnx(model_file):
-    with trt.Builder(TRT_LOGGER) as builder, builder.create_network(common.EXPLICIT_BATCH) as network, builder.create_builder_config() as config, trt.OnnxParser(network, TRT_LOGGER) as parser:
-        config.max_workspace_size = common.GiB(1)
-        # Load the Onnx model and parse it in order to populate the TensorRT network.
-        with open(model_file, 'rb') as model:
-            if not parser.parse(model.read()):
-                print ('ERROR: Failed to parse the ONNX file.')
-                for error in range(parser.num_errors):
-                    print (parser.get_error(error))
-                return None
-        return builder.build_engine(network, config)
+    builder = trt.Builder(TRT_LOGGER)
+    network = builder.create_network(common.EXPLICIT_BATCH)
+    config = builder.create_builder_config()
+    parser = trt.OnnxParser(network, TRT_LOGGER)
+
+    config.max_workspace_size = common.GiB(1)
+    # Load the Onnx model and parse it in order to populate the TensorRT network.
+    with open(model_file, 'rb') as model:
+        if not parser.parse(model.read()):
+            print ('ERROR: Failed to parse the ONNX file.')
+            for error in range(parser.num_errors):
+                print (parser.get_error(error))
+            return None
+    return builder.build_engine(network, config)
+
 
 def load_normalized_test_case(test_image, pagelocked_buffer):
     # Converts the input image to a CHW Numpy array
@@ -64,6 +69,7 @@ def load_normalized_test_case(test_image, pagelocked_buffer):
     np.copyto(pagelocked_buffer, normalize_image(Image.open(test_image)))
     return test_image
 
+
 def main():
     # Set the data path to the directory that contains the trained models and test images for inference.
     _, data_files = common.find_sample_data(description="Runs a ResNet50 network with a TensorRT inference engine.", subfolder="resnet50", find_files=["binoculars.jpeg", "reflex_camera.jpeg", "tabby_tiger_cat.jpg", ModelData.MODEL_PATH, "class_labels.txt"])
@@ -73,24 +79,26 @@ def main():
     labels = open(labels_file, 'r').read().split('\n')
 
     # Build a TensorRT engine.
-    with build_engine_onnx(onnx_model_file) as engine:
-        # Inference is the same regardless of which parser is used to build the engine, since the model architecture is the same.
-        # Allocate buffers and create a CUDA stream.
-        inputs, outputs, bindings, stream = common.allocate_buffers(engine)
-        # Contexts are used to perform inference.
-        with engine.create_execution_context() as context:
-            # Load a normalized test case into the host input page-locked buffer.
-            test_image = random.choice(test_images)
-            test_case = load_normalized_test_case(test_image, inputs[0].host)
-            # Run the engine. The output will be a 1D tensor of length 1000, where each value represents the
-            # probability that the image corresponds to that label
-            trt_outputs = common.do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
-            # We use the highest probability as our prediction. Its index corresponds to the predicted label.
-            pred = labels[np.argmax(trt_outputs[0])]
-            if "_".join(pred.split()) in os.path.splitext(os.path.basename(test_case))[0]:
-                print("Correctly recognized " + test_case + " as " + pred)
-            else:
-                print("Incorrectly recognized " + test_case + " as " + pred)
+    engine = build_engine_onnx(onnx_model_file)
+    # Inference is the same regardless of which parser is used to build the engine, since the model architecture is the same.
+    # Allocate buffers and create a CUDA stream.
+    inputs, outputs, bindings, stream = common.allocate_buffers(engine)
+    # Contexts are used to perform inference.
+    context = engine.create_execution_context()
+
+    # Load a normalized test case into the host input page-locked buffer.
+    test_image = random.choice(test_images)
+    test_case = load_normalized_test_case(test_image, inputs[0].host)
+    # Run the engine. The output will be a 1D tensor of length 1000, where each value represents the
+    # probability that the image corresponds to that label
+    trt_outputs = common.do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+    # We use the highest probability as our prediction. Its index corresponds to the predicted label.
+    pred = labels[np.argmax(trt_outputs[0])]
+    if "_".join(pred.split()) in os.path.splitext(os.path.basename(test_case))[0]:
+        print("Correctly recognized " + test_case + " as " + pred)
+    else:
+        print("Incorrectly recognized " + test_case + " as " + pred)
+
 
 if __name__ == '__main__':
     main()

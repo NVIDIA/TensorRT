@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "specialSlicePlugin.h"
 #include "maskRCNNKernels.h"
 #include <cuda_runtime_api.h>
@@ -42,27 +41,27 @@ SpecialSlicePluginCreator::SpecialSlicePluginCreator() noexcept
 const char* SpecialSlicePluginCreator::getPluginName() const noexcept
 {
     return SPECIALSLICE_PLUGIN_NAME;
-};
+}
 
 const char* SpecialSlicePluginCreator::getPluginVersion() const noexcept
 {
     return SPECIALSLICE_PLUGIN_VERSION;
-};
+}
 
 const PluginFieldCollection* SpecialSlicePluginCreator::getFieldNames() noexcept
 {
     return &mFC;
-};
+}
 
 IPluginV2Ext* SpecialSlicePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     return new SpecialSlice();
-};
+}
 
 IPluginV2Ext* SpecialSlicePluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
     return new SpecialSlice(data, length);
-};
+}
 
 size_t SpecialSlice::getWorkspaceSize(int) const noexcept
 {
@@ -71,30 +70,30 @@ size_t SpecialSlice::getWorkspaceSize(int) const noexcept
 
 bool SpecialSlice::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
-};
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
+}
 
 const char* SpecialSlice::getPluginType() const noexcept
 {
     return "SpecialSlice_TRT";
-};
+}
 
 const char* SpecialSlice::getPluginVersion() const noexcept
 {
     return "1";
-};
+}
 
 IPluginV2Ext* SpecialSlice::clone() const noexcept
 {
     auto plugin = new SpecialSlice(*this);
     plugin->setPluginNamespace(mNameSpace.c_str());
     return plugin;
-};
+}
 
 void SpecialSlice::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNameSpace = libNamespace;
-};
+}
 
 const char* SpecialSlice::getPluginNamespace() const noexcept
 {
@@ -104,35 +103,35 @@ const char* SpecialSlice::getPluginNamespace() const noexcept
 size_t SpecialSlice::getSerializationSize() const noexcept
 {
     return sizeof(int);
-};
+}
 
 void SpecialSlice::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mBboxesCnt);
     ASSERT(d == a + getSerializationSize());
-};
+}
 
 SpecialSlice::SpecialSlice(const void* data, size_t length) noexcept
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mBboxesCnt = read<int>(d);
     assert(d == a + length);
-};
+}
 
-SpecialSlice::SpecialSlice() noexcept {
-
-};
+SpecialSlice::SpecialSlice() noexcept
+{
+}
 
 int SpecialSlice::initialize() noexcept
 {
     return 0;
-};
+}
 
 int SpecialSlice::getNbOutputs() const noexcept
 {
     return 1;
-};
+}
 
 void SpecialSlice::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims) noexcept
 {
@@ -157,16 +156,16 @@ Dims SpecialSlice::getOutputDimensions(int index, const Dims* inputDims, int nbI
     output.d[1] = 4;
 
     return output;
-};
+}
 
 int SpecialSlice::enqueue(
-    int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept
+    int batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     specialSlice(stream, batch_size, mBboxesCnt, inputs[0], outputs[0]);
 
     return cudaGetLastError() != cudaSuccess;
-};
+}
 
 // Return the DataType of the plugin output at the requested index
 DataType SpecialSlice::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept

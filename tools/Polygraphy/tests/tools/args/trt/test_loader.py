@@ -18,18 +18,24 @@ import tempfile
 
 import pytest
 import tensorrt as trt
-from polygraphy.backend.trt import (engine_bytes_from_network,
-                                    network_from_onnx_path, create_network)
-from polygraphy.tools.args import (ModelArgs, OnnxLoaderArgs, TrtConfigArgs,
-                                   TrtEngineLoaderArgs, TrtNetworkLoaderArgs,
-                                   TrtPluginLoaderArgs)
+from polygraphy.backend.trt import engine_bytes_from_network, network_from_onnx_path, create_network
+from polygraphy.tools.args import (
+    ModelArgs,
+    OnnxLoaderArgs,
+    TrtConfigArgs,
+    TrtEngineLoaderArgs,
+    TrtNetworkLoaderArgs,
+    TrtPluginLoaderArgs,
+)
 from tests.models.meta import ONNX_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
 
 
 class TestTrtNetworkLoaderArgs(object):
     def test_load_network(self):
-        arg_group = ArgGroupTestHelper(TrtNetworkLoaderArgs(), deps=[ModelArgs(), OnnxLoaderArgs(), TrtPluginLoaderArgs()])
+        arg_group = ArgGroupTestHelper(
+            TrtNetworkLoaderArgs(), deps=[ModelArgs(), OnnxLoaderArgs(), TrtPluginLoaderArgs()]
+        )
         arg_group.parse_args([ONNX_MODELS["identity_identity"].path, "--trt-outputs=identity_out_0"])
 
         builder, network, parser = arg_group.load_network()
@@ -40,8 +46,10 @@ class TestTrtNetworkLoaderArgs(object):
 
 @pytest.fixture()
 def engine_loader_args():
-    return ArgGroupTestHelper(TrtEngineLoaderArgs(), deps=[ModelArgs(), OnnxLoaderArgs(), TrtConfigArgs(),
-                                                           TrtPluginLoaderArgs(), TrtNetworkLoaderArgs()])
+    return ArgGroupTestHelper(
+        TrtEngineLoaderArgs(),
+        deps=[ModelArgs(), OnnxLoaderArgs(), TrtConfigArgs(), TrtPluginLoaderArgs(), TrtNetworkLoaderArgs()],
+    )
 
 
 class TestTrtEngineLoaderArgs(object):
@@ -52,7 +60,6 @@ class TestTrtEngineLoaderArgs(object):
             assert isinstance(engine, trt.ICudaEngine)
             assert len(engine) == 2
             assert engine[1] == "identity_out_0"
-
 
     def test_build_engine_custom_network(self, engine_loader_args):
         engine_loader_args.parse_args([])
@@ -69,9 +76,10 @@ class TestTrtEngineLoaderArgs(object):
             assert engine[0] == "input"
             assert engine[1] == "output"
 
-
     def test_load_serialized_engine(self, engine_loader_args):
-        with tempfile.NamedTemporaryFile() as f, engine_bytes_from_network(network_from_onnx_path(ONNX_MODELS["identity"].path)) as engine_bytes:
+        with tempfile.NamedTemporaryFile() as f, engine_bytes_from_network(
+            network_from_onnx_path(ONNX_MODELS["identity"].path)
+        ) as engine_bytes:
             f.write(engine_bytes)
             f.flush()
 

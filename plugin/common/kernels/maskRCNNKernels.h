@@ -100,7 +100,7 @@ struct RefineDetectionWorkSpace
     nvinfer1::DimsHW sortClassScoreDims;
     nvinfer1::DimsHW sortClassLabelDims;
     nvinfer1::DimsHW sortClassSampleIdxDims;
-    nvinfer1::Dims sortClassValidCountDims = {1, {1, 0}, {nvinfer1::DimensionType::kINDEX}};
+    nvinfer1::Dims sortClassValidCountDims = {1, {1, 0}};
     nvinfer1::DimsHW sortClassPosDims;
     nvinfer1::DimsHW sortNMSMarkDims;
 
@@ -132,7 +132,7 @@ struct ProposalWorkSpace
     nvinfer1::DimsHW sortClassScoreDims;
     nvinfer1::DimsHW sortClassLabelDims;
     nvinfer1::DimsHW sortClassSampleIdxDims;
-    nvinfer1::Dims sortClassValidCountDims = {1, {1, 0}, {nvinfer1::DimensionType::kINDEX}};
+    nvinfer1::Dims sortClassValidCountDims = {1, {1, 0}};
     nvinfer1::DimsHW sortClassPosDims;
     nvinfer1::DimsHW sortNMSMarkDims;
 
@@ -167,7 +167,7 @@ struct MultilevelProposeROIWorkSpace
     nvinfer1::DimsHW sortClassScoreDims;
     nvinfer1::DimsHW sortClassLabelDims;
     nvinfer1::DimsHW sortClassSampleIdxDims;
-    nvinfer1::Dims sortClassValidCountDims = {1, {1, 0}, {nvinfer1::DimensionType::kINDEX}};
+    nvinfer1::Dims sortClassValidCountDims = {1, {1, 0}};
     nvinfer1::DimsHW sortClassPosDims;
     nvinfer1::DimsHW sortNMSMarkDims;
 

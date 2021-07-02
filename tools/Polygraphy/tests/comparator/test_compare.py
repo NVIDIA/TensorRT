@@ -31,7 +31,6 @@ class TestBasicCompareFunc(object):
 
         assert not acc["output"]
 
-
     @pytest.mark.parametrize("mode", ["abs", "rel"])
     def test_per_output_tol(self, mode):
         OUT0_NAME = "output0"
@@ -62,7 +61,6 @@ class TestBasicCompareFunc(object):
         assert acc[OUT0_NAME]
         assert acc[OUT1_NAME]
 
-
     @pytest.mark.parametrize("mode", ["abs", "rel"])
     def test_per_output_tol_fallback(self, mode):
         OUT0_NAME = "output0"
@@ -90,7 +88,6 @@ class TestBasicCompareFunc(object):
         assert not acc[OUT0_NAME]
         assert acc[OUT1_NAME]
 
-
     @pytest.mark.parametrize("mode", ["abs", "rel"])
     def test_default_tol_in_map(self, mode):
         # "" can be used to indicate a global tolerance
@@ -112,13 +109,15 @@ class TestBasicCompareFunc(object):
         acc = compare_func(iter_result0, iter_result1)
         assert acc[OUT0_NAME]
 
-
-    @pytest.mark.parametrize("shape", [
-        tuple(),
-        (0, 2, 1, 2),
-        (1, ),
-        (2, 2, 2, 2),
-    ])
+    @pytest.mark.parametrize(
+        "shape",
+        [
+            tuple(),
+            (0, 2, 1, 2),
+            (1,),
+            (2, 2, 2, 2),
+        ],
+    )
     def test_non_matching_outputs(self, shape):
         iter_result0 = IterationResult(outputs={"output": np.zeros(shape, dtype=np.float32)})
         iter_result1 = IterationResult(outputs={"output": np.ones(shape, dtype=np.float32)})
@@ -130,15 +129,17 @@ class TestBasicCompareFunc(object):
 
         assert util.is_empty_shape(shape) or not acc["output"]
 
-
     @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "elemwise"])
-    @pytest.mark.parametrize("func", [
-        np.zeros,
-        np.ones,
-    ])
+    @pytest.mark.parametrize(
+        "func",
+        [
+            np.zeros,
+            np.ones,
+        ],
+    )
     def test_check_error_stat(self, func, check_error_stat):
-        iter_result0 = IterationResult(outputs={"output": func((100, ), dtype=np.float32)})
-        iter_result1 = IterationResult(outputs={"output": func((100, ), dtype=np.float32)})
+        iter_result0 = IterationResult(outputs={"output": func((100,), dtype=np.float32)})
+        iter_result1 = IterationResult(outputs={"output": func((100,), dtype=np.float32)})
 
         iter_result0["output"][0] += 100
 
@@ -151,7 +152,6 @@ class TestBasicCompareFunc(object):
         else:
             assert compare_func(iter_result0, iter_result1)["output"]
 
-
     @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "elemwise"])
     def test_atol_rtol_either_pass(self, check_error_stat):
         # If either rtol/atol is sufficient, the compare_func should pass
@@ -162,7 +162,6 @@ class TestBasicCompareFunc(object):
 
         assert CompareFunc.basic_compare_func(check_error_stat=check_error_stat, rtol=0.25)(res0, res1)["output"]
         assert CompareFunc.basic_compare_func(check_error_stat=check_error_stat, atol=0.5)(res0, res1)["output"]
-
 
     def test_atol_rtol_combined_pass(self):
         # We should also be able to mix them - i.e. rtol might enough for some, atol for others.
@@ -177,30 +176,35 @@ class TestBasicCompareFunc(object):
 
         assert CompareFunc.basic_compare_func(atol=0.3, rtol=0.25)(res0, res1)["output"]
 
-
-    @pytest.mark.parametrize("check_error_stat", [
-        {"output0": "mean", "output1": "max"},
-        {"": "mean", "output1": "elemwise"},
-        {"output0": "mean"},
-        {"": "mean"},
-    ])
+    @pytest.mark.parametrize(
+        "check_error_stat",
+        [
+            {"output0": "mean", "output1": "max"},
+            {"": "mean", "output1": "elemwise"},
+            {"output0": "mean"},
+            {"": "mean"},
+        ],
+    )
     def test_per_output_error_stat(self, check_error_stat):
         # output0 will only pass when using check_error_stat=mean
-        res0 = IterationResult(outputs={
-            "output0": np.array([0, 1, 2, 3], dtype=np.float32),
-            "output1": np.array([0, 1, 2, 3], dtype=np.float32),
-        })
-        res1 = IterationResult(outputs={
-            "output0": np.array((0.15, 1.25, 2.5, 3.75), dtype=np.float32),
-            "output1": np.array((0, 1, 2, 3), dtype=np.float32),
-        })
+        res0 = IterationResult(
+            outputs={
+                "output0": np.array([0, 1, 2, 3], dtype=np.float32),
+                "output1": np.array([0, 1, 2, 3], dtype=np.float32),
+            }
+        )
+        res1 = IterationResult(
+            outputs={
+                "output0": np.array((0.15, 1.25, 2.5, 3.75), dtype=np.float32),
+                "output1": np.array((0, 1, 2, 3), dtype=np.float32),
+            }
+        )
 
         atol = 0.4125
         assert not CompareFunc.basic_compare_func(atol=atol)(res0, res1)["output0"]
 
         assert CompareFunc.basic_compare_func(check_error_stat=check_error_stat, atol=atol)(res0, res1)["output0"]
         assert CompareFunc.basic_compare_func(check_error_stat=check_error_stat, atol=atol)(res0, res1)["output1"]
-
 
     def test_invalid_error_stat(self):
         res0 = IterationResult(outputs={"output": np.array([0, 1, 2, 3], dtype=np.float32)})

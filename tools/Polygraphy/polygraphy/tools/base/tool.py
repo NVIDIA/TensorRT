@@ -29,6 +29,7 @@ class Tool(object):
     """
     Base class for CLI Tools.
     """
+
     def __init__(self, name=None):
         self.name = name
 
@@ -38,7 +39,6 @@ class Tool(object):
         # instead of reimplementing argument parsing.
         self.arg_groups = OrderedDict()
         self.subscribe_args(LoggerArgs())
-
 
     def subscribe_args(self, maker):
         """
@@ -52,11 +52,9 @@ class Tool(object):
         m_type = type(maker)
         self.arg_groups[m_type] = maker
 
-
     def add_parser_args(self, parser):
         # Should be implemented by child classes to add custom arguments.
         pass
-
 
     def setup_parser(self, subparsers=None):
         """
@@ -76,7 +74,9 @@ class Tool(object):
 
         allow_abbrev = all(not maker.disable_abbrev for maker in self.arg_groups.values())
         if subparsers is not None:
-            parser = subparsers.add_parser(self.name, help=self.__doc__ , add_help=True, description=self.__doc__, allow_abbrev=allow_abbrev)
+            parser = subparsers.add_parser(
+                self.name, help=self.__doc__, add_help=True, description=self.__doc__, allow_abbrev=allow_abbrev
+            )
             parser.set_defaults(subcommand=self)
         else:
             parser = argparse.ArgumentParser(add_help=True, description=self.__doc__, allow_abbrev=allow_abbrev)
@@ -96,14 +96,13 @@ class Tool(object):
         try:
             self.add_parser_args(parser)
         except Exception as err:
-            G_LOGGER.warning("Could not register tool argument parser for: {:}\n"
-                             "Note: Error was: {:}".format(self.name, err))
+            G_LOGGER.warning(
+                "Could not register tool argument parser for: {:}\nNote: Error was: {:}".format(self.name, err)
+            )
         return parser
-
 
     def run(self, args):
         raise NotImplementedError("run() must be implemented by child classes")
-
 
     def __call__(self, args):
         """
@@ -118,7 +117,6 @@ class Tool(object):
 
         G_LOGGER.module_info(polygraphy)
         return self.run(args)
-
 
     def main(self):
         """

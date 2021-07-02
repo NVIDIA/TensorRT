@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 import os
-
+import sys
 
 INTERNAL_CORRECTNESS_CHECKS = bool(os.environ.get("POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS", "0") != "0")
 """
@@ -26,6 +26,14 @@ AUTOINSTALL_DEPS = bool(os.environ.get("POLYGRAPHY_AUTOINSTALL_DEPS", "0") != "0
 """
 Whether Polygraphy will automatically install required Python packages at runtime.
 This can be configured by setting the 'POLYGRAPHY_AUTOINSTALL_DEPS' environment variable.
+"""
+
+INSTALL_CMD = os.environ.get("POLYGRAPHY_INSTALL_CMD", "{:} -m pip install".format(sys.executable)).split()
+"""
+The command to use to automatically install dependencies. Only relevant when AUTOINSTALL_DEPS
+is enabled. Defaults to ``["python3", "-m", "pip", "install"]``.
+This can be configured by setting the 'POLYGRAPHY_INSTALL_CMD' environment variable to a
+string containing the command; for example: ``python3 -m pip install``.
 """
 
 ARRAY_SWAP_THRESHOLD_MB = int(os.environ.get("POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB", "-1"))

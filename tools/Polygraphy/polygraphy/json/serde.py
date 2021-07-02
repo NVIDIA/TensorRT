@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import base64
 import functools
 import io
 import json
@@ -27,14 +28,20 @@ util = mod.lazy_import("polygraphy.util.util")
 
 TYPE_STRING_PREFIX = "__polygraphy_encoded_"
 
-def str_from_type(typ):
+
+def legacy_str_from_type(typ):
     return TYPE_STRING_PREFIX + typ.__name__
+
+
+def str_from_type(typ):
+    return typ.__name__
 
 
 class BaseCustomImpl(object):
     """
     Base class for Polygraphy's JSON encoder/decoder.
     """
+
     @classmethod
     def register(cls, typ):
         """
@@ -93,32 +100,43 @@ class BaseCustomImpl(object):
         Args:
             typ (type): The type of the class for which to register the function.
         """
+
         def register_impl(func):
             def add(key, val):
                 if key in cls.polygraphy_registered:
-                    G_LOGGER.critical("Duplicate serialization function for type: {:}.\n"
-                                      "Note: Existing function: {:}, New function: {:}".format(
-                                        key, cls.polygraphy_registered[key], func))
+                    G_LOGGER.critical(
+                        "Duplicate serialization function for type: {:}.\n"
+                        "Note: Existing function: {:}, New function: {:}".format(
+                            key, cls.polygraphy_registered[key], func
+                        )
+                    )
                 cls.polygraphy_registered[key] = val
 
-
             if cls == Encoder:
+
                 def wrapped(obj):
                     dct = func(obj)
-                    dct[str_from_type(typ)] = constants.TYPE_MARKER
+                    dct[constants.TYPE_MARKER] = str_from_type(typ)
                     return dct
 
                 add(typ, wrapped)
                 return wrapped
             elif cls == Decoder:
+
                 def wrapped(dct):
-                    del dct[str_from_type(typ)]
+                    if constants.TYPE_MARKER in dct:
+                        del dct[constants.TYPE_MARKER]
+
+                    type_name = legacy_str_from_type(typ)
+                    if type_name in dct:
+                        del dct[type_name]
+
                     return func(dct)
 
+                add(legacy_str_from_type(typ), wrapped)
                 add(str_from_type(typ), wrapped)
             else:
                 G_LOGGER.critical("Cannot register for unrecognized class type: ")
-
 
         return register_impl
 
@@ -128,6 +146,7 @@ class Encoder(BaseCustomImpl, json.JSONEncoder):
     """
     Polygraphy's custom JSON Encoder implementation.
     """
+
     polygraphy_registered = {}
 
     def default(self, o):
@@ -141,6 +160,7 @@ class Decoder(BaseCustomImpl):
     """
     Polygraphy's custom JSON Decoder implementation.
     """
+
     polygraphy_registered = {}
 
     def __call__(self, pairs):
@@ -149,19 +169,27 @@ class Decoder(BaseCustomImpl):
         if config.INTERNAL_CORRECTNESS_CHECKS:
             custom_type_keys = [key for key in dct if key.startswith(TYPE_STRING_PREFIX)]
             if custom_type_keys and custom_type_keys[0] not in self.polygraphy_registered:
-                G_LOGGER.internal_error("Custom type has no decode function registered! "
-                                        "Note: Encoded object is:\n{:}".format(dct))
+                G_LOGGER.internal_error(
+                    "Custom type has no decode function registered! " "Note: Encoded object is:\n{:}".format(dct)
+                )
 
         # The encoder will insert special key-value pairs into dictionaries encoded from
         # custom types. If we find one, then we know to decode using the corresponding custom
         # type function.
+        type_name = dct.get(constants.TYPE_MARKER)
+        func = self.polygraphy_registered.get(type_name)
+        if func:
+            return func(dct)
+
         for type_str, func in self.polygraphy_registered.items():
-            if type_str in dct and dct[type_str] == constants.TYPE_MARKER: # Found a custom type!
+            if type_str in dct and dct[type_str] == constants.LEGACY_TYPE_MARKER:  # Found a custom type!
                 return func(dct)
         return dct
 
 
 NUMPY_REGISTRATION_SUCCESS = False
+
+
 def try_register_numpy_json(func):
     """
     Decorator that attempts to register JSON encode/decode methods
@@ -170,31 +198,44 @@ def try_register_numpy_json(func):
     This needs to be attempted multiple times because numpy may become available in the
     middle of execution - for example, if using dependency auto-installation.
     """
+
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         global NUMPY_REGISTRATION_SUCCESS
         if not NUMPY_REGISTRATION_SUCCESS and mod.has_mod(np, "__version__"):
-            # We define this along-side load_json/save_json so that it is guaranteed to be
+            # We define this alongside load_json/save_json so that it is guaranteed to be
             # imported before we need to encode/decode NumPy arrays.
             @Encoder.register(np.ndarray)
             def encode(array):
                 outfile = io.BytesIO()
-                np.savez(outfile, array)
+                np.save(outfile, array, allow_pickle=False)
                 outfile.seek(0)
-                return {
-                    "array": outfile.read().decode('latin-1')
-                }
-
+                data = base64.b64encode(outfile.read()).decode()
+                return {"array": data}
 
             @Decoder.register(np.ndarray)
             def decode(dct):
-                infile = io.BytesIO(dct["array"].encode('latin-1'))
-                # We always encode arrays separately.
-                return list(np.load(infile, allow_pickle=False).values())[0]
+                def load(mode="base64"):
+                    if mode == "base64":
+                        data = base64.b64decode(dct["array"].encode(), validate=True)
+                    elif mode == "latin-1":
+                        data = dct["array"].encode(mode)
+                    else:
+                        assert False, "Unsupported mode: {:}".format(mode)
+                    infile = io.BytesIO(data)
+                    return np.load(infile, allow_pickle=False)
 
+                try:
+                    arr = load()
+                except:
+                    arr = load("latin-1")  # For backwards compatibility
+                if isinstance(arr, np.ndarray):
+                    return arr
+                return list(arr.values())[0]  # For backwards compatibility
 
             NUMPY_REGISTRATION_SUCCESS = True
         return func(*args, **kwargs)
+
     return wrapped
 
 
@@ -230,9 +271,13 @@ def from_json(src):
     return json.loads(src, object_pairs_hook=Decoder())
 
 
-@mod.export_deprecated_alias("pickle_save", remove_in="0.31.0", use_instead="JSON serialization. "
-                             "This function has been migrated to use JSON and will NOT pickle the input object. "
-                             "Use save_json")
+@mod.export_deprecated_alias(
+    "pickle_save",
+    remove_in="0.31.0",
+    use_instead="JSON serialization. "
+    "This function has been migrated to use JSON and will NOT pickle the input object. "
+    "Use save_json",
+)
 @mod.export()
 @try_register_numpy_json
 def save_json(obj, dest, description=None):
@@ -268,10 +313,12 @@ def load_json(src, description=None):
     except UnicodeDecodeError:
         # This is a pickle file from Polygraphy 0.26.1 or older.
         mod.warn_deprecated("pickle", use_instead="JSON", remove_in="0.31.0")
-        G_LOGGER.critical("It looks like you're trying to load a Pickle file.\nPolygraphy migrated to using JSON "
-                          "instead of Pickle in version 0.27.0 for security reasons.\nYou can convert your existing "
-                          "pickled data to JSON using the command-line tool: `polygraphy to-json {:} -o new.json`.\nAll data serialized "
-                          "from this and future versions of Polygraphy will always use JSON. ".format(src))
+        G_LOGGER.critical(
+            "It looks like you're trying to load a Pickle file.\nPolygraphy migrated to using JSON "
+            "instead of Pickle in version 0.27.0 for security reasons.\nYou can convert your existing "
+            "pickled data to JSON using the command-line tool: `polygraphy to-json {:} -o new.json`.\nAll data serialized "
+            "from this and future versions of Polygraphy will always use JSON. ".format(src)
+        )
 
 
 @mod.export()
@@ -288,15 +335,17 @@ def add_json_methods(description=None):
         description (str):
                 A description of what is being saved or loaded.
     """
+
     def add_json_methods_impl(cls):
         # JSON methods
 
         def check_decoded(obj):
             if not isinstance(obj, cls):
-                G_LOGGER.critical("Provided JSON cannot be decoded into a {:}.\n"
-                                  "Note: JSON was decoded into a {:}:\n{:}".format(cls.__name__, type(obj), obj))
+                G_LOGGER.critical(
+                    "Provided JSON cannot be decoded into a {:}.\n"
+                    "Note: JSON was decoded into a {:}:\n{:}".format(cls.__name__, type(obj), obj)
+                )
             return obj
-
 
         def _to_json_method(self):
             """
@@ -307,10 +356,8 @@ def add_json_methods(description=None):
             """
             return to_json(self)
 
-
         def _from_json_method(src):
             return check_decoded(from_json(src))
-
 
         _from_json_method.__doc__ = """
             Decode a JSON object and create an instance of this class.
@@ -325,8 +372,9 @@ def add_json_methods(description=None):
             Raises:
                 PolygraphyException:
                         If the JSON cannot be decoded to an instance of {cls}
-            """.format(cls=cls.__name__)
-
+            """.format(
+            cls=cls.__name__
+        )
 
         cls.to_json = _to_json_method
         cls.from_json = staticmethod(_from_json_method)
@@ -345,10 +393,8 @@ def add_json_methods(description=None):
             """
             save_json(self, dest, description=description)
 
-
         def _load_method(src):
             return check_decoded(load_json(src, description=description))
-
 
         _load_method.__doc__ = """
             Loads an instance of this class from a JSON file.
@@ -362,8 +408,9 @@ def add_json_methods(description=None):
             Raises:
                 PolygraphyException:
                         If the JSON cannot be decoded to an instance of {cls}
-            """.format(cls=cls.__name__)
-
+            """.format(
+            cls=cls.__name__
+        )
 
         cls.save = _save_method
         cls.load = staticmethod(_load_method)

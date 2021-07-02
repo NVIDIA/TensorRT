@@ -44,9 +44,24 @@ class TestWheel(object):
         all_poly_files = [f for f in map(os.path.basename, all_poly_files) if f not in EXCLUDE_FILES]
 
         # NOTE: This should be updated when new files are added to the top-level package.
-        EXPECTED_FILES = set(["backend", "mod", "__init__.py", "cuda", "logger", "constants.py",
-                              "util", "comparator", "tools", "exception", "func", "common", "json",
-                              "config.py"])
+        EXPECTED_FILES = set(
+            [
+                "backend",
+                "mod",
+                "__init__.py",
+                "cuda",
+                "logger",
+                "constants.py",
+                "util",
+                "comparator",
+                "tools",
+                "exception",
+                "func",
+                "common",
+                "json",
+                "config.py",
+            ]
+        )
         assert set(all_poly_files) == EXPECTED_FILES
 
         # Check CLI is installed
@@ -58,4 +73,4 @@ class TestWheel(object):
         lib_path = virtualenv.virtualenv.dirs()[0]
         output = virtualenv.run(["polygraphy", "-v"], capture=True)
         assert polygraphy.__version__ in output
-        assert lib_path in output # Make sure we're using the binary from the venv.
+        assert lib_path in output  # Make sure we're using the binary from the venv.

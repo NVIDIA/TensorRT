@@ -90,7 +90,7 @@ specified in `remove_in`.
 2. Make your changes
 3. Run Tests:
     - Install prerequisite packages with:
-        - `python3 -m pip install -r tests/requirements.txt`
-        - `python3 -m pip install -r docs/requirements.txt`
+        - `python3 -m pip install -r tests/requirements.txt --index-url https://pypi.ngc.nvidia.com`
+        - `python3 -m pip install -r docs/requirements.txt --index-url https://pypi.ngc.nvidia.com`
     - Run tests with: `make test`
 4. Commit, push, and submit a merge request to the main branch

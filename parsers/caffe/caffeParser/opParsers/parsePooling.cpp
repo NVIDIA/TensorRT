@@ -37,9 +37,9 @@ ILayer* parsePooling(INetworkDefinition& network, const trtcaffe::LayerParameter
     int kernelH, kernelW;
     if (p.has_global_pooling() && p.global_pooling())
     {
-        DimsCHW dims = parserutils::getCHW(tensors[msg.bottom(0)]->getDimensions());
-        kernelH = dims.h();
-        kernelW = dims.w();
+        Dims3 dims = parserutils::getCHW(tensors[msg.bottom(0)]->getDimensions());
+        kernelH = dims.d[1];
+        kernelW = dims.d[2];
     }
     else
     {

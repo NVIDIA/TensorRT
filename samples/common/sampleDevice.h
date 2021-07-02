@@ -17,6 +17,7 @@
 #ifndef TRT_SAMPLE_DEVICE_H
 #define TRT_SAMPLE_DEVICE_H
 
+#include <cassert>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <iostream>
@@ -109,7 +110,7 @@ class TrtCudaEvent
 public:
     explicit TrtCudaEvent(bool blocking = true)
     {
-        const unsigned int flags = blocking ? cudaEventBlockingSync : cudaEventDefault;
+        const uint32_t flags = blocking ? cudaEventBlockingSync : cudaEventDefault;
         cudaCheck(cudaEventCreateWithFlags(&mEvent, flags));
     }
 
@@ -189,9 +190,9 @@ public:
         cudaCheck(cudaStreamBeginCapture(stream.get(), cudaStreamCaptureModeThreadLocal));
     }
 
-    void launch(TrtCudaStream& stream)
+    bool launch(TrtCudaStream& stream)
     {
-        cudaCheck(cudaGraphLaunch(mGraphExec, stream.get()));
+        return cudaGraphLaunch(mGraphExec, stream.get()) == cudaSuccess;
     }
 
     void endCapture(TrtCudaStream& stream)
@@ -199,6 +200,16 @@ public:
         cudaCheck(cudaStreamEndCapture(stream.get(), &mGraph));
         cudaCheck(cudaGraphInstantiate(&mGraphExec, mGraph, nullptr, nullptr, 0));
         cudaCheck(cudaGraphDestroy(mGraph));
+    }
+
+    void endCaptureOnError(TrtCudaStream& stream)
+    {
+        const auto ret = cudaStreamEndCapture(stream.get(), &mGraph);
+        assert(ret == cudaErrorStreamCaptureInvalidated);
+        assert(mGraph == nullptr);
+        // Clean up the above CUDA error.
+        cudaGetLastError();
+        sample::gLogWarning << "The CUDA graph capture on the stream has failed." << std::endl;
     }
 
 private:
@@ -351,6 +362,7 @@ private:
     TrtDeviceBuffer mDeviceBuffer;
 };
 
+
 inline void setCudaDevice(int device, std::ostream& os)
 {
     cudaCheck(cudaSetDevice(device));
@@ -358,7 +370,7 @@ inline void setCudaDevice(int device, std::ostream& os)
     cudaDeviceProp properties;
     cudaCheck(cudaGetDeviceProperties(&properties, device));
 
-    // clang-format off
+// clang-format off
     os << "=== Device Information ===" << std::endl;
     os << "Selected Device: "      << properties.name                                               << std::endl;
     os << "Compute Capability: "   << properties.major << "." << properties.minor                   << std::endl;

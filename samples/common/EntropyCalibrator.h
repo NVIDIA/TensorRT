@@ -46,24 +46,24 @@ public:
         CHECK(cudaFree(mDeviceInput));
     }
 
-    int getBatchSize() const
+    int getBatchSize() const noexcept
     {
         return mStream.getBatchSize();
     }
 
-    bool getBatch(void* bindings[], const char* names[], int nbBindings)
+    bool getBatch(void* bindings[], const char* names[], int nbBindings) noexcept
     {
         if (!mStream.next())
         {
             return false;
         }
         CHECK(cudaMemcpy(mDeviceInput, mStream.getBatch(), mInputCount * sizeof(float), cudaMemcpyHostToDevice));
-        assert(!strcmp(names[0], mInputBlobName));
+        ASSERT(!strcmp(names[0], mInputBlobName));
         bindings[0] = mDeviceInput;
         return true;
     }
 
-    const void* readCalibrationCache(size_t& length)
+    const void* readCalibrationCache(size_t& length) noexcept
     {
         mCalibrationCache.clear();
         std::ifstream input(mCalibrationTableName, std::ios::binary);
@@ -77,7 +77,7 @@ public:
         return length ? mCalibrationCache.data() : nullptr;
     }
 
-    void writeCalibrationCache(const void* cache, size_t length)
+    void writeCalibrationCache(const void* cache, size_t length) noexcept
     {
         std::ofstream output(mCalibrationTableName, std::ios::binary);
         output.write(reinterpret_cast<const char*>(cache), length);
@@ -108,22 +108,22 @@ public:
     {
     }
 
-    int getBatchSize() const override
+    int getBatchSize() const noexcept override
     {
         return mImpl.getBatchSize();
     }
 
-    bool getBatch(void* bindings[], const char* names[], int nbBindings) override
+    bool getBatch(void* bindings[], const char* names[], int nbBindings) noexcept override
     {
         return mImpl.getBatch(bindings, names, nbBindings);
     }
 
-    const void* readCalibrationCache(size_t& length) override
+    const void* readCalibrationCache(size_t& length) noexcept override
     {
         return mImpl.readCalibrationCache(length);
     }
 
-    void writeCalibrationCache(const void* cache, size_t length) override
+    void writeCalibrationCache(const void* cache, size_t length) noexcept override
     {
         mImpl.writeCalibrationCache(cache, length);
     }

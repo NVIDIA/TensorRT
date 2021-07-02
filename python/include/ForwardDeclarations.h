@@ -16,7 +16,12 @@
 
 #pragma once
 #include <pybind11/pybind11.h>
+
+#include "NvCaffeParser.h"
 #include "NvInfer.h"
+#include "NvInferPlugin.h"
+#include "NvUffParser.h"
+#include "onnx/NvOnnxParser.h"
 
 // We need to avoid making copies of PluginField because it does not own any of it's members.
 // When there are multiple PluginFields pointing to the same data in Python, bad things happen.
@@ -25,30 +30,43 @@ PYBIND11_MAKE_OPAQUE(std::vector<nvinfer1::PluginField>);
 
 namespace tensorrt
 {
-    // Set some global namespace aliases.
-    namespace py = pybind11;
-    // This is for literal operators (like _a for default args)
-    using namespace pybind11::literals;
-    // Hack for situations where the C++ object does not own a member string/const char*.
-    // Cannot reference python strings, so we make a copy and keep it alive on the C++ side.
-    struct FallbackString {
-        FallbackString() = default;
-        FallbackString(std::string other) : mData{other} { }
-        FallbackString(py::str other) : mData{std::string(other)} { }
-        const char* c_str() const { return mData.c_str(); }
-        const char* c_str() { return mData.c_str(); }
-        std::string mData{};
-    };
+// Set some global namespace aliases.
+namespace py = pybind11;
+// This is for literal operators (like _a for default args)
+using namespace pybind11::literals;
+// Hack for situations where the C++ object does not own a member string/const char*.
+// Cannot reference python strings, so we make a copy and keep it alive on the C++ side.
+struct FallbackString
+{
+    FallbackString() = default;
+    FallbackString(std::string other)
+        : mData{other}
+    {
+    }
+    FallbackString(py::str other)
+        : mData{std::string(other)}
+    {
+    }
+    const char* c_str() const
+    {
+        return mData.c_str();
+    }
+    const char* c_str()
+    {
+        return mData.c_str();
+    }
+    std::string mData{};
+};
 
-    // Infer
-    void bindFoundationalTypes(py::module& m);
-    void bindPlugin(py::module& m);
-    void bindInt8(py::module& m);
-    void bindGraph(py::module& m);
-    void bindAlgorithm(py::module& m);
-    void bindCore(py::module& m);
-    // Parsers
-    void bindOnnx(py::module& m);
-    void bindUff(py::module& m);
-    void bindCaffe(py::module& m);
-} /* tensorrt */
+// Infer
+void bindFoundationalTypes(py::module& m);
+void bindPlugin(py::module& m);
+void bindInt8(py::module& m);
+void bindGraph(py::module& m);
+void bindAlgorithm(py::module& m);
+void bindCore(py::module& m);
+// Parsers
+void bindOnnx(py::module& m);
+void bindUff(py::module& m);
+void bindCaffe(py::module& m);
+} // namespace tensorrt

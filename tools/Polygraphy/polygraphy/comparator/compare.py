@@ -29,10 +29,8 @@ class OutputCompareResult(object):
     Represents the result of comparing a single output of a single iteration
     between two runners.
     """
-    def __init__(self, passed,
-                 max_absdiff, max_reldiff,
-                 mean_absdiff, mean_reldiff,
-                 median_absdiff, median_reldiff):
+
+    def __init__(self, passed, max_absdiff, max_reldiff, mean_absdiff, mean_reldiff, median_absdiff, median_reldiff):
         """
         Records the required tolerances and other statistics gathered during comparison.
 
@@ -60,7 +58,6 @@ class OutputCompareResult(object):
         self.median_absdiff = median_absdiff
         self.median_reldiff = median_reldiff
 
-
     def __bool__(self):
         """
         Whether the output matched.
@@ -69,7 +66,6 @@ class OutputCompareResult(object):
             bool
         """
         return self.passed
-
 
     def __str__(self):
         return "(atol={:}, rtol={:})".format(self.max_absdiff, self.max_reldiff)
@@ -83,8 +79,9 @@ class CompareFunc(object):
     """
 
     @staticmethod
-    def basic_compare_func(check_shapes=None, rtol=None, atol=None, fail_fast=None,
-                           find_output_func=None, check_error_stat=None):
+    def basic_compare_func(
+        check_shapes=None, rtol=None, atol=None, fail_fast=None, find_output_func=None, check_error_stat=None
+    ):
         """
         Creates a function that compares two IterationResults, and can be used as the `compare_func` argument
         in ``Comparator.compare_accuracy``.
@@ -140,7 +137,6 @@ class CompareFunc(object):
         default_error_stat = "elemwise"
         check_error_stat = util.default(check_error_stat, default_error_stat)
 
-
         def compare_output(iter_result0, iter_result1):
             """
             Compare the outputs of two runners from a single iteration.
@@ -162,28 +158,39 @@ class CompareFunc(object):
             Raises:
                 PolygraphyException: If all output names are skipped, and thus no outputs are compared.
             """
+
             def check_dict(dct, dict_name):
                 if isinstance(dct, dict):
-                    util.check_dict_contains(dct, set(iter_result0.keys()) | set(iter_result1.keys()) | set([""]),
-                                             check_missing=False, dict_name=dict_name)
-
+                    util.check_dict_contains(
+                        dct,
+                        set(iter_result0.keys()) | set(iter_result1.keys()) | {""},
+                        check_missing=False,
+                        dict_name=dict_name,
+                    )
 
             check_dict(rtol, "the rtol dictionary")
             check_dict(atol, "the atol dictionary")
             check_dict(check_error_stat, "the chcek_error_stat dictionary")
 
-
             # Returns whether the outputs match
             def check_outputs_match(out0, out0_name, out1, out1_name, per_out_rtol, per_out_atol, per_out_err_stat):
                 VALID_CHECK_ERROR_STATS = ["max", "mean", "median", "elemwise"]
                 if per_out_err_stat not in VALID_CHECK_ERROR_STATS:
-                    G_LOGGER.critical("Invalid choice for check_error_stat: {:}.\n"
-                                      "Note: Valid choices are: {:}".format(per_out_err_stat, VALID_CHECK_ERROR_STATS))
+                    G_LOGGER.critical(
+                        "Invalid choice for check_error_stat: {:}.\n"
+                        "Note: Valid choices are: {:}".format(per_out_err_stat, VALID_CHECK_ERROR_STATS)
+                    )
 
-                G_LOGGER.super_verbose("{:35} | Output: {:} (dtype={:}, shape={:}):\n{:}".format(
-                                            iter_result0.runner_name, out0_name, out0.dtype, out0.shape, util.indent_block(out0)))
-                G_LOGGER.super_verbose("{:35} | Output: {:} (dtype={:}, shape={:}):\n{:}".format(
-                                            iter_result1.runner_name, out1_name, out1.dtype, out1.shape, util.indent_block(out1)))
+                G_LOGGER.super_verbose(
+                    "{:35} | Output: {:} (dtype={:}, shape={:}):\n{:}".format(
+                        iter_result0.runner_name, out0_name, out0.dtype, out0.shape, util.indent_block(out0)
+                    )
+                )
+                G_LOGGER.super_verbose(
+                    "{:35} | Output: {:} (dtype={:}, shape={:}):\n{:}".format(
+                        iter_result1.runner_name, out1_name, out1.dtype, out1.shape, util.indent_block(out1)
+                    )
+                )
 
                 # Check difference vs. tolerances
                 if np.issubdtype(out0.dtype, np.bool_) and np.issubdtype(out1.dtype, np.bool_):
@@ -209,11 +216,15 @@ class CompareFunc(object):
                 if per_out_err_stat == "mean":
                     failed = mean_absdiff > per_out_atol and (np.isnan(mean_reldiff) or mean_reldiff > per_out_rtol)
                 elif per_out_err_stat == "median":
-                    failed = median_absdiff > per_out_atol and (np.isnan(median_reldiff) or median_reldiff > per_out_rtol)
+                    failed = median_absdiff > per_out_atol and (
+                        np.isnan(median_reldiff) or median_reldiff > per_out_rtol
+                    )
                 elif per_out_err_stat == "max":
                     failed = max_absdiff > per_out_atol and (np.isnan(max_reldiff) or max_reldiff > per_out_rtol)
                 else:
-                    assert per_out_err_stat == "elemwise", "This branch should be unreachable unless per_out_err_stat is 'elemwise'"
+                    assert (
+                        per_out_err_stat == "elemwise"
+                    ), "This branch should be unreachable unless per_out_err_stat is 'elemwise'"
                     mismatches = (absdiff > per_out_atol) & (reldiff > per_out_rtol)
 
                     failed = np.any(mismatches)
@@ -224,19 +235,30 @@ class CompareFunc(object):
 
                         with G_LOGGER.indent():
                             G_LOGGER.super_verbose("Mismatched indices:\n{:}".format(np.argwhere(mismatches)))
-                            G_LOGGER.extra_verbose("{:35} | Mismatched values:\n{:}".format(iter_result0.runner_name, out0[mismatches]))
-                            G_LOGGER.extra_verbose("{:35} | Mismatched values:\n{:}".format(iter_result1.runner_name, out1[mismatches]))
+                            G_LOGGER.extra_verbose(
+                                "{:35} | Mismatched values:\n{:}".format(iter_result0.runner_name, out0[mismatches])
+                            )
+                            G_LOGGER.extra_verbose(
+                                "{:35} | Mismatched values:\n{:}".format(iter_result1.runner_name, out1[mismatches])
+                            )
                     except Exception as err:
                         G_LOGGER.warning("Failing to log mismatches.\nNote: Error was: {:}".format(err))
 
                 # Log information about the outputs
-                hist_bin_range = (min(comp_util.compute_min(out0), comp_util.compute_min(out1)),
-                                  max(comp_util.compute_max(out0), comp_util.compute_max(out1)))
-                comp_util.log_output_stats(out0, failed, iter_result0.runner_name + ": " + out0_name, hist_range=hist_bin_range)
-                comp_util.log_output_stats(out1, failed, iter_result1.runner_name + ": " + out1_name, hist_range=hist_bin_range)
+                hist_bin_range = (
+                    min(comp_util.compute_min(out0), comp_util.compute_min(out1)),
+                    max(comp_util.compute_max(out0), comp_util.compute_max(out1)),
+                )
+                comp_util.log_output_stats(
+                    out0, failed, iter_result0.runner_name + ": " + out0_name, hist_range=hist_bin_range
+                )
+                comp_util.log_output_stats(
+                    out1, failed, iter_result1.runner_name + ": " + out1_name, hist_range=hist_bin_range
+                )
 
                 G_LOGGER.info("Error Metrics: {:}".format(out0_name))
                 with G_LOGGER.indent():
+
                     def req_tol(mean_diff, median_diff, max_diff, elemwise_diff):
                         return {
                             "mean": mean_diff,
@@ -245,31 +267,49 @@ class CompareFunc(object):
                             "elemwise": elemwise_diff,
                         }[per_out_err_stat]
 
-                    G_LOGGER.info("Minimum Required Tolerance: {:} error | [abs={:.5g}] OR [rel={:.5g}]".format(
-                                    per_out_err_stat,
-                                    req_tol(mean_absdiff, median_absdiff, max_absdiff, max_elemwiseabs),
-                                    req_tol(mean_reldiff, median_reldiff, max_reldiff, max_elemwiserel)))
+                    G_LOGGER.info(
+                        "Minimum Required Tolerance: {:} error | [abs={:.5g}] OR [rel={:.5g}]".format(
+                            per_out_err_stat,
+                            req_tol(mean_absdiff, median_absdiff, max_absdiff, max_elemwiseabs),
+                            req_tol(mean_reldiff, median_reldiff, max_reldiff, max_elemwiserel),
+                        )
+                    )
                     comp_util.log_output_stats(absdiff, failed, "Absolute Difference")
                     comp_util.log_output_stats(reldiff, failed, "Relative Difference")
 
                 # Finally show summary.
                 if failed:
-                    G_LOGGER.error("FAILED | Difference exceeds tolerance (rel={:}, abs={:})".format(per_out_rtol, per_out_atol))
+                    G_LOGGER.error(
+                        "FAILED | Difference exceeds tolerance (rel={:}, abs={:})".format(per_out_rtol, per_out_atol)
+                    )
                 else:
-                    G_LOGGER.finish("PASSED | Difference is within tolerance (rel={:}, abs={:})".format(per_out_rtol, per_out_atol))
+                    G_LOGGER.finish(
+                        "PASSED | Difference is within tolerance (rel={:}, abs={:})".format(per_out_rtol, per_out_atol)
+                    )
 
-                G_LOGGER.extra_verbose("Finished comparing: '{:}' (dtype={:}, shape={:}) [{:}] and '{:}' (dtype={:}, shape={:}) [{:}]"
-                                .format(out0_name, out0.dtype, out0.shape, iter_result0.runner_name, out1_name, out1.dtype, out1.shape, iter_result1.runner_name))
-                return OutputCompareResult(not failed, max_absdiff, max_reldiff, mean_absdiff, mean_reldiff, median_absdiff, median_reldiff)
+                G_LOGGER.extra_verbose(
+                    "Finished comparing: '{:}' (dtype={:}, shape={:}) [{:}] and '{:}' (dtype={:}, shape={:}) [{:}]".format(
+                        out0_name,
+                        out0.dtype,
+                        out0.shape,
+                        iter_result0.runner_name,
+                        out1_name,
+                        out1.dtype,
+                        out1.shape,
+                        iter_result1.runner_name,
+                    )
+                )
+                return OutputCompareResult(
+                    not failed, max_absdiff, max_reldiff, mean_absdiff, mean_reldiff, median_absdiff, median_reldiff
+                )
                 #
                 # End: def check_outputs_match
                 #
 
-            output_status = OrderedDict() # OrderedDict[str, bool] Maps output names to whether they matched.
+            output_status = OrderedDict()  # OrderedDict[str, bool] Maps output names to whether they matched.
 
             if not check_shapes:
                 G_LOGGER.info("Strict shape checking disabled. Will attempt to match output shapes before comparisons")
-
 
             def default_find_output_func(output_name, index, iter_result):
                 found_name = util.find_in_dict(output_name, iter_result, index)
@@ -278,14 +318,17 @@ class CompareFunc(object):
                 elif found_name != output_name:
                     exact_match = util.find_in_dict(found_name, iter_result0)
                     if exact_match == found_name:
-                        G_LOGGER.verbose("Will not compare {:} with {:}, since the former already has an exact match: {:}".format(
-                                            found_name, output_name, exact_match))
-                        return None # If the found output is being compared against another output already, skip this non-exact match
-                    G_LOGGER.warning("Output names did not match exactly. Assuming {:} output: {:} "
-                                    "corresponds to output: {:}".format(
-                                        iter_result.runner_name, found_name, output_name))
+                        G_LOGGER.verbose(
+                            "Will not compare {:} with {:}, since the former already has an exact match: {:}".format(
+                                found_name, output_name, exact_match
+                            )
+                        )
+                        return None  # If the found output is being compared against another output already, skip this non-exact match
+                    G_LOGGER.warning(
+                        "Output names did not match exactly. Assuming {:} output: {:} "
+                        "corresponds to output: {:}".format(iter_result.runner_name, found_name, output_name)
+                    )
                 return [found_name]
-
 
             nonlocal find_output_func
             find_output_func = util.default(find_output_func, default_find_output_func)
@@ -294,16 +337,21 @@ class CompareFunc(object):
                 out1_names = util.default(find_output_func(out0_name, index, iter_result1), [])
 
                 if len(out1_names) > 1:
-                    G_LOGGER.info("Will attempt to compare output: '{:}' [{:}] with multiple outputs: '{:}' [{:}]".format(
-                                    out0_name, iter_result0.runner_name, list(out1_names), iter_result1.runner_name))
+                    G_LOGGER.info(
+                        "Will attempt to compare output: '{:}' [{:}] with multiple outputs: '{:}' [{:}]".format(
+                            out0_name, iter_result0.runner_name, list(out1_names), iter_result1.runner_name
+                        )
+                    )
 
                 for out1_name in out1_names:
                     if out1_name is None or out1_name not in iter_result1:
-                        G_LOGGER.warning("For output: '{:}' [{:}], skipping corresponding output: '{:}' [{:}], "
-                                         "since the output was not found".format(out0_name, iter_result0.runner_name,
-                                                                                 out1_name, iter_result1.runner_name))
+                        G_LOGGER.warning(
+                            "For output: '{:}' [{:}], skipping corresponding output: '{:}' [{:}], "
+                            "since the output was not found".format(
+                                out0_name, iter_result0.runner_name, out1_name, iter_result1.runner_name
+                            )
+                        )
                         continue
-
 
                     def get_tol(tol_dict, default):
                         if isinstance(tol_dict, numbers.Number):
@@ -315,7 +363,6 @@ class CompareFunc(object):
                             return tol_dict[""]
                         return default
 
-
                     def get_error_stat():
                         if isinstance(check_error_stat, str):
                             return check_error_stat
@@ -323,41 +370,60 @@ class CompareFunc(object):
                         if out0_name in check_error_stat:
                             return check_error_stat[out0_name]
                         elif "" in check_error_stat:
-                            return  check_error_stat[""]
+                            return check_error_stat[""]
                         return default_error_stat
-
 
                     per_out_atol = get_tol(atol, default_atol)
                     per_out_rtol = get_tol(rtol, default_rtol)
                     per_out_err_stat = get_error_stat()
 
                     output1 = iter_result1[out1_name]
-                    G_LOGGER.start("Comparing Output: '{:}' (dtype={:}, shape={:}) with '{:}' (dtype={:}, shape={:}) | "
-                                   "Tolerance: [abs={:.5g}, rel={:.5g}] | Checking {:} error".format(
-                                        out0_name, output0.dtype, output0.shape,
-                                        out1_name, output1.dtype, output1.shape,
-                                        per_out_atol, per_out_rtol, per_out_err_stat))
-                    G_LOGGER.extra_verbose("Note: Comparing {:} vs. {:}".format(iter_result0.runner_name, iter_result1.runner_name))
-
+                    G_LOGGER.start(
+                        "Comparing Output: '{:}' (dtype={:}, shape={:}) with '{:}' (dtype={:}, shape={:}) | "
+                        "Tolerance: [abs={:.5g}, rel={:.5g}] | Checking {:} error".format(
+                            out0_name,
+                            output0.dtype,
+                            output0.shape,
+                            out1_name,
+                            output1.dtype,
+                            output1.shape,
+                            per_out_atol,
+                            per_out_rtol,
+                            per_out_err_stat,
+                        )
+                    )
+                    G_LOGGER.extra_verbose(
+                        "Note: Comparing {:} vs. {:}".format(iter_result0.runner_name, iter_result1.runner_name)
+                    )
 
                     with G_LOGGER.indent():
                         if check_shapes and output0.shape != output1.shape:
-                            G_LOGGER.error("Will not compare outputs of different shapes. Note: Output shapes are "
-                                           "{:} and {:}.".format(output0.shape, output1.shape))
-                            G_LOGGER.error("Note: Use --no-strict-shape-checking or set check_shapes=False to "
-                                           "attempt to compare values anyway.", mode=LogMode.ONCE)
+                            G_LOGGER.error(
+                                "Will not compare outputs of different shapes. Note: Output shapes are "
+                                "{:} and {:}.".format(output0.shape, output1.shape)
+                            )
+                            G_LOGGER.error(
+                                "Note: Use --no-shape-check or set check_shapes=False to "
+                                "attempt to compare values anyway.",
+                                mode=LogMode.ONCE,
+                            )
                             outputs_match = False
                         else:
                             output1 = util.try_match_shape(output1, output0.shape)
                             output0 = output0.reshape(output1.shape)
-                            outputs_match = check_outputs_match(output0, out0_name, output1, out1_name,
-                                                                per_out_rtol=per_out_rtol, per_out_atol=per_out_atol,
-                                                                per_out_err_stat=per_out_err_stat)
+                            outputs_match = check_outputs_match(
+                                output0,
+                                out0_name,
+                                output1,
+                                out1_name,
+                                per_out_rtol=per_out_rtol,
+                                per_out_atol=per_out_atol,
+                                per_out_err_stat=per_out_err_stat,
+                            )
 
                         output_status[out0_name] = outputs_match
                         if fail_fast and not outputs_match:
                             return output_status
-
 
             mismatched_output_names = [name for name, matched in output_status.items() if not matched]
             if mismatched_output_names:
@@ -371,8 +437,10 @@ class CompareFunc(object):
                 r0_outs = list(iter_result0.keys())
                 r1_name = iter_result1.runner_name
                 r1_outs = list(iter_result1.keys())
-                G_LOGGER.critical("All outputs were skipped, no common outputs found! Note:\n{:} outputs: "
-                                  "{:}\n{:} outputs: {:}".format(r0_name, r0_outs, r1_name, r1_outs))
+                G_LOGGER.critical(
+                    "All outputs were skipped, no common outputs found! Note:\n{:} outputs: "
+                    "{:}\n{:} outputs: {:}".format(r0_name, r0_outs, r1_name, r1_outs)
+                )
 
             return output_status
 

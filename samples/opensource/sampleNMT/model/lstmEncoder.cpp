@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
+#include "common.h"
 #include "lstmEncoder.h"
 #include "trtUtil.h"
-
-#include <cassert>
 #include <sstream>
 
 namespace nmtSample
@@ -27,9 +26,9 @@ LSTMEncoder::LSTMEncoder(ComponentWeights::ptr weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
-    assert(mWeights->mMetaData.size() >= 4);
+    ASSERT(mWeights->mMetaData.size() >= 4);
     const nvinfer1::DataType dataType = static_cast<nvinfer1::DataType>(mWeights->mMetaData[0]);
-    assert(dataType == nvinfer1::DataType::kFLOAT);
+    ASSERT(dataType == nvinfer1::DataType::kFLOAT);
     mRNNKind = mWeights->mMetaData[1];
     mNumLayers = mWeights->mMetaData[2];
     mNumUnits = mWeights->mMetaData[3];
@@ -54,7 +53,7 @@ LSTMEncoder::LSTMEncoder(ComponentWeights::ptr weights)
             biasOffset = biasOffset + mNumUnits * elementSize;
         }
     }
-    assert(kernelOffset + biasOffset - biasStartOffset == mWeights->mWeights.size());
+    ASSERT(kernelOffset + biasOffset - biasStartOffset == mWeights->mWeights.size());
 }
 
 void LSTMEncoder::addToModel(nvinfer1::INetworkDefinition* network, int maxInputSequenceLength,
@@ -63,7 +62,7 @@ void LSTMEncoder::addToModel(nvinfer1::INetworkDefinition* network, int maxInput
 {
     auto encoderLayer = network->addRNNv2(
         *inputEmbeddedData, mNumLayers, mNumUnits, maxInputSequenceLength, nvinfer1::RNNOperation::kLSTM);
-    assert(encoderLayer != nullptr);
+    ASSERT(encoderLayer != nullptr);
     encoderLayer->setName("LSTM encoder");
 
     encoderLayer->setSequenceLengths(*actualInputSequenceLengths);
@@ -83,17 +82,17 @@ void LSTMEncoder::addToModel(nvinfer1::INetworkDefinition* network, int maxInput
     encoderLayer->setHiddenState(*inputStates[0]);
     encoderLayer->setCellState(*inputStates[1]);
     *memoryStates = encoderLayer->getOutput(0);
-    assert(*memoryStates != nullptr);
+    ASSERT(*memoryStates != nullptr);
 
     if (lastTimestepStates)
     {
         // Per layer hidden output
         lastTimestepStates[0] = encoderLayer->getOutput(1);
-        assert(lastTimestepStates[0] != nullptr);
+        ASSERT(lastTimestepStates[0] != nullptr);
 
         // Per layer cell output
         lastTimestepStates[1] = encoderLayer->getOutput(2);
-        assert(lastTimestepStates[1] != nullptr);
+        ASSERT(lastTimestepStates[1] != nullptr);
     }
 }
 
@@ -104,10 +103,8 @@ int LSTMEncoder::getMemoryStatesSize()
 
 std::vector<nvinfer1::Dims> LSTMEncoder::getStateSizes()
 {
-    nvinfer1::Dims hiddenStateDims{
-        2, {mNumLayers, mNumUnits}, {nvinfer1::DimensionType::kSPATIAL, nvinfer1::DimensionType::kCHANNEL}};
-    nvinfer1::Dims cellStateDims{
-        2, {mNumLayers, mNumUnits}, {nvinfer1::DimensionType::kSPATIAL, nvinfer1::DimensionType::kCHANNEL}};
+    nvinfer1::Dims hiddenStateDims{2, {mNumLayers, mNumUnits}};
+    nvinfer1::Dims cellStateDims{2, {mNumLayers, mNumUnits}};
     return std::vector<nvinfer1::Dims>({hiddenStateDims, cellStateDims});
 }
 

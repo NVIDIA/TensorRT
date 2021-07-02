@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "kernel.h"
 template <typename KeyT, typename ValueT>
 size_t cubSortPairsWorkspaceSize(int num_items, int num_segments)

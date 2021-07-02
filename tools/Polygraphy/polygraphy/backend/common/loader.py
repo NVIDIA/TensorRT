@@ -22,6 +22,7 @@ class BytesFromPath(BaseLoader):
     """
     Functor that can load a file in binary mode ('rb').
     """
+
     def __init__(self, path):
         """
         Loads a file in binary mode ('rb').
@@ -30,7 +31,6 @@ class BytesFromPath(BaseLoader):
             path (str): The file path.
         """
         self._path = path
-
 
     def call_impl(self):
         """
@@ -45,6 +45,7 @@ class SaveBytes(BaseLoader):
     """
     Functor that can save bytes to a file.
     """
+
     def __init__(self, obj, path):
         """
         Saves bytes to a file.
@@ -55,7 +56,6 @@ class SaveBytes(BaseLoader):
         """
         self._bytes = obj
         self._path = path
-
 
     def call_impl(self):
         """
@@ -72,6 +72,7 @@ class InvokeFromScript(BaseLoader):
     """
     Functor that invokes a function from a Python script.
     """
+
     def __init__(self, path, name):
         """
         Invokes the specified function from the specified Python script.
@@ -85,7 +86,6 @@ class InvokeFromScript(BaseLoader):
         """
         self._path = path
         self._name = name
-
 
     def call_impl(self, *args, **kwargs):
         """

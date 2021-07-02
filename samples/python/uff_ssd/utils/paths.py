@@ -32,17 +32,18 @@ class Paths(object):
         )
         self._VOC_DIR_PATH = \
             os.path.join(self._SAMPLE_ROOT, 'VOCdevkit', 'VOC2007')
+        self._DATA_DIR_PATH = None
 
     # User configurable paths
+
+    def set_data_dir_path(self, data_dir):
+        self._DATA_DIR_PATH = data_dir
 
     def set_workspace_dir_path(self, workspace_dir):
         self._WORKSPACE_DIR_PATH = workspace_dir
 
     def get_workspace_dir_path(self):
         return self._WORKSPACE_DIR_PATH
-
-    def set_voc_dir_path(self, voc_dir_path):
-        self._VOC_DIR_PATH = voc_dir_path
 
     def get_voc_dir_path(self):
         return self._VOC_DIR_PATH
@@ -69,6 +70,9 @@ class Paths(object):
             self.get_engines_dir_path(),
             inference_type_to_str[inference_type],
             'engine_bs_{}.buf'.format(max_batch_size))
+
+    def get_data_file_path(self, path):
+        return os.path.join(self._DATA_DIR_PATH, path)
 
     def get_voc_annotation_cache_path(self):
         return os.path.join(self.get_workspace_dir_path(), 'annotations_cache')
@@ -102,9 +106,6 @@ class Paths(object):
         else:
             return self.get_voc_tensorrt_model_detections_path(use_fp16)
 
-    def get_model_url(self, model_name):
-        return 'http://download.tensorflow.org/models/object_detection/{}.tar.gz'.format(model_name)
-
     def get_model_dir_path(self, model_name):
         return os.path.join(self.get_models_dir_path(), model_name)
 
@@ -128,6 +129,8 @@ class Paths(object):
         if should_verify_voc:
             error = self._verify_voc_paths()
         if not os.path.exists(self.get_workspace_dir_path()):
+            error = True
+        if not os.path.exists(self._DATA_DIR_PATH):
             error = True
 
         if error:
@@ -167,7 +170,7 @@ class Paths(object):
         print(
             "Error: {}\n{}\n{}".format(
                 "Incomplete VOC dataset detected (voc_dir: {})".format(voc_dir),
-                "Try redownloading VOC or check if --voc_dir is set up correctly",
+                "Try redownloading VOC or check if --data is set up correctly",
                 "For more details, check README.md"
             )
         )

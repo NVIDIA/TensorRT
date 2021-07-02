@@ -1,6 +1,6 @@
 # Pytorch Quantization
 
-PyTorch-Quantization is a toolkit for training and evaluating PyTorch models with simulated quantization. Quantization can be added to the model automatically, or manually, allowing the model to be tuned for accuracy and performance. Quantization is compatible with NVIDIAs high performance integer kernels which leverage integer Tensor Cores. The quantized model can be exported to ONNX and imported to an upcoming version of TensorRT.
+PyTorch-Quantization is a toolkit for training and evaluating PyTorch models with simulated quantization. Quantization can be added to the model automatically, or manually, allowing the model to be tuned for accuracy and performance. Quantization is compatible with NVIDIAs high performance integer kernels which leverage integer Tensor Cores. The quantized model can be exported to ONNX and imported by TensorRT 8.0 and later.
 
 ## Install
 
@@ -17,14 +17,18 @@ git clone https://github.com/NVIDIA/TensorRT.git
 cd tools/pytorch-quantization
 ```
 
-Install prerequisites
+Install PyTorch and prerequisites
 ```bash
 pip install -r requirements.txt
-pip install torch
+# for CUDA 10.2 users
+pip install torch>=1.8.0
+# for CUDA 11.1 users
+pip install torch>=1.8.0+cu111
 ```
 
 Build and install pytorch-quantization
 ```bash
+# Python version >= 3.7, GCC version >= 5.4 required
 python setup.py install
 ```
 

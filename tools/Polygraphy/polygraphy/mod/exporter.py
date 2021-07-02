@@ -103,9 +103,8 @@ def export(funcify=False, func_name=None):
         for ancestor in hierarchy:
             if method in vars(ancestor):
                 return vars(ancestor)[method]
-        else:
-            assert False, "Could not find method: {:} in the inheritance hierarcy of: {:}".format(method, symbol)
 
+        assert False, "Could not find method: {:} in the inheritance hierarcy of: {:}".format(method, symbol)
 
     def export_impl(func_or_cls):
         _add_to_all(func_or_cls.__name__, module)
@@ -116,11 +115,17 @@ def export(funcify=False, func_name=None):
             from polygraphy.backend.base import BaseLoader
 
             assert inspect.isclass(func_or_cls), "Decorated type must be a loader to use funcify=True"
-            assert BaseLoader in inspect.getmro(func_or_cls), "Decorated type must derive from BaseLoader to use funcify=True"
+            assert BaseLoader in inspect.getmro(
+                func_or_cls
+            ), "Decorated type must derive from BaseLoader to use funcify=True"
             loader = func_or_cls
 
             def get_params(method):
-                return [p for p in inspect.signature(find_method(func_or_cls, method)).parameters.values() if p.name != "self"]
+                return [
+                    p
+                    for p in inspect.signature(find_method(func_or_cls, method)).parameters.values()
+                    if p.name != "self"
+                ]
 
             init_params = get_params("__init__")
             call_impl_params = get_params("call_impl")
@@ -128,7 +133,9 @@ def export(funcify=False, func_name=None):
             def param_names(params):
                 return list(str(p).partition("=")[0] for p in params)
 
-            assert (set(param_names(call_impl_params)) - set(param_names(init_params))) == set(param_names(call_impl_params)), "Cannot funcify a type where call_impl and __init__ have the same argument names!"
+            assert (set(param_names(call_impl_params)) - set(param_names(init_params))) == set(
+                param_names(call_impl_params)
+            ), "Cannot funcify a type where call_impl and __init__ have the same argument names!"
 
             # Dynamically generate a function with the right signature.
 
@@ -137,7 +144,7 @@ def export(funcify=False, func_name=None):
             def is_special(param):
                 return "*" in str(param)
 
-            def has_default(param): # Non special arguments that have default values
+            def has_default(param):  # Non special arguments that have default values
                 return "=" in str(param)
 
             def build_arg_list(should_include):
@@ -160,15 +167,19 @@ def export(funcify=False, func_name=None):
                     return loader_binding({init_args})({call_impl_args})
 
                 func_var = func_impl
-                """.format(signature=signature, init_args=init_args, call_impl_args=call_impl_args)
+                """.format(
+                    signature=signature, init_args=init_args, call_impl_args=call_impl_args
+                )
             )
 
-            exec(func_code, {"loader_binding": loader}, locals()) # Need to bind the loader this way, or it won't be accesible from func_code.
+            exec(
+                func_code, {"loader_binding": loader}, locals()
+            )  # Need to bind the loader this way, or it won't be accesible from func_code.
             func = locals()["func_var"]
 
             # Next we setup the docstring so that it is a combination of the __init__
             # and call_impl docstrings.
-            func.__doc__ = "Immediately evaluated functional variant of {}.\n".format(loader.__name__)
+            func.__doc__ = "Immediately evaluated functional variant of :class:`{}` .\n".format(loader.__name__)
 
             def try_add_method_doc(method):
                 call_impl = find_method(loader, method)
@@ -199,8 +210,12 @@ def warn_deprecated(name, use_instead, remove_in, module_name=None):
         G_LOGGER.internal_error("{:} should have been removed in version: {:}".format(name, remove_in))
 
     full_obj_name = "{:}.{:}".format(module_name, name) if module_name else name
-    warnings.warn("{:} is deprecated and will be removed in Polygraphy {:}. "
-                  "Use {:} instead.".format(full_obj_name, remove_in, use_instead), DeprecationWarning, stacklevel=3)
+    warnings.warn(
+        "{:} is deprecated and will be removed in Polygraphy {:}. "
+        "Use {:} instead.".format(full_obj_name, remove_in, use_instead),
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 def deprecate(remove_in, use_instead, module_name=None, name=None):
@@ -222,6 +237,7 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
                 If not provided, this is automatically determined based on the decorated type.
                 Defaults to None.
     """
+
     def deprecate_impl(obj):
         if config.INTERNAL_CORRECTNESS_CHECKS and version(polygraphy.__version__) >= version(remove_in):
             G_LOGGER.internal_error("{:} should have been removed in version: {:}".format(obj, remove_in))
@@ -230,6 +246,7 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
         name = name or obj.__name__
 
         if inspect.ismodule(obj):
+
             class DeprecatedModule(object):
                 def __getattr__(self, attr_name):
                     warn_deprecated(name, use_instead, remove_in, module_name)
@@ -244,6 +261,7 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
             DeprecatedModule.__doc__ = "Deprecated: Use {:} instead".format(use_instead)
             return DeprecatedModule()
         elif inspect.isclass(obj):
+
             class Deprecated(obj):
                 def __init__(self, *args, **kwargs):
                     warn_deprecated(name, use_instead, remove_in, module_name)
@@ -252,9 +270,11 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
             Deprecated.__doc__ = "Deprecated: Use {:} instead".format(use_instead)
             return Deprecated
         elif inspect.isfunction(obj):
+
             def wrapped(*args, **kwargs):
                 warn_deprecated(name, use_instead, remove_in, module_name)
                 return obj(*args, **kwargs)
+
             wrapped.__doc__ = "Deprecated: Use {:} instead".format(use_instead)
             return wrapped
         else:
@@ -290,7 +310,9 @@ def export_deprecated_alias(name, remove_in, use_instead=None):
     module = inspect.getmodule(sys._getframe(1))
 
     def export_deprecated_alias_impl(obj):
-        new_obj = deprecate(remove_in, use_instead=use_instead or obj.__name__, module_name=module.__name__, name=name)(obj)
+        new_obj = deprecate(remove_in, use_instead=use_instead or obj.__name__, module_name=module.__name__, name=name)(
+            obj
+        )
         _define_in_module(name, new_obj, module)
         _add_to_all(name, module)
         return obj

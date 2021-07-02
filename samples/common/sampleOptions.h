@@ -60,6 +60,20 @@ enum class ModelFormat
     kUFF
 };
 
+enum class SparsityFlag
+{
+    kDISABLE,
+    kENABLE,
+    kFORCE
+};
+
+enum class TimingCacheMode
+{
+    kDISABLE,
+    kLOCAL,
+    kGLOBAL
+};
+
 using Arguments = std::unordered_multimap<std::string, std::string>;
 
 using IOFormat = std::pair<nvinfer1::DataType, nvinfer1::TensorFormats>;
@@ -110,13 +124,14 @@ struct BuildOptions : public Options
     int minTiming{defaultMinTiming};
     int avgTiming{defaultAvgTiming};
     bool tf32{true};
-    bool refittable{false};
     bool fp16{false};
     bool int8{false};
     bool safe{false};
     bool save{false};
     bool load{false};
-    bool builderCache{true};
+    bool refittable{false};
+    bool explicitPrecision{false};
+    SparsityFlag sparsity{SparsityFlag::kDISABLE};
     nvinfer1::ProfilingVerbosity nvtxMode{nvinfer1::ProfilingVerbosity::kDEFAULT};
     std::string engine;
     std::string calibration;
@@ -126,6 +141,8 @@ struct BuildOptions : public Options
     std::vector<IOFormat> outputFormats;
     nvinfer1::TacticSources enabledTactics{0};
     nvinfer1::TacticSources disabledTactics{0};
+    TimingCacheMode timingCacheMode{TimingCacheMode::kLOCAL};
+    std::string timingCacheFile{};
     void parse(Arguments& arguments) override;
 
     static void help(std::ostream& out);
@@ -158,6 +175,8 @@ struct InferenceOptions : public Options
     bool graph{false};
     bool skip{false};
     bool rerun{false};
+    bool timeDeserialize{false};
+    bool timeRefit{false};
     std::unordered_map<std::string, std::string> inputs;
     std::unordered_map<std::string, std::vector<int>> shapes;
 
@@ -181,6 +200,23 @@ struct ReportingOptions : public Options
     void parse(Arguments& arguments) override;
 
     static void help(std::ostream& out);
+};
+
+struct SafeBuilderOptions : public Options
+{
+    std::string serialized{};
+    std::string onnxModelFile{};
+    bool help{false};
+    bool verbose{false};
+    std::vector<IOFormat> inputFormats;
+    std::vector<IOFormat> outputFormats;
+    bool int8{false};
+    std::string calibFile{};
+    std::vector<std::string> plugins;
+
+    void parse(Arguments& arguments) override;
+
+    static void printHelp(std::ostream& out);
 };
 
 struct AllOptions : public Options
@@ -224,6 +260,8 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options);
 std::ostream& operator<<(std::ostream& os, const ReportingOptions& options);
 
 std::ostream& operator<<(std::ostream& os, const AllOptions& options);
+
+std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options);
 
 } // namespace sample
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright 2017 Google Inc.
-# Modifications Copyright (c) 2021, NVIDIA CORPORATION.
+# Modifications Copyright (c) 2021 Nvidia
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ mkdir -p ${DATA_DIR}
 if [ ! -f ${OUTPUT_DIR}/sampleNMT_data.tar.bz2 ]; then
     echo "Downloading sample_nmt support data..."
     curl -o ${OUTPUT_DIR}/sampleNMT_data.tar.bz2 \
-        https://developer.download.nvidia.com/compute/machine-learning/tensorrt/models/sampleNMT_data.tar.bz2 
+        https://developer.download.nvidia.com/compute/machine-learning/tensorrt/models/sampleNMT_data.tar.bz2
 fi
 
 echo "Extracting sample_nmt support data..."
@@ -99,4 +99,3 @@ bpe_de=${DATA_DIR}/newstest2015.tok.bpe.32000.de
 bpe_en=${DATA_DIR}/newstest2015.tok.bpe.32000.en
 split_subwords ${tok_de} ${bpe_de}
 split_subwords ${tok_en} ${bpe_en}
-

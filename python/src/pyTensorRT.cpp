@@ -22,33 +22,33 @@
 
 namespace tensorrt
 {
-    PYBIND11_MODULE(tensorrt, m)
-    {
-        // Python strings can be automatically converted to FallbackStrings,
-        // whose lifetime is tied to TRT objects that reference, but do not own, a string.
-        // See ForwardDeclarations.h for more information about FallbackString.
-        // Note that we cannot allow Python to deallocate this string, hence the py::nodelete.
-        py::class_<FallbackString, std::unique_ptr<FallbackString, py::nodelete>>(m, "FallbackString")
-            .def(py::init<std::string>())
-            .def(py::init<py::str>())
-        ;
-        py::implicitly_convertible<std::string, FallbackString>();
-        py::implicitly_convertible<py::str, FallbackString>();
+PYBIND11_MODULE(tensorrt, m)
+{
+    // Python strings can be automatically converted to FallbackStrings,
+    // whose lifetime is tied to TRT objects that reference, but do not own, a string.
+    // See ForwardDeclarations.h for more information about FallbackString.
+    // Note that we cannot allow Python to deallocate this string, hence the py::nodelete.
+    py::class_<FallbackString, std::unique_ptr<FallbackString, py::nodelete>>(m, "FallbackString")
+        .def(py::init<std::string>())
+        .def(py::init<py::str>());
+    py::implicitly_convertible<std::string, FallbackString>();
+    py::implicitly_convertible<py::str, FallbackString>();
 
-        // Make it so that we can use lists of PluginFields without creating unwanted copies.
-        // This is declared opaque in ForwardDeclarations.h
-        py::bind_vector<std::vector<nvinfer1::PluginField>>(m, "PluginFieldCollection");
+    // Make it so that we can use lists of PluginFields without creating unwanted copies.
+    // This is declared opaque in ForwardDeclarations.h
+    py::bind_vector<std::vector<nvinfer1::PluginField>>(m, "PluginFieldCollection");
 
-        // Order matters here - Dependencies must be resolved properly!
-        bindFoundationalTypes(m);
-        bindPlugin(m);
-        bindInt8(m);
-        bindGraph(m);
-        bindAlgorithm(m);
-        bindCore(m);
-        // Parsers
-        bindOnnx(m);
-        bindUff(m);
-        bindCaffe(m);
-    }
-} /* tensorrt */
+    // Order matters here - Dependencies must be resolved properly!
+    // TODO: Maybe use actual forward declarations and define functions later.
+    bindFoundationalTypes(m);
+    bindPlugin(m);
+    bindInt8(m);
+    bindGraph(m);
+    bindAlgorithm(m);
+    bindCore(m);
+    // Parsers
+    bindOnnx(m);
+    bindUff(m);
+    bindCaffe(m);
+}
+} // namespace tensorrt

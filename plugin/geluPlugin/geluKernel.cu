@@ -101,14 +101,14 @@ __global__ void geluBiasKernel(const T a, const T b, const T c, T* output, const
     }
 }
 
-void computeGeluBias(
+int computeGeluBias(
     float* output, const float* input, const float* bias, const int ld, const int cols, cudaStream_t stream)
 {
     geluBiasKernel<float, 256><<<cols, 256, 0, stream>>>(A, B, C, output, input, bias, ld);
-    CHECK(cudaPeekAtLastError());
+    return cudaPeekAtLastError();
 }
 
-void computeGeluBias(
+int computeGeluBias(
     half* output, const half* input, const half* bias, const int ld, const int cols, cudaStream_t stream)
 {
     if (ld & 1)
@@ -128,7 +128,7 @@ void computeGeluBias(
         geluBiasKernel<half2, 256><<<cols, 256, 0, stream>>>(A2, B2, C2, output2, input2, bias2, ld2);
     }
 
-    CHECK(cudaPeekAtLastError());
+    return cudaPeekAtLastError();
 }
 
 } // namespace bert

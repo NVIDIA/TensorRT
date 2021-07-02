@@ -1,0 +1,5 @@
+sample: engine_refit_onnx_bidaf
+files:
+  - path: samples/python/engine_refit_onnx_bidaf/bidaf-original.onnx
+    url: https://github.com/onnx/models/raw/c02f8c8699fc12273649e658b8d2a1a8e32a35d0/text/machine_comprehension/bidirectional_attention_flow/model/bidaf-9.onnx
+    checksum: cf11f1eceb4731f8dd39345467fe94a1

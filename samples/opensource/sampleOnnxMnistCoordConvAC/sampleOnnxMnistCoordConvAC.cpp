@@ -37,6 +37,8 @@
 #include <iostream>
 #include <sstream>
 
+using samplesCommon::SampleUniquePtr;
+
 const std::string gSampleName = "TensorRT.sample_onnx_mnist_coord_conv_ac";
 
 // Normalization constants from Pytorch transform.Normalize().
@@ -51,9 +53,6 @@ const float PYTORCH_NORMALIZE_STD = 0.3081;
 //!
 class SampleOnnxMnistCoordConvAC
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleOnnxMnistCoordConvAC(const samplesCommon::OnnxSampleParams& params)
         : mParams(params)
@@ -142,6 +141,14 @@ bool SampleOnnxMnistCoordConvAC::build()
         return false;
     }
 
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
         builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
@@ -187,7 +194,7 @@ bool SampleOnnxMnistCoordConvAC::constructNetwork(SampleUniquePtr<nvinfer1::IBui
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
-        samplesCommon::setAllTensorScales(network.get(), 127.0f, 127.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);

@@ -19,11 +19,15 @@ import numpy as np
 import pytest
 import tensorrt as trt
 from polygraphy import cuda, mod
-from polygraphy.backend.trt import (Calibrator, CreateConfig,
-                                    engine_from_network, get_trt_logger,
-                                    network_from_onnx_bytes)
+from polygraphy.backend.trt import (
+    Calibrator,
+    CreateConfig,
+    engine_from_network,
+    get_trt_logger,
+    network_from_onnx_bytes,
+)
 from polygraphy.exception import PolygraphyException
-from tests.helper import check_file_non_empty, get_file_size
+from tests.helper import is_file_non_empty, get_file_size
 from tests.models.meta import ONNX_MODELS
 
 
@@ -51,14 +55,16 @@ class TestCalibrator(object):
         # Calibrator buffers should be freed after the build
         assert all([buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()])
 
-
-    @pytest.mark.parametrize("BaseClass", [
-        trt.IInt8Calibrator,
-        trt.IInt8LegacyCalibrator,
-        trt.IInt8EntropyCalibrator,
-        trt.IInt8EntropyCalibrator2,
-        trt.IInt8MinMaxCalibrator,
-    ])
+    @pytest.mark.parametrize(
+        "BaseClass",
+        [
+            trt.IInt8Calibrator,
+            trt.IInt8LegacyCalibrator,
+            trt.IInt8EntropyCalibrator,
+            trt.IInt8EntropyCalibrator2,
+            trt.IInt8MinMaxCalibrator,
+        ],
+    )
     def test_calibrator_basic(self, identity_builder_network, BaseClass):
         if mod.version(trt.__version__) < mod.version("7.0") and BaseClass == trt.IInt8LegacyCalibrator:
             pytest.skip("Bug in TRT 6 causes NaNs with legacy calibrator")
@@ -74,7 +80,6 @@ class TestCalibrator(object):
             assert calibrator.num_batches == NUM_BATCHES
         self.check_calibrator_cleanup(calibrator)
 
-
     def test_host_data_copied_to_device(self):
         with Calibrator(generate_data(1)) as calibrator:
             [ptr] = calibrator.get_batch(names=["x"])
@@ -82,7 +87,6 @@ class TestCalibrator(object):
             arr = v.numpy()
             assert arr.shape == (1, 1, 2, 2)
             assert np.all(arr == 1)
-
 
     def test_calibrator_data_and_ordering_correct(self):
         def generate_multidata(num_batches):
@@ -101,7 +105,6 @@ class TestCalibrator(object):
                     v = cuda.DeviceView(ptr, shape=(4, 5), dtype=np.float32)
                     assert np.all(v.numpy() == index)
 
-
     def test_calibrator_generator_data(self, identity_builder_network):
         builder, network = identity_builder_network
         NUM_BATCHES = 2
@@ -113,20 +116,17 @@ class TestCalibrator(object):
             assert calibrator.num_batches == NUM_BATCHES
         self.check_calibrator_cleanup(calibrator)
 
-
     # We should be able to mix DeviceView with NumPy arrays.
-    @pytest.mark.parametrize("mode", ["array", "view", "pointer"]) # We should be able to use DeviceArray in place of DeviceView
+    @pytest.mark.parametrize(
+        "mode", ["array", "view", "pointer"]
+    )  # We should be able to use DeviceArray in place of DeviceView
     def test_calibrator_device_buffers_multiinput(self, multi_input_builder_network, mode):
         def generate_dev_data(num_batches):
-            with cuda.DeviceArray(shape=(1, ), dtype=np.float32) as x:
+            with cuda.DeviceArray(shape=(1,), dtype=np.float32) as x:
                 for _ in range(num_batches):
-                    x.copy_from(np.ones((1, ), dtype=np.float32))
-                    xdata = {
-                        "array": x,
-                        "view": cuda.DeviceView(x.ptr, x.shape, x.dtype),
-                        "pointer": x.ptr
-                    }[mode]
-                    yield {"X0": xdata, "Y0": np.zeros((1, ), dtype=np.float32)}
+                    x.copy_from(np.ones((1,), dtype=np.float32))
+                    xdata = {"array": x, "view": cuda.DeviceView(x.ptr, x.shape, x.dtype), "pointer": x.ptr}[mode]
+                    yield {"X0": xdata, "Y0": np.zeros((1,), dtype=np.float32)}
 
         builder, network = multi_input_builder_network
         NUM_BATCHES = 2
@@ -137,7 +137,6 @@ class TestCalibrator(object):
         with engine_from_network((builder, network), create_config):
             assert calibrator.num_batches == NUM_BATCHES
         self.check_calibrator_cleanup(calibrator)
-
 
     # We want the calibrator to inter-op with TRT APIs seamlessly
     def test_calibrator_outside_polygraphy(self, identity_builder_network):
@@ -159,7 +158,6 @@ class TestCalibrator(object):
                 assert engine
         self.check_calibrator_cleanup(calibrator)
 
-
     def test_cannot_use_calibrator_without_activation(self):
         def generate_data():
             for item in [np.ones((1, 1, 2, 2), dtype=np.float32)]:
@@ -167,7 +165,6 @@ class TestCalibrator(object):
 
         calibrator = Calibrator(generate_data())
         assert calibrator.get_batch(["x"]) is None
-
 
     def test_calibrator_with_path_name_cache(self, identity_builder_network):
         builder, network = identity_builder_network
@@ -177,9 +174,8 @@ class TestCalibrator(object):
             calibrator = Calibrator(data, cache=cache.name)
             create_config = CreateConfig(int8=True, calibrator=calibrator)
             with engine_from_network((builder, network), create_config):
-                check_file_non_empty(cache.name)
+                assert is_file_non_empty(cache.name)
         self.check_calibrator_cleanup(calibrator)
-
 
     @pytest.mark.parametrize("mode", ["wb+", "rb", "wb"])
     def test_calibrator_with_file_object_cache(self, identity_builder_network, mode):
@@ -191,9 +187,8 @@ class TestCalibrator(object):
             create_config = CreateConfig(int8=True, calibrator=calibrator)
             with engine_from_network((builder, network), create_config):
                 if mode != "rb":
-                    check_file_non_empty(cache.name)
+                    assert is_file_non_empty(cache.name)
         self.check_calibrator_cleanup(calibrator)
-
 
     # read_calibration_cache should work even if an explicit cache is not provided
     # This way, it is possible to calibrate quickly when calibrating multiple times.
@@ -210,7 +205,6 @@ class TestCalibrator(object):
         # Check that the internal cache is populated
         assert calibrator.read_calibration_cache()
         self.check_calibrator_cleanup(calibrator)
-
 
     def test_calibrator_rechecks_cache_on_reset(self, identity_builder_network):
         builder, network = identity_builder_network
@@ -230,11 +224,13 @@ class TestCalibrator(object):
 
         self.check_calibrator_cleanup(calibrator)
 
-
-    @pytest.mark.parametrize("names", [
-        (["fake-input", "x"]),
-        (["fake-input"]),
-    ])
+    @pytest.mark.parametrize(
+        "names",
+        [
+            (["fake-input", "x"]),
+            (["fake-input"]),
+        ],
+    )
     def test_calibrator_invalid_input_fails(self, identity_builder_network, names):
         builder, network = identity_builder_network
 

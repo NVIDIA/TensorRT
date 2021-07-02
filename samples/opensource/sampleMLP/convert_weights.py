@@ -36,9 +36,9 @@ parser.add_argument('-o', '--output', required=True, help='The weight file to du
 
 opt = parser.parse_args()
 
-print("Outputting the trained weights in TensorRT's wts v2 format. This format is documented as:")
-print("Line 0: <number of buffers in the file>")
-print("Line 1-Num: [buffer name] [buffer type] [(buffer shape{e.g. (1, 2, 3)}] <buffer shaped size bytes of data>")
+print ("Outputting the trained weights in TensorRT's wts v2 format. This format is documented as:")
+print ("Line 0: <number of buffers in the file>")
+print ("Line 1-Num: [buffer name] [buffer type] [(buffer shape{e.g. (1, 2, 3)}] <buffer shaped size bytes of data>")
 
 inputbase = opt.model
 outputbase = opt.output

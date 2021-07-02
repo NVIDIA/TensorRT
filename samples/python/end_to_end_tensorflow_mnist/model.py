@@ -15,8 +15,9 @@
 #
 
 # This file contains functions for training a TensorFlow model
-import tensorflow as tf
+import os
 import numpy as np
+import tensorflow as tf
 
 def process_dataset():
     # Import the data
@@ -56,7 +57,9 @@ def main():
     model.fit(x_train, y_train, epochs = 5, verbose = 1)
     # Evaluate the model on test data
     model.evaluate(x_test, y_test)
-    save(model, filename="models/lenet5.pb")
+    model_path = os.environ.get("MODEL_PATH") or os.path.join(os.path.dirname(__file__), "models")
+    model_file = os.path.join(model_path, "lenet5.pb")
+    save(model, filename=model_file)
 
 if __name__ == '__main__':
     main()

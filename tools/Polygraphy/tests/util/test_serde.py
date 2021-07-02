@@ -37,7 +37,7 @@ def encode(dummy):
 
 @Decoder.register(Dummy)
 def decode(dct):
-    assert len(dct) == 1 # Custom type markers should be removed at this point
+    assert len(dct) == 1  # Custom type markers should be removed at this point
     return Dummy(x=dct["x"])
 
 
@@ -45,8 +45,8 @@ class TestEncoder(object):
     def test_registered(self):
         d = Dummy(x=-1)
         d_json = to_json(d)
-        assert encode(d) == {'x': d.x, '__polygraphy_encoded_Dummy': constants.TYPE_MARKER}
-        expected = "{{\n    \"x\": {:},\n    \"__polygraphy_encoded_Dummy\": \"{:}\"\n}}".format(d.x, constants.TYPE_MARKER)
+        assert encode(d) == {"x": d.x, constants.TYPE_MARKER: "Dummy"}
+        expected = '{{\n    "x": {:},\n    "{:}": "Dummy"\n}}'.format(d.x, constants.TYPE_MARKER)
         assert d_json == expected
 
 
@@ -60,14 +60,23 @@ class TestDecoder(object):
 
 
 def make_algo():
-    return Algorithm(implementation=4, tactic=5, inputs=[(trt.TensorFormat.LINEAR, trt.float32)],
-                     outputs=[(trt.TensorFormat.LINEAR, trt.float32)])
+    return Algorithm(
+        implementation=4,
+        tactic=5,
+        inputs=[(trt.TensorFormat.LINEAR, trt.float32)],
+        outputs=[(trt.TensorFormat.LINEAR, trt.float32)],
+    )
+
 
 def make_iter_result():
-    return IterationResult(runtime=4.5, runner_name="test", outputs={
-        "out0": np.random.random_sample((1, 2, 1)),
-        "out1": np.ones((1, 2), dtype=np.float32),
-    })
+    return IterationResult(
+        runtime=4.5,
+        runner_name="test",
+        outputs={
+            "out0": np.random.random_sample((1, 2, 1)),
+            "out1": np.ones((1, 2), dtype=np.float32),
+        },
+    )
 
 
 JSONABLE_CASES = [
@@ -75,19 +84,32 @@ JSONABLE_CASES = [
     TacticReplayData().add("hi", algorithm=make_algo()),
 ]
 
+
 class TestImplementations(object):
-    @pytest.mark.parametrize("obj", [
-        Algorithm(implementation=4, tactic=5, inputs=[(trt.TensorFormat.LINEAR, trt.float32)],
-                  outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-        Algorithm(implementation=4, tactic=5, inputs=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.CHW32, trt.int8)],
-                  outputs=[(trt.TensorFormat.CHW32, trt.float16)]),
-        np.ones((3, 4, 5), dtype=np.int64),
-        np.ones(5, dtype=np.int64),
-        np.zeros((4, 5), dtype=np.float32),
-        np.random.random_sample((3, 5)),
-        make_iter_result(),
-        RunResults([("runner0", [make_iter_result()]), ("runner0", [make_iter_result()])])
-    ], ids=lambda x: type(x))
+    @pytest.mark.parametrize(
+        "obj",
+        [
+            Algorithm(
+                implementation=4,
+                tactic=5,
+                inputs=[(trt.TensorFormat.LINEAR, trt.float32)],
+                outputs=[(trt.TensorFormat.LINEAR, trt.float32)],
+            ),
+            Algorithm(
+                implementation=4,
+                tactic=5,
+                inputs=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.CHW32, trt.int8)],
+                outputs=[(trt.TensorFormat.CHW32, trt.float16)],
+            ),
+            np.ones((3, 4, 5), dtype=np.int64),
+            np.ones(5, dtype=np.int64),
+            np.zeros((4, 5), dtype=np.float32),
+            np.random.random_sample((3, 5)),
+            make_iter_result(),
+            RunResults([("runner0", [make_iter_result()]), ("runner0", [make_iter_result()])]),
+        ],
+        ids=lambda x: type(x),
+    )
     def test_serde(self, obj):
         encoded = to_json(obj)
         decoded = from_json(encoded)
@@ -96,13 +118,11 @@ class TestImplementations(object):
         else:
             assert decoded == obj
 
-
     @pytest.mark.parametrize("obj", JSONABLE_CASES)
     def test_to_from_json(self, obj):
         encoded = obj.to_json()
         decoded = type(obj).from_json(encoded)
         assert decoded == obj
-
 
     @pytest.mark.parametrize("obj", JSONABLE_CASES)
     def test_save_load(self, obj):
@@ -110,7 +130,6 @@ class TestImplementations(object):
             obj.save(f)
             decoded = type(obj).load(f)
             assert decoded == obj
-
 
     def test_cannot_save_load_to_different_types(self):
         run_result = JSONABLE_CASES[0]

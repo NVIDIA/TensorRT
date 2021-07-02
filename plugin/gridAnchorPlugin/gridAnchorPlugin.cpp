@@ -34,8 +34,8 @@ PluginFieldCollection GridAnchorBasePluginCreator::mFC{};
 std::vector<PluginField> GridAnchorBasePluginCreator::mPluginAttributes;
 
 GridAnchorGenerator::GridAnchorGenerator(const GridAnchorParameters* paramIn, int numLayers, const char* name)
-    : mNumLayers(numLayers)
-    , mPluginName(name)
+    : mPluginName(name)
+    , mNumLayers(numLayers)
 {
     CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
     CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
@@ -170,33 +170,33 @@ GridAnchorGenerator::~GridAnchorGenerator()
     CUERRORMSG(cudaFreeHost(mDeviceHeights));
 }
 
-int GridAnchorGenerator::getNbOutputs() const
+int GridAnchorGenerator::getNbOutputs() const noexcept
 {
     return mNumLayers;
 }
 
-Dims GridAnchorGenerator::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims GridAnchorGenerator::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
     // Particularity of the PriorBox layer: no batchSize dimension needed
     // 2 channels. First channel stores the mean of each prior coordinate.
     // Second channel stores the variance of each prior coordinate.
-    return DimsCHW(2, mParam[index].H * mParam[index].W * mNumPriors[index] * 4, 1);
+    return Dims3(2, mParam[index].H * mParam[index].W * mNumPriors[index] * 4, 1);
 }
 
-int GridAnchorGenerator::initialize()
+int GridAnchorGenerator::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
-void GridAnchorGenerator::terminate() {}
+void GridAnchorGenerator::terminate() noexcept {}
 
-size_t GridAnchorGenerator::getWorkspaceSize(int maxBatchSize) const
+size_t GridAnchorGenerator::getWorkspaceSize(int maxBatchSize) const noexcept
 {
     return 0;
 }
 
 int GridAnchorGenerator::enqueue(
-    int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     // Generate prior boxes for each layer
     for (int id = 0; id < mNumLayers; id++)
@@ -204,12 +204,15 @@ int GridAnchorGenerator::enqueue(
         void* outputData = outputs[id];
         pluginStatus_t status = anchorGridInference(
             stream, mParam[id], mNumPriors[id], mDeviceWidths[id].values, mDeviceHeights[id].values, outputData);
-        ASSERT(status == STATUS_SUCCESS);
+        if (status != STATUS_SUCCESS)
+        {
+            return status;
+        }
     }
     return STATUS_SUCCESS;
 }
 
-size_t GridAnchorGenerator::getSerializationSize() const
+size_t GridAnchorGenerator::getSerializationSize() const noexcept
 {
     size_t sum = sizeof(int); // mNumLayers
     for (int i = 0; i < mNumLayers; i++)
@@ -223,7 +226,7 @@ size_t GridAnchorGenerator::getSerializationSize() const
     return sum;
 }
 
-void GridAnchorGenerator::serialize(void* buffer) const
+void GridAnchorGenerator::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mNumLayers);
@@ -251,7 +254,7 @@ void GridAnchorGenerator::serialize(void* buffer) const
     ASSERT(d == a + getSerializationSize());
 }
 
-Weights GridAnchorGenerator::copyToDevice(const void* hostData, size_t count)
+Weights GridAnchorGenerator::copyToDevice(const void* hostData, size_t count) noexcept
 {
     void* deviceData;
     CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
@@ -259,47 +262,47 @@ Weights GridAnchorGenerator::copyToDevice(const void* hostData, size_t count)
     return Weights{DataType::kFLOAT, deviceData, int64_t(count)};
 }
 
-void GridAnchorGenerator::serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const
+void GridAnchorGenerator::serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const noexcept
 {
     cudaMemcpy(hostBuffer, deviceWeights.values, deviceWeights.count * sizeof(float), cudaMemcpyDeviceToHost);
     hostBuffer += deviceWeights.count * sizeof(float);
 }
 
-Weights GridAnchorGenerator::deserializeToDevice(const char*& hostBuffer, size_t count)
+Weights GridAnchorGenerator::deserializeToDevice(const char*& hostBuffer, size_t count) noexcept
 {
     Weights w = copyToDevice(hostBuffer, count);
     hostBuffer += count * sizeof(float);
     return w;
 }
-bool GridAnchorGenerator::supportsFormat(DataType type, PluginFormat format) const
+bool GridAnchorGenerator::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-const char* GridAnchorGenerator::getPluginType() const
+const char* GridAnchorGenerator::getPluginType() const noexcept
 {
     return mPluginName.c_str();
 }
 
-const char* GridAnchorGenerator::getPluginVersion() const
+const char* GridAnchorGenerator::getPluginVersion() const noexcept
 {
     return GRID_ANCHOR_PLUGIN_VERSION;
 }
 
 // Set plugin namespace
-void GridAnchorGenerator::setPluginNamespace(const char* pluginNamespace)
+void GridAnchorGenerator::setPluginNamespace(const char* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* GridAnchorGenerator::getPluginNamespace() const
+const char* GridAnchorGenerator::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 #include <iostream>
 // Return the DataType of the plugin output at the requested index
-DataType GridAnchorGenerator::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+DataType GridAnchorGenerator::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     ASSERT(index < mNumLayers);
     return DataType::kFLOAT;
@@ -307,13 +310,13 @@ DataType GridAnchorGenerator::getOutputDataType(int index, const nvinfer1::DataT
 
 // Return true if output tensor is broadcast across a batch.
 bool GridAnchorGenerator::isOutputBroadcastAcrossBatch(
-    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool GridAnchorGenerator::canBroadcastInputAcrossBatch(int inputIndex) const
+bool GridAnchorGenerator::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 {
     return false;
 }
@@ -321,7 +324,7 @@ bool GridAnchorGenerator::canBroadcastInputAcrossBatch(int inputIndex) const
 // Configure the layer with input and output data types.
 void GridAnchorGenerator::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
+    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     ASSERT(nbOutputs == mNumLayers);
     ASSERT(outputDims[0].nbDims == 3);
@@ -329,19 +332,19 @@ void GridAnchorGenerator::configurePlugin(const Dims* inputDims, int nbInputs, c
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void GridAnchorGenerator::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator)
+    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
 {
 }
 
 // Detach the plugin object from its execution context.
-void GridAnchorGenerator::detachFromContext() {}
+void GridAnchorGenerator::detachFromContext() noexcept {}
 
-void GridAnchorGenerator::destroy()
+void GridAnchorGenerator::destroy() noexcept
 {
     delete this;
 }
 
-IPluginV2Ext* GridAnchorGenerator::clone() const
+IPluginV2Ext* GridAnchorGenerator::clone() const noexcept
 {
     IPluginV2Ext* plugin = new GridAnchorGenerator(mParam.data(), mNumLayers, mPluginName.c_str());
     plugin->setPluginNamespace(mPluginNamespace.c_str());
@@ -361,22 +364,22 @@ GridAnchorBasePluginCreator::GridAnchorBasePluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* GridAnchorBasePluginCreator::getPluginName() const
+const char* GridAnchorBasePluginCreator::getPluginName() const noexcept
 {
     return mPluginName.c_str();
 }
 
-const char* GridAnchorBasePluginCreator::getPluginVersion() const
+const char* GridAnchorBasePluginCreator::getPluginVersion() const noexcept
 {
     return GRID_ANCHOR_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* GridAnchorBasePluginCreator::getFieldNames()
+const PluginFieldCollection* GridAnchorBasePluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     float minScale = 0.2F, maxScale = 0.95F;
     int numLayers = 6;
@@ -484,8 +487,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
     return obj;
 }
 
-IPluginV2Ext* GridAnchorBasePluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)
+IPluginV2Ext* GridAnchorBasePluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call GridAnchor::destroy()

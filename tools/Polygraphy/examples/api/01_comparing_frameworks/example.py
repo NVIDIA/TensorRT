@@ -20,8 +20,7 @@ This script runs an identity model with ONNX-Runtime and TensorRT,
 then compares outputs.
 """
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
-from polygraphy.backend.trt import (EngineFromNetwork, NetworkFromOnnxPath,
-                                    TrtRunner)
+from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
 from polygraphy.comparator import Comparator
 
 

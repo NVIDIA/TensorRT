@@ -28,12 +28,12 @@ class ArgGroupTestHelper(object):
             for other_dep in self.deps:
                 other_dep.register(dep)
             self.arg_group.register(dep)
+            dep.register(self.arg_group)
         self.arg_group.check_registered()
 
         for dep in self.deps:
             dep.add_to_parser(self.parser)
         self.arg_group.add_to_parser(self.parser)
-
 
     def parse_args(self, cli_args):
         args = self.parser.parse_args(cli_args)
@@ -41,7 +41,6 @@ class ArgGroupTestHelper(object):
             dep.parse(args)
         self.arg_group.parse(args)
         return args
-
 
     def __getattr__(self, name):
         if name in ["arg_group", "parser"]:

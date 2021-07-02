@@ -112,7 +112,19 @@ class Node(object):
 
 
     def __str__(self):
-        ret = "{:} ({:})\n\tInputs: {:}\n\tOutputs: {:}".format(self.name, self.op, self.inputs, self.outputs)
+        ret = "{:} ({:})".format(self.name, self.op)
+        
+        def add_io(name, io):
+            nonlocal ret
+            ret += "\n\t{:}: [".format(name)
+            for elem in io:
+                ret += "\n\t\t{:}".format(elem)
+            ret += "\n\t]"
+
+
+        add_io("Inputs", self.inputs)
+        add_io("Outputs", self.outputs)
+
         if self.attrs:
             ret += "\nAttributes: {:}".format(self.attrs)
         return ret

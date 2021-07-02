@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef CHECK_MACROS_PLUGIN_H
 #define CHECK_MACROS_PLUGIN_H
 
@@ -55,8 +54,7 @@ class LogStream : public std::ostream
     Buf buffer;
 
 public:
-    LogStream()
-        : std::ostream(&buffer){};
+    LogStream() : std::ostream(&buffer) {};
 };
 
 extern LogStream<ILogger::Severity::kERROR> gLogError;
@@ -84,10 +82,7 @@ public:
     {
     }
     virtual void log(std::ostream& logStream) const;
-    void setMessage(const char* msg)
-    {
-        message = msg;
-    }
+    void setMessage(const char* msg) { message = msg; }
 
 protected:
     const char* file{nullptr};
@@ -125,6 +120,11 @@ public:
     }
 };
 
+
+inline void caughtError(const std::exception& e)
+{
+    gLogError << e.what() << std::endl;
+}
 } // namespace plugin
 
 } // namespace nvinfer1
@@ -150,24 +150,24 @@ public:
         }                                                                                                              \
     }
 
-#define API_CHECK_WEIGHTS(Name)                                                                                        \
-    API_CHECK((Name).values != nullptr);                                                                               \
-    API_CHECK((Name).count > 0);                                                                                       \
+#define API_CHECK_WEIGHTS(Name)        \
+    API_CHECK((Name).values != nullptr); \
+    API_CHECK((Name).count > 0);         \
     API_CHECK(int((Name).type) >= 0 && int((Name).type) < EnumMax<DataType>());
 
-#define API_CHECK_WEIGHTS0(Name)                                                                                       \
-    API_CHECK((Name).count >= 0);                                                                                      \
-    API_CHECK((Name).count > 0 ? ((Name).values != nullptr) : ((Name).values == nullptr));                             \
+#define API_CHECK_WEIGHTS0(Name)                                                     \
+    API_CHECK((Name).count >= 0);                                                      \
+    API_CHECK((Name).count > 0 ? ((Name).values != nullptr) : ((Name).values == nullptr)); \
     API_CHECK(int((Name).type) >= 0 && int((Name).type) < EnumMax<DataType>());
 
-#define API_CHECK_WEIGHTS_RETVAL(Name, retval)                                                                         \
-    API_CHECK_RETVAL((Name).values != nullptr, retval);                                                                \
-    API_CHECK_RETVAL((Name).count > 0, retval);                                                                        \
+#define API_CHECK_WEIGHTS_RETVAL(Name, retval)        \
+    API_CHECK_RETVAL((Name).values != nullptr, retval); \
+    API_CHECK_RETVAL((Name).count > 0, retval);         \
     API_CHECK_RETVAL(int((Name).type) >= 0 && int((Name).type) < EnumMax<DataType>(), retval);
 
-#define API_CHECK_WEIGHTS0_RETVAL(Name, retval)                                                                        \
-    API_CHECK_RETVAL((Name).count >= 0, retval);                                                                       \
-    API_CHECK_RETVAL((Name).count > 0 ? ((Name).values != nullptr) : ((Name).values == nullptr), retval);              \
+#define API_CHECK_WEIGHTS0_RETVAL(Name, retval)                                                     \
+    API_CHECK_RETVAL((Name).count >= 0, retval);                                                      \
+    API_CHECK_RETVAL((Name).count > 0 ? ((Name).values != nullptr) : ((Name).values == nullptr), retval); \
     API_CHECK_RETVAL(int((Name).type) >= 0 && int((Name).type) < EnumMax<DataType>(), retval);
 
 #define API_CHECK_NULL(param) API_CHECK((param) != nullptr)
@@ -177,6 +177,26 @@ public:
 #define API_CHECK_ENUM_RANGE(Type, val) API_CHECK(int(val) >= 0 && int(val) < EnumMax<Type>())
 #define API_CHECK_ENUM_RANGE_RETVAL(Type, val, retval)                                                                 \
     API_CHECK_RETVAL(int(val) >= 0 && int(val) < EnumMax<Type>(), retval)
+
+#define CHECK_CUDA(call)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        cudaError_t status = call;                                                                                     \
+        if (status != cudaSuccess)                                                                                     \
+        {                                                                                                              \
+            return status;                                                                                             \
+        }                                                                                                              \
+    } while (0)
+
+#define CHECK_CUDNN(call)                                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        cudnnStatus_t status = call;                                                                                   \
+        if (status != CUDNN_STATUS_SUCCESS)                                                                            \
+        {                                                                                                              \
+            return status;                                                                                             \
+        }                                                                                                              \
+    } while (0)
 
 #define CUBLASASSERTMSG(status_, msg)                                                                                  \
     {                                                                                                                  \

@@ -24,15 +24,18 @@ class Build(BaseCheckerSubtool):
     into `good` and `bad` directories.
     Each iteration will generate an engine called 'polygraphy_debug.engine' in the current directory.
     """
+
     def __init__(self):
         super().__init__("build")
 
-
     def add_parser_args(self, parser):
-        parser.add_argument("--until", required=True, help="Controls when to stop running. "
-                            "Choices are: ['good', 'bad', int]. 'good' will keep running until the first 'good' run. "
-                            "'bad' will run until the first 'bad' run. An integer can be specified to run a set number of iterations. ")
-
+        parser.add_argument(
+            "--until",
+            required=True,
+            help="Controls when to stop running. "
+            "Choices are: ['good', 'bad', int]. 'good' will keep running until the first 'good' run. "
+            "'bad' will run until the first 'bad' run. An integer can be specified to run a set number of iterations. ",
+        )
 
     def setup(self, args, network):
         try:
@@ -40,8 +43,7 @@ class Build(BaseCheckerSubtool):
         except:
             self.until = args.until
             if self.until not in ["good", "bad"]:
-                G_LOGGER.exit("--until value must be an integer, 'good', or 'bad', but was: {:}".format(args.until))
-
+                G_LOGGER.critical("--until value must be an integer, 'good', or 'bad', but was: {:}".format(args.until))
 
     def stop(self, index, success):
         if self.until == "good":

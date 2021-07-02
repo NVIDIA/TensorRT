@@ -39,7 +39,7 @@ ILayer* parsePReLU(INetworkDefinition& network, const trtcaffe::LayerParameter& 
     }
 
     int nWeights = channelShared ? 1 : inputDims.d[0]; // Caffe treats second input dimension as channels
-    Dims slopesDims{inputDims.nbDims, {}, {}};
+    Dims slopesDims{inputDims.nbDims, {}};
     std::fill(slopesDims.d, slopesDims.d + slopesDims.nbDims, 1);
     slopesDims.d[0] = nWeights;
 

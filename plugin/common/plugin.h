@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef TRT_PLUGIN_H
 #define TRT_PLUGIN_H
 #include "checkMacrosPlugin.h"
@@ -45,15 +44,9 @@ namespace plugin
 class BasePlugin : public IPluginV2
 {
 protected:
-    void setPluginNamespace(const char* libNamespace) override
-    {
-        mNamespace = libNamespace;
-    }
+    void setPluginNamespace(const char* libNamespace) noexcept override { mNamespace = libNamespace; }
 
-    const char* getPluginNamespace() const override
-    {
-        return mNamespace.c_str();
-    }
+    const char* getPluginNamespace() const noexcept override { return mNamespace.c_str(); }
 
     std::string mNamespace;
 };
@@ -61,12 +54,12 @@ protected:
 class BaseCreator : public IPluginCreator
 {
 public:
-    void setPluginNamespace(const char* libNamespace) override
+    void setPluginNamespace(const char* libNamespace) noexcept override
     {
         mNamespace = libNamespace;
     }
 
-    const char* getPluginNamespace() const override
+    const char* getPluginNamespace() const noexcept override
     {
         return mNamespace.c_str();
     }

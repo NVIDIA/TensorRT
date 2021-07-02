@@ -27,6 +27,7 @@ class PytRunner(BaseRunner):
     """
     Runs inference using PyTorch.
     """
+
     def __init__(self, model, input_metadata, output_names, name=None):
         """
         Args:
@@ -47,15 +48,16 @@ class PytRunner(BaseRunner):
         self.input_metadata = input_metadata
         self.output_names = output_names
 
-
     def activate_impl(self):
         self.model, _ = util.invoke_if_callable(self._model)
         self.model.eval()
 
-
     def infer_impl(self, feed_dict):
         with torch.no_grad():
-            inputs = [torch.from_numpy(val.astype(dtype)).cuda() for (val, (dtype, _)) in zip(feed_dict.values(), self.input_metadata.values())]
+            inputs = [
+                torch.from_numpy(val.astype(dtype)).cuda()
+                for (val, (dtype, _)) in zip(feed_dict.values(), self.input_metadata.values())
+            ]
             start = time.time()
             outputs = self.model(*inputs)
             end = time.time()
@@ -65,10 +67,8 @@ class PytRunner(BaseRunner):
             out_dict[name] = output.cpu().numpy()
         return out_dict, end - start
 
-
     def deactivate_impl(self):
         del self.model
-
 
     @func.constantmethod
     def get_input_metadata_impl(self):

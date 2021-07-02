@@ -47,8 +47,12 @@ def all_tensor_names(model):
 
 def check_outputs_not_found(not_found, all_outputs):
     if not_found:
-        G_LOGGER.critical("The following outputs: {:} were not found. "
-                          "Note: Available tensors: {:}".format(not_found, all_outputs))
+        G_LOGGER.critical(
+            "The following outputs were not found: {:}.\nNote: Available tensors:\n\t{:}".format(
+                not_found, "\n\t".join(all_outputs)
+            )
+        )
+
 
 def mark_outputs(model, outputs):
     # Clear the old outputs
@@ -85,7 +89,7 @@ def unmark_outputs(model, outputs):
     cur_outputs = []
     while model.graph.output:
         cur_outputs.append(model.graph.output.pop())
-    cur_outputs = list(reversed(cur_outputs)) # Preserve ordering
+    cur_outputs = list(reversed(cur_outputs))  # Preserve ordering
 
     unmarked_outputs = set()
     for out in cur_outputs:
@@ -135,7 +139,7 @@ def get_tensor_metadata(tensors):
 
 def get_input_metadata(graph):
     # Some "inputs" are actually weights with initalizers, so we need to eliminate those.
-    initializer_names = set([tensor.name for tensor in graph.initializer])
+    initializer_names = {tensor.name for tensor in graph.initializer}
     input_tensors = [tensor for tensor in graph.input if tensor.name not in initializer_names]
     return get_tensor_metadata(input_tensors)
 
@@ -155,6 +159,7 @@ def str_from_onnx(model, mode="full"):
     Returns:
         str
     """
+
     def get_opset():
         try:
             return model.opset_import[0].version
@@ -192,7 +197,8 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
     if mode == "full":
         for init in graph.initializer:
             onnx_str += "Initializer | {:} [dtype={:}, shape={:}] | Values:\n{:}\n\n".format(
-                            init.name, get_dtype(init), get_shape(init), util.indent_block(str(get_values(init))))
+                init.name, get_dtype(init), get_shape(init), util.indent_block(str(get_values(init)))
+            )
         if not graph.initializer:
             onnx_str += "{}\n\n"
     elif mode != "none":
@@ -200,7 +206,6 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
         onnx_str += "\n\n"
     else:
         onnx_str += "\n"
-
 
     def metadata_from_names(names):
         metadata = TensorMetadata()
@@ -229,6 +234,7 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
     def attrs_to_dict(attrs):
         attr_dict = OrderedDict()
         for attr in attrs:
+
             def process_attr(attr_str: str):
                 processed = getattr(attr, ONNX_PYTHON_ATTR_MAPPING[attr_str])
                 if attr_str == "STRING":
@@ -252,12 +258,15 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
                 if attr_str in ONNX_PYTHON_ATTR_MAPPING:
                     attr_dict[attr.name] = process_attr(attr_str)
                 else:
-                    G_LOGGER.warning("Attribute of type {:} is currently unsupported. Skipping attribute.".format(attr_str))
+                    G_LOGGER.warning(
+                        "Attribute of type {:} is currently unsupported. Skipping attribute.".format(attr_str)
+                    )
             else:
-                G_LOGGER.warning("Attribute type: {:} was not recognized. Was the graph generated with a newer IR "
-                                "version than the installed `onnx` package? Skipping attribute.".format(attr.type))
+                G_LOGGER.warning(
+                    "Attribute type: {:} was not recognized. Was the graph generated with a newer IR "
+                    "version than the installed `onnx` package? Skipping attribute.".format(attr.type)
+                )
         return attr_dict
-
 
     onnx_str += "---- {:} Node(s) ----\n".format(len(graph.node))
     if mode != "none":

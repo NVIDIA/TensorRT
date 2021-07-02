@@ -38,11 +38,17 @@ class TestModelArgs(object):
         assert group.model_file == os.path.abspath("model.onnx")
         assert group.model_type.is_onnx()
 
-
     def test_input_shapes(self, group):
         group.parse_args(["--input-shapes", "test0:[1,1]", "test1:[10]", "test:2:[25,301]", "test3:[]"])
 
         assert group.input_shapes["test0"].shape == (1, 1)
-        assert group.input_shapes["test1"].shape == (10, )
+        assert group.input_shapes["test1"].shape == (10,)
         assert group.input_shapes["test:2"].shape == (25, 301)
         assert group.input_shapes["test3"].shape == tuple()
+
+
+    def test_fixed_model_type(self):
+        group = ArgGroupTestHelper(ModelArgs(model_type="onnx"))
+        group.parse_args(["model.pb"])
+
+        assert group.model_type.is_onnx()

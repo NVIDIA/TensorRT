@@ -15,10 +15,10 @@
  */
 
 #include "bleuScoreWriter.h"
+#include "common.h"
 #include "logger.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <iostream>
 #include <map>
@@ -53,7 +53,7 @@ int read(std::vector<Segment_t>& samples, std::shared_ptr<std::istream> input, i
 #else
         p0 = line.find("\u2581");
 #endif
-        assert((p0 == std::string::npos));
+        ASSERT((p0 == std::string::npos));
         std::istringstream ss(line);
         std::string token;
         tokens.resize(0);
@@ -120,7 +120,7 @@ void accumulateBLEU(const std::vector<Segment_t>& referenceSamples, const std::v
     int maxOrder, size_t& referenceLength, size_t& translationLength, std::vector<size_t>& matchesByOrder,
     std::vector<size_t>& possibleMatchesByOrder)
 {
-    assert(referenceSamples.size() == outputSamples.size());
+    ASSERT(referenceSamples.size() == outputSamples.size());
     auto reference = referenceSamples.begin();
     auto translation = outputSamples.begin();
 
@@ -165,7 +165,7 @@ void BLEUScoreWriter::write(const int* hOutputData, int actualOutputSequenceLeng
     std::vector<Segment_t> outputSamples;
     std::vector<Segment_t> referenceSamples;
     int numReferenceSamples = read(referenceSamples, mReferenceInput, 1);
-    assert(numReferenceSamples == 1);
+    ASSERT(numReferenceSamples == 1);
 
     Segment_t segment;
     std::stringstream filteredSentence(DataWriter::generateText(actualOutputSequenceLength, hOutputData, mVocabulary));

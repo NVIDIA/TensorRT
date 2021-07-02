@@ -48,11 +48,15 @@ def save(model, filename):
 
 1. If running this sample in a test container, launch [NVIDIA tf1 (Tensorflow 1.x)](https://docs.nvidia.com/deeplearning/frameworks/tensorflow-release-notes/running.html#running) container in a separate terminal for generating the UFF model.
     ```bash
-    docker run --rm -it --gpus all -v `pwd`:/workspace nvcr.io/nvidia/tensorflow:20.12-tf1-py3 /bin/bash
+    docker run --rm -it --gpus all -v `pwd`:/workspace nvcr.io/nvidia/tensorflow:21.03-tf1-py3 /bin/bash
     ```
 
     Alternatively, install Tensorflow 1.15
-    `pip3 install tensorflow>=1.15.3,<2.0`
+    `pip3 install tensorflow>=1.15.5,<2.0`
+
+  NOTE
+  - On PowerPC systems, you will need to manually install TensorFlow using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
+  - On Jetson boards, you will need to manually install TensorFlow by following the documentation for [Xavier](https://docs.nvidia.com/deeplearning/dgx/install-tf-xavier/index.html) or [TX2](https://docs.nvidia.com/deeplearning/dgx/install-tf-jetsontx2/index.html).
 
 2. Run the sample to train the model and write out the frozen graph:
     ```bash
@@ -66,7 +70,9 @@ def save(model, filename):
     pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com graphsurgeon
     ```
 
-4. Convert the `.pb` file to `.uff` using the convert-to-uff utility:
+4. The MNIST dataset can be found under the data directory (usually `/usr/src/tensorrt/data/mnist`) if using the TensorRT containers. It is also bundled along with the [TensorRT tarball](https://developer.nvidia.com/nvidia-tensorrt-download).
+
+5. Convert the `.pb` file to `.uff` using the convert-to-uff utility:
     ```bash
     convert-to-uff models/lenet5.pb
     ```
@@ -80,25 +86,15 @@ def save(model, filename):
     python3 -m pip install -r requirements.txt
     ```
 
-  NOTE:
-  - On PowerPC systems, you will need to manually install TensorFlow using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
-  - On Jetson boards, you will need to manually install TensorFlow by following the documentation for [Xavier](https://docs.nvidia.com/deeplearning/dgx/install-tf-xavier/index.html) or [TX2](https://docs.nvidia.com/deeplearning/dgx/install-tf-jetsontx2/index.html).
-
-2. Download the MNIST test data.
-    ```bash
-    mkdir -p /usr/src/tensorrt/data/mnist
-    python3 ../scripts/download_mnist_pgms.py -o /usr/src/tensorrt/data/mnist
-    ```
-
 ## Running the sample
 
 1.  Create a TensorRT inference engine from the UFF file and run inference:
     ```bash
-    python sample.py [-d DATA_DIR]
+    python3 sample.py [-d DATA_DIR]
     ```
 
   * NOTE: If the MNIST image data is not installed in the default location, `/usr/src/tensorrt/data/` as shown, the data directory must be specified.
-	For example: `python sample.py -d /path/to/my/data/`.
+	For example: `python3 sample.py -d /path/to/my/data/`.
 
 2.  Verify that the sample ran successfully. If the sample runs successfully you should see a match between the test case and the prediction.
 	```

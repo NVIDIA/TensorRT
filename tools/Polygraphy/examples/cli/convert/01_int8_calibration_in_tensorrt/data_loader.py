@@ -24,6 +24,7 @@ import numpy as np
 
 INPUT_SHAPE = (1, 1, 2, 2)
 
+
 def load_data():
     for _ in range(5):
-        yield {"x": np.ones(shape=INPUT_SHAPE, dtype=np.float32)} # Still totally real data
+        yield {"x": np.ones(shape=INPUT_SHAPE, dtype=np.float32)}  # Still totally real data

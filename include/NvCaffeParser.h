@@ -53,7 +53,7 @@ public:
     //!
     //! \return ITensor* corresponding to the queried name. If no such ITensor exists, then nullptr is returned.
     //!
-    virtual nvinfer1::ITensor* find(const char* name) const TRTNOEXCEPT = 0;
+    virtual nvinfer1::ITensor* find(const char* name) const noexcept = 0;
 
 protected:
     virtual ~IBlobNameToTensor() {}
@@ -71,62 +71,16 @@ protected:
 class IBinaryProtoBlob
 {
 public:
-    virtual const void* getData() TRTNOEXCEPT = 0;
-    virtual nvinfer1::DimsNCHW getDimensions() TRTNOEXCEPT = 0;
-    virtual nvinfer1::DataType getDataType() TRTNOEXCEPT = 0;
-    virtual void destroy() TRTNOEXCEPT = 0;
-
-protected:
-    virtual ~IBinaryProtoBlob() {}
-};
-
-//!
-//! \class IPluginFactory
-//!
-//! \brief Plugin factory used to configure plugins.
-//!
-class IPluginFactory
-{
-public:
+    virtual const void* getData() noexcept = 0;
+    virtual nvinfer1::Dims4 getDimensions() noexcept = 0;
+    virtual nvinfer1::DataType getDataType() noexcept = 0;
     //!
-    //! \brief A user implemented function that determines if a layer configuration is provided by an IPlugin.
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
     //!
-    //! \param layerName Name of the layer which the user wishes to validate.
+    //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
-    virtual bool isPlugin(const char* layerName) TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Creates a plugin.
-    //!
-    //! \param layerName Name of layer associated with the plugin.
-    //! \param weights Weights used for the layer.
-    //! \param nbWeights Number of weights.
-    //!
-    virtual nvinfer1::IPlugin* createPlugin(
-        const char* layerName, const nvinfer1::Weights* weights, int32_t nbWeights) TRTNOEXCEPT = 0;
-
-    virtual ~IPluginFactory() {}
-};
-
-//!
-//! \class IPluginFactoryExt
-//!
-//! \brief Plugin factory used to configure plugins with added support for TRT versioning.
-//!
-class IPluginFactoryExt : public IPluginFactory
-{
-public:
-    virtual int32_t getVersion() const TRTNOEXCEPT
-    {
-        return NV_TENSORRT_VERSION;
-    }
-
-    //!
-    //! \brief A user implemented function that determines if a layer configuration is provided by an IPluginExt.
-    //!
-    //! \param layerName Name of the layer which the user wishes to validate.
-    //!
-    virtual bool isPluginExt(const char* layerName) TRTNOEXCEPT = 0;
+    TRT_DEPRECATED virtual void destroy() noexcept = 0;
+    virtual ~IBinaryProtoBlob() noexcept = default;
 };
 
 //!
@@ -142,7 +96,7 @@ public:
     //!
     //! \param layerName Name of the layer which the user wishes to validate.
     //!
-    virtual bool isPluginV2(const char* layerName) TRTNOEXCEPT = 0;
+    virtual bool isPluginV2(const char* layerName) noexcept = 0;
 
     //!
     //! \brief Creates a plugin.
@@ -153,9 +107,10 @@ public:
     //! \param libNamespace Library Namespace associated with the plugin object
     //!
     virtual nvinfer1::IPluginV2* createPlugin(const char* layerName, const nvinfer1::Weights* weights,
-        int32_t nbWeights, const char* libNamespace = "") TRTNOEXCEPT = 0;
+        int32_t nbWeights, const char* libNamespace = "") noexcept
+        = 0;
 
-    virtual ~IPluginFactoryV2() {}
+    virtual ~IPluginFactoryV2() noexcept = default;
 };
 //!
 //! \class ICaffeParser
@@ -182,13 +137,12 @@ public:
     //!
     //! \see nvcaffeparser1::IBlobNameToTensor
     //!
-    virtual const IBlobNameToTensor* parse(const char* deploy,
-                                           const char* model,
-                                           nvinfer1::INetworkDefinition& network,
-                                           nvinfer1::DataType weightType) TRTNOEXCEPT = 0;
+    virtual const IBlobNameToTensor* parse(const char* deploy, const char* model, nvinfer1::INetworkDefinition& network,
+        nvinfer1::DataType weightType) noexcept
+        = 0;
 
     //!
-    //! \brief Parse a deploy prototxt a binaryproto Caffe model from memory buffers to extract
+    //! \brief Parse a deploy prototxt and a binaryproto Caffe model from memory buffers to extract
     //!   network definition and weights associated with the network, respectively.
     //!
     //! \param deployBuffer The plain text deploy prototxt used to define the network definition.
@@ -202,12 +156,10 @@ public:
     //!
     //! \see nvcaffeparser1::IBlobNameToTensor
     //!
-    virtual const IBlobNameToTensor* parseBuffers(const char* deployBuffer,
-                                                  std::size_t deployLength,
-                                                  const char* modelBuffer,
-                                                  std::size_t modelLength,
-                                                  nvinfer1::INetworkDefinition& network,
-                                                  nvinfer1::DataType weightType) TRTNOEXCEPT = 0;
+    virtual const IBlobNameToTensor* parseBuffers(const char* deployBuffer, std::size_t deployLength,
+        const char* modelBuffer, std::size_t modelLength, nvinfer1::INetworkDefinition& network,
+        nvinfer1::DataType weightType) noexcept
+        = 0;
 
     //!
     //! \brief Parse and extract data stored in binaryproto file.
@@ -221,7 +173,7 @@ public:
     //!
     //! \see nvcaffeparser1::IBinaryProtoBlob
     //!
-    virtual IBinaryProtoBlob* parseBinaryProto(const char* fileName) TRTNOEXCEPT = 0;
+    virtual IBinaryProtoBlob* parseBinaryProto(const char* fileName) noexcept = 0;
 
     //!
     //! \brief Set buffer size for the parsing and storage of the learned model.
@@ -230,41 +182,30 @@ public:
     //!
     //! \note  Default size is 2^30 bytes.
     //!
-    virtual void setProtobufBufferSize(size_t size) TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Set the IPluginFactory used to create the user defined plugins.
-    //!
-    //! \param factory Pointer to an instance of the user implmentation of IPluginFactory.
-    //!
-    virtual void setPluginFactory(IPluginFactory* factory) TRTNOEXCEPT = 0;
-
-    //!
-    //! \brief Set the IPluginFactoryExt used to create the user defined pluginExts.
-    //!
-    //! \param factory Pointer to an instance of the user implmentation of IPluginFactoryExt.
-    //!
-    virtual void setPluginFactoryExt(IPluginFactoryExt* factory) TRTNOEXCEPT = 0;
+    virtual void setProtobufBufferSize(size_t size) noexcept = 0;
 
     //!
     //! \brief Destroy this ICaffeParser object.
     //!
-    virtual void destroy() TRTNOEXCEPT = 0;
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //!
+    //! \warning Calling destroy on a managed pointer will result in a double-free error.
+    //!
+    TRT_DEPRECATED virtual void destroy() noexcept = 0;
 
     //!
     //! \brief Set the IPluginFactoryV2 used to create the user defined pluginV2 objects.
     //!
-    //! \param factory Pointer to an instance of the user implmentation of IPluginFactoryV2.
+    //! \param factory Pointer to an instance of the user implementation of IPluginFactoryV2.
     //!
-    virtual void setPluginFactoryV2(IPluginFactoryV2* factory) TRTNOEXCEPT = 0;
+    virtual void setPluginFactoryV2(IPluginFactoryV2* factory) noexcept = 0;
 
     //!
     //! \brief Set the namespace used to lookup and create plugins in the network.
     //!
-    virtual void setPluginNamespace(const char* libNamespace) TRTNOEXCEPT = 0;
+    virtual void setPluginNamespace(const char* libNamespace) noexcept = 0;
 
-protected:
-    virtual ~ICaffeParser() {}
+    virtual ~ICaffeParser() noexcept = default;
 
 public:
     //!
@@ -275,23 +216,25 @@ public:
     //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
     //! a recorder has been registered.
     //!
+    //! If an error recorder is not set, messages will be sent to the global log stream.
+    //!
     //! \param recorder The error recorder to register with this interface.
     //!
-    //! \see getErrorRecorder
+    //! \see getErrorRecorder()
     //!
-    virtual void setErrorRecorder(nvinfer1::IErrorRecorder* recorder) TRTNOEXCEPT = 0;
+    virtual void setErrorRecorder(nvinfer1::IErrorRecorder* recorder) noexcept = 0;
 
     //!
     //! \brief get the ErrorRecorder assigned to this interface.
     //!
-    //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
-    //! so a nullptr will be returned if setErrorRecorder has not been called.
+    //! Retrieves the assigned error recorder object for the given class. A
+    //! nullptr will be returned if setErrorRecorder has not been called.
     //!
     //! \return A pointer to the IErrorRecorder object that has been registered.
     //!
-    //! \see setErrorRecorder
+    //! \see setErrorRecorder()
     //!
-    virtual nvinfer1::IErrorRecorder* getErrorRecorder() const TRTNOEXCEPT = 0;
+    virtual nvinfer1::IErrorRecorder* getErrorRecorder() const noexcept = 0;
 };
 
 //!
@@ -301,19 +244,22 @@ public:
 //!
 //! \see nvcaffeparser1::ICaffeParser
 //!
-TENSORRTAPI ICaffeParser* createCaffeParser() TRTNOEXCEPT;
+//! \deprecated ICaffeParser will be removed in TensorRT 9.0. Plan to migrate your workflow to
+//! use nvonnxparser::IParser for deployment.
+//!
+TENSORRTAPI ICaffeParser* createCaffeParser() noexcept;
 
 //!
 //! \brief Shuts down protocol buffers library.
 //!
 //! \note No part of the protocol buffers library can be used after this function is called.
 //!
-TENSORRTAPI void shutdownProtobufLibrary() TRTNOEXCEPT;
+TENSORRTAPI void shutdownProtobufLibrary() noexcept;
 } // namespace nvcaffeparser1
 
 //!
 //! Internal C entry point for creating ICaffeParser.
 //! @private
 //!
-extern "C" TENSORRTAPI void* createNvCaffeParser_INTERNAL();
+extern "C" TENSORRTAPI void* createNvCaffeParser_INTERNAL() noexcept;
 #endif

@@ -22,7 +22,7 @@ import tensorrt as trt
 import pycuda.driver as cuda
 import numpy as np
 
-from utils.model import ModelData
+from utils.modeldata import ModelData
 
 # ../../common.py
 sys.path.insert(1,
@@ -80,7 +80,7 @@ def allocate_buffers(engine):
     return inputs, outputs, bindings, stream
 
 def build_engine(uff_model_path, trt_logger, trt_engine_datatype=trt.DataType.FLOAT, batch_size=1, silent=False):
-    with trt.Builder(trt_logger) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.UffParser() as parser:
+    with trt.Builder(trt_logger) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.UffParser() as parser, trt.Runtime(trt_logger) as runtime:
         config.max_workspace_size = 1 << 30
         if trt_engine_datatype == trt.DataType.HALF:
             config.set_flag(trt.BuilderFlag.FP16)
@@ -93,7 +93,8 @@ def build_engine(uff_model_path, trt_logger, trt_engine_datatype=trt.DataType.FL
         if not silent:
             print("Building TensorRT engine. This may take few minutes.")
 
-        return builder.build_engine(network, config)
+        plan = builder.build_serialized_network(network, config)
+        return runtime.deserialize_cuda_engine(plan)
 
 def save_engine(engine, engine_dest_path):
     buf = engine.serialize()

@@ -29,11 +29,9 @@ class TrtRunnerArgs(BaseArgs):
         elif isinstance(maker, TrtEngineLoaderArgs):
             self.trt_engine_loader_args = maker
 
-
     def check_registered(self):
         assert self.model_args is not None, "ModelArgs is required!"
         assert self.trt_engine_loader_args is not None, "TrtEngineLoaderArgs is required!"
-
 
     def add_to_script(self, script):
         script.add_import(imports=["TrtRunner"], frm="polygraphy.backend.trt")

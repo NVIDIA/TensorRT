@@ -66,7 +66,7 @@ public:
     }
 
 private:
-    void log(Severity severity, const char* msg) override
+    void log(Severity severity, const char* msg) noexcept override
     {
         report(severity, msg) << "\n";
     }

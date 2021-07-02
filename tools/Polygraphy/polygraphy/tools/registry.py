@@ -27,11 +27,14 @@ class MissingTool(Tool):
         self.err = err
         # NOTE: When modifying this error message, make sure to update the checks in
         # tests/test_public_imports.py so that we don't miss errors!
-        self.__doc__ = "[!] This tool could not be loaded due to an error:\n{:}\nRun 'polygraphy {:}' for details.".format(self.err, self.name)
-
+        self.__doc__ = (
+            "[!] This tool could not be loaded due to an error:\n{:}\nRun 'polygraphy {:}' for details.".format(
+                self.err, self.name
+            )
+        )
 
     def __call__(self, args):
-        G_LOGGER.exit("Encountered an error when loading this tool:\n{:}".format(self.err))
+        G_LOGGER.critical("Encountered an error when loading this tool:\n{:}".format(self.err))
 
 
 def try_register_tool(module, tool_class):
@@ -55,6 +58,6 @@ try_register_tool("polygraphy.tools.to_json", "ToJSON")
 
 # Check that tool names are unique
 tool_names = [tool.name for tool in TOOL_REGISTRY]
-duplicates = set([name for name in tool_names if tool_names.count(name) > 1])
+duplicates = {name for name in tool_names if tool_names.count(name) > 1}
 if duplicates:
     G_LOGGER.internal_error("Multiple tools have the same name. Duplicate tool names found: {:}".format(duplicates))

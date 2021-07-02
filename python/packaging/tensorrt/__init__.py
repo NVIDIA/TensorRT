@@ -17,6 +17,7 @@
 import ctypes
 import glob
 import os
+import warnings
 
 
 def try_load(library):
@@ -33,22 +34,25 @@ for lib in glob.iglob(os.path.join(CURDIR, "*.so*")):
 
 
 from .tensorrt import *
+
 __version__ = "##TENSORRT_VERSION##"
 
-import sys
-if sys.version_info.major == 2:
-    print("WARNING: TensorRT Python 2 support is deprecated, and will be dropped in a future version!")
 
 # Provides Python's `with` syntax
 def common_enter(this):
+    warnings.warn("Context managers for TensorRT types are deprecated. "
+                  "Memory will be freed automatically when the reference count reaches 0.",
+                  DeprecationWarning)
     return this
+
 
 def common_exit(this, exc_type, exc_value, traceback):
     """
-    Destroy this object, freeing all memory associated with it. This should be called to ensure that the object is cleaned up properly.
-    Equivalent to invoking :func:`__del__`
+    Context managers are deprecated and have no effect. Objects are automatically freed when
+    the reference count reaches 0.
     """
-    this.__del__()
+    pass
+
 
 # Logger does not have a destructor.
 ILogger.__enter__ = common_enter
@@ -87,6 +91,7 @@ Refitter.__exit__ = common_exit
 IBuilderConfig.__enter__ = common_enter
 IBuilderConfig.__exit__ = common_exit
 
+
 # Computes the volume of an iterable.
 def volume(iterable):
     """
@@ -100,6 +105,7 @@ def volume(iterable):
     for elem in iterable:
         vol *= elem
     return vol
+
 
 # Converts a TensorRT datatype to the equivalent numpy type.
 def nptype(trt_type):
@@ -121,6 +127,7 @@ def nptype(trt_type):
     if trt_type in mapping:
         return mapping[trt_type]
     raise TypeError("Could not resolve TensorRT datatype to an equivalent numpy datatype.")
+
 
 # Add a numpy-like itemsize property to the datatype.
 def _itemsize(trt_type):

@@ -15,9 +15,14 @@
 #
 import argparse
 
-from polygraphy.tools.args import (ModelArgs, OnnxLoaderArgs,
-                                   Tf2OnnxLoaderArgs, TfLoaderArgs,
-                                   TrtNetworkLoaderArgs, TrtPluginLoaderArgs)
+from polygraphy.tools.args import (
+    ModelArgs,
+    OnnxLoaderArgs,
+    Tf2OnnxLoaderArgs,
+    TfLoaderArgs,
+    TrtNetworkLoaderArgs,
+    TrtPluginLoaderArgs,
+)
 from polygraphy.tools.base import Tool
 from polygraphy.tools.script import Script, inline, safe
 
@@ -27,6 +32,7 @@ class TrtNetwork(Tool):
     Generate a template script that defines or modifies a TensorRT network
     using the TensorRT network API.
     """
+
     def __init__(self):
         super().__init__("trt-network")
         self.subscribe_args(ModelArgs(model_required=False, inputs=None))
@@ -36,14 +42,15 @@ class TrtNetwork(Tool):
         self.subscribe_args(TrtPluginLoaderArgs())
         self.subscribe_args(TrtNetworkLoaderArgs())
 
-
     def add_parser_args(self, parser):
-        parser.add_argument("-o", "--output", help="Path to save the generated script.",
-                            type=argparse.FileType("w"), required=True)
-
+        parser.add_argument(
+            "-o", "--output", help="Path to save the generated script.", type=argparse.FileType("w"), required=True
+        )
 
     def run(self, args):
-        script = Script(summary="Defines or modifies a TensorRT Network using the Network API.", always_create_runners=False)
+        script = Script(
+            summary="Defines or modifies a TensorRT Network using the Network API.", always_create_runners=False
+        )
         script.add_import(imports=["func"], frm="polygraphy")
         script.add_import(imports=["tensorrt as trt"])
 

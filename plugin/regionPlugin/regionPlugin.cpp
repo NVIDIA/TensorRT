@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "regionPlugin.h"
 #include <cstring>
 
@@ -231,19 +230,20 @@ Region::Region(const void* buffer, size_t length)
     ASSERT(d == a + length);
 }
 
-int Region::getNbOutputs() const
+int Region::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims Region::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims Region::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
     ASSERT(nbInputDims == 1);
     ASSERT(index == 0);
     return inputs[0];
 }
 
-int Region::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+int Region::enqueue(
+    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     const void* inputData = inputs[0];
     void* outputData = outputs[0];
@@ -257,11 +257,10 @@ int Region::enqueue(int batchSize, const void* const* inputs, void** outputs, vo
     }
     pluginStatus_t status = regionInference(
         stream, batchSize, C, H, W, num, coords, classes, hasSoftmaxTree, smTree.get(), inputData, outputData);
-    ASSERT(status == STATUS_SUCCESS);
     return status;
 }
 
-size_t Region::getSerializationSize() const
+size_t Region::getSerializationSize() const noexcept
 {
     // C, H, W, num, classes, coords, smTree !nullptr and other array members !nullptr, softmaxTree members
     size_t count = 6 * sizeof(int) + 8 * sizeof(bool);
@@ -301,7 +300,7 @@ size_t Region::getSerializationSize() const
     return count;
 }
 
-void Region::serialize(void* buffer) const
+void Region::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, C);
@@ -368,39 +367,41 @@ void Region::serialize(void* buffer) const
     ASSERT(d == a + getSerializationSize());
 }
 
-bool Region::supportsFormat(DataType type, PluginFormat format) const
+bool Region::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-int Region::initialize()
+int Region::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
-void Region::terminate() {}
+void Region::terminate() noexcept
+{
+}
 
-const char* Region::getPluginType() const
+const char* Region::getPluginType() const noexcept
 {
     return REGION_PLUGIN_NAME;
 }
 
-const char* Region::getPluginVersion() const
+const char* Region::getPluginVersion() const noexcept
 {
     return REGION_PLUGIN_VERSION;
 }
 
-size_t Region::getWorkspaceSize(int maxBatchSize) const
+size_t Region::getWorkspaceSize(int maxBatchSize) const noexcept
 {
     return 0;
 }
 
-void Region::destroy()
+void Region::destroy() noexcept
 {
     delete this;
 }
 
-IPluginV2Ext* Region::clone() const
+IPluginV2Ext* Region::clone() const noexcept
 {
     RegionParameters params{num, coords, classes, nullptr};
     Region* plugin = new Region(params, C, H, W);
@@ -411,31 +412,31 @@ IPluginV2Ext* Region::clone() const
 }
 
 // Set plugin namespace
-void Region::setPluginNamespace(const char* pluginNamespace)
+void Region::setPluginNamespace(const char* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* Region::getPluginNamespace() const
+const char* Region::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType Region::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+DataType Region::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     ASSERT(index == 0);
     return DataType::kFLOAT;
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool Region::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool Region::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool Region::canBroadcastInputAcrossBatch(int inputIndex) const
+bool Region::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 {
     return false;
 }
@@ -443,9 +444,9 @@ bool Region::canBroadcastInputAcrossBatch(int inputIndex) const
 // Configure the layer with input and output data types.
 void Region::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
+    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kNCHW);
+    ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     ASSERT(nbInputs == 1);
     ASSERT(nbOutputs == 1);
     C = inputDims[0].d[0];
@@ -460,10 +461,10 @@ void Region::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* ou
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void Region::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) {}
+void Region::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept {}
 
 // Detach the plugin object from its execution context.
-void Region::detachFromContext() {}
+void Region::detachFromContext() noexcept {}
 
 RegionPluginCreator::RegionPluginCreator()
 {
@@ -476,22 +477,22 @@ RegionPluginCreator::RegionPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* RegionPluginCreator::getPluginName() const
+const char* RegionPluginCreator::getPluginName() const noexcept
 {
     return REGION_PLUGIN_NAME;
 }
 
-const char* RegionPluginCreator::getPluginVersion() const
+const char* RegionPluginCreator::getPluginVersion() const noexcept
 {
     return REGION_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* RegionPluginCreator::getFieldNames()
+const PluginFieldCollection* RegionPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* RegionPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* RegionPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     for (int i = 0; i < fc->nbFields; ++i)
@@ -525,7 +526,7 @@ IPluginV2Ext* RegionPluginCreator::createPlugin(const char* name, const PluginFi
     return obj;
 }
 
-IPluginV2Ext* RegionPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2Ext* RegionPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call Region::destroy()

@@ -27,6 +27,7 @@ def register_logger_callback():
         else:
             get_trt_logger().min_severity = trt.Logger.VERBOSE
 
-    G_LOGGER.register_callback(set_trt_logging_level) # Will be registered when this runner is imported.
+    G_LOGGER.register_callback(set_trt_logging_level)  # Will be registered when this runner is imported.
+
 
 register_logger_callback()

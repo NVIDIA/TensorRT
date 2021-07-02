@@ -3,6 +3,11 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.10 (2021-05-20)
+### Added
+-  Added support for folding `Shape -> Slice` patterns even when the entire shape may not be known. 
+
+
 ## v0.3.9 (2021-04-20)
 ### Changed
 - `fold_constants()` will no longer store values for foldable tensors whose outputs are all foldable.

@@ -888,7 +888,7 @@ uint16 int2half_impl(T value)
     }
     else if (value)
     {
-        unsigned int m = value, exp = 24;
+        uint32_t m = value, exp = 24;
         for (; m < 0x400; m <<= 1, --exp)
             ;
         for (; m > 0x7FF; m >>= 1, ++exp)
@@ -1250,7 +1250,7 @@ T half2int_impl(uint16 value)
 #if HALF_ENABLE_CPP11_STATIC_ASSERT && HALF_ENABLE_CPP11_TYPE_TRAITS
     static_assert(std::is_integral<T>::value, "half to int conversion only supports builtin integer types");
 #endif
-    unsigned int e = value & 0x7FFF;
+    uint32_t e = value & 0x7FFF;
     if (e >= 0x7C00)
         return (value & 0x8000) ? std::numeric_limits<T>::min() : std::numeric_limits<T>::max();
     if (e < 0x3800)
@@ -1261,7 +1261,7 @@ T half2int_impl(uint16 value)
             return -T(value > 0x8000);
         return T();
     }
-    unsigned int m = (value & 0x3FF) | 0x400;
+    uint32_t m = (value & 0x3FF) | 0x400;
     e >>= 10;
     if (e < 25)
     {
@@ -1305,7 +1305,7 @@ T half2int_up(uint16 value)
 template <std::float_round_style R, bool E>
 uint16 round_half_impl(uint16 value)
 {
-    unsigned int e = value & 0x7FFF;
+    uint32_t e = value & 0x7FFF;
     uint16 result = value;
     if (e < 0x3C00)
     {
@@ -1320,7 +1320,7 @@ uint16 round_half_impl(uint16 value)
     else if (e < 0x6400)
     {
         e = 25 - (e >> 10);
-        unsigned int mask = (1 << e) - 1;
+        uint32_t mask = (1 << e) - 1;
         if (R == std::round_to_nearest)
             result += (1 << (e - 1)) - (~(result >> e) & E);
         else if (R == std::round_toward_infinity)
@@ -2166,13 +2166,13 @@ struct functions
     /// \return fractional part
     static half modf(half arg, half* iptr)
     {
-        unsigned int e = arg.data_ & 0x7FFF;
+        uint32_t e = arg.data_ & 0x7FFF;
         if (e >= 0x6400)
             return *iptr = arg, half(binary, arg.data_ & (0x8000U | -(e > 0x7C00)));
         if (e < 0x3C00)
             return iptr->data_ = arg.data_ & 0x8000, arg;
         e >>= 10;
-        unsigned int mask = (1 << (25 - e)) - 1, m = arg.data_ & mask;
+        uint32_t mask = (1 << (25 - e)) - 1, m = arg.data_ & mask;
         iptr->data_ = arg.data_ & ~mask;
         if (!m)
             return half(binary, arg.data_ & 0x8000);
@@ -2187,7 +2187,7 @@ struct functions
     /// \return scaled number
     static half scalbln(half arg, long exp)
     {
-        unsigned int m = arg.data_ & 0x7FFF;
+        uint32_t m = arg.data_ & 0x7FFF;
         if (m >= 0x7C00 || !m)
             return arg;
         for (; m < 0x400; m <<= 1, --exp)
@@ -2268,7 +2268,7 @@ struct functions
             uint16 bits = (exp < 0) << 15;
             if (exp)
             {
-                unsigned int m = std::abs(exp) << 6, e = 18;
+                uint32_t m = std::abs(exp) << 6, e = 18;
                 for (; m < 0x400; m <<= 1, --e)
                     ;
                 bits |= (e << 10) + m;
@@ -2329,7 +2329,7 @@ struct functions
     /// \retval false else
     static int fpclassify(half arg)
     {
-        unsigned int abs = arg.data_ & 0x7FFF;
+        uint32_t abs = arg.data_ & 0x7FFF;
         return abs
             ? ((abs > 0x3FF) ? ((abs >= 0x7C00) ? ((abs > 0x7C00) ? FP_NAN : FP_INFINITE) : FP_NORMAL) : FP_SUBNORMAL)
             : FP_ZERO;

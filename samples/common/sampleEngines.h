@@ -18,6 +18,7 @@
 #define TRT_SAMPLE_ENGINES_H
 
 #include <iostream>
+#include <vector>
 
 #include "NvCaffeParser.h"
 #include "NvInfer.h"
@@ -53,20 +54,13 @@ struct Parser
 Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& network, std::ostream& err);
 
 //!
-//! \brief Create an engine for a network defintion
+//! \brief Set up network and config
 //!
-//! \return Pointer to the engine created or nullptr if the creation failed
+//! \return boolean Return true if network and config were successfully set
 //!
-nvinfer1::ICudaEngine* networkToEngine(const BuildOptions& build, const SystemOptions& sys, nvinfer1::IBuilder& builder,
-    nvinfer1::INetworkDefinition& network, std::ostream& err);
-
-//!
-//! \brief Create an engine for a given model
-//!
-//! \return Pointer to the engine created or nullptr if the creation failed
-//!
-nvinfer1::ICudaEngine* modelToEngine(
-    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+bool setupNetworkAndConfig(const BuildOptions& build, const SystemOptions& sys, IBuilder& builder,
+    INetworkDefinition& network, IBuilderConfig& config, std::ostream& err,
+    std::vector<std::vector<char>>& sparseWeights);
 
 //!
 //! \brief Log refittable layers and weights of a refittable engine
@@ -92,8 +86,50 @@ bool saveEngine(const nvinfer1::ICudaEngine& engine, const std::string& fileName
 //!
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
-TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(
+std::tuple<TrtUniquePtr<nvinfer1::ICudaEngine>, TrtUniquePtr<INetworkDefinition>, Parser> getEngineNetworkParserTuple(
     const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+
+//!
+//! \brief Create an engine from model or serialized file, and optionally save engine
+//!
+//! \return Pointer to the engine created or nullptr if the creation failed
+//!
+inline TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(
+    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
+{
+    return std::get<0>(getEngineNetworkParserTuple(model, build, sys, err));
+}
+
+//!
+//! \brief Create a serialized network
+//!
+//! \return Pointer to a host memory for a serialized network
+//!
+IHostMemory* networkToSerialized(const BuildOptions& build, const SystemOptions& sys, IBuilder& builder,
+    INetworkDefinition& network, std::ostream& err);
+
+//!
+//! \brief Tranfer model to a serialized network
+//!
+//! \return Pointer to a host memory for a serialized network
+//!
+IHostMemory* modelToSerialized(
+    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+
+//!
+//! \brief Serialize network and save it into a file
+//!
+//! \return boolean Return true if the network was successfully serialized and saved
+//!
+bool serializeAndSave(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+
+bool timeRefit(const INetworkDefinition& network, nvinfer1::ICudaEngine& engine);
+
+//!
+//! \brief Set tensor scales from a calibration table
+//!
+void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, const std::vector<IOFormat>& inputFormats,
+        const std::vector<IOFormat>& outputFormats, const std::string& calibrationFile);
 
 } // namespace sample
 

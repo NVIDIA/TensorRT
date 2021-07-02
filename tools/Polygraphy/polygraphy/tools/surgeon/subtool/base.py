@@ -27,29 +27,24 @@ class BaseSurgeonSubtool(Tool):
     def __init__(self, name):
         super().__init__(name)
 
-
     def load_model(self, log_model=True):
         model = self.arg_groups[OnnxLoaderArgs].load_onnx()
         if log_model:
             G_LOGGER.info("Original Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model, mode="none")))
         return model
 
-
     # Since new graph outputs may be added, and we don't know the types,
     # we skip type checks in ONNX-GraphSurgeon.
     def export_graph(self, graph, do_type_check=False):
         return gs.export_onnx(graph, do_type_check=do_type_check)
-
 
     def save_model(self, model, log_model=True):
         model = self.arg_groups[OnnxSaveArgs].save_onnx(model)
         if log_model:
             G_LOGGER.info("New Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model, mode="none")))
 
-
     def run_impl(self, args):
         raise NotImplementedError("Subclasses must implement run_impl!")
-
 
     def run(self, args):
         def set_onnx_gs_logging_level(sev):

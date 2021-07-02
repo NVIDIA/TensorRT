@@ -18,5 +18,5 @@ System A to compare against:
 
 ```bash
 polygraphy run identity.onnx --onnxrt \
-    --load-results system_a_results.json
+    --load-outputs system_a_results.json
 ```

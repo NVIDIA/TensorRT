@@ -16,12 +16,19 @@
 import contextlib
 import os
 
-from polygraphy import mod, util
+from polygraphy import mod, util, config
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import (DataLoaderArgs, ModelArgs, OnnxLoaderArgs,
-                                   OnnxShapeInferenceArgs, TrtConfigArgs,
-                                   TrtEngineLoaderArgs, TrtEngineSaveArgs,
-                                   TrtNetworkLoaderArgs, TrtPluginLoaderArgs)
+from polygraphy.tools.args import (
+    DataLoaderArgs,
+    ModelArgs,
+    OnnxLoaderArgs,
+    OnnxShapeInferenceArgs,
+    TrtConfigArgs,
+    TrtEngineLoaderArgs,
+    TrtEngineSaveArgs,
+    TrtNetworkLoaderArgs,
+    TrtPluginLoaderArgs,
+)
 from polygraphy.tools.base import Tool
 from polygraphy.tools.debug.subtool.artifact_sorter import ArtifactSorterArgs
 
@@ -29,26 +36,24 @@ trt_backend = mod.lazy_import("polygraphy.backend.trt")
 
 
 class BaseCheckerSubtool(Tool):
-    def __init__(self, name, force_strict_types=None, prefer_artifacts=True):
+    def __init__(self, name, strict_types_default=None, prefer_artifacts=True):
         super().__init__(name)
         self.subscribe_args(ArtifactSorterArgs("polygraphy_debug.engine", prefer_artifacts=prefer_artifacts))
         self.subscribe_args(ModelArgs(model_required=True, inputs=None))
         self.subscribe_args(OnnxShapeInferenceArgs())
         self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
-        self.subscribe_args(DataLoaderArgs()) # For int8 calibration
-        self.subscribe_args(TrtConfigArgs(force_strict_types=force_strict_types))
+        self.subscribe_args(DataLoaderArgs())  # For int8 calibration
+        self.subscribe_args(TrtConfigArgs(strict_types_default=strict_types_default))
         self.subscribe_args(TrtPluginLoaderArgs())
         self.subscribe_args(TrtNetworkLoaderArgs())
         self.subscribe_args(TrtEngineLoaderArgs())
         self.subscribe_args(TrtEngineSaveArgs(output=False))
-
 
     def setup(self, args, network):
         """
         Initialize a subtool.
         """
         pass
-
 
     def stop(self, iteration, success):
         """
@@ -63,7 +68,6 @@ class BaseCheckerSubtool(Tool):
         """
         raise NotImplementedError("Must be implemented by child classes!")
 
-
     def process_network(self, network, prev_success):
         """
         Process the TensorRT network prior to engine building.
@@ -76,6 +80,11 @@ class BaseCheckerSubtool(Tool):
         """
         pass
 
+    def remaining(self):
+        """
+        Returns the estimated number of iterations remaining.
+        """
+        pass
 
     def run(self, args):
         G_LOGGER.start("Starting iterations")
@@ -94,17 +103,36 @@ class BaseCheckerSubtool(Tool):
             num_total = 0
 
             success = True
-            MAX_COUNT = 100000 # We don't want to loop forever. This many iterations ought to be enough for anybody.
+            MAX_COUNT = 100000  # We don't want to loop forever. This many iterations ought to be enough for anybody.
             for iteration in range(MAX_COUNT):
-                G_LOGGER.start("RUNNING | Iteration {:}".format(iteration + 1))
+                remaining = self.remaining()
+                G_LOGGER.start(
+                    "RUNNING | Iteration {:}{:}".format(
+                        iteration + 1,
+                        " | Approximately {:} iteration(s) remaining".format(remaining)
+                        if remaining is not None
+                        else "",
+                    )
+                )
 
                 self.process_network(network, success)
 
-                # Don't need to keep the engine around in memory - just serialize to disk and free it.
-                with self.arg_groups[TrtEngineLoaderArgs].build_engine((builder, network)) as engine:
-                    self.arg_groups[TrtEngineSaveArgs].save_engine(engine, self.arg_groups[ArtifactSorterArgs].iter_artifact)
-
-                success = self.arg_groups[ArtifactSorterArgs].sort_artifacts(iteration + 1)
+                try:
+                    engine = self.arg_groups[TrtEngineLoaderArgs].build_engine((builder, network))
+                except Exception as err:
+                    G_LOGGER.warning(
+                        "Failed to create network or engine, continuing to the next iteration.\n"
+                        "Note: Error was: {:}".format(err)
+                    )
+                    G_LOGGER.internal_error("Failed to create network or engine. See warning above for details.")
+                    success = False
+                else:
+                    # Don't need to keep the engine around in memory - just serialize to disk and free it.
+                    with engine:
+                        self.arg_groups[TrtEngineSaveArgs].save_engine(
+                            engine, self.arg_groups[ArtifactSorterArgs].iter_artifact
+                        )
+                    success = self.arg_groups[ArtifactSorterArgs].sort_artifacts(iteration + 1)
 
                 num_total += 1
                 if success:
@@ -113,8 +141,13 @@ class BaseCheckerSubtool(Tool):
                 if self.stop(iteration, success):
                     break
             else:
-                G_LOGGER.warning("Maximum number of iterations reached: {:}.\n"
-                                 "Iteration has been halted to prevent an infinite loop!".format(MAX_COUNT))
+                G_LOGGER.warning(
+                    "Maximum number of iterations reached: {:}.\n"
+                    "Iteration has been halted to prevent an infinite loop!".format(MAX_COUNT)
+                )
 
-        G_LOGGER.finish("Finished {:} iteration(s) | Passed: {:}/{:} | Pass Rate: {:}%".format(
-                            iteration + 1, num_passed, num_total, float(num_passed) * 100 / float(num_total)))
+        G_LOGGER.finish(
+            "Finished {:} iteration(s) | Passed: {:}/{:} | Pass Rate: {:}%".format(
+                iteration + 1, num_passed, num_total, float(num_passed) * 100 / float(num_total)
+            )
+        )

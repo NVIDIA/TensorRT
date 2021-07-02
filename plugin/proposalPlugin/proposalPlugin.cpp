@@ -267,7 +267,7 @@ Dims ProposalPlugin::getOutputDimensions(int index, const Dims* inputs, int nbIn
     int channels = mMaxBoxNum;
     int height = 4;
     int width = 1;
-    return DimsCHW(channels, height, width);
+    return Dims3(channels, height, width);
 }
 
 DimsExprs ProposalDynamicPlugin::getOutputDimensions(
@@ -310,7 +310,7 @@ size_t ProposalDynamicPlugin::getWorkspaceSize(
 }
 
 int ProposalPlugin::enqueue(
-    int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) noexcept
+    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     int status = -1;
     // Our plugin outputs only one tensor
@@ -409,7 +409,7 @@ void ProposalDynamicPlugin::serialize(void* buffer) const noexcept
 bool ProposalPlugin::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
     // This plugin only supports ordinary floats, and NCHW input format
-    if (type == DataType::kFLOAT && format == PluginFormat::kNCHW)
+    if (type == DataType::kFLOAT && format == PluginFormat::kLINEAR)
     {
         return true;
     }

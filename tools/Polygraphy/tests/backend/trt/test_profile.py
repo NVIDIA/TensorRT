@@ -38,7 +38,6 @@ class TestProfile(object):
         assert shape_tuple.opt == opt
         assert shape_tuple.max == max
 
-
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_fill_defaults_does_not_overwrite(self, dynamic_identity_network):
         _, network, _ = dynamic_identity_network
@@ -48,7 +47,6 @@ class TestProfile(object):
         assert profile["X"].min == (1, 1, 1, 1)
         assert profile["X"].opt == (1, 1, 2, 2)
         assert profile["X"].max == (1, 1, 3, 3)
-
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_to_trt(self, dynamic_identity_network):

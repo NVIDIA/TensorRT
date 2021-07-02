@@ -1,8 +1,5 @@
 # Int8 Calibration In TensorRT
 
-
-## Introduction
-
 In [API example 04](../../../api/04_int8_calibration_in_tensorrt/), we saw how we can leverage
 Polygraphy's included calibrator to easily run int8 calibration with TensorRT.
 

@@ -40,18 +40,19 @@ class ModelData(object):
 
 def build_engine(model_file):
     # For more information on TRT basics, refer to the introductory samples.
-    with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.UffParser() as parser:
+    with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.UffParser() as parser, trt.Runtime(TRT_LOGGER) as runtime:
         config.max_workspace_size = common.GiB(1)
         # Parse the Uff Network
         parser.register_input(ModelData.INPUT_NAME, ModelData.INPUT_SHAPE)
         parser.register_output(ModelData.OUTPUT_NAME)
         parser.parse(model_file, network)
         # Build and return an engine.
-        return builder.build_engine(network, config)
+        plan = builder.build_serialized_network(network, config)
+        return runtime.deserialize_cuda_engine(plan)
 
 # Loads a test case into the provided pagelocked_buffer.
 def load_normalized_test_case(data_paths, pagelocked_buffer, case_num=randint(0, 9)):
-    [test_case_path] = common.locate_files(data_paths, [str(case_num) + ".pgm"], err_msg="MNIST image data not found. Please follow the README instructions.")
+    [test_case_path] = common.locate_files(data_paths, [str(case_num) + ".pgm"], err_msg="Please follow the README in the mnist data directory (usually in `/usr/src/tensorrt/data/mnist`) to download the MNIST dataset")
     # Flatten the image into a 1D array, normalize, and copy to pagelocked memory.
     img = np.array(Image.open(test_case_path)).ravel()
     np.copyto(pagelocked_buffer, 1.0 - img / 255.0)

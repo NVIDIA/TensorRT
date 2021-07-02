@@ -29,12 +29,10 @@ class TestDeviceView(object):
             assert v.dtype == arr.dtype
             assert v.nbytes == arr.nbytes
 
-
     def test_with_int_ptr(self):
         ptr = 74892
-        v = DeviceView(ptr=ptr, shape=(1, ), dtype=np.float32)
+        v = DeviceView(ptr=ptr, shape=(1,), dtype=np.float32)
         assert v.ptr == ptr
-
 
     def test_copy_to(self):
         with DeviceArray((2, 2), dtype=np.float32) as arr:
@@ -45,7 +43,6 @@ class TestDeviceView(object):
             v.copy_to(host_buf)
 
             assert np.all(host_buf == 4)
-
 
     def test_numpy(self):
         with DeviceArray((2, 2), dtype=np.float32) as arr:
@@ -63,10 +60,11 @@ class ResizeTestCase(object):
         self.new = new
         self.new_bytes = new_size * np.float32().itemsize
 
+
 RESIZES = [
-    ResizeTestCase(tuple(), 1, (1, 1, 1), 1), # Reshape (no-op)
-    ResizeTestCase((2, 2, 2), 8, (1, 1), 8), # Resize to smaller buffer
-    ResizeTestCase((2, 2, 2), 8, (9, 9), 81), # Resize to larger buffer
+    ResizeTestCase(tuple(), 1, (1, 1, 1), 1),  # Reshape (no-op)
+    ResizeTestCase((2, 2, 2), 8, (1, 1), 8),  # Resize to smaller buffer
+    ResizeTestCase((2, 2, 2), 8, (9, 9), 81),  # Resize to larger buffer
 ]
 
 
@@ -80,15 +78,13 @@ class TestDeviceBuffer(object):
             assert buf.allocated_nbytes == shapes.new_bytes
             assert buf.shape == shapes.new
 
-
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Breaks TRT 6 tests for some reason")
     def test_large_allocation(self):
         dtype = np.byte
         # See if we can alloc 3GB (bigger than value of signed int)
-        shape = (3*1024*1024*1024,)
+        shape = (3 * 1024 * 1024 * 1024,)
         with DeviceArray(shape=shape, dtype=dtype) as buf:
             assert buf.allocated_nbytes == util.volume(shape) * np.dtype(dtype).itemsize
-
 
     def test_device_buffer_memcpy_async(self):
         arr = np.ones((1, 384), dtype=np.int32)
@@ -103,7 +99,6 @@ class TestDeviceBuffer(object):
 
             assert np.all(new_arr == arr)
 
-
     def test_device_buffer_memcpy_sync(self):
         arr = np.ones((1, 384), dtype=np.int32)
 
@@ -115,7 +110,6 @@ class TestDeviceBuffer(object):
 
             assert np.all(new_arr == arr)
 
-
     def test_device_buffer_free(self):
         buf = DeviceArray(shape=(64, 64), dtype=np.float32)
         assert buf.allocated_nbytes == 64 * 64 * np.float32().itemsize
@@ -123,7 +117,6 @@ class TestDeviceBuffer(object):
         buf.free()
         assert buf.allocated_nbytes == 0
         assert buf.shape == tuple()
-
 
     def test_empty_tensor_to_host(self):
         with DeviceArray(shape=(5, 2, 0, 3, 0), dtype=np.float32) as buf:

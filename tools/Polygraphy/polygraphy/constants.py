@@ -20,11 +20,12 @@ from polygraphy.config import AUTOINSTALL_DEPS, INTERNAL_CORRECTNESS_CHECKS
 DEFAULT_SHAPE_VALUE = 1
 DEFAULT_SEED = 1
 
-TAB = " " * 4 # The one true tab
+TAB = " " * 4  # The one true tab
 
 MARK_ALL = "mark-all"
 """
 Special value for ModifyOutputs loaders indicating that all values should be marked as outputs
 """
 
-TYPE_MARKER = "polygraphy_serialized_json_type"
+LEGACY_TYPE_MARKER = "polygraphy_serialized_json_type"
+TYPE_MARKER = "polygraphy_class"

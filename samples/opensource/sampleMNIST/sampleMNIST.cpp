@@ -31,12 +31,13 @@
 #include "NvInfer.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cuda_runtime_api.h>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+
+using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_mnist";
 
@@ -47,9 +48,6 @@ const std::string gSampleName = "TensorRT.sample_mnist";
 //!
 class SampleMNIST
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleMNIST(const samplesCommon::CaffeSampleParams& params)
         : mParams(params)
@@ -117,7 +115,7 @@ bool SampleMNIST::build()
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -155,15 +153,36 @@ bool SampleMNIST::build()
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
-
-    if (!mEngine)
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
         return false;
+    }
+    config->setProfileStream(*profileStream);
 
-    assert(network->getNbInputs() == 1);
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+    if (!mEngine)
+    {
+        return false;
+    }
+
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 3);
 
     return true;
 }
@@ -277,7 +296,7 @@ bool SampleMNIST::constructNetwork(
         return false;
     }
     network->getLayer(0)->setInput(0, *meanSub->getOutput(0));
-    samplesCommon::setAllTensorScales(network.get(), 127.0f, 127.0f);
+    samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
 
     return true;
 }
@@ -305,7 +324,7 @@ bool SampleMNIST::infer()
 
     // Read the input data into the managed buffers
     // There should be just 1 input tensor
-    assert(mParams.inputTensorNames.size() == 1);
+    ASSERT(mParams.inputTensorNames.size() == 1);
     if (!processInput(buffers, mParams.inputTensorNames[0], digit))
     {
         return false;
@@ -333,7 +352,7 @@ bool SampleMNIST::infer()
 
     // Check and print the output of the inference
     // There should be just one output tensor
-    assert(mParams.outputTensorNames.size() == 1);
+    ASSERT(mParams.outputTensorNames.size() == 1);
     bool outputCorrect = verifyOutput(buffers, mParams.outputTensorNames[0], digit);
 
     return outputCorrect;

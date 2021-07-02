@@ -14,14 +14,22 @@
 # limitations under the License.
 #
 
+import glob
+import os
 import tempfile
 
 from polygraphy.backend.onnx import onnx_from_path
-from polygraphy.tools.args import (DataLoaderArgs, ModelArgs, OnnxLoaderArgs,
-                                   OnnxSaveArgs, OnnxShapeInferenceArgs)
-from tests.helper import check_file_non_empty
+from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
+from polygraphy.tools.script import Script
+from tests.helper import is_file_empty, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
+
+
+def _check_ext_weights_model(model):
+    assert len(model.graph.node) == 3
+    for init in model.graph.initializer:
+        assert init
 
 
 class TestOnnxLoaderArgs(object):
@@ -33,14 +41,42 @@ class TestOnnxLoaderArgs(object):
         assert len(model.graph.output) == 1
         assert model.graph.output[0].name == "identity_out_0"
 
-
     def test_external_data(self):
         arg_group = ArgGroupTestHelper(OnnxLoaderArgs(), deps=[ModelArgs()])
         model = ONNX_MODELS["ext_weights"]
-        arg_group.parse_args([model.path, "--load-external-data", model.ext_data])
+        arg_group.parse_args([model.path, "--external-data-dir", model.ext_data])
         model = arg_group.load_onnx()
+        _check_ext_weights_model(model)
 
-        assert len(model.graph.node) == 3
+    def test_shape_inference(self):
+        # When using shape inference, we should load directly from the path
+        arg_group = ArgGroupTestHelper(OnnxLoaderArgs(), deps=[ModelArgs(), OnnxShapeInferenceArgs()])
+        model = ONNX_MODELS["identity"]
+        arg_group.parse_args([model.path, "--shape-inference"])
+
+        assert arg_group.should_use_onnx_loader()
+
+        script = Script()
+        arg_group.add_onnx_loader(script)
+
+        expected_loader = "InferShapes({:})".format(repr(model.path))
+        assert expected_loader in str(script)
+
+    def test_shape_inference_ext_data(self):
+        arg_group = ArgGroupTestHelper(OnnxLoaderArgs(), deps=[ModelArgs(), OnnxShapeInferenceArgs()])
+        model = ONNX_MODELS["ext_weights"]
+        arg_group.parse_args([model.path, "--external-data-dir", model.ext_data, "--shape-inference"])
+
+        assert arg_group.should_use_onnx_loader()
+
+        script = Script()
+        arg_group.add_onnx_loader(script)
+
+        expected_loader = "InferShapes({:}, external_data_dir={:})".format(repr(model.path), repr(model.ext_data))
+        assert expected_loader in str(script)
+
+        model = arg_group.load_onnx()
+        _check_ext_weights_model(model)
 
 
 class TestOnnxSaveArgs(object):
@@ -48,16 +84,52 @@ class TestOnnxSaveArgs(object):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
         arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
         with tempfile.NamedTemporaryFile() as path, tempfile.NamedTemporaryFile() as data:
-            arg_group.parse_args(["-o", path.name, "--save-external-data", data.name])
+            arg_group.parse_args(
+                ["-o", path.name, "--save-external-data", data.name, "--external-data-size-threshold=0"]
+            )
             arg_group.save_onnx(model)
 
-            check_file_non_empty(path.name)
-            check_file_non_empty(data.name)
+            assert is_file_non_empty(path.name)
+            assert is_file_non_empty(data.name)
+
+    def test_size_threshold(self):
+        model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
+        with tempfile.NamedTemporaryFile() as path, tempfile.NamedTemporaryFile() as data:
+            arg_group.parse_args(
+                ["-o", path.name, "--save-external-data", data.name, "--external-data-size-threshold=1024"]
+            )
+            arg_group.save_onnx(model)
+
+            assert is_file_non_empty(path.name)
+            assert is_file_empty(data.name)
+
+    def test_no_all_tensors_to_one_file(self):
+        model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
+        with tempfile.TemporaryDirectory() as outdir:
+            path = os.path.join(outdir, "model.onnx")
+            arg_group.parse_args(
+                [
+                    "-o",
+                    path,
+                    "--save-external-data",
+                    "--external-data-size-threshold=0",
+                    "--no-save-all-tensors-to-one-file",
+                ]
+            )
+            arg_group.save_onnx(model)
+
+            assert is_file_non_empty(path)
+            outfiles = glob.glob(os.path.join(outdir, "*"))
+            assert len(outfiles) == 4
 
 
 class TestOnnxShapeInferenceArgs(object):
     def test_shape_inference_disabled_on_fallback(self):
-        arg_group = ArgGroupTestHelper(OnnxShapeInferenceArgs(default=True, enable_force_fallback=True), deps=[DataLoaderArgs()])
+        arg_group = ArgGroupTestHelper(
+            OnnxShapeInferenceArgs(default=True, enable_force_fallback=True), deps=[DataLoaderArgs()]
+        )
         arg_group.parse_args([])
         assert arg_group.do_shape_inference
 

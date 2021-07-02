@@ -18,401 +18,284 @@
 
 namespace tensorrt
 {
-    namespace IPluginDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin class for user-implemented layers.
-            Plugins are a mechanism for applications to implement custom layers. Each plugin is owned by the application, and its lifetime must span any use of it by TensorRT.
+namespace IPluginV2Doc
+{
+constexpr const char* descr = R"trtdoc(
+    Plugin class for user-implemented layers.
 
-            :ivar num_outputs: :class:`int` The number of outputs from the layer. This is used by the implementations of :class:`INetworkDefinition` and :class:`Builder` . In particular, it is called prior to any call to :func:`initialize` .
-            :ivar serialization_size: :class:`int` The size of the serialization buffer required.
-        )trtdoc";
+    Plugins are a mechanism for applications to implement custom layers. When
+    combined with IPluginCreator it provides a mechanism to register plugins and
+    look up the Plugin Registry during de-serialization.
 
-        constexpr const char* get_output_shape = R"trtdoc(
-            Get the dimension of an output tensor.
 
-            :arg index: The index of the output tensor.
-            :arg input_shapes: The shapes of the input tensors.
+    :ivar num_outputs: :class:`int` The number of outputs from the layer. This is used by the implementations of :class:`INetworkDefinition` and :class:`Builder` . In particular, it is called prior to any call to :func:`initialize` .
+    :ivar tensorrt_version: :class:`int` The API version with which this plugin was built.
+    :ivar plugin_type: :class:`str` The plugin type. Should match the plugin name returned by the corresponding plugin creator
+    :ivar plugin_version: :class:`str` The plugin version. Should match the plugin version returned by the corresponding plugin creator.
+    :ivar plugin_namespace: :class:`str` The namespace that this plugin object belongs to. Ideally, all plugin objects from the same plugin library should have the same namespace.
+    :ivar serialization_size: :class:`int` The size of the serialization buffer required.
+)trtdoc";
 
-             This function is called by the implementations of :class:`INetworkDefinition` and :class:`Builder` . In particular, it is called prior to any call to :func:`initialize` .
-        )trtdoc";
+constexpr const char* get_output_shape = R"trtdoc(
+    Get the dimension of an output tensor.
 
-        constexpr const char* configure = R"trtdoc(
-            Configure the layer.
+    :arg index: The index of the output tensor.
+    :arg input_shapes: The shapes of the input tensors.
 
-            This function is called by the :class:`Builder` prior to :func:`initialize` . It provides an opportunity for the layer to make algorithm choices on the basis of its weights, dimensions, and maximum batch size. The type is assumed to be FP32 and format NCHW.
+    This function is called by the implementations of :class:`INetworkDefinition` and :class:`Builder` . In particular, it is called prior to any call to :func:`initialize` .
+)trtdoc";
 
-            :arg input_shapes: The shapes of the input tensors.
-            :arg output_shapes: The shapes of the output tensors.
-            :arg max_batch_size: The maximum batch size.
+constexpr const char* supports_format = R"trtdoc(
+    Check format support.
 
-             The shapes passed here do not include the outermost batch size (i.e. for 2D image networks, they will be 3D CHW dimensions).
+    This function is called by the implementations of :class:`INetworkDefinition` , :class:`Builder` , and :class:`ICudaEngine` . In particular, it is called when creating an engine and when deserializing an engine.
 
-             This method is not called for :class:`IPluginExt` classes; :func:`configure_with_format` is called instead.
-        )trtdoc";
+    :arg dtype: Data type requested.
+    :arg format: TensorFormat requested.
 
-        constexpr const char* initialize = R"trtdoc(
-            Initialize the layer for execution. This is called when the engine is created.
+    :returns: True if the plugin supports the type-format combination.
+)trtdoc";
 
-            :returns: 0 for success, else non-zero (which will cause engine termination).
-        )trtdoc";
+constexpr const char* configure_with_format = R"trtdoc(
+    Configure the layer.
 
-        constexpr const char* terminate = R"trtdoc(
-            Release resources acquired during plugin layer initialization. This is called when the engine is destroyed.
-        )trtdoc";
+    This function is called by the :class:`Builder` prior to :func:`initialize` . It provides an opportunity for the layer to make algorithm choices on the basis of its weights, dimensions, and maximum batch size.
 
-        constexpr const char* get_workspace_size = R"trtdoc(
-            Find the workspace size required by the layer.
+    The dimensions passed here do not include the outermost batch size (i.e. for 2D image networks, they will be 3D CHW dimensions).
 
-            This function is called during engine startup, after :func:`initialize` . The workspace size returned should be sufficient for any batch size up to the maximum.
+    :arg input_shapes: The shapes of the input tensors.
+    :arg output_shapes: The shapes of the output tensors.
+    :arg dtype: The data type selected for the engine.
+    :arg format: The format selected for the engine.
+    :arg max_batch_size: The maximum batch size.
+)trtdoc";
 
-            :arg max_batch_size: :class:`int` The maximum possible batch size during inference.
+constexpr const char* initialize = R"trtdoc(
+    Initialize the layer for execution. This is called when the engine is created.
 
-            :returns: The workspace size.
-        )trtdoc";
+    :returns: 0 for success, else non-zero (which will cause engine termination).
+)trtdoc";
 
-        constexpr const char* execute_async = R"trtdoc(
-            Execute the layer asynchronously.
+constexpr const char* terminate = R"trtdoc(
+    Release resources acquired during plugin layer initialization. This is called when the engine is destroyed.
+)trtdoc";
 
-            :arg batch_size: The number of inputs in the batch.
-            :arg inputs: The memory for the input tensors.
-            :arg outputs: The memory for the output tensors.
-            :arg workspace: Workspace for execution.
-            :arg stream_handle: The stream in which to execute the kernels.
+constexpr const char* get_workspace_size = R"trtdoc(
+    Find the workspace size required by the layer.
 
-            :returns: 0 for success, else non-zero (which will cause engine termination).
-       )trtdoc";
+    This function is called during engine startup, after :func:`initialize` . The workspace size returned should be sufficient for any batch size up to the maximum.
 
-        constexpr const char* serialize = R"trtdoc(
-            Serialize the layer.
+    :arg max_batch_size: :class:`int` The maximum possible batch size during inference.
 
-            :arg buffer: A buffer of size at least :attr:`serialization_size` .
-        )trtdoc";
+    :returns: The workspace size.
+)trtdoc";
 
-    } /* IPluginDoc */
+constexpr const char* execute_async = R"trtdoc(
+    Execute the layer asynchronously.
 
-    namespace IPluginExtDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin class for user-implemented layers.
+    :arg batch_size: The number of inputs in the batch.
+    :arg inputs: The memory for the input tensors.
+    :arg outputs: The memory for the output tensors.
+    :arg workspace: Workspace for execution.
+    :arg stream_handle: The stream in which to execute the kernels.
 
-            Plugins are a mechanism for applications to implement custom layers. Each plugin is owned by the application, and its lifetime must span any use of it by TensorRT.
+    :returns: 0 for success, else non-zero (which will cause engine termination).
+)trtdoc";
 
-            :ivar tensorrt_version: :class:`int` The API version with which this plugin was built.
-        )trtdoc";
+constexpr const char* serialize = R"trtdoc(
+    Serialize the plugin.
+)trtdoc";
 
-        constexpr const char* supports_format = R"trtdoc(
-            Check format support.
+constexpr const char* destroy = R"trtdoc(
+    Destroy the plugin object. This will be called when the :class:`INetworkDefinition` , :class:`Builder` or :class:`ICudaEngine` is destroyed.
+)trtdoc";
 
-            This function is called by the implementations of :class:`INetworkDefinition` , :class:`Builder` , and :class:`ICudaEngine` . In particular, it is called when creating an engine and when deserializing an engine.
+constexpr const char* clone = R"trtdoc(
+    Clone the plugin object. This copies over internal plugin parameters and returns a new plugin object with these parameters.
+)trtdoc";
+} // namespace IPluginV2Doc
 
-            :arg dtype: Data type requested.
-            :arg format: TensorFormat requested.
+namespace IPluginV2ExtDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Plugin class for user-implemented layers.
+
+    Plugins are a mechanism for applications to implement custom layers. This interface provides additional capabilities to the IPluginV2 interface by supporting different output data types.
+
+    :ivar tensorrt_version: :class:`int` The API version with which this plugin was built.
+)trtdoc";
+
+constexpr const char* get_output_data_type = R"trtdoc(
+
+    Return the DataType of the plugin output at the requested index.
+    The default behavior should be to return the type of the first input, or DataType::kFLOAT if the layer has no inputs.
+    The returned data type must have a format that is supported by the plugin.
 
-            :returns: True if the plugin supports the type-format combination.
-        )trtdoc";
+    :arg index: Index of the output for which Data type is requested.
+    :arg input_types: Data types of the inputs.
 
-        constexpr const char* configure_with_format = R"trtdoc(
-            Configure the layer.
+    :returns: DataType of the plugin output at the requested index.
+)trtdoc";
 
-            This function is called by the :class:`Builder` prior to :func:`initialize` . It provides an opportunity for the layer to make algorithm choices on the basis of its weights, dimensions, and maximum batch size.
+constexpr const char* configure_plugin = R"trtdoc(
+    Configure the layer.
+
+    This function is called by the :class:`Builder` prior to :func:`initialize` . It provides an opportunity for the layer to make algorithm choices on the basis of its weights, dimensions, and maximum batch size.
 
-            The dimensions passed here do not include the outermost batch size (i.e. for 2D image networks, they will be 3D CHW dimensions).
+    The dimensions passed here do not include the outermost batch size (i.e. for 2D image networks, they will be 3D CHW dimensions).
+
+    :arg input_shapes: The shapes of the input tensors.
+    :arg output_shapes: The shapes of the output tensors.
+    :arg input_types: The data types of the input tensors.
+    :arg output_types: The data types of the output tensors.
+    :arg input_is_broadcasted: Whether an input is broadcasted across the batch.
+    :arg output_is_broadcasted: Whether an output is broadcasted across the batch.
+    :arg format: The format selected for floating-point inputs and outputs of the engine.
+    :arg max_batch_size: The maximum batch size.
+)trtdoc";
 
-            :arg input_shapes: The shapes of the input tensors.
-            :arg output_shapes: The shapes of the output tensors.
-            :arg dtype: The data type selected for the engine.
-            :arg format: The format selected for the engine.
-            :arg max_batch_size: The maximum batch size.
-        )trtdoc";
+constexpr const char* clone = R"trtdoc(
+    Clone the plugin object. This copies over internal plugin parameters as well and returns a new plugin object with these parameters.
 
-    } /* IPluginExtDoc */
+    If the source plugin is pre-configured with configure_plugin(), the returned object should also be pre-configured. The returned object should allow attach_to_context() with a new execution context.
+    Cloned plugin objects can share the same per-engine immutable resource (e.g. weights) with the source object (e.g. via ref-counting) to avoid duplication.
+)trtdoc";
 
-    namespace IPluginV2Doc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin class for user-implemented layers.
+constexpr const char* attach_to_context = R"trtdoc(
+    Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 
-            Plugins are a mechanism for applications to implement custom layers. When
-            combined with IPluginCreator it provides a mechanism to register plugins and
-            look up the Plugin Registry during de-serialization.
+    :arg cudnn The cudnn context handle of the execution context
+    :arg cublas The cublas context handle of the execution context
+    :arg allocator The allocator used by the execution context
 
+    This function is called automatically for each plugin when a new execution context is created. If the plugin needs per-context resource, it can be allocated here. The plugin can also get context-owned CUDNN and CUBLAS context here.
+)trtdoc";
 
-            :ivar num_outputs: :class:`int` The number of outputs from the layer. This is used by the implementations of :class:`INetworkDefinition` and :class:`Builder` . In particular, it is called prior to any call to :func:`initialize` .
-            :ivar tensorrt_version: :class:`int` The API version with which this plugin was built.
-            :ivar plugin_type: :class:`str` The plugin type. Should match the plugin name returned by the corresponding plugin creator
-            :ivar plugin_version: :class:`str` The plugin version. Should match the plugin version returned by the corresponding plugin creator.
-            :ivar plugin_namespace: :class:`str` The namespace that this plugin object belongs to. Ideally, all plugin objects from the same plugin library should have the same namespace.
-            :ivar serialization_size: :class:`int` The size of the serialization buffer required.
-        )trtdoc";
+constexpr const char* detach_from_context = R"trtdoc(
+    Detach the plugin object from its execution context.
 
-        constexpr const char* get_output_shape = R"trtdoc(
-            Get the dimension of an output tensor.
+    This function is called automatically for each plugin when a execution context is destroyed. If the plugin owns per-context resource, it can be released here.
+)trtdoc";
+} // namespace IPluginV2ExtDoc
 
-            :arg index: The index of the output tensor.
-            :arg input_shapes: The shapes of the input tensors.
+namespace PluginFieldTypeDoc
+{
+constexpr const char* descr = R"trtdoc(
+    The possible field types for custom layer.
+)trtdoc";
+} // namespace PluginFieldTypeDoc
 
-             This function is called by the implementations of :class:`INetworkDefinition` and :class:`Builder` . In particular, it is called prior to any call to :func:`initialize` .
-        )trtdoc";
+namespace PluginFieldDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Contains plugin attribute field names and associated data.
+    This information can be parsed to decode necessary plugin metadata
 
-        constexpr const char* supports_format = R"trtdoc(
-            Check format support.
+    :ivar name: :class:`str` Plugin field attribute name.
+    :ivar data: :class:`buffer` Plugin field attribute data.
+    :ivar type: :class:`PluginFieldType` Plugin field attribute type.
+    :ivar size: :class:`int` Number of data entries in the Plugin attribute.
+)trtdoc";
+} // namespace PluginFieldDoc
 
-            This function is called by the implementations of :class:`INetworkDefinition` , :class:`Builder` , and :class:`ICudaEngine` . In particular, it is called when creating an engine and when deserializing an engine.
+namespace PluginFieldCollectionDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Contains plugin attribute field names and associated data.
+    This information can be parsed to decode necessary plugin metadata
 
-            :arg dtype: Data type requested.
-            :arg format: TensorFormat requested.
+    :ivar num_fields: :class:`int`  Number of :class:`PluginField` entries.
+    :ivar fields: :class:`list` PluginField entries.
+)trtdoc";
+} // namespace PluginFieldCollectionDoc
 
-            :returns: True if the plugin supports the type-format combination.
-        )trtdoc";
+namespace IPluginCreatorDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Plugin creator class for user implemented layers
 
-        constexpr const char* configure_with_format = R"trtdoc(
-            Configure the layer.
+    :ivar tensorrt_version: :class:`int`  Number of :class:`PluginField` entries.
+    :ivar name: :class:`str` Plugin name.
+    :ivar plugin_version: :class:`str` Plugin version.
+    :ivar field_names: :class:`list` List of fields that needs to be passed to :func:`create_plugin` .
+    :ivar plugin_namespace: :class:`str` The namespace of the plugin creator based on the plugin library it belongs to. This can be set while registering the plugin creator.
+)trtdoc";
 
-            This function is called by the :class:`Builder` prior to :func:`initialize` . It provides an opportunity for the layer to make algorithm choices on the basis of its weights, dimensions, and maximum batch size.
+constexpr const char* create_plugin = R"trtdoc(
+    Creates a new plugin.
 
-            The dimensions passed here do not include the outermost batch size (i.e. for 2D image networks, they will be 3D CHW dimensions).
+    :arg name: The name of the plugin.
+    :arg field_collection: The :class:`PluginFieldCollection` for this plugin.
 
-            :arg input_shapes: The shapes of the input tensors.
-            :arg output_shapes: The shapes of the output tensors.
-            :arg dtype: The data type selected for the engine.
-            :arg format: The format selected for the engine.
-            :arg max_batch_size: The maximum batch size.
-        )trtdoc";
+    :returns: :class:`IPluginV2` or :class:`None` on failure.
+)trtdoc";
 
-        constexpr const char* initialize = R"trtdoc(
-            Initialize the layer for execution. This is called when the engine is created.
+constexpr const char* deserialize_plugin = R"trtdoc(
+    Creates a plugin object from a serialized plugin.
 
-            :returns: 0 for success, else non-zero (which will cause engine termination).
-        )trtdoc";
+    :arg name: Name of the plugin.
+    :arg serialized_plugin: A buffer containing a serialized plugin.
 
-        constexpr const char* terminate = R"trtdoc(
-            Release resources acquired during plugin layer initialization. This is called when the engine is destroyed.
-        )trtdoc";
+    :returns: A new :class:`IPluginV2`
+)trtdoc";
+} // namespace IPluginCreatorDoc
 
-        constexpr const char* get_workspace_size = R"trtdoc(
-            Find the workspace size required by the layer.
+namespace IPluginRegistryDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Registers plugin creators.
 
-            This function is called during engine startup, after :func:`initialize` . The workspace size returned should be sufficient for any batch size up to the maximum.
+    :ivar plugin_creator_list: All the registered plugin creators.
+    :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
+)trtdoc";
 
-            :arg max_batch_size: :class:`int` The maximum possible batch size during inference.
+constexpr const char* register_creator = R"trtdoc(
+    Register a plugin creator.
 
-            :returns: The workspace size.
-        )trtdoc";
+    :arg creator: The IPluginCreator instance.
+    :arg plugin_namespace: The namespace of the plugin creator.
 
-        constexpr const char* execute_async = R"trtdoc(
-            Execute the layer asynchronously.
+    :returns: False if one with the same type is already registered.
+)trtdoc";
 
-            :arg batch_size: The number of inputs in the batch.
-            :arg inputs: The memory for the input tensors.
-            :arg outputs: The memory for the output tensors.
-            :arg workspace: Workspace for execution.
-            :arg stream_handle: The stream in which to execute the kernels.
+constexpr const char* deregister_creator = R"trtdoc(
+    Deregister a previously registered plugin creator.
 
-            :returns: 0 for success, else non-zero (which will cause engine termination).
-       )trtdoc";
+    Since there may be a desire to limit the number of plugins,
+    this function provides a mechanism for removing plugin creators registered in TensorRT.
+    The plugin creator that is specified by ``creator`` is removed from TensorRT and no longer tracked.
 
-        constexpr const char* serialize = R"trtdoc(
-            Serialize the plugin.
-        )trtdoc";
+    :arg creator: The IPluginCreator instance.
 
-        constexpr const char* destroy = R"trtdoc(
-            Destroy the plugin object. This will be called when the :class:`INetworkDefinition` , :class:`Builder` or :class:`ICudaEngine` is destroyed.
-        )trtdoc";
+    :returns: ``True`` if the plugin creator was deregistered, ``False`` if it was not found in the registry
+            or otherwise could not be deregistered.
+)trtdoc";
 
-        constexpr const char* clone = R"trtdoc(
-            Clone the plugin object. This copies over internal plugin parameters and returns a new plugin object with these parameters.
-        )trtdoc";
-    } /* IPluginV2Doc */
+constexpr const char* get_plugin_creator = R"trtdoc(
+    Return plugin creator based on type and version
 
-    namespace IPluginV2ExtDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin class for user-implemented layers.
+    :arg type: The type of the plugin.
+    :arg version: The version of the plugin.
+    :arg plugin_namespace: The namespace of the plugin.
 
-            Plugins are a mechanism for applications to implement custom layers. This interface provides additional capabilities to the IPluginV2 interface by supporting different output data types.
+    :returns: An :class:`IPluginCreator` .
+)trtdoc";
+} // namespace IPluginRegistryDoc
 
-            :ivar tensorrt_version: :class:`int` The API version with which this plugin was built.
-        )trtdoc";
+namespace FreeFunctionsDoc
+{
+constexpr const char* get_plugin_registry = R"trtdoc(
+    Return the plugin registry
+)trtdoc";
 
-        constexpr const char* get_output_data_type = R"trtdoc(
+constexpr const char* init_libnvinfer_plugins = R"trtdoc(
+    Initialize and register all the existing TensorRT plugins to the :class:`IPluginRegistry` with an optional namespace.
+    The plugin library author should ensure that this function name is unique to the library.
+    This function should be called once before accessing the Plugin Registry.
 
-            Return the DataType of the plugin output at the requested index.
-            The default behavior should be to return the type of the first input, or DataType::kFLOAT if the layer has no inputs.
-            The returned data type must have a format that is supported by the plugin.
+    :arg logger: Logger to print plugin registration information.
+    :arg namespace: Namespace used to register all the plugins in this library.
+)trtdoc";
+} // namespace FreeFunctionsDoc
 
-            :arg index: Index of the output for which Data type is requested.
-            :arg input_types: Data types of the inputs.
-
-            :returns: DataType of the plugin output at the requested index.
-        )trtdoc";
-
-        constexpr const char* configure_plugin = R"trtdoc(
-            Configure the layer.
-
-            This function is called by the :class:`Builder` prior to :func:`initialize` . It provides an opportunity for the layer to make algorithm choices on the basis of its weights, dimensions, and maximum batch size.
-
-            The dimensions passed here do not include the outermost batch size (i.e. for 2D image networks, they will be 3D CHW dimensions).
-
-            :arg input_shapes: The shapes of the input tensors.
-            :arg output_shapes: The shapes of the output tensors.
-            :arg input_types: The data types of the input tensors.
-            :arg output_types: The data types of the output tensors.
-            :arg input_is_broadcasted: Whether an input is broadcasted across the batch.
-            :arg output_is_broadcasted: Whether an output is broadcasted across the batch.
-            :arg format: The format selected for floating-point inputs and outputs of the engine.
-            :arg max_batch_size: The maximum batch size.
-        )trtdoc";
-
-        constexpr const char* clone = R"trtdoc(
-            Clone the plugin object. This copies over internal plugin parameters as well and returns a new plugin object with these parameters.
-
-            If the source plugin is pre-configured with configure_plugin(), the returned object should also be pre-configured. The returned object should allow attach_to_context() with a new execution context.
-            Cloned plugin objects can share the same per-engine immutable resource (e.g. weights) with the source object (e.g. via ref-counting) to avoid duplication.
-        )trtdoc";
-
-        constexpr const char* attach_to_context = R"trtdoc(
-            Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-
-            :arg cudnn The cudnn context handle of the execution context
-            :arg cublas The cublas context handle of the execution context
-            :arg allocator The allocator used by the execution context
-
-            This function is called automatically for each plugin when a new execution context is created. If the plugin needs per-context resource, it can be allocated here. The plugin can also get context-owned CUDNN and CUBLAS context here.
-        )trtdoc";
-
-        constexpr const char* detach_from_context = R"trtdoc(
-            Detach the plugin object from its execution context.
-
-            This function is called automatically for each plugin when a execution context is destroyed. If the plugin owns per-context resource, it can be released here.
-        )trtdoc";
-    } /* IPluginExtDoc */
-
-
-    namespace PluginFieldTypeDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            The possible field types for custom layer.
-        )trtdoc";
-    } /* PluginFieldTypeDoc */
-
-    namespace PluginFieldDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Contains plugin attribute field names and associated data.
-            This information can be parsed to decode necessary plugin metadata
-
-            :ivar name: :class:`str` Plugin field attribute name.
-            :ivar data: :class:`buffer` Plugin field attribute data.
-            :ivar type: :class:`PluginFieldType` Plugin field attribute type.
-            :ivar size: :class:`int` Number of data entries in the Plugin attribute.
-        )trtdoc";
-    } /* PluginFieldDoc */
-
-    namespace PluginFieldCollectionDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Contains plugin attribute field names and associated data.
-            This information can be parsed to decode necessary plugin metadata
-
-            :ivar num_fields: :class:`int`  Number of :class:`PluginField` entries.
-            :ivar fields: :class:`list` PluginField entries.
-        )trtdoc";
-    } /* PluginFieldCollectionDoc */
-
-    namespace IPluginCreatorDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin creator class for user implemented layers
-
-            :ivar tensorrt_version: :class:`int`  Number of :class:`PluginField` entries.
-            :ivar name: :class:`str` Plugin name.
-            :ivar plugin_version: :class:`str` Plugin version.
-            :ivar field_names: :class:`list` List of fields that needs to be passed to :func:`create_plugin` .
-            :ivar plugin_namespace: :class:`str` The namespace of the plugin creator based on the plugin library it belongs to. This can be set while registering the plugin creator.
-        )trtdoc";
-
-        constexpr const char* create_plugin = R"trtdoc(
-            Creates a new plugin.
-
-            :arg name: The name of the plugin.
-            :arg field_collection: The :class:`PluginFieldCollection` for this plugin.
-
-            :returns: :class:`IPluginV2` or :class:`None` on failure.
-        )trtdoc";
-
-        constexpr const char* deserialize_plugin = R"trtdoc(
-            Creates a plugin object from a serialized plugin.
-
-            :arg name: Name of the plugin.
-            :arg serialized_plugin: A buffer containing a serialized plugin.
-
-            :returns: A new :class:`IPluginV2`
-        )trtdoc";
-    } /* IPluginCreatorDoc */
-
-
-    namespace IPluginRegistryDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Registers plugin creators.
-
-            :ivar plugin_creator_list: All the registered plugin creators.
-        )trtdoc";
-
-        constexpr const char* register_creator = R"trtdoc(
-            Register a plugin creator.
-
-            :arg creator: The IPluginCreator instance.
-            :arg plugin_namespace: The namespace of the plugin creator.
-
-            :returns: False if one with the same type is already registered.
-        )trtdoc";
-
-        constexpr const char* get_plugin_creator = R"trtdoc(
-            Return plugin creator based on type and version
-
-            :arg type: The type of the plugin.
-            :arg version: The version of the plugin.
-            :arg plugin_namespace: The namespace of the plugin.
-
-            :returns: An :class:`IPluginCreator` .
-        )trtdoc";
-    } /* IPluginRegistryDoc */
-
-    namespace FreeFunctionsDoc
-    {
-        constexpr const char* get_plugin_registry = R"trtdoc(
-            Return the plugin registry
-        )trtdoc";
-
-
-        constexpr const char* init_libnvinfer_plugins = R"trtdoc(
-            Initialize and register all the existing TensorRT plugins to the :class:`IPluginRegistry` with an optional namespace.
-            The plugin library author should ensure that this function name is unique to the library.
-            This function should be called once before accessing the Plugin Registry.
-
-            :arg logger: Logger to print plugin registration information.
-            :arg namespace: Namespace used to register all the plugins in this library.
-        )trtdoc";
-    } /* FreeFunctionsDoc */
-
-    namespace IPluginFactoryDoc
-    {
-        constexpr const char* descr = R"trtdoc(
-            Plugin factory for deserialization
-        )trtdoc";
-
-        constexpr const char* create_plugin = R"trtdoc(
-            Create a plugin from serialized data.
-
-            Responsibility of destroying this plugin lies with the application. It can be done anytime after consumers of this plugin are destroyed.
-
-            :arg layer_name: The name of the layer.
-            :arg serialized_plugin: The serialized plugin.
-
-            :returns: The plugin.
-        )trtdoc";
-    } /* IPluginFactoryDoc */
-
-} /* tensorrt */
+} // namespace tensorrt

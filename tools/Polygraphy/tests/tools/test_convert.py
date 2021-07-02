@@ -32,10 +32,11 @@ class TestConvertToOnnx(object):
             run_polygraphy_convert([TF_MODELS["identity"].path, "--model-type=frozen", "-o", outmodel.name])
             assert onnx.load(outmodel.name)
 
-
     def test_fp_to_fp16(self):
         with tempfile.NamedTemporaryFile() as outmodel:
-            run_polygraphy_convert([ONNX_MODELS["identity_identity"].path, "--convert-to=onnx", "--fp-to-fp16", "-o", outmodel.name])
+            run_polygraphy_convert(
+                [ONNX_MODELS["identity_identity"].path, "--convert-to=onnx", "--fp-to-fp16", "-o", outmodel.name]
+            )
             assert onnx.load(outmodel.name).graph.value_info[0].type.tensor_type.elem_type == 10
 
 
@@ -45,22 +46,24 @@ class TestConvertToTrt(object):
         with loader() as engine:
             assert isinstance(engine, trt.ICudaEngine)
 
-
     def test_onnx_to_trt(self):
         with tempfile.NamedTemporaryFile(suffix=".engine") as outmodel:
             run_polygraphy_convert([ONNX_MODELS["identity"].path, "--model-type=onnx", "-o", outmodel.name])
             self.check_engine(outmodel.name)
 
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Bug in older versions of TRT breaks this test")
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.0"), reason="Bug in older versions of TRT breaks this test"
+    )
     def test_tf_to_onnx_to_trt(self):
         with tempfile.NamedTemporaryFile() as outmodel:
-            run_polygraphy_convert([TF_MODELS["identity"].path, "--model-type=frozen", "--convert-to=trt", "-o", outmodel.name])
+            run_polygraphy_convert(
+                [TF_MODELS["identity"].path, "--model-type=frozen", "--convert-to=trt", "-o", outmodel.name]
+            )
             self.check_engine(outmodel.name)
 
-
     def test_trt_network_config_script_to_engine(self):
-        script = dedent("""
+        script = dedent(
+            """
         from polygraphy.backend.trt import CreateNetwork, CreateConfig
         from polygraphy import func
         import tensorrt as trt
@@ -74,20 +77,44 @@ class TestConvertToTrt(object):
         @func.extend(CreateConfig())
         def load_config(config):
             config.set_flag(trt.BuilderFlag.FP16)
-        """)
+        """
+        )
 
         with tempfile.NamedTemporaryFile("w+", suffix=".py") as f, tempfile.NamedTemporaryFile() as outmodel:
             f.write(script)
             f.flush()
 
-            run_polygraphy_convert([f.name, "--model-type=trt-network-script", "--trt-network-func-name=my_load_network", "--trt-config-script", f.name,
-                                    "--convert-to=trt", "-o", outmodel.name])
+            run_polygraphy_convert(
+                [
+                    f.name,
+                    "--model-type=trt-network-script",
+                    "--trt-network-func-name=my_load_network",
+                    "--trt-config-script",
+                    f.name,
+                    "--convert-to=trt",
+                    "-o",
+                    outmodel.name,
+                ]
+            )
             self.check_engine(outmodel.name)
-
 
     def test_modify_onnx_outputs(self):
         with tempfile.NamedTemporaryFile(suffix=".onnx") as outmodel:
-            run_polygraphy_convert([ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--onnx-outputs", "mark", "all"])
+            run_polygraphy_convert(
+                [ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--onnx-outputs", "mark", "all"]
+            )
 
             model = onnx.load(outmodel.name)
             assert len(model.graph.output) == 2
+
+
+class TestConvertToOnnxLikeTrt(object):
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.2"), reason="Unsupported for TRT 7.1 and older")
+    @pytest.mark.parametrize(
+        "model_name", ["identity", "empty_tensor_expand", "const_foldable", "and", "scan", "dim_param", "tensor_attr"]
+    )
+    def test_onnx_to_trt_to_onnx_like(self, model_name):
+        with tempfile.NamedTemporaryFile() as outmodel:
+            run_polygraphy_convert(
+                [ONNX_MODELS[model_name].path, "--convert-to=onnx-like-trt-network", "-o", outmodel.name]
+            )

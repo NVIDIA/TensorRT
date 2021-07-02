@@ -19,8 +19,7 @@ import math
 from polygraphy import mod
 from polygraphy.logger.logger import G_LOGGER
 from polygraphy.tools import util as tools_util
-from polygraphy.tools.args import (DataLoaderArgs, ModelArgs, OnnxLoaderArgs,
-                                   OnnxSaveArgs, OnnxShapeInferenceArgs)
+from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
 from polygraphy.tools.base import Tool
 from polygraphy.tools.debug.subtool.artifact_sorter import ArtifactSorterArgs
 
@@ -33,6 +32,7 @@ class MarkerBase(object):
     """
     Controls how layers are marked for reduction.
     """
+
     def __init__(self, num_nodes, node_index):
         self.num_nodes = num_nodes
         self.iteration = 0
@@ -48,7 +48,6 @@ class MarkerBase(object):
         self._good_node_indices = {}
         self.best_good_node_index = None
 
-
     def step(self, success, num_nodes):
         self.iteration += 1
         if not success and num_nodes <= self._least_bad_nodes:
@@ -58,10 +57,8 @@ class MarkerBase(object):
         if success:
             self._good_node_indices[num_nodes] = self.node_index
 
-
     def _clamp(self, x, min_val, max_val):
         return max(min(x, max_val), min_val)
-
 
     def finish(self):
         # Find the index of the node that has the highest number of nodes less than _least_bad_nodes, but still is successful.
@@ -83,20 +80,17 @@ class LinearMarker(MarkerBase):
         super().__init__(num_nodes, node_index=num_nodes - 1 if not invert else 0)
         self.invert = invert
 
-
     def step(self, success, num_nodes):
         super().step(success, num_nodes)
 
         self.node_index += -1 if not self.invert else 1
         return self.node_index
 
-
     def stop(self):
         return (self.node_index < 0) or (self.node_index >= self.num_nodes)
 
-
     def remaining(self):
-        return self.num_nodes - self.iteration - 1
+        return self.num_nodes - self.iteration
 
 
 class BisectMarker(MarkerBase):
@@ -109,7 +103,6 @@ class BisectMarker(MarkerBase):
 
         if invert:
             self.good, self.bad = self.bad, self.good
-
 
     # Take a step in bisection.
     # This will return the index of the next node to try depending on the status of the previous run.
@@ -126,13 +119,11 @@ class BisectMarker(MarkerBase):
         self.node_index = round_func((self.good + self.bad) / 2.0)
         return self.node_index
 
-
     def stop(self):
         return abs(self.good - self.bad) <= 1
 
-
     def remaining(self):
-        return int(math.log2(self.num_nodes) - self.iteration - 1)
+        return int(math.log2(self.num_nodes) - self.iteration)
 
 
 class Reduce(Tool):
@@ -140,6 +131,7 @@ class Reduce(Tool):
     [EXPERIMENTAL] Reduce a failing ONNX model to the minimum set of nodes that cause the failure.
     Each iteration will generate an ONNX model called 'polygraphy_debug.onnx' in the current directory.
     """
+
     def __init__(self):
         super().__init__("reduce")
         self.subscribe_args(ArtifactSorterArgs("polygraphy_debug.onnx", prefer_artifacts=False))
@@ -147,32 +139,46 @@ class Reduce(Tool):
         self.subscribe_args(OnnxSaveArgs())
         self.subscribe_args(OnnxShapeInferenceArgs(default=True, enable_force_fallback=True))
         self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
-        self.subscribe_args(DataLoaderArgs()) # For fallback shape inference
-
+        self.subscribe_args(DataLoaderArgs())  # For fallback shape inference
 
     def add_parser_args(self, parser):
-        parser.add_argument("--min-good", "--minimal-good", dest="min_good",
-                            help="Path at which to save an ONNX model close in size to the reduced model "
-                                 "that does not have the failure. This is not guaranteed to be generated.")
+        parser.add_argument(
+            "--min-good",
+            "--minimal-good",
+            dest="min_good",
+            help="Path at which to save an ONNX model close in size to the reduced model "
+            "that does not have the failure. This is not guaranteed to be generated.",
+        )
 
         disable_passes = parser.add_mutually_exclusive_group()
-        disable_passes.add_argument("--no-reduce-inputs", help="Do not attempt to change the graph inputs to reduce the model further. "
-                                    "'reduce' will then only attempt to find the earliest failing outputs. ",
-                                    action="store_false", dest="reduce_inputs")
-        disable_passes.add_argument("--no-reduce-outputs", help="Do not attempt to change the graph outputs to reduce the model further. "
-                                    "'reduce' will then only attempt to find the latest failing inputs. ",
-                                    action="store_false", dest="reduce_outputs")
+        disable_passes.add_argument(
+            "--no-reduce-inputs",
+            help="Do not attempt to change the graph inputs to reduce the model further. "
+            "'reduce' will then only attempt to find the earliest failing outputs. ",
+            action="store_false",
+            dest="reduce_inputs",
+        )
+        disable_passes.add_argument(
+            "--no-reduce-outputs",
+            help="Do not attempt to change the graph outputs to reduce the model further. "
+            "'reduce' will then only attempt to find the latest failing inputs. ",
+            action="store_false",
+            dest="reduce_outputs",
+        )
 
-        parser.add_argument("--mode", help="Strategy to use to iteratively remove nodes from the model. "
-                            "'bisect' will use binary search, and 'linear' will delete one node at a time. "
-                            "'linear' mode may be significantly slower, but can offer better results in models with branches. "
-                            "One strategy is to use 'bisect' first, and then further reduce the result with 'linear'. ",
-                            choices=["bisect", "linear"], default="bisect")
-
+        parser.add_argument(
+            "--mode",
+            help="Strategy to use to iteratively remove nodes from the model. "
+            "'bisect' will use binary search, and 'linear' will delete one node at a time. "
+            "'linear' mode may be significantly slower, but can offer better results in models with branches. "
+            "One strategy is to use 'bisect' first, and then further reduce the result with 'linear'. ",
+            choices=["bisect", "linear"],
+            default="bisect",
+        )
 
     def run(self, args):
         if not self.arg_groups[OnnxSaveArgs].path and not args.min_good:
-            G_LOGGER.exit("Either --output or --min-good must be provided!")
+            G_LOGGER.critical("Either --output or --min-good must be provided!")
 
         model = self.arg_groups[OnnxLoaderArgs].load_onnx()
         num_orig_nodes = len(model.graph.node)
@@ -194,21 +200,22 @@ class Reduce(Tool):
         def layerwise(model, include_data=False):
             nonlocal _layerwise_outputs, _layerwise_meta
             if _layerwise_outputs is None or _layerwise_meta is None:
-                G_LOGGER.info("Running inference with ONNX-Runtime to determine metadata for intermediate tensors.\n"
-                              "This will cause intermediate models to have static shapes.")
+                G_LOGGER.info(
+                    "Running inference with ONNX-Runtime to determine metadata for intermediate tensors.\n"
+                    "This will cause intermediate models to have static shapes."
+                )
                 _layerwise_outputs, _layerwise_meta = self.arg_groups[OnnxShapeInferenceArgs].fallback_inference(model)
             return _layerwise_outputs if include_data else _layerwise_meta
-
 
         if self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
             G_LOGGER.info("Freezing shapes in the model according to values determined by fallback shape inference")
             tools_util.set_shapes_from_layerwise_meta(GRAPH, layerwise(model))
 
-
         def fix_graph(graph, model):
             """
             Fix the graph so it is valid ONNX.
             """
+
             def fix_tensor_metadata(tensors, fix_shape=True):
                 for tensor in tensors:
                     if not tensor.shape and fix_shape:
@@ -236,28 +243,26 @@ class Reduce(Tool):
 
             return graph
 
-
         def mark_io(graph, attr, tensors, filter_const=True):
             if filter_const:
                 tensors = [t for t in tensors if not isinstance(t, gs.Constant)]
 
             if not tensors:
-                G_LOGGER.warning("No non-constant tensors are available to mark. "
-                                 "Try folding constants in the model with `polygraphy surgeon sanitize --fold-constants`")
+                G_LOGGER.warning(
+                    "No non-constant tensors are available to mark. "
+                    "Try folding constants in the model with `polygraphy surgeon sanitize --fold-constants`"
+                )
 
             setattr(graph, attr, tensors)
             G_LOGGER.info("Marking model {attr}: {:}".format(getattr(graph, attr), attr=attr))
             return graph
 
-
         def names_from_tensors(tensors):
             return [t.name for t in tensors]
-
 
         def lookup_tensors(graph, names):
             tensor_map = graph.tensors()
             return [tensor_map[name] for name in names]
-
 
         # Bisect using the given marker, and modifying the given graph attribute.
         # attr should be one of ["inputs", "outputs"].
@@ -267,17 +272,25 @@ class Reduce(Tool):
             iter_graph = graph
 
             while not marker.stop():
-                G_LOGGER.start("RUNNING | Iteration {:} | Approximately {:} iteration(s) remaining".format(marker.iteration + 1, marker.remaining()))
-                iter_graph = graph.copy() # This is a very light-weight copy of the entire graph.
+                G_LOGGER.start(
+                    "RUNNING | Iteration {:} | Approximately {:} iteration(s) remaining".format(
+                        marker.iteration + 1, marker.remaining()
+                    )
+                )
+                iter_graph = graph.copy()  # This is a very light-weight copy of the entire graph.
 
                 with G_LOGGER.indent():
                     io_list = list(getattr(iter_graph.nodes[marker.node_index], attr))
                     mark_io(iter_graph, attr, io_list, filter_const)
                     iter_graph.cleanup()
-                    self.arg_groups[OnnxSaveArgs].save_onnx(gs.export_onnx(fix_graph(iter_graph, model)), self.arg_groups[ArtifactSorterArgs].iter_artifact)
+                    self.arg_groups[OnnxSaveArgs].save_onnx(
+                        gs.export_onnx(fix_graph(iter_graph, model)), self.arg_groups[ArtifactSorterArgs].iter_artifact
+                    )
 
                 num_nodes = len(iter_graph.nodes)
-                success = self.arg_groups[ArtifactSorterArgs].sort_artifacts(marker.iteration + 1, suffix="_reduce_{:}_{:}_nodes".format(attr, num_nodes))
+                success = self.arg_groups[ArtifactSorterArgs].sort_artifacts(
+                    marker.iteration + 1, suffix="_reduce_{:}_{:}_nodes".format(attr, num_nodes)
+                )
                 marker.step(success, num_nodes)
 
             marker.finish()
@@ -290,7 +303,6 @@ class Reduce(Tool):
                 return names_from_tensors(list(getattr(graph.nodes[index], attr)))
 
             return get_io(marker.best_bad_node_index), get_io(marker.best_good_node_index)
-
 
         # We reduce the model in 2 phases:
         #   1. Find the earliest output nodes that cause a failure.
@@ -311,7 +323,9 @@ class Reduce(Tool):
             bad_outputs, good_outputs = bisect_io(bad_graph, model, out_marker, attr="outputs", filter_const=False)
             bad_graph = mark_io(bad_graph, "outputs", lookup_tensors(bad_graph, bad_outputs)).cleanup()
             if good_graph is not None:
-                good_graph = mark_io(good_graph, "outputs", lookup_tensors(good_graph, good_outputs)) # Defer cleanup where possible.
+                good_graph = mark_io(
+                    good_graph, "outputs", lookup_tensors(good_graph, good_outputs)
+                )  # Defer cleanup where possible.
             # Export the model with the reduced outputs so that reducing inputs is faster.
             model = gs.export_onnx(fix_graph(bad_graph, model))
 
@@ -322,7 +336,9 @@ class Reduce(Tool):
             bad_inputs, good_inputs = bisect_io(bad_graph, model, in_marker, attr="inputs")
             bad_graph = mark_io(bad_graph, "inputs", lookup_tensors(bad_graph, bad_inputs)).cleanup()
             if good_graph is not None:
-                good_graph = mark_io(good_graph, "inputs", lookup_tensors(good_graph, good_inputs)) # Defer cleanup where possible.
+                good_graph = mark_io(
+                    good_graph, "inputs", lookup_tensors(good_graph, good_inputs)
+                )  # Defer cleanup where possible.
 
         # == Write Bad Model ==
 
@@ -331,9 +347,15 @@ class Reduce(Tool):
         if self.arg_groups[OnnxSaveArgs].path:
             num_reduced_nodes = len(reduced_model.graph.node)
 
-            if float(num_reduced_nodes) / float(num_orig_nodes) >= 0.25 and num_reduced_nodes > 1 and args.mode == "bisect":
-                G_LOGGER.warning("It looks like this model could potentially be reduced further.\n"
-                                 "You may want to reduce {:} again using --mode=linear. ".format(self.arg_groups[OnnxSaveArgs].path))
+            if (
+                float(num_reduced_nodes) / float(num_orig_nodes) >= 0.25
+                and num_reduced_nodes > 1
+                and args.mode == "bisect"
+            ):
+                G_LOGGER.warning(
+                    "It looks like this model could potentially be reduced further.\n"
+                    "You may want to reduce {:} again using --mode=linear. ".format(self.arg_groups[OnnxSaveArgs].path)
+                )
 
             G_LOGGER.info("Minimum Bad Model:\n{:}\n\n".format(onnx_util.str_from_onnx(reduced_model, mode="none")))
             self.arg_groups[OnnxSaveArgs].save_onnx(reduced_model)
@@ -343,7 +365,11 @@ class Reduce(Tool):
         if good_graph is not None:
             min_good_model = gs.export_onnx(fix_graph(good_graph.cleanup(), model))
             if min_good_model == reduced_model:
-                G_LOGGER.warning("Could not find a minimal model close in size to the reduced model that does not cause a failure.")
+                G_LOGGER.warning(
+                    "Could not find a minimal model close in size to the reduced model that does not cause a failure."
+                )
             else:
-                G_LOGGER.info("Minimum Good Model:\n{:}\n\n".format(onnx_util.str_from_onnx(min_good_model, mode="none")))
+                G_LOGGER.info(
+                    "Minimum Good Model:\n{:}\n\n".format(onnx_util.str_from_onnx(min_good_model, mode="none"))
+                )
                 self.arg_groups[OnnxSaveArgs].save_onnx(min_good_model, args.min_good)

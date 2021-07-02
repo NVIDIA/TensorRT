@@ -23,11 +23,13 @@ from polygraphy.logger import G_LOGGER
 
 tf = mod.lazy_import("tensorflow", version="<2.0")
 
+
 @mod.export(funcify=True)
 class OptimizeGraph(BaseLoader):
     """
     Functor that freezes a TensorFlow graph, and folds constants.
     """
+
     def __init__(self, graph):
         """
         Freezes a TensorFlow graph and folds constants.
@@ -38,10 +40,8 @@ class OptimizeGraph(BaseLoader):
         """
         self._graph = graph
 
-
     def constfold(self, graphdef, output_names):
-        from tensorflow.core.protobuf import (config_pb2, meta_graph_pb2,
-                                              rewriter_config_pb2)
+        from tensorflow.core.protobuf import config_pb2, meta_graph_pb2, rewriter_config_pb2
         from tensorflow.python.framework import importer, ops
         from tensorflow.python.grappler import tf_optimizer
         from tensorflow.python.training import saver
@@ -59,12 +59,11 @@ class OptimizeGraph(BaseLoader):
 
         rewriter_config = rewriter_config_pb2.RewriterConfig()
         rewriter_config.optimizers.extend(["constfold"])
-        rewriter_config.meta_optimizer_iterations = (rewriter_config_pb2.RewriterConfig.ONE)
+        rewriter_config.meta_optimizer_iterations = rewriter_config_pb2.RewriterConfig.ONE
 
         session_config = config_pb2.ConfigProto()
         session_config.graph_options.resave_options.CopyFrom(rewriter_config)
         return tf_optimizer.OptimizeGraph(session_config, metagraph, graph_id=b"graph")
-
 
     def call_impl(self):
         """
@@ -81,21 +80,25 @@ class OptimizeGraph(BaseLoader):
             G_LOGGER.ultra_verbose("Removed nodes: {:}".format(removed))
 
             for node in graphdef.node:
-                if node.op == 'RefSwitch':
-                    node.op = 'Switch'
+                if node.op == "RefSwitch":
+                    node.op = "Switch"
                     for index in range(len(node.input)):
-                        if 'moving_' in node.input[index]:
-                            node.input[index] = node.input[index] + '/read'
-                elif node.op == 'AssignSub':
-                    node.op = 'Sub'
-                    if 'use_locking' in node.attr: del node.attr['use_locking']
-                elif node.op == 'AssignAdd':
-                    node.op = 'Add'
-                    if 'use_locking' in node.attr: del node.attr['use_locking']
-                elif node.op == 'Assign':
-                    node.op = 'Identity'
-                    if 'use_locking' in node.attr: del node.attr['use_locking']
-                    if 'validate_shape' in node.attr: del node.attr['validate_shape']
+                        if "moving_" in node.input[index]:
+                            node.input[index] = node.input[index] + "/read"
+                elif node.op == "AssignSub":
+                    node.op = "Sub"
+                    if "use_locking" in node.attr:
+                        del node.attr["use_locking"]
+                elif node.op == "AssignAdd":
+                    node.op = "Add"
+                    if "use_locking" in node.attr:
+                        del node.attr["use_locking"]
+                elif node.op == "Assign":
+                    node.op = "Identity"
+                    if "use_locking" in node.attr:
+                        del node.attr["use_locking"]
+                    if "validate_shape" in node.attr:
+                        del node.attr["validate_shape"]
                     if len(node.input) == 2:
                         # input0: ref: Should be from a Variable node. May be uninitialized.
                         # input1: value: The value to be assigned to the variable.
@@ -114,6 +117,7 @@ class GraphFromKeras(BaseLoader):
     """
     Functor that loads a TensorFlow model from Keras.
     """
+
     def __init__(self, path):
         """
         Loads a TensorFlow model from Keras.
@@ -122,7 +126,6 @@ class GraphFromKeras(BaseLoader):
             path (Union[str, h5py.File]): A path to the saved model, or the file object.
         """
         self.path = path
-
 
     def call_impl(self):
         """
@@ -143,6 +146,7 @@ class GraphFromFrozen(BaseLoader):
     """
     Functor that loads a TensorFlow frozen model.
     """
+
     def __init__(self, path):
         """
         Loads a TensorFlow frozen model.
@@ -152,7 +156,6 @@ class GraphFromFrozen(BaseLoader):
                     A path to the frozen model, or a frozen TensorFlow graph or graphdef.
         """
         self.path = path
-
 
     def call_impl(self):
         """
@@ -169,6 +172,7 @@ class GraphFromCkpt(BaseLoader):
     Functor that loads a TensorFlow model from a checkpoint. Note that in order to use checkpoints,
     you must NOT use subprocesses in the Comparator.
     """
+
     def __init__(self, dir, name=None):
         """
         Loads a TensorFlow model from a checkpoint.
@@ -183,7 +187,6 @@ class GraphFromCkpt(BaseLoader):
         """
         self.dir = dir
         self.name = name
-
 
     def call_impl(self):
         """
@@ -204,15 +207,17 @@ class GraphFromCkpt(BaseLoader):
             checkpoint = tf.train.get_checkpoint_state(self.dir)
             if checkpoint is None:
                 ckpt_file_contents = '\nmodel_checkpoint_path: "model"\nall_model_checkpoint_paths: "model"\n'
-                G_LOGGER.critical("Checkpoint directory: {:} does not contain a `checkpoint` file, and the checkpoint name was "
-                                  "not provided. Please either create a checkpoint file with the contents:\n{:} "
-                                  "\nWhere `model` is the name of the checkpoint, or explicitly provide the name with "
-                                  "--ckpt, not including file extensions".format(self.dir, ckpt_file_contents))
+                G_LOGGER.critical(
+                    "Checkpoint directory: {:} does not contain a `checkpoint` file, and the checkpoint name was "
+                    "not provided. Please either create a checkpoint file with the contents:\n{:} "
+                    "\nWhere `model` is the name of the checkpoint, or explicitly provide the name with "
+                    "--ckpt, not including file extensions".format(self.dir, ckpt_file_contents)
+                )
             input_checkpoint = checkpoint.model_checkpoint_path
         else:
             input_checkpoint = os.path.join(self.dir, self.name)
 
-        meta_file = input_checkpoint + '.meta'
+        meta_file = input_checkpoint + ".meta"
         with tf.Graph().as_default() as graph, tf.compat.v1.Session(graph=graph).as_default() as sess:
             saver = tf.compat.v1.train.import_meta_graph(meta_file, clear_devices=True)
             saver.restore(sess, input_checkpoint)
@@ -224,8 +229,17 @@ class UseTfTrt(BaseLoader):
     """
     [UNTESTED] Functor that optimizes a TensorFlow model using TF-TRT.
     """
-    def __init__(self, graph, max_workspace_size=None, fp16=None, int8=None, max_batch_size=None,
-        is_dynamic_op=False, minimum_segment_size=None):
+
+    def __init__(
+        self,
+        graph,
+        max_workspace_size=None,
+        fp16=None,
+        int8=None,
+        max_batch_size=None,
+        is_dynamic_op=False,
+        minimum_segment_size=None,
+    ):
         """
         Optimizes a TensorFlow model using TF-TRT.
 
@@ -237,13 +251,12 @@ class UseTfTrt(BaseLoader):
             max_batch_size (int): The maximum batch size.
         """
         self._graph = graph
-        self.max_workspace_size = util.default(max_workspace_size, 1<<24)
+        self.max_workspace_size = util.default(max_workspace_size, 1 << 24)
         self.fp16 = util.default(fp16, False)
         self.int8 = util.default(int8, False)
         self.max_batch_size = util.default(max_batch_size, 1)
         self.is_dynamic_op = is_dynamic_op
         self.minimum_segment_size = util.default(minimum_segment_size, 3)
-
 
     def call_impl(self):
         """
@@ -257,14 +270,27 @@ class UseTfTrt(BaseLoader):
         precision_mode = "FP16" if self.fp16 else "FP32"
         precision_mode = "INT8" if self.int8 else precision_mode
 
-        G_LOGGER.info("For TF-TRT, using outputs={:}, max_workspace_size_bytes={:}, max_batch_size={:}, "
-                      "minimum_segment_size={:}, is_dynamic_op={:}, precision_mode={:}".format(
-                        output_names, self.max_workspace_size, self.max_batch_size, self.minimum_segment_size,
-                        self.is_dynamic_op, precision_mode))
+        G_LOGGER.info(
+            "For TF-TRT, using outputs={:}, max_workspace_size_bytes={:}, max_batch_size={:}, "
+            "minimum_segment_size={:}, is_dynamic_op={:}, precision_mode={:}".format(
+                output_names,
+                self.max_workspace_size,
+                self.max_batch_size,
+                self.minimum_segment_size,
+                self.is_dynamic_op,
+                precision_mode,
+            )
+        )
 
-        graphdef = tf_trt.create_inference_graph(graph.as_graph_def(), outputs=output_names,
-            max_workspace_size_bytes=self.max_workspace_size, max_batch_size=self.max_batch_size,
-            minimum_segment_size=self.minimum_segment_size, is_dynamic_op=self.is_dynamic_op, precision_mode=precision_mode)
+        graphdef = tf_trt.create_inference_graph(
+            graph.as_graph_def(),
+            outputs=output_names,
+            max_workspace_size_bytes=self.max_workspace_size,
+            max_batch_size=self.max_batch_size,
+            minimum_segment_size=self.minimum_segment_size,
+            is_dynamic_op=self.is_dynamic_op,
+            precision_mode=precision_mode,
+        )
 
         segment_number = 0
         for node in graphdef.node:
@@ -278,12 +304,13 @@ class UseTfTrt(BaseLoader):
             return graph, tf_util.get_graph_output_names(graph)
 
 
-@mod.export_deprecated_alias("ModifyGraph", remove_in="0.30.0")
+@mod.export_deprecated_alias("ModifyGraph", remove_in="0.32.0")
 @mod.export(funcify=True)
 class ModifyGraphOutputs(BaseLoader):
     """
     Functor that modifies outputs of a TensorFlow graph.
     """
+
     def __init__(self, graph, outputs=None):
         """
         Modifies outputs of a TensorFlow graph.
@@ -301,7 +328,6 @@ class ModifyGraphOutputs(BaseLoader):
         """
         self._graph = graph
         self.outputs = outputs
-
 
     def call_impl(self):
         """
@@ -323,6 +349,7 @@ class SaveGraph(BaseLoader):
     """
     Functor that writes out artifacts from a TensorFlow graph.
     """
+
     def __init__(self, graph, path=None, tensorboard_dir=None, engine_dir=None):
         """
         Writes out artifacts from a TensorFlow Graph.
@@ -341,7 +368,6 @@ class SaveGraph(BaseLoader):
         self.path = path
         self.tensorboard_dir = tensorboard_dir
         self.engine_dir = engine_dir
-
 
     def call_impl(self):
         """
@@ -364,8 +390,9 @@ class SaveGraph(BaseLoader):
                 if node.op == "TRTEngineOp":
                     engine = node.attr["serialized_segment"].s
                     if self.engine_dir is not None:
-                        util.save_file(contents=engine,
-                                       dest=os.path.join(self.engine_dir, "segment-{:}".format(segment_number)))
+                        util.save_file(
+                            contents=engine, dest=os.path.join(self.engine_dir, "segment-{:}".format(segment_number))
+                        )
                     segment_number += 1
 
         return graph, outputs
@@ -376,6 +403,7 @@ class CreateConfig(BaseLoader):
     """
     Functor that creates a TensorFlow config.
     """
+
     def __init__(self, gpu_memory_fraction=None, allow_growth=None, use_xla=None):
         """
         Creates a TensorFlow config.
@@ -391,7 +419,6 @@ class CreateConfig(BaseLoader):
         self.allow_growth = util.default(allow_growth, False)
         self.use_xla = util.default(use_xla, False)
 
-
     def call_impl(self):
         """
         Returns:
@@ -399,8 +426,9 @@ class CreateConfig(BaseLoader):
         """
 
         # Session configuration
-        gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=self.gpu_memory_fraction,
-                                              allow_growth=self.allow_growth)
+        gpu_options = tf.compat.v1.GPUOptions(
+            per_process_gpu_memory_fraction=self.gpu_memory_fraction, allow_growth=self.allow_growth
+        )
         config = tf.compat.v1.ConfigProto(gpu_options=gpu_options)
         if self.use_xla:
             config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
@@ -413,6 +441,7 @@ class SessionFromGraph(BaseLoader):
     """
     Functor that creates a TensorFlow session that can be used for inference.
     """
+
     def __init__(self, graph, config=None):
         """
         Creates a TensorFlow session.
@@ -427,7 +456,6 @@ class SessionFromGraph(BaseLoader):
         """
         self.graph = graph
         self.config = util.default(config, CreateConfig())
-
 
     def call_impl(self):
         """

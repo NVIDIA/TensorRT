@@ -24,8 +24,11 @@ from polygraphy.tools.script import make_invocable
 class TfRunnerArgs(BaseArgs):
     def add_to_parser(self, parser):
         tf_args = parser.add_argument_group("TensorFlow Runner", "Options for TensorFlow Inference")
-        tf_args.add_argument("--save-timeline", help="[EXPERIMENTAL] Directory to save timeline JSON files for profiling inference (view at chrome://tracing)", default=None)
-
+        tf_args.add_argument(
+            "--save-timeline",
+            help="[EXPERIMENTAL] Directory to save timeline JSON files for profiling inference (view at chrome://tracing)",
+            default=None,
+        )
 
     def register(self, maker):
         from polygraphy.tools.args.tf.config import TfConfigArgs
@@ -36,15 +39,12 @@ class TfRunnerArgs(BaseArgs):
         if isinstance(maker, TfConfigArgs):
             self.tf_config_args = maker
 
-
     def check_registered(self):
         assert self.tf_loader_args is not None, "TfLoaderArgs is required!"
         assert self.tf_config_args is not None, "TfConfigArgs is required!"
 
-
     def parse(self, args):
         self.timeline_path = args_util.get(args, "save_timeline")
-
 
     def add_to_script(self, script):
         script.add_import(imports=["TfRunner"], frm="polygraphy.backend.tf")
@@ -53,6 +53,8 @@ class TfRunnerArgs(BaseArgs):
         config_name = self.tf_config_args.add_to_script(script)
 
         script.add_import(imports=["SessionFromGraph"], frm="polygraphy.backend.tf")
-        loader_name = script.add_loader(make_invocable("SessionFromGraph", graph_name, config=config_name), "build_tf_session")
+        loader_name = script.add_loader(
+            make_invocable("SessionFromGraph", graph_name, config=config_name), "build_tf_session"
+        )
 
         script.add_runner(make_invocable("TfRunner", loader_name, timeline_path=self.timeline_path))

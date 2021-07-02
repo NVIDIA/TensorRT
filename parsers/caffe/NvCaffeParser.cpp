@@ -19,17 +19,17 @@
 
 using namespace nvcaffeparser1;
 
-void nvcaffeparser1::shutdownProtobufLibrary()
+void nvcaffeparser1::shutdownProtobufLibrary() noexcept
 {
     google::protobuf::ShutdownProtobufLibrary();
 }
 
-extern "C" void* createNvCaffeParser_INTERNAL()
+extern "C" void* createNvCaffeParser_INTERNAL() noexcept
 {
     return nvcaffeparser1::createCaffeParser();
 }
 
-ICaffeParser* nvcaffeparser1::createCaffeParser()
+ICaffeParser* nvcaffeparser1::createCaffeParser() noexcept
 {
     return new CaffeParser;
 }

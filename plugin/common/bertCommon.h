@@ -44,6 +44,8 @@ constexpr uint32_t BDIM = 1; // batch dimension
 constexpr uint32_t SDIM = 0; // seq len dimension
 constexpr uint32_t HDIM = 2; // hidden dimension
 
+constexpr int32_t kSM_53 = 53;
+constexpr int32_t kSM_70 = 70;
 constexpr int32_t kSM_72 = 72;
 constexpr int32_t kSM_75 = 75;
 constexpr int32_t kSM_80 = 80;
@@ -107,7 +109,7 @@ inline int getMHAMaskPackedSize(int smVersion, nvinfer1::DataType dataType, int 
     return packedSize;
 }
 
-inline unsigned int getElementSize(nvinfer1::DataType t)
+inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
 {
     switch (t)
     {
@@ -117,7 +119,6 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kINT8: return 1;
     }
-    throw std::runtime_error("Invalid DataType.");
     return 0;
 }
 
@@ -362,7 +363,7 @@ struct WeightsWithOwnership : public nvinfer1::Weights
         }
     }
 
-    void convertAndCopy(const char*& srcBuf, size_t count, nvinfer1::DataType type)
+    void convertAndCopy(const char*& srcBuf, size_t count, nvinfer1::DataType type) noexcept
     {
         this->type = type;
         this->count = count;

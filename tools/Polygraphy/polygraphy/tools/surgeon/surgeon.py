@@ -18,13 +18,14 @@ from polygraphy.tools.surgeon.subtool import Extract, Insert, Sanitize
 
 ################################# MAIN TOOL #################################
 
+
 class Surgeon(Tool):
     """
     Modify ONNX models.
     """
+
     def __init__(self):
         super().__init__("surgeon")
-
 
     def add_parser_args(self, parser):
         subparsers = parser.add_subparsers(title="Surgical Instruments", dest="instrument")

@@ -24,9 +24,8 @@ import pytest
 
 
 def meta(dtype):
-    return TensorMetadata().add(
-        "X", dtype=dtype, shape=(4, 4)).add(
-        "Y", dtype=dtype, shape=(5, 5))
+    return TensorMetadata().add("X", dtype=dtype, shape=(4, 4)).add("Y", dtype=dtype, shape=(5, 5))
+
 
 class TestDataLoader(object):
     @pytest.mark.parametrize("dtype", [np.int32, np.bool, np.float32, np.int64])
@@ -35,7 +34,6 @@ class TestDataLoader(object):
         x, y = data_loader[0].values()
         assert np.all((x >= 0) & (x <= 1))
         assert np.all((y >= 0) & (y <= 1))
-
 
     def test_can_override_shape(self):
         model = ONNX_MODELS["dynamic_identity"]
@@ -49,29 +47,27 @@ class TestDataLoader(object):
         feed_dict = data_loader[0]
         assert tuple(feed_dict["X"].shape) == shape
 
-
     @pytest.mark.parametrize("dtype", [np.int32, np.bool, np.float32, np.int64])
     @pytest.mark.parametrize("range_val", [0, 1])
     def test_range_min_max_equal(self, dtype, range_val):
-        data_loader = DataLoader(input_metadata=meta(dtype),
-                                 val_range=(range_val, range_val))
+        data_loader = DataLoader(input_metadata=meta(dtype), val_range=(range_val, range_val))
         feed_dict = data_loader[0]
         assert np.all(feed_dict["X"] == range_val)
         assert np.all(feed_dict["Y"] == range_val)
 
-
-    @pytest.mark.parametrize("range", [
-        (0, 1, np.int32),
-        (5.0, 5.5, np.float32),
-        (0, 1, np.bool),
-    ])
+    @pytest.mark.parametrize(
+        "range",
+        [
+            (0, 1, np.int32),
+            (5.0, 5.5, np.float32),
+            (0, 1, np.bool),
+        ],
+    )
     def test_val_ranges(self, range):
         min_val, max_val, dtype = range
-        data_loader = DataLoader(input_metadata=meta(dtype),
-                                 val_range=(min_val, max_val))
+        data_loader = DataLoader(input_metadata=meta(dtype), val_range=(min_val, max_val))
         feed_dict = data_loader[0]
         assert np.all((feed_dict["X"] >= min_val) & (feed_dict["X"] <= max_val))
-
 
     @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
     def test_val_range_dict(self, dtype):
@@ -81,7 +77,6 @@ class TestDataLoader(object):
         assert np.all((feed_dict["X"] >= 2) & (feed_dict["X"] <= 5))
         assert np.all((feed_dict["Y"] >= -1) & (feed_dict["Y"] <= 2))
 
-
     @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
     def test_val_range_dict_default(self, dtype):
         val_range = {"": (6, 8), "Y": (-3, 4)}
@@ -89,7 +84,6 @@ class TestDataLoader(object):
         feed_dict = data_loader[0]
         assert np.all((feed_dict["X"] >= 6) & (feed_dict["X"] <= 8))
         assert np.all((feed_dict["Y"] >= -3) & (feed_dict["Y"] <= 4))
-
 
     @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32])
     def test_val_range_dict_fallback(self, dtype):
@@ -99,53 +93,51 @@ class TestDataLoader(object):
         assert np.all((feed_dict["X"] >= 0) & (feed_dict["X"] <= 1))
         assert np.all((feed_dict["Y"] >= -3) & (feed_dict["Y"] <= 4))
 
-
     def test_shape_tensor_detected(self):
         INPUT_DATA = (1, 2, 3)
-        input_meta = TensorMetadata().add("X", dtype=np.int32, shape=(3, ))
+        input_meta = TensorMetadata().add("X", dtype=np.int32, shape=(3,))
         # This contains the shape values
         overriden_meta = TensorMetadata().add("X", dtype=np.int32, shape=INPUT_DATA)
         data_loader = DataLoader(input_metadata=overriden_meta)
         data_loader.input_metadata = input_meta
 
         feed_dict = data_loader[0]
-        assert np.all(feed_dict["X"] == INPUT_DATA) # values become INPUT_DATA
-
+        assert np.all(feed_dict["X"] == INPUT_DATA)  # values become INPUT_DATA
 
     def test_no_shape_tensor_false_positive_negative_dims(self):
         INPUT_DATA = (-100, 2, 4)
         # This should NOT be detected as a shape tensor
-        input_meta = TensorMetadata().add("X", dtype=np.int32, shape=(3, ))
+        input_meta = TensorMetadata().add("X", dtype=np.int32, shape=(3,))
         overriden_meta = TensorMetadata().add("X", dtype=np.int32, shape=INPUT_DATA)
         data_loader = DataLoader(input_metadata=overriden_meta)
         data_loader.input_metadata = input_meta
 
         feed_dict = data_loader[0]
-        assert feed_dict["X"].shape == (3, ) # Shape IS (3, ), because this is NOT a shape tensor
-        assert np.any(feed_dict["X"] != INPUT_DATA) # Contents are not INPUT_DATA, since it's not treated as a shape value
-
+        assert feed_dict["X"].shape == (3,)  # Shape IS (3, ), because this is NOT a shape tensor
+        assert np.any(
+            feed_dict["X"] != INPUT_DATA
+        )  # Contents are not INPUT_DATA, since it's not treated as a shape value
 
     def test_no_shape_tensor_false_positive_float(self):
         INPUT_DATA = (-100, -50, 0)
         # Float cannot be a shape tensor
-        input_meta = TensorMetadata().add("X", dtype=np.float32, shape=(3, ))
+        input_meta = TensorMetadata().add("X", dtype=np.float32, shape=(3,))
         overriden_meta = TensorMetadata().add("X", dtype=np.float32, shape=INPUT_DATA)
         data_loader = DataLoader(input_metadata=overriden_meta)
         data_loader.input_metadata = input_meta
 
         feed_dict = data_loader[0]
-        assert feed_dict["X"].shape == (3, ) # Values are NOT (3, )
-        assert np.any(feed_dict["X"] != INPUT_DATA) # Values are NOT (3, )
-
+        assert feed_dict["X"].shape == (3,)  # Values are NOT (3, )
+        assert np.any(feed_dict["X"] != INPUT_DATA)  # Values are NOT (3, )
 
     def test_non_user_provided_inputs_never_shape_tensors(self):
         # If the user didn't provide metadata, then the value can never be a shape tensor.
-        input_meta = TensorMetadata().add("X", dtype=np.int32, shape=(3, ))
+        input_meta = TensorMetadata().add("X", dtype=np.int32, shape=(3,))
         data_loader = DataLoader()
         data_loader.input_metadata = input_meta
 
         feed_dict = data_loader[0]
-        assert feed_dict["X"].shape == (3, ) # Treat as a normal tensor
+        assert feed_dict["X"].shape == (3,)  # Treat as a normal tensor
 
 
 class TestDataLoaderCache(object):
@@ -153,6 +145,7 @@ class TestDataLoaderCache(object):
         # Ensure that the data loader can only be used once
         def load_data():
             yield {"X": np.ones((1, 1), dtype=np.float32)}
+
         cache = DataLoaderCache(load_data())
 
         fp32_meta = TensorMetadata().add("X", dtype=np.float32, shape=(1, 1))
@@ -164,7 +157,6 @@ class TestDataLoaderCache(object):
         cache.set_input_metadata(fp64_meta)
         feed_dict = cache[0]
         assert feed_dict["X"].dtype == np.float64
-
 
     # If one input isn't in the cache, we shouldn't give up looking
     # for other inputs

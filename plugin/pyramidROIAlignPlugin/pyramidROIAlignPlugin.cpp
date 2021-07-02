@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "pyramidROIAlignPlugin.h"
 #include "plugin.h"
 #include <cuda_runtime_api.h>
@@ -40,22 +39,22 @@ PyramidROIAlignPluginCreator::PyramidROIAlignPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* PyramidROIAlignPluginCreator::getPluginName() const
+const char* PyramidROIAlignPluginCreator::getPluginName() const noexcept
 {
     return PYRAMIDROIALGIN_PLUGIN_NAME;
-};
+}
 
-const char* PyramidROIAlignPluginCreator::getPluginVersion() const
+const char* PyramidROIAlignPluginCreator::getPluginVersion() const noexcept
 {
     return PYRAMIDROIALGIN_PLUGIN_VERSION;
-};
+}
 
-const PluginFieldCollection* PyramidROIAlignPluginCreator::getFieldNames()
+const PluginFieldCollection* PyramidROIAlignPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
-};
+}
 
-IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     for (int i = 0; i < fc->nbFields; ++i)
@@ -68,12 +67,13 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(const char* name, const
         }
     }
     return new PyramidROIAlign(mPooledSize);
-};
+}
 
-IPluginV2Ext* PyramidROIAlignPluginCreator::deserializePlugin(const char* name, const void* data, size_t length)
+IPluginV2Ext* PyramidROIAlignPluginCreator::deserializePlugin(
+    const char* name, const void* data, size_t length) noexcept
 {
     return new PyramidROIAlign(data, length);
-};
+}
 
 PyramidROIAlign::PyramidROIAlign(int pooled_size)
     : mPooledSize({pooled_size, pooled_size})
@@ -83,60 +83,58 @@ PyramidROIAlign::PyramidROIAlign(int pooled_size)
     // shape
     mInputSize = MaskRCNNConfig::IMAGE_SHAPE.d[1];
     mThresh = (224 * 224 * 2.0f / (mInputSize * mInputSize)) / (4.0 * 4.0f);
-};
+}
 
-int PyramidROIAlign::getNbOutputs() const
+int PyramidROIAlign::getNbOutputs() const noexcept
 {
     return 1;
-};
+}
 
-int PyramidROIAlign::initialize()
-{
-    return 0;
-};
-
-void PyramidROIAlign::terminate(){
-
-};
-
-void PyramidROIAlign::destroy()
-{
-    delete this;
-};
-
-size_t PyramidROIAlign::getWorkspaceSize(int) const
+int PyramidROIAlign::initialize() noexcept
 {
     return 0;
 }
 
-bool PyramidROIAlign::supportsFormat(DataType type, PluginFormat format) const
-{
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
-};
+void PyramidROIAlign::terminate() noexcept {}
 
-const char* PyramidROIAlign::getPluginType() const
+void PyramidROIAlign::destroy() noexcept
+{
+    delete this;
+}
+
+size_t PyramidROIAlign::getWorkspaceSize(int) const noexcept
+{
+    return 0;
+}
+
+bool PyramidROIAlign::supportsFormat(DataType type, PluginFormat format) const noexcept
+{
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
+}
+
+const char* PyramidROIAlign::getPluginType() const noexcept
 {
     return "PyramidROIAlign_TRT";
-};
+}
 
-const char* PyramidROIAlign::getPluginVersion() const
+const char* PyramidROIAlign::getPluginVersion() const noexcept
 {
     return "1";
-};
+}
 
-IPluginV2Ext* PyramidROIAlign::clone() const
+IPluginV2Ext* PyramidROIAlign::clone() const noexcept
 {
     auto plugin = new PyramidROIAlign(*this);
     plugin->setPluginNamespace(mNameSpace.c_str());
     return plugin;
-};
+}
 
-void PyramidROIAlign::setPluginNamespace(const char* libNamespace)
+void PyramidROIAlign::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNameSpace = libNamespace;
-};
+}
 
-const char* PyramidROIAlign::getPluginNamespace() const
+const char* PyramidROIAlign::getPluginNamespace() const noexcept
 {
     return mNameSpace.c_str();
 }
@@ -161,7 +159,7 @@ void PyramidROIAlign::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInp
     }
 }
 
-Dims PyramidROIAlign::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims PyramidROIAlign::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
 
     check_valid_inputs(inputs, nbInputDims);
@@ -180,10 +178,10 @@ Dims PyramidROIAlign::getOutputDimensions(int index, const Dims* inputs, int nbI
     result.d[3] = mPooledSize.x;
 
     return result;
-};
+}
 
 int PyramidROIAlign::enqueue(
-    int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+    int batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     void* pooled = outputs[0];
@@ -194,16 +192,15 @@ int PyramidROIAlign::enqueue(
 
         pooled, mPooledSize);
 
-    assert(status == cudaSuccess);
-    return 0;
-};
+    return status;
+}
 
-size_t PyramidROIAlign::getSerializationSize() const
+size_t PyramidROIAlign::getSerializationSize() const noexcept
 {
     return sizeof(int) * 2 + sizeof(int) * 3 + sizeof(float) + sizeof(int) * 2 * 4;
-};
+}
 
-void PyramidROIAlign::serialize(void* buffer) const
+void PyramidROIAlign::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mPooledSize.y);
@@ -221,7 +218,7 @@ void PyramidROIAlign::serialize(void* buffer) const
     write(d, mFeatureSpatialSize[3].y);
     write(d, mFeatureSpatialSize[3].x);
     assert(d == a + getSerializationSize());
-};
+}
 
 PyramidROIAlign::PyramidROIAlign(const void* data, size_t length)
 {
@@ -241,23 +238,24 @@ PyramidROIAlign::PyramidROIAlign(const void* data, size_t length)
     mFeatureSpatialSize[3].x = read<int>(d);
 
     assert(d == a + length);
-};
+}
 
 // Return the DataType of the plugin output at the requested index
 DataType PyramidROIAlign::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool PyramidROIAlign::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool PyramidROIAlign::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool PyramidROIAlign::canBroadcastInputAcrossBatch(int inputIndex) const
+bool PyramidROIAlign::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 {
     return false;
 }
@@ -265,7 +263,7 @@ bool PyramidROIAlign::canBroadcastInputAcrossBatch(int inputIndex) const
 // Configure the layer with input and output data types.
 void PyramidROIAlign::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
+    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     assert(supportsFormat(inputTypes[0], floatFormat));
     check_valid_inputs(inputDims, nbInputs);
@@ -284,9 +282,9 @@ void PyramidROIAlign::configurePlugin(const Dims* inputDims, int nbInputs, const
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void PyramidROIAlign::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator)
+    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
 {
 }
 
 // Detach the plugin object from its execution context.
-void PyramidROIAlign::detachFromContext() {}
+void PyramidROIAlign::detachFromContext() noexcept {}

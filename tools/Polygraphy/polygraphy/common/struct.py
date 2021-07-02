@@ -25,13 +25,22 @@ class MetadataTuple(object):
         self.dtype = dtype
         self.shape = shape
 
-
     def __iter__(self):
         yield from [self.dtype, self.shape]
 
-
     def __repr__(self):
         return "MetadataTuple({:}, {:})".format(self.dtype, self.shape)
+
+    def __str__(self):
+        ret = ""
+        meta_items = []
+        if self.dtype is not None:
+            meta_items.append("dtype={:}".format(np.dtype(self.dtype).name))
+        if self.shape is not None:
+            meta_items.append("shape={:}".format(tuple(self.shape)))
+        if meta_items:
+            ret += "[" + ", ".join(meta_items) + "]"
+        return ret
 
 
 @mod.export()
@@ -47,6 +56,7 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
         shape = tensor_meta["input0"].shape
         dtype = tensor_meta["input0"].dtype
     """
+
     @staticmethod
     def from_feed_dict(feed_dict):
         """
@@ -63,7 +73,6 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
         for name, arr in feed_dict.items():
             meta.add(name, arr.dtype, arr.shape)
         return meta
-
 
     def add(self, name, dtype, shape):
         """
@@ -82,26 +91,13 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
         self[name] = MetadataTuple(dtype, shape)
         return self
 
-
     def __repr__(self):
         ret = "TensorMetadata()"
         for name, (dtype, shape) in self.items():
             ret += ".add('{:}', {:}, {:})".format(name, dtype, shape)
         return ret
 
-
     def __str__(self):
-        def str_from_single_meta(name, dtype, shape):
-            ret = "{:}".format(name)
-            meta_items = []
-            if dtype is not None:
-                meta_items.append("dtype={:}".format(np.dtype(dtype).name))
-            if shape is not None:
-                meta_items.append("shape={:}".format(tuple(shape)))
-            if meta_items:
-                ret += " [" + ", ".join(meta_items) + "]"
-            return ret
-
         sep = ",\n "
-        elems = [str_from_single_meta(name, dtype, shape) for name, (dtype, shape) in self.items()]
+        elems = ["{:} {:}".format(name, meta_tuple).strip() for name, meta_tuple in self.items()]
         return "{" + sep.join(elems) + "}"

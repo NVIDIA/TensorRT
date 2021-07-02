@@ -32,7 +32,7 @@ class ModelArgs(BaseArgs):
         ".engine": "engine",
         ".plan": "engine",
         ".graphdef": "frozen",
-        ".py": "trt-network-script"
+        ".py": "trt-network-script",
     }
 
     class ModelType(str):
@@ -47,18 +47,14 @@ class ModelArgs(BaseArgs):
             assert model_type in ModelArgs.ModelType.VALID_TYPES or model_type is None
             return str.__new__(cls, model_type)
 
-
         def is_tf(self):
             return self in ModelArgs.ModelType.TF_TYPES
-
 
         def is_onnx(self):
             return self in ModelArgs.ModelType.ONNX_TYPES
 
-
         def is_trt(self):
             return self in ModelArgs.ModelType.TRT_TYPES
-
 
     def __init__(self, model_required=False, inputs="--inputs", model_type=None):
         super().__init__()
@@ -67,25 +63,33 @@ class ModelArgs(BaseArgs):
         # If model type is provided, it means the tool only supports a single type of model.
         self._model_type = model_type
 
-
     def add_to_parser(self, parser):
         model_args = parser.add_argument_group("Model", "Options for the model")
-        model_args.add_argument("model_file", help="Path to the model", nargs=None if self._model_required else '?')
+        model_args.add_argument("model_file", help="Path to the model", nargs=None if self._model_required else "?")
         if self._model_type is None:
-            model_args.add_argument("--model-type", help="The type of the input model: {{'frozen': TensorFlow frozen graph, 'keras': Keras model, "
-                                    "'ckpt': TensorFlow checkpoint directory, 'onnx': ONNX model, 'engine': TensorRT engine, 'trt-network-script': "
-                                    "A Python script that defines a `load_network` function that takes no arguments and returns a TensorRT Builder, "
-                                    "Network, and optionally Parser, "
-                                    "'uff': UFF file [deprecated], 'caffe': Caffe prototxt [deprecated]}}",
-                                    choices=ModelArgs.ModelType.VALID_TYPES,
-                                    default=None)
+            model_args.add_argument(
+                "--model-type",
+                help="The type of the input model: {{'frozen': TensorFlow frozen graph, 'keras': Keras model, "
+                "'ckpt': TensorFlow checkpoint directory, 'onnx': ONNX model, 'engine': TensorRT engine, 'trt-network-script': "
+                "A Python script that defines a `load_network` function that takes no arguments and returns a TensorRT Builder, "
+                "Network, and optionally Parser, "
+                "'uff': UFF file [deprecated], 'caffe': Caffe prototxt [deprecated]}}",
+                choices=ModelArgs.ModelType.VALID_TYPES,
+                default=None,
+            )
         if self._inputs:
-            model_args.add_argument(self._inputs.replace("inputs", "input") + "-shapes", self._inputs,
-                                    help="Model input(s) and their shape(s). "
-                                    "Format: {arg_name}-shapes <name>:<shape>. "
-                                    "For example: {arg_name}-shapes image:[1,3,224,224] other_input:[10]".format(
-                                        arg_name=self._inputs.replace("inputs", "input")), nargs="+", default=None, dest="input_shapes")
-
+            model_args.add_argument(
+                self._inputs.replace("inputs", "input") + "-shapes",
+                self._inputs,
+                help="Model input(s) and their shape(s). Generally, this is used to determine inference-time input shapes, "
+                "or override dynamic shapes set in the model. Format: {arg_name}-shapes <name>:<shape>. "
+                "For example: {arg_name}-shapes image:[1,3,224,224] other_input:[10]".format(
+                    arg_name=self._inputs.replace("inputs", "input")
+                ),
+                nargs="+",
+                default=None,
+                dest="input_shapes",
+            )
 
     def parse(self, args):
         def determine_model_type():
@@ -112,15 +116,17 @@ class ModelArgs(BaseArgs):
                 if model_type:
                     return model_type
 
-            G_LOGGER.exit("Could not automatically determine model type for: {:}\n"
-                          "Please explicitly specify the type with the --model-type option".format(args.model_file))
-
+            G_LOGGER.critical(
+                "Could not automatically determine model type for: {:}\n"
+                "Please explicitly specify the type with the --model-type option".format(args.model_file)
+            )
 
         if args_util.get(args, "input_shapes"):
-            self.input_shapes = args_util.parse_meta(args_util.get(args, "input_shapes"), includes_dtype=False) # TensorMetadata
+            self.input_shapes = args_util.parse_meta(
+                args_util.get(args, "input_shapes"), includes_dtype=False
+            )  # TensorMetadata
         else:
             self.input_shapes = TensorMetadata()
-
 
         self.model_file = args_util.get(args, "model_file")
 
@@ -130,9 +136,11 @@ class ModelArgs(BaseArgs):
                 G_LOGGER.warning("Model path does not exist: {:}".format(self.model_file))
             self.model_file = os.path.abspath(self.model_file)
 
-        model_type_str = util.default(self._model_type, determine_model_type())
+        model_type_str = self._model_type if self._model_type else determine_model_type()
         self.model_type = ModelArgs.ModelType(model_type_str) if model_type_str else None
 
         if self.model_type == "trt-network-script" and (not self.model_file or not self.model_file.endswith(".py")):
-            G_LOGGER.exit("TensorRT network scripts must exist and have '.py' extensions. "
-                              "Note: Provided network script path was: {:}".format(self.model_file))
+            G_LOGGER.critical(
+                "TensorRT network scripts must exist and have '.py' extensions. "
+                "Note: Provided network script path was: {:}".format(self.model_file)
+            )

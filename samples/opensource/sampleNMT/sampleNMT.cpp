@@ -49,7 +49,6 @@
 #include "model/beamSearchPolicy.h"
 #include "model/componentWeights.h"
 #include "model/contextNMT.h"
-#include "model/debugUtil.h"
 #include "model/decoder.h"
 #include "model/embedder.h"
 #include "model/encoder.h"
@@ -76,7 +75,7 @@ int gMaxOutputSequenceLength = -1;
 int gMaxInferenceSamples = -1;
 std::string gDataWriterStr = "bleu";
 std::string gOutputTextFileName("translation_output.txt");
-int gMaxWorkspaceSize = 256_MiB;
+int gMaxWorkspaceSize = 512_MiB;
 std::string gDataDirectory("data/samples/nmt/deen");
 bool gEnableProfiling = false;
 bool gAggregateProfiling = false;
@@ -116,8 +115,8 @@ nmtSample::DataReader::ptr getDataReader()
 {
     std::shared_ptr<std::istream> textInput(new std::ifstream(locateNMTFile(gInputTextFileName)));
     std::shared_ptr<std::istream> vocabInput(new std::ifstream(locateNMTFile(gInputVocabularyFileName)));
-    assert(textInput->good());
-    assert(vocabInput->good());
+    ASSERT(textInput->good());
+    ASSERT(vocabInput->good());
 
     auto vocabulary = std::make_shared<nmtSample::Vocabulary>();
     *vocabInput >> *vocabulary;
@@ -135,7 +134,7 @@ std::shared_ptr<Component> buildNMTComponentFromWeightsFile(const std::string& f
 {
     auto weights = std::make_shared<nmtSample::ComponentWeights>();
     std::ifstream input(locateNMTFile(filename), std::ios::binary);
-    assert(input.good());
+    ASSERT(input.good());
     input >> *weights;
 
     return std::make_shared<Component>(weights);
@@ -197,14 +196,14 @@ nmtSample::DataWriter::ptr getDataWriter()
     if (gDataWriterStr == "bleu")
     {
         std::shared_ptr<std::istream> textInput(new std::ifstream(locateNMTFile(gReferenceOutputTextFileName)));
-        assert(textInput->good());
+        ASSERT(textInput->good());
         return std::make_shared<nmtSample::BLEUScoreWriter>(textInput, gOutputVocabulary);
     }
     else if (gDataWriterStr == "text")
     {
         std::remove(gOutputTextFileName.data());
         std::shared_ptr<std::ostream> textOutput(new std::ofstream(gOutputTextFileName));
-        assert(textOutput->good()
+        ASSERT(textOutput->good()
             && "Please contact system administrator if you have no permission to write the file "
                "translation_output.txt");
         return std::make_shared<nmtSample::TextWriter>(textOutput, gOutputVocabulary);
@@ -216,7 +215,7 @@ nmtSample::DataWriter::ptr getDataWriter()
     else
     {
         sample::gLogError << "Invalid data writer specified: " << gDataWriterStr << std::endl;
-        assert(0);
+        ASSERT(0);
         return nmtSample::DataWriter::ptr();
     }
 }
@@ -289,7 +288,7 @@ void printUsage()
     printf("  --verbose                            Output verbose-level messages by TensorRT\n");
     printf("  --max_workspace_size=<N>             Maximum workspace size (default = %d)\n", gMaxWorkspaceSize);
     printf(
-        "  --datadir=<path_to_data_directory>  Path to the directory where data and weights are located (default = "
+        "  --data_dir=<path_to_data_directory>  Path to the directory where data and weights are located (default = "
         "%s)\n",
         gDataDirectory.c_str());
     printf(
@@ -336,7 +335,7 @@ bool parseNMTArgs(samplesCommon::Args& args, int argc, char* argv[])
             continue;
         if (parseInt(argv[j], "max_workspace_size", gMaxWorkspaceSize))
             continue;
-        if (parseString(argv[j], "datadir", gDataDirectory))
+        if (parseString(argv[j], "data_dir", gDataDirectory))
             continue;
         if (parseBool(argv[j], "profile", gEnableProfiling))
             continue;
@@ -366,7 +365,7 @@ nvinfer1::ICudaEngine* getEncoderEngine(
     nmtSample::Embedder::ptr inputEmbedder, nmtSample::Encoder::ptr encoder, nmtSample::Alignment::ptr alignment)
 {
     nvinfer1::IBuilder* encoderBuilder = nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger());
-    assert(encoderBuilder != nullptr);
+    ASSERT(encoderBuilder != nullptr);
     nvinfer1::IBuilderConfig* encoderConfig = encoderBuilder->createBuilderConfig();
     encoderBuilder->setMaxBatchSize(gMaxBatchSize);
     encoderConfig->setMaxWorkspaceSize(gMaxWorkspaceSize);
@@ -379,21 +378,21 @@ nvinfer1::ICudaEngine* getEncoderEngine(
         encoderConfig->setFlag(BuilderFlag::kINT8);
     }
 
-    nvinfer1::INetworkDefinition* encoderNetwork = encoderBuilder->createNetwork();
+    nvinfer1::INetworkDefinition* encoderNetwork = encoderBuilder->createNetworkV2(0);
 
     // Define inputs for the encoder
-    nvinfer1::Dims inputDims{1, {gMaxInputSequenceLength}, {nvinfer1::DimensionType::kSEQUENCE}};
+    nvinfer1::Dims inputDims{1, {gMaxInputSequenceLength}};
     auto inputEncoderDataTensor = encoderNetwork->addInput("input_encoder_data", nvinfer1::DataType::kINT32, inputDims);
-    assert(inputEncoderDataTensor != nullptr);
-    nvinfer1::Dims inputSequenceLengthsDims{0, {}, {}};
+    ASSERT(inputEncoderDataTensor != nullptr);
+    nvinfer1::Dims inputSequenceLengthsDims{0, {}};
     auto actualInputSequenceLengthsTensor = encoderNetwork->addInput(
         "actual_input_sequence_lengths", nvinfer1::DataType::kINT32, inputSequenceLengthsDims);
-    assert(actualInputSequenceLengthsTensor != nullptr);
-    nvinfer1::Dims inputSequenceLengthsWithUnitIndexDims{1, {1}, {nvinfer1::DimensionType::kINDEX}};
+    ASSERT(actualInputSequenceLengthsTensor != nullptr);
+    nvinfer1::Dims inputSequenceLengthsWithUnitIndexDims{1, {1}};
     auto actualInputSequenceLengthsWithUnitIndexTensor
         = encoderNetwork->addInput("actual_input_sequence_lengths_with_index_dim", nvinfer1::DataType::kINT32,
             inputSequenceLengthsWithUnitIndexDims);
-    assert(actualInputSequenceLengthsWithUnitIndexTensor != nullptr);
+    ASSERT(actualInputSequenceLengthsWithUnitIndexTensor != nullptr);
 
     auto stateSizes = encoder->getStateSizes();
     std::vector<nvinfer1::ITensor*> encoderInputStatesTensors(stateSizes.size());
@@ -403,16 +402,16 @@ nvinfer1::ICudaEngine* getEncoderEngine(
         ss << "input_encoder_states_" << i;
         encoderInputStatesTensors[i] = encoderNetwork->addInput(
             ss.str().c_str(), gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT, stateSizes[i]);
-        assert(encoderInputStatesTensors[i] != nullptr);
+        ASSERT(encoderInputStatesTensors[i] != nullptr);
     }
 
     nvinfer1::ITensor* initializeDecoderIndicesTensor = nullptr;
     if (gInitializeDecoderFromEncoderHiddenStates)
     {
-        nvinfer1::Dims inputDims{1, {gBeamWidth}, {nvinfer1::DimensionType::kINDEX}};
+        nvinfer1::Dims inputDims{1, {gBeamWidth}};
         initializeDecoderIndicesTensor
             = encoderNetwork->addInput("initialize_decoder_indices", nvinfer1::DataType::kINT32, inputDims);
-        assert(initializeDecoderIndicesTensor != nullptr);
+        ASSERT(initializeDecoderIndicesTensor != nullptr);
     }
 
     nvinfer1::ITensor* inputEncoderEmbeddedTensor;
@@ -441,10 +440,10 @@ nvinfer1::ICudaEngine* getEncoderEngine(
     {
         auto gatherLayer = encoderNetwork->addGather(
             *actualInputSequenceLengthsWithUnitIndexTensor, *initializeDecoderIndicesTensor, 0);
-        assert(gatherLayer != nullptr);
+        ASSERT(gatherLayer != nullptr);
         gatherLayer->setName("Replicate input sequence lengths for decoder");
         auto actualInputSequenceLengthsReplicatedTensor = gatherLayer->getOutput(0);
-        assert(actualInputSequenceLengthsReplicatedTensor != nullptr);
+        ASSERT(actualInputSequenceLengthsReplicatedTensor != nullptr);
         actualInputSequenceLengthsReplicatedTensor->setName("actual_input_sequence_lengths_replicated");
         encoderNetwork->markOutput(*actualInputSequenceLengthsReplicatedTensor);
         actualInputSequenceLengthsReplicatedTensor->setType(nvinfer1::DataType::kINT32);
@@ -454,13 +453,13 @@ nvinfer1::ICudaEngine* getEncoderEngine(
     {
         for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
         {
-            assert(encoderOutputStatesTensors[i] != nullptr);
+            ASSERT(encoderOutputStatesTensors[i] != nullptr);
 
             // Insert index (Z=1) dimension into tensor
             nvinfer1::ITensor* encoderOutputStatesTensorWithUnitIndex;
             {
                 auto shuffleLayer = encoderNetwork->addShuffle(*encoderOutputStatesTensors[i]);
-                assert(shuffleLayer != nullptr);
+                ASSERT(shuffleLayer != nullptr);
                 {
                     std::stringstream ss;
                     ss << "Reshape encoder states for decoder initialization " << i;
@@ -470,27 +469,25 @@ nvinfer1::ICudaEngine* getEncoderEngine(
                 {
                     shuffleDims.nbDims = stateSizes[i].nbDims + 1;
                     shuffleDims.d[0] = 1;
-                    shuffleDims.type[0] = nvinfer1::DimensionType::kINDEX;
                     for (int j = 0; j < stateSizes[i].nbDims; ++j)
                     {
                         shuffleDims.d[j + 1] = stateSizes[i].d[j];
-                        shuffleDims.type[j + 1] = stateSizes[i].type[j];
                     }
                 }
                 shuffleLayer->setReshapeDimensions(shuffleDims);
                 encoderOutputStatesTensorWithUnitIndex = shuffleLayer->getOutput(0);
-                assert(encoderOutputStatesTensorWithUnitIndex != nullptr);
+                ASSERT(encoderOutputStatesTensorWithUnitIndex != nullptr);
             }
             auto gatherLayer = encoderNetwork->addGather(
                 *encoderOutputStatesTensorWithUnitIndex, *initializeDecoderIndicesTensor, 0);
-            assert(gatherLayer != nullptr);
+            ASSERT(gatherLayer != nullptr);
             {
                 std::stringstream ss;
                 ss << "Replicate encoder states for decoder initialization " << i;
                 gatherLayer->setName(ss.str().c_str());
             }
             auto inputDecoderHiddenStatesTensor = gatherLayer->getOutput(0);
-            assert(inputDecoderHiddenStatesTensor != nullptr);
+            ASSERT(inputDecoderHiddenStatesTensor != nullptr);
             std::stringstream ss;
             ss << "input_decoder_states_" << i;
             inputDecoderHiddenStatesTensor->setName(ss.str().c_str());
@@ -499,9 +496,15 @@ nvinfer1::ICudaEngine* getEncoderEngine(
         }
     }
 
-    samplesCommon::setDummyInt8Scales(encoderConfig, encoderNetwork);
+    samplesCommon::setDummyInt8DynamicRanges(encoderConfig, encoderNetwork);
     samplesCommon::enableDLA(encoderBuilder, encoderConfig, gUseDLACore);
-    auto res = encoderBuilder->buildEngineWithConfig(*encoderNetwork, *encoderConfig);
+    auto encoderPlan = encoderBuilder->buildSerializedNetwork(*encoderNetwork, *encoderConfig);
+    ASSERT(encoderPlan != nullptr);
+    auto runtime = createInferRuntime(sample::gLogger.getTRTLogger());
+    ASSERT(runtime != nullptr);
+    auto res = runtime->deserializeCudaEngine(encoderPlan->data(), encoderPlan->size());
+    runtime->destroy();
+    encoderPlan->destroy();
     encoderNetwork->destroy();
     encoderBuilder->destroy();
     encoderConfig->destroy();
@@ -513,7 +516,7 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
     nmtSample::Projection::ptr projection, nmtSample::Likelihood::ptr likelihood)
 {
     nvinfer1::IBuilder* generatorBuilder = nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger());
-    assert(generatorBuilder != nullptr);
+    ASSERT(generatorBuilder != nullptr);
     nvinfer1::IBuilderConfig* generatorConfig = generatorBuilder->createBuilderConfig();
     generatorBuilder->setMaxBatchSize(gMaxBatchSize);
     generatorConfig->setMaxWorkspaceSize(gMaxWorkspaceSize);
@@ -526,7 +529,7 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
         generatorConfig->setFlag(BuilderFlag::kINT8);
     }
 
-    nvinfer1::INetworkDefinition* generatorNetwork = generatorBuilder->createNetwork();
+    nvinfer1::INetworkDefinition* generatorNetwork = generatorBuilder->createNetworkV2(0);
 
     // Define inputs for the generator
     auto stateSizes = decoder->getStateSizes();
@@ -539,63 +542,56 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
         {
             statesDims.nbDims = stateSizes[i].nbDims + 1;
             statesDims.d[0] = gBeamWidth;
-            statesDims.type[0] = nvinfer1::DimensionType::kINDEX;
             for (int j = 0; j < stateSizes[i].nbDims; ++j)
             {
                 statesDims.d[j + 1] = stateSizes[i].d[j];
-                statesDims.type[j + 1] = stateSizes[i].type[j];
             }
         }
         decoderInputStatesTensors[i] = generatorNetwork->addInput(
             ss.str().c_str(), gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT, statesDims);
-        assert(decoderInputStatesTensors[i] != nullptr);
+        ASSERT(decoderInputStatesTensors[i] != nullptr);
     }
-    nvinfer1::Dims inputDecoderDataDims{1, {gBeamWidth}, {nvinfer1::DimensionType::kINDEX}};
+    nvinfer1::Dims inputDecoderDataDims{1, {gBeamWidth}};
     auto inputDecoderDataTensor
         = generatorNetwork->addInput("input_decoder_data", nvinfer1::DataType::kINT32, inputDecoderDataDims);
-    assert(inputDecoderDataTensor != nullptr);
-    nvinfer1::Dims inputSequenceLengthsTeplicatedDims{
-        2, {gBeamWidth, 1}, {nvinfer1::DimensionType::kINDEX, nvinfer1::DimensionType::kCHANNEL}};
+    ASSERT(inputDecoderDataTensor != nullptr);
+    nvinfer1::Dims inputSequenceLengthsTeplicatedDims{2, {gBeamWidth, 1}};
     auto actualInputSequenceLengthsReplicatedTensor = generatorNetwork->addInput(
         "actual_input_sequence_lengths_replicated", nvinfer1::DataType::kINT32, inputSequenceLengthsTeplicatedDims);
-    assert(actualInputSequenceLengthsReplicatedTensor != nullptr);
-    nvinfer1::Dims memoryStatesDims{2, {gMaxInputSequenceLength, alignment->getSourceStatesSize()},
-        {nvinfer1::DimensionType::kSEQUENCE, nvinfer1::DimensionType::kCHANNEL}};
+    ASSERT(actualInputSequenceLengthsReplicatedTensor != nullptr);
+    nvinfer1::Dims memoryStatesDims{2, {gMaxInputSequenceLength, alignment->getSourceStatesSize()}};
     auto memoryStatesTensor = generatorNetwork->addInput(
         "memory_states", gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT, memoryStatesDims);
-    assert(memoryStatesTensor != nullptr);
+    ASSERT(memoryStatesTensor != nullptr);
     nvinfer1::ITensor* attentionKeysTensor = nullptr;
     if (alignment->getAttentionKeySize() > 0)
     {
-        nvinfer1::Dims attentionKeysDims{2, {gMaxInputSequenceLength, alignment->getAttentionKeySize()},
-            {nvinfer1::DimensionType::kSEQUENCE, nvinfer1::DimensionType::kCHANNEL}};
+        nvinfer1::Dims attentionKeysDims{2, {gMaxInputSequenceLength, alignment->getAttentionKeySize()}};
         attentionKeysTensor = generatorNetwork->addInput(
             "attention_keys", gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT, attentionKeysDims);
-        assert(attentionKeysTensor != nullptr);
+        ASSERT(attentionKeysTensor != nullptr);
     }
     nvinfer1::ITensor* inputAttentionTensor = nullptr;
     if (gFeedAttentionToInput)
     {
-        nvinfer1::Dims inputAttentionDims{2, {gBeamWidth, attention->getAttentionSize()},
-            {nvinfer1::DimensionType::kINDEX, nvinfer1::DimensionType::kCHANNEL}};
+        nvinfer1::Dims inputAttentionDims{2, {gBeamWidth, attention->getAttentionSize()}};
         inputAttentionTensor = generatorNetwork->addInput(
             "input_attention", gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT, inputAttentionDims);
-        assert(inputAttentionTensor != nullptr);
+        ASSERT(inputAttentionTensor != nullptr);
     }
-    nvinfer1::Dims inputLikelihoodsDims{
-        2, {gBeamWidth, 1}, {nvinfer1::DimensionType::kINDEX, nvinfer1::DimensionType::kCHANNEL}};
+    nvinfer1::Dims inputLikelihoodsDims{2, {gBeamWidth, 1}};
     auto inputLikelihoodsTensor
         = generatorNetwork->addInput("input_likelihoods", nvinfer1::DataType::kFLOAT, inputLikelihoodsDims);
-    assert(inputLikelihoodsTensor != nullptr);
-    nvinfer1::Dims inputLikelihoodsReplicateIndicesDims{1, {gBeamWidth}, {nvinfer1::DimensionType::kCHANNEL}};
+    ASSERT(inputLikelihoodsTensor != nullptr);
+    nvinfer1::Dims inputLikelihoodsReplicateIndicesDims{1, {gBeamWidth}};
     auto inputLikelihoodsReplicateIndicesTensor = generatorNetwork->addInput(
         "replicate_likelihoods_indices", nvinfer1::DataType::kINT32, inputLikelihoodsReplicateIndicesDims);
-    assert(inputLikelihoodsReplicateIndicesTensor != nullptr);
+    ASSERT(inputLikelihoodsReplicateIndicesTensor != nullptr);
 
     // Add output embedder
     nvinfer1::ITensor* inputDecoderEmbeddedTensor;
     outputEmbedder->addToModel(generatorNetwork, inputDecoderDataTensor, &inputDecoderEmbeddedTensor);
-    assert(inputDecoderEmbeddedTensor != nullptr);
+    ASSERT(inputDecoderEmbeddedTensor != nullptr);
 
     // Add concatination of previous attention vector and embedded input for the decoder
     nvinfer1::ITensor* inputDecoderEmbeddedConcatinatedWithAttentionTensor{nullptr};
@@ -603,11 +599,11 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
     {
         nvinfer1::ITensor* inputTensors[] = {inputDecoderEmbeddedTensor, inputAttentionTensor};
         auto concatLayer = generatorNetwork->addConcatenation(inputTensors, 2);
-        assert(concatLayer != nullptr);
+        ASSERT(concatLayer != nullptr);
         concatLayer->setName("Concatenate embedded input and attention");
         concatLayer->setAxis(1);
         inputDecoderEmbeddedConcatinatedWithAttentionTensor = concatLayer->getOutput(0);
-        assert(inputDecoderEmbeddedConcatinatedWithAttentionTensor != nullptr);
+        ASSERT(inputDecoderEmbeddedConcatinatedWithAttentionTensor != nullptr);
     }
 
     // Add decoder (single timestep)
@@ -652,10 +648,10 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
 
     // Replicate input likelihoods across all TopK options
     auto gatherLayer = generatorNetwork->addGather(*inputLikelihoodsTensor, *inputLikelihoodsReplicateIndicesTensor, 1);
-    assert(gatherLayer != nullptr);
+    ASSERT(gatherLayer != nullptr);
     gatherLayer->setName("Replicate beam likelihoods");
     auto inputLikelihoodsReplicatedTensor = gatherLayer->getOutput(0);
-    assert(inputLikelihoodsReplicatedTensor != nullptr);
+    ASSERT(inputLikelihoodsReplicatedTensor != nullptr);
 
     // Add per-ray top-k options generation
     nvinfer1::ITensor* outputCombinedLikelihoodsTensor;
@@ -672,9 +668,15 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
     generatorNetwork->markOutput(*outputVocabularyIndicesTensor);
     outputVocabularyIndicesTensor->setType(nvinfer1::DataType::kINT32);
 
-    samplesCommon::setDummyInt8Scales(generatorConfig, generatorNetwork);
+    samplesCommon::setDummyInt8DynamicRanges(generatorConfig, generatorNetwork);
     samplesCommon::enableDLA(generatorBuilder, generatorConfig, gUseDLACore);
-    auto res = generatorBuilder->buildEngineWithConfig(*generatorNetwork, *generatorConfig);
+    auto generatorPlan = generatorBuilder->buildSerializedNetwork(*generatorNetwork, *generatorConfig);
+    ASSERT(generatorPlan != nullptr);
+    auto runtime = createInferRuntime(sample::gLogger.getTRTLogger());
+    ASSERT(runtime != nullptr);
+    auto res = runtime->deserializeCudaEngine(generatorPlan->data(), generatorPlan->size());
+    runtime->destroy();
+    generatorPlan->destroy();
     generatorNetwork->destroy();
     generatorBuilder->destroy();
     generatorConfig->destroy();
@@ -685,7 +687,7 @@ nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
     const std::vector<nvinfer1::Dims>& decoderStateSizes, int attentionSize)
 {
     nvinfer1::IBuilder* shuffleBuilder = nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger());
-    assert(shuffleBuilder != nullptr);
+    ASSERT(shuffleBuilder != nullptr);
     nvinfer1::IBuilderConfig* shuffleConfig = shuffleBuilder->createBuilderConfig();
     shuffleBuilder->setMaxBatchSize(gMaxBatchSize);
     shuffleConfig->setMaxWorkspaceSize(gMaxWorkspaceSize);
@@ -698,12 +700,12 @@ nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
         shuffleConfig->setFlag(BuilderFlag::kINT8);
     }
 
-    nvinfer1::INetworkDefinition* shuffleNetwork = shuffleBuilder->createNetwork();
+    nvinfer1::INetworkDefinition* shuffleNetwork = shuffleBuilder->createNetworkV2(0);
 
-    nvinfer1::Dims sourceRayIndicesDims{1, {gBeamWidth}, {nvinfer1::DimensionType::kINDEX}};
+    nvinfer1::Dims sourceRayIndicesDims{1, {gBeamWidth}};
     auto sourceRayIndicesTensor
         = shuffleNetwork->addInput("source_ray_indices", nvinfer1::DataType::kINT32, sourceRayIndicesDims);
-    assert(sourceRayIndicesTensor != nullptr);
+    ASSERT(sourceRayIndicesTensor != nullptr);
 
     std::vector<nvinfer1::ITensor*> previousOutputDecoderStatesTensors(decoderStateSizes.size());
     for (int i = 0; i < static_cast<int>(decoderStateSizes.size()); ++i)
@@ -714,40 +716,37 @@ nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
         {
             statesDims.nbDims = decoderStateSizes[i].nbDims + 1;
             statesDims.d[0] = gBeamWidth;
-            statesDims.type[0] = nvinfer1::DimensionType::kINDEX;
             for (int j = 0; j < decoderStateSizes[i].nbDims; ++j)
             {
                 statesDims.d[j + 1] = decoderStateSizes[i].d[j];
-                statesDims.type[j + 1] = decoderStateSizes[i].type[j];
             }
         }
         previousOutputDecoderStatesTensors[i] = shuffleNetwork->addInput(
             ss.str().c_str(), gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT, statesDims);
-        assert(previousOutputDecoderStatesTensors[i] != nullptr);
+        ASSERT(previousOutputDecoderStatesTensors[i] != nullptr);
     }
 
     nvinfer1::ITensor* previousOutputAttentionTensor = nullptr;
     if (gFeedAttentionToInput)
     {
-        nvinfer1::Dims previousOutputAttentionDims{
-            2, {gBeamWidth, attentionSize}, {nvinfer1::DimensionType::kINDEX, nvinfer1::DimensionType::kCHANNEL}};
+        nvinfer1::Dims previousOutputAttentionDims{2, {gBeamWidth, attentionSize}};
         previousOutputAttentionTensor = shuffleNetwork->addInput("previous_output_attention",
             gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT, previousOutputAttentionDims);
-        assert(previousOutputAttentionTensor != nullptr);
+        ASSERT(previousOutputAttentionTensor != nullptr);
     }
 
     for (int i = 0; i < static_cast<int>(decoderStateSizes.size()); ++i)
     {
         auto gatherLayer
             = shuffleNetwork->addGather(*previousOutputDecoderStatesTensors[i], *sourceRayIndicesTensor, 0);
-        assert(gatherLayer != nullptr);
+        ASSERT(gatherLayer != nullptr);
         {
             std::stringstream ss;
             ss << "Shuffle decoder states " << i;
             gatherLayer->setName(ss.str().c_str());
         }
         auto inputDecoderHiddenStatesTensor = gatherLayer->getOutput(0);
-        assert(inputDecoderHiddenStatesTensor != nullptr);
+        ASSERT(inputDecoderHiddenStatesTensor != nullptr);
         std::stringstream ss;
         ss << "input_decoder_states_" << i;
         inputDecoderHiddenStatesTensor->setName(ss.str().c_str());
@@ -758,18 +757,24 @@ nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
     if (gFeedAttentionToInput)
     {
         auto gatherLayer = shuffleNetwork->addGather(*previousOutputAttentionTensor, *sourceRayIndicesTensor, 0);
-        assert(gatherLayer != nullptr);
+        ASSERT(gatherLayer != nullptr);
         gatherLayer->setName("Shuffle attention");
         auto inputAttentionTensor = gatherLayer->getOutput(0);
-        assert(inputAttentionTensor != nullptr);
+        ASSERT(inputAttentionTensor != nullptr);
         inputAttentionTensor->setName("input_attention");
         shuffleNetwork->markOutput(*inputAttentionTensor);
         inputAttentionTensor->setType(gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT);
     }
 
-    samplesCommon::setDummyInt8Scales(shuffleConfig, shuffleNetwork);
+    samplesCommon::setDummyInt8DynamicRanges(shuffleConfig, shuffleNetwork);
     samplesCommon::enableDLA(shuffleBuilder, shuffleConfig, gUseDLACore);
-    auto res = shuffleBuilder->buildEngineWithConfig(*shuffleNetwork, *shuffleConfig);
+    auto shufflePlan = shuffleBuilder->buildSerializedNetwork(*shuffleNetwork, *shuffleConfig);
+    ASSERT(shufflePlan != nullptr);
+    auto runtime = createInferRuntime(sample::gLogger.getTRTLogger());
+    ASSERT(runtime != nullptr);
+    auto res = runtime->deserializeCudaEngine(shufflePlan->data(), shufflePlan->size());
+    runtime->destroy();
+    shufflePlan->destroy();
     shuffleNetwork->destroy();
     shuffleBuilder->destroy();
     shuffleConfig->destroy();
@@ -787,7 +792,7 @@ void processBindings(
     for (auto& a : bindingMap)
     {
         auto bindIdx = engine->getBindingIndex(a.first.c_str());
-        assert(bindIdx >= 0 && bindIdx < engine->getNbBindings());
+        ASSERT(bindIdx >= 0 && bindIdx < engine->getNbBindings());
         bindings[bindIdx] = a.second;
     }
 }
@@ -864,15 +869,15 @@ int main(int argc, char** argv)
     std::vector<nvinfer1::Dims> stateSizes = decoder->getStateSizes();
 
     // A number of consistency checks between components
-    assert(alignment->getSourceStatesSize() == encoder->getMemoryStatesSize());
+    ASSERT(alignment->getSourceStatesSize() == encoder->getMemoryStatesSize());
     if (gInitializeDecoderFromEncoderHiddenStates)
     {
         std::vector<nvinfer1::Dims> encoderStateSizes = encoder->getStateSizes();
-        assert(stateSizes.size() == encoderStateSizes.size());
+        ASSERT(stateSizes.size() == encoderStateSizes.size());
         for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
-            assert(nmtSample::getVolume(stateSizes[i]) == nmtSample::getVolume(encoderStateSizes[i]));
+            ASSERT(nmtSample::getVolume(stateSizes[i]) == nmtSample::getVolume(encoderStateSizes[i]));
     }
-    assert(projection->getOutputSize() == outputEmbedder->getInputDimensionSize());
+    ASSERT(projection->getOutputSize() == outputEmbedder->getInputDimensionSize());
 
     auto inputOriginalHostBuffer
         = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize * gMaxInputSequenceLength);

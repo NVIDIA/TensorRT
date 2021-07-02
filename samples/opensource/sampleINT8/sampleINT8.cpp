@@ -38,6 +38,8 @@
 #include <iostream>
 #include <sstream>
 
+using samplesCommon::SampleUniquePtr;
+
 const std::string gSampleName = "TensorRT.sample_int8";
 
 //!
@@ -57,9 +59,6 @@ struct SampleINT8Params : public samplesCommon::CaffeSampleParams
 //!
 class SampleINT8
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleINT8(const SampleINT8Params& params)
         : mParams(params)
@@ -133,7 +132,13 @@ bool SampleINT8::build(DataType dataType)
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    if ((dataType == DataType::kINT8 && !builder->platformHasFastInt8())
+        || (dataType == DataType::kHALF && !builder->platformHasFastFp16()))
+    {
+        return false;
+    }
+
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -151,21 +156,15 @@ bool SampleINT8::build(DataType dataType)
         return false;
     }
 
-    if ((dataType == DataType::kINT8 && !builder->platformHasFastInt8())
-        || (dataType == DataType::kHALF && !builder->platformHasFastFp16()))
-    {
-        return false;
-    }
-
     auto constructed = constructNetwork(builder, network, config, parser, dataType);
     if (!constructed)
     {
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 3);
 
     return true;
 }
@@ -252,8 +251,28 @@ bool SampleINT8::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
         }
     }
 
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -287,14 +306,14 @@ bool SampleINT8::infer(std::vector<float>& score, int firstScoreBatch, int nbSco
 
     Dims outputDims = context->getEngine().getBindingDimensions(
         context->getEngine().getBindingIndex(mParams.outputTensorNames[0].c_str()));
-    int outputSize = samplesCommon::volume(outputDims);
+    int64_t outputSize = samplesCommon::volume(outputDims);
     int top1{0}, top5{0};
     float totalTime{0.0f};
 
     while (batchStream.next())
     {
         // Read the input data into the managed buffers
-        assert(mParams.inputTensorNames.size() == 1);
+        ASSERT(mParams.inputTensorNames.size() == 1);
         if (!processInput(buffers, batchStream.getBatch()))
         {
             return false;

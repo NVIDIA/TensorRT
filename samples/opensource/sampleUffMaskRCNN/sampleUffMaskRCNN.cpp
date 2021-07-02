@@ -15,11 +15,10 @@
  */
 
 #ifndef _MSC_VER
-#include <sys/time.h>
 #include <unistd.h>
+#include <sys/time.h>
 #endif
 
-#include <assert.h>
 #include <chrono>
 #include <ctime>
 #include <cuda_runtime_api.h>
@@ -44,6 +43,8 @@
 
 // MaskRCNN Parameter
 #include "mrcnn_config.h"
+
+using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_maskrcnn";
 
@@ -80,7 +81,7 @@ void readPPMFile(const std::string& filename, PPM<uint8_t>& ppm)
 {
     ppm.fileName = filename;
     std::ifstream infile(filename, std::ifstream::binary);
-    assert(infile.is_open() && "Attempting to read from a file that is not open. ");
+    ASSERT(infile.is_open() && "Attempting to read from a file that is not open. ");
     infile >> ppm.magic >> ppm.w >> ppm.h >> ppm.max;
     infile.seekg(1, infile.cur);
 
@@ -92,7 +93,7 @@ void readPPMFile(const std::string& filename, PPM<uint8_t>& ppm)
 void writePPMFile(const std::string& filename, PPM<uint8_t>& ppm)
 {
     std::ofstream outfile("./" + filename, std::ofstream::binary);
-    assert(!outfile.fail());
+    ASSERT(!outfile.fail());
     outfile << "P6"
             << "\n"
             << ppm.w << " " << ppm.h << "\n"
@@ -107,8 +108,8 @@ void resizePPM(const PPM<T>& src, PPM<T>& dst, int target_height, int target_wid
     auto clip = [](float in, float low, float high) -> float { return (in < low) ? low : (in > high ? high : in); };
     int original_height = src.h;
     int original_width = src.w;
-    assert(dst.h == target_height);
-    assert(dst.w == target_width);
+    ASSERT(dst.h == target_height);
+    ASSERT(dst.w == target_width);
     float ratio_h = static_cast<float>(original_height - 1.0f) / static_cast<float>(target_height - 1.0f);
     float ratio_w = static_cast<float>(original_width - 1.0f) / static_cast<float>(target_width - 1.0f);
 
@@ -143,8 +144,8 @@ void resizePPM(const PPM<T>& src, PPM<T>& dst, int target_height, int target_wid
 
 void padPPM(const PPM<uint8_t>& src, PPM<uint8_t>& dst, int top, int bottom, int left, int right)
 {
-    assert(dst.h == (src.h + top + bottom));
-    assert(dst.w == (src.w + left + right));
+    ASSERT(dst.h == (src.h + top + bottom));
+    ASSERT(dst.w == (src.w + left + right));
 
     for (int y = 0; y < src.h; y++)
     {
@@ -160,13 +161,13 @@ void padPPM(const PPM<uint8_t>& src, PPM<uint8_t>& dst, int top, int bottom, int
 
 void preprocessPPM(PPM<uint8_t>& src, PPM<uint8_t>& dst, int target_h, int target_w)
 {
-    assert(target_h == target_w);
+    ASSERT(target_h == target_w);
     int input_dim = target_h;
     // padding the input img to model's input_size:
     const int image_dim = std::max(src.h, src.w);
     int resize_h = src.h * input_dim / image_dim;
     int resize_w = src.w * input_dim / image_dim;
-    assert(resize_h == input_dim || resize_w == input_dim);
+    ASSERT(resize_h == input_dim || resize_w == input_dim);
 
     int y_offset = (input_dim - resize_h) / 2;
     int x_offset = (input_dim - resize_w) / 2;
@@ -192,7 +193,7 @@ PPM<uint8_t> resizeMask(const BBoxInfo& box, const float mask_threshold)
     PPM<uint8_t> result;
     if (!box.mask)
     {
-        assert(result.buffer.size() == 0);
+        ASSERT(result.buffer.size() == 0);
         return result;
     }
 
@@ -240,8 +241,8 @@ void maskPPM(
             uint8_t mask_pixel = mask.buffer[y * mask.w + x];
             if (mask_pixel == 1)
             {
-                assert(0 <= start_y + y && start_y + y < image.h);
-                assert(0 <= start_x + x && start_x + x < image.w);
+                ASSERT(0 <= start_y + y && start_y + y < image.h);
+                ASSERT(0 <= start_x + x && start_x + x < image.w);
 
                 int cur_y = start_y + y;
                 int cur_x = start_x + x;
@@ -258,7 +259,7 @@ void maskPPM(
                     = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, p_b * (1 - alpha) + color[2] * alpha)));
             }
             else
-                assert(mask_pixel == 0);
+                ASSERT(mask_pixel == 0);
         }
     }
 }
@@ -309,9 +310,6 @@ struct SampleMaskRCNNParams : public samplesCommon::SampleParams
 
 class SampleMaskRCNN
 {
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
-
 public:
     SampleMaskRCNN(const SampleMaskRCNNParams& params)
         : mParams(params)
@@ -358,7 +356,7 @@ bool SampleMaskRCNN::build()
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetwork());
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -376,11 +374,11 @@ bool SampleMaskRCNN::build()
         return false;
     }
 
-    assert(network->getNbInputs() == 1);
+    ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    assert(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 3);
 
-    assert(network->getNbOutputs() == 2);
+    ASSERT(network->getNbOutputs() == 2);
 
     return true;
 }
@@ -399,18 +397,44 @@ bool SampleMaskRCNN::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
         return false;
     }
 
+    SampleUniquePtr<IBuilderConfig> config{builder->createBuilderConfig()};
+
     builder->setMaxBatchSize(mParams.batchSize);
-    builder->setMaxWorkspaceSize(1_GiB);
-    builder->setFp16Mode(mParams.fp16);
+    config->setMaxWorkspaceSize(1_GiB);
+    if (mParams.fp16)
+    {
+        config->setFlag(BuilderFlag::kFP16);
+    }
 
     // Only for speed test
     if (mParams.int8)
     {
-        samplesCommon::setAllTensorScales(network.get());
-        builder->setInt8Mode(true);
+        samplesCommon::setAllDynamicRanges(network.get());
+        config->setFlag(BuilderFlag::kINT8);
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+    // CUDA stream used for profiling by the builder.
+    auto profileStream = samplesCommon::makeCudaStream();
+    if (!profileStream)
+    {
+        return false;
+    }
+    config->setProfileStream(*profileStream);
+
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    if (!plan)
+    {
+        return false;
+    }
+
+    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (!runtime)
+    {
+        return false;
+    }
+
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
+        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -431,7 +455,7 @@ bool SampleMaskRCNN::infer()
     }
 
     // Read the input data into the managed buffers
-    assert(mParams.inputTensorNames.size() == 1);
+    ASSERT(mParams.inputTensorNames.size() == 1);
     if (!processInput(buffers))
     {
         return false;
@@ -449,8 +473,7 @@ bool SampleMaskRCNN::infer()
     auto tEnd = std::chrono::high_resolution_clock::now();
     float totalHost = std::chrono::duration<float, std::milli>(tEnd - tStart).count();
     sample::gLogInfo << "Run for 10 times with Batch Size " << mParams.batchSize << std::endl;
-    sample::gLogInfo << "Average inference time is " << (totalHost / 10) / mParams.batchSize << " ms/frame"
-                     << std::endl;
+    sample::gLogInfo << "Average inference time is " << (totalHost / 10) / mParams.batchSize << " ms/frame" << std::endl;
 
     if (!status)
     {
@@ -495,7 +518,7 @@ bool SampleMaskRCNN::processInput(const samplesCommon::BufferManager& buffers)
 
     mPPMs.resize(batchSize);
     mOriginalPPMs.resize(batchSize);
-    assert(mPPMs.size() <= imageList.size());
+    ASSERT(mPPMs.size() <= imageList.size());
     for (int i = 0; i < batchSize; ++i)
     {
         MaskRCNNUtils::readPPMFile(locateFile(imageList[i], mParams.dataDirs), mOriginalPPMs[i]);
@@ -524,7 +547,7 @@ std::vector<MaskRCNNUtils::BBoxInfo> SampleMaskRCNN::decodeOutput(
     const int imageIdx, void* detectionsHost, void* masksHost)
 {
     int input_dim_h = MaskRCNNConfig::IMAGE_SHAPE.d[1], input_dim_w = MaskRCNNConfig::IMAGE_SHAPE.d[2];
-    assert(input_dim_h == input_dim_w);
+    ASSERT(input_dim_h == input_dim_w);
     int image_height = mOriginalPPMs[imageIdx].h;
     int image_width = mOriginalPPMs[imageIdx].w;
     // resize the DsImage with scale
@@ -591,9 +614,9 @@ bool SampleMaskRCNN::verifyOutput(const samplesCommon::BufferManager& buffers)
             MaskRCNNUtils::addBBoxPPM(mOriginalPPMs[p], binfo[roi_id], resized_mask);
 
             sample::gLogInfo << "Detected " << MaskRCNNConfig::CLASS_NAMES[binfo[roi_id].label] << " in"
-                             << mOriginalPPMs[p].fileName << " with confidence " << binfo[roi_id].prob * 100.f
-                             << " and coordinates (" << binfo[roi_id].box.x1 << ", " << binfo[roi_id].box.y1 << ", "
-                             << binfo[roi_id].box.x2 << ", " << binfo[roi_id].box.y2 << ")" << std::endl;
+                     << mOriginalPPMs[p].fileName << " with confidence " << binfo[roi_id].prob * 100.f
+                     << " and coordinates (" << binfo[roi_id].box.x1 << ", " << binfo[roi_id].box.y1 << ", "
+                     << binfo[roi_id].box.x2 << ", " << binfo[roi_id].box.y2 << ")" << std::endl;
         }
         sample::gLogInfo << "The results are stored in current directory: " << std::to_string(p) + ".ppm" << std::endl;
         MaskRCNNUtils::writePPMFile(std::to_string(p) + ".ppm", mOriginalPPMs[p]);

@@ -8,7 +8,6 @@
 	* [Building the engine](#building-the-engine)
 	* [Running inference](#running-inference)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
-- [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
 	* [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -94,26 +93,21 @@ The Scale layer implements a per-tensor, per-channel, or per-element affine tran
 [Shuffle layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#shuffle-layer)
 The Shuffle layer implements a reshape and transpose operator for tensors.
 
-## Preparing sample data
-
-1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
-    ```bash
-    export TRT_DATADIR=/usr/src/tensorrt/data
-    ```
 
 ## Running the sample
 
-1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
-
-2.  Run the sample to build and run the MNIST engine from the ONNX model.
-	```bash
-	sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleOnnxMNIST` directory. The binary named `sample_onnx_mnist` will be created in the `<TensorRT root directory>/bin` directory.
+	```
+	cd <TensorRT root directory>/samples/sampleOnnxMNIST
+	make
 	```
 
-    For example:
-    ```bash
-    sample_onnx_mnist --datadir $TRT_DATADIR/mnist
-    ```
+	Where `<TensorRT root directory>` is where you installed TensorRT.
+
+2.  Run the sample to build and run the MNIST engine from the ONNX model.
+	```
+	./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+	```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	```

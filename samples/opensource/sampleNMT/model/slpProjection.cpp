@@ -16,8 +16,6 @@
 
 #include "slpProjection.h"
 #include "common.h"
-
-#include <cassert>
 #include <sstream>
 
 namespace nmtSample
@@ -26,9 +24,9 @@ SLPProjection::SLPProjection(ComponentWeights::ptr weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
-    assert(mWeights->mMetaData.size() >= 3);
+    ASSERT(mWeights->mMetaData.size() >= 3);
     mKernelWeights.type = static_cast<nvinfer1::DataType>(mWeights->mMetaData[0]);
-    assert(mKernelWeights.type == nvinfer1::DataType::kFLOAT);
+    ASSERT(mKernelWeights.type == nvinfer1::DataType::kFLOAT);
     // Resize dimensions to be multiples of gPadMultiple for performance
     mInputChannelCount = samplesCommon::roundUp(mWeights->mMetaData[1], gPadMultiple);  // matches embedder outputs
     mOutputChannelCount = samplesCommon::roundUp(mWeights->mMetaData[2], gPadMultiple); // matches embedder inputs
@@ -41,19 +39,18 @@ SLPProjection::SLPProjection(ComponentWeights::ptr weights)
 void SLPProjection::addToModel(
     nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* input, nvinfer1::ITensor** outputLogits)
 {
-    nvinfer1::Dims weightDims{2, {mInputChannelCount, mOutputChannelCount},
-        {nvinfer1::DimensionType::kCHANNEL, nvinfer1::DimensionType::kCHANNEL}};
+    nvinfer1::Dims weightDims{2, {mInputChannelCount, mOutputChannelCount}};
     auto constLayer = network->addConstant(weightDims, mKernelWeights);
-    assert(constLayer != nullptr);
+    ASSERT(constLayer != nullptr);
     constLayer->setName("Projection matrix");
     auto weights = constLayer->getOutput(0);
-    assert(weights != nullptr);
+    ASSERT(weights != nullptr);
 
-    auto mmLayer = network->addMatrixMultiply(*input, false, *weights, false);
-    assert(mmLayer != nullptr);
+    auto mmLayer = network->addMatrixMultiply(*input, MatrixOperation::kNONE, *weights, MatrixOperation::kNONE);
+    ASSERT(mmLayer != nullptr);
     mmLayer->setName("Projection Matrix Multiply");
     *outputLogits = mmLayer->getOutput(0);
-    assert(*outputLogits != nullptr);
+    ASSERT(*outputLogits != nullptr);
 }
 
 int SLPProjection::getOutputSize()

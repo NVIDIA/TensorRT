@@ -24,15 +24,14 @@ class ToJSON(Tool):
     This tool will be removed in 0.31.0 since all future versions of Polygraphy
     will not use Pickle for serialization.
     """
+
     def __init__(self):
         mod.warn_deprecated("to-json", use_instead="JSON serialization", remove_in="0.31.0")
         super().__init__(name="to-json")
 
-
     def add_parser_args(self, parser):
         parser.add_argument("pickle_data", help="Path to old pickled data")
         parser.add_argument("-o", "--output", help="Path at which to write the JSON-ified data.", required=True)
-
 
     def run(self, args):
         import pickle

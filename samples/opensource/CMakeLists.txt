@@ -24,11 +24,8 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleMLP
     sampleMNIST
     sampleMNISTAPI
-    sampleMovieLens
-    sampleMovieLensMPS
     sampleNMT
     sampleOnnxMNIST
-    samplePlugin
     sampleReformatFreeIO
     sampleSSD
     sampleUffFasterRCNN

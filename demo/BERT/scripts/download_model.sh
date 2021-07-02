@@ -20,16 +20,20 @@ SQUAD='2'
 MODEL='large'
 SEQ_LEN='128'
 FW='tf'
+WTYPE='dense'
+PREC='fp16'
 
 while test $# -gt 0
 do
     case "$1" in
-        -h) echo "Usage: sh download_model.sh [tf|pyt] [base|large] [128|384] [v2|v1_1]"
+        -h) echo "Usage: sh download_model.sh [tf|pyt] [base|large|megatron-large] [128|384] [v2|v1_1] [sparse] [int8-qat]"
             exit 0
             ;;
         base) MODEL='base'
             ;;
         large) MODEL='large'
+            ;;
+        megatron-large) MODEL='megatron'
             ;;
         128) SEQ_LEN='128'
             ;;
@@ -42,6 +46,10 @@ do
         tf) FW='tf'
             ;;
         pyt) FW='pyt'
+            ;;
+        int8-qat) PREC='int8qat'
+            ;;
+        sparse) WTYPE='sparse'
             ;;
         *) echo "Invalid argument $1...exiting"
             exit 0
@@ -56,12 +64,14 @@ pushd models/fine-tuned
 
 # Download the BERT fine-tuned model
 echo "Downloading BERT-${FW} ${MODEL} checkpoints for sequence length ${SEQ_LEN} and fine-tuned for SQuAD ${SQUAD}."
-
 if [ "${FW}" = 'tf' ]; then
     CKPT=bert_${FW}_ckpt_${MODEL}_qa_squad${SQUAD}_amp_${SEQ_LEN}
     CKPT_VERSION=19.03.1
 elif [ "${FW}" = 'pyt' ]; then
-    if [ "${MODEL}" != 'large' ] || [ "${SQUAD}" != '11' ]; then
+    if [ "${MODEL}" == 'megatron' ]; then
+        CKPT=bert_${FW}_statedict_megatron_${WTYPE}_${PREC}
+        CKPT_VERSION=21.03.0
+    elif [ "${MODEL}" != 'large' ] || [ "${SQUAD}" != '11' ]; then
         echo "ERROR: Only BERT-large checkpoint fine-tuned for SQuAD v1.1 available in the QAT (PyTorch) workflow."
     else
         CKPT=bert_${FW}_onnx_${MODEL}_qa_squad${SQUAD}_amp_fake_quant
@@ -78,4 +88,5 @@ if [ -n "$CKPT" ]; then
         ngc registry model download-version nvidia/${CKPT}:${CKPT_VERSION}
     fi
 fi
+
 popd

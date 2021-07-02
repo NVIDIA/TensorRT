@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,12 @@
 #define CLIP_KERNEL_H
 #include "NvInfer.h"
 
-int clipInference(cudaStream_t stream, int n, float clipMin, float clipMax, const void* input, void* output);
+int clipInference(
+    cudaStream_t stream,
+    int n,
+    float clipMin,
+    float clipMax,
+    const void* input,
+    void* output);
 
 #endif

@@ -28,23 +28,24 @@ class OnnxrtRunner(BaseRunner):
     """
     Runs inference using an ONNX-Runtime inference session.
     """
+
     def __init__(self, sess, name=None):
         """
         Args:
             sess (Callable() -> onnxruntime.InferenceSession):
-                    A callable that can supply an ONNX-Runtime inferences session.
+                    A callable that can supply an ONNX-Runtime inference session.
+                    This callable is invoked whenever the runner is activated.
+
+                    Alternatively, the inference session may be supplied directly.
         """
         super().__init__(name=name, prefix="onnxrt-runner")
         self._sess = sess
 
-
     def activate_impl(self):
         self.sess, _ = util.invoke_if_callable(self._sess)
 
-
     def deactivate_impl(self):
         del self.sess
-
 
     def infer_impl(self, feed_dict):
         start = time.time()
@@ -56,7 +57,6 @@ class OnnxrtRunner(BaseRunner):
             out_dict[node.name] = out
         self.inference_time = end - start
         return out_dict
-
 
     @func.constantmethod
     def get_input_metadata_impl(self):

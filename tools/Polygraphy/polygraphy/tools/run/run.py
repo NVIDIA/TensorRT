@@ -17,15 +17,28 @@ import argparse
 import copy
 
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import (ComparatorCompareArgs, ComparatorRunArgs,
-                                   DataLoaderArgs, LoggerArgs, ModelArgs,
-                                   OnnxLoaderArgs, OnnxrtRunnerArgs,
-                                   OnnxSaveArgs, OnnxShapeInferenceArgs,
-                                   Tf2OnnxLoaderArgs, TfConfigArgs,
-                                   TfLoaderArgs, TfRunnerArgs, TrtConfigArgs,
-                                   TrtEngineLoaderArgs, TrtEngineSaveArgs,
-                                   TrtLegacyArgs, TrtNetworkLoaderArgs,
-                                   TrtPluginLoaderArgs, TrtRunnerArgs)
+from polygraphy.tools.args import (
+    ComparatorCompareArgs,
+    ComparatorRunArgs,
+    DataLoaderArgs,
+    LoggerArgs,
+    ModelArgs,
+    OnnxLoaderArgs,
+    OnnxrtRunnerArgs,
+    OnnxSaveArgs,
+    OnnxShapeInferenceArgs,
+    Tf2OnnxLoaderArgs,
+    TfConfigArgs,
+    TfLoaderArgs,
+    TfRunnerArgs,
+    TrtConfigArgs,
+    TrtEngineLoaderArgs,
+    TrtEngineSaveArgs,
+    TrtLegacyArgs,
+    TrtNetworkLoaderArgs,
+    TrtPluginLoaderArgs,
+    TrtRunnerArgs,
+)
 from polygraphy.tools.base import Tool
 from polygraphy.tools.script import Script, inline, safe
 
@@ -33,18 +46,23 @@ from polygraphy.tools.script import Script, inline, safe
 # FIXME: This should be moved into tools/args/
 def add_runner_args(parser):
     class StoreRunnerOrdered(argparse.Action):
-         def __call__(self, parser, namespace, values, option_string=None):
+        def __call__(self, parser, namespace, values, option_string=None):
             if not hasattr(namespace, "runners"):
                 namespace.runners = []
             namespace.runners.append(option_string.lstrip("-").replace("-", "_"))
 
-    runner_args = parser.add_argument_group("Runners", "Options for selecting runners. Zero or more runners may be specified")
+    runner_args = parser.add_argument_group(
+        "Runners", "Options for selecting runners. Zero or more runners may be specified"
+    )
 
     def add_runner(option, help):
         runner_args.add_argument(option, help=help, action=StoreRunnerOrdered, dest="runners", default=[], nargs=0)
 
     add_runner("--trt", help="Run inference using TensorRT")
-    add_runner("--trt-legacy", help="Run inference using Legacy TensorRT Runner. Only supports networks using implicit batch mode")
+    add_runner(
+        "--trt-legacy",
+        help="Run inference using Legacy TensorRT Runner. Only supports networks using implicit batch mode",
+    )
     add_runner("--tf", help="Run inference using TensorFlow")
     add_runner("--onnxrt", help="Run inference using ONNX Runtime")
 
@@ -91,6 +109,7 @@ class Run(Tool):
     """
     Run inference and compare results across backends.
     """
+
     def __init__(self):
         super().__init__("run")
         self.subscribe_args(ModelArgs())
@@ -113,19 +132,24 @@ class Run(Tool):
         self.subscribe_args(ComparatorRunArgs())
         self.subscribe_args(ComparatorCompareArgs())
 
-
     def add_parser_args(self, parser):
-        parser.add_argument("--gen", "--gen-script", help="Path to save a generated Python script, that will do exactly "
-                            "what `run` would. When this option is enabled, `run` will just save the script and exit. "
-                            "Use `-` to print the script to the standard output",
-                            type=argparse.FileType("w"), dest="gen_script")
+        parser.add_argument(
+            "--gen",
+            "--gen-script",
+            help="Path to save a generated Python script, that will do exactly "
+            "what `run` would. When this option is enabled, `run` will just save the script and exit. "
+            "Use `-` to print the script to the standard output",
+            type=argparse.FileType("w"),
+            dest="gen_script",
+        )
         add_runner_args(parser)
-
 
     def run(self, args):
         if self.arg_groups[ModelArgs].model_file is None and args.runners:
-            G_LOGGER.exit("One or more runners was specified, but no model file was provided. Make sure you've specified the model path, "
-                            "and also that it's not being consumed as an argument for another parameter")
+            G_LOGGER.critical(
+                "One or more runners was specified, but no model file was provided. Make sure you've specified the model path, "
+                "and also that it's not being consumed as an argument for another parameter"
+            )
 
         script = self.build_script(args)
 
@@ -134,10 +158,11 @@ class Run(Tool):
         else:
             exec(str(script))
 
-
     # Generates a script based on command-line arguments
     def build_script(self, args):
-        script = Script(summary=generate_summary(self.arg_groups[ModelArgs].model_file, args.runners, args.load_results))
+        script = Script(
+            summary=generate_summary(self.arg_groups[ModelArgs].model_file, args.runners, args.load_results)
+        )
 
         self.arg_groups[LoggerArgs].add_to_script(script)
 
@@ -159,12 +184,15 @@ class Run(Tool):
         script.add_import(imports=["sys"])
 
         cmd_run = inline(safe("' '.join(sys.argv)"))
-        exit_status = safe('# Report Results\n'
-                           'cmd_run = {cmd}\n'
-                           'if not {success}:\n'
-                           '\tG_LOGGER.exit("FAILED | Command: {{}}".format(cmd_run))\n'
-                           'G_LOGGER.finish("PASSED | Command: {{}}".format(cmd_run))\n',
-                           cmd=cmd_run, success=SUCCESS_VAR_NAME)
+        exit_status = safe(
+            "# Report Results\n"
+            "cmd_run = {cmd}\n"
+            "if not {success}:\n"
+            '\tG_LOGGER.critical("FAILED | Command: {{}}".format(cmd_run))\n'
+            'G_LOGGER.finish("PASSED | Command: {{}}".format(cmd_run))\n',
+            cmd=cmd_run,
+            success=SUCCESS_VAR_NAME,
+        )
         script.append_suffix(exit_status)
 
         return script
