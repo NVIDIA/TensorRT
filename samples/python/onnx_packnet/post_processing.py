@@ -63,7 +63,7 @@ def process_pad_nodes(graph):
 
 def fold_pad_inputs(node, graph):
     # Gather the amount of padding in each dimension from pytorch graph.
-    pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(0).attrs['value'].values
+    pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(1).i(0).i(1).i(0).i(0).attrs['value'].values
 
     # Assumption a 4d input tensor
     onnx_pad_values = [0]*4*2 # 4d tensor and 2 sides padding for each dimension
@@ -225,5 +225,5 @@ def convert_to_groupnorm(instancenorm, graph):
     relu_input_tensor.inputs[0] = groupnorm
 
     # Add scale and bias constant tensors from unsqueeze op as input to group norm plugin
-    groupnorm.inputs.append(instancenorm.o().o().i(1).inputs[0])
-    groupnorm.inputs.append(instancenorm.o().o().o().i(1).inputs[0])
+    groupnorm.inputs.append(instancenorm.o().o().inputs[1])
+    groupnorm.inputs.append(instancenorm.o().o().o().inputs[1])
