@@ -512,6 +512,7 @@ message LayerParameter {
   // please note that the serialization number for ClipParameter differs from
   // Caffe master, since 148 was already used for a custom field
   optional ClipParameter clip_param = 8787;
+  optional ResizeParameter resize_param = 8788;
 }
 
 // Message that stores parameters used to apply transformation
