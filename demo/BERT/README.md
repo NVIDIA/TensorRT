@@ -35,9 +35,6 @@ This subfolder of the BERT TensorFlow repository, tested and maintained by NVIDI
     * [Inference performance: NVIDIA T4](#inference-performance-nvidia-t4-16gb)
       * [BERT Base](#bert-base-1)
       * [BERT Large](#bert-large-1)
-    * [Inference performance: NVIDIA V100](#inference-performance-nvidia-v100-16gb)
-      * [BERT Base](#bert-base-2)
-      * [BERT Large](#bert-large-2)
 
 
 ## Model overview
