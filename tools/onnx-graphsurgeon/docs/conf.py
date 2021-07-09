@@ -70,7 +70,11 @@ html_logo = '_static/img/nvlogo_white.png'
 html_show_sourcelink = False
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'TensorRTdoc'
+htmlhelp_basename = 'OnnxGraphSurgeonDoc'
+
+# Template files to extend default Sphinx templates.
+# See https://www.sphinx-doc.org/en/master/templating.html for details.
+templates_path = ["_templates"]
 
 # For constructor arguments to show up in Sphinx generated doc
 autoclass_content = 'both'
