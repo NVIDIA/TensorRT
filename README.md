@@ -125,20 +125,22 @@ For Linux platforms, we recommend that you generate a docker container for build
 ## Building TensorRT-OSS
 * Generate Makefiles or VS project (Windows) and build.
 
-   **Example: Linux (x86-64) build with default cuda-11.3**
+    **Example: Linux (x86-64) build with default cuda-11.3**
 	```bash
 	cd $TRT_OSSPATH
 	mkdir -p build && cd build
 	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
 	make -j$(nproc)
 	```
-    **Example: Native build on Jetson (arm64) with cuda-10.2**
+    **Example: Native build on Jetson (aarch64) with cuda-10.2**
     ```bash
     cd $TRT_OSSPATH
     mkdir -p build && cd build
     cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DTRT_PLATFORM_ID=aarch64 -DCUDA_VERSION=10.2
-    make -j$(nproc)
+    CC=/usr/bin/gcc make -j$(nproc)
     ```
+    > NOTE: C compiler must be explicitly specified via `CC=` for native `aarch64` builds of protobuf.
+
     **Example: Ubuntu 18.04 Cross-Compile for Jetson (arm64) with cuda-10.2 (JetPack)**
 	```bash
 	cd $TRT_OSSPATH
