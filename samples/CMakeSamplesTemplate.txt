@@ -24,7 +24,7 @@ set_ifndef(SAMPLE_PARSERS "none")
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-get_filename_component(SAMPLES_DIR ../../ ABSOLUTE)
+get_filename_component(SAMPLES_DIR ../ ABSOLUTE)
 get_filename_component(SAMPLE_DIR_NAME ${TARGET_DIR} NAME)
 
 set_ifndef(CUDA_INSTALL_DIR /usr/local/cuda)

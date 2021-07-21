@@ -14,32 +14,10 @@
 # limitations under the License.
 #
 
-add_custom_target(samples)
-
-set(OPENSOURCE_SAMPLES_LIST
-    sampleAlgorithmSelector
-    sampleCharRNN
-    sampleDynamicReshape
-    sampleFasterRCNN
-    sampleGoogleNet
-    sampleINT8
-    sampleINT8API
-    sampleMLP
-    sampleMNIST
-    sampleMNISTAPI
-    sampleNMT
-    sampleOnnxMNIST
-    sampleReformatFreeIO
-    sampleSSD
-    sampleUffFasterRCNN
-    sampleUffMaskRCNN
-    sampleUffMNIST
-    sampleUffPluginV2Ext
-    sampleUffSSD
-    sampleOnnxMnistCoordConvAC
-    trtexec
+SET(SAMPLE_SOURCES
+     sampleAlgorithmSelector.cpp
 )
 
-foreach(SAMPLE_ITER ${OPENSOURCE_SAMPLES_LIST})
-    add_subdirectory(${SAMPLE_ITER})
-endforeach(SAMPLE_ITER)
+set(SAMPLE_PARSERS "caffe")
+
+include(../CMakeSamplesTemplate.txt)
