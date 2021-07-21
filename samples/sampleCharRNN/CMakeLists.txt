@@ -13,33 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-add_custom_target(samples)
-
-set(OPENSOURCE_SAMPLES_LIST
-    sampleAlgorithmSelector
-    sampleCharRNN
-    sampleDynamicReshape
-    sampleFasterRCNN
-    sampleGoogleNet
-    sampleINT8
-    sampleINT8API
-    sampleMLP
-    sampleMNIST
-    sampleMNISTAPI
-    sampleNMT
-    sampleOnnxMNIST
-    sampleReformatFreeIO
-    sampleSSD
-    sampleUffFasterRCNN
-    sampleUffMaskRCNN
-    sampleUffMNIST
-    sampleUffPluginV2Ext
-    sampleUffSSD
-    sampleOnnxMnistCoordConvAC
-    trtexec
+SET(SAMPLE_SOURCES
+    sampleCharRNN.cpp
+    ../common/sampleEngines.cpp
 )
+# Required due to inclusion of sampleEnines.h
+SET(SAMPLE_PARSERS "uff" "caffe" "onnx")
 
-foreach(SAMPLE_ITER ${OPENSOURCE_SAMPLES_LIST})
-    add_subdirectory(${SAMPLE_ITER})
-endforeach(SAMPLE_ITER)
+include(../CMakeSamplesTemplate.txt)
