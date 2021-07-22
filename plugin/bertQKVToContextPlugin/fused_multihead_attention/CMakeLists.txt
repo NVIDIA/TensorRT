@@ -13,11 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-add_subdirectory(fused_multihead_attention)
-add_subdirectory(fused_multihead_attention_v2)
-file(GLOB SRCS *.cpp)
+file(GLOB SRCS src/*.cpp)
 set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
 set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)
-file(GLOB CU_SRCS *.cu)
+file(GLOB CU_SRCS src/*.cu)
 set(BERT_CU_SOURCES ${BERT_CU_SOURCES} ${CU_SRCS})
 set(BERT_CU_SOURCES ${BERT_CU_SOURCES} PARENT_SCOPE)
