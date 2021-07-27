@@ -35,6 +35,7 @@ set(PLUGIN_LISTS
     coordConvACPlugin
     cropAndResizePlugin
     detectionLayerPlugin
+    stemDetectionLayerPlugin
     efficientNMSPlugin
     flattenConcat
     generateDetectionPlugin

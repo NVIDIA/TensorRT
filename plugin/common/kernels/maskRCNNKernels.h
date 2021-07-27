@@ -116,6 +116,37 @@ struct RefineDetectionWorkSpace
     size_t totalSize = 0;
 };
 
+struct RefineStemDetectionWorkSpace
+{
+    RefineStemDetectionWorkSpace(
+        const int batchSize, const int sampleCount, const RefineNMSParameters& param, const nvinfer1::DataType type);
+
+    RefineStemDetectionWorkSpace() = default;
+
+    nvinfer1::DimsHW argMaxScoreDims;
+    nvinfer1::DimsHW argMaxBboxDims;
+    nvinfer1::DimsHW argMaxStemsDims;
+    nvinfer1::DimsHW argMaxLabelDims;
+    nvinfer1::DimsHW sortClassScoreDims;
+    nvinfer1::DimsHW sortClassLabelDims;
+    nvinfer1::DimsHW sortClassSampleIdxDims;
+    nvinfer1::Dims sortClassValidCountDims = {1, {1, 0}};
+    nvinfer1::DimsHW sortClassPosDims;
+    nvinfer1::DimsHW sortNMSMarkDims;
+
+    size_t argMaxScoreOffset = 0;
+    size_t argMaxBboxOffset = 0;
+    size_t argMaxStemsOffset = 0;
+    size_t argMaxLabelOffset = 0;
+    size_t sortClassScoreOffset = 0;
+    size_t sortClassLabelOffset = 0;
+    size_t sortClassSampleIdxOffset = 0;
+    size_t sortClassValidCountOffset = 0;
+    size_t sortClassPosOffset = 0;
+    size_t sortNMSMarkOffset = 0;
+    size_t totalSize = 0;
+};
+
 struct ProposalWorkSpace
 {
     ProposalWorkSpace(const int batchSize, const int inputCnt, const int sampleCount, const RefineNMSParameters& param,
@@ -209,6 +240,11 @@ cudaError_t RefineBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer
     const RefineNMSParameters& param, const RefineDetectionWorkSpace& refineOffset, void* workspace,
     const void* inScores, const void* inDelta, const void* inCountValid, const void* inROI, void* outDetections);
 
+cudaError_t RefineStemBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer1::DataType dtype,
+    const RefineNMSParameters& param, const RefineStemDetectionWorkSpace& refineOffset, void* workspace,
+    const void* inScores, const void* inDelta, const void* inCountValid, const void* inROI, const void* inStemsDelta,
+    void* outDetections);
+
 cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const float* regWeight,
     const float inputHeight, const float inputWidth, nvinfer1::DataType dtype, const RefineNMSParameters& param,
     const RefineDetectionWorkSpace& refineOffset, void* workspace, const void* inScores, const void* inDelta,
@@ -253,6 +289,12 @@ cudaError_t ApplyDelta2Bboxes(cudaStream_t stream, int N,
     const void* anchors, // [N, anchors, (y1, x1, y2, x2)]
     const void* delta,   //[N, anchors, (dy, dx, log(dh), log(dw)]
     void* outputBbox);
+
+cudaError_t ApplyStemsDelta(cudaStream_t stream, int N,
+    int samples,         // number of anchors per image
+    const void* anchors, // [N, anchors, (y1, x1, y2, x2)]
+    const void* delta,   //[N, anchors, (dy, dx)]
+    void* outputStems);
 
 struct xy_t
 {

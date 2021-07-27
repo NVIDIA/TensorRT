@@ -43,6 +43,11 @@ struct BBoxT
     BoxType y1, x1, y2, x2;
 };
 
+template <typename BoxType>
+struct StemT
+{
+    BoxType y, x;
+};
 
 inline __device__ __half mul_fb(const __half & a, const __half & b) {
     #if __CUDA_ARCH__ >= 530
@@ -179,6 +184,73 @@ __global__ void argMaxGroup_kernel(int samples, int start_class_id, int NClass, 
             outBbox[dstOffset * 4 + 1] = inBbox[(classOffset + maxItem.idx) * 4 + 1];
             outBbox[dstOffset * 4 + 2] = inBbox[(classOffset + maxItem.idx) * 4 + 2];
             outBbox[dstOffset * 4 + 3] = inBbox[(classOffset + maxItem.idx) * 4 + 3];
+        }
+    }
+}
+
+template <typename DType, typename BoxType, int Threads = 32>
+__global__ void argMaxGroupStem_kernel(int samples, int start_class_id, int NClass, const void* inScorePtr,
+    const void* inBboxPtr, const void* inStemsPtr, const void* validSampleCountPtr, void* outScorePtr,
+    void* outLabelPtr, void* outBboxPtr, void* outStemsPtr)
+{
+    const DType* inScore = static_cast<const DType*>(inScorePtr);
+    const BoxType* inBbox = static_cast<const BoxType*>(inBboxPtr);
+    const BoxType* inStems = static_cast<const BoxType*>(inStemsPtr);
+    const int* validSampleCount = static_cast<const int*>(validSampleCountPtr);
+    DType* outScore = static_cast<DType*>(outScorePtr);
+    BoxType* outLabel = static_cast<BoxType*>(outLabelPtr);
+    BoxType* outBbox = static_cast<BoxType*>(outBboxPtr);
+    BoxType* outStems = static_cast<BoxType*>(outStemsPtr);
+
+    const int N = blockIdx.y;
+    const int validSamples = validSampleCount[N];
+
+    typedef ScanItem<DType> ScanItemD;
+    typedef cub::BlockReduce<ScanItemD, Threads> BlockReduce;
+
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    for (int iSample = blockIdx.x; iSample < validSamples; iSample += gridDim.x)
+    {
+        int classOffset = (N * samples + iSample) * NClass; // start from [batch, count, class0]
+        // total IPerThread * blockDim
+        ScanItemD maxItem = {0.0f, -1};
+        for (int i = start_class_id; i < NClass; i += Threads)
+        {
+            int curIdx = i + threadIdx.x;
+            ScanItemD item = {0.0f, -1};
+            if (curIdx < NClass)
+            {
+                item.data = inScore[classOffset + curIdx];
+                item.idx = curIdx;
+            }
+            const int validNum = (NClass - i > Threads ? Threads : NClass - i);
+            ScanItemD aggregate = BlockReduce(temp_storage).Reduce(item, GreaterItem<DType>(), validNum);
+            __syncthreads();
+            if (aggregate.data > maxItem.data)
+            {
+                maxItem = aggregate;
+            }
+#if DUBUG_KERNEL
+            if (N == DUBUG_BATCH && threadIdx.x == 0 && iSample < 15 /*&& maxItem.idx >= 32*/)
+            {
+                printf("argMaxGroup N:%d, iSample:%d, maxItem(score:%.3f, idx:%d)validReduceNum:%d\n", N, iSample,
+                    (float) maxItem.data, maxItem.idx, validNum);
+            }
+#endif
+        }
+
+        const int dstOffset = N * samples + iSample;
+        if (threadIdx.x == 0)
+        {
+            outScore[dstOffset] = maxItem.data;
+            outLabel[dstOffset] = (BoxType) maxItem.idx;
+            outBbox[dstOffset * 4] = inBbox[(classOffset + maxItem.idx) * 4];
+            outBbox[dstOffset * 4 + 1] = inBbox[(classOffset + maxItem.idx) * 4 + 1];
+            outBbox[dstOffset * 4 + 2] = inBbox[(classOffset + maxItem.idx) * 4 + 2];
+            outBbox[dstOffset * 4 + 3] = inBbox[(classOffset + maxItem.idx) * 4 + 3];
+            outStems[dstOffset * 2] = inStems[(classOffset + maxItem.idx) * 2];
+            outStems[dstOffset * 2 + 1] = inStems[(classOffset + maxItem.idx) * 2 + 1];
         }
     }
 }
@@ -1079,6 +1151,129 @@ __global__ void TopKGather_kernel(int samples, int keepTopK, const void* validSa
     }
 }
 
+#define MaxItemsPerThreads 8
+template <typename DType, typename BoxType, int Threads = 256>
+__global__ void TopKGatherStem_kernel(int samples, int keepTopK, const void* validSampleCountPtr, const void* inScorePtr,
+    const void* inLabelPtr, const void* inBboxPtr, const void* inStemsPtr, const void* inBboxRefIdxPtr, const void* inFlagSamplesPtr,
+    void* outDetectionPtr)
+{
+    typedef BBoxT<BoxType> BBox;
+    typedef StemT<BoxType> Stem;
+    typedef cub::BlockRadixSort<DType, Threads, 1, int> BlockRadixSort1;
+    typedef cub::BlockRadixSort<DType, Threads, 2, int> BlockRadixSort2;
+    typedef cub::BlockRadixSort<DType, Threads, 3, int> BlockRadixSort3;
+    typedef cub::BlockRadixSort<DType, Threads, 4, int> BlockRadixSort4;
+    typedef cub::BlockRadixSort<DType, Threads, 5, int> BlockRadixSort5;
+    typedef cub::BlockRadixSort<DType, Threads, 6, int> BlockRadixSort6;
+    typedef cub::BlockRadixSort<DType, Threads, 7, int> BlockRadixSort7;
+    typedef cub::BlockRadixSort<DType, Threads, 8, int> BlockRadixSort8;
+    __shared__ union
+    {
+        typename BlockRadixSort8::TempStorage sort8;
+        typename BlockRadixSort7::TempStorage sort7;
+        typename BlockRadixSort6::TempStorage sort6;
+        typename BlockRadixSort5::TempStorage sort5;
+        typename BlockRadixSort4::TempStorage sort4;
+        typename BlockRadixSort3::TempStorage sort3;
+        typename BlockRadixSort2::TempStorage sort2;
+        typename BlockRadixSort1::TempStorage sort1;
+    } temp_storage;
+    assert(MaxItemsPerThreads * Threads >= samples);
+
+    const int* validSampleCount = static_cast<const int*>(validSampleCountPtr);
+    const DType* inScore = static_cast<const DType*>(inScorePtr);
+    const BoxType* inLabel = static_cast<const BoxType*>(inLabelPtr); // InLabel keeps INT32
+    const BBox* inBbox = static_cast<const BBox*>(inBboxPtr);
+    const Stem* inStems = static_cast<const Stem*>(inStemsPtr);
+    const int* inBboxRefIdx = static_cast<const int*>(inBboxRefIdxPtr);
+    const int* inFlagSamples = static_cast<const int*>(inFlagSamplesPtr);
+    DType* outDetections = static_cast<DType*>(outDetectionPtr);
+
+    int N = blockIdx.x;
+    int blockOffset = N * samples;
+    int validSamples = validSampleCount[N];
+    int finalTopK = dMIN(keepTopK, validSamples);
+
+    int idx[MaxItemsPerThreads];
+    DType score[MaxItemsPerThreads];
+    int totalItems = (validSamples + (blockDim.x - 1)) / blockDim.x;
+
+    for (int ite = 0; ite < totalItems; ++ite)
+    {
+        int curIdx = ite * blockDim.x + threadIdx.x;
+        if (curIdx < validSamples && inFlagSamples[blockOffset + curIdx])
+        {
+            idx[ite] = curIdx;
+            score[ite] = inScore[blockOffset + curIdx];
+        }
+        else
+        {
+            idx[ite] = 0;  // Pad with 0 instead of -1
+            score[ite] = 0.0f;
+        }
+    }
+
+    switch (totalItems)
+    {
+    case 0: break;
+    case 1:
+        BlockRadixSort1(temp_storage.sort1).SortDescendingBlockedToStriped((DType(&)[1]) score, (int(&)[1]) idx);
+        break;
+    case 2:
+        BlockRadixSort2(temp_storage.sort2).SortDescendingBlockedToStriped((DType(&)[2]) score, (int(&)[2]) idx);
+        break;
+    case 3:
+        BlockRadixSort3(temp_storage.sort3).SortDescendingBlockedToStriped((DType(&)[3]) score, (int(&)[3]) idx);
+        break;
+    case 4:
+        BlockRadixSort4(temp_storage.sort4).SortDescendingBlockedToStriped((DType(&)[4]) score, (int(&)[4]) idx);
+        break;
+    case 5:
+        BlockRadixSort5(temp_storage.sort5).SortDescendingBlockedToStriped((DType(&)[5]) score, (int(&)[5]) idx);
+        break;
+    case 6:
+        BlockRadixSort6(temp_storage.sort6).SortDescendingBlockedToStriped((DType(&)[6]) score, (int(&)[6]) idx);
+        break;
+    case 7:
+        BlockRadixSort7(temp_storage.sort7).SortDescendingBlockedToStriped((DType(&)[7]) score, (int(&)[7]) idx);
+        break;
+    case 8:
+        BlockRadixSort8(temp_storage.sort8).SortDescendingBlockedToStriped((DType(&)[8]) score, (int(&)[8]) idx);
+        break;
+    default: assert(false);
+    }
+    __syncthreads();
+
+    int outBlockOffset = N * keepTopK;
+    int topkItems = (keepTopK + (Threads - 1)) / Threads;
+    for (int i = 0; i < topkItems; ++i)
+    {
+        int curI = i * blockDim.x + threadIdx.x;
+        if (curI < keepTopK)
+        {
+            BBox oB = {(BoxType) 0.0f, (BoxType) 0.0f, (BoxType) 0.0f, (BoxType) 0.0f};
+            Stem oSt = {(BoxType) 0.0f, (BoxType) 0.0f};
+            DType oS = 0.0f;
+            BoxType oL = -1;
+            if (curI < finalTopK && idx[i] >= 0 && float(score[i]) > MinValidScore)
+            {
+                oB = ((BBox*) inBbox)[blockOffset + inBboxRefIdx[blockOffset + idx[i]]];
+                oSt = ((Stem*) inStems)[blockOffset + inBboxRefIdx[blockOffset + idx[i]]];
+                oS = score[i];
+                oL = (BoxType) inLabel[blockOffset + idx[i]];
+            }
+            outDetections[(outBlockOffset + curI) * 8] = oB.y1;
+            outDetections[(outBlockOffset + curI) * 8 + 1] = oB.x1;
+            outDetections[(outBlockOffset + curI) * 8 + 2] = oB.y2;
+            outDetections[(outBlockOffset + curI) * 8 + 3] = oB.x2;
+            outDetections[(outBlockOffset + curI) * 8 + 4] = oL;
+            outDetections[(outBlockOffset + curI) * 8 + 5] = oS;
+            outDetections[(outBlockOffset + curI) * 8 + 6] = oSt.y;
+            outDetections[(outBlockOffset + curI) * 8 + 7] = oSt.x;
+        }
+    }
+}
+
 RefineDetectionWorkSpace::RefineDetectionWorkSpace(
     const int batchSize, const int sampleCount, const RefineNMSParameters& param, const nvinfer1::DataType inType)
     : argMaxScoreDims(sampleCount, 1)
@@ -1102,6 +1297,66 @@ RefineDetectionWorkSpace::RefineDetectionWorkSpace(
     argMaxBboxOffset = sumSize;
     // argMaxBbox : [N, samples, 4] : m_Type
     sumSize += AlignMem(dimVolume(argMaxBboxDims) * typeSize(type) * batchSize);
+
+    argMaxLabelOffset = sumSize;
+    // argMaxLabel : [N, samples] : kINT32
+    sumSize += AlignMem(dimVolume(argMaxLabelDims) * typeSize(nvinfer1::DataType::kINT32) * batchSize);
+
+    sortClassScoreOffset = sumSize;
+    // sortClassScore : [N, samples] : m_Type
+    sumSize += AlignMem(dimVolume(sortClassScoreDims) * typeSize(type) * batchSize);
+
+    sortClassLabelOffset = sumSize;
+    // sortClassLabel : [N, samples] : m_Type
+    sumSize += AlignMem(dimVolume(sortClassLabelDims) * typeSize(type) * batchSize);
+
+    sortClassSampleIdxOffset = sumSize;
+    // sortClassSampleIdx : [N, samples] : kINT32
+    sumSize += AlignMem(dimVolume(sortClassSampleIdxDims) * typeSize(nvinfer1::DataType::kINT32) * batchSize);
+
+    sortClassValidCountOffset = sumSize;
+    // sortClassValidCount : [N, 1] : kINT32
+    sumSize += AlignMem(dimVolume(sortClassValidCountDims) * typeSize(nvinfer1::DataType::kINT32) * batchSize);
+
+    sortClassPosOffset = sumSize;
+    // sortClassPos : [N, numClasses+1] : kINT32
+    sumSize += AlignMem(dimVolume(sortClassPosDims) * typeSize(nvinfer1::DataType::kINT32) * batchSize);
+
+    sortNMSMarkOffset = sumSize;
+    // sortNMSMark : [N, samples] : kINT32
+    sumSize += AlignMem(dimVolume(sortNMSMarkDims) * typeSize(nvinfer1::DataType::kINT32) * batchSize);
+
+    totalSize = sumSize;
+}
+
+RefineStemDetectionWorkSpace::RefineStemDetectionWorkSpace(
+    const int batchSize, const int sampleCount, const RefineNMSParameters& param, const nvinfer1::DataType inType)
+    : argMaxScoreDims(sampleCount, 1)
+    , argMaxBboxDims(sampleCount, 4)
+    , argMaxStemsDims(sampleCount, 2)
+    , argMaxLabelDims(sampleCount, 1)
+    , sortClassScoreDims(sampleCount, 1)
+    , sortClassLabelDims(sampleCount, 1)
+    , sortClassSampleIdxDims(sampleCount + 1, 1)
+    , sortClassPosDims(param.numClasses + 1, 1)
+    , sortNMSMarkDims(sampleCount, 1)
+{
+    size_t sumSize = 0;
+
+    const nvinfer1::DataType type = nvinfer1::DataType::kFLOAT;
+
+    // resource
+    // arMaxScore : [N, samples] : m_Type
+    argMaxScoreOffset = sumSize;
+    sumSize += AlignMem(dimVolume(argMaxScoreDims) * typeSize(type) * batchSize);
+
+    argMaxBboxOffset = sumSize;
+    // argMaxBbox : [N, samples, 4] : m_Type
+    sumSize += AlignMem(dimVolume(argMaxBboxDims) * typeSize(type) * batchSize);
+
+    argMaxStemsOffset = sumSize;
+    // argMaxBbox : [N, samples, 2] : m_Type
+    sumSize += AlignMem(dimVolume(argMaxStemsDims) * typeSize(type) * batchSize);
 
     argMaxLabelOffset = sumSize;
     // argMaxLabel : [N, samples] : kINT32
@@ -1336,6 +1591,29 @@ cudaError_t argMaxGroup(cudaStream_t stream, int N, nvinfer1::DataType dtype, in
 }
 
 template <int Threads>
+cudaError_t argMaxGroupStem(cudaStream_t stream, int N, nvinfer1::DataType dtype, int samples, int NClass,
+    const void* inScore, const void* inBbox, const void* inStems, const void* validSamples, void* outScore,
+    void* outLabel, void* outBbox, void* outStems)
+{
+    int gridX = nAlignDown(dMIN(samples, 512 / N), 32);
+    gridX = dMAX(gridX, 1);
+
+    dim3 gridDim = {static_cast<unsigned int>(gridX), static_cast<unsigned int>(N), 1};
+    dim3 threads = {Threads, 1, 1};
+    switch (dtype)
+    {
+    case nvinfer1::DataType::kFLOAT:
+        argMaxGroupStem_kernel<float, float, Threads><<<gridDim, threads, 0, stream>>>(
+            samples, 0, NClass, inScore, inBbox, inStems, validSamples, outScore, outLabel, outBbox, outStems);
+        break;
+    case nvinfer1::DataType::kHALF: break;
+    default: assert(false);
+    }
+
+    return cudaGetLastError();
+}
+
+template <int Threads>
 cudaError_t argMaxWOBackground(cudaStream_t stream, int N, nvinfer1::DataType dtype, int samples, int NClass,
     const void* inScore, const void* inBbox, const void* validSamples, void* outScore, void* outLabel, void* outBbox)
 {
@@ -1430,6 +1708,38 @@ cudaError_t KeepTopKGather(cudaStream_t stream, int N, nvinfer1::DataType dtype,
         {
             TopKGather_kernel<float, float, Threads><<<blocks, threads, 0, stream>>>(samples, keepTopK,
                 validSampleCountPtr, inScorePtr, inLabelPtr, inBboxPtr, inBboxRefIdxPtr, inFlagSamplesPtr,
+                outDetections);
+        }
+        break;
+    case nvinfer1::DataType::kHALF: break;
+    default: assert(false);
+    }
+
+    return cudaGetLastError();
+}
+
+template <int Threads>
+cudaError_t KeepTopKGatherStem(cudaStream_t stream, int N, nvinfer1::DataType dtype, int samples,
+    int keepTopK, const void* validSampleCountPtr, const void* inScorePtr, const void* inLabelPtr,
+    const void* inBboxPtr, const void* inStemsPtr, const void* inBboxRefIdxPtr, const void* inFlagSamplesPtr,
+    void* outDetections, int proposal)
+{
+    int blocks = N;
+    int threads = Threads;
+
+    switch (dtype)
+    {
+    case nvinfer1::DataType::kFLOAT:
+        if (proposal)
+        {
+            TopKGatherProposal_kernel<float, float, Threads><<<blocks, threads, 0, stream>>>(samples, keepTopK,
+                validSampleCountPtr, inScorePtr, inLabelPtr, inBboxPtr, inBboxRefIdxPtr, inFlagSamplesPtr,
+                outDetections);
+        }
+        else
+        {
+            TopKGatherStem_kernel<float, float, Threads><<<blocks, threads, 0, stream>>>(samples, keepTopK,
+                validSampleCountPtr, inScorePtr, inLabelPtr, inBboxPtr, inStemsPtr, inBboxRefIdxPtr, inFlagSamplesPtr,
                 outDetections);
         }
         break;
@@ -1683,6 +1993,101 @@ cudaError_t RefineBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer
 
     status = KeepTopKGather<256>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr, sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outDetections, 0);
+    assert(status == cudaSuccess);
+    CUASSERT(status);
+    return status;
+}
+
+cudaError_t RefineStemBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer1::DataType dtype,
+    const RefineNMSParameters& param, const RefineStemDetectionWorkSpace& refineOffset, void* workspace,
+    const void* inScores, const void* inDelta, const void* inCountValid, const void* inROI,
+    const void* inStemsDelta, void* outDetections)
+{
+    int NClass = param.numClasses;
+    int8_t* wsPtr = static_cast<int8_t*>(workspace);
+    void* argMaxScorePtr = wsPtr + refineOffset.argMaxScoreOffset;
+    void* argMaxLabelPtr = wsPtr + refineOffset.argMaxLabelOffset;
+    void* argMaxBBoxPtr = wsPtr + refineOffset.argMaxBboxOffset;
+    void* argMaxStemsPtr = wsPtr + refineOffset.argMaxStemsOffset;
+
+    void* sortClassScorePtr = wsPtr + refineOffset.sortClassScoreOffset;
+    void* sortClassLabelPtr = wsPtr + refineOffset.sortClassLabelOffset;
+    void* sortClassSampleIdxPtr = wsPtr + refineOffset.sortClassSampleIdxOffset;
+    void* sortClassValidCountPtr = wsPtr + refineOffset.sortClassValidCountOffset;
+    void* sortClassPosPtr = wsPtr + refineOffset.sortClassPosOffset;
+    void* sortNMSMarkPtr = wsPtr + refineOffset.sortNMSMarkOffset;
+
+    cudaError_t status = cudaSuccess;
+    CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
+
+    if (NClass > 1)
+    { // multiple classes
+        status = argMaxGroupStem<32>(stream, N, dtype, samples, NClass, inScores, inDelta, inStemsDelta, inCountValid,
+        argMaxScorePtr, argMaxLabelPtr, argMaxBBoxPtr, argMaxStemsPtr); // argMaxBBoxPtr means delta of bboxes
+        assert(status == cudaSuccess);
+        CUASSERT(status);
+    }
+    else
+    { // Only one class
+        argMaxScorePtr = const_cast<void*>(inScores);
+        argMaxBBoxPtr = const_cast<void*>(inDelta);
+        argMaxStemsPtr = const_cast<void*>(inStemsDelta);
+        int threads = 512;
+        int blocks = (N * samples + threads - 1) / threads;
+        blocks = dMIN(blocks, 8);
+        switch (dtype)
+        {
+        case nvinfer1::DataType::kFLOAT:
+        {
+            resetMemValue_kernel<float><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
+            break;
+        }
+        case nvinfer1::DataType::kHALF: { break;
+        }
+        default: assert(false);
+        }
+    }
+
+    status = ApplyDelta2Bboxes(stream, N, samples, inROI, argMaxBBoxPtr, argMaxBBoxPtr);
+    assert(status == cudaSuccess);
+
+    status = ApplyStemsDelta(stream, N, samples, inROI, argMaxStemsPtr, argMaxStemsPtr);
+    assert(status == cudaSuccess);
+
+    if (samples <= 1024)
+    {
+        status = sortPerClass<256, 4>(stream, N, dtype, samples, NClass, param.backgroundLabelId, param.scoreThreshold,
+            inCountValid, argMaxScorePtr, argMaxLabelPtr, argMaxBBoxPtr, sortClassPosPtr, sortClassScorePtr,
+            sortClassLabelPtr, sortClassSampleIdxPtr, sortClassValidCountPtr);
+    }
+    else if (samples <= 2048)
+    {
+        status = sortPerClass<256, 8>(stream, N, dtype, samples, NClass, param.backgroundLabelId, param.scoreThreshold,
+            inCountValid, argMaxScorePtr, argMaxLabelPtr, argMaxBBoxPtr, sortClassPosPtr, sortClassScorePtr,
+            sortClassLabelPtr, sortClassSampleIdxPtr, sortClassValidCountPtr);
+    }
+    else if (samples <= 4096)
+    {
+        status = sortPerClass<256, 16>(stream, N, dtype, samples, NClass, param.backgroundLabelId, param.scoreThreshold,
+            inCountValid, argMaxScorePtr, argMaxLabelPtr, argMaxBBoxPtr, sortClassPosPtr, sortClassScorePtr,
+            sortClassLabelPtr, sortClassSampleIdxPtr, sortClassValidCountPtr);
+    }
+    else
+    {
+        assert(false && "unsupported sortPerClass");
+        return cudaErrorLaunchFailure;
+    }
+    assert(status == cudaSuccess);
+    CUASSERT(status);
+
+    status = PerClassNMS<256>(stream, N, dtype, samples, NClass, param.iouThreshold, sortClassValidCountPtr,
+        // sortClassScorePtr,
+        sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortClassPosPtr, sortNMSMarkPtr);
+    assert(status == cudaSuccess);
+    CUASSERT(status);
+
+    status = KeepTopKGatherStem<256>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr, sortClassScorePtr,
+        sortClassLabelPtr, argMaxBBoxPtr, argMaxStemsPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outDetections, 0);
     assert(status == cudaSuccess);
     CUASSERT(status);
     return status;
@@ -2145,9 +2550,19 @@ struct BBOX
     float y1, x1, y2, x2;
 };
 
+struct POINT
+{
+    float y, x;
+};
+
 struct DELTA
 {
     float dy, dx, logdh, logdw;
+};
+
+struct POINT_DELTA
+{
+    float dy, dx;
 };
 
 struct DELTA_HALF
@@ -2411,6 +2826,76 @@ cudaError_t ApplyDelta2Bboxes(cudaStream_t stream, int N,
 
     return cudaGetLastError();
 }
+
+__global__ void apply_stems_delta_kernel(int samples, const void* anchors, const void* delta, void* outputStems)
+{
+
+    const BBOX* anchors_in = static_cast<const BBOX*>(anchors);
+    const POINT_DELTA* delta_in = static_cast<const POINT_DELTA*>(delta);
+    POINT* stems_out = static_cast<POINT*>(outputStems);
+
+    int N = blockIdx.x;
+    int blockOffset = N * samples;
+    int totalItems = (samples + (blockDim.x - 1)) / blockDim.x;
+
+    for (int i = 0; i < totalItems; i++)
+    {
+        int cur_id = i * blockDim.x + threadIdx.x;
+        if (cur_id < samples)
+        {
+            BBOX cur_anchor_yxyx = anchors_in[blockOffset + cur_id];
+            // convert yxyx -> cyxhw
+            // cy, cx, h, w
+            BBOX cur_anchor_cyxhw;
+
+            cur_anchor_cyxhw.y1 = (cur_anchor_yxyx.y1 + cur_anchor_yxyx.y2) / 2;
+            cur_anchor_cyxhw.x1 = (cur_anchor_yxyx.x1 + cur_anchor_yxyx.x2) / 2;
+            cur_anchor_cyxhw.y2 = (cur_anchor_yxyx.y2 - cur_anchor_yxyx.y1);
+            cur_anchor_cyxhw.x2 = (cur_anchor_yxyx.x2 - cur_anchor_yxyx.x1);
+
+            POINT_DELTA cur_delta = delta_in[blockOffset + cur_id];
+
+            // multiply std_dev
+            cur_delta.dy *= 0.1;
+            cur_delta.dx *= 0.1;
+
+            // apply delta
+            cur_anchor_cyxhw.y1 += cur_delta.dy * cur_anchor_cyxhw.y2;
+            cur_anchor_cyxhw.x1 += cur_delta.dx * cur_anchor_cyxhw.x2;
+
+            // TODO: clip bbox: a more precision clip method based on real window could be implemented
+            // (is implemented in python mrcnn but not here)
+            cur_anchor_cyxhw.y1 = dMAX(dMIN(cur_anchor_cyxhw.y1, 1.0), 0.0);
+            cur_anchor_cyxhw.x1 = dMAX(dMIN(cur_anchor_cyxhw.x1, 1.0), 0.0);
+
+            stems_out[blockOffset + cur_id].y = cur_anchor_cyxhw.y1;
+            stems_out[blockOffset + cur_id].x = cur_anchor_cyxhw.x1;
+        }
+    }
+}
+
+cudaError_t ApplyStemsDelta(cudaStream_t stream, int N,
+    int samples,         // number of anchors per image
+    const void* anchors, // [N, anchors, (y1, x1, y2, x2)]
+    const void* delta,   //[N, anchors, (dy, dx])
+    void* outputStems     //[N, anchors, (y, x)]
+    )
+{
+
+    int blocks = N;
+    int threads = dMIN(samples, 1024);
+
+    // delta multiply stems_std
+    // apply delta steps:
+    //  cy = anchor_cy + dy*height
+    //  cx = anchor_cx + dx*weight
+    // clip the stems
+
+    apply_stems_delta_kernel<<<blocks, threads, 0, stream>>>(samples, anchors, delta, outputStems);
+
+    return cudaGetLastError();
+}
+
 
 template <typename Tfeat>
 __device__ inline Tfeat interpolateBilinear(const Tfeat* src, xy_t srcDims, float y, float x)

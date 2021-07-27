@@ -32,6 +32,7 @@ using namespace nvinfer1::plugin;
 #include "coordConvACPlugin.h"
 #include "cropAndResizePlugin.h"
 #include "detectionLayerPlugin.h"
+#include "stemDetectionLayerPlugin.h"
 #include "efficientNMSPlugin.h"
 #include "flattenConcat.h"
 #include "generateDetectionPlugin.h"
@@ -170,6 +171,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::CropAndResizePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::CropAndResizeDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::DetectionLayerPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::StemDetectionLayerPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::EfficientNMSONNXPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::EfficientNMSPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::FlattenConcatPluginCreator>(logger, libNamespace);
