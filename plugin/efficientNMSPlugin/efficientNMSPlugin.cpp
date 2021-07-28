@@ -299,9 +299,9 @@ void EfficientNMSPlugin::configurePlugin(
         }
         else
         {
-            ASSERT(in[0].desc.dims.d[2] == mParam.numClasses);
-            ASSERT(in[0].desc.dims.d[3] == 4);
             mParam.shareLocation = (in[0].desc.dims.d[2] == 1);
+            ASSERT(in[0].desc.dims.d[2] == mParam.numClasses || mParam.shareLocation);
+            ASSERT(in[0].desc.dims.d[3] == 4);
             mParam.numBoxElements = in[0].desc.dims.d[1] * in[0].desc.dims.d[2] * in[0].desc.dims.d[3];
         }
         mParam.numAnchors = in[0].desc.dims.d[1];
