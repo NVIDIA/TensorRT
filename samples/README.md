@@ -9,7 +9,7 @@
 | [sampleDynamicReshape](sampleDynamicReshape) | C++ | ONNX | Digit Recognition With Dynamic Shapes In TensorRT |
 | [sampleFasterRCNN](sampleFasterRCNN) | C++ | Caffe | Object Detection With Faster R-CNN |
 | [sampleGoogleNet](sampleGoogleNet) | C++ | Caffe | Building And Running GoogleNet In TensorRT |
-| [sampleINT8](sampleINT8) | C++ | Caffe | Building And Running GoogleNet In TensorRT |
+| [sampleINT8](sampleINT8) | C++ | Caffe | Performing Inference In INT8 Using Custom Calibration |
 | [sampleINT8API](sampleINT8API) | C++ | Caffe | Performing Inference In INT8 Precision |
 | [sampleMLP](sampleMLP) | C++ | INetwork | “Hello World” For Multilayer Perceptron (MLP) |
 | [sampleMNIST](sampleMNIST) | C++ | Caffe | “Hello World” For TensorRT |

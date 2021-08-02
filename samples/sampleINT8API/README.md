@@ -21,7 +21,7 @@
 
 ## Description
 
-This sample, sampleINT8API, performs INT8 inference without using the INT8 calibrator; using the user provided per activation tensor dynamic range. INT8 inference is available only on GPUs with compute capability 6.1 or 7.x and supports Image Classification ONNX models such as ResNet-50, VGG19, and MobileNet.
+This sample, sampleINT8API, performs INT8 inference without using the INT8 calibrator; using the user provided per activation tensor dynamic range. INT8 inference is available only on GPUs with compute capability 6.1 or newer and supports Image Classification ONNX models such as ResNet-50, VGG19, and MobileNet.
 
 Specifically, this sample demonstrates how to:
 -   Use `nvinfer1::ITensor::setDynamicRange` to set per tensor dynamic range

@@ -27,7 +27,7 @@
 
 This sample, sampleINT8, performs INT8 calibration and inference.
 
-Specifically, this sample demonstrates how to perform inference in 8-bit integer (INT8). INT8 inference is available only on GPUs with compute capability 6.1 or 7.x. After the network is calibrated for execution in INT8, output of the calibration is cached to avoid repeating the process. You can then reproduce your own experiments with any deep learning framework in order to validate your results on ImageNet networks.
+Specifically, this sample demonstrates how to perform inference in 8-bit integer (INT8). INT8 inference is available only on GPUs with compute capability 6.1 or newer. After the network is calibrated for execution in INT8, output of the calibration is cached to avoid repeating the process. You can then reproduce your own experiments with any deep learning framework in order to validate your results on ImageNet networks.
 
 ## How does this sample work?
 
