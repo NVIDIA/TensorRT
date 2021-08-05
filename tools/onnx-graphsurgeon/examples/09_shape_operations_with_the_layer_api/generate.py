@@ -29,7 +29,9 @@ def shape(self, a):
 
 @gs.Graph.register()
 def reduce_prod(self, a, axes, keepdims=True):
-    return self.layer(op="ReduceProd", inputs=[a], attrs={"axes": axes, "keepdims": int(keepdims)}, outputs=["reduce_prod_out_gs"])[0]
+    return self.layer(
+        op="ReduceProd", inputs=[a], attrs={"axes": axes, "keepdims": int(keepdims)}, outputs=["reduce_prod_out_gs"]
+    )[0]
 
 
 @gs.Graph.register()
@@ -69,8 +71,8 @@ new_shape = graph.concat([NC, graph.reduce_prod(HW, axes=[0])])
 partially_flattened = graph.reshape(graph.inputs[0], new_shape)
 
 # Finally, set up the outputs and export.
-flattened.name = "flattened" # Rename output tensor to make it easy to find.
-flattened.dtype = np.float32 # NOTE: We must include dtype information for graph outputs
+flattened.name = "flattened"  # Rename output tensor to make it easy to find.
+flattened.dtype = np.float32  # NOTE: We must include dtype information for graph outputs
 partially_flattened.name = "partially_flattened"
 partially_flattened.dtype = np.float32
 

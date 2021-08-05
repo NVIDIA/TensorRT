@@ -22,15 +22,14 @@ from onnx_models import identity_model
 import tempfile
 import onnx
 
+
 class TestApi(object):
     def setup_method(self):
         self.imported_graph = OnnxImporter.import_graph(identity_model().load().graph)
 
-
     def test_import(self):
         graph = gs.import_onnx(onnx.load(identity_model().path))
         assert graph == self.imported_graph
-
 
     def test_export(self):
         with tempfile.NamedTemporaryFile() as f:

@@ -23,6 +23,7 @@ from onnx_graphsurgeon.logger.logger import G_LOGGER
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
+
 class TensorBaseTests(object):
     def test_can_convert_in_place_to_constant(self):
         tensor = self.tensor.to_constant(values=np.ones((1, 3, 5, 5), dtype=np.float64))
@@ -117,7 +118,9 @@ class TestVariable(TensorBaseTests):
 class TestConstant(TensorBaseTests):
     def setup_method(self):
         self.tensor = Constant(name="test_tensor", values=np.ones((1, 3, 5, 5), dtype=np.float64))
-        self.input_node = Node(op="Add", outputs=[self.tensor]) # Doesn't make sense for Constants, but needed to make base tests happy.
+        self.input_node = Node(
+            op="Add", outputs=[self.tensor]
+        )  # Doesn't make sense for Constants, but needed to make base tests happy.
         self.output_node = Node(op="Add", inputs=[self.tensor])
 
     def test_can_get_shape(self):
@@ -194,7 +197,9 @@ class TestNode(object):
         intermediate_tensor2 = Variable(name="intermediate2")
         input_node = Node(op="Add", name="Input", inputs=[self.input_tensor], outputs=[intermediate_tensor])
         input_node2 = Node(op="Add", name="Input2", inputs=[self.input_tensor], outputs=[intermediate_tensor2])
-        output_node = Node(op="Add", name="Out", inputs=[intermediate_tensor, intermediate_tensor2], outputs=[self.output_tensor])
+        output_node = Node(
+            op="Add", name="Out", inputs=[intermediate_tensor, intermediate_tensor2], outputs=[self.output_tensor]
+        )
         assert output_node.i() == input_node
         assert output_node.i(1) == input_node2
 
@@ -216,7 +221,9 @@ class TestNode(object):
 
 class TestNodeIO(object):
     def setup_method(self, field_names):
-        self.tensors = [Variable(name="test_tensor_{:}".format(i), dtype=np.float32, shape=(1, 3, 224, 224)) for i in range(10)]
+        self.tensors = [
+            Variable(name="test_tensor_{:}".format(i), dtype=np.float32, shape=(1, 3, 224, 224)) for i in range(10)
+        ]
         self.node = Node(op="Dummy")
 
     def get_lists(self, field_names):

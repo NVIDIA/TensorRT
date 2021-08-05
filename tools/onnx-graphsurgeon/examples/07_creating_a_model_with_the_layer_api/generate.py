@@ -50,7 +50,9 @@ def mul(self, a, b):
 @gs.Graph.register()
 def gemm(self, a, b, trans_a=False, trans_b=False):
     attrs = {"transA": int(trans_a), "transB": int(trans_b)}
-    return propagate_dtype(self.layer(op="Gemm", inputs=[a, b], outputs=["gemm_out_gs"], attrs=attrs), a.dtype or b.dtype)
+    return propagate_dtype(
+        self.layer(op="Gemm", inputs=[a, b], outputs=["gemm_out_gs"], attrs=attrs), a.dtype or b.dtype
+    )
 
 
 # You can also specify a set of opsets when regsitering a function.

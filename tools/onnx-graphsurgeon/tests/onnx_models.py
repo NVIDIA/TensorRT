@@ -31,6 +31,7 @@ import os
 
 TEST_ROOT = os.path.realpath(os.path.dirname(__file__))
 
+
 class Model(object):
     def __init__(self, path: str, inputs: List[Tensor], outputs: List[Tensor], nodes: List[Node], opset: int):
         self.path = path
@@ -48,6 +49,7 @@ class Model(object):
 
         # Break down fields to make debugging failures easier.
         for actual, expected in zip(graph.nodes, self.nodes):
+
             def check_tensor_io(actensor, extensor):
                 def check_list(aclist, exlist):
                     G_LOGGER.debug("Actual node list: {:}\n\nExpected node list: {:}".format(aclist, exlist))
@@ -59,7 +61,6 @@ class Model(object):
                 check_list(actensor.inputs, extensor.inputs)
                 G_LOGGER.debug("Checking tensor: {:} outputs".format(actensor.name))
                 check_list(actensor.outputs, extensor.outputs)
-
 
             G_LOGGER.debug("Actual Node: {:}\n\nExpected Node: {:}".format(actual, expected))
             assert actual.op == expected.op
@@ -83,7 +84,6 @@ class Model(object):
 
         assert graph.outputs == self.outputs
         G_LOGGER.debug("Graph outputs matched")
-
 
     def __str__(self):
         return os.path.basename(self.path)
@@ -133,7 +133,12 @@ def lstm_model():
     attrs = OrderedDict()
     attrs["direction"] = "forward"
     attrs["hidden_size"] = 5
-    node = Node(op="LSTM", attrs=attrs, inputs=[X, W, R, B, Variable.empty(), Variable.empty(), initial_c], outputs=[Y, Y_h, Y_c])
+    node = Node(
+        op="LSTM",
+        attrs=attrs,
+        inputs=[X, W, R, B, Variable.empty(), Variable.empty(), initial_c],
+        outputs=[Y, Y_h, Y_c],
+    )
 
     # Initializers will not be included in the graph inputs.
     return Model(path, inputs=[X], outputs=[Y, Y_h, Y_c], nodes=[node], opset=OnnxImporter.get_opset(model))
@@ -144,10 +149,10 @@ def scan_model():
     model = onnx.load(path)
 
     # Body graph
-    sum_in = Variable(name="sum_in", dtype=np.float32, shape=(2, ))
-    next = Variable(name="next", dtype=np.float32, shape=(2, ))
-    sum_out = Variable(name="sum_out", dtype=np.float32, shape=(2, ))
-    scan_out = Variable(name="scan_out", dtype=np.float32, shape=(2, ))
+    sum_in = Variable(name="sum_in", dtype=np.float32, shape=(2,))
+    next = Variable(name="next", dtype=np.float32, shape=(2,))
+    sum_out = Variable(name="sum_out", dtype=np.float32, shape=(2,))
+    scan_out = Variable(name="scan_out", dtype=np.float32, shape=(2,))
 
     body_nodes = [
         Node(op="Add", inputs=[sum_in, next], outputs=[sum_out]),
@@ -157,11 +162,11 @@ def scan_model():
 
     # Outer graph
     inputs = [
-        Variable(name="initial", dtype=np.float32, shape=(2, )),
+        Variable(name="initial", dtype=np.float32, shape=(2,)),
         Variable(name="x", dtype=np.float32, shape=(3, 2)),
     ]
     outputs = [
-        Variable(name="y", dtype=np.float32, shape=(2, )),
+        Variable(name="y", dtype=np.float32, shape=(2,)),
         Variable(name="z", dtype=np.float32, shape=(3, 2)),
     ]
 
@@ -226,4 +231,4 @@ def ext_weights():
 
 def const_foldable():
     path = os.path.join(TEST_ROOT, "models", "const_foldable.onnx")
-    return Model(path, inputs=None, outputs=None, nodes=None, opset=None) # Only used for path.
+    return Model(path, inputs=None, outputs=None, nodes=None, opset=None)  # Only used for path.

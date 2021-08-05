@@ -18,17 +18,19 @@ import sys
 import onnx_graphsurgeon
 from setuptools import setup, find_packages
 
+
 def no_publish():
-    blacklist = ['register']
+    blacklist = ["register"]
     for cmd in blacklist:
         if cmd in sys.argv:
-            raise RuntimeError("Command \"{}\" blacklisted".format(cmd))
+            raise RuntimeError('Command "{}" blacklisted'.format(cmd))
 
 
 REQUIRED_PACKAGES = [
     "numpy",
     "onnx",
 ]
+
 
 def main():
     no_publish()
@@ -42,8 +44,8 @@ def main():
         author="NVIDIA",
         author_email="svc_tensorrt@nvidia.com",
         classifiers=[
-            'Intended Audience :: Developers',
-            'Programming Language :: Python :: 3',
+            "Intended Audience :: Developers",
+            "Programming Language :: Python :: 3",
             "Programming Language :: Python :: 3.4",
             "Programming Language :: Python :: 3.5",
             "Programming Language :: Python :: 3.6",
@@ -55,5 +57,6 @@ def main():
         zip_safe=True,
     )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -16,6 +16,7 @@
 
 from onnx_graphsurgeon.ir.graph import Graph
 
+
 class BaseImporter(object):
     @staticmethod
     def import_graph(graph) -> Graph:
