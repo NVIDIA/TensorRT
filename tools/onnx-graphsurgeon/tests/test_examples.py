@@ -30,6 +30,7 @@ import os
 ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), os.path.pardir))
 EXAMPLES_ROOT = os.path.join(ROOT_DIR, "examples")
 
+
 class Artifact(object):
     def __init__(self, name, infer=True):
         self.name = name
@@ -54,7 +55,7 @@ def load_commands_from_readme(readme):
         return "pip" in cmd
 
     commands = []
-    with open(readme, 'r') as f:
+    with open(readme, "r") as f:
         in_command_block = False
         for line in f.readlines():
             if not in_command_block and "```bash" in line:
