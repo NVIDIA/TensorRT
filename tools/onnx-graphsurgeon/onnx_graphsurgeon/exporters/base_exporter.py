@@ -16,6 +16,7 @@
 
 from onnx_graphsurgeon.ir.graph import Graph
 
+
 class BaseExporter(object):
     @staticmethod
     def export_graph(graph: Graph):

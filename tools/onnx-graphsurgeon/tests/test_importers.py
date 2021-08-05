@@ -25,11 +25,18 @@ from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
 from onnx_graphsurgeon.ir.tensor import Constant, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 
-from onnx_models import (dim_param_model, ext_weights, identity_model,
-                         initializer_is_output_model, lstm_model,
-                         nested_dup_names, scan_model)
+from onnx_models import (
+    dim_param_model,
+    ext_weights,
+    identity_model,
+    initializer_is_output_model,
+    lstm_model,
+    nested_dup_names,
+    scan_model,
+)
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
+
 
 class TestOnnxImporter(object):
     def test_import_variable_tensor(self):
@@ -42,7 +49,6 @@ class TestOnnxImporter(object):
         assert tensor.dtype == np.float32
         assert tuple(tensor.shape) == shape
 
-
     def test_import_constant_tensor(self):
         shape = (3, 3, 3)
         dtype = np.float32
@@ -52,14 +58,12 @@ class TestOnnxImporter(object):
         assert tensor.dtype == dtype
         assert tuple(tensor.shape) == shape
 
-
     def test_import_tensor_unknown_metadata(self):
         name = "test0"
         onnx_tensor = onnx.helper.make_empty_tensor_value_info(name)
         tensor = OnnxImporter.import_tensor(onnx_tensor)
         assert type(tensor) == Variable
         assert tensor.name == name
-
 
     # An empty string in `dim_param` should be treated like a dynamic dimension
     def test_import_empty_dim_param_tensor(self):
@@ -69,7 +73,6 @@ class TestOnnxImporter(object):
         assert type(tensor) == Variable
         assert tuple(tensor.shape) == shape
 
-
     # Sometimes, tensor shape is not known, in which case we shouldn't import it
     def test_import_unknown_shape_tensor(self):
         shape = None
@@ -78,10 +81,9 @@ class TestOnnxImporter(object):
         assert type(tensor) == Variable
         assert tensor.shape is None
 
-
     # Scalars can be represented in ONNX with a dim that includes neither a dim_param nor dim_value
     def test_import_empty_dim_tensor(self):
-        shape = (None, )
+        shape = (None,)
         onnx_tensor = onnx.helper.make_tensor_value_info("test0", onnx.TensorProto.FLOAT, shape)
         onnx_tensor.type.tensor_type.shape.dim[0].ClearField("dim_value")
         onnx_tensor.type.tensor_type.shape.dim[0].ClearField("dim_param")
@@ -89,7 +91,6 @@ class TestOnnxImporter(object):
         tensor = OnnxImporter.import_tensor(onnx_tensor)
         assert type(tensor) == Variable
         assert tuple(tensor.shape) == shape
-
 
     # TODO: Test all attribute types - missing graph
     def test_import_node(self):
@@ -105,7 +106,18 @@ class TestOnnxImporter(object):
         ints_attr = [4, 3, 2, 1]
         strings_attr = ["constant", "and", "variable"]
 
-        onnx_node = onnx.helper.make_node(op, inputs, outputs, float_attr=float_attr, int_attr=int_attr, str_attr=str_attr, tensor_attr=tensor_attr, floats_attr=floats_attr, ints_attr=ints_attr, strings_attr=strings_attr)
+        onnx_node = onnx.helper.make_node(
+            op,
+            inputs,
+            outputs,
+            float_attr=float_attr,
+            int_attr=int_attr,
+            str_attr=str_attr,
+            tensor_attr=tensor_attr,
+            floats_attr=floats_attr,
+            ints_attr=ints_attr,
+            strings_attr=strings_attr,
+        )
         node = OnnxImporter.import_node(onnx_node, OrderedDict(), OrderedDict())
         assert node.op == op
         assert node.attrs["float_attr"] == float_attr
@@ -117,22 +129,30 @@ class TestOnnxImporter(object):
         assert node.attrs["ints_attr"] == ints_attr
         assert node.attrs["strings_attr"] == strings_attr
 
-
-    @pytest.mark.parametrize("model",
-        [identity_model(), lstm_model(), scan_model(), dim_param_model(),
-         initializer_is_output_model(), nested_dup_names(), ext_weights()],
-        ids=lambda model: str(model))
+    @pytest.mark.parametrize(
+        "model",
+        [
+            identity_model(),
+            lstm_model(),
+            scan_model(),
+            dim_param_model(),
+            initializer_is_output_model(),
+            nested_dup_names(),
+            ext_weights(),
+        ],
+        ids=lambda model: str(model),
+    )
     def test_import_graph(self, model):
         graph = OnnxImporter.import_graph(model.load().graph)
         model.assert_equal(graph)
-
 
     def test_import_graph_value_info(self):
         model = onnx.shape_inference.infer_shapes(identity_model().load())
         graph = OnnxImporter.import_graph(model.graph)
         tensors = graph.tensors()
-        assert all([type(tensor) == Variable and tensor.dtype is not None and tensor.shape for tensor in tensors.values()])
-
+        assert all(
+            [type(tensor) == Variable and tensor.dtype is not None and tensor.shape for tensor in tensors.values()]
+        )
 
     def test_import_graph_tensor_map_preserved(self):
         model = identity_model()
@@ -141,12 +161,10 @@ class TestOnnxImporter(object):
         assert len(tensor_map) == 0
         model.assert_equal(graph)
 
-
     def test_import_graph_with_initializer(self):
         model = lstm_model()
         graph = OnnxImporter.import_graph(model.load().graph)
         model.assert_equal(graph)
-
 
     def test_import_graph_with_dim_param(self):
         model = dim_param_model()

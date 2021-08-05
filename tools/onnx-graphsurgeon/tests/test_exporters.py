@@ -25,9 +25,15 @@ from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
 
-from onnx_models import (dim_param_model, ext_weights, identity_model,
-                         initializer_is_output_model, lstm_model,
-                         nested_dup_names, scan_model)
+from onnx_models import (
+    dim_param_model,
+    ext_weights,
+    identity_model,
+    initializer_is_output_model,
+    lstm_model,
+    nested_dup_names,
+    scan_model,
+)
 
 
 class TestOnnxExporter(object):
@@ -42,7 +48,6 @@ class TestOnnxExporter(object):
         onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
         assert isinstance(tensor._values, LazyValues)
 
-
     def test_export_constant_tensor_to_tensor_proto(self):
         name = "constant_tensor"
         shape = (3, 224, 224)
@@ -54,7 +59,6 @@ class TestOnnxExporter(object):
         assert np.all(onnx.numpy_helper.to_array(onnx_tensor) == values)
         assert onnx_tensor.data_type == onnx.TensorProto.FLOAT
         assert tuple(onnx_tensor.dims) == shape
-
 
     def test_export_constant_tensor_to_value_info_proto(self):
         name = "constant_tensor"
@@ -71,7 +75,6 @@ class TestOnnxExporter(object):
             onnx_shape.append(dim.dim_value)
         assert tuple(onnx_shape) == shape
 
-
     def test_export_variable_tensor(self):
         name = "variable_tensor"
         shape = (3, 224, 224)
@@ -87,7 +90,6 @@ class TestOnnxExporter(object):
             onnx_shape.append(dim.dim_value)
         assert tuple(onnx_shape) == shape
 
-
     def test_export_variable_tensor_empty_dim_param(self):
         shape = ("", 224, 224)
 
@@ -99,7 +101,6 @@ class TestOnnxExporter(object):
             onnx_shape.append(dim.dim_value if dim.HasField("dim_value") else dim.dim_param)
         assert tuple(onnx_shape) == shape
 
-
     # When a tensor shape is unknown, we should leave the shape field empty.
     def test_export_variable_tensor_empty_shape(self):
         shape = None
@@ -107,7 +108,6 @@ class TestOnnxExporter(object):
         tensor = Variable(dtype=np.float32, shape=shape, name="variable_tensor")
         onnx_tensor = OnnxExporter.export_value_info_proto(tensor, do_type_check=True)
         assert not onnx_tensor.type.tensor_type.HasField("shape")
-
 
     # When a tensor shape is unknown, we should leave the shape field empty.
     def test_export_variable_tensor_scalar_shape(self):
@@ -117,7 +117,6 @@ class TestOnnxExporter(object):
         onnx_tensor = OnnxExporter.export_value_info_proto(tensor, do_type_check=True)
         assert not onnx_tensor.type.tensor_type.shape.dim[0].HasField("dim_param")
         assert not onnx_tensor.type.tensor_type.shape.dim[0].HasField("dim_value")
-
 
     # TODO: Test subgraph export.
     def test_export_node(self):
@@ -158,18 +157,28 @@ class TestOnnxExporter(object):
                 elif isinstance(attr[0], str):
                     assert [s.decode() for s in onnx_attr.strings] == attr
                 else:
-                    raise AssertionError("Unrecognized list attribute: ({:}: {:}) of type: {:}".format(name, attr, type(attr)))
+                    raise AssertionError(
+                        "Unrecognized list attribute: ({:}: {:}) of type: {:}".format(name, attr, type(attr))
+                    )
             else:
                 raise AssertionError("Unrecognized attribute: ({:}: {:}) of type: {:}".format(name, attr, type(attr)))
-
 
     # See test_importers for import correctness checks
     # This function first imports an ONNX graph, and then re-exports it with no changes.
     # The exported ONNX graph should exactly match the original.
-    @pytest.mark.parametrize("model",
-        [identity_model(), lstm_model(), scan_model(), dim_param_model(),
-         initializer_is_output_model(), nested_dup_names(), ext_weights()],
-        ids=lambda model: str(model))
+    @pytest.mark.parametrize(
+        "model",
+        [
+            identity_model(),
+            lstm_model(),
+            scan_model(),
+            dim_param_model(),
+            initializer_is_output_model(),
+            nested_dup_names(),
+            ext_weights(),
+        ],
+        ids=lambda model: str(model),
+    )
     def test_export_graph(self, model):
         onnx_graph = model.load().graph
         graph = OnnxImporter.import_graph(onnx_graph)
