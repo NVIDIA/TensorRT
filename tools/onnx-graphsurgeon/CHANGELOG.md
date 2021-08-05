@@ -3,9 +3,17 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.11 (2021-07-14)
+### Changed
+- Updated `fold_constants()` so that it no longer fails if a shape folding pass fails when `error_ok` is `True`.
+
+### Fixed
+- Fixed a bug where `fold_constants()` would fail if a model contained a `Slice` node without a `starts` or `ends` input.
+
+
 ## v0.3.10 (2021-05-20)
 ### Added
--  Added support for folding `Shape -> Slice` patterns even when the entire shape may not be known. 
+-  Added support for folding `Shape -> Slice` patterns even when the entire shape may not be known.
 
 
 ## v0.3.9 (2021-04-20)

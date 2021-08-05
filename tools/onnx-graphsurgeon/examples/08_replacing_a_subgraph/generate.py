@@ -23,9 +23,11 @@ import onnx
 def min(self, *args):
     return self.layer(op="Min", inputs=args, outputs=["min_out"])[0]
 
+
 @gs.Graph.register()
 def max(self, *args):
     return self.layer(op="Max", inputs=args, outputs=["max_out"])[0]
+
 
 @gs.Graph.register()
 def identity(self, inp):
@@ -44,7 +46,9 @@ MAX_VAL = np.array(6, np.float32)
 # Add identity nodes to make the graph structure a bit more interesting
 inp = graph.identity(graph.inputs[0])
 max_out = graph.max(graph.min(inp, MAX_VAL), MIN_VAL)
-graph.outputs = [graph.identity(max_out), ]
+graph.outputs = [
+    graph.identity(max_out),
+]
 
 # Graph outputs must include dtype information
 graph.outputs[0].to_variable(dtype=np.float32, shape=(4, 4))
