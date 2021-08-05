@@ -1,5 +1,27 @@
 # TensorRT OSS Release Changelog
 
+## [21.08](https://github.com/NVIDIA/TensorRT/releases/tag/21.08) - 2021-08-05
+### Added
+
+- Add demoBERT and demoBERT-MT (sparsity) benchmark data for TensorRT 8.
+- Added example python notebooks
+  - [BERT - Q&A with TensorRT](demo/BERT/notebooks)
+  - [EfficientNet - Object Detection with TensorRT](demo/EfficientDet/notebooks)
+
+### Changed
+- Updated samples and plugins directory structure
+- Updates to TensorRT developer tools
+  - Polygraphy [v0.31.1](tools/Polygraphy/CHANGELOG.md#v0311-2021-07-16)
+  - ONNX-GraphSurgeon [v0.3.11](tools/onnx-graphsurgeon/CHANGELOG.md#v0311-2021-07-14)
+  - pytorch-quantization toolkit [v2.1.1](tools/pytorch-quantization)
+- README fix to update build command for native aarch64 builds.
+
+### Removed
+- N/A
+
+## [21.07](https://github.com/NVIDIA/TensorRT/releases/tag/21.07) - 2021-07-21
+Identical to the TensorRT-OSS [8.0.1](https://github.com/NVIDIA/TensorRT/releases/tag/8.0.1) Release.
+
 ## [8.0.1](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2021-07-02
 ### Added
 - Added support for the following ONNX operators: `Celu`, `CumSum`, `EyeLike`, `GatherElements`, `GlobalLpPool`, `GreaterOrEqual`, `LessOrEqual`, `LpNormalization`, `LpPool`, `ReverseSequence`, and `SoftmaxCrossEntropyLoss` [details](). 
