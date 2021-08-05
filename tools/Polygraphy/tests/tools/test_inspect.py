@@ -13,12 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import glob
+import os
 import tempfile
 from textwrap import dedent
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod
+from polygraphy import mod, util
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 from tests.tools.common import run_polygraphy_inspect, run_polygraphy_run
 
@@ -32,7 +34,7 @@ def run_inspect_model(request):
 
 @pytest.fixture(scope="session")
 def identity_engine():
-    with tempfile.NamedTemporaryFile() as outpath:
+    with util.NamedTemporaryFile() as outpath:
         run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--save-engine", outpath.name])
         yield outpath.name
 
@@ -297,6 +299,53 @@ ONNX_CASES = [
 ]
 
 
+# List[model, expected_files, expected_output]
+TEST_CAPABILITY_CASES = [
+    (
+        "capability",
+        [
+            "results.txt",
+            "supported_subgraph-nodes-1-1.onnx",
+            "supported_subgraph-nodes-3-3.onnx",
+            "unsupported_subgraph-nodes-0-0.onnx",
+            "unsupported_subgraph-nodes-2-2.onnx",
+            "unsupported_subgraph-nodes-4-4.onnx",
+        ],
+        """
+        [I] ===== Summary =====
+            Operator | Count   | Reason                                                                                                                                                            | Nodes
+            -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            FAKE!    |       2 | In node 0 (importFallbackPluginImporter): UNSUPPORTED_NODE: Assertion failed: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[0, 1], [2, 3]]
+            FAKER!   |       1 | In node 0 (importFallbackPluginImporter): UNSUPPORTED_NODE: Assertion failed: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[4, 5]]
+        """,
+    ),
+    (
+        "identity_identity",
+        [],
+        """
+        Graph is fully supported by TensorRT; Will not generate subgraphs.
+        """,
+    ),
+]
+
+
+class TestCapability(object):
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.0"), reason="supports_model API not available before TRT 8.0"
+    )
+    @pytest.mark.parametrize("case", TEST_CAPABILITY_CASES, ids=lambda case: case[0])
+    def test_capability(self, case):
+        model, expected_files, expected_summary = case
+        with tempfile.TemporaryDirectory() as outdir:
+            status = run_polygraphy_inspect(
+                ["capability", ONNX_MODELS[model].path, "-o", os.path.join(outdir, "subgraphs")],
+            )
+            assert sorted(map(os.path.basename, glob.glob(os.path.join(outdir, "subgraphs", "**")))) == sorted(
+                expected_files
+            )
+            assert dedent(expected_summary).strip() in status.stdout
+
+
 class TestInspectModel(object):
     @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: "{:}-{:}".format(case[0], case[1]))
     def test_model_onnx(self, case):
@@ -337,7 +386,7 @@ class TestInspectModel(object):
         """
         )
 
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
             f.flush()
 
@@ -353,13 +402,13 @@ class TestInspectModel(object):
 class TestInspectData(object):
     @pytest.mark.parametrize("opts", [[], ["--show-values"]])
     def test_outputs(self, opts):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", outpath.name])
             run_polygraphy_inspect(["data", outpath.name] + opts)
 
     @pytest.mark.parametrize("opts", [[], ["--show-values"]])
     def test_inputs(self, opts):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
             run_polygraphy_inspect(["data", outpath.name] + opts)
 
@@ -379,7 +428,7 @@ TACTIC_REPLAY_CASES = [
 class TestInspectTactics(object):
     @pytest.mark.parametrize("case", TACTIC_REPLAY_CASES, ids=lambda case: case[0])
     def test_show_tactics(self, case):
-        with tempfile.NamedTemporaryFile() as replay:
+        with util.NamedTemporaryFile() as replay:
             model_name, expected = case
 
             run_polygraphy_run([ONNX_MODELS[model_name].path, "--trt", "--save-tactics", replay.name])

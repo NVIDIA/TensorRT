@@ -140,4 +140,9 @@ ONNX_MODELS = {
         check_runner=no_check_implemented,
         ext_data=model_path("ext_weights_same_dir"),
     ),
+    "capability": Model(
+        path=model_path("capability.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented
+    )
 }

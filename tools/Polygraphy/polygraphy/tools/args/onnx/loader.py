@@ -26,12 +26,24 @@ onnxrt_backend = mod.lazy_import("polygraphy.backend.onnxrt")
 
 @mod.export()
 class OnnxSaveArgs(BaseArgs):
-    def __init__(self, infer_shapes=False, output="output", short_opt="-o", required=False):
+    def __init__(
+        self,
+        infer_shapes=False,
+        output="output",
+        short_opt="-o",
+        required=False,
+        allow_ext_data_path=True,
+        custom_help=None,
+        default_output_path=None,
+    ):
         super().__init__()
         self._infer_shapes = infer_shapes
         self._output = output
         self._short_opt = short_opt
         self._required = required
+        self._allow_ext_data_path = allow_ext_data_path
+        self._custom_help = custom_help
+        self._default_output_path = default_output_path
         self.onnx_shape_inference_args = None
 
     def register(self, maker):
@@ -44,17 +56,36 @@ class OnnxSaveArgs(BaseArgs):
             flag = "--{:}".format(self._output)
             short = self._short_opt or flag
             self.group.add_argument(
-                short, flag, help="Path to save the ONNX model", dest="save_onnx", default=None, required=self._required
+                short,
+                flag,
+                help=self._custom_help or "Path to save the ONNX model",
+                dest="save_onnx",
+                default=self._default_output_path,
+                required=self._required,
             )
+
+        if self._allow_ext_data_path:
+            ext_data_params = {
+                "action": "append",
+                "nargs": "?",
+            }
+        else:
+            ext_data_params = {
+                "action": "append_const",
+                "const": "",
+            }
 
         self.group.add_argument(
             "--save-external-data",
             help="Whether to save weight data in external file(s). "
-            "To use a non-default path, supply the desired path as an argument. This is always a relative path; "
-            "external data is always written to the same directory as the model. ",
+            + (
+                "To use a non-default path, supply the desired path as an argument. This is always a relative path; "
+                "external data is always written to the same directory as the model. "
+                if self._allow_ext_data_path
+                else ""
+            ),
             default=None,
-            action="append",
-            nargs="?",
+            **ext_data_params,
         )
         self.group.add_argument(
             "--external-data-size-threshold",
@@ -248,7 +279,8 @@ class OnnxLoaderArgs(BaseArgs):
             "--load-external-data",
             "--ext",
             dest="load_external_data",
-            help="Path to a directory containing external data for the model. ",
+            help="Path to a directory containing external data for the model. "
+            "Generally, this is only required if the external data is not stored in the model directory.",
         )
 
         if self._output_prefix is not None:

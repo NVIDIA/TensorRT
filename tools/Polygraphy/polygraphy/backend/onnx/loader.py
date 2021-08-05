@@ -75,7 +75,7 @@ class _GSGraphManager(object):
         model, _ = util.invoke_if_callable(self._model)
         self.USE_GS_GRAPH = isinstance(model, gs.Graph)
         if self.USE_GS_GRAPH:
-            self.graph = model
+            self.graph = model.copy()
         else:
             self.graph = gs.import_onnx(model)
         return self
@@ -355,7 +355,7 @@ class FoldConstants(BaseLoadOnnxCopy):
                 model = infer_shapes(model)
             return model
 
-        if not mod.has_mod(onnxrt, "__version__"):
+        if not mod.has_mod(onnxrt):
             G_LOGGER.error(
                 "ONNX-Runtime is not installed, so constant folding may be suboptimal or not work at all.\n"
                 "Consider installing ONNX-Runtime: {:} -m pip install onnxruntime".format(sys.executable)
@@ -377,7 +377,7 @@ class FoldConstants(BaseLoadOnnxCopy):
                 if not self.error_ok:
                     raise
                 G_LOGGER.warning(
-                    "Constant folding pass failed. Skipping subsequent passes.\n" "Note: Error was:\n{:}".format(err)
+                    "Constant folding pass failed. Skipping subsequent passes.\nNote: Error was:\n{:}".format(err)
                 )
                 break
             else:
@@ -462,13 +462,13 @@ class InferShapes(BaseLoader):
             if isinstance(model, onnx.ModelProto):
                 model = shape_inference.infer_shapes(model)
             else:
-                with tempfile.NamedTemporaryFile(prefix="tmp_polygraphy_", suffix=".onnx") as f:
-                    G_LOGGER.verbose("Writing shape-inferred model to: {:}".format(f.name))
-                    shape_inference.infer_shapes_path(model, f.name)
-                    # When external_data_dir is unset, use the model's current directory
-                    model = onnx_from_path(
-                        f.name, external_data_dir=util.default(external_data_dir, os.path.dirname(model) or None)
-                    )
+                tmp_path = util.NamedTemporaryFile(prefix="tmp_polygraphy_", suffix=".onnx").name
+                G_LOGGER.verbose("Writing shape-inferred model to: {:}".format(tmp_path))
+                shape_inference.infer_shapes_path(model, tmp_path)
+                # When external_data_dir is unset, use the model's current directory
+                model = onnx_from_path(
+                    tmp_path, external_data_dir=util.default(external_data_dir, os.path.dirname(model) or None)
+                )
             G_LOGGER.verbose("ONNX Shape Inference completed successfully")
         except Exception as err:
             if not self.error_ok:
@@ -530,7 +530,9 @@ class ExtractSubgraph(BaseLoader):
 
             def update_tensor(name, dtype, shape):
                 tensor = get_tensor(name)
-                tensor.dtype, tensor.shape = dtype or tensor.dtype, shape or tensor.shape
+                # No need to update constants
+                if isinstance(tensor, gs.Variable):
+                    tensor.dtype, tensor.shape = dtype or tensor.dtype, shape or tensor.shape
                 return tensor
 
             def check_meta(name, dtype, shape, meta_type, needs_shape=True):
@@ -642,6 +644,7 @@ class SaveOnnx(BaseLoader):
                     "No external data will be written."
                 )
 
+        util.makedirs(self.path)
         onnx.save(model, self.path)
         return model
 

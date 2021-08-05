@@ -19,7 +19,6 @@ from polygraphy.backend.trt import util as trt_util
 from polygraphy.common.interface import TypedDict
 from polygraphy.json import Decoder, Encoder, add_json_methods
 from polygraphy.logger import G_LOGGER, LogMode
-from polygraphy.exception import PolygraphyException
 
 trt = mod.lazy_import("tensorrt")
 

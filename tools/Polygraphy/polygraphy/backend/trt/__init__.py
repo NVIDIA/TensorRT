@@ -13,7 +13,7 @@ def register_logger_callback():
         from polygraphy import mod
 
         trt = mod.lazy_import("tensorrt")
-        if not mod.has_mod(trt, with_attr="__version__"):
+        if not mod.has_mod(trt):
             return
 
         if sev >= G_LOGGER.CRITICAL:
@@ -27,7 +27,7 @@ def register_logger_callback():
         else:
             get_trt_logger().min_severity = trt.Logger.VERBOSE
 
-    G_LOGGER.register_callback(set_trt_logging_level)  # Will be registered when this runner is imported.
+    G_LOGGER.register_callback(set_trt_logging_level)  # Will be registered when this backend is imported.
 
 
 register_logger_callback()

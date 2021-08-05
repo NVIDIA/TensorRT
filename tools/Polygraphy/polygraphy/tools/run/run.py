@@ -73,7 +73,7 @@ def generate_summary(model_file, runners, load_results):
         new_list = copy.copy(lst)
         if len(new_list) > 1:
             new_list[-1] = "and {:}".format(new_list[-1])
-        return ", ".join(new_list)
+        return ", ".join(new_list) if len(new_list) > 2 else " ".join(new_list)
 
     summary = ""
 
@@ -94,7 +94,7 @@ def generate_summary(model_file, runners, load_results):
         }
         runners = [runner_names[runner] for runner in runners]
         summary += "between " if len(runners) > 1 else "using "
-        summary += join_list(runners)
+        summary += join_list(runners) + "."
 
     if load_results:
         summary += "\nIt will check against outputs stored in {:}\n".format(join_list(load_results))

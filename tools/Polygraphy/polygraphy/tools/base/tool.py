@@ -96,7 +96,7 @@ class Tool(object):
         try:
             self.add_parser_args(parser)
         except Exception as err:
-            G_LOGGER.warning(
+            G_LOGGER.internal_error(
                 "Could not register tool argument parser for: {:}\nNote: Error was: {:}".format(self.name, err)
             )
         return parser

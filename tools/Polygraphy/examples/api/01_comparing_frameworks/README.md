@@ -11,7 +11,7 @@ In this example, we'll look at how you can use the Polygraphy API to run inferen
 on a model using ONNX Runtime and TensorRT, and then compare the results.
 
 
-## Running the Example
+## Running The Example
 
 1. Install prerequisites
     * Ensure that TensorRT is installed
@@ -23,6 +23,7 @@ on a model using ONNX Runtime and TensorRT, and then compare the results.
     ```
 
 3. **[Optional]** Inspect the inference outputs from the example:
+
     ```bash
     polygraphy inspect data inference_results.json
     ```

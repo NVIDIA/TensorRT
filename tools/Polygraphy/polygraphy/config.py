@@ -18,27 +18,27 @@ import sys
 
 INTERNAL_CORRECTNESS_CHECKS = bool(os.environ.get("POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS", "0") != "0")
 """
-Whether internal correctness checks are enabled.
+bool: Whether internal correctness checks are enabled.
 This can be configured by setting the 'POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS' environment variable.
 """
 
 AUTOINSTALL_DEPS = bool(os.environ.get("POLYGRAPHY_AUTOINSTALL_DEPS", "0") != "0")
 """
-Whether Polygraphy will automatically install required Python packages at runtime.
+bool: Whether Polygraphy will automatically install required Python packages at runtime.
 This can be configured by setting the 'POLYGRAPHY_AUTOINSTALL_DEPS' environment variable.
 """
 
 INSTALL_CMD = os.environ.get("POLYGRAPHY_INSTALL_CMD", "{:} -m pip install".format(sys.executable)).split()
 """
-The command to use to automatically install dependencies. Only relevant when AUTOINSTALL_DEPS
-is enabled. Defaults to ``["python3", "-m", "pip", "install"]``.
+List[str]: The command to use to automatically install dependencies. Only relevant when
+AUTOINSTALL_DEPS is enabled. Defaults to ``["python", "-m", "pip", "install"]``.
 This can be configured by setting the 'POLYGRAPHY_INSTALL_CMD' environment variable to a
 string containing the command; for example: ``python3 -m pip install``.
 """
 
 ARRAY_SWAP_THRESHOLD_MB = int(os.environ.get("POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB", "-1"))
 """
-The threshold, in megabytes, above which Polygraphy will evict a NumPy array from memory and swap it to disk.
+int: The threshold, in megabytes, above which Polygraphy will evict a NumPy array from memory and swap it to disk.
 A negative value disables swapping and a value of 0 causes all arrays to be saved to disk.
 Disabled by default.
 This can be configured by setting the 'POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB' environment variable.

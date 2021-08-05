@@ -141,6 +141,6 @@ class ModelArgs(BaseArgs):
 
         if self.model_type == "trt-network-script" and (not self.model_file or not self.model_file.endswith(".py")):
             G_LOGGER.critical(
-                "TensorRT network scripts must exist and have '.py' extensions. "
+                "TensorRT network scripts must exist and have '.py' extensions.\n"
                 "Note: Provided network script path was: {:}".format(self.model_file)
             )

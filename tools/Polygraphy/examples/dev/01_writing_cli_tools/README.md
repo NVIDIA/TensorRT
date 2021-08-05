@@ -17,11 +17,13 @@ group provided by Polygraphy.
 ## Running The Example
 
 1. You can run the example tool from this directory. For example:
+
     ```bash
     ./gen-data -o data.json --num-values 25
     ```
 
 2. We can even inspect the generated data with `inspect data`:
+
     ```bash
     polygraphy inspect data data.json -s
     ```

@@ -38,8 +38,11 @@ def main():
         OnnxrtRunner(build_onnxrt_session),
     ]
 
-    # `Comparator.run()` will run each runner separately using synthetic input data and return a `RunResults` instance.
-    # See `polygraphy/comparator/struct.py` for details.
+    # `Comparator.run()` will run each runner separately using synthetic input data and
+    #   return a `RunResults` instance. See `polygraphy/comparator/struct.py` for details.
+    #
+    # TIP: To use custom input data, you can set the `data_loader` parameter in `Comparator.run()``
+    #   to a generator or iterable that yields `Dict[str, np.ndarray]`.
     run_results = Comparator.run(runners)
 
     # `Comparator.compare_accuracy()` checks that outputs match between runners.
