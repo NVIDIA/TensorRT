@@ -18,7 +18,7 @@ import os
 import tempfile
 
 import pytest
-from polygraphy.logger.logger import G_LOGGER
+from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import LoggerArgs
 from tests.tools.args.helper import ArgGroupTestHelper
 

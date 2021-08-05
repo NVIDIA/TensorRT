@@ -14,6 +14,9 @@
 # limitations under the License.
 #
 import ctypes
+import glob
+import os
+import sys
 
 from polygraphy import func, mod, util
 from polygraphy.logger import G_LOGGER
@@ -52,7 +55,22 @@ class Cuda(object):
     """
 
     def __init__(self):
-        self.handle = ctypes.CDLL("libcudart.so")
+        self.handle = None
+        if sys.platform.startswith("win"):
+            cuda_paths = [os.environ.get("CUDA_PATH", "")]
+            cuda_paths += os.environ.get("PATH", "").split(os.path.pathsep)
+            cuda_paths = list(filter(lambda x: x, cuda_paths))  # Filter out empty paths (i.e. "")
+
+            candidates = util.find_in_dirs("cudart64_*.dll", cuda_paths)
+            if not candidates:
+                G_LOGGER.critical(
+                    "Could not find the CUDA runtime library.\nNote: Paths searched were:\n{:}".format(cuda_paths)
+                )
+
+            self.handle = ctypes.CDLL(candidates[0])
+        else:
+            self.handle = ctypes.CDLL("libcudart.so")
+
         if not self.handle:
             G_LOGGER.critical("Could not load the CUDA runtime library. Is it on your loader path?")
 

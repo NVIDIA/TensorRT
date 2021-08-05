@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #
 # Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
@@ -14,18 +15,16 @@
 # limitations under the License.
 #
 
-from polygraphy import util
-from polygraphy.logger.logger import Logger
+"""
+Defines a `load_data` function that returns a generator yielding
+feed_dicts so that this script can be used as the argument for
+the --data-loader-script command-line parameter.
+"""
+import numpy as np
+
+INPUT_SHAPE = (1, 2, 28, 28)
 
 
-# We don't use the global logger here because we would have to reset the state each time.
-class TestLogger(object):
-    def test_log_file(self):
-        logger = Logger()
-        with util.NamedTemporaryFile("w+") as log_file:
-            logger.log_file = log_file.name
-            assert logger.log_file == log_file.name
-            logger.info("Hello")
-
-            log_file.seek(0)
-            assert log_file.read() == "[I] Hello\n"
+def load_data():
+    for _ in range(5):
+        yield {"x": np.ones(shape=INPUT_SHAPE, dtype=np.float32)}  # Still totally real data

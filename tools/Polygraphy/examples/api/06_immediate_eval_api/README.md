@@ -12,6 +12,7 @@ Most of the time, the lazy loaders included with Polygraphy have several advanta
 - They allow us to define a sequence of operations in advance by chaining loaders together, which
     provides an easy way to build reusable functions.
     For example, we could create a loader that imports a model from ONNX and generates a serialized TensorRT Engine:
+
     ```python
     build_engine = EngineBytesFromNetwork(NetworkFromOnnxPath("/path/to/model.onnx"))
     ```
@@ -52,13 +53,14 @@ engine = engine_from_network((builder, network), config)
 
 `example.py` showcases basic usage of the immediately evaluated functional API.
 
-## Running the Example
+## Running The Example
 
 1. Install prerequisites
     * Ensure that TensorRT is installed
     * Install other dependencies with `python3 -m pip install -r requirements.txt`
 
 2. Run the example:
+
     ```bash
     python3 example.py
     ```

@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import tempfile
 from textwrap import dedent
 
 import onnx
 import pytest
 import tensorrt as trt
-from polygraphy import mod
+from polygraphy import mod, util
 from polygraphy.backend.common.loader import BytesFromPath
 from polygraphy.backend.trt.loader import EngineFromBytes
 from tests.models.meta import ONNX_MODELS, TF_MODELS
@@ -28,12 +27,12 @@ from tests.tools.common import run_polygraphy_convert
 
 class TestConvertToOnnx(object):
     def test_tf2onnx(self):
-        with tempfile.NamedTemporaryFile(suffix=".onnx") as outmodel:
+        with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
             run_polygraphy_convert([TF_MODELS["identity"].path, "--model-type=frozen", "-o", outmodel.name])
             assert onnx.load(outmodel.name)
 
     def test_fp_to_fp16(self):
-        with tempfile.NamedTemporaryFile() as outmodel:
+        with util.NamedTemporaryFile() as outmodel:
             run_polygraphy_convert(
                 [ONNX_MODELS["identity_identity"].path, "--convert-to=onnx", "--fp-to-fp16", "-o", outmodel.name]
             )
@@ -47,7 +46,7 @@ class TestConvertToTrt(object):
             assert isinstance(engine, trt.ICudaEngine)
 
     def test_onnx_to_trt(self):
-        with tempfile.NamedTemporaryFile(suffix=".engine") as outmodel:
+        with util.NamedTemporaryFile(suffix=".engine") as outmodel:
             run_polygraphy_convert([ONNX_MODELS["identity"].path, "--model-type=onnx", "-o", outmodel.name])
             self.check_engine(outmodel.name)
 
@@ -55,7 +54,7 @@ class TestConvertToTrt(object):
         mod.version(trt.__version__) < mod.version("8.0"), reason="Bug in older versions of TRT breaks this test"
     )
     def test_tf_to_onnx_to_trt(self):
-        with tempfile.NamedTemporaryFile() as outmodel:
+        with util.NamedTemporaryFile() as outmodel:
             run_polygraphy_convert(
                 [TF_MODELS["identity"].path, "--model-type=frozen", "--convert-to=trt", "-o", outmodel.name]
             )
@@ -80,7 +79,7 @@ class TestConvertToTrt(object):
         """
         )
 
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as f, tempfile.NamedTemporaryFile() as outmodel:
+        with util.NamedTemporaryFile("w+", suffix=".py") as f, util.NamedTemporaryFile() as outmodel:
             f.write(script)
             f.flush()
 
@@ -99,7 +98,7 @@ class TestConvertToTrt(object):
             self.check_engine(outmodel.name)
 
     def test_modify_onnx_outputs(self):
-        with tempfile.NamedTemporaryFile(suffix=".onnx") as outmodel:
+        with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
             run_polygraphy_convert(
                 [ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--onnx-outputs", "mark", "all"]
             )
@@ -114,7 +113,7 @@ class TestConvertToOnnxLikeTrt(object):
         "model_name", ["identity", "empty_tensor_expand", "const_foldable", "and", "scan", "dim_param", "tensor_attr"]
     )
     def test_onnx_to_trt_to_onnx_like(self, model_name):
-        with tempfile.NamedTemporaryFile() as outmodel:
+        with util.NamedTemporaryFile() as outmodel:
             run_polygraphy_convert(
                 [ONNX_MODELS[model_name].path, "--convert-to=onnx-like-trt-network", "-o", outmodel.name]
             )

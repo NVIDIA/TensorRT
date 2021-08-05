@@ -19,13 +19,14 @@ with (fake) calibration data, and how you can manage the calibration cache with 
 parameter.
 
 
-## Running the Example
+## Running The Example
 
 1. Install prerequisites
     * Ensure that TensorRT is installed
     * Install other dependencies with `python3 -m pip install -r requirements.txt`
 
 2. Run the example:
+
     ```bash
     python3 example.py
     ```
@@ -33,6 +34,7 @@ parameter.
 3. The first time you run the example, it will create a calibration cache
     called `identity-calib.cache`. If you run the example again, you should see that
     it now uses the cache instead of running calibration again:
+
     ```bash
     python3 example.py
     ```

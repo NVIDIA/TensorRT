@@ -16,11 +16,10 @@
 
 import glob
 import os
-import tempfile
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod
+from polygraphy import mod, util
 from polygraphy.mod.importer import _version_ok
 
 from tests.models.meta import ONNX_MODELS
@@ -71,7 +70,7 @@ class TestPublicImports(object):
 TOOLS = {
     "run": [],
     "convert": [],
-    "inspect": ["data", "model", "tactics"],
+    "inspect": ["data", "model", "tactics", "capability"],
     "surgeon": ["extract", "insert", "sanitize"],
     "template": ["trt-network"],
     "debug": ["build", "precision", "diff-tactics", "reduce", "repeat"],
@@ -109,13 +108,16 @@ class TestAutoinstallDeps(object):
                 "--fold-constants",
                 ONNX_MODELS["const_foldable"].path,
                 "-o",
-                tempfile.NamedTemporaryFile().name,
+                util.NamedTemporaryFile().name,
             ],
         ],
     )
     def test_can_automatically_install_deps(self, virtualenv_with_poly, cmd):
         if "--trt" in cmd and mod.version(trt.__version__) < mod.version("7.0"):
             pytest.skip("TRT 6 container has an old version of CUDA")
+
+        if "--trt" in cmd:
+            pytest.xfail("TensorRT 8.0.1.6 wheels are currently broken")
 
         virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
         POLYGRAPHY_BIN = os.path.join(ROOT_DIR, "bin", "polygraphy")

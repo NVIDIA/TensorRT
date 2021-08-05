@@ -21,12 +21,12 @@ from polygraphy.tools.base import Tool
 class ToJSON(Tool):
     """
     [TEMPORARY] Converts pickled data to JSON.
-    This tool will be removed in 0.31.0 since all future versions of Polygraphy
+    This tool will be removed in 0.32.0 since all future versions of Polygraphy
     will not use Pickle for serialization.
     """
 
     def __init__(self):
-        mod.warn_deprecated("to-json", use_instead="JSON serialization", remove_in="0.31.0")
+        mod.warn_deprecated("to-json", use_instead="JSON serialization", remove_in="0.32.0")
         super().__init__(name="to-json")
 
     def add_parser_args(self, parser):

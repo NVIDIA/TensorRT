@@ -14,12 +14,11 @@
 # limitations under the License.
 #
 
-import tempfile
 from collections import namedtuple
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod
+from polygraphy import mod, util
 from polygraphy.backend.trt import Algorithm, TacticRecorder, TacticReplayData, TacticReplayer
 from polygraphy.exception import PolygraphyException
 
@@ -160,11 +159,11 @@ def replay(request):
     in_replay_data = TacticReplayData().add(name, poly_algo)
     out_replay_data = TacticReplayData()
     if jsonify:
-        inpath = tempfile.NamedTemporaryFile("w")
-        in_replay_data.save(inpath)
+        inpath = util.NamedTemporaryFile("w")
+        in_replay_data.save(inpath.name)
         in_replay_data = inpath.name
 
-        outpath = tempfile.NamedTemporaryFile("r")
+        outpath = util.NamedTemporaryFile("r")
         out_replay_data = outpath.name
 
     yield context, poly_algo, trt_algo, in_replay_data, out_replay_data

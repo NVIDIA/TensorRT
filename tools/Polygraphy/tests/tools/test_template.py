@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import tempfile
 
 import tensorrt as trt
+from polygraphy import util
 from polygraphy.backend.common.loader import InvokeFromScript
 from tests.models.meta import ONNX_MODELS
 from tests.tools.common import run_polygraphy_template
@@ -23,7 +23,7 @@ from tests.tools.common import run_polygraphy_template
 
 class TestTrtNetwork(object):
     def test_no_model_file(self):
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as template:
+        with util.NamedTemporaryFile("w+", suffix=".py") as template:
             run_polygraphy_template(["trt-network", "-o", template.name])
 
             load_network = InvokeFromScript(template.name, "load_network")
@@ -33,7 +33,7 @@ class TestTrtNetwork(object):
                 assert isinstance(network, trt.INetworkDefinition)
 
     def test_with_model_file(self):
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as template:
+        with util.NamedTemporaryFile("w+", suffix=".py") as template:
             run_polygraphy_template(["trt-network", ONNX_MODELS["identity"].path, "-o", template.name])
 
             load_network = InvokeFromScript(template.name, "load_network")
