@@ -65,6 +65,7 @@ All the `debug` tools work on the same general principles:
     You can invoke it with the model and a command that can check intermediate models.
     The intermediate models will be written to `polygraphy_debug.onnx` by default.
     For example, to reduce a model with accuracy errors:
+
     ```bash
     polygraphy debug reduce model.onnx -o reduced.onnx \
         --check polygraphy run polygraphy_debug.onnx --onnxrt --trt

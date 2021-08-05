@@ -22,6 +22,7 @@ The `inspect` tool can be used to display information about supported types of f
     `polygraphy run --save-outputs/--save-inputs`.
 - [EXPERIMENTAL] `tactics` displays information about the contents of tactic replay files, like those written by
     `polygraphy run --save-tactics`
+- `capability` partitions an ONNX model into one or more subgraphs that are supported or unsupported by TensorRT.
 
 
 ## Usage

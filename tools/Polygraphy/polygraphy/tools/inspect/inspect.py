@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.inspect.subtool import Data, Model, Tactics
+from polygraphy.tools.inspect.subtool import Data, Model, Tactics, Capability
 
 
 class Inspect(Tool):
@@ -33,6 +33,7 @@ class Inspect(Tool):
             Model(),
             Data(),
             Tactics(),
+            Capability()
         ]
 
         for subtool in SUBTOOLS:

@@ -24,7 +24,7 @@ from textwrap import dedent
 import onnx
 import pytest
 import tensorrt as trt
-from polygraphy import mod
+from polygraphy import mod, util
 from polygraphy.json import load_json
 from tests.helper import get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS, TF_MODELS
@@ -33,7 +33,7 @@ from tests.tools.common import ROOT_DIR, check_subprocess, run_polygraphy_run
 
 class TestGen(object):
     def test_polygraphy_run_gen_script(self):
-        with tempfile.NamedTemporaryFile(mode="w") as f:
+        with util.NamedTemporaryFile(mode="w") as f:
             run_polygraphy_run(["--gen-script={:}".format(f.name), ONNX_MODELS["identity"].path])
             with open(f.name, "r") as script:
                 print(script.read())
@@ -73,13 +73,20 @@ class TestTrt(object):
         run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt"])
 
     def test_plugins(self):
-        run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--plugins", "libnvinfer_plugin.so"])
+        run_polygraphy_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--trt",
+                "--plugins",
+                "nvinfer_plugin.dll" if sys.platform.startswith("win") else "libnvinfer_plugin.so",
+            ]
+        )
 
     def test_custom_outputs(self):
         run_polygraphy_run([ONNX_MODELS["identity_identity"].path, "--trt", "--trt-outputs", "identity_out_0"])
 
     def test_layerwise_outputs(self):
-        with tempfile.NamedTemporaryFile() as outfile0:
+        with util.NamedTemporaryFile() as outfile0:
             run_polygraphy_run(
                 [
                     ONNX_MODELS["identity_identity"].path,
@@ -98,7 +105,7 @@ class TestTrt(object):
             assert "identity_out_2" in result
 
     def test_exclude_outputs_with_layerwise(self):
-        with tempfile.NamedTemporaryFile() as outfile0:
+        with util.NamedTemporaryFile() as outfile0:
             run_polygraphy_run(
                 [
                     ONNX_MODELS["identity_identity"].path,
@@ -213,7 +220,7 @@ class TestTrt(object):
         )
 
     def test_int8_calibration_cache(self):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             cmd = [ONNX_MODELS["identity"].path, "--trt", "--int8", "--calibration-cache", outpath.name]
             if mod.version(trt.__version__) >= mod.version("7.0"):
                 cmd += ["--onnxrt"]
@@ -252,14 +259,14 @@ class TestTrt(object):
             assert total_cache_size <= (const_foldable_cache_size + identity_cache_size)
 
     def test_save_load_engine(self):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--save-engine", outpath.name])
             assert is_file_non_empty(outpath.name)
             run_polygraphy_run(["--trt", outpath.name, "--model-type=engine"])
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
     def test_tactic_replay(self):
-        with tempfile.NamedTemporaryFile() as tactic_replay:
+        with util.NamedTemporaryFile() as tactic_replay:
             run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--save-tactics", tactic_replay.name])
             assert is_file_non_empty(tactic_replay.name)
             run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--load-tactics", tactic_replay.name])
@@ -269,7 +276,7 @@ class TestTrt(object):
         run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--tactic-sources", "CUBLAS", "CUBLAS_LT"])
 
     def test_data_loader_script_calibration(self):
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
                 dedent(
                     """
@@ -291,7 +298,7 @@ class TestTf(object):
         run_polygraphy_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5"])
 
     def test_tf_save_pb(self):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             run_polygraphy_run(
                 [TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5", "--save-pb", outpath.name]
             )
@@ -307,7 +314,7 @@ class TestTf(object):
 
     @pytest.mark.skip(reason="Non-trivial to set up - requires CUPTI")
     def test_tf_save_timeline(self):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             run_polygraphy_run(
                 [TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5", "--save-timeline", outpath.name]
             )
@@ -325,7 +332,7 @@ class TestOnnxrt(object):
         run_polygraphy_run([TF_MODELS["identity"].path, "--onnxrt", "--model-type=frozen"])
 
     def test_tf2onnx_save_onnx(self):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             run_polygraphy_run(
                 [TF_MODELS["identity"].path, "--onnxrt", "--model-type=frozen", "--save-onnx", outpath.name]
             )
@@ -336,7 +343,7 @@ class TestOnnxrt(object):
         run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt"])
 
     def test_onnx_rt_save_onnx(self):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-onnx", outpath.name])
             assert is_file_non_empty(outpath.name)
             assert onnx.load(outpath.name)
@@ -345,7 +352,7 @@ class TestOnnxrt(object):
         run_polygraphy_run([ONNX_MODELS["identity_identity"].path, "--onnxrt", "--onnx-outputs", "identity_out_0"])
 
     def test_onnx_rt_layerwise_outputs(self):
-        with tempfile.NamedTemporaryFile() as outfile0:
+        with util.NamedTemporaryFile() as outfile0:
             run_polygraphy_run(
                 [
                     ONNX_MODELS["identity_identity"].path,
@@ -364,7 +371,7 @@ class TestOnnxrt(object):
             assert "identity_out_2" in result
 
     def test_onnx_rt_exclude_outputs_with_layerwise(self):
-        with tempfile.NamedTemporaryFile() as outfile0:
+        with util.NamedTemporaryFile() as outfile0:
             run_polygraphy_run(
                 [
                     ONNX_MODELS["identity_identity"].path,
@@ -464,7 +471,7 @@ class TestOther(object):
         )  # Make sure it actually compared stuff.
 
     def test_save_load_inputs(self):
-        with tempfile.NamedTemporaryFile() as infile0, tempfile.NamedTemporaryFile() as infile1:
+        with util.NamedTemporaryFile() as infile0, util.NamedTemporaryFile() as infile1:
             run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-input-data", infile0.name])
             run_polygraphy_run(
                 [

@@ -16,12 +16,11 @@
 
 import copy
 import sys
-import tempfile
 from textwrap import dedent
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod
+from polygraphy import mod, util
 from polygraphy.exception import PolygraphyException
 from polygraphy.mod.importer import _version_ok
 
@@ -42,7 +41,7 @@ class TestImporter(object):
         """
         )
 
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
             f.flush()
 
@@ -65,7 +64,7 @@ class TestImporter(object):
         """
         )
 
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
             f.flush()
 

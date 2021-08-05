@@ -22,7 +22,7 @@ build: clean
 	python3 setup.py bdist_wheel
 
 install_deps: build
-	-python3 -m pip install colored
+	-python3 -m pip install colored wheel
 
 install: install_deps
 	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl

@@ -14,11 +14,11 @@
 # limitations under the License.
 #
 import contextlib
-import tempfile
+import sys
 
 import pytest
 import tensorrt as trt
-from polygraphy import constants, mod
+from polygraphy import constants, mod, util
 from polygraphy.backend.trt import (
     Calibrator,
     CreateConfig,
@@ -38,7 +38,7 @@ from polygraphy.backend.trt import (
     onnx_like_from_network,
 )
 from polygraphy.comparator import DataLoader
-from tests.helper import is_file_non_empty, get_file_size
+from tests.helper import get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
 
 ##
@@ -104,14 +104,16 @@ class TestLoadPlugins(object):
         def get_plugin_names():
             return [pc.name for pc in trt.get_plugin_registry().plugin_creator_list]
 
-        loader = LoadPlugins(plugins=["libnvinfer_plugin.so"])
+        loader = LoadPlugins(
+            plugins=["nvinfer_plugin.dll" if sys.platform.startswith("win") else "libnvinfer_plugin.so"]
+        )
         loader()
         assert get_plugin_names()
 
 
 class TestSerializedEngineLoader(object):
     def test_serialized_engine_loader_from_lambda(self, identity_engine):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             with open(outpath.name, "wb") as f, identity_engine.serialize() as buffer:
                 f.write(buffer)
 
@@ -325,7 +327,7 @@ class TestConfigLoader(object):
     @pytest.mark.parametrize("path_mode", [True, False], ids=["path", "file-like"])
     def test_timing_cache(self, identity_builder_network, path_mode):
         builder, network = identity_builder_network
-        with tempfile.NamedTemporaryFile() as cache:
+        with util.NamedTemporaryFile() as cache:
             loader = CreateConfig(load_timing_cache=cache.name if path_mode else cache)
             with loader(builder, network) as config:
                 assert config.get_timing_cache()
@@ -381,7 +383,7 @@ class TestEngineFromNetwork(object):
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
     @pytest.mark.parametrize("path_mode", [True, False], ids=["path", "file-like"])
     def test_timing_cache_generate_and_append(self, path_mode):
-        with tempfile.NamedTemporaryFile() as total_cache, tempfile.NamedTemporaryFile() as identity_cache:
+        with util.NamedTemporaryFile() as total_cache, util.NamedTemporaryFile() as identity_cache:
 
             def build_engine(model, cache):
                 if not path_mode:
@@ -429,7 +431,7 @@ class TestBytesFromEngine(object):
 
 class TestSaveEngine(object):
     def test_save_engine(self, identity_network):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             engine_loader = SaveEngine(EngineFromNetwork(identity_network), path=outpath.name)
             with engine_loader():
                 assert is_file_non_empty(outpath.name)

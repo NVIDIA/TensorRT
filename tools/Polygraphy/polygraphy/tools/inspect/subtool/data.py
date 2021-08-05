@@ -59,17 +59,23 @@ class Data(Tool):
             out_str = ""
             for index, iter_result in enumerate(iters):
                 iter_meta = meta_from_iter_result(iter_result)
+                indent = 1
                 if len(iters) > 1 and args.all:
-                    out_str += util.indent_block("Iteration: {:} | ".format(index))
+                    out_str += util.indent_block("\n-- Iteration: {:}\n".format(index), indent - 1)
+                    indent = 2
 
                 for name, arr in iter_result.items():
-                    out_str += "\n{:} {:} | Stats\n".format(name, iter_meta[name])
-                    out_str += util.indent_block(comp_util.str_output_stats(arr)) + "\n"
+                    out_str += util.indent_block(
+                        "\n{:} {:} | Stats: {:}".format(name, iter_meta[name], comp_util.str_output_stats(arr)),
+                        indent - 1,
+                    )
                     if args.histogram:
-                        out_str += util.indent_block(comp_util.str_histogram(arr)) + "\n"
+                        out_str += "\n{:}".format(util.indent_block(comp_util.str_histogram(arr), indent))
                     if args.show_values:
-                        out_str += "{:}\n".format(util.indent_block(str(arr)))
+                        out_str += "\n{:}".format(util.indent_block(str(arr), indent))
 
+                if indent == 2:
+                    out_str += "\n"
                 if not args.all:
                     break
             return out_str

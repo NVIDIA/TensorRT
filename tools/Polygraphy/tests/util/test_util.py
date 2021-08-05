@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+import tempfile
+import random
+
 import numpy as np
 import pytest
 from polygraphy import util
@@ -122,3 +126,18 @@ UNIQUE_LIST_CASES = [
 def test_unique_list(case):
     lst, expected = case
     assert util.unique_list(lst) == expected
+
+
+def test_find_in_dirs():
+    with tempfile.TemporaryDirectory() as topdir:
+        dirs = list(map(lambda x: os.path.join(topdir, x), ["test0", "test1", "test2", "test3", "test4"]))
+        for subdir in dirs:
+            os.makedirs(subdir)
+
+        path_dir = random.choice(dirs)
+        path = os.path.join(path_dir, "cudart64_11.dll")
+
+        with open(path, "w") as f:
+            f.write("This file should be found by find_in_dirs")
+
+        assert util.find_in_dirs("cudart64_*.dll", dirs) == [path]

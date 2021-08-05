@@ -14,11 +14,10 @@
 # limitations under the License.
 #
 
-import tempfile
-
 import pytest
 import tensorrt as trt
-from polygraphy.backend.trt import engine_bytes_from_network, network_from_onnx_path, create_network
+from polygraphy import util
+from polygraphy.backend.trt import create_network, engine_bytes_from_network, network_from_onnx_path
 from polygraphy.tools.args import (
     ModelArgs,
     OnnxLoaderArgs,
@@ -77,7 +76,7 @@ class TestTrtEngineLoaderArgs(object):
             assert engine[1] == "output"
 
     def test_load_serialized_engine(self, engine_loader_args):
-        with tempfile.NamedTemporaryFile() as f, engine_bytes_from_network(
+        with util.NamedTemporaryFile() as f, engine_bytes_from_network(
             network_from_onnx_path(ONNX_MODELS["identity"].path)
         ) as engine_bytes:
             f.write(engine_bytes)

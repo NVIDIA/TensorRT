@@ -3,6 +3,24 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.31.1 (2021-07-16)
+### Changed
+- Improved the quality of several examples and added information on how to load serialized TensorRT engines
+    as well as how to use custom input data.
+
+
+## v0.31.0 (2021-07-02)
+### Added
+- Added `inspect capability` subtool that will partition a ONNX graph into supported and unsupported subgraphs for usage within TensorRT.
+- Added Windows support to the CUDA wrapper in `polygraphy/cuda/cuda.py`.
+
+### Changed
+- `SaveOnnx` will now create parent directories if they do not already exist.
+
+### Fixed
+- Fixed a bug where `ExtractSubgraph` would modify the original graph instead of creating a new graph.
+
+
 ## v0.30.3 (2021-06-25)
 ### Fixed
 - Fixed various typos, added more details to some tool READMEs.

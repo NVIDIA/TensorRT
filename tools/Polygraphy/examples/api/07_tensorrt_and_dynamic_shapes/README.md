@@ -24,6 +24,7 @@ Using the TensorRT API, the process involves two steps:
     the entire output(s).
 
     For a single-input, single-output model, this would look roughly as follows:
+
     ```python
     context.set_binding_shape(0, inp.shape)
 
@@ -108,18 +109,20 @@ the cost of activating a runner should be small - it just needs to allocate
 input and output buffers. Hence, we'll be able to activate runners on-demand quickly.
 
 
-## Running the Example
+## Running The Example
 
 1. Install prerequisites
     * Ensure that TensorRT is installed
     * Install other dependencies with `python3 -m pip install -r requirements.txt`
 
 2. Run the example:
+
     ```bash
     python3 example.py
     ```
 
-3. [Optional] Inspect the generated engine:
+3. **[Optional]** Inspect the generated engine:
+
     ```bash
     polygraphy inspect model dynamic_identity.engine
     ```

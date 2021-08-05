@@ -13,12 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import tempfile
 
 import numpy as np
 import pytest
 import tensorrt as trt
-from polygraphy import constants
+from polygraphy import constants, util
 from polygraphy.backend.trt import Algorithm, TacticReplayData
 from polygraphy.comparator import IterationResult, RunResults
 from polygraphy.exception import PolygraphyException
@@ -126,7 +125,7 @@ class TestImplementations(object):
 
     @pytest.mark.parametrize("obj", JSONABLE_CASES)
     def test_save_load(self, obj):
-        with tempfile.NamedTemporaryFile("w+") as f:
+        with util.NamedTemporaryFile("w+") as f:
             obj.save(f)
             decoded = type(obj).load(f)
             assert decoded == obj

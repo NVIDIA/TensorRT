@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import tempfile
 
 import numpy as np
 import onnx_graphsurgeon as gs
 import pytest
-from polygraphy import constants
+from polygraphy import constants, util
 from polygraphy.backend.onnx import (
     ConvertToFp16,
     FoldConstants,
@@ -31,7 +32,6 @@ from polygraphy.backend.onnx import (
     onnx_from_path,
 )
 from polygraphy.common import TensorMetadata
-from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
 from tests.helper import is_file_non_empty
 from tests.models.meta import ONNX_MODELS, TF_MODELS
@@ -143,7 +143,9 @@ class TestFoldConstants:
     @pytest.mark.parametrize("copy", [True, False])
     def test_basic(self, partitioning, fold_shapes, copy):
         original_model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
-        loader = FoldConstants(original_model, partitioning=partitioning, fold_shapes=fold_shapes, copy=copy)
+        loader = FoldConstants(
+            original_model, partitioning=partitioning, fold_shapes=fold_shapes, copy=copy, error_ok=False
+        )
         model = loader()
         assert len(original_model.graph.node) != 1 or not copy
         assert len(model.graph.node) == 1
@@ -151,13 +153,14 @@ class TestFoldConstants:
 
 class TestSaveOnnx(object):
     def test_save_onnx(self):
-        with tempfile.NamedTemporaryFile() as outpath:
-            loader = SaveOnnx(OnnxFromPath(ONNX_MODELS["identity"].path), path=outpath.name)
+        with tempfile.TemporaryDirectory() as outdir:
+            outpath = os.path.join(outdir, "test", "nested")
+            loader = SaveOnnx(OnnxFromPath(ONNX_MODELS["identity"].path), path=outpath)
             loader()
-            assert is_file_non_empty(outpath.name)
+            assert is_file_non_empty(outpath)
 
     def test_external_data(self):
-        with tempfile.NamedTemporaryFile() as path, tempfile.NamedTemporaryFile() as data:
+        with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
             model = OnnxFromPath(ONNX_MODELS["const_foldable"].path)
             loader = SaveOnnx(model, path.name, external_data_path=data.name, size_threshold=0)
             loader()
@@ -206,15 +209,18 @@ class TestExtractSubgraph(object):
     def test_extract_onnx_gs_graph(self, extract_model):
         model, input_meta, output_meta = extract_model
         graph = gs.import_onnx(model)
-        graph = extract_subgraph(graph, input_meta, output_meta)
-        assert isinstance(graph, gs.Graph)
-        assert len(graph.nodes) == 1
+        subgraph = extract_subgraph(graph, input_meta, output_meta)
+        # Make sure original graph isn't modified.
+        assert len(graph.nodes) == 2
 
-        assert len(graph.inputs) == 1
-        assert graph.inputs[0].name == "X"
+        assert isinstance(subgraph, gs.Graph)
+        assert len(subgraph.nodes) == 1
 
-        assert len(graph.outputs) == 1
-        assert graph.outputs[0].name == "identity_out_0"
+        assert len(subgraph.inputs) == 1
+        assert subgraph.inputs[0].name == "X"
+
+        assert len(subgraph.outputs) == 1
+        assert subgraph.outputs[0].name == "identity_out_0"
 
     def test_extract_passes_no_input_shape(self, extract_model):
         model, input_meta, output_meta = extract_model

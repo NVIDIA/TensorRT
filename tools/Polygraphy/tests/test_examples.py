@@ -17,6 +17,7 @@ import copy
 import os
 import shutil
 import subprocess as sp
+from textwrap import dedent
 
 import pytest
 import tensorrt as trt
@@ -29,6 +30,12 @@ EXAMPLES_ROOT = os.path.join(ROOT_DIR, "examples")
 # Extract any ``` blocks from the README
 # Each block is stored as a separate string in the returned list
 def load_code_blocks_from_readme(readme, ignore_block):
+    with open(readme, "r") as f:
+        contents = f.read()
+        # Check that the README has all the expected sections.
+        assert "## Introduction" in contents, "All example READMEs should have an 'Introduction' section!"
+        assert "## Running The Example" in contents, "All example READMEs should have a 'Running The Example' section!"
+
     def ignore_command(cmd):
         return "pip" in cmd
 
@@ -49,7 +56,7 @@ def load_code_blocks_from_readme(readme, ignore_block):
                     block.append(line.rstrip())
 
     # commands is List[List[str]] - flatten and remove start/end markers:
-    commands = ["\n".join(block[1:-1]) for block in commands]
+    commands = [dedent("\n".join(block[1:-1])) for block in commands]
     return commands
 
 
@@ -96,7 +103,7 @@ class Example(object):
 API_EXAMPLES = [
     Example(["api", "00_inference_with_tensorrt"], artifact_names=["identity.engine"]),
     Example(["api", "01_comparing_frameworks"], artifact_names=["inference_results.json"]),
-    Example(["api", "02_using_real_data"]),
+    Example(["api", "02_validating_on_a_dataset"]),
     Example(["api", "03_interoperating_with_tensorrt"]),
     Example(["api", "04_int8_calibration_in_tensorrt"], artifact_names=["identity-calib.cache"]),
     Example(["api", "05_using_tensorrt_network_api"]),
@@ -126,6 +133,7 @@ CLI_EXAMPLES = [
     Example(["cli", "run", "02_comparing_across_runs"], artifact_names=["system_a_results.json"]),
     Example(["cli", "run", "03_generating_a_comparison_script"], artifact_names=["compare_trt_onnxrt.py"]),
     Example(["cli", "run", "04_defining_a_tensorrt_network_manually"]),
+    Example(["cli", "run", "05_comparing_with_custom_data"]),
     # Convert
     Example(["cli", "convert", "01_int8_calibration_in_tensorrt"], artifact_names=["identity.engine"]),
     Example(

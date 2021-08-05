@@ -14,14 +14,12 @@
 # limitations under the License.
 #
 
-from polygraphy.backend.trt.algorithm_selector import TacticReplayData
-import tempfile
 from textwrap import dedent
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod
-from polygraphy.backend.trt import TacticRecorder, TacticReplayer, create_network
+from polygraphy import mod, util
+from polygraphy.backend.trt import TacticRecorder, TacticReplayData, TacticReplayer, create_network
 from polygraphy.exception import PolygraphyException
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, TrtConfigArgs
 from tests.tools.args.helper import ArgGroupTestHelper
@@ -68,7 +66,7 @@ class TestTrtConfigArgs(object):
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Bugged before TRT 8")
     def test_tactic_replay(self, trt_config_args):
-        with tempfile.NamedTemporaryFile(suffix=".json") as f:
+        with util.NamedTemporaryFile(suffix=".json") as f:
             trt_config_args.parse_args(["--tactic-replay", f.name])
             builder, network = create_network()
 
@@ -86,7 +84,7 @@ class TestTrtConfigArgs(object):
         ],
     )
     def test_tactics(self, trt_config_args, opt, cls):
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as f:
+        with util.NamedTemporaryFile("w+", suffix=".json") as f:
             if opt == "--load-tactics":
                 TacticReplayData().save(f)
 
@@ -185,7 +183,7 @@ class TestTrtConfigArgs(object):
     def test_config_script(self):
         arg_group = ArgGroupTestHelper(TrtConfigArgs())
 
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
                 dedent(
                     """

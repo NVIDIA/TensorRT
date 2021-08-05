@@ -64,6 +64,7 @@ In those cases, we can export the old name as a deprecated alias to preserve bac
 
 - For a class or function, annotate the replacement with the `export_deprecated_alias` decorator.
     For example:
+
     ```python
     @mod.export_deprecated_alias("Old", remove_in="0.25.0")
     class New(object):
@@ -72,6 +73,7 @@ In those cases, we can export the old name as a deprecated alias to preserve bac
 
 - For modules, invoke the decorator manually within the module file.
     For example:
+
     ```python
     mod.export_deprecated_alias("old_mod_name", remove_in="0.25.0")(sys.modules[__name__])
     ```

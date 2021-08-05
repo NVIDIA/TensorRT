@@ -13,10 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import tempfile
-
 import numpy as np
 import pytest
+from polygraphy import util
 from polygraphy.backend.tf import SessionFromGraph, TfRunner
 from polygraphy.exception import PolygraphyException
 from tests.helper import is_file_non_empty
@@ -39,7 +38,7 @@ class TestTfRunner(object):
     @pytest.mark.skip(reason="Non-trivial to set up - requires CUPTI")
     def test_save_timeline(self):
         model = TF_MODELS["identity"]
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             with TfRunner(SessionFromGraph(model.loader), allow_growth=True, save_timeline=outpath.name) as runner:
                 model.check_runner(runner)
                 assert is_file_non_empty(outpath.name)

@@ -9,7 +9,6 @@
 - [Examples](#examples)
 - [Advanced](#advanced)
     - [Using The Python API](#using-the-python-api)
-    - [Building API Docs](#building-api-docs)
     - [Enabling Internal Correctness Checks](#enabling-internal-correctness-checks)
 - [Contributing](#contributing)
 
@@ -37,44 +36,70 @@ Among other things, Polygraphy lets you:
 
 ## Installation
 
+**IMPORTANT**: **Polygraphy does *not* support Python 2.X.**
+    **All the instructions here assume you are using Python 3 or later.**
+
 
 ### Installing Prebuilt Wheels
 
 ```bash
-python3 -m pip install colored polygraphy --index-url https://pypi.ngc.nvidia.com
+python -m pip install colored polygraphy --index-url https://pypi.ngc.nvidia.com
 ```
 
-**NOTE:** When using this method, the command-line toolkit will be installed into `${HOME}/.local/bin` by default.
-Make sure to add this directory to your `PATH` environment variable.
+**NOTE:** *When using this method, the command-line toolkit will be installed into `${HOME}/.local/bin` by default.*
+    *Make sure to add this directory to your `PATH` environment variable.*
 
 
 ### Building From Source
 
-#### Using Make Targets
+#### Using Make Targets (Linux)
 
 ```bash
 make install
 ```
 
+#### Using Powershell Script (Windows)
+
+Make sure you are allowed to execute scripts on your system then run:
+```ps
+.\install.ps1
+```
+
 #### Building Manually
 
-1. Build a wheel:
+1. Install prerequisites:
 
-```bash
-python3 setup.py bdist_wheel
+```
+python -m pip install wheel
 ```
 
-2. Install the wheel manually from **outside** the repository:
+2. Build a wheel:
 
-```bash
-python3 -m pip install Polygraphy/dist/polygraphy-*-py2.py3-none-any.whl
+```
+python setup.py bdist_wheel
 ```
 
-**NOTE:** It is strongly recommended to install the `colored` module for colored output
-from Polygraphy, as this can greatly improve readability:
-```bash
-python3 -m pip install colored
-```
+3. Install the wheel manually from **outside** the repository:
+
+    On Linux, run:
+
+    ```
+    python -m pip install Polygraphy/dist/polygraphy-*-py2.py3-none-any.whl
+    ```
+
+    On Windows, using Powershell, run:
+
+    ```ps
+    $wheel_path = gci -Name Polygraphy\dist
+    python -m pip install Polygraphy\dist\$wheel_path
+    ```
+
+
+    **NOTE:** *It is strongly recommended to install the `colored` module for colored output*
+    *from Polygraphy, as this can greatly improve readability:*
+    ```
+    python -m pip install colored
+    ```
 
 
 ### Installing Dependencies
@@ -91,9 +116,9 @@ To make this easier, Polygraphy can optionally automatically install or upgrade 
 To enable this behavior, set the `POLYGRAPHY_AUTOINSTALL_DEPS` environment variable to `1` or
 `polygraphy.config.AUTOINSTALL_DEPS = True` using the Python API.
 
-NOTE: By default, dependencies will be installed using the current interpreter, and may overwrite existing
-packages. The default installation command, which is `python3 -m pip install`, can be overriden by setting
-the `POLYGRAPHY_INSTALL_CMD` environment variable, or setting `polygraphy.config.INSTALL_CMD = "..."` using the Python API.
+**NOTE**: *By default, dependencies will be installed using the current interpreter, and may overwrite existing*
+    *packages. The default installation command, which is `python -m pip install`, can be overriden by setting*
+    *the `POLYGRAPHY_INSTALL_CMD` environment variable, or setting `polygraphy.config.INSTALL_CMD = "..."` using the Python API.*
 
 #### Installing Manually
 
@@ -103,13 +128,13 @@ by the backend, but does serve as a good starting point.
 
 You can install the requirements for whichever backends you're interested in with:
 ```bash
-python3 -m pip install -r polygraphy/backend/<name>/requirements.txt
+python -m pip install -r polygraphy/backend/<name>/requirements.txt
 ```
 
 If additional packages are required, warnings or errors will be logged.
 You can install the additional packages manually with:
 ```bash
-python3 -m pip install <package_name>
+python -m pip install <package_name>
 ```
 
 ## Usage
@@ -130,26 +155,9 @@ For examples of both the CLI and Python API, see the [examples directory](./exam
 
 ### Using The Python API
 
-For a high-level overview of the Polygraphy Python API, see the [API directory](./polygraphy).
-For more details, see the [Polygraphy API documentation](https://docs.nvidia.com/deeplearning/tensorrt/polygraphy/docs/index.html).
+For more information on the Polygraphy Python API, including a high-level overview and the
+Python API reference documentation, see the [API directory](./polygraphy).
 
-
-### Building API Docs
-
-To build the API documentation, first install required packages:
-
-```bash
-python3 -m pip install -r docs/requirements.txt
-```
-
-and then use the `make` target to build docs:
-
-```bash
-make docs
-```
-
-The HTML documentation will be generated under `build/docs`
-To view the docs, open `build/docs/index.html` in a browser or HTML viewer.
 
 ### Enabling Internal Correctness Checks
 
@@ -162,8 +170,8 @@ When the checks are enabled, Polygraphy will ensure, for example, that loaders d
 modify their state when they are called, and that runners will reset their state correctly in
 `deactivate()`.
 
-Note that `POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS` only relates to checks that validate Polygraphy's internal
-APIs. User input validation and public API checks are always enabled and cannot be disabled.
+**NOTE:** *`POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS` only relates to checks that validate Polygraphy's*
+    *internal APIs. User input validation and public API checks are always enabled and cannot be disabled.*
 
 
 ## Contributing
