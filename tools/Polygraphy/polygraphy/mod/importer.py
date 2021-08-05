@@ -108,9 +108,9 @@ def lazy_import(name, log=True, version=None):
             )
             status = sp.run(cmd)
             if status.returncode != 0:
-                G_LOGGER.log(
-                    "Could not automatically install required package: {:}. Please install it manually.".format(pkg),
-                    severity=G_LOGGER.CRITICAL if raise_error else G_LOGGER.WARNING,
+                log_func = G_LOGGER.critical if raise_error else G_LOGGER.warning
+                log_func(
+                    "Could not automatically install required package: {:}. Please install it manually.".format(pkg)
                 )
 
             mod = importlib.import_module(name)
@@ -123,14 +123,13 @@ def lazy_import(name, log=True, version=None):
             if config.AUTOINSTALL_DEPS:
                 mod = install_mod()
             else:
-                G_LOGGER.error(
+                G_LOGGER.critical(
                     "Module: {:} is required but could not be imported.\n"
                     "You can try setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables "
                     "to allow Polygraphy to automatically install missing packages.\n"
                     "Note that this may cause existing packages to be overwritten - hence, it may be "
                     "desirable to use a Python virtual environment or container. ".format(name)
                 )
-                raise
 
         # Auto-upgrade if necessary
         if version is not None and hasattr(mod, "__version__") and not _version_ok(mod.__version__, version):
@@ -167,7 +166,7 @@ def lazy_import(name, log=True, version=None):
     return LazyModule()
 
 
-def has_mod(lazy_mod, with_attr):
+def has_mod(lazy_mod, with_attr="__version__"):
     """
     Checks whether a module is available.
 
@@ -210,8 +209,8 @@ def import_from_script(path, name):
 
         stack.callback(reset_sys_path)
 
-        mod = importlib.import_module(modname)
         try:
+            mod = importlib.import_module(modname)
             return getattr(mod, name)
         except Exception as err:
             ext = os.path.splitext(path)[1]

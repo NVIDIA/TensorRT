@@ -170,7 +170,7 @@ class CompareFunc(object):
 
             check_dict(rtol, "the rtol dictionary")
             check_dict(atol, "the atol dictionary")
-            check_dict(check_error_stat, "the chcek_error_stat dictionary")
+            check_dict(check_error_stat, "the check_error_stat dictionary")
 
             # Returns whether the outputs match
             def check_outputs_match(out0, out0_name, out1, out1_name, per_out_rtol, per_out_atol, per_out_err_stat):

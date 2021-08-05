@@ -1,5 +1,8 @@
 # Using Extract To Isolate A Subgraph
 
+
+## Introduction
+
 The `surgeon extract` subtool can be used to extract a subgraph from a model with a single command.
 
 In this example, we'll extract a subgraph from a model that computes `Y = x0 + (a * x1 + b)`:
@@ -15,34 +18,37 @@ attempt to automatically determine these.
 For inputs, we must specify both shape and data type, whereas outputs only require the data
 type - hence `--inputs` requires 2 `auto`s and `--outputs` requires only 1.
 
-In our case, we can run:
 
-```bash
-polygraphy surgeon extract model.onnx \
-    --inputs x1:auto:auto \
-    --outputs add_out:auto \
-    -o subgraph.onnx
-```
+## Running The Example
 
-If we knew the shapes and/or data types, we could instead write, for example:
+1. Extract the subgraph:
 
-```bash
-polygraphy surgeon extract model.onnx \
-    --inputs x1:[1,3,224,224]:float32 \
-    --outputs add_out:float32 \
-    -o subgraph.onnx
-```
+    ```bash
+    polygraphy surgeon extract model.onnx \
+        --inputs x1:auto:auto \
+        --outputs add_out:auto \
+        -o subgraph.onnx
+    ```
 
-The resulting subgraph will look like this:
+    If we knew the shapes and/or data types, we could instead write, for example:
 
-![./subgraph.png](./subgraph.png)
+    ```bash
+    polygraphy surgeon extract model.onnx \
+        --inputs x1:[1,3,224,224]:float32 \
+        --outputs add_out:float32 \
+        -o subgraph.onnx
+    ```
 
-At this point, the model is ready for use. You can use `inspect model` to confirm
-whether it looks correct:
+    The resulting subgraph will look like this:
 
-```bash
-polygraphy inspect model subgraph.onnx --mode=basic
-```
+    ![./subgraph.png](./subgraph.png)
+
+2. **[Optional]** At this point, the model is ready for use. You can use `inspect model`
+    to confirm whether it looks correct:
+
+    ```bash
+    polygraphy inspect model subgraph.onnx --mode=basic
+    ```
 
 ## A Note On `auto`
 

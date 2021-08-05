@@ -1,5 +1,8 @@
 # Debugging Flaky TensorRT Tactics
 
+
+## Introduction
+
 Sometimes, a tactic in TensorRT may produce incorrect results, or have
 otherwise buggy behavior. Since the TensorRT builder relies on timing
 tactics, engine builds are non-deterministic, which can make tactic bugs
@@ -11,6 +14,9 @@ known-bad tactics, we can compare them to determine which tactic(s)
 is likely to be the source of error.
 
 The `debug` subtool allows us to automate this process.
+
+
+## Running The Example
 
 For this example, we'll break the process down into 3 steps:
 

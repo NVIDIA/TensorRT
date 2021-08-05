@@ -202,7 +202,7 @@ def try_register_numpy_json(func):
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         global NUMPY_REGISTRATION_SUCCESS
-        if not NUMPY_REGISTRATION_SUCCESS and mod.has_mod(np, "__version__"):
+        if not NUMPY_REGISTRATION_SUCCESS and mod.has_mod(np):
             # We define this alongside load_json/save_json so that it is guaranteed to be
             # imported before we need to encode/decode NumPy arrays.
             @Encoder.register(np.ndarray)
@@ -273,7 +273,7 @@ def from_json(src):
 
 @mod.export_deprecated_alias(
     "pickle_save",
-    remove_in="0.31.0",
+    remove_in="0.32.0",
     use_instead="JSON serialization. "
     "This function has been migrated to use JSON and will NOT pickle the input object. "
     "Use save_json",
@@ -293,7 +293,7 @@ def save_json(obj, dest, description=None):
     util.save_file(to_json(obj), dest, mode="w", description=description)
 
 
-@mod.export_deprecated_alias("pickle_load", remove_in="0.31.0", use_instead="load_json")
+@mod.export_deprecated_alias("pickle_load", remove_in="0.32.0", use_instead="load_json")
 @mod.export()
 @try_register_numpy_json
 def load_json(src, description=None):
@@ -312,7 +312,7 @@ def load_json(src, description=None):
         return from_json(util.load_file(src, mode="r", description=description))
     except UnicodeDecodeError:
         # This is a pickle file from Polygraphy 0.26.1 or older.
-        mod.warn_deprecated("pickle", use_instead="JSON", remove_in="0.31.0")
+        mod.warn_deprecated("pickle", use_instead="JSON", remove_in="0.32.0")
         G_LOGGER.critical(
             "It looks like you're trying to load a Pickle file.\nPolygraphy migrated to using JSON "
             "instead of Pickle in version 0.27.0 for security reasons.\nYou can convert your existing "

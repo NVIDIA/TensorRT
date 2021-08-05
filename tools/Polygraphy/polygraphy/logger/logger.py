@@ -111,7 +111,7 @@ class Logger(object):
         EXTRA_VERBOSE: "medium_purple",
         VERBOSE: "light_magenta",
         INFO: None,
-        START: "light_blue",
+        START: "light_cyan",
         FINISH: "light_green",
         WARNING: "light_yellow",
         ERROR: "light_red",

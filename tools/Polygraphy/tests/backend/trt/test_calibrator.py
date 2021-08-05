@@ -13,12 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import tempfile
-
 import numpy as np
 import pytest
 import tensorrt as trt
-from polygraphy import cuda, mod
+from polygraphy import cuda, mod, util
 from polygraphy.backend.trt import (
     Calibrator,
     CreateConfig,
@@ -170,7 +168,7 @@ class TestCalibrator(object):
         builder, network = identity_builder_network
         data = [{"x": np.ones((1, 1, 2, 2), dtype=np.float32)}]
 
-        with tempfile.NamedTemporaryFile() as cache:
+        with util.NamedTemporaryFile() as cache:
             calibrator = Calibrator(data, cache=cache.name)
             create_config = CreateConfig(int8=True, calibrator=calibrator)
             with engine_from_network((builder, network), create_config):
@@ -182,7 +180,7 @@ class TestCalibrator(object):
         builder, network = identity_builder_network
         data = [{"x": np.ones((1, 1, 2, 2), dtype=np.float32)}]
 
-        with tempfile.NamedTemporaryFile(mode=mode) as cache:
+        with util.NamedTemporaryFile(mode=mode) as cache:
             calibrator = Calibrator(data, cache=cache)
             create_config = CreateConfig(int8=True, calibrator=calibrator)
             with engine_from_network((builder, network), create_config):
@@ -210,7 +208,7 @@ class TestCalibrator(object):
         builder, network = identity_builder_network
         data = [{"x": np.ones((1, 1, 2, 2), dtype=np.float32)}]
 
-        with tempfile.NamedTemporaryFile(mode="wb+") as cache:
+        with util.NamedTemporaryFile(mode="wb+") as cache:
             calibrator = Calibrator(data, cache=cache.name)
             # First, populate the cache
             create_config = CreateConfig(int8=True, calibrator=calibrator)

@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-import tempfile
 from textwrap import dedent
 
 import numpy as np
@@ -79,7 +78,7 @@ class TestDataLoaderArgs(object):
     def test_data_loader_script(self):
         arg_group = ArgGroupTestHelper(DataLoaderArgs())
 
-        with tempfile.NamedTemporaryFile("w+", suffix=".py") as f:
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
                 dedent(
                     """

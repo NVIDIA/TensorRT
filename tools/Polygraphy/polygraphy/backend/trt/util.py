@@ -106,11 +106,15 @@ def get_layer_class_mapping():
     try_add("FILL", "IFillLayer")
     try_add("QUANTIZE", "IQuantizeLayer")
     try_add("DEQUANTIZE", "IDequantizeLayer")
+    try_add("CONDITION", "IConditionLayer")
+    try_add("CONDITIONAL_INPUT", "IIfConditionalInputLayer")
+    try_add("CONDITIONAL_OUTPUT", "IIfConditionalOutputLayer")
 
     return layer_class_mapping
 
 
 def np_dtype_from_trt(trt_dtype):
+    _ = mod.has_mod(np)  # Force numpy to be imported
     return np.dtype(trt.nptype(trt_dtype))
 
 
@@ -341,7 +345,7 @@ def str_from_config(config):
         config_str += "{:20} | {:}\n".format("Tactic Sources", source_vals)
 
     with contextlib.suppress(AttributeError):
-        config_str += "{:20}: {:}\n".format("Safety Restricted", config.get_flag(trt.BuilderFlag.SAFETY_SCOPE))
+        config_str += "{:20} | {:}\n".format("Safety Restricted", config.get_flag(trt.BuilderFlag.SAFETY_SCOPE))
 
     if config.int8_calibrator:
         config_str += "{:20} | {:}\n".format("Calibrator", config.int8_calibrator)
@@ -395,7 +399,7 @@ def get_input_metadata_from_profile(profile, network):
                 "will use fixed input shapes (this is not necessarily an issue)."
             )
         # Always use opt shape
-        input_metadata.add(name=tensor.name, dtype=trt.nptype(tensor.dtype), shape=shapes[1])
+        input_metadata.add(name=tensor.name, dtype=np_dtype_from_trt(tensor.dtype), shape=shapes[1])
     return input_metadata
 
 
@@ -404,7 +408,7 @@ def add_binding_to_metadata(engine, binding, metadata, name_binding):
     # get all binding names in the runner
     metadata.add(
         name=engine[name_binding],
-        dtype=trt.nptype(engine.get_binding_dtype(binding)),
+        dtype=np_dtype_from_trt(engine.get_binding_dtype(binding)),
         shape=list(engine.get_binding_shape(binding)),
     )
 

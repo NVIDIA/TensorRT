@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-import tempfile
 from collections import OrderedDict
 
 from polygraphy import mod, util, config
@@ -40,13 +39,13 @@ class LazyNumpyArray(object):
         self.arr = None
         self.tmpfile = None
         if config.ARRAY_SWAP_THRESHOLD_MB >= 0 and arr.nbytes > (config.ARRAY_SWAP_THRESHOLD_MB << 20):
-            self.tmpfile = tempfile.NamedTemporaryFile(mode="w+", suffix=".json")
+            self.tmpfile = util.NamedTemporaryFile(suffix=".json")
             G_LOGGER.extra_verbose(
                 "Evicting large array ({:.3f} MiB) from memory and saving to {:}".format(
                     arr.nbytes / (1024.0 ** 2), self.tmpfile.name
                 )
             )
-            save_json(arr, self.tmpfile)
+            save_json(arr, self.tmpfile.name)
         else:
             self.arr = arr
 
@@ -61,7 +60,7 @@ class LazyNumpyArray(object):
             return self.arr
 
         assert self.tmpfile is not None, "Path and NumPy array cannot both be None!"
-        return load_json(self.tmpfile)
+        return load_json(self.tmpfile.name)
 
 
 @Encoder.register(LazyNumpyArray)

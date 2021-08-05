@@ -15,8 +15,10 @@
 #
 import os
 import sys
+
+from setuptools import find_packages, setup
+
 import polygraphy
-from setuptools import setup, find_packages
 
 ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
 BIN_DIR = os.path.join(ROOT_DIR, "bin")

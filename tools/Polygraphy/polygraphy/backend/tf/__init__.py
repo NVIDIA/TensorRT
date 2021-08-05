@@ -10,7 +10,7 @@ def register_logger_callback():
         from polygraphy import mod
 
         tf = mod.lazy_import("tensorflow", version="<2.0")
-        if not mod.has_mod(tf, with_attr="__version__"):
+        if not mod.has_mod(tf):
             return
 
         if sev > G_LOGGER.WARNING:
@@ -29,7 +29,7 @@ def register_logger_callback():
         tf.compat.v1.logging.set_verbosity(tf_sev)
         os.environ["TF_CPP_MIN_LOG_LEVEL"] = tf_logging_level
 
-    G_LOGGER.register_callback(set_tf_logging_level)  # Will be registered when this runner is imported.
+    G_LOGGER.register_callback(set_tf_logging_level)  # Will be registered when this backend is imported.
 
 
 register_logger_callback()

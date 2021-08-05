@@ -14,8 +14,10 @@
 # limitations under the License.
 #
 import contextlib
+import glob
 import os
 import sys
+import tempfile
 import zlib
 from collections import OrderedDict
 
@@ -208,6 +210,80 @@ def unpack_args(args, num):
 
 
 @mod.export()
+class NamedTemporaryFile(object):
+    """
+    Cross-platform temporary file implementation. Unlike tempfile.NamedTemporaryFile,
+    it can be opened multiple times without error on Windows.
+    """
+
+    def __init__(self, mode=None, prefix=None, suffix=None):
+        """
+        Args:
+            mode (str): The mode to use when opening the file.
+            prefix (str): The prefix to use for the file path.
+            suffix (str): The suffix to use for the file path.
+        """
+        self.mode = default(mode, "wb+")
+        prefix = default(prefix, "")
+        suffix = default(suffix, "")
+
+        def rand_path():
+            return os.path.join(tempfile.gettempdir(), "{:}{:}{:}".format(prefix, os.urandom(24).hex(), suffix))
+
+        # In the unlikely event the path exists, generate a new one. Only try 100 times so
+        # we don't end up in an infinite loop.
+        path = rand_path()
+        for _ in range(100):
+            if not os.path.exists(path):
+                break
+            path = rand_path()
+        else:
+            G_LOGGER.critical("Could not create a temporary file under: {:}".format(tempfile.gettempdir()))
+
+        self.name = path  # Use 'name' to be compatible with tempfile.NamedTemporaryFile
+        open(self.name, "x").close()
+        self._fhandle = None
+
+    def __enter__(self):
+        """
+        Opens the temporary file using the mode specified in the constructor.
+
+        Returns:
+            file-like: The open file object.
+        """
+        self._fhandle = open(self.name, self.mode)
+        return self._fhandle
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Closes the file handle.
+        """
+        self._fhandle.close()
+
+
+@mod.export()
+def find_in_dirs(name_glob, dirs):
+    """
+    Finds a file, optionally including a glob expression, in the specified directories.
+
+    Args:
+        name_glob (str):
+                The name of the file, optionally including a glob expression.
+                Only the first match will be returned.
+        dirs (Sequence[str]):
+                The directories in which to search.
+
+    Returns:
+        List[str]: The paths found, or an empty list if it could not be found.
+    """
+    for dir_name in dirs:
+        paths = glob.glob(os.path.join(dir_name, name_glob))
+        if paths:
+            return paths
+    return []
+
+
+@mod.export()
 def get_file_size(src):
     """
     Gets the size of a file or file-like object.
@@ -261,6 +337,16 @@ def is_file_like(obj):
         return False
     else:
         return True
+
+
+@mod.export()
+def makedirs(path):
+    dir_path = os.path.dirname(path)
+    if dir_path:
+        dir_path = os.path.realpath(dir_path)
+        if not os.path.exists(dir_path):
+            G_LOGGER.verbose("{:} does not exist, creating now.".format(dir_path))
+        os.makedirs(dir_path, exist_ok=True)
 
 
 @mod.export()
@@ -338,13 +424,7 @@ def save_file(contents, dest, mode="wb", description=None):
                     "{:} bytes were written".format(content_bytes, bytes_written)
                 )
     else:
-        dir_path = os.path.dirname(dest)
-        if dir_path:
-            dir_path = os.path.realpath(dir_path)
-            if not os.path.exists(dir_path):
-                G_LOGGER.verbose("{:} does not exist, creating now.".format(dir_path))
-            os.makedirs(dir_path, exist_ok=True)
-
+        makedirs(dest)
         with open(dest, mode) as f:
             f.write(contents)
     return dest

@@ -18,6 +18,7 @@ import glob
 import os
 import tempfile
 
+from polygraphy import util
 from polygraphy.backend.onnx import onnx_from_path
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
 from polygraphy.tools.script import Script
@@ -83,7 +84,7 @@ class TestOnnxSaveArgs(object):
     def test_external_data(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
         arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
-        with tempfile.NamedTemporaryFile() as path, tempfile.NamedTemporaryFile() as data:
+        with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
             arg_group.parse_args(
                 ["-o", path.name, "--save-external-data", data.name, "--external-data-size-threshold=0"]
             )
@@ -95,7 +96,7 @@ class TestOnnxSaveArgs(object):
     def test_size_threshold(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
         arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
-        with tempfile.NamedTemporaryFile() as path, tempfile.NamedTemporaryFile() as data:
+        with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
             arg_group.parse_args(
                 ["-o", path.name, "--save-external-data", data.name, "--external-data-size-threshold=1024"]
             )

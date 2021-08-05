@@ -12,20 +12,17 @@
 - [Putting It All Together](#putting-it-all-together)
 - [Enabling PyTorch](#enabling-pytorch)
 - [Examples](#examples)
+- [Python API Reference Documentation](#python-api-reference-documentation)
+    - [Building Python API Documentation Locally](#building-python-api-documentation-locally)
 
 
 ## Introduction
-
-**IMPORTANT:** The Python API is still not completely stable, and minor but breaking changes
-may be made in future versions.
 
 The Polygraphy API consists broadly of two major components:
 [`Backend`s](#backends) and the [`Comparator`](#comparator).
 
 **NOTE:** To help you get started with the API, you can use the [`run`](./tools/run/) tool
 with the `--gen-script` option to auto-generate template scripts that use the Polygraphy API.
-
-Also see the [Polygraphy API documentation](https://docs.nvidia.com/deeplearning/tensorrt/polygraphy/docs/index.html).
 
 
 ## Backends
@@ -191,3 +188,25 @@ In order to enable PyTorch, you need to provide three things to the `PytRunner`:
 ## Examples
 
 You can find complete code examples that use the Polygraphy Python API [here](../examples/api).
+
+
+## Python API Reference Documentation
+
+For more details, see the [Polygraphy Python API reference documentation](https://docs.nvidia.com/deeplearning/tensorrt/polygraphy/docs/index.html).
+
+### Building Python API Documentation Locally
+
+To build the API documentation, first install required packages:
+
+```bash
+python -m pip install -r docs/requirements.txt
+```
+
+and then use the `make` target to build docs:
+
+```bash
+make docs
+```
+
+The HTML documentation will be generated under `build/docs`
+To view the docs, open `build/docs/index.html` in a browser or HTML viewer.
