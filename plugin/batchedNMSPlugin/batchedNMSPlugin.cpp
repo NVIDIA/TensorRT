@@ -261,8 +261,11 @@ size_t BatchedNMSPlugin::getWorkspaceSize(int maxBatchSize) const noexcept
 size_t BatchedNMSDynamicPlugin::getWorkspaceSize(
     const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
-    return detectionInferenceWorkspaceSize(param.shareLocation, inputs[0].dims.d[0], boxesSize, scoresSize,
-        param.numClasses, numPriors, param.topK, mPrecision, mPrecision);
+    int boxesSizeMax = inputs[0].dims.d[1] * inputs[0].dims.d[2] * inputs[0].dims.d[3];
+    int scoresSizeMax = inputs[1].dims.d[1] * inputs[1].dims.d[2];
+    int numPriorsMax = inputs[0].dims.d[1];
+    return detectionInferenceWorkspaceSize(param.shareLocation, inputs[0].dims.d[0], boxesSizeMax, scoresSizeMax,
+        param.numClasses, numPriorsMax, param.topK, mPrecision, mPrecision);
 }
 
 int BatchedNMSPlugin::enqueue(
