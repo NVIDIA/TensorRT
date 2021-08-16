@@ -34,6 +34,7 @@ foreach(TYPE MAJOR MINOR PATCH)
 endforeach(TYPE)
 
 set(TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "TensorRT project version")
+set(ONNX2TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "ONNX2TRT project version")
 set(TRT_SOVERSION "${TRT_SO_MAJOR}" CACHE STRING "TensorRT library so version")
 message("Building for TensorRT version: ${TRT_VERSION}, library version: ${TRT_SOVERSION}")
 
