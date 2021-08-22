@@ -84,7 +84,6 @@ endif()
 set(DEFAULT_CUDA_VERSION 11.3.1)
 set(DEFAULT_CUDNN_VERSION 8.2)
 set(DEFAULT_PROTOBUF_VERSION 3.0.0)
-set(DEFAULT_CUB_VERSION 1.8.0)
 
 # Dependency Version Resolution
 set_ifndef(CUDA_VERSION ${DEFAULT_CUDA_VERSION})
@@ -100,7 +99,9 @@ if (BUILD_PLUGINS OR BUILD_PARSERS)
     include(third_party/protobuf.cmake)
 endif()
 if(NOT CUB_ROOT_DIR)
+  if (CUDA_VERSION VERSION_LESS 11.0)
     set(CUB_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cub CACHE STRING "directory of CUB installation")
+  endif()
 endif()
 
 ## find_package(CUDA) is broken for cross-compilation. Enable CUDA language instead.
