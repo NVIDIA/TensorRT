@@ -1,6 +1,6 @@
 onnx==1.8.1
 onnxruntime==1.7.0
-tensorflow-gpu==2.4.1
+tensorflow-gpu==2.5.1
 torch==1.8.1
 Pillow==8.1.2
 numpy
