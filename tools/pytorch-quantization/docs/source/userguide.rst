@@ -189,37 +189,7 @@ QuantizeLinear/DequantizeLinear ONNX ops. In future, TensorRT will take
 the graph, and execute it in int8 in the most optimized way to its
 capability.
 
-Pytorch doesn’t support exporting fake quantize ops to ONNX yet, but the
-code is simple. Add the following code to
-``torch/onnx/symbolic_opset10.py``
-
-.. code:: python
-
-   @parse_args('v', 't', 'i', 'i', 'i')
-   def fake_quantize_per_tensor_affine(g, inputs, scale, zero_point, quant_min=-128, quant_max=127):
-       if quant_min not in [0, -128] or quant_max not in [127, 255]:
-           raise TypeError("ONNX defines [0, 255] for quint8 and [-128, 127] for int8, got [{}, {}]".format(
-               quant_min, quant_max))
-       scale = scale.float()  # Avoid exportor generating double type
-       zero_point = torch.tensor(zero_point, dtype=torch.int8)  # ONNX requires zero_point to be tensor
-       return g.op("DequantizeLinear", g.op("QuantizeLinear", inputs, scale, zero_point), scale, zero_point)
-
-   @parse_args('v', 'v', 'v', 'i', 'i', 'i')
-   def fake_quantize_per_channel_affine(g, inputs, scale, zero_point, axis, quant_min=-128, quant_max=127):
-       if quant_min not in [0, -128] or quant_max not in [127, 255]:
-           raise TypeError("ONNX defines [0, 255] for quint8 and [-128, 127] for int8, got [{}, {}]".format(
-               quant_min, quant_max))
-       # ONNX defines zero_point to be int8 or uint8
-       if quant_min == 0:
-           zero_point = g.op("Cast", zero_point, to_i=sym_help.cast_pytorch_to_onnx['Byte'])
-       else:
-           zero_point = g.op("Cast", zero_point, to_i=sym_help.cast_pytorch_to_onnx['Char'])
-       return g.op(
-           "DequantizeLinear",
-           g.op("QuantizeLinear", inputs, scale, zero_point, axis_i=axis),
-           scale, zero_point, axis_i=axis)
-
-Then set static member of TensorQuantizer to use Pytorch’s own fake
+First set static member of TensorQuantizer to use Pytorch’s own fake
 quantization functions
 
 .. code:: python
