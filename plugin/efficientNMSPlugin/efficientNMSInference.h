@@ -21,7 +21,7 @@
 
 #include "efficientNMSParameters.h"
 
-size_t EfficientNMSWorkspaceSize(EfficientNMSParameters param);
+size_t EfficientNMSWorkspaceSize(int batchSize, int numScoreElements, int numClasses, nvinfer1::DataType datatype);
 
 pluginStatus_t EfficientNMSInference(EfficientNMSParameters param, const void* boxesInput, const void* scoresInput,
     const void* anchorsInput, void* numDetectionsOutput, void* nmsBoxesOutput, void* nmsScoresOutput,
