@@ -547,46 +547,47 @@ cudaError_t EfficientNMSFilterLauncher(EfficientNMSParameters& param, const T* s
 }
 
 template <typename T>
-size_t EfficientNMSSortWorkspaceSize(EfficientNMSParameters param)
+size_t EfficientNMSSortWorkspaceSize(int batchSize, int numScoreElements)
 {
     size_t sortedWorkspaceSize = 0;
     cub::DoubleBuffer<T> keysDB(nullptr, nullptr);
     cub::DoubleBuffer<int> valuesDB(nullptr, nullptr);
     cub::DeviceSegmentedRadixSort::SortPairsDescending(nullptr, sortedWorkspaceSize, keysDB, valuesDB,
-        param.numScoreElements, param.batchSize, (const int*) nullptr, (const int*) nullptr);
+        numScoreElements, batchSize, (const int*) nullptr, (const int*) nullptr);
     return sortedWorkspaceSize;
 }
 
-size_t EfficientNMSWorkspaceSize(EfficientNMSParameters param)
+size_t EfficientNMSWorkspaceSize(int batchSize, int numScoreElements, int numClasses, DataType datatype)
 {
-    size_t total = 0, size = 0, align = 256;
+    size_t total = 0;
+    const size_t align = 256;
     // Counters
     // 3 for Filtering
     // 1 for Output Indexing
     // C for Max per Class Limiting
-    size = (3 + 1 + param.numClasses) * param.batchSize * sizeof(int);
+    size_t size = (3 + 1 + numClasses) * batchSize * sizeof(int);
     total += size + (size % align ? align - (size % align) : 0);
     // Int Buffers
     for (int i = 0; i < 4; i++)
     {
-        size = param.batchSize * param.numScoreElements * sizeof(int);
+        size = batchSize * numScoreElements * sizeof(int);
         total += size + (size % align ? align - (size % align) : 0);
     }
     // Float Buffers
     for (int i = 0; i < 2; i++)
     {
-        size = param.batchSize * param.numScoreElements * dataTypeSize(param.datatype);
+        size = batchSize * numScoreElements * dataTypeSize(datatype);
         total += size + (size % align ? align - (size % align) : 0);
     }
     // Sort Workspace
-    if (param.datatype == DataType::kHALF)
+    if (datatype == DataType::kHALF)
     {
-        size = EfficientNMSSortWorkspaceSize<__half>(param);
+        size = EfficientNMSSortWorkspaceSize<__half>(batchSize, numScoreElements);
         total += size + (size % align ? align - (size % align) : 0);
     }
-    else if (param.datatype == DataType::kFLOAT)
+    else if (datatype == DataType::kFLOAT)
     {
-        size = EfficientNMSSortWorkspaceSize<float>(param);
+        size = EfficientNMSSortWorkspaceSize<float>(batchSize, numScoreElements);
         total += size + (size % align ? align - (size % align) : 0);
     }
 
@@ -652,7 +653,7 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
     T* topScoresData = EfficientNMSWorkspace<T>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
     T* sortedScoresData
         = EfficientNMSWorkspace<T>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
-    size_t sortedWorkspaceSize = EfficientNMSSortWorkspaceSize<T>(param);
+    size_t sortedWorkspaceSize = EfficientNMSSortWorkspaceSize<T>(param.batchSize, param.numScoreElements);
     char* sortedWorkspaceData = EfficientNMSWorkspace<char>(workspace, workspaceOffset, sortedWorkspaceSize);
     cub::DoubleBuffer<T> scoresDB(topScoresData, sortedScoresData);
     cub::DoubleBuffer<int> indexDB(topIndexData, sortedIndexData);

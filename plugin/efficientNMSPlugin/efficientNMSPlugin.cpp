@@ -330,9 +330,10 @@ void EfficientNMSPlugin::configurePlugin(
 size_t EfficientNMSPlugin::getWorkspaceSize(
     const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
-    EfficientNMSParameters p = mParam;
-    p.batchSize = inputs[0].dims.d[0];
-    return EfficientNMSWorkspaceSize(p);
+    int batchSize = inputs[1].dims.d[0];
+    int numScoreElements = inputs[1].dims.d[1] * inputs[1].dims.d[2];
+    int numClasses = inputs[1].dims.d[2];
+    return EfficientNMSWorkspaceSize(batchSize, numScoreElements, numClasses, mParam.datatype);
 }
 
 int EfficientNMSPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
