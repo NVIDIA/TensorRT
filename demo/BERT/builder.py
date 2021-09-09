@@ -179,6 +179,11 @@ def skipln(prefix, config, init_dict, network, input_tensor, skip, bias=None):
     layer = network.add_plugin_v2(skipln_inputs, skipln_plug)
     return layer
 
+# Custom FC plugin is faster than native FC only on older architectures.
+def use_custom_fc():
+    cc = pycuda.autoinit.device.compute_capability()
+    return cc[0] * 10 + cc[1] <= 70
+
 def custom_fc(config, network, input_tensor, out_dims, W):
     pf_out_dims = trt.PluginField("out_dims", np.array([out_dims], dtype=np.int32), trt.PluginFieldType.INT32)
     pf_W = trt.PluginField("W", W.numpy(), trt.PluginFieldType.FLOAT32)
@@ -219,9 +224,13 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
         if config.use_qat:
             dr_fc_aout = init_dict[prefix + 'attention_output_add_local_input_quantizer_amax']
             set_output_range(attention_out_fc, dr_fc_aout)
-    else:
+    elif use_custom_fc():
         W_aoutT = init_dict[prefix + W_AOUT + "_notrans"]
         attention_out_fc = custom_fc(config, network, attention_heads, hidden_size, W_aoutT)
+    else:
+        W_aout = init_dict[prefix + W_AOUT]
+        attention_out_fc = network.add_fully_connected(attention_heads, hidden_size, W_aout, B_aout)
+        B_aout = None
 
     skiplayer = skipln(prefix + "attention_output_layernorm_",config, init_dict, network, attention_out_fc.get_output(0), input_tensor, B_aout)
     attention_ln = skiplayer.get_output(0)
@@ -275,9 +284,13 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
 
         if not config.use_int8_skipln:
             out_dense.set_output_type(0, trt.DataType.HALF if config.use_fp16 else trt.DataType.FLOAT)
-    else:
+    elif use_custom_fc():
         W_loutT = init_dict[prefix + W_LOUT + "_notrans"]
         out_dense = custom_fc(config, network, intermediate_act, hidden_size, W_loutT)
+    else:
+        W_lout = init_dict[prefix + W_LOUT]
+        out_dense = network.add_fully_connected(intermediate_act, hidden_size, W_lout, B_lout)
+        B_lout = None
 
     if config.use_qat:
         dr_fc_out = init_dict[prefix + 'output_add_local_input_quantizer_amax']
