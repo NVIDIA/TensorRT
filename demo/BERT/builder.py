@@ -339,31 +339,32 @@ def squad_output(prefix, config, init_dict, network, input_tensor):
 
 def emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_lengths, batch_sizes):
     # int8 only support some of the sequence length, we dynamic on sequence length is not allowed.
-    input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1, -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
-    segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1, -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
-    input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1, -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
+    input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1 if len(batch_sizes) > 1 else batch_sizes[0], -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
+    segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1 if len(batch_sizes) > 1 else batch_sizes[0], -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
+    input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1 if len(batch_sizes) > 1 else batch_sizes[0], -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
 
     # Specify profiles for the batch sizes we're interested in.
     # Make sure the profile also works for all sizes not covered by the previous profile.
 
-    for batch_size in sorted(batch_sizes):
-        if len(sequence_lengths) == 1:
-            profile = builder.create_optimization_profile()
-            min_shape = (1, sequence_lengths[0])
-            shape = (batch_size, sequence_lengths[0])
-            profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
-            profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
-            profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
-            builder_config.add_optimization_profile(profile)
-        else:
-            for sequence_length in sorted(sequence_lengths):
+    if len(sequence_lengths) > 1 or len(batch_sizes) > 1:
+        for batch_size in sorted(batch_sizes):
+            if len(sequence_lengths) == 1:
                 profile = builder.create_optimization_profile()
-                min_shape = (1, sequence_length)
-                shape = (batch_size, sequence_length)
+                min_shape = (1, sequence_lengths[0])
+                shape = (batch_size, sequence_lengths[0])
                 profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
                 profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
                 profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
                 builder_config.add_optimization_profile(profile)
+            else:
+                for sequence_length in sorted(sequence_lengths):
+                    profile = builder.create_optimization_profile()
+                    min_shape = (1, sequence_length)
+                    shape = (batch_size, sequence_length)
+                    profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
+                    profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
+                    profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
+                    builder_config.add_optimization_profile(profile)
 
     wbeta = trt.PluginField("bert_embeddings_layernorm_beta", weights_dict["bert_embeddings_layernorm_beta"].numpy(), trt.PluginFieldType.FLOAT32)
     wgamma = trt.PluginField("bert_embeddings_layernorm_gamma", weights_dict["bert_embeddings_layernorm_gamma"].numpy(), trt.PluginFieldType.FLOAT32)
