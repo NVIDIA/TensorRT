@@ -110,7 +110,7 @@ class TensorFlowInfer:
                 'ymax': boxes[0][n][2] * scale,
                 'xmax': boxes[0][n][3] * scale,
                 'score': scores[0][n],
-                'class': int(classes[0][n]) - 1,
+                'class': int(classes[0][n]),
             })
         return detections
 
