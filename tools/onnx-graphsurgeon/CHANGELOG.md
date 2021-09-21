@@ -4,6 +4,9 @@ Dates are in YYYY-MM-DD format.
 
 
 ## vNext()
+### Added
+- `Graph.tensors()` will now display a warning when duplicate tensors are detected in the graph, even if `check_duplicates=False`.
+    As before, when `check_duplicates=True`, it will throw an exception in such cases.
 
 
 ## v0.3.12 (2021-08-24)
