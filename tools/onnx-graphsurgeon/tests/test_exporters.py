@@ -186,7 +186,6 @@ class TestOnnxExporter(object):
         reimported_graph = OnnxImporter.import_graph(exported_onnx_graph)
         assert graph == reimported_graph
         assert graph.opset == reimported_graph.opset
-        assert graph.ir_version == reimported_graph.ir_version
 
         # ONNX exports the initializers in this model differently after importing - ONNX GS can't do much about this.
         if model.path != lstm_model().path:
