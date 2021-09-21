@@ -316,6 +316,17 @@ class TestTensors(object):
         with pytest.raises(OnnxGraphSurgeonException):
             graph.tensors(check_duplicates=True)
 
+    def test_tensors_with_duplicates_check_disabled(self):
+        inputs = [Variable(name="x")]
+        outputs = [Variable(name="x")]  # Distinct tensors with the same name
+        nodes = [
+            Node(op="Add", name="Test", inputs=inputs, outputs=outputs),
+        ]
+        graph = Graph(nodes=nodes, inputs=inputs, outputs=outputs)
+
+        # This should *not* throw
+        graph.tensors(check_duplicates=False)
+
 
 def toposort_linear_graph():
     inputs = [Variable(name="x")]
