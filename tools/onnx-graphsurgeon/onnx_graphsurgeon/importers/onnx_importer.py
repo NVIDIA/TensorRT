@@ -192,7 +192,6 @@ class OnnxImporter(BaseImporter):
         tensor_map: "OrderedDict[str, Tensor]" = None,
         opset=None,
         import_domains: onnx.OperatorSetIdProto = None,
-        ir_version: int = None,
     ) -> Graph:
         """
         Imports a Graph from an ONNX Graph.
@@ -273,7 +272,6 @@ class OnnxImporter(BaseImporter):
             doc_string=onnx_graph.doc_string,
             opset=opset,
             import_domains=import_domains,
-            ir_version=ir_version,
         )
 
 
@@ -291,5 +289,4 @@ def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
         onnx_model.graph,
         opset=OnnxImporter.get_opset(onnx_model),
         import_domains=OnnxImporter.get_import_domains(onnx_model),
-        ir_version=onnx_model.ir_version,
     )

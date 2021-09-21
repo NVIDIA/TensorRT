@@ -3,12 +3,12 @@
 Dates are in YYYY-MM-DD format.
 
 
+## vNext()
+
+
 ## v0.3.12 (2021-08-24)
 ### Added
 - Added support for `Cast` elision in `fold_constants()`.
-
-### Fixed
-- Fixed a bug where the IR version of an ONNX model would not be preserved during export.
 
 
 ## v0.3.11 (2021-07-14)
