@@ -3,7 +3,7 @@
 Dates are in YYYY-MM-DD format.
 
 
-## vNext()
+## v0.3.13 (2021-09-21)
 ### Added
 - `Graph.tensors()` will now display a warning when duplicate tensors are detected in the graph, even if `check_duplicates=False`.
     As before, when `check_duplicates=True`, it will throw an exception in such cases.
