@@ -40,14 +40,12 @@ class Model(object):
         outputs: List[Tensor],
         nodes: List[Node],
         opset: int = None,
-        ir_version: int = None,
     ):
         self.path = path
         self.inputs = inputs
         self.outputs = outputs
         self.nodes = nodes
         self.opset = opset
-        self.ir_version = ir_version
 
     def load(self):
         return onnx.load(self.path)
@@ -106,9 +104,7 @@ def identity_model():
     y = Variable(name="y", dtype=np.float32, shape=(1, 1, 2, 2))
     node = Node(op="Identity", inputs=[x], outputs=[y])
 
-    return Model(
-        path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model), ir_version=model.ir_version
-    )
+    return Model(path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model))
 
 
 def dim_param_model():
@@ -119,9 +115,7 @@ def dim_param_model():
     y = Variable(name="Output:0", dtype=np.float32, shape=("dim0", 16, 128))
     node = Node(op="Identity", inputs=[x], outputs=[y])
 
-    return Model(
-        path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model), ir_version=model.ir_version
-    )
+    return Model(path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model))
 
 
 def lstm_model():
@@ -160,7 +154,6 @@ def lstm_model():
         outputs=[Y, Y_h, Y_c],
         nodes=[node],
         opset=OnnxImporter.get_opset(model),
-        ir_version=model.ir_version,
     )
 
 
@@ -200,7 +193,6 @@ def scan_model():
         outputs=outputs,
         nodes=[scan_node],
         opset=OnnxImporter.get_opset(model),
-        ir_version=model.ir_version,
     )
 
 
@@ -210,9 +202,7 @@ def initializer_is_output_model():
 
     X = Constant(name="X", values=np.ones((64, 64), dtype=np.float32))
 
-    return Model(
-        path, inputs=[], outputs=[X], nodes=[], opset=OnnxImporter.get_opset(model), ir_version=model.ir_version
-    )
+    return Model(path, inputs=[], outputs=[X], nodes=[], opset=OnnxImporter.get_opset(model))
 
 
 # Node includes a subgraph whose I/O names are the same as that of the node.
@@ -238,7 +228,6 @@ def nested_dup_names():
         outputs=outputs,
         nodes=[node],
         opset=OnnxImporter.get_opset(model),
-        ir_version=model.ir_version,
     )
 
 
@@ -268,7 +257,6 @@ def ext_weights():
         outputs=outputs,
         nodes=nodes,
         opset=OnnxImporter.get_opset(model),
-        ir_version=model.ir_version,
     )
 
 
