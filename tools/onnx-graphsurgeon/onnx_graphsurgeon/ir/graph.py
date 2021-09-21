@@ -99,7 +99,6 @@ class Graph(object):
         doc_string=None,
         opset=None,
         import_domains=None,
-        ir_version=None,
     ):
         """
         Args:
@@ -120,7 +119,6 @@ class Graph(object):
         self.doc_string = misc.default_value(doc_string, "")
         self.opset = misc.default_value(opset, Graph.DEFAULT_OPSET)
         self.import_domains = import_domains
-        self.ir_version = ir_version
         # Printing graphs can be very expensive
         G_LOGGER.ultra_verbose(lambda: "Created Graph: {:}".format(self))
         # For layer() function
@@ -977,6 +975,7 @@ class Graph(object):
             name=copy.copy(self.name),
             doc_string=copy.copy(self.doc_string),
             opset=copy.copy(self.opset),
+            import_domains=self.import_domains,
         )
 
     def __str__(self):
