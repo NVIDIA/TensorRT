@@ -99,7 +99,7 @@ class ScaledQuantDescriptor():
         self._scale_amax = kwargs.pop('scale_amax', None)
         self._calib_method = kwargs.pop('calib_method', "max")
         self._unsigned = kwargs.pop('unsigned', False)
-        self._narrow_range = kwargs.pop('narrow_range', True)
+        self._narrow_range = kwargs.pop('narrow_range', False)
 
         if kwargs:
             raise TypeError("Unused keys: {}".format(kwargs.keys()))
