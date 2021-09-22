@@ -18,7 +18,6 @@ from polygraphy.backend.trt_legacy import TrtLegacyRunner, LoadNetworkFromUff, C
 from tests.models.meta import TF_MODELS, ONNX_MODELS
 
 import numpy as np
-import pytest
 
 
 def test_uff_identity():

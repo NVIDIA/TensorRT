@@ -19,17 +19,25 @@ from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, Onn
 from polygraphy.tools.surgeon.subtool.base import BaseSurgeonSubtool
 
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
+onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
 gs = mod.lazy_import("onnx_graphsurgeon")
 
 
 class Sanitize(BaseSurgeonSubtool):
     """
-    Clean up and optimize an ONNX model.
+    Clean up, optimize, and/or change input shapes in an ONNX model.
     """
 
     def __init__(self):
         super().__init__("sanitize")
-        self.subscribe_args(ModelArgs(model_required=True, inputs="--override-inputs", model_type="onnx"))
+        self.subscribe_args(
+            ModelArgs(
+                model_required=True,
+                inputs="--override-inputs",
+                model_type="onnx",
+                inputs_doc="Override input shapes in the model for the given inputs",
+            )
+        )
         self.subscribe_args(DataLoaderArgs())
         self.subscribe_args(OnnxShapeInferenceArgs(default=True, enable_force_fallback=True))
         self.subscribe_args(OnnxLoaderArgs(output_prefix=""))
@@ -96,7 +104,7 @@ class Sanitize(BaseSurgeonSubtool):
             def get_graph():
                 nonlocal graph
                 if graph is None:
-                    graph = gs.import_onnx(model)
+                    graph = onnx_backend.gs_from_onnx(model)
                 return graph
 
             user_input_metadata = self.arg_groups[ModelArgs].input_shapes
@@ -108,7 +116,7 @@ class Sanitize(BaseSurgeonSubtool):
             if self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
                 _, layerwise_meta = self.arg_groups[OnnxShapeInferenceArgs].fallback_inference(model)
                 graph = get_graph()
-                tools_util.set_shapes_from_layerwise_meta(graph, layerwise_meta)
+                onnx_util.set_shapes_from_layerwise_meta(graph, layerwise_meta)
 
             if args.cleanup:
                 graph = get_graph()

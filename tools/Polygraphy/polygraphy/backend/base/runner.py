@@ -52,50 +52,27 @@ class BaseRunner(object):
         self.is_active = False
         """bool: Whether this runner has been activated, either via context manager, or by calling ``activate()``."""
 
-    @func.constantmethod
-    def last_inference_time(self):
-        """
-        Returns the total inference time required during the last call to ``infer()``.
-
-        Returns:
-            float: The time in seconds, or None if runtime was not measured by the runner.
-        """
-        if self.inference_time is None:
-            G_LOGGER.warning(
-                "{:35} | inference_time was not set. Inference time will be incorrect!"
-                "To correctly compare runtimes, please set the inference_time property in the"
-                "infer() function".format(self.name),
-                mode=LogMode.ONCE,
-            )
-            return None
-        return self.inference_time
-
     def __enter__(self):
         """
-        Activate the runner for inference. This may involve allocating GPU buffers, for example.
+        Activate the runner for inference. For example, this may involve allocating CPU or GPU memory.
         """
         self.activate()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         """
-        Deactivate the runner.
-
-        If the POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS environment variable is set to `1`, this
-        will also check that the runner was reset to its state prior to activation.
+        Deactivate the runner. For example, this may involve freeing CPU or GPU memory.
         """
         self.deactivate()
 
+    # Implementation for runner activation. Derived classes should override this function
+    # rather than ``activate()``.
     def activate_impl(self):
-        """
-        Implementation for runner activation. Derived classes should override this function
-        rather than ``activate()``.
-        """
         pass
 
     def activate(self):
         """
-        Activate the runner for inference. This may involve allocating GPU buffers, for example.
+        Activate the runner for inference. For example, this may involve allocating CPU or GPU memory.
 
         Generally, you should use a context manager instead of manually activating and deactivating.
         For example:
@@ -117,16 +94,36 @@ class BaseRunner(object):
         self.activate_impl()
         self.is_active = True
 
-    def infer_impl(self, feed_dict):
+    def get_input_metadata_impl(self):
         """
-        Implementation for runner inference. Derived classes should override this function
-        rather than ``infer()``
+        Implemenation for `get_input_metadata`. Derived classes should override this function
+        rather than `get_input_metadata`.
         """
         raise NotImplementedError("BaseRunner is an abstract class")
 
-    def infer(self, feed_dict, check_inputs=True):
+    @func.constantmethod
+    def get_input_metadata(self):
+        """
+        Returns information about the inputs of the model.
+        Shapes here may include dynamic dimensions, represented by ``None``.
+        Must be called only after activate() and before deactivate().
+
+        Returns:
+            TensorMetadata: Input names, shapes, and data types.
+        """
+        return self.get_input_metadata_impl()
+
+    # Implementation for runner inference. Derived classes should override this function
+    # rather than ``infer()``
+    def infer_impl(self, feed_dict):
+        raise NotImplementedError("BaseRunner is an abstract class")
+
+    def infer(self, feed_dict, check_inputs=True, *args, **kwargs):
         """
         Runs inference using the provided feed_dict.
+
+        NOTE: Some runners may accept additional parameters in infer().
+        For details on these, see the documentation for their `infer_impl()` methods.
 
         Args:
             feed_dict (OrderedDict[str, numpy.ndarray]):
@@ -135,6 +132,8 @@ class BaseRunner(object):
             check_inputs (bool):
                     Whether to check that the provided ``feed_dict`` includes the expected inputs
                     with the expected data types and shapes.
+                    Disabling this may improve performance.
+                    Defaults to True.
 
         Returns:
             OrderedDict[str, numpy.ndarray]:
@@ -168,40 +167,34 @@ class BaseRunner(object):
                         "Note: Expected a shape compatible with: {:}".format(name, inp.shape, meta.shape)
                     )
 
-        return self.infer_impl(feed_dict)
+        return self.infer_impl(feed_dict, *args, **kwargs)
 
     @func.constantmethod
-    def get_input_metadata_impl(self):
+    def last_inference_time(self):
         """
-        Implemenation for `get_input_metadata`. Derived classes should override this function
-        rather than `get_input_metadata`.
-        """
-        raise NotImplementedError("BaseRunner is an abstract class")
-
-    def get_input_metadata(self):
-        """
-        Returns information about the inputs of the model.
-        Shapes here may include dynamic dimensions, represented by ``None``.
-        Must be called only after activate() and before deactivate().
+        Returns the total inference time required during the last call to ``infer()``.
 
         Returns:
-            TensorMetadata: Input names, shapes, and data types.
+            float: The time in seconds, or None if runtime was not measured by the runner.
         """
-        return self.get_input_metadata_impl()
+        if self.inference_time is None:
+            G_LOGGER.warning(
+                "{:35} | inference_time was not set. Inference time will be incorrect!"
+                "To correctly compare runtimes, please set the inference_time property in the"
+                "infer() function".format(self.name),
+                mode=LogMode.ONCE,
+            )
+            return None
+        return self.inference_time
 
+    # Implementation for runner deactivation. Derived classes should override this function
+    # rather than ``deactivate()``.
     def deactivate_impl(self):
-        """
-        Implementation for runner deactivation. Derived classes should override this function
-        rather than ``deactivate()``.
-        """
         pass
 
     def deactivate(self):
         """
-        Deactivate the runner.
-
-        If the POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS environment variable is set to `1`, this
-        will also check that the runner was reset to its state prior to activation.
+        Deactivate the runner. For example, this may involve freeing CPU or GPU memory.
 
         Generally, you should use a context manager instead of manually activating and deactivating.
         For example:
@@ -220,20 +213,16 @@ class BaseRunner(object):
         self.inference_time = None
         self.is_active = None
 
-        try:
-            self.deactivate_impl()
-        except:
-            raise  # Needed so we can have the else clause
-        else:
-            self.is_active = False
-            if config.INTERNAL_CORRECTNESS_CHECKS:
-                old_state = self._pre_activate_runner_state
-                del self._pre_activate_runner_state
-                if old_state != vars(self):
-                    G_LOGGER.internal_error(
-                        "Runner state was not reset after deactivation. "
-                        "Note:\nOld state: {:}\nNew state: {:}".format(old_state, vars(self))
-                    )
+        self.deactivate_impl()
+        self.is_active = False
+        if config.INTERNAL_CORRECTNESS_CHECKS:
+            old_state = self._pre_activate_runner_state
+            del self._pre_activate_runner_state
+            if old_state != vars(self):
+                G_LOGGER.internal_error(
+                    "Runner state was not reset after deactivation. "
+                    "Note:\nOld state: {:}\nNew state: {:}".format(old_state, vars(self))
+                )
 
     def __del__(self):
         if self.is_active:

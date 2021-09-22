@@ -128,6 +128,11 @@ ONNX_MODELS = {
         check_runner=no_check_implemented,
         input_metadata=TensorMetadata().add("X0", shape=(1,), dtype=np.float32).add("Y0", shape=(1,), dtype=np.float32),
     ),
+    "reducable_with_const": Model(
+        path=model_path("reducable_with_const.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+    ),
     "ext_weights": Model(
         path=model_path("ext_weights.onnx"),
         LoaderType=OnnxFromPath,
@@ -141,8 +146,9 @@ ONNX_MODELS = {
         ext_data=model_path("ext_weights_same_dir"),
     ),
     "capability": Model(
-        path=model_path("capability.onnx"),
-        LoaderType=BytesFromPath,
-        check_runner=no_check_implemented
-    )
+        path=model_path("capability.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "instancenorm": Model(
+        path=model_path("instancenorm.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
 }

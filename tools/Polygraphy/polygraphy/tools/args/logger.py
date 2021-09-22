@@ -58,7 +58,7 @@ class LoggerArgs(BaseArgs):
     def parse(self, args):
         self.verbosity_count = args_util.get(args, "verbose") - args_util.get(args, "quiet")
         self.silent = args_util.get(args, "silent")
-        self.log_format = util.default(args_util.get(args, "log_format"), [])
+        self.log_format = args_util.get(args, "log_format", default=[])
         self.log_file = args_util.get(args, "log_file")
 
         # Enable logger settings immediately on parsing.

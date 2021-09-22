@@ -271,13 +271,6 @@ def from_json(src):
     return json.loads(src, object_pairs_hook=Decoder())
 
 
-@mod.export_deprecated_alias(
-    "pickle_save",
-    remove_in="0.32.0",
-    use_instead="JSON serialization. "
-    "This function has been migrated to use JSON and will NOT pickle the input object. "
-    "Use save_json",
-)
 @mod.export()
 @try_register_numpy_json
 def save_json(obj, dest, description=None):
@@ -293,7 +286,6 @@ def save_json(obj, dest, description=None):
     util.save_file(to_json(obj), dest, mode="w", description=description)
 
 
-@mod.export_deprecated_alias("pickle_load", remove_in="0.32.0", use_instead="load_json")
 @mod.export()
 @try_register_numpy_json
 def load_json(src, description=None):
@@ -308,17 +300,7 @@ def load_json(src, description=None):
     Returns:
         object: The object, or `None` if nothing could be read.
     """
-    try:
-        return from_json(util.load_file(src, mode="r", description=description))
-    except UnicodeDecodeError:
-        # This is a pickle file from Polygraphy 0.26.1 or older.
-        mod.warn_deprecated("pickle", use_instead="JSON", remove_in="0.32.0")
-        G_LOGGER.critical(
-            "It looks like you're trying to load a Pickle file.\nPolygraphy migrated to using JSON "
-            "instead of Pickle in version 0.27.0 for security reasons.\nYou can convert your existing "
-            "pickled data to JSON using the command-line tool: `polygraphy to-json {:} -o new.json`.\nAll data serialized "
-            "from this and future versions of Polygraphy will always use JSON. ".format(src)
-        )
+    return from_json(util.load_file(src, mode="r", description=description))
 
 
 @mod.export()

@@ -18,8 +18,9 @@ import subprocess as sp
 import numpy as np
 import pytest
 import tensorrt as trt
-from polygraphy.backend.onnx import BytesFromOnnx, OnnxFromTfGraph
+from polygraphy.backend.onnx import BytesFromOnnx, OnnxFromTfGraph, GsFromOnnx
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
+from polygraphy.backend.pluginref import PluginRefRunner
 from polygraphy.backend.tf import SessionFromGraph, TfRunner
 from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxBytes, TrtRunner
 from polygraphy.exception import PolygraphyException
@@ -63,18 +64,21 @@ class TestComparator(object):
     def test_multiple_runners(self):
         load_tf = TF_MODELS["identity"].loader
         build_tf_session = SessionFromGraph(load_tf)
-        load_serialized_onnx = BytesFromOnnx(OnnxFromTfGraph(load_tf))
+        onnx_model = OnnxFromTfGraph(load_tf)
+        load_serialized_onnx = BytesFromOnnx(onnx_model)
         build_onnxrt_session = SessionFromOnnx(load_serialized_onnx)
         load_engine = EngineFromNetwork(NetworkFromOnnxBytes(load_serialized_onnx))
+        gs_graph = GsFromOnnx(onnx_model)
 
         runners = [
             TfRunner(build_tf_session),
             OnnxrtRunner(build_onnxrt_session),
+            PluginRefRunner(gs_graph),
             TrtRunner(load_engine),
         ]
 
         run_results = Comparator.run(runners)
-        compare_func = CompareFunc.basic_compare_func(check_shapes=mod.version(trt.__version__) >= mod.version("7.0"))
+        compare_func = CompareFunc.simple(check_shapes=mod.version(trt.__version__) >= mod.version("7.0"))
         assert bool(Comparator.compare_accuracy(run_results, compare_func=compare_func))
         assert len(list(run_results.values())[0]) == 1  # Default number of iterations
 
@@ -140,6 +144,6 @@ class TestComparator(object):
         ]
 
         run_results = Comparator.run(runners)
-        compare_func = CompareFunc.basic_compare_func(check_shapes=mod.version(trt.__version__) >= mod.version("7.0"))
+        compare_func = CompareFunc.simple(check_shapes=mod.version(trt.__version__) >= mod.version("7.0"))
         assert bool(Comparator.compare_accuracy(run_results, compare_func=compare_func))
         assert len(list(run_results.values())[0]) == 1  # Default number of iterations

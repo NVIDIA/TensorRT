@@ -95,14 +95,9 @@ class Comparator(object):
 
         def execute_runner(runner, loader_cache):
             with runner as active_runner:
-                input_metadata = active_runner.get_input_metadata()
-                G_LOGGER.info(
-                    "{:35}\n---- Model Input(s) ----\n{:}".format(active_runner.name, input_metadata), mode=LogMode.ONCE
-                )
-
                 # DataLoaderCache will ensure that the feed_dict does not contain any extra entries
                 # based on the provided input_metadata.
-                loader_cache.set_input_metadata(input_metadata)
+                loader_cache.set_input_metadata(active_runner.get_input_metadata())
 
                 if warm_up:
                     G_LOGGER.start("{:35} | Running {:} warm-up run(s)".format(active_runner.name, warm_up))
@@ -126,6 +121,13 @@ class Comparator(object):
 
                 total_runtime = 0
                 for index, feed_dict in enumerate(loader_cache):
+                    G_LOGGER.info(
+                        "{:35}\n---- Inference Input(s) ----\n{:}".format(
+                            active_runner.name, TensorMetadata().from_feed_dict(feed_dict)
+                        ),
+                        mode=LogMode.ONCE,
+                    )
+
                     G_LOGGER.extra_verbose(
                         lambda: "{:35} | Feeding inputs:\n{:}".format(active_runner.name, util.indent_block(feed_dict))
                     )
@@ -139,7 +141,7 @@ class Comparator(object):
                     )
 
                     G_LOGGER.info(
-                        "{:35}\n---- Model Output(s) ----\n{:}".format(
+                        "{:35}\n---- Inference Output(s) ----\n{:}".format(
                             active_runner.name, TensorMetadata().from_feed_dict(outputs)
                         ),
                         mode=LogMode.ONCE,
@@ -275,7 +277,7 @@ class Comparator(object):
         def find_mismatched(match_dict):
             return [name for name, matched in match_dict.items() if not bool(matched)]
 
-        compare_func = util.default(compare_func, CompareFunc.basic_compare_func())
+        compare_func = util.default(compare_func, CompareFunc.simple())
         comparisons = util.default(comparisons, Comparator.default_comparisons(run_results))
 
         accuracy_result = AccuracyResult()

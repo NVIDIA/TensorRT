@@ -38,6 +38,7 @@ class TestOnnxrtRunner(object):
         with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
             assert runner.is_active
             model.check_runner(runner)
+            assert runner.last_inference_time() is not None
         assert not runner.is_active
 
     def test_shape_output(self):

@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.template.subtool import TrtNetwork
+from polygraphy.tools.template.subtool import TrtNetwork, TrtConfig
 
 
 class Template(Tool):
@@ -31,6 +31,7 @@ class Template(Tool):
 
         SUBTOOLS = [
             TrtNetwork(),
+            TrtConfig(),
         ]
 
         for subtool in SUBTOOLS:

@@ -18,6 +18,7 @@ import glob
 import os
 import tempfile
 
+import pytest
 from polygraphy import util
 from polygraphy.backend.onnx import onnx_from_path
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
@@ -81,6 +82,11 @@ class TestOnnxLoaderArgs(object):
 
 
 class TestOnnxSaveArgs(object):
+    def test_defaults(self):
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
+        arg_group.parse_args([])
+        assert arg_group.size_threshold is None
+
     def test_external_data(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
         arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
@@ -124,6 +130,19 @@ class TestOnnxSaveArgs(object):
             assert is_file_non_empty(path)
             outfiles = glob.glob(os.path.join(outdir, "*"))
             assert len(outfiles) == 4
+
+    @pytest.mark.parametrize(
+        "arg, expected",
+        [
+            ("16", 16),
+            ("1e9", 1e9),
+            ("2M", 2 << 20),
+        ],
+    )
+    def test_size_threshold_parsing(self, arg, expected):
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
+        arg_group.parse_args(["--external-data-size-threshold", arg])
+        assert arg_group.size_threshold == expected
 
 
 class TestOnnxShapeInferenceArgs(object):

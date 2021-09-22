@@ -16,7 +16,7 @@
 import contextlib
 import os
 
-from polygraphy import mod, util, config
+from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import (
     DataLoaderArgs,

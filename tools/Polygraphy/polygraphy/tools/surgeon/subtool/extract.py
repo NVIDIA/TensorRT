@@ -18,23 +18,30 @@ import copy
 from polygraphy import mod
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools import util as tools_util
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.surgeon.subtool.base import BaseSurgeonSubtool
 
-gs = mod.lazy_import("onnx_graphsurgeon")
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
+onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
 
 
 class Extract(BaseSurgeonSubtool):
     """
-    Extract a subgraph based on the specified inputs and outputs.
+    Extract a subgraph from an ONNX model based on the specified inputs and outputs.
     """
 
     def __init__(self):
         super().__init__("extract")
-        self.subscribe_args(ModelArgs(model_required=True, inputs="--model-inputs", model_type="onnx"))
+        self.subscribe_args(
+            ModelArgs(
+                model_required=True,
+                inputs="--model-inputs",
+                model_type="onnx",
+                inputs_doc="Input shapes to use when generating data to run fallback shape inference. "
+                "Has no effect if fallback shape inference is not run",
+            )
+        )
         self.subscribe_args(DataLoaderArgs())
         self.subscribe_args(OnnxShapeInferenceArgs(default=False, enable_force_fallback=True))
         self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
@@ -85,7 +92,7 @@ class Extract(BaseSurgeonSubtool):
 
         # Loads an ONNX-GS graph and create new I/O metadata w/ info missing in user_input/output_metadata.
         def load_graph_and_io_meta(model):
-            graph = gs.import_onnx(model)
+            graph = onnx_backend.gs_from_onnx(model)
             TENSOR_MAP = graph.tensors()
 
             def get_tensor(name):
@@ -97,7 +104,7 @@ class Extract(BaseSurgeonSubtool):
             # or details derived from tensors.
             def make_io_meta(user_meta, tensors):
                 if not user_meta:
-                    return tools_util.meta_from_gs_tensors(tensors)
+                    return onnx_util.meta_from_gs_tensors(tensors)
 
                 new_meta = copy.copy(user_meta)
                 for name, (dtype, shape) in new_meta.items():

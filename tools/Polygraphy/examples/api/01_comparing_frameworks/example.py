@@ -21,7 +21,7 @@ then compares outputs.
 """
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
 from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
-from polygraphy.comparator import Comparator
+from polygraphy.comparator import Comparator, CompareFunc
 
 
 def main():
@@ -46,7 +46,11 @@ def main():
     run_results = Comparator.run(runners)
 
     # `Comparator.compare_accuracy()` checks that outputs match between runners.
-    assert bool(Comparator.compare_accuracy(run_results))
+    #
+    # TIP: The `compare_func` parameter can be used to control how outputs are compared (see API reference for details).
+    #   The default comparison function is created by `CompareFunc.simple()`, but we can construct it
+    #   explicitly if we want to change the default parameters, such as tolerance.
+    assert bool(Comparator.compare_accuracy(run_results, compare_func=CompareFunc.simple(atol=1e-8)))
 
     # We can use `RunResults.save()` method to save the inference results to a JSON file.
     # This can be useful if you want to generate and compare results separately.

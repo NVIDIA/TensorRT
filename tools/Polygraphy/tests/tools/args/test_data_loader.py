@@ -20,9 +20,9 @@ import numpy as np
 import pytest
 from polygraphy import util
 from polygraphy.common import TensorMetadata
+from polygraphy.exception import PolygraphyException
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs
 from tests.tools.args.helper import ArgGroupTestHelper
-
 
 ARG_CASES = [
     (["--seed=123"], ["seed"], [123]),
@@ -30,6 +30,7 @@ ARG_CASES = [
     (["--float-min=2.3", "--float-max=9.4"], ["float_range"], [(2.3, 9.4)]),
     ([], ["val_range"], [None], [(0.0, 1.0)]),  # When not specified, this should default to None.
     (["--val-range", "[0.0,2.3]"], ["val_range"], [{"": (0.0, 2.3)}]),
+    (["--val-range", "[1,5]"], ["val_range"], [{"": (1, 5)}]),  # Should work for integral quantities
     (["--val-range", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"], ["val_range"], [{"inp0": (0.0, 2.3), "inp1": (4.5, 9.6)}]),
     (
         ["--val-range", "[-1,0]", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"],
@@ -101,3 +102,16 @@ class TestDataLoaderArgs(object):
             data = list(data_loader)
             assert len(data) == 5
             assert all(np.all(d["inp"] == np.ones((3, 5), dtype=np.float32) * 6.4341) for d in data)
+
+    @pytest.mark.parametrize(
+        "opts,expected_err",
+        [
+            (["--val-range", "x:[y,2]"], "could not be parsed as a number"),
+            (["--val-range", "x:[1,2,3]"], "expected to receive exactly 2 values, but received 3"),
+        ],
+    )
+    def test_val_range_errors(self, opts, expected_err):
+        arg_group = ArgGroupTestHelper(DataLoaderArgs())
+
+        with pytest.raises(PolygraphyException, match=expected_err):
+            arg_group.parse_args(opts)

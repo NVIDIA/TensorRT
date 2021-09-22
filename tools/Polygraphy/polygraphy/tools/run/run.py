@@ -27,6 +27,7 @@ from polygraphy.tools.args import (
     OnnxrtRunnerArgs,
     OnnxSaveArgs,
     OnnxShapeInferenceArgs,
+    PluginRefArgs,
     Tf2OnnxLoaderArgs,
     TfConfigArgs,
     TfLoaderArgs,
@@ -65,6 +66,10 @@ def add_runner_args(parser):
     )
     add_runner("--tf", help="Run inference using TensorFlow")
     add_runner("--onnxrt", help="Run inference using ONNX Runtime")
+    add_runner(
+        "--pluginref",
+        help="Run inference for models containing single TensorRT plugins using a CPU reference implementation",
+    )
 
 
 # Generate a summary line to add as a comment to the script
@@ -91,6 +96,7 @@ def generate_summary(model_file, runners, load_results):
             "trt_legacy": "TensorRT Legacy",
             "tf": "TensorFlow",
             "onnxrt": "ONNX Runtime",
+            "pluginref": "CPU plugin references",
         }
         runners = [runner_names[runner] for runner in runners]
         summary += "between " if len(runners) > 1 else "using "
@@ -121,7 +127,10 @@ class Run(Tool):
         self.subscribe_args(OnnxShapeInferenceArgs())
         self.subscribe_args(OnnxLoaderArgs(save=True))
         self.subscribe_args(OnnxrtRunnerArgs())
-        self.subscribe_args(TrtConfigArgs())
+        self.subscribe_args(PluginRefArgs())
+        self.subscribe_args(
+            TrtConfigArgs(random_data_calib_warning=False)
+        )  # We run calibration with the inference-time data
         self.subscribe_args(TrtPluginLoaderArgs())
         self.subscribe_args(TrtNetworkLoaderArgs())
         self.subscribe_args(TrtEngineSaveArgs(output="save-engine", short_opt=None))
@@ -175,6 +184,7 @@ class Run(Tool):
                 "onnxrt": self.arg_groups[OnnxrtRunnerArgs].add_to_script,
                 "trt": self.arg_groups[TrtRunnerArgs].add_to_script,
                 "trt_legacy": self.arg_groups[TrtLegacyArgs].add_to_script,
+                "pluginref": self.arg_groups[PluginRefArgs].add_to_script,
             }[runner_arg]
             add_runner_func(script)
 

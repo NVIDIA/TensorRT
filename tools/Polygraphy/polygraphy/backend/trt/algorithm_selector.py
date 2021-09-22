@@ -149,7 +149,7 @@ def decode(dct):
 class TacticReplayData(TypedDict(lambda: str, lambda: Algorithm)):
     """
     Maps layer names to corresponding tactics.
-    More specifically, it is an `OrderedDict[str, Algorithm]`
+    More specifically, it is an ``OrderedDict[str, Algorithm]``.
     """
 
     def add(self, name, algorithm):

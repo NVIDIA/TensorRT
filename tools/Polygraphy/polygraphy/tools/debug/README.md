@@ -37,6 +37,13 @@ All the `debug` tools work on the same general principles:
     any artifacts specified to `--artifacts` are moved into a `bad` directory.
 
 
+Therefore, the general form of most `debug` subtools is:
+```
+polygraphy debug <subtool> <model> [--artifacts per_iteration_files_to_sort...] \
+    --check <checker_script_or_tool> <per_iteration_model> [options to checker_script_or_tool]
+```
+
+
 ## Subtools
 
 `debug` provides subtools for different tasks:
@@ -62,21 +69,7 @@ All the `debug` tools work on the same general principles:
 - [EXPERIMENTAL] `reduce` can reduce failing ONNX models to a minimal subgraph of failing nodes.
     This can make further debugging significantly easier.
 
-    You can invoke it with the model and a command that can check intermediate models.
-    The intermediate models will be written to `polygraphy_debug.onnx` by default.
-    For example, to reduce a model with accuracy errors:
-
-    ```bash
-    polygraphy debug reduce model.onnx -o reduced.onnx \
-        --check polygraphy run polygraphy_debug.onnx --onnxrt --trt
-    ```
-
-    When using a model with dynamic shapes, you can use `--model-input-shapes` to freeze the
-    shapes of the intermediate tensors. In case ONNX shape inference is not able to freeze shapes,
-    you can enable `--force-fallback-shape-inference`.
-    Alternatively, you can use `--no-reduce-inputs` so that the model inputs are not modified.
-    This can be useful in cases where it may not be trivial to implement a `--check` command
-    that can determine the shapes to use for intermediate tensors.
+    See the [example](../../../examples//cli/debug/02_reducing_failing_onnx_models/) for details.
 
 - [EXPERIMENTAL] `repeat` can run an arbitrary command repeatedly, sorting generated artifacts
     into `good` and `bad` directories. This is more general than the other `debug` subtools, and is
