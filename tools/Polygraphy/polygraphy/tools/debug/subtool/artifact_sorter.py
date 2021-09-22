@@ -99,9 +99,17 @@ class ArtifactSorterArgs(BaseArgs):
             nargs="+",
         )
 
-        artifact_sorter_args.add_argument(
+        output_show = artifact_sorter_args.add_mutually_exclusive_group()
+        output_show.add_argument(
             "--show-output",
-            help="Show output from the --check command. Defaults to capturing output instead. ",
+            help="Show output from the --check command even for passing iterations. "
+            "By default, output from passing iterations is captured. ",
+            action="store_true",
+        )
+        output_show.add_argument(
+            "--hide-fail-output",
+            help="Suppress output from the --check command for failing iterations. "
+            "By default, output from failing iterations is displayed. ",
             action="store_true",
         )
 
@@ -144,6 +152,7 @@ class ArtifactSorterArgs(BaseArgs):
         self.artifacts = util.default(args_util.get(args, "artifacts"), [])
         self.output = args_util.get(args, "artifacts_dir")
         self.show_output = args_util.get(args, "show_output")
+        self.hide_fail_output = args_util.get(args, "hide_fail_output")
         self.remove_intermediate = args_util.get(args, "remove_intermediate")
         self.fail_codes = args_util.get(args, "fail_codes")
         self.ignore_fail_codes = args_util.get(args, "ignore_fail_codes")
@@ -271,7 +280,7 @@ class ArtifactSorterArgs(BaseArgs):
             status = sp.run(self.check, stdout=sp.PIPE, stderr=sp.PIPE)
             success = is_success(status)
 
-            if self.show_output:
+            if self.show_output or (not success and not self.hide_fail_output):
                 stderr_log_level = G_LOGGER.WARNING if success else G_LOGGER.ERROR
                 G_LOGGER.info("========== CAPTURED STDOUT ==========\n{:}".format(status.stdout.decode()))
                 G_LOGGER.log(

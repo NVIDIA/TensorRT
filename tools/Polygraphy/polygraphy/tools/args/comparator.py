@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy import mod, util
+from polygraphy import mod
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
@@ -156,7 +156,7 @@ class ComparatorCompareArgs(BaseArgs):
         comparator_args.add_argument(
             "--check-error-stat",
             help="The error statistic to check. "
-            "For details on possible values, see the documentation for CompareFunc.basic_compare_func(). "
+            "For details on possible values, see the documentation for CompareFunc.simple(). "
             "To specify per-output values, use the format: --check-error-stat [<out_name>:]<stat>. If no output name is provided, "
             "the value is used for any outputs not explicitly specified. For example: "
             "--check-error-stat max out0:mean out1:median",
@@ -194,7 +194,7 @@ class ComparatorCompareArgs(BaseArgs):
                     )
 
         # FIXME: This should be a proper dependency from a RunnerArgs
-        self.runners = util.default(args_util.get(args, "runners"), [])
+        self.runners = args_util.get(args, "runners", default=[])
 
     def add_to_script(self, script, results_name):
         script.add_import(imports=["Comparator"], frm="polygraphy.comparator")
@@ -228,7 +228,7 @@ class ComparatorCompareArgs(BaseArgs):
             script.append_suffix(safe("# Accuracy Comparison"))
 
             compare_func_str = make_invocable_if_nondefault(
-                "CompareFunc.basic_compare_func",
+                "CompareFunc.simple",
                 rtol=self.rtol,
                 atol=self.atol,
                 check_shapes=False if self.no_shape_check else None,

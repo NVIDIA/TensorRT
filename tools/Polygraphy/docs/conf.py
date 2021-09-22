@@ -36,7 +36,7 @@ autodoc_mock_imports = ["tensorrt", "onnx", "numpy", "tensorflow", "onnx_graphsu
 autodoc_default_options = {
     "members": True,
     "show-inheritance": True,
-    "exclude-members": "activate_impl, deactivate_impl, get_input_metadata_impl, infer_impl, BaseNetworkFromOnnx, Encoder, Decoder, add_json_methods, constantmethod",
+    "exclude-members": "activate_impl, deactivate_impl, get_input_metadata_impl, BaseNetworkFromOnnx, Encoder, Decoder, add_json_methods, constantmethod",
     "special-members": "__call__, __getitem__, __bool__, __enter__, __exit__",
 }
 

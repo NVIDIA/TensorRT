@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 import ctypes
-import glob
+import time
 import os
 import sys
 
@@ -224,6 +224,13 @@ def try_get_stream_handle(stream):
     return stream.ptr
 
 
+# Make a numpy array contiguous if it's not already.
+def make_np_contiguous(arr):
+    if not arr.flags["C_CONTIGUOUS"]:
+        return np.ascontiguousarray(arr)
+    return arr
+
+
 @mod.export()
 class DeviceView(object):
     """
@@ -242,6 +249,7 @@ class DeviceView(object):
         """int: The memory address of the underlying GPU memory"""
         self.shape = shape
         """Tuple[int]: The shape of the device buffer"""
+        self.itemsize = None
         self.dtype = dtype
         """np.dtype: The data type of the device buffer"""
 
@@ -253,11 +261,20 @@ class DeviceView(object):
             )
 
     @property
+    def dtype(self):
+        return self._dtype
+
+    @dtype.setter
+    def dtype(self, new):
+        self._dtype = new
+        self.itemsize = np.dtype(new).itemsize
+
+    @property
     def nbytes(self):
         """
         The number of bytes in the memory region.
         """
-        return util.volume(self.shape) * np.dtype(self.dtype).itemsize
+        return util.volume(self.shape) * self.itemsize
 
     @func.constantmethod
     def copy_to(self, host_buffer, stream=None):
@@ -266,7 +283,7 @@ class DeviceView(object):
 
         Args:
             host_buffer (numpy.ndarray):
-                    The host buffer to copy into. The buffer will be resized to match the
+                    The host buffer to copy into. The buffer will be reshaped to match the
                     shape of this device buffer. If the provided host buffer is too small,
                     it will be freed and reallocated.
                     The buffer may also be reallocated if it is not contiguous in
@@ -292,7 +309,7 @@ class DeviceView(object):
         if not self.nbytes:
             return host_buffer
 
-        host_buffer = np.ascontiguousarray(host_buffer)
+        host_buffer = make_np_contiguous(host_buffer)
         wrapper().memcpy(
             dst=host_buffer.ctypes.data,
             src=self.ptr,
@@ -301,8 +318,6 @@ class DeviceView(object):
             stream_ptr=try_get_stream_handle(stream),
         )
 
-        # Use resize instead of reshape since it operates in-place.
-        host_buffer.resize(self.shape, refcheck=False)
         return host_buffer
 
     @func.constantmethod
@@ -377,7 +392,7 @@ class DeviceArray(DeviceView):
         Args:
             shape (Tuple[int]): The new shape.
         """
-        nbytes = util.volume(shape) * np.dtype(self.dtype).itemsize
+        nbytes = util.volume(shape) * self.itemsize
         if nbytes > self.allocated_nbytes:
             self.free()
             self.allocate(nbytes)
@@ -402,7 +417,7 @@ class DeviceArray(DeviceView):
         if host_buffer.nbytes:
             self._check_dtype_matches(host_buffer)
             self.resize(host_buffer.shape)
-            host_buffer = np.ascontiguousarray(host_buffer.ravel())
+            host_buffer = make_np_contiguous(host_buffer)
             wrapper().memcpy(
                 dst=self.ptr,
                 src=host_buffer.ctypes.data,
@@ -411,6 +426,15 @@ class DeviceArray(DeviceView):
                 stream_ptr=try_get_stream_handle(stream),
             )
         return self
+
+    def view(self):
+        """
+        Creates a read-only DeviceView from this DeviceArray.
+
+        Returns:
+            DeviceView: A view of this arrays data on the device.
+        """
+        return DeviceView(self.ptr, self.shape, self.dtype)
 
     def __str__(self):
         return "DeviceArray[(dtype={:}, shape={:}), ptr={:}]".format(

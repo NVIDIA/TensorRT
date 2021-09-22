@@ -16,7 +16,7 @@
 import time
 from collections import OrderedDict
 
-from polygraphy import func, mod, util
+from polygraphy import mod, util
 from polygraphy.backend.base import BaseRunner
 from polygraphy.common import TensorMetadata
 
@@ -32,11 +32,8 @@ class OnnxrtRunner(BaseRunner):
     def __init__(self, sess, name=None):
         """
         Args:
-            sess (Callable() -> onnxruntime.InferenceSession):
-                    A callable that can supply an ONNX-Runtime inference session.
-                    This callable is invoked whenever the runner is activated.
-
-                    Alternatively, the inference session may be supplied directly.
+            sess (Union[onnxruntime.InferenceSession, Callable() -> onnxruntime.InferenceSession]):
+                    An ONNX-Runtime inference session or a callable that returns one.
         """
         super().__init__(name=name, prefix="onnxrt-runner")
         self._sess = sess
@@ -44,21 +41,6 @@ class OnnxrtRunner(BaseRunner):
     def activate_impl(self):
         self.sess, _ = util.invoke_if_callable(self._sess)
 
-    def deactivate_impl(self):
-        del self.sess
-
-    def infer_impl(self, feed_dict):
-        start = time.time()
-        inference_outputs = self.sess.run(None, feed_dict)
-        end = time.time()
-
-        out_dict = OrderedDict()
-        for node, out in zip(self.sess.get_outputs(), inference_outputs):
-            out_dict[node.name] = out
-        self.inference_time = end - start
-        return out_dict
-
-    @func.constantmethod
     def get_input_metadata_impl(self):
         ONNX_RT_TYPE_TO_NP = {
             "tensor(double)": np.float64,
@@ -81,3 +63,17 @@ class OnnxrtRunner(BaseRunner):
             dtype = ONNX_RT_TYPE_TO_NP[node.type] if node.type in ONNX_RT_TYPE_TO_NP else None
             meta.add(node.name, dtype=dtype, shape=node.shape)
         return meta
+
+    def infer_impl(self, feed_dict):
+        start = time.time()
+        inference_outputs = self.sess.run(None, feed_dict)
+        end = time.time()
+
+        out_dict = OrderedDict()
+        for node, out in zip(self.sess.get_outputs(), inference_outputs):
+            out_dict[node.name] = out
+        self.inference_time = end - start
+        return out_dict
+
+    def deactivate_impl(self):
+        del self.sess

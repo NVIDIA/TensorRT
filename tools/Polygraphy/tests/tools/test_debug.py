@@ -71,8 +71,8 @@ def replay_dir(request):
 
         EXPECTED_OUTPUT = dedent(
             """
-        [I] Loaded 2 good tactic replays.
-        [I] Loaded 2 bad tactic replays.
+        [I] Loaded {num} good tactic replays.
+        [I] Loaded {num} bad tactic replays.
         [I] Found potentially bad tactics:
         [I] Layer: layer0
                 Algorithms: ["(Implementation: 0, Tactic: 2) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),)"]
@@ -82,11 +82,11 @@ def replay_dir(request):
 
 
 class TestDiffTactics(object):
-    def check_output(self, status, expected_output):
+    def check_output(self, status, expected_output, expected_num=2):
         output = "\n".join(
             line for line in status.stdout.strip().splitlines() if "Loading tactic replay file from " not in line
         )
-        assert output == expected_output.strip()
+        assert output == expected_output.format(num=expected_num).strip()
 
     def test_dir(self, replay_dir):
         replay_dir, expected_output = replay_dir
@@ -100,6 +100,17 @@ class TestDiffTactics(object):
         bad = os.path.join(replay_dir, "bad")
         status = run_polygraphy_debug(["diff-tactics", "--good", good, "--bad", bad], disable_verbose=True)
         self.check_output(status, expected_output)
+
+    def test_good_bad_file(self, replay_dir):
+        replay_dir, expected_output = replay_dir
+
+        def find_file(dirpath, filename):
+            return glob.glob(os.path.join(dirpath, "**", filename), recursive=True)[0]
+
+        good = find_file(os.path.join(replay_dir, "good"), "0.json")
+        bad = find_file(os.path.join(replay_dir, "bad"), "1.json")
+        status = run_polygraphy_debug(["diff-tactics", "--good", good, "--bad", bad], disable_verbose=True)
+        self.check_output(status, expected_output, expected_num=1)
 
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
@@ -415,6 +426,35 @@ class TestReduce(object):
             graph = gs.import_onnx(model)
             assert tuple(graph.inputs[0].shape) == (1, 2, 5, 5)
             assert tuple(graph.outputs[0].shape) == (1, 2, 5, 5)
+
+    def test_reduce_with_constant(self):
+        # Should be no failure when models including Constant nodes use fallback
+        # shape inference; Constant nodes will be lowered to constant tensors.
+        with tempfile.TemporaryDirectory() as outdir:
+            run_polygraphy_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["reducable_with_const"].path,
+                    "--no-shape-inference",
+                    "--mode=linear",
+                    "--output=reduced.onnx",
+                ]
+                + [
+                    "--check",
+                    TestReduce.FAKE_REDUCE_CHECKER,
+                    "polygraphy_debug.onnx",
+                    "--fail-node",
+                    "onnx_graphsurgeon_node_3",
+                ],
+                disable_verbose=True,
+                cwd=outdir,
+            )
+            model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
+            graph = gs.import_onnx(model)
+            assert len(graph.nodes) == 1
+            assert graph.nodes[0].name == "onnx_graphsurgeon_node_3"
+            # Outputs of Constant nodes should not become Variables; thus the model should have no inputs.
+            assert not graph.inputs
 
 
 class TestRepeat(object):

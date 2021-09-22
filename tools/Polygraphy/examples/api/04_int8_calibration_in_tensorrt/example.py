@@ -29,7 +29,7 @@ from polygraphy.logger import G_LOGGER
 def calib_data():
     for _ in range(4):
         # TIP: If your calibration data is already on the GPU, you can instead provide GPU pointers
-        # (as `int`s) or Polygraphy `DeviceView`s  instead of NumPy arrays.
+        # (as `int`s) or Polygraphy `DeviceView`s instead of NumPy arrays.
         #
         # For details on `DeviceView`, see `polygraphy/cuda/cuda.py`.
         yield {"x": np.ones(shape=(1, 1, 2, 2), dtype=np.float32)}  # Totally real data

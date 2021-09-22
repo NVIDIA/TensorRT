@@ -16,4 +16,4 @@
 from polygraphy import mod
 from polygraphy.constants import *
 
-mod.warn_deprecated("polygraphy.common.constants", "polygraphy.constants", remove_in="0.32.0")
+mod.warn_deprecated("polygraphy.common.constants", "polygraphy.constants", remove_in="0.34.0")

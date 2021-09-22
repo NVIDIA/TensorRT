@@ -26,7 +26,7 @@ class TestBasicCompareFunc(object):
         iter_result0 = IterationResult(outputs={"output": np.zeros((4, 4), dtype=np.bool)})
         iter_result1 = IterationResult(outputs={"output": np.ones((4, 4), dtype=np.bool)})
 
-        compare_func = CompareFunc.basic_compare_func()
+        compare_func = CompareFunc.simple()
         acc = compare_func(iter_result0, iter_result1)
 
         assert not acc["output"]
@@ -41,7 +41,7 @@ class TestBasicCompareFunc(object):
         iter_result1 = IterationResult(outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS + 1})
 
         # With default tolerances, out1 is wrong for the second result.
-        compare_func = CompareFunc.basic_compare_func()
+        compare_func = CompareFunc.simple()
         acc = compare_func(iter_result0, iter_result1)
         assert acc[OUT0_NAME]
         assert not acc[OUT1_NAME]
@@ -53,9 +53,9 @@ class TestBasicCompareFunc(object):
         }
 
         if mode == "abs":
-            compare_func = CompareFunc.basic_compare_func(atol=tols)
+            compare_func = CompareFunc.simple(atol=tols)
         else:
-            compare_func = CompareFunc.basic_compare_func(rtol=tols)
+            compare_func = CompareFunc.simple(rtol=tols)
 
         acc = compare_func(iter_result0, iter_result1)
         assert acc[OUT0_NAME]
@@ -70,7 +70,7 @@ class TestBasicCompareFunc(object):
         iter_result0 = IterationResult(outputs={OUT0_NAME: OUT_VALS + 1, OUT1_NAME: OUT_VALS})
         iter_result1 = IterationResult(outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS + 1})
 
-        acc = CompareFunc.basic_compare_func()(iter_result0, iter_result1)
+        acc = CompareFunc.simple()(iter_result0, iter_result1)
         assert not acc[OUT0_NAME]
         assert not acc[OUT1_NAME]
 
@@ -80,9 +80,9 @@ class TestBasicCompareFunc(object):
         }
 
         if mode == "abs":
-            compare_func = CompareFunc.basic_compare_func(atol=tols)
+            compare_func = CompareFunc.simple(atol=tols)
         else:
-            compare_func = CompareFunc.basic_compare_func(rtol=tols)
+            compare_func = CompareFunc.simple(rtol=tols)
 
         acc = compare_func(iter_result0, iter_result1)
         assert not acc[OUT0_NAME]
@@ -102,9 +102,9 @@ class TestBasicCompareFunc(object):
         }
 
         if mode == "abs":
-            compare_func = CompareFunc.basic_compare_func(atol=tols)
+            compare_func = CompareFunc.simple(atol=tols)
         else:
-            compare_func = CompareFunc.basic_compare_func(rtol=tols)
+            compare_func = CompareFunc.simple(rtol=tols)
 
         acc = compare_func(iter_result0, iter_result1)
         assert acc[OUT0_NAME]
@@ -122,7 +122,7 @@ class TestBasicCompareFunc(object):
         iter_result0 = IterationResult(outputs={"output": np.zeros(shape, dtype=np.float32)})
         iter_result1 = IterationResult(outputs={"output": np.ones(shape, dtype=np.float32)})
 
-        compare_func = CompareFunc.basic_compare_func()
+        compare_func = CompareFunc.simple()
 
         with G_LOGGER.verbosity(G_LOGGER.ULTRA_VERBOSE):
             acc = compare_func(iter_result0, iter_result1)
@@ -145,7 +145,7 @@ class TestBasicCompareFunc(object):
 
         # Even though the max diff is 100, atol=1 should cause this to pass since we're checking
         # against the mean error.
-        compare_func = CompareFunc.basic_compare_func(check_error_stat=check_error_stat, atol=1)
+        compare_func = CompareFunc.simple(check_error_stat=check_error_stat, atol=1)
 
         if check_error_stat in ["max", "elemwise"]:
             assert not compare_func(iter_result0, iter_result1)["output"]
@@ -158,10 +158,10 @@ class TestBasicCompareFunc(object):
         res0 = IterationResult(outputs={"output": np.array([1, 2], dtype=np.float32)})
         res1 = IterationResult(outputs={"output": np.array((1.25, 2.5), dtype=np.float32)})
 
-        assert not CompareFunc.basic_compare_func(check_error_stat=check_error_stat)(res0, res1)["output"]
+        assert not CompareFunc.simple(check_error_stat=check_error_stat)(res0, res1)["output"]
 
-        assert CompareFunc.basic_compare_func(check_error_stat=check_error_stat, rtol=0.25)(res0, res1)["output"]
-        assert CompareFunc.basic_compare_func(check_error_stat=check_error_stat, atol=0.5)(res0, res1)["output"]
+        assert CompareFunc.simple(check_error_stat=check_error_stat, rtol=0.25)(res0, res1)["output"]
+        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=0.5)(res0, res1)["output"]
 
     def test_atol_rtol_combined_pass(self):
         # We should also be able to mix them - i.e. rtol might enough for some, atol for others.
@@ -169,12 +169,12 @@ class TestBasicCompareFunc(object):
         res0 = IterationResult(outputs={"output": np.array([0, 1, 2, 3], dtype=np.float32)})
         res1 = IterationResult(outputs={"output": np.array((0.15, 1.25, 2.5, 3.75), dtype=np.float32)})
 
-        assert not CompareFunc.basic_compare_func()(res0, res1)["output"]
+        assert not CompareFunc.simple()(res0, res1)["output"]
 
-        assert not CompareFunc.basic_compare_func(atol=0.3)(res0, res1)["output"]
-        assert not CompareFunc.basic_compare_func(rtol=0.25)(res0, res1)["output"]
+        assert not CompareFunc.simple(atol=0.3)(res0, res1)["output"]
+        assert not CompareFunc.simple(rtol=0.25)(res0, res1)["output"]
 
-        assert CompareFunc.basic_compare_func(atol=0.3, rtol=0.25)(res0, res1)["output"]
+        assert CompareFunc.simple(atol=0.3, rtol=0.25)(res0, res1)["output"]
 
     @pytest.mark.parametrize(
         "check_error_stat",
@@ -201,14 +201,14 @@ class TestBasicCompareFunc(object):
         )
 
         atol = 0.4125
-        assert not CompareFunc.basic_compare_func(atol=atol)(res0, res1)["output0"]
+        assert not CompareFunc.simple(atol=atol)(res0, res1)["output0"]
 
-        assert CompareFunc.basic_compare_func(check_error_stat=check_error_stat, atol=atol)(res0, res1)["output0"]
-        assert CompareFunc.basic_compare_func(check_error_stat=check_error_stat, atol=atol)(res0, res1)["output1"]
+        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=atol)(res0, res1)["output0"]
+        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=atol)(res0, res1)["output1"]
 
     def test_invalid_error_stat(self):
         res0 = IterationResult(outputs={"output": np.array([0, 1, 2, 3], dtype=np.float32)})
         res1 = IterationResult(outputs={"output": np.array((0.15, 1.25, 2.5, 3.75), dtype=np.float32)})
 
         with pytest.raises(PolygraphyException, match="Invalid choice"):
-            CompareFunc.basic_compare_func(check_error_stat="invalid-stat")(res0, res1)
+            CompareFunc.simple(check_error_stat="invalid-stat")(res0, res1)

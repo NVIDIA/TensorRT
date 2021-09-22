@@ -25,6 +25,7 @@ Using the TensorRT API, the process involves two steps:
 
     For a single-input, single-output model, this would look roughly as follows:
 
+    <!-- Polygraphy Test: Ignore Start -->
     ```python
     context.set_binding_shape(0, inp.shape)
 
@@ -33,6 +34,7 @@ Using the TensorRT API, the process involves two steps:
 
     # Rest of inference code...
     ```
+    <!-- Polygraphy Test: Ignore End -->
 
 Polygraphy can simplify both steps and help you avoid common pitfalls:
 

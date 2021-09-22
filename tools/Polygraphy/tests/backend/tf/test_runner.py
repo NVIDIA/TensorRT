@@ -33,6 +33,7 @@ class TestTfRunner(object):
         with TfRunner(SessionFromGraph(model.loader)) as runner:
             assert runner.is_active
             model.check_runner(runner)
+            assert runner.last_inference_time() is not None
         assert not runner.is_active
 
     @pytest.mark.skip(reason="Non-trivial to set up - requires CUPTI")

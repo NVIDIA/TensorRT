@@ -15,12 +15,13 @@
 #
 from polygraphy import mod
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
+from polygraphy.tools.args import ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.surgeon.subtool.base import BaseSurgeonSubtool
 
 gs = mod.lazy_import("onnx_graphsurgeon")
+onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 
 
 class OnnxNodeArgs(BaseArgs):
@@ -66,20 +67,20 @@ class OnnxNodeArgs(BaseArgs):
 
 class Insert(BaseSurgeonSubtool):
     """
-    [EXPERIMENTAL] Insert a single node into a graph with the specified inputs and outputs.
+    [EXPERIMENTAL] Insert a single node into an ONNX model with the specified inputs and outputs.
     Any existing subgraph between the inputs and outputs is replaced.
     """
 
     def __init__(self):
         super().__init__("insert")
         self.subscribe_args(OnnxNodeArgs())
-        self.subscribe_args(ModelArgs(model_required=True, inputs="--model-inputs", model_type="onnx"))
+        self.subscribe_args(ModelArgs(model_required=True, inputs=None, model_type="onnx"))
         self.subscribe_args(OnnxShapeInferenceArgs())
         self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
         self.subscribe_args(OnnxSaveArgs(infer_shapes=True, required=True))
 
     def run_impl(self, args):
-        graph = gs.import_onnx(super().load_model())
+        graph = onnx_backend.gs_from_onnx(super().load_model())
 
         TENSOR_MAP = graph.tensors()
 

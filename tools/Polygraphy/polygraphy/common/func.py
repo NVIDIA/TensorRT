@@ -16,4 +16,4 @@
 from polygraphy import mod
 from polygraphy.func import *
 
-mod.warn_deprecated("polygraphy.common.func", "polygraphy.func", remove_in="0.32.0")
+mod.warn_deprecated("polygraphy.common.func", "polygraphy.func", remove_in="0.34.0")

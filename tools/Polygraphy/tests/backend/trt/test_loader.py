@@ -266,6 +266,13 @@ class TestConfigLoader(object):
         with loader(builder, network) as config:
             assert config.get_flag(trt.BuilderFlag.INT8) == flag
 
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_allow_gpu_fallback(self, identity_builder_network, flag):
+        builder, network = identity_builder_network
+        loader = CreateConfig(allow_gpu_fallback=flag)
+        with loader(builder, network) as config:
+            assert config.get_flag(trt.BuilderFlag.GPU_FALLBACK) == flag
+
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.0"), reason="API was not available in 7.2 and older"
     )
@@ -275,6 +282,13 @@ class TestConfigLoader(object):
         loader = CreateConfig(sparse_weights=flag)
         with loader(builder, network) as config:
             assert config.get_flag(trt.BuilderFlag.SPARSE_WEIGHTS) == flag
+
+    def test_use_dla(self, identity_builder_network):
+        builder, network = identity_builder_network
+        loader = CreateConfig(use_dla=True)
+        with loader(builder, network) as config:
+            assert config.default_device_type == trt.DeviceType.DLA
+            assert config.DLA_core == 0
 
     with contextlib.suppress(AttributeError):
         if mod.version(trt.__version__) < mod.version("8.0"):
