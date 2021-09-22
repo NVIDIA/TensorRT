@@ -33,12 +33,21 @@ TEST_ROOT = os.path.realpath(os.path.dirname(__file__))
 
 
 class Model(object):
-    def __init__(self, path: str, inputs: List[Tensor], outputs: List[Tensor], nodes: List[Node], opset: int):
+    def __init__(
+        self,
+        path: str,
+        inputs: List[Tensor],
+        outputs: List[Tensor],
+        nodes: List[Node],
+        opset: int = None,
+        ir_version: int = None,
+    ):
         self.path = path
         self.inputs = inputs
         self.outputs = outputs
         self.nodes = nodes
         self.opset = opset
+        self.ir_version = ir_version
 
     def load(self):
         return onnx.load(self.path)
@@ -97,7 +106,9 @@ def identity_model():
     y = Variable(name="y", dtype=np.float32, shape=(1, 1, 2, 2))
     node = Node(op="Identity", inputs=[x], outputs=[y])
 
-    return Model(path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model), ir_version=model.ir_version
+    )
 
 
 def dim_param_model():
@@ -108,7 +119,9 @@ def dim_param_model():
     y = Variable(name="Output:0", dtype=np.float32, shape=("dim0", 16, 128))
     node = Node(op="Identity", inputs=[x], outputs=[y])
 
-    return Model(path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model), ir_version=model.ir_version
+    )
 
 
 def lstm_model():
@@ -141,7 +154,14 @@ def lstm_model():
     )
 
     # Initializers will not be included in the graph inputs.
-    return Model(path, inputs=[X], outputs=[Y, Y_h, Y_c], nodes=[node], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path,
+        inputs=[X],
+        outputs=[Y, Y_h, Y_c],
+        nodes=[node],
+        opset=OnnxImporter.get_opset(model),
+        ir_version=model.ir_version,
+    )
 
 
 def scan_model():
@@ -174,7 +194,14 @@ def scan_model():
     attrs["body"] = body_graph
     attrs["num_scan_inputs"] = 1
     scan_node = Node(op="Scan", inputs=inputs, outputs=outputs, attrs=attrs)
-    return Model(path, inputs=inputs, outputs=outputs, nodes=[scan_node], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path,
+        inputs=inputs,
+        outputs=outputs,
+        nodes=[scan_node],
+        opset=OnnxImporter.get_opset(model),
+        ir_version=model.ir_version,
+    )
 
 
 def initializer_is_output_model():
@@ -183,7 +210,9 @@ def initializer_is_output_model():
 
     X = Constant(name="X", values=np.ones((64, 64), dtype=np.float32))
 
-    return Model(path, inputs=[], outputs=[X], nodes=[], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path, inputs=[], outputs=[X], nodes=[], opset=OnnxImporter.get_opset(model), ir_version=model.ir_version
+    )
 
 
 # Node includes a subgraph whose I/O names are the same as that of the node.
@@ -203,7 +232,14 @@ def nested_dup_names():
     outputs = [Variable("Y", shape=(2, 2), dtype=np.float32)]
 
     node = Node(op="Nested", inputs=inputs, outputs=outputs, attrs={"body": subgraph})
-    return Model(path, inputs=inputs, outputs=outputs, nodes=[node], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path,
+        inputs=inputs,
+        outputs=outputs,
+        nodes=[node],
+        opset=OnnxImporter.get_opset(model),
+        ir_version=model.ir_version,
+    )
 
 
 def ext_weights():
@@ -226,9 +262,21 @@ def ext_weights():
         Node(op="Add", inputs=[inputs[0], e], outputs=outputs),
     ]
 
-    return Model(path, inputs=inputs, outputs=outputs, nodes=nodes, opset=OnnxImporter.get_opset(model))
+    return Model(
+        path,
+        inputs=inputs,
+        outputs=outputs,
+        nodes=nodes,
+        opset=OnnxImporter.get_opset(model),
+        ir_version=model.ir_version,
+    )
 
 
 def const_foldable():
     path = os.path.join(TEST_ROOT, "models", "const_foldable.onnx")
+    return Model(path, inputs=None, outputs=None, nodes=None, opset=None)  # Only used for path.
+
+
+def shape_cast_elision():
+    path = os.path.join(TEST_ROOT, "models", "shape_cast_elision.onnx")
     return Model(path, inputs=None, outputs=None, nodes=None, opset=None)  # Only used for path.

@@ -17,7 +17,6 @@
 from collections import OrderedDict
 from typing import List, Sequence
 
-
 # default_value exists to solve issues that might result from Python's normal default argument behavior.
 # Specifically, consider the following class:
 #
