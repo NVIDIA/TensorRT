@@ -44,14 +44,18 @@ class HistogramCalibrator(_Calibrator):
         num_bins: An integer. Number of histograms bins. Default 2048.
         grow_method: A string. DEPRECATED. default None.
         skip_zeros: A boolean. If True, skips zeros when collecting data for histogram. Default False.
+        torch_hist: A boolean. If True, collect histogram by torch.histc instead of np.histogram. If input tensor
+            is on GPU, histc will also be running on GPU. Default False.
     """
-    def __init__(self, num_bits, axis, unsigned, num_bins=2048, grow_method=None, skip_zeros=False):
+    def __init__(self, num_bits, axis, unsigned, num_bins=2048, grow_method=None, skip_zeros=False, torch_hist=False):
         super(HistogramCalibrator, self).__init__(num_bits, axis, unsigned)
         self._num_bins = num_bins
         self._skip_zeros = skip_zeros
 
         self._calib_bin_edges = None
         self._calib_hist = None
+
+        self._torch_hist = torch_hist
 
         if axis is not None:
             raise NotImplementedError("Calibrator histogram collection only supports per tensor scaling")
@@ -68,25 +72,50 @@ class HistogramCalibrator(_Calibrator):
                  "Make sure this is the right tensor to calibrate."),
                 1)
             x = x.abs()
-        x_np = x.cpu().detach().numpy()
 
-        if self._skip_zeros:
-            x_np = x_np[np.where(x_np != 0)]
+        x = x.float()
 
-        if self._calib_bin_edges is None and self._calib_hist is None:
-            # first time it uses num_bins to compute histogram.
-            self._calib_hist, self._calib_bin_edges = np.histogram(x_np, bins=self._num_bins)
+        if not self._torch_hist:
+            x_np = x.cpu().detach().numpy()
+
+            if self._skip_zeros:
+                x_np = x_np[np.where(x_np != 0)]
+
+            if self._calib_bin_edges is None and self._calib_hist is None:
+                # first time it uses num_bins to compute histogram.
+                self._calib_hist, self._calib_bin_edges = np.histogram(x_np, bins=self._num_bins)
+            else:
+                temp_amax = np.max(x_np)
+                if temp_amax > self._calib_bin_edges[-1]:
+                    # increase the number of bins
+                    width = self._calib_bin_edges[1] - self._calib_bin_edges[0]
+                    # NOTE: np.arange may create an extra bin after the one containing temp_amax
+                    new_bin_edges = np.arange(self._calib_bin_edges[-1] + width, temp_amax + width, width)
+                    self._calib_bin_edges = np.hstack((self._calib_bin_edges, new_bin_edges))
+                hist, self._calib_bin_edges = np.histogram(x_np, bins=self._calib_bin_edges)
+                hist[:len(self._calib_hist)] += self._calib_hist
+                self._calib_hist = hist
         else:
-            temp_amax = np.max(x_np)
-            if temp_amax > self._calib_bin_edges[-1]:
-                # increase the number of bins
-                width = self._calib_bin_edges[1] - self._calib_bin_edges[0]
-                # NOTE: np.arange may create an extra bin after the one containing temp_amax
-                new_bin_edges = np.arange(self._calib_bin_edges[-1] + width, temp_amax + width, width)
-                self._calib_bin_edges = np.hstack((self._calib_bin_edges, new_bin_edges))
-            hist, self._calib_bin_edges = np.histogram(x_np, bins=self._calib_bin_edges)
-            hist[:len(self._calib_hist)] += self._calib_hist
-            self._calib_hist = hist
+            # This branch of code is designed to match numpy version as close as possible
+            with torch.no_grad():
+                if self._skip_zeros:
+                    x = x[torch.where(x != 0)]
+
+                # Because we collect histogram on absolute value, setting min=0 simplifying the rare case where
+                # minimum value is not exactly 0 and first batch collected has larger min value than later batches
+                x_max = x.max()
+                if self._calib_bin_edges is None and self._calib_hist is None:
+                    self._calib_hist = torch.histc(x, bins=self._num_bins, min=0, max=x_max)
+                    self._calib_bin_edges = torch.linspace(0, x_max, self._num_bins + 1)
+                else:
+                    if x_max > self._calib_bin_edges[-1]:
+                        width = self._calib_bin_edges[1] - self._calib_bin_edges[0]
+                        self._num_bins = int((x_max / width).ceil().item())
+                        self._calib_bin_edges = torch.arange(0, x_max + width, width, device=x.device)
+
+                    hist = torch.histc(x, bins=self._num_bins, min=0, max=self._calib_bin_edges[-1])
+                    hist[:self._calib_hist.numel()] += self._calib_hist
+                    self._calib_hist = hist
 
     def reset(self):
         """Reset the collected histogram"""
@@ -108,14 +137,21 @@ class HistogramCalibrator(_Calibrator):
         Returns:
             amax: a tensor
         """
+        if isinstance(self._calib_hist, torch.Tensor):
+            calib_hist = self._calib_hist.int().cpu().numpy()
+            calib_bin_edges = self._calib_bin_edges.cpu().numpy()
+        else:
+            calib_hist = self._calib_hist
+            calib_bin_edges = self._calib_bin_edges
+
         if method == 'entropy':
             calib_amax = _compute_amax_entropy(
-                self._calib_hist, self._calib_bin_edges, self._num_bits, self._unsigned, stride, start_bin)
+                calib_hist, calib_bin_edges, self._num_bits, self._unsigned, stride, start_bin)
         elif method == 'mse':
             calib_amax = _compute_amax_mse(
-                self._calib_hist, self._calib_bin_edges, self._num_bits, self._unsigned, stride, start_bin)
+                calib_hist, calib_bin_edges, self._num_bits, self._unsigned, stride, start_bin)
         elif method == 'percentile':
-            calib_amax = _compute_amax_percentile(self._calib_hist, self._calib_bin_edges, percentile)
+            calib_amax = _compute_amax_percentile(calib_hist, calib_bin_edges, percentile)
         else:
             raise TypeError("Unknown calibration method {}".format(method))
 
