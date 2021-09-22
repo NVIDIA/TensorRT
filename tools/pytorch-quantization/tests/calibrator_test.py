@@ -139,6 +139,39 @@ class TestHistogramCalibrator():
         # amax should be close to 5
         assert (amax - 5.).abs() < 10/2048
 
+    def test_torch_hist(self):
+        x_1 = torch.rand(1023, device="cuda")
+        x_1[0] = 0
+        x_2 = torch.rand(1023, device="cuda") + 1  # Make sure histogram bins need to be grown
+        x_2[1] = 0
+
+        calibrator_np = calib.HistogramCalibrator(8, None, False, num_bins=19, torch_hist=False)
+        calibrator_torch = calib.HistogramCalibrator(8, None, False, num_bins=19, torch_hist=True)
+
+        calibrator_np.collect(x_1)
+        calibrator_torch.collect(x_1)
+        assert calibrator_torch._calib_hist.numel() == calibrator_torch._calib_bin_edges.numel() - 1
+        np.testing.assert_array_equal(calibrator_np._calib_hist, calibrator_torch._calib_hist.cpu().numpy())
+        np.testing.assert_array_almost_equal(
+            calibrator_np._calib_bin_edges, calibrator_torch._calib_bin_edges.cpu().numpy())
+
+        # Test multiple collections with some of them needs to expand range
+        for _ in range(3):
+            calibrator_np.collect(x_2)
+            calibrator_torch.collect(x_2)
+            calibrator_np.collect(x_1)
+            calibrator_torch.collect(x_1)
+
+            # Test compute_amax function doesn't convert _calib_hist and _calib_bin_edges unnecessarily
+            calibrator_np.compute_amax("percentile", percentile=99.99)
+            calibrator_torch.compute_amax("percentile", percentile=99.99)
+
+            np.testing.assert_array_equal(calibrator_np._calib_hist, calibrator_torch._calib_hist.cpu().numpy())
+            np.testing.assert_array_almost_equal(
+                calibrator_np._calib_bin_edges, calibrator_torch._calib_bin_edges.cpu().numpy())
+            assert calibrator_torch._calib_hist.numel() == calibrator_torch._calib_bin_edges.numel() - 1
+
+
 class TestEntropyCalibrator():
 
     def test_one_tensor(self, verbose):
@@ -170,8 +203,9 @@ class TestEntropyCalibrator():
 
         assert amax < 1.1
 
-    def test_two_tensor(self, verbose):
-        hist_calibrator = calib.HistogramCalibrator(8, None, False, grow_method='stretch')
+    @pytest.mark.parametrize("torch_hist", [False, True])
+    def test_two_tensor(self, torch_hist, verbose):
+        hist_calibrator = calib.HistogramCalibrator(8, None, False, torch_hist=torch_hist)
 
         x_2 = torch.rand(11, 7, 3, 3).cuda() # uniform in (0,1)
         x_2[1, 1, 1, 1] = 10. # create outlier
@@ -227,8 +261,9 @@ class TestMSECalibrator():
         # amax should be closer to 512
         assert (amax - 512.).abs() < (amax - 513.).abs()
 
-    def test_two_tensor(self, verbose):
-        calibrator = calib.HistogramCalibrator(8, None, False)
+    @pytest.mark.parametrize("torch_hist", [False, True])
+    def test_two_tensor(self, torch_hist, verbose):
+        calibrator = calib.HistogramCalibrator(8, None, False, torch_hist=torch_hist)
 
         x_1 = torch.ones(11, 7, 3, 3).cuda() * 255.
         x_1[1, 1, 1, 1] = 256. # create an outlier
@@ -278,8 +313,9 @@ class TestPercentileCalibrator():
         # amax should be approximately 79
         assert (amax - 79.).abs() < 100/2048
 
-    def test_two_tensor(self, verbose):
-        calibrator = calib.HistogramCalibrator(8, None, False)
+    @pytest.mark.parametrize("torch_hist", [False, True])
+    def test_two_tensor(self, torch_hist, verbose):
+        calibrator = calib.HistogramCalibrator(8, None, False, torch_hist=torch_hist)
 
         x_1 = torch.arange(100)
         calibrator.collect(x_1)
