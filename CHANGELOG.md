@@ -1,5 +1,18 @@
 # TensorRT OSS Release Changelog
 
+## [21.09](https://github.com/NVIDIA/TensorRT/releases/tag/21.08) - 2021-09-22
+### Added
+- Add `ONNX2TRT_VERSION` overwrite in CMake.
+
+### Changed
+- Updates to TensorRT developer tools
+  - ONNX-GraphSurgeon [v0.3.12](tools/onnx-graphsurgeon/CHANGELOG.md#v0312-2021-08-24)
+  - pytorch-quantization toolkit [v2.1.1](tools/pytorch-quantization)
+- Fix assertion in EfficientNMSPlugin
+
+### Removed
+- N/A
+
 ## [21.08](https://github.com/NVIDIA/TensorRT/releases/tag/21.08) - 2021-08-05
 ### Added
 
