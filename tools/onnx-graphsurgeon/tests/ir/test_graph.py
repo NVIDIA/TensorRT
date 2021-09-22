@@ -25,7 +25,7 @@ from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
 from onnx_graphsurgeon.util.misc import SynchronizedList
-from onnx_models import const_foldable
+from onnx_models import const_foldable, shape_cast_elision
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
@@ -1002,6 +1002,15 @@ class TestFoldConstants(object):
         assert len(then_graph.nodes) == 1
         assert len(else_graph.nodes) == 2
 
+    def test_cast_elision(self):
+        graph = gs.import_onnx(shape_cast_elision().load())
+        new_graph = graph.fold_constants()
+        no_casts = True
+
+        for node in new_graph.nodes:
+            no_casts &= node.op != "Cast"
+
+        assert(no_casts)
 
 class TestIO(object):
     def test_io_cannot_be_sync_list_on_init(self):
