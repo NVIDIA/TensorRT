@@ -3,6 +3,14 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.12 (2021-08-24)
+### Added
+- Added support for `Cast` elision in `fold_constants()`.
+
+### Fixed
+- Fixed a bug where the IR version of an ONNX model would not be preserved during export.
+
+
 ## v0.3.11 (2021-07-14)
 ### Changed
 - Updated `fold_constants()` so that it no longer fails if a shape folding pass fails when `error_ok` is `True`.
