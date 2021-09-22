@@ -18,7 +18,7 @@ import copy
 import ctypes
 import time
 
-from polygraphy import config, constants, mod, util
+from polygraphy import constants, mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.backend.trt import util as trt_util
 from polygraphy.backend.trt.profile import Profile
@@ -49,7 +49,7 @@ class LoadPlugins(BaseLoader):
         Args:
             plugins (List[str]):
                     A list of paths to plugin libraries to load before inference.
-            obj (BaseLoader):
+            obj (object):
                     An object or callable to return or call respectively.
                     If ``obj`` is callable, extra parameters will be forwarded to ``obj``.
                     If ``obj`` is not callable, it will be returned.
@@ -136,7 +136,8 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
         Parses an ONNX model.
 
         Args:
-            model_bytes (Callable() -> bytes): A loader that can supply a serialized ONNX model.
+            model_bytes (Union[bytes, Callable() -> bytes]):
+                    A serialized ONNX model or a callable that returns one.
             explicit_precision (bool): Whether to construct the TensorRT network with explicit precision enabled.
         """
         super().__init__(explicit_precision)
@@ -193,7 +194,6 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
             return network_from_onnx_bytes(bytes_from_path(path), self.explicit_precision)
 
 
-@mod.export_deprecated_alias("ModifyNetwork", remove_in="0.32.0")
 @mod.export(funcify=True)
 class ModifyNetworkOutputs(BaseLoader):
     """
@@ -205,11 +205,9 @@ class ModifyNetworkOutputs(BaseLoader):
         Modifies outputs in a TensorRT ``INetworkDefinition``.
 
         Args:
-            network (Callable() -> trt.Builder, trt.INetworkDefinition):
-                    A callable capable of returning a TensorRT Builder and INetworkDefinition. The callable may
-                    have at most 3 return values if another object needs to be kept alive for the duration of the network,
-                    e.g., in the case of a parser. The first and second return values must
-                    always be the builder and network respectively. ModifyNetworkOutputs will never take ownership of these.
+            network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
+                    A tuple containing a TensorRT builder, network and optionally parser or a callable that returns one.
+                    To omit the parser, return a tuple containing just the builder and network.
 
             outputs (Sequence[str]):
                     Names of tensors to mark as outputs. If provided, this will override the outputs
@@ -268,6 +266,8 @@ class CreateConfig(BaseLoader):
         sparse_weights=None,
         tactic_sources=None,
         restricted=None,
+        use_dla=None,
+        allow_gpu_fallback=None,
     ):
         """
         Creates a TensorRT IBuilderConfig that can be used by EngineFromNetwork.
@@ -320,6 +320,13 @@ class CreateConfig(BaseLoader):
                     Whether to enable safety scope checking in the builder. This will check if the network
                     and builder configuration are compatible with safety scope.
                     Defaults to False.
+            use_dla (bool):
+                    [EXPERIMENTAL] Whether to enable DLA as the default device type.
+                    Defaults to False.
+            allow_gpu_fallback (bool):
+                    [EXPERIMENTAL] When DLA is enabled, whether to allow layers to fall back to GPU if they cannot be run on DLA.
+                    Has no effect if DLA is not enabled.
+                    Defaults to False.
         """
         self.max_workspace_size = util.default(max_workspace_size, 1 << 24)
         self.tf32 = util.default(tf32, False)
@@ -333,6 +340,8 @@ class CreateConfig(BaseLoader):
         self.algorithm_selector = algorithm_selector
         self.sparse_weights = util.default(sparse_weights, False)
         self.tactic_sources = tactic_sources
+        self.use_dla = util.default(use_dla, False)
+        self.allow_gpu_fallback = util.default(allow_gpu_fallback, False)
 
         if self.calibrator is not None and not self.int8:
             G_LOGGER.warning(
@@ -410,6 +419,13 @@ class CreateConfig(BaseLoader):
             if self.sparse_weights:
                 try_set_flag("SPARSE_WEIGHTS")
 
+            if self.use_dla:
+                config.default_device_type = trt.DeviceType.DLA
+                config.DLA_core = 0
+
+            if self.allow_gpu_fallback:
+                try_set_flag("GPU_FALLBACK")
+
             if self.tactic_sources is not None:
                 tactic_sources_flag = 0
                 for source in self.tactic_sources:
@@ -451,19 +467,13 @@ class EngineBytesFromNetwork(BaseLoader):
         Builds and serializes TensorRT engine.
 
         Args:
-            network (Callable() -> trt.Builder, trt.INetworkDefinition):
-                    A callable capable of returning a TensorRT Builder and INetworkDefinition. The returned builder
-                    and network are owned by EngineFromNetwork and should not be freed manually. The callable may
-                    have at most 3 return values if another object needs to be kept alive for the duration of the network,
-                    e.g., in the case of a parser. EngineFromNetwork will take ownership of the third return value, and,
-                    like the network, it should not be freed by the callable. The first and second return values must
-                    always be the builder and network respectively.
-                    If instead of a loader, the network, builder, and optional parser arguments are provided directly,
-                    then EngineFromNetwork will *not* deallocate them.
+            network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
+                    A tuple containing a TensorRT builder, network and optionally parser or a callable that returns one.
+                    To omit the parser, return a tuple containing just the builder and network.
 
 
             config (Callable(trt.Builder, trt.INetworkDefinition) -> trt.IBuilderConfig):
-                    A callable that returns a TensorRT builder configuration. If not supplied,
+                    A TensorRT builder configuration or a callable that returns one. If not supplied,
                     a `CreateConfig` instance with default parameters is used.
             save_timing_cache (Union[str, file-like]):
                     A path or file-like object at which to save a tactic timing cache.
@@ -582,8 +592,8 @@ class EngineFromBytes(BaseLoader):
         Deserializes an engine from a buffer.
 
         Args:
-            serialized_engine (Callable() -> Union[str, bytes]):
-                    Either a loader that can supply a memory buffer, or a memory buffer itself.
+            serialized_engine (Union[Union[str, bytes], Callable() -> Union[str, bytes]]):
+                    The serialized engine bytes  or a callable that returns them.
         """
         self._serialized_engine = serialized_engine
 
@@ -621,8 +631,8 @@ class BytesFromEngine(BaseLoader):
         Serializes an engine.
 
         Args:
-            engine (Callable() -> trt.ICudaEngine):
-                    Either a loader that can supply an engine, or the engine itself.
+            engine (Union[trt.ICudaEngine, Callable() -> trt.ICudaEngine]):
+                    An engine or a callable that returns one.
         """
         self._engine = engine
 
@@ -652,8 +662,8 @@ class SaveEngine(BaseLoader):
         Saves an engine to the provided path.
 
         Args:
-            engine (Callable() -> trt.ICudaEngine):
-                    A callable that can supply a TensorRT engine.
+            engine (Union[trt.ICudaEngine, Callable() -> trt.ICudaEngine]):
+                    An engine or a callable that returns one.
 
 
             path (str): The path at which to save the engine.
@@ -686,25 +696,22 @@ class OnnxLikeFromNetwork(BaseLoader):
         """
         [HIGHLY EXPERIMENTAL] Creates an ONNX-like, but **not** valid ONNX, model from a TensorRT network.
         This uses the ONNX format, but generates nodes that are **not** valid ONNX operators.
-        Hence, the resulting model is **not** valid ONNX.
-        This should be used **only** for visualization or debugging purposes.
+        Hence, this should be used **only** for visualization or debugging purposes.
 
-        The resulting model does **not** include enough information to faithfully reconstruct the TensorRT network.
+        The resulting model does **not** include enough information to faithfully reconstruct the TensorRT network,
+        but does preserve the structure of the network and many of the layer parameters.
 
         Args:
-            network (Callable() -> trt.Builder, trt.INetworkDefinition):
-                    A callable capable of returning a TensorRT Builder and INetworkDefinition. The callable may
-                    have at most 3 return values if another object needs to be kept alive for the duration of the network,
-                    e.g., in the case of a parser. The first and second return values must always be the builder and network respectively.
-                    If instead of a loader, the network, builder, and optional parser arguments are provided directly,
-                    then OnnxLikeFromNetwork will *not* deallocate them.
+            network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
+                    A tuple containing a TensorRT builder, network and optionally parser or a callable that returns one.
+                    To omit the parser, return a tuple containing just the builder and network.
         """
         self._network = network
 
     def call_impl(self):
         """
         Returns:
-            onnx.ModelProto: The ONNX-like, but **not** valid ONNX, model.
+            onnx.ModelProto: The ONNX-like, but **not** valid ONNX, representation of the TensorRT network.
         """
         ret, owns_network = util.invoke_if_callable(self._network)
         builder, network, parser = util.unpack_args(ret, num=3)

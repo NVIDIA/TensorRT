@@ -45,6 +45,9 @@ def try_register_tool(module, tool_class):
         ToolClass = getattr(toolmod, tool_class)
         TOOL_REGISTRY.append(ToolClass())
     except Exception as err:
+        G_LOGGER.internal_error(
+            "Could not load command-line tool: {:}.\nNote: Error was: {:}".format(tool_class.lower(), err)
+        )
         TOOL_REGISTRY.append(MissingTool(tool_class.lower(), err=err))
 
 
@@ -54,7 +57,7 @@ try_register_tool("polygraphy.tools.inspect", "Inspect")
 try_register_tool("polygraphy.tools.surgeon", "Surgeon")
 try_register_tool("polygraphy.tools.template", "Template")
 try_register_tool("polygraphy.tools.debug", "Debug")
-try_register_tool("polygraphy.tools.to_json", "ToJSON")
+try_register_tool("polygraphy.tools.data", "Data")
 
 # Check that tool names are unique
 tool_names = [tool.name for tool in TOOL_REGISTRY]

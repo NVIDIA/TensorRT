@@ -18,7 +18,7 @@ import copy
 import time
 from collections import OrderedDict
 
-from polygraphy import cuda, func, mod, util
+from polygraphy import cuda, mod, util
 from polygraphy.backend.base import BaseRunner
 from polygraphy.backend.trt import util as trt_util
 from polygraphy.logger import G_LOGGER
@@ -39,15 +39,9 @@ class TrtRunner(BaseRunner):
     def __init__(self, engine, name=None):
         """
         Args:
-            engine (Callable() -> Union[trt.ICudaEngine, trt.IExecutionContext]):
-                    A callable that can supply either a TensorRT engine or execution context.
+            engine (Union[Union[trt.ICudaEngine, trt.IExecutionContext], Callable() -> Union[trt.ICudaEngine, trt.IExecutionContext]]):
+                    A TensorRT engine or execution context or a callable that returns one.
                     If an engine is provided, the runner will create a context automatically.
-                    This callable is invoked whenever the runner is activated.
-
-                    Alternatively, the engine or context may be supplied directly instead of
-                    through a callable, in which case the runner will *not* take ownership of it,
-                    and therefore will not destroy it.
-
 
             name (str):
                     The human-readable name prefix to use for this runner.
@@ -55,12 +49,6 @@ class TrtRunner(BaseRunner):
         """
         super().__init__(name=name, prefix="trt-runner")
         self._engine_or_context = engine
-
-    @func.constantmethod
-    def get_input_metadata_impl(self):
-        start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
-        # This function always uses binding names of the 0th profile.
-        return trt_util.get_input_metadata_from_engine(self.context.engine, start_binding, end_binding)
 
     def activate_impl(self):
         def make_buffers(engine):
@@ -135,6 +123,11 @@ class TrtRunner(BaseRunner):
         else:
             self.context.set_optimization_profile_async(index, self.stream.ptr)
 
+    def get_input_metadata_impl(self):
+        start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
+        # This function always uses binding names of the 0th profile.
+        return trt_util.get_input_metadata_from_engine(self.context.engine, start_binding, end_binding)
+
     def _set_shapes_from_feed_dict(self, feed_dict):
         """
         Sets context shapes according to the provided feed_dict.
@@ -193,7 +186,28 @@ class TrtRunner(BaseRunner):
 
         return start_binding, end_binding
 
-    def infer_impl(self, feed_dict):
+    def infer_impl(self, feed_dict, copy_outputs_to_host=True):
+        """
+        Implementation for running inference with TensorRT.
+        Do not call this method directly - use ``infer()`` instead,
+        which will forward unrecognized arguments to this method.
+
+        In addition to accepting NumPy arrays in the feed_dict, this runner can also
+        accept Polygraphy DeviceViews. In that case, no host-to-device copy is necessary for the inputs.
+
+        Args:
+            feed_dict (OrderedDict[str, Union[numpy.ndarray, DeviceView]]):
+                    A mapping of input tensor names to corresponding input NumPy arrays
+                    or Polygraphy DeviceViews.
+
+            copy_outputs_to_host (bool):
+                    Whether to copy inference outputs back to the host.
+                    If this is False, Polygraphy DeviceViews are returned
+                    instead of NumPy arrays.
+                    Defaults to True.
+        """
+
+        start = time.time()
         start_binding, end_binding = self._set_shapes_from_feed_dict(feed_dict)
 
         # Resize output device buffers - host buffers will be automatically resized by copy_to
@@ -202,8 +216,6 @@ class TrtRunner(BaseRunner):
                 name = self.context.engine[binding - start_binding]  # Use profile 0 binding names for all buffers.
                 shape = tuple(self.context.get_binding_shape(binding))
                 self.device_buffers[name].resize(shape)
-
-        start = time.time()
 
         # Use a shallow copy in case we need to replace our allocated buffers with provided DeviceViews.
         dev_bufs = copy.copy(self.device_buffers)
@@ -214,8 +226,8 @@ class TrtRunner(BaseRunner):
                 dev_bufs[name].copy_from(buffer, self.stream)
             else:
                 G_LOGGER.critical(
-                    "Unrecognized type in feed_dict: {:} for input: {:}.\n"
-                    "Please provide either a NumPy array or Polygraphy DeviceView. ".format(type(buffer).__name__, name)
+                    "For input: {:}, unrecognized type in feed_dict: {:}.\n"
+                    "Please provide either a NumPy array or Polygraphy DeviceView. ".format(name, type(buffer).__name__)
                 )
 
         # Need to offset bindings in case the active profile is not 0.
@@ -224,15 +236,20 @@ class TrtRunner(BaseRunner):
         if not success:
             G_LOGGER.critical("Model execution failed. Please see the log messages above for details")
 
+        output_buffers = OrderedDict()
         for name, buffer in self.host_output_buffers.items():
-            self.host_output_buffers[name] = dev_bufs[name].copy_to(buffer, self.stream)
+            if copy_outputs_to_host:
+                self.host_output_buffers[name] = dev_bufs[name].copy_to(buffer, self.stream)
+                output_buffers[name] = self.host_output_buffers[name]
+            else:
+                output_buffers[name] = dev_bufs[name].view()
 
         self.stream.synchronize()
 
         end = time.time()
         self.inference_time = end - start
 
-        return self.host_output_buffers
+        return output_buffers
 
     def deactivate_impl(self):
         with contextlib.ExitStack() as stack:
@@ -255,8 +272,8 @@ class TrtRunner(BaseRunner):
         )
 
     # Note: This can be removed once TRT 6 support is dropped.
-    def infer(self, feed_dict, check_inputs=None):
+    def infer(self, feed_dict, check_inputs=None, *args, **kwargs):
         # Disable checks by default on TRT 6.0 due to implicit batch semantics.
         if mod.version(trt.__version__) < mod.version("7.0"):
-            return super().infer(feed_dict, util.default(check_inputs, False))
-        return super().infer(feed_dict, util.default(check_inputs, True))
+            return super().infer(feed_dict, util.default(check_inputs, False), *args, **kwargs)
+        return super().infer(feed_dict, util.default(check_inputs, True), *args, **kwargs)

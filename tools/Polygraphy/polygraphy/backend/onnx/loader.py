@@ -46,7 +46,8 @@ class BaseLoadOnnxCopy(BaseLoader):
     def __init__(self, model, copy=None):
         """
         Args:
-            model (Callable() -> onnx.ModelProto): A loader that can supply an ONNX model.
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
 
             copy (bool): Whether to create a copy of the model first. Defaults to False.
         """
@@ -77,7 +78,7 @@ class _GSGraphManager(object):
         if self.USE_GS_GRAPH:
             self.graph = model.copy()
         else:
-            self.graph = gs.import_onnx(model)
+            self.graph = gs_from_onnx(model)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -85,6 +86,31 @@ class _GSGraphManager(object):
             self.retval = self.graph
         else:
             self.retval = gs.export_onnx(self.graph, do_type_check=False)
+
+
+@mod.export(funcify=True)
+class GsFromOnnx(BaseLoader):
+    """
+    Functor that creates an ONNX-GraphSurgeon graph from an ONNX ModelProto.
+    """
+
+    def __init__(self, model):
+        """
+        Creates an ONNX-GraphSurgeon graph from an ONNX ModelProto.
+
+        Args:
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
+        """
+        self._model = model
+
+    def call_impl(self):
+        """
+        Returns:
+            onnx_graphsurgeon.Graph: The ONNX-GraphSurgeon representation of the ONNX model
+        """
+        model, _ = util.invoke_if_callable(self._model)
+        return gs.import_onnx(model)
 
 
 @mod.export(funcify=True)
@@ -130,9 +156,8 @@ class OnnxFromTfGraph(BaseLoader):
         Converts a TensorFlow model into ONNX.
 
         Args:
-            graph (Callable() -> Tuple[tf.Graph, Sequence[str]]):
-                    A callable that can supply a tuple containing a TensorFlow
-                    graph and output names.
+            graph (Union[Tuple[tf.Graph, Sequence[str]], Callable() -> Tuple[tf.Graph, Sequence[str]]]):
+                    A tuple containing a TensorFlow graph and output names or a callable that returns one.
 
 
             opset (int): The ONNX opset to use during conversion.
@@ -179,7 +204,6 @@ class OnnxFromTfGraph(BaseLoader):
             return onnx_graph.make_model("model")
 
 
-@mod.export_deprecated_alias("ModifyOnnx", remove_in="0.32.0")
 @mod.export(funcify=True)
 class ModifyOutputs(BaseLoadOnnxCopy):
     """
@@ -191,7 +215,8 @@ class ModifyOutputs(BaseLoadOnnxCopy):
         Modifies outputs of an ONNX model.
 
         Args:
-            model (Callable() -> onnx.ModelProto): A loader that can supply an ONNX model.
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
 
             outputs (Sequence[str]):
                     Names of tensors to mark as outputs. If provided, this will override the
@@ -237,7 +262,8 @@ class ConvertToFp16(BaseLoadOnnxCopy):
         Converts all floating point tensors in the model to 16-bit precision.
 
         Args:
-            model (Callable() -> onnx.ModelProto): A loader that can supply an ONNX model.
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
             copy (bool): Whether to create a copy of the model first. Defaults to False.
         """
         super().__init__(model, copy)
@@ -280,7 +306,8 @@ class FoldConstants(BaseLoadOnnxCopy):
         Fold constants in an ONNX model.
 
         Args:
-            model (Callable() -> onnx.ModelProto): A loader that can supply an ONNX model.
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
 
             num_passes (int):
                     The number of constant folding passes to run.
@@ -327,7 +354,7 @@ class FoldConstants(BaseLoadOnnxCopy):
         """
 
         def run_const_fold_pass(model):
-            graph = gs.import_onnx(model)
+            graph = gs_from_onnx(model)
             del model
 
             try:
@@ -404,8 +431,8 @@ class InferShapes(BaseLoader):
         Run shape inference on an ONNX model.
 
         Args:
-            model (Callable() -> onnx.ModelProto):
-                    A loader that can supply an ONNX model, or a path to a model.
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one, or a path to a model.
                     Supports models larger than the 2 GiB protobuf limit.
 
             error_ok (bool):
@@ -492,8 +519,8 @@ class ExtractSubgraph(BaseLoader):
         Extracts a subgraph from an ONNX model.
 
         Args:
-            model (Callable() -> Union[onnx.ModelProto, onnx_graphsurgeon.Graph]):
-                    A loader that can supply an ONNX model or an ONNX-GraphSurgeon graph.
+            model (Union[Union[onnx.ModelProto, onnx_graphsurgeon.Graph], Callable() -> Union[onnx.ModelProto, onnx_graphsurgeon.Graph]]):
+                    An ONNX model or ONNX-GraphSurgeon Graph or a callable that returns one.
 
             input_metadata (TensorMetadata):
                     Metadata for the inputs of the subgraph.
@@ -580,7 +607,8 @@ class SaveOnnx(BaseLoader):
         Saves an ONNX model to the specified path.
 
         Args:
-            model (Callable() -> onnx.ModelProto): A loader that can supply an ONNX model.
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
             path (str): Path at which to write the ONNX model.
             external_data_path (str):
                     Path to save external data.
@@ -660,7 +688,8 @@ class BytesFromOnnx(BaseLoader):
         Serializes an ONNX model.
 
         Args:
-            model (Callable() -> onnx.ModelProto): A loader that can supply an ONNX model.
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
         """
         self._model = model
 

@@ -56,6 +56,7 @@ class DataLoader(object):
                     minimum and maximum.
                     This can be specified on a per-input basis using a dictionary. In that case,
                     use an empty string ("") as the key to specify default range for inputs not explicitly listed.
+                    Defaults to (0.0, 1.0).
 
             int_range (Tuple[int]):
                     [DEPRECATED - Use val_range instead]
@@ -87,12 +88,12 @@ class DataLoader(object):
 
         self.int_range_set = int_range is not None
         if self.int_range_set:
-            mod.warn_deprecated("The int_range parameter in DataLoader", "val_range", remove_in="0.32.0")
+            mod.warn_deprecated("The int_range parameter in DataLoader", "val_range", remove_in="0.35.0")
         self.int_range = default_tuple(int_range, (1, 25))
 
         self.float_range_set = float_range is not None
         if self.float_range_set:
-            mod.warn_deprecated("The float_range parameter in DataLoader", "val_range", remove_in="0.32.0")
+            mod.warn_deprecated("The float_range parameter in DataLoader", "val_range", remove_in="0.35.0")
         self.float_range = default_tuple(float_range, (-1.0, 1.0))
 
         self.input_metadata = None
@@ -123,15 +124,7 @@ class DataLoader(object):
         elif cast_type == float and self.float_range_set:
             return self.float_range
 
-        tup = None
-        if isinstance(self.val_range, tuple):
-            tup = self.val_range
-        elif name in self.val_range:
-            tup = self.val_range[name]
-        elif "" in self.val_range:
-            tup = self.val_range[""]
-        else:
-            tup = self.default_val_range
+        tup = util.value_or_from_dict(self.val_range, name, self.default_val_range)
         return tuple(cast_type(val) for val in tup)
 
     def __getitem__(self, index):

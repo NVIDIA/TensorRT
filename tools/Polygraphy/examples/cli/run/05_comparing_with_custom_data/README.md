@@ -3,10 +3,10 @@
 ## Introduction
 
 In some cases, we may want to run comparisons using custom input data.
-Polygraphy provides multiple ways to do so, which are detailed [here](../../).
+Polygraphy provides multiple ways to do so, which are detailed [here](../../../cli#using-custom-input-data).
 
 In this example, we'll use a data loader script by defining a `load_data` function in a Python
-script called `data_loader.py` and then use `polygraphy convert` to build the TensorRT engine.
+script called `data_loader.py` and then use `polygraphy run` to compare TensorRT and ONNX-Runtime.
 
 Since our model has dynamic shapes, we'll need to set up a TensorRT Optimization Profile.
 For details on how we can do this via the command-line,

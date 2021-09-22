@@ -490,3 +490,13 @@ class TestOther(object):
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_runner_coexistence(self):
         run_polygraphy_run([TF_MODELS["identity"].path, "--model-type=frozen", "--tf", "--onnxrt", "--trt"])
+
+
+class TestPluginRef(object):
+    def test_basic(self):
+        run_polygraphy_run([ONNX_MODELS["identity"].path, "--pluginref"])
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
+    @pytest.mark.parametrize("model", ["identity", "instancenorm"])
+    def test_ref_implementations(self, model):
+        run_polygraphy_run([ONNX_MODELS[model].path, "--pluginref", "--onnxrt", "--trt"])

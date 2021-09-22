@@ -26,10 +26,12 @@ from polygraphy.backend.trt import (
     Profile,
     TrtRunner,
     engine_from_network,
+    network_from_onnx_bytes,
 )
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
 from tests.models.meta import ONNX_MODELS
+from tests.helper import time_func
 
 
 class TestLoggerCallbacks(object):
@@ -52,6 +54,7 @@ class TestTrtRunner(object):
             assert runner.owns_engine
             assert runner.owns_context
             model.check_runner(runner)
+            assert runner.last_inference_time() is not None
         assert not runner.is_active
 
     def test_context(self):
@@ -161,12 +164,22 @@ class TestTrtRunner(object):
             x.copy_from(np.ones((1,), dtype=np.float32))
             outputs = runner.infer(
                 {
-                    "X0": cuda.DeviceView(x.ptr, x.shape, x.dtype) if use_view else x,
+                    "X0": x.view() if use_view else x,
                     "Y0": np.ones((1,), dtype=np.float32),
                 }
             )
             assert outputs["identity_out_6"][0] == 2
             assert outputs["identity_out_8"][0] == 2
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
+    def test_no_output_copy(self):
+        model = ONNX_MODELS["identity"]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+            inp = np.ones(shape=(1, 1, 2, 2), dtype=np.float32)
+            outputs = runner.infer({"x": inp}, copy_outputs_to_host=False)
+            assert isinstance(outputs["y"], cuda.DeviceView)
+            assert np.array_equal(outputs["y"].numpy(), inp)
 
     def test_subsequent_infers_with_different_input_types(self):
         model = ONNX_MODELS["identity"]
@@ -204,3 +217,46 @@ class TestTrtRunner(object):
         ) as arr:
             with pytest.raises(PolygraphyException, match="it must reside in host memory"):
                 runner.infer({"data": np.ones((2, 0, 3, 0), dtype=np.float32), "new_shape": arr})
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
+    @pytest.mark.serial
+    @pytest.mark.parametrize("copy_outputs", [True, False], ids=["output_dtoh", "no_output_copy"])
+    @pytest.mark.parametrize("copy_inputs", [True, False], ids=["input_htod", "no_input_copy"])
+    def test_infer_overhead(self, copy_inputs, copy_outputs):
+        inp = np.ones(shape=(1, 2, 1024, 1024), dtype=np.float32)
+        dev_inp = cuda.DeviceArray(shape=inp.shape, dtype=inp.dtype).copy_from(inp)
+
+        out = np.zeros(shape=(1, 2, 1024, 1024), dtype=np.float32)  # Using identity model!
+        dev_out = cuda.DeviceArray(shape=out.shape, dtype=out.dtype)
+
+        stream = cuda.Stream()
+
+        model = ONNX_MODELS["dynamic_identity"]
+        profiles = [
+            Profile().add("X", (1, 2, 1024, 1024), (1, 2, 1024, 1024), (1, 2, 1024, 1024)),
+        ]
+        inp_name = list(model.input_metadata.keys())[0]
+
+        with engine_from_network(
+            network_from_onnx_bytes(model.loader), CreateConfig(profiles=profiles)
+        ) as engine, engine.create_execution_context() as context, TrtRunner(context) as runner, dev_inp, dev_out:
+            # Inference outside the TrtRunner
+            def infer():
+                if copy_inputs:
+                    dev_inp.copy_from(inp, stream=stream)
+                context.execute_async_v2(bindings=[dev_inp.ptr, dev_out.ptr], stream_handle=stream.ptr)
+                if copy_outputs:
+                    dev_out.copy_to(out, stream=stream)
+                stream.synchronize()
+
+            native_time = time_func(infer)
+
+            feed_dict = {inp_name: (inp if copy_inputs else dev_inp)}
+            runner_time = time_func(
+                lambda: runner.infer(feed_dict, check_inputs=False, copy_outputs_to_host=copy_outputs)
+            )
+
+        # The overhead should be less than 0.5ms, or the runtime should be within 5%
+        print("Absolute difference: {:.5g}".format(runner_time - native_time))
+        print("Relative difference: {:.5g}".format(runner_time / native_time))
+        assert (runner_time - native_time) < 0.5e-3 or runner_time <= (native_time * 1.05)

@@ -52,7 +52,7 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
     An ordered dictionary that represents a single optimization profile that
     can be used to build an engine.
 
-    More specifically, this is a OrderedDict[str, ShapeTuple] which maps binding
+    More specifically, it is an ``OrderedDict[str, ShapeTuple]`` which maps binding
     names to a set of min/opt/max shapes.
     """
 

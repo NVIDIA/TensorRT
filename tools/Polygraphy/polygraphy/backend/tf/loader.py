@@ -35,8 +35,8 @@ class OptimizeGraph(BaseLoader):
         Freezes a TensorFlow graph and folds constants.
 
         Args:
-            graph (Callable() -> Tuple[tf.Graph, Sequence[str]]):
-                    A callable that can supply a tuple containing a TensorFlow graph and output names.
+            graph (Union[Tuple[tf.Graph, Sequence[str]], Callable() -> Tuple[tf.Graph, Sequence[str]]]):
+                    A tuple containing a TensorFlow graph and output names or a callable that returns one.
         """
         self._graph = graph
 
@@ -244,8 +244,8 @@ class UseTfTrt(BaseLoader):
         Optimizes a TensorFlow model using TF-TRT.
 
         Args:
-            graph (Callable() -> Tuple[tf.Graph, Sequence[str]]):
-                    A callable that can supply a tuple containing a TensorFlow graph and output names.
+            graph (Union[Tuple[tf.Graph, Sequence[str]], Callable() -> Tuple[tf.Graph, Sequence[str]]]):
+                    A tuple containing a TensorFlow graph and output names or a callable that returns one.
             max_workspace_size (int): The maximum workspace size.
             fp16 (bool): Whether to run in FP16 mode.
             max_batch_size (int): The maximum batch size.
@@ -304,7 +304,6 @@ class UseTfTrt(BaseLoader):
             return graph, tf_util.get_graph_output_names(graph)
 
 
-@mod.export_deprecated_alias("ModifyGraph", remove_in="0.32.0")
 @mod.export(funcify=True)
 class ModifyGraphOutputs(BaseLoader):
     """
@@ -316,9 +315,8 @@ class ModifyGraphOutputs(BaseLoader):
         Modifies outputs of a TensorFlow graph.
 
         Args:
-            graph (Callable() -> Tuple[tf.Graph, Sequence[str]]):
-                    A callable that can supply a tuple containing a
-                    TensorFlow graph and output names.
+            graph (Union[Tuple[tf.Graph, Sequence[str]], Callable() -> Tuple[tf.Graph, Sequence[str]]]):
+                    A tuple containing a TensorFlow graph and output names or a callable that returns one.
 
 
             outputs (List[str]):
@@ -355,9 +353,8 @@ class SaveGraph(BaseLoader):
         Writes out artifacts from a TensorFlow Graph.
 
         Args:
-            graph (Callable() -> Tuple[tf.Graph, Sequence[str]]):
-                    A callable that can supply a tuple containing a
-                    TensorFlow graph and output names.
+            graph (Union[Tuple[tf.Graph, Sequence[str]], Callable() -> Tuple[tf.Graph, Sequence[str]]]):
+                    A tuple containing a TensorFlow graph and output names or a callable that returns one.
 
 
             path (str): Path at which to save the frozen graphdef.
@@ -447,12 +444,12 @@ class SessionFromGraph(BaseLoader):
         Creates a TensorFlow session.
 
         Args:
-            graph (Callable() -> Tuple[tf.Graph, Sequence[str]]):
-                    A callable that can supply a tuple containing a
-                    TensorFlow graph and output names.
+            graph (Union[Tuple[tf.Graph, Sequence[str]], Callable() -> Tuple[tf.Graph, Sequence[str]]]):
+                    A tuple containing a TensorFlow graph and output names or a callable that returns one.
 
 
-            config (Callable() -> tf.ConfigProto):
+            config (Union[tf.ConfigProto, Callable() -> tf.ConfigProto]):
+                    A TensorFlow ConfigProto or a callable that returns one.
         """
         self.graph = graph
         self.config = util.default(config, CreateConfig())

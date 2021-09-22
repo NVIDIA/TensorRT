@@ -141,3 +141,17 @@ def test_find_in_dirs():
             f.write("This file should be found by find_in_dirs")
 
         assert util.find_in_dirs("cudart64_*.dll", dirs) == [path]
+
+
+@pytest.mark.parametrize(
+    "val,key,default,expected",
+    [
+        (1.0, None, None, 1.0),  # Basic
+        ({"inp": "hi"}, "inp", "", "hi"),  # Per-key
+        ({"inp": "hi"}, "out", "default", "default"),  # Per-key missing
+        ({"inp": 1.0, "": 2.0}, "out", 1.5, 2.0),  # Per-key with default
+    ],
+)
+def test_value_or_from_dict(val, key, default, expected):
+    actual = util.value_or_from_dict(val, key, default)
+    assert actual == expected

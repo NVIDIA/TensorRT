@@ -19,6 +19,7 @@ from polygraphy.tools.args.logger import *
 from polygraphy.tools.args.model import *
 from polygraphy.tools.args.onnx import *
 from polygraphy.tools.args.onnxrt import *
+from polygraphy.tools.args.pluginref import *
 from polygraphy.tools.args.tf2onnx import *
 from polygraphy.tools.args.tf import *
 from polygraphy.tools.args.trt import *

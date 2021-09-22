@@ -91,9 +91,10 @@ class OnnxSaveArgs(BaseArgs):
             "--external-data-size-threshold",
             help="The size threshold, in bytes, above which tensor data will be stored in the external file. "
             "Tensors smaller that this threshold will remain in the ONNX file. "
+            "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively."
+            "For example, `--external-data-size-threshold=16M` is equivalent to `--external-data-size-threshold=16777216`"
             "Has no effect if `--save-external-data` is not set",
             default=None,
-            type=int,
         )
         self.group.add_argument(
             "--no-save-all-tensors-to-one-file",
@@ -111,7 +112,7 @@ class OnnxSaveArgs(BaseArgs):
             save_external_data = save_external_data[0] or ""
         self.save_external_data = save_external_data
 
-        self.size_threshold = args_util.get(args, "external_data_size_threshold")
+        self.size_threshold = args_util.parse_num_bytes(args_util.get(args, "external_data_size_threshold"))
         self.all_tensors_to_one_file = args_util.get(args, "all_tensors_to_one_file")
 
     def add_save_onnx(self, script, loader_name):

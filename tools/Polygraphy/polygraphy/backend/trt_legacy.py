@@ -129,7 +129,8 @@ class ParseNetworkFromOnnxLegacy(BaseNetworkFromOnnx):
         implicit batch version of the parser.
 
         Args:
-            onnx_loader (Callable() -> onnx.ModelProto): A loader that can supply an ONNX model.
+            onnx_loader (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
         """
         super().__init__(explicit_precision=False, explicit_batch=False)
         self.onnx_loader = onnx_loader
@@ -172,13 +173,20 @@ class LoadNetworkFromCaffe(object):
         network = builder.create_network()
         parser = trt.CaffeParser()
 
-        model_tensors = parser.parse(deploy=self.deploy, model=self.model, network=network, dtype=self.dtype)
+        parser.parse(deploy=self.deploy, model=self.model, network=network, dtype=self.dtype)
 
         if self.outputs and self.outputs != constants.MARK_ALL:
-            for output in self.outputs:
-                network.mark_output(model_tensors.find(output))
+            trt_util.mark_outputs(network, self.outputs)
 
         return builder, network, parser, self.batch_size
+
+
+def _input_metadata_from_network(network):
+    input_metadata = TensorMetadata()
+    for index in range(network.num_inputs):
+        tensor = network.get_input(index)
+        input_metadata.add(name=tensor.name, dtype=np.dtype(trt.nptype(tensor.dtype)), shape=tensor.shape)
+    return input_metadata
 
 
 # Builds and tracks a single engine for a single network.
@@ -208,6 +216,10 @@ class TrtLegacyRunner(BaseRunner):
         layerwise=False,
         plugins=[],
         name=None,
+        int8=None,
+        calibrator=None,
+        use_dla=None,
+        allow_gpu_fallback=None,
     ):
         """
         Creates a runner that manages a single TensorRT engine.
@@ -247,6 +259,10 @@ class TrtLegacyRunner(BaseRunner):
 
         self.layerwise = layerwise
         self.max_batch_size = max_batch_size
+        self.int8 = util.default(int8, False)
+        self.calibrator = calibrator
+        self.use_dla = use_dla
+        self.allow_gpu_fallback = allow_gpu_fallback
 
     def activate_impl(self):
         """
@@ -268,7 +284,6 @@ class TrtLegacyRunner(BaseRunner):
         def allocate_buffers(engine):
             input_buffers = OrderedDict()
             output_buffers = OrderedDict()
-            bindings = []
             stream = cuda.Stream()
             G_LOGGER.verbose("Using batch size: " + str(engine.max_batch_size) + " during buffer allocation")
             for binding in engine:
@@ -294,6 +309,10 @@ class TrtLegacyRunner(BaseRunner):
             trt.init_libnvinfer_plugins(get_trt_logger(), "")
             builder, network, parser, model_batch_size = self.network_loader()
             with builder, network, parser, builder.create_builder_config() as config:
+                if not network:
+                    G_LOGGER.critical("Invalid network")
+                G_LOGGER.super_verbose(lambda: trt_util.str_from_network(network) or "Finished logging network")
+
                 builder.max_batch_size = int(self.max_batch_size or model_batch_size or 1)
 
                 config.max_workspace_size = int(self.max_workspace_size)
@@ -302,24 +321,30 @@ class TrtLegacyRunner(BaseRunner):
                     with contextlib.suppress(AttributeError):
                         config.clear_flag(trt.BuilderFlag.TF32)
                 if self.fp16:
-                    config.flags = 1 << int(trt.BuilderFlag.FP16)
+                    config.set_flag(trt.BuilderFlag.FP16)
 
-                if not network:
-                    G_LOGGER.critical("Invalid network")
-                G_LOGGER.super_verbose(lambda: trt_util.str_from_network(network) or "Finished logging network")
+                if self.int8:
+                    config.set_flag(trt.BuilderFlag.INT8)
+                    input_metadata = _input_metadata_from_network(network)
+                    with contextlib.suppress(AttributeError):  # Polygraphy calibrator has a reset method
+                        self.calibrator.reset(input_metadata)
+                    config.int8_calibrator = self.calibrator
+
+                if self.use_dla:
+                    config.default_device_type = trt.DeviceType.DLA
+                    config.DLA_core = 0
+
+                if self.allow_gpu_fallback:
+                    config.set_flag(trt.BuilderFlag.GPU_FALLBACK)
 
                 if self.layerwise:
-                    # In layerwise mode, every layer becomes an output.
-                    G_LOGGER.info("Running in layerwise mode. Marking {:} layers as outputs".format(network.num_layers))
-                    for layer in network:
-                        for index in range(layer.num_outputs):
-                            out = layer.get_output(index)
-                            if not out.is_network_output:
-                                network.mark_output(out)
+                    trt_util.mark_layerwise(network)
 
                 G_LOGGER.info(
                     "Building engine: max workspace size={:} bytes, max batch size={:}, fp16={:}, "
-                    "tf32={:}".format(config.max_workspace_size, builder.max_batch_size, self.fp16, self.tf32)
+                    "tf32={:}, int8={:}".format(
+                        config.max_workspace_size, builder.max_batch_size, self.fp16, self.tf32, self.int8
+                    )
                 )
                 self.engine = builder.build_engine(network, config)
 

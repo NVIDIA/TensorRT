@@ -51,7 +51,8 @@ class SaveBytes(BaseLoader):
         Saves bytes to a file.
 
         Args:
-            obj (Callable() -> bytes): A callable that returns the bytes to save, or bytes directly.
+            obj (Union[bytes, Callable() -> bytes]):
+                    The bytes to save or a callable that returns them.
             path (str): The file path.
         """
         self._bytes = obj

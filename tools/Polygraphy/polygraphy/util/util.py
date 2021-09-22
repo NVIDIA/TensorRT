@@ -26,8 +26,6 @@ from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
 
-mod.export_deprecated_alias("misc", remove_in="0.32.0", use_instead="polygraphy.util")(sys.modules[__name__])
-
 
 @mod.export()
 def check(cond, msg=None):
@@ -124,6 +122,46 @@ def check_dict_contains(dct, keys, check_missing=True, dict_name=None, log_func=
 
 
 @mod.export()
+def value_or_from_dict(obj, key, default=None):
+    """
+    Many Polygraphy APIs can accept a `Union[obj, Dict[str, obj]]` to allow
+    for specifying either a global value, or a per-key (e.g. input, output, etc.) value.
+
+    When a dictionary is provided, the `""` key indiciates a default value to use for keys
+    not otherwise found.
+
+    For example, Polygraphy allows for providing per-output tolerances. Thus, all of the
+    following are valid arguments:
+    ::
+
+        # Value directly
+        atol = 1.0
+
+        # Per-output values
+        atol = {"out1": 1.0, "out2": 2.0}
+
+        # Per-output values with default
+        atol = {"out1": 1.0, "": 2.0}
+
+    Args:
+        obj (Union[obj, Dict[str, obj]]): The value, or per-key values.
+        key (str): The key to use when per-key values are provided.
+        default (obj): The default value to use if it is not found in the dictionary.
+
+    Returns:
+        obj: The value.
+    """
+    if not isinstance(obj, dict):
+        return obj
+
+    if key in obj:
+        return obj[key]
+    elif "" in obj:
+        return obj[""]
+    return default
+
+
+@mod.export()
 def unique_list(sequence):
     """
     Creates a list without duplicate elements, preserving order.
@@ -165,7 +203,6 @@ def unique_list(sequence):
 # >>> y = MyClass()
 # >>> y.value
 # []
-@mod.export_deprecated_alias("default_value", remove_in="0.32.0")
 @mod.export()
 def default(value, default):
     """
@@ -779,6 +816,11 @@ class FreeOnException(object):
                 for obj in self.objs:
                     if obj is not None:
                         stack.enter_context(obj)
+
+
+##
+## Attribute Helpers
+##
 
 
 @mod.export()
