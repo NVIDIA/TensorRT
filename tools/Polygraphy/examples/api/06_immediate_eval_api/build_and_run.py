@@ -18,12 +18,11 @@
 """
 This script uses Polygraphy's immediately evaluated functional APIs
 to load an ONNX model, convert it into a TensorRT network, add an identity
-layer to the end of it, build an engine with FP16 mode enabled, and finally
-run inference.
+layer to the end of it, build an engine with FP16 mode enabled,
+save the engine, and finally run inference.
 """
 import numpy as np
-
-from polygraphy.backend.trt import TrtRunner, create_config, engine_from_network, network_from_onnx_path
+from polygraphy.backend.trt import TrtRunner, create_config, engine_from_network, network_from_onnx_path, save_engine
 
 
 def main():
@@ -34,7 +33,10 @@ def main():
     # Since we are immediately evaluating, we take ownership of objects, and are responsible for freeing them.
     builder, network, parser = network_from_onnx_path("identity.onnx")
 
-    # Extend the network with an identity layer.
+    # Extend the network with an identity layer (purely for the sake of example).
+    #   Note that unlike with lazy loaders, we don't need to do anything special to modify the network.
+    #   If we were using lazy loaders, we would need to use `func.extend()` as described
+    #   in example 03 and example 05.
     prev_output = network.get_output(0)
     network.unmark_output(prev_output)
     output = network.add_identity(prev_output).get_output(0)
@@ -45,11 +47,14 @@ def main():
     config = create_config(builder, network, fp16=True)
 
     # We can free everything we constructed above once we're done building the engine.
-    # NOTE: In TensorRT 8.0, we do *not* need to use a context manager here.
+    # NOTE: In TensorRT 8.0 and newer, we do *not* need to use a context manager here.
     with builder, network, parser, config:
         engine = engine_from_network((builder, network), config)
 
-    # NOTE: In TensorRT 8.0, we do *not* need to use a context manager to free `engine`.
+    # To reuse the engine elsewhere, we can serialize it and save it to a file.
+    save_engine(engine, path="identity.engine")
+
+    # NOTE: In TensorRT 8.0 and newer, we do *not* need to use a context manager to free `engine`.
     with engine, TrtRunner(engine) as runner:
         inp_data = np.ones((1, 1, 2, 2), dtype=np.float32)
 

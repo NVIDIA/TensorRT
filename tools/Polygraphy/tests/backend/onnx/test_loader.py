@@ -28,6 +28,7 @@ from polygraphy.backend.onnx import (
     OnnxFromTfGraph,
     SaveOnnx,
     extract_subgraph,
+    gs_from_onnx,
     infer_shapes,
     onnx_from_path,
 )
@@ -45,7 +46,7 @@ class TestLoggerCallbacks(object):
         G_LOGGER.severity = sev
 
 
-class TestOnnxFileLoader(object):
+class TestOnnxFromPath(object):
     def test_basic(self):
         loader = OnnxFromPath(ONNX_MODELS["identity"].path)
         assert isinstance(loader(), onnx.ModelProto)
@@ -54,6 +55,12 @@ class TestOnnxFileLoader(object):
         model = ONNX_MODELS["ext_weights"]
         loader = OnnxFromPath(model.path, model.ext_data)
         assert isinstance(loader(), onnx.ModelProto)
+
+
+class TestGsFromOnnx(object):
+    def test_basic(self):
+        graph = gs_from_onnx(OnnxFromPath(ONNX_MODELS["identity"].path))
+        assert isinstance(graph, gs.Graph)
 
 
 class TestExportOnnxFromTf(object):
@@ -177,7 +184,7 @@ def extract_model():
 
 class TestExtractSubgraph(object):
     def check_model(self, model):
-        graph = gs.import_onnx(model)
+        graph = gs_from_onnx(model)
         assert len(graph.nodes) == 1
 
         assert len(graph.inputs) == 1
@@ -208,7 +215,7 @@ class TestExtractSubgraph(object):
 
     def test_extract_onnx_gs_graph(self, extract_model):
         model, input_meta, output_meta = extract_model
-        graph = gs.import_onnx(model)
+        graph = gs_from_onnx(model)
         subgraph = extract_subgraph(graph, input_meta, output_meta)
         # Make sure original graph isn't modified.
         assert len(graph.nodes) == 2

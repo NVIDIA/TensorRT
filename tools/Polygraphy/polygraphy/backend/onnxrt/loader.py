@@ -19,7 +19,6 @@ from polygraphy.backend.base import BaseLoader
 onnxruntime = mod.lazy_import("onnxruntime")
 
 
-@mod.export_deprecated_alias("SessionFromOnnxBytes", remove_in="0.32.0")
 @mod.export(funcify=True)
 class SessionFromOnnx(BaseLoader):
     """
@@ -31,8 +30,8 @@ class SessionFromOnnx(BaseLoader):
         Builds an ONNX-Runtime inference session.
 
         Args:
-            model_bytes (Callable() -> Union[bytes, str]):
-                    A serialized ONNX model or a path to a model, or a callable that returns the same.
+            model_bytes (Union[Union[bytes, str], Callable() -> Union[bytes, str]]):
+                    A serialized ONNX model or a path to a model or a callable that returns one of those.
         """
         self._model_bytes_or_path = model_bytes
 

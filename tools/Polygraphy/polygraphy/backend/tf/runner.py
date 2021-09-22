@@ -18,7 +18,7 @@ import os
 import time
 from collections import OrderedDict
 
-from polygraphy import func, mod, util
+from polygraphy import mod, util
 from polygraphy.backend.base import BaseRunner
 from polygraphy.backend.tf import util as tf_util
 from polygraphy.logger import G_LOGGER
@@ -35,9 +35,8 @@ class TfRunner(BaseRunner):
     def __init__(self, sess, timeline_dir=None, name=None):
         """
         Args:
-            sess (Callable() -> Tuple[tf.Session, Sequence[str]]):
-                    A callable that can supply a tuple containing a
-                    TensorFlow session and output names.
+            sess (Union[Tuple[tf.Session, Sequence[str]], Callable() -> Tuple[tf.Session, Sequence[str]]]):
+                    A tuple containing a TensorFlow session and output names or a callable that returns one.
 
 
             timeline_dir (str):
@@ -64,14 +63,8 @@ class TfRunner(BaseRunner):
     def activate_impl(self):
         (self.sess, self.output_names), _ = util.invoke_if_callable(self._sess)
 
-    @func.constantmethod
     def get_input_metadata_impl(self):
         return tf_util.get_input_metadata(self.sess.graph)
-
-    def deactivate_impl(self):
-        self.sess.close()
-        del (self.sess, self.output_names)
-        self.num_inferences = 0
 
     def infer_impl(self, feed_dict):
         G_LOGGER.extra_verbose("Received feed_dict: {:}".format(feed_dict))
@@ -99,3 +92,8 @@ class TfRunner(BaseRunner):
         self.num_inferences += 1
 
         return out_dict
+
+    def deactivate_impl(self):
+        self.sess.close()
+        del (self.sess, self.output_names)
+        self.num_inferences = 0

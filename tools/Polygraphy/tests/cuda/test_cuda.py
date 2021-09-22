@@ -17,7 +17,8 @@ import numpy as np
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util
-from polygraphy.cuda import DeviceArray, Stream, DeviceView
+from polygraphy.cuda import DeviceArray, Stream, DeviceView, wrapper, MemcpyKind
+from tests.helper import time_func
 
 
 class TestDeviceView(object):
@@ -78,6 +79,7 @@ class TestDeviceBuffer(object):
             assert buf.allocated_nbytes == shapes.new_bytes
             assert buf.shape == shapes.new
 
+    @pytest.mark.serial  # Sometimes the GPU may run out of memory if too many other tests are also running.
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Breaks TRT 6 tests for some reason")
     def test_large_allocation(self):
         dtype = np.byte
@@ -129,3 +131,39 @@ class TestDeviceBuffer(object):
             assert host_buf.shape == buf.shape
             assert host_buf.nbytes == 0
             assert util.volume(host_buf.shape) == 0
+
+    @pytest.mark.serial
+    def test_copy_from_overhead(self):
+        host_buf = np.ones(shape=(1, 2, 1024, 1024), dtype=np.float32)
+        with DeviceArray(shape=host_buf.shape, dtype=host_buf.dtype) as dev_buf:
+            memcpy_time = time_func(
+                lambda: wrapper().memcpy(
+                    dst=dev_buf.ptr,
+                    src=host_buf.ctypes.data,
+                    nbytes=host_buf.nbytes,
+                    kind=MemcpyKind.HostToDevice,
+                )
+            )
+
+            copy_from_time = time_func(lambda: dev_buf.copy_from(host_buf))
+
+        print("memcpy time: {:}, copy_from time: {:}".format(memcpy_time, copy_from_time))
+        assert copy_from_time <= (memcpy_time * 1.02)
+
+    @pytest.mark.serial
+    def test_copy_to_overhead(self):
+        host_buf = np.ones(shape=(1, 2, 1024, 1024), dtype=np.float32)
+        with DeviceArray(shape=host_buf.shape, dtype=host_buf.dtype) as dev_buf:
+            memcpy_time = time_func(
+                lambda: wrapper().memcpy(
+                    dst=host_buf.ctypes.data,
+                    src=dev_buf.ptr,
+                    nbytes=host_buf.nbytes,
+                    kind=MemcpyKind.DeviceToHost,
+                )
+            )
+
+            copy_to_time = time_func(lambda: dev_buf.copy_to(host_buf))
+
+        print("memcpy time: {:}, copy_to time: {:}".format(memcpy_time, copy_to_time))
+        assert copy_to_time <= (memcpy_time * 1.04)

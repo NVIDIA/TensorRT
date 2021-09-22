@@ -9,7 +9,7 @@ Polygraphy's included calibrator to easily run int8 calibration with TensorRT.
 But what if we wanted to do the same thing on the command-line?
 
 To do this, we need a way to supply custom input data to our command-line tools.
-Polygraphy provides multiple ways to do so, which are detailed [here](../../).
+Polygraphy provides multiple ways to do so, which are detailed [here](../../../cli#using-custom-input-data).
 
 In this example, we'll use a data loader script by defining a `load_data` function in a Python
 script called `data_loader.py` and then use `polygraphy convert` to build the TensorRT engine.

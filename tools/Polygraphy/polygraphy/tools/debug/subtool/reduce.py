@@ -178,7 +178,10 @@ class Reduce(Tool):
 
     def run(self, args):
         if not self.arg_groups[OnnxSaveArgs].path and not args.min_good:
-            G_LOGGER.critical("Either --output or --min-good must be provided!")
+            G_LOGGER.critical(
+                "--output (where to write the reduced model) and/or "
+                "--min-good (where to write a reduced model that passes) must be provided!"
+            )
 
         model = self.arg_groups[OnnxLoaderArgs].load_onnx()
         num_orig_nodes = len(model.graph.node)
@@ -187,11 +190,16 @@ class Reduce(Tool):
         # shape inference to figure out the new shapes of intermediate tensors.
         user_input_metadata = self.arg_groups[ModelArgs].input_shapes
         if user_input_metadata:
-            model = gs.export_onnx(tools_util.override_input_shapes(gs.import_onnx(model), user_input_metadata))
+            model = gs.export_onnx(
+                tools_util.override_input_shapes(onnx_backend.gs_from_onnx(model), user_input_metadata)
+            )
             if self.arg_groups[OnnxShapeInferenceArgs].do_shape_inference:
                 model = onnx_backend.infer_shapes(model)
 
-        GRAPH = gs.import_onnx(model)
+        # Lower Constant nodes into Constant tensors
+        # If we don't do this, the outputs of Constant nodes may be incorrectly marked
+        #   as variable inputs. Further, fallback shape inference does not apply to Constant nodes.
+        GRAPH = onnx_util.lower_constant_nodes(onnx_backend.gs_from_onnx(model))
 
         _layerwise_outputs = None
         _layerwise_meta = None
@@ -209,7 +217,7 @@ class Reduce(Tool):
 
         if self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
             G_LOGGER.info("Freezing shapes in the model according to values determined by fallback shape inference")
-            tools_util.set_shapes_from_layerwise_meta(GRAPH, layerwise(model))
+            onnx_util.set_shapes_from_layerwise_meta(GRAPH, layerwise(model))
 
         def fix_graph(graph, model):
             """

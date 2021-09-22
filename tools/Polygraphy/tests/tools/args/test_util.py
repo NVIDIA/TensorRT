@@ -16,7 +16,7 @@
 
 import numpy as np
 import pytest
-from polygraphy import mod
+from polygraphy.exception import PolygraphyException
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.script import inline, safe
 
@@ -86,3 +86,32 @@ class TestRunScript(object):
         assert args_util.run_script(script_add) == 0
         assert args_util.run_script(script_add, 1) == 1
         assert args_util.run_script(script_add, 1, 2) == 3
+
+
+class TestParseNumBytes(object):
+    def test_none(self):
+        assert args_util.parse_num_bytes(None) is None
+
+    @pytest.mark.parametrize(
+        "arg, expected",
+        [
+            ("16", 16),
+            ("1e9", 1e9),
+            ("2M", 2 << 20),
+            ("2.3m", int(2.3 * (1 << 20))),
+            ("4.3K", int(4.3 * (1 << 10))),
+            ("7k", 7 << 10),
+            ("1G", 1 << 30),
+            ("2.5g", int(2.5 * (1 << 30))),
+        ],
+    )
+    def test_num_bytes(self, arg, expected):
+        assert args_util.parse_num_bytes(arg) == expected
+
+    @pytest.mark.parametrize("arg", ["hi", "4.5x", "2.3.4"])
+    def test_negative(self, arg):
+        with pytest.raises(
+            PolygraphyException,
+            match="Could not convert {:} to a number of bytes".format(arg),
+        ):
+            args_util.parse_num_bytes(arg)

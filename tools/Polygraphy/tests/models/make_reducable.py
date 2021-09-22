@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 """
-Helper utility to generate a model to help test the `debug reduce`
+Helper utility to generate models to help test the `debug reduce`
 subtool, which reduces failing ONNX models.
 """
 import os
@@ -36,7 +36,19 @@ def add(self, a, b):
     return self.layer(op="Add", inputs=[a, b], outputs=["add_out"])[0]
 
 
-# Generates a model with multiple inputs/outputs. Something like:
+@gs.Graph.register()
+def constant(self, values: gs.Constant):
+    return self.layer(op="Constant", outputs=["constant_out"], attrs={"value": values})[0]
+
+
+def save(graph, model_name):
+    path = os.path.join(CURDIR, model_name)
+    print("Writing: {:}".format(path))
+    onnx.save(gs.export_onnx(graph), path)
+
+
+# Generates a model with multiple inputs/outputs:
+#
 #    X0    Y0
 #    |     |
 #    X1    Y1
@@ -44,27 +56,63 @@ def add(self, a, b):
 #       Z0
 #      /  \
 #    Z1    Z2
-DTYPE = np.float32
-SHAPE = (1,)
+#
+def make_multi_input_output():
+    DTYPE = np.float32
+    SHAPE = (1,)
 
-X0 = gs.Variable("X0", dtype=DTYPE, shape=SHAPE)
-Y0 = gs.Variable("Y0", dtype=DTYPE, shape=SHAPE)
+    X0 = gs.Variable("X0", dtype=DTYPE, shape=SHAPE)
+    Y0 = gs.Variable("Y0", dtype=DTYPE, shape=SHAPE)
 
-graph = gs.Graph(inputs=[X0, Y0])
+    graph = gs.Graph(inputs=[X0, Y0])
 
-X1 = graph.identity(X0)
-Y1 = graph.identity(Y0)
+    X1 = graph.identity(X0)
+    Y1 = graph.identity(Y0)
 
-Z0 = graph.add(X1, Y1)
+    Z0 = graph.add(X1, Y1)
 
-Z1 = graph.identity(Z0)
-Z1.dtype = DTYPE
-Z1.shape = SHAPE
+    Z1 = graph.identity(Z0)
+    Z1.dtype = DTYPE
+    Z1.shape = SHAPE
 
-Z2 = graph.identity(Z0)
-Z2.dtype = DTYPE
-Z2.shape = SHAPE
+    Z2 = graph.identity(Z0)
+    Z2.dtype = DTYPE
+    Z2.shape = SHAPE
 
-graph.outputs = [Z1, Z2]
+    graph.outputs = [Z1, Z2]
 
-onnx.save(gs.export_onnx(graph), os.path.join(CURDIR, "reducable.onnx"))
+    save(graph, "reducable.onnx")
+
+
+make_multi_input_output()
+
+
+# Generates a linear model with a Constant node and no inputs:
+#
+#    X0 (Constant)
+#    |
+#    X1 (Identity)
+#    |
+#    X2 (Identity)
+#
+def make_constant_linear():
+    DTYPE = np.float32
+    SHAPE = (4, 4)
+
+    graph = gs.Graph()
+
+    X0 = graph.constant(gs.Constant("const", values=np.ones(SHAPE, dtype=DTYPE)))
+    # Explicitly clear shape to trigger the failure condition in reduce
+    X0.shape = None
+
+    X1 = graph.identity(X0)
+    X2 = graph.identity(X1)
+    X2.dtype = DTYPE
+    X2.shape = SHAPE
+
+    graph.outputs = [X2]
+
+    save(graph, "reducable_with_const.onnx")
+
+
+make_constant_linear()

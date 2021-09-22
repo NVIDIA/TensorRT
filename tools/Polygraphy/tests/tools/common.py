@@ -75,3 +75,7 @@ def run_polygraphy_template(additional_opts=[], disable_verbose=False, *args, **
 
 def run_polygraphy_debug(additional_opts=[], disable_verbose=False, *args, **kwargs):
     return run_subtool("debug", additional_opts, disable_verbose, *args, **kwargs)
+
+
+def run_polygraphy_data(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("data", additional_opts, disable_verbose, *args, **kwargs)

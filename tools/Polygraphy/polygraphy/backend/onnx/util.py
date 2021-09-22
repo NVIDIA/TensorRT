@@ -20,8 +20,9 @@ from polygraphy import mod, util
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER
 
-onnx = mod.lazy_import("onnx")
+gs = mod.lazy_import("onnx_graphsurgeon")
 numpy_helper = mod.lazy_import("onnx.numpy_helper")
+onnx = mod.lazy_import("onnx")
 
 
 def get_num_nodes(model):
@@ -288,3 +289,37 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
             onnx_str += "\n"
 
     return util.indent_block(onnx_str, indent_level)
+
+
+##
+## ONNX-GraphSurgeon utilities
+##
+
+
+def meta_from_gs_tensors(tensors):
+    """Get TensorMetadata from a list of ONNX-GraphSurgeon tensors"""
+    meta = TensorMetadata()
+    for tensor in tensors:
+        meta.add(tensor.name, tensor.dtype, tensor.shape)
+    return meta
+
+
+def set_shapes_from_layerwise_meta(graph, layerwise_meta):
+    for tensor in graph.tensors().values():
+        if isinstance(tensor, gs.Variable) and tensor.name in layerwise_meta:
+            tensor.shape = layerwise_meta[tensor.name].shape
+            tensor.dtype = layerwise_meta[tensor.name].dtype
+
+
+def lower_constant_nodes(graph):
+    """Converts the outputs of Constant nodes into constant tensors, removing the nodes"""
+    remove_nodes = set()
+    with graph.node_ids():
+        for node in graph.nodes:
+            if node.op == "Constant" and "value" in node.attrs:
+                node.outputs[0].to_constant(node.attrs["value"].values)
+                remove_nodes.add(node.id)
+        # Iterate from the end so we don't shift the list under us.
+        for node_id in sorted(remove_nodes, reverse=True):
+            del graph.nodes[node_id]
+    return graph

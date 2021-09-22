@@ -58,6 +58,11 @@ def compute_median(buffer):
     return np.median(buffer)
 
 
+@zero_on_empty
+def compute_average_magnitude(buffer):
+    return np.mean(np.abs(buffer))
+
+
 def str_histogram(output, hist_range=None):
     if np.issubdtype(output.dtype, np.bool_):
         return ""
@@ -108,17 +113,16 @@ def str_output_stats(output, runner_name=None):
     try:
         with np.testing.suppress_warnings() as sup:
             sup.filter(RuntimeWarning)
-            ret += (
-                "mean={:.5g}, std-dev={:.5g}, var={:.5g}, median={:.5g}, min={:.5g} at {:}, max={:.5g} at {:}\n".format(
-                    compute_mean(output),
-                    compute_stddev(output),
-                    compute_variance(output),
-                    compute_median(output),
-                    compute_min(output),
-                    compute_argmin(output),
-                    compute_max(output),
-                    compute_argmax(output),
-                )
+            ret += "mean={:.5g}, std-dev={:.5g}, var={:.5g}, median={:.5g}, min={:.5g} at {:}, max={:.5g} at {:}, avg-magnitude={:.5g}\n".format(
+                compute_mean(output),
+                compute_stddev(output),
+                compute_variance(output),
+                compute_median(output),
+                compute_min(output),
+                compute_argmin(output),
+                compute_max(output),
+                compute_argmax(output),
+                compute_average_magnitude(output),
             )
     except Exception as err:
         G_LOGGER.verbose("Could not generate statistics.\nNote: Error was: {:}".format(err))

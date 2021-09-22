@@ -16,7 +16,7 @@
 
 from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
-from polygraphy.logger import G_LOGGER
+from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.tools.script import Script, ensure_safe, inline, safe
 
 np = mod.lazy_import("numpy")
@@ -94,17 +94,18 @@ def run_script(script_func, *args):
 
 
 @mod.export()
-def get(args, attr):
+def get(args, attr, default=None):
     """
-    Gets a command-line argument if it exists, otherwise returns None.
+    Gets a command-line argument if it exists, otherwise returns a default value.
 
     Args:
         args: The command-line arguments.
         attr (str): The name of the command-line argument.
+        default (obj): The default value to return if the argument is not found. Defaults to None.
     """
     if hasattr(args, attr):
         return getattr(args, attr)
-    return None
+    return default
 
 
 @mod.export()
@@ -268,6 +269,31 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
 
         name = tensor_meta_arg
         meta.add(name, dtype, shape)
+
+    new_style = []
+    for m_arg in meta_args:
+        arg = m_arg
+        if includes_shape:
+            arg = arg.replace(",", ":[", 1)
+            if includes_dtype:
+                arg = arg.replace(",", "]:", 1)
+            else:
+                arg += "]"
+
+        arg = arg.replace(",auto", ":auto")
+        arg = arg.replace(",", ":")
+
+        if includes_shape:
+            arg = arg.replace("x", ",")
+
+        new_style.append(arg)
+
+    G_LOGGER.warning(
+        "The old shape syntax is deprecated and will be removed in a future version of Polygraphy\n"
+        "See the CHANGELOG for the motivation behind this deprecation.",
+        mode=LogMode.ONCE,
+    )
+    G_LOGGER.warning("Instead of: '{:}', use: '{:}'\n".format(" ".join(meta_args), " ".join(new_style)))
     return meta
 
 
@@ -314,3 +340,41 @@ def parse_meta(meta_args, includes_shape=True, includes_dtype=True):
     if all((includes_shape and "[" in arg) or (includes_dtype and "," not in arg) for arg in meta_args):
         return parse_meta_new_impl(meta_args, includes_shape, includes_dtype)
     return parse_meta_legacy(meta_args, includes_shape, includes_dtype)
+
+
+@mod.export()
+def parse_num_bytes(num_bytes_arg):
+    """
+    Parses an argument that indicates a number of bytes. The argument may use scientific notation,
+    or contain a `K`, `M`, or `G` suffix (case-insensitive), indicating `KiB`, `MiB`, or `GiB` respectively.
+    If the number is fractional, it will be truncated to the nearest integer value.
+
+    If the provided argument is `None`, `None` is returned.
+
+    Args:
+        num_bytes_arg (str): The argument indicating the number of bytes.
+
+    Returns:
+        int: The number of bytes.
+    """
+    if num_bytes_arg is None:
+        return None
+
+    num_component = num_bytes_arg  # Numerical component of the argument
+    multiplier = 1
+
+    suffix_mulitplier = {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30}
+    for suffix, mult in suffix_mulitplier.items():
+        if num_bytes_arg.upper().endswith(suffix):
+            num_component = num_bytes_arg.upper().rstrip(suffix)
+            multiplier = mult
+            break
+
+    try:
+        return int(float(num_component) * multiplier)
+    except:
+        G_LOGGER.critical(
+            "Could not convert {:} to a number of bytes. "
+            "Please use either an integer (e.g. 16000000), scientific notation (e.g. 16e6), "
+            "or a number with a valid suffix: K, M, or G (e.g. 16M).".format(num_bytes_arg)
+        )

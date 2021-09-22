@@ -21,38 +21,46 @@ from textwrap import dedent
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod, util
+from polygraphy import mod
 from polygraphy.logger import G_LOGGER
 
 ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), os.path.pardir))
 EXAMPLES_ROOT = os.path.join(ROOT_DIR, "examples")
 
+IGNORE_START_MARKER = "<!-- Polygraphy Test: Ignore Start -->"
+IGNORE_STOP_MARKER = "<!-- Polygraphy Test: Ignore End -->"
+
 # Extract any ``` blocks from the README
 # Each block is stored as a separate string in the returned list
-def load_code_blocks_from_readme(readme, ignore_block):
+def load_code_blocks_from_readme(readme):
     with open(readme, "r") as f:
         contents = f.read()
         # Check that the README has all the expected sections.
         assert "## Introduction" in contents, "All example READMEs should have an 'Introduction' section!"
         assert "## Running The Example" in contents, "All example READMEs should have a 'Running The Example' section!"
 
-    def ignore_command(cmd):
-        return "pip" in cmd
-
     commands = []
     with open(readme, "r") as f:
         in_command_block = False
+        should_ignore = False
         block = []
         for line in f.readlines():
+            if line.strip() == IGNORE_START_MARKER:
+                should_ignore = True
+            elif line.strip() == IGNORE_STOP_MARKER:
+                should_ignore = False
+
+            if should_ignore:
+                continue
+
             if not in_command_block and "```" in line:
                 block = [line.rstrip()]
                 in_command_block = True
             elif in_command_block:
                 if "```" in line:
                     in_command_block = False
-                    if not ignore_block(block):
-                        commands.append(copy.copy(block) + [line.rstrip()])
-                elif not ignore_command(line):
+                    commands.append(copy.copy(block) + [line.rstrip()])
+                else:
                     block.append(line.rstrip())
 
     # commands is List[List[str]] - flatten and remove start/end markers:
@@ -61,14 +69,13 @@ def load_code_blocks_from_readme(readme, ignore_block):
 
 
 class Example(object):
-    def __init__(self, path_components, artifact_names=[], ignore_block=None):
+    def __init__(self, path_components, artifact_names=[]):
         self.path = os.path.join(EXAMPLES_ROOT, *path_components)
         self.artifacts = [os.path.join(self.path, name) for name in artifact_names]
-        self.ignore_block = util.default(ignore_block, lambda block: False)
 
     def __enter__(self):
         readme = os.path.join(self.path, "README.md")
-        return load_code_blocks_from_readme(readme, self.ignore_block)
+        return load_code_blocks_from_readme(readme)
 
     def run(self, command):
         G_LOGGER.info("Running: {:} from cwd: {:}".format(command, self.path))
@@ -90,7 +97,7 @@ class Example(object):
         """
         for artifact in self.artifacts:
             print("Checking for the existence of artifact: {:}".format(artifact))
-            assert os.path.exists(artifact)
+            assert os.path.exists(artifact), "{:} does not exist!".format(artifact)
             if os.path.isdir(artifact):
                 shutil.rmtree(artifact)
             else:
@@ -107,12 +114,8 @@ API_EXAMPLES = [
     Example(["api", "03_interoperating_with_tensorrt"]),
     Example(["api", "04_int8_calibration_in_tensorrt"], artifact_names=["identity-calib.cache"]),
     Example(["api", "05_using_tensorrt_network_api"]),
-    Example(["api", "06_immediate_eval_api"], ignore_block=lambda block: "```python" in block[0]),
-    Example(
-        ["api", "07_tensorrt_and_dynamic_shapes"],
-        artifact_names=["dynamic_identity.engine"],
-        ignore_block=lambda block: "```python" in block[0],
-    ),
+    Example(["api", "06_immediate_eval_api"], artifact_names=["identity.engine"]),
+    Example(["api", "07_tensorrt_and_dynamic_shapes"], artifact_names=["dynamic_identity.engine"]),
 ]
 
 
@@ -132,7 +135,10 @@ CLI_EXAMPLES = [
     Example(["cli", "run", "01_comparing_frameworks"]),
     Example(["cli", "run", "02_comparing_across_runs"], artifact_names=["system_a_results.json"]),
     Example(["cli", "run", "03_generating_a_comparison_script"], artifact_names=["compare_trt_onnxrt.py"]),
-    Example(["cli", "run", "04_defining_a_tensorrt_network_manually"]),
+    Example(
+        ["cli", "run", "04_defining_a_tensorrt_network_or_config_manually"],
+        artifact_names=["my_define_network.py", "my_create_config.py"],
+    ),
     Example(["cli", "run", "05_comparing_with_custom_data"]),
     # Convert
     Example(["cli", "convert", "01_int8_calibration_in_tensorrt"], artifact_names=["identity.engine"]),
@@ -144,8 +150,19 @@ CLI_EXAMPLES = [
     # Surgeon
     Example(["cli", "surgeon", "01_isolating_subgraphs"], artifact_names=["subgraph.onnx"]),
     Example(["cli", "surgeon", "02_folding_constants"], artifact_names=["folded.onnx"]),
+    Example(["cli", "surgeon", "03_modifying_input_shapes"], artifact_names=["dynamic_identity.onnx"]),
     # Debug
     Example(["cli", "debug", "01_debugging_flaky_trt_tactics"], artifact_names=["replays", "golden.json"]),
+    Example(
+        ["cli", "debug", "02_reducing_failing_onnx_models"],
+        artifact_names=[
+            "inputs.json",
+            "layerwise_golden.json",
+            "layerwise_inputs.json",
+            "initial_reduced.onnx",
+            "final_reduced.onnx",
+        ],
+    ),
 ]
 
 

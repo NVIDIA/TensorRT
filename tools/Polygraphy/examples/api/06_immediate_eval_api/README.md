@@ -2,6 +2,7 @@
 
 ## Introduction
 
+<!-- Polygraphy Test: Ignore Start -->
 Most of the time, the lazy loaders included with Polygraphy have several advantages:
 
 - They allow us to defer the work until we actually need to do it, which can potentially save
@@ -16,6 +17,7 @@ Most of the time, the lazy loaders included with Polygraphy have several advanta
     ```python
     build_engine = EngineBytesFromNetwork(NetworkFromOnnxPath("/path/to/model.onnx"))
     ```
+
 - They allow for special semantics where if a callable is provided to a loader, it takes ownership
     of the return value, whereas otherwise it does not. These special semantics are useful for
     sharing objects between multiple loaders.
@@ -46,12 +48,18 @@ engine = build_engine()
 becomes:
 
 ```python
-builder, network = network_from_onnx_path("/path/to/model.onnx")
+builder, network, parser = network_from_onnx_path("/path/to/model.onnx")
 config = create_config(builder, network, fp16=True, tf32=True)
-engine = engine_from_network((builder, network), config)
+engine = engine_from_network((builder, network, parser), config)
 ```
+<!-- Polygraphy Test: Ignore End -->
 
-`example.py` showcases basic usage of the immediately evaluated functional API.
+
+In this example, we'll look at how you can leverage the functional API to convert an ONNX
+model to a TensorRT network, modify the network, build a TensorRT engine with FP16 precision
+enabled, and run inference.
+We'll also save the engine to a file to see how you can load it again and run inference.
+
 
 ## Running The Example
 
@@ -59,8 +67,26 @@ engine = engine_from_network((builder, network), config)
     * Ensure that TensorRT is installed
     * Install other dependencies with `python3 -m pip install -r requirements.txt`
 
-2. Run the example:
+2. **[Optional]** Inspect the model before running the example:
 
     ```bash
-    python3 example.py
+    polygraphy inspect model identity.onnx
+    ```
+
+3. Run the script that builds and runs the engine:
+
+    ```bash
+    python3 build_and_run.py
+    ```
+
+4. **[Optional]** Inspect the TensorRT engine built by the example:
+
+    ```bash
+    polygraphy inspect model identity.engine
+    ```
+
+5. Run the script that loads the previously built engine, then runs it:
+
+    ```bash
+    python3 load_and_run.py
     ```

@@ -85,11 +85,19 @@ def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
 
 @mod.export()
 class TrtConfigArgs(BaseArgs):
-    def __init__(self, strict_types_default=None):
+    def __init__(self, strict_types_default=None, random_data_calib_warning=True):
+        """
+        Args:
+            strict_types_default (bool): Whether strict types should be enabled by default.
+            random_data_calib_warning (bool):
+                    Whether to issue a warning when randomly generated data is being used
+                    for calibration.
+        """
         super().__init__()
         self.model_args = None
         self.data_loader_args = None
         self._strict_types_default = strict_types_default
+        self._random_data_calib_warning = random_data_calib_warning
 
     def add_to_parser(self, parser):
         trt_config_args = parser.add_argument_group(
@@ -132,8 +140,8 @@ class TrtConfigArgs(BaseArgs):
         trt_config_args.add_argument(
             "--int8",
             help="Enable int8 precision in TensorRT. "
-            "If no calibration cache is provided, this option will cause TensorRT to run int8 calibration "
-            "using the Polygraphy data loader to provide calibration data. ",
+            "If calibration is required but no calibration cache is provided, this option will cause TensorRT to run "
+            "int8 calibration using the Polygraphy data loader to provide calibration data. ",
             action="store_true",
             default=None,
         )
@@ -163,12 +171,12 @@ class TrtConfigArgs(BaseArgs):
             default=None,
         )
 
-        # Workspace uses float to enable scientific notation (e.g. 1e9)
         trt_config_args.add_argument(
             "--workspace",
             metavar="BYTES",
-            help="Memory in bytes to allocate for the TensorRT builder's workspace",
-            type=float,
+            help="Amount of memory, in bytes, to allocate for the TensorRT builder's workspace. "
+            "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively."
+            "For example, `--workspace=16M` is equivalent to `--workspace=16777216`",
             default=None,
         )
         trt_config_args.add_argument(
@@ -253,8 +261,23 @@ class TrtConfigArgs(BaseArgs):
             default="load_config",
         )
         trt_config_args.add_argument(
-            "--trt-safety-restricted", help="Enable safety scope checking in TensorRT", action="store_true", default=None,
+            "--trt-safety-restricted",
+            help="Enable safety scope checking in TensorRT",
+            action="store_true",
+            default=None,
             dest="restricted",
+        )
+        trt_config_args.add_argument(
+            "--use-dla",
+            help="[EXPERIMENTAL] Use DLA as the default device type",
+            action="store_true",
+            default=None,
+        )
+        trt_config_args.add_argument(
+            "--allow-gpu-fallback",
+            help="[EXPERIMENTAL] Allow layers unsupported on the DLA to fall back to GPU. Has no effect if --dla is not set.",
+            action="store_true",
+            default=None,
         )
 
     def register(self, maker):
@@ -267,9 +290,9 @@ class TrtConfigArgs(BaseArgs):
             self.data_loader_args = maker
 
     def parse(self, args):
-        trt_min_shapes = util.default(args_util.get(args, "trt_min_shapes"), [])
-        trt_max_shapes = util.default(args_util.get(args, "trt_max_shapes"), [])
-        trt_opt_shapes = util.default(args_util.get(args, "trt_opt_shapes"), [])
+        trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
+        trt_max_shapes = args_util.get(args, "trt_max_shapes", default=[])
+        trt_opt_shapes = args_util.get(args, "trt_opt_shapes", default=[])
 
         default_shapes = TensorMetadata()
         if self.model_args is not None:
@@ -278,8 +301,7 @@ class TrtConfigArgs(BaseArgs):
 
         self.profile_dicts = parse_profile_shapes(default_shapes, trt_min_shapes, trt_opt_shapes, trt_max_shapes)
 
-        workspace = args_util.get(args, "workspace")
-        self.workspace = int(workspace) if workspace is not None else workspace
+        self.workspace = args_util.parse_num_bytes(args_util.get(args, "workspace"))
 
         self.tf32 = args_util.get(args, "tf32")
         self.fp16 = args_util.get(args, "fp16")
@@ -323,6 +345,9 @@ class TrtConfigArgs(BaseArgs):
         self.trt_config_script = args_util.get(args, "trt_config_script")
         self.trt_config_func_name = args_util.get(args, "trt_config_func_name")
 
+        self.use_dla = args_util.get(args, "use_dla")
+        self.allow_gpu_fallback = args_util.get(args, "allow_gpu_fallback")
+
     def add_trt_config_loader(self, script):
         profiles = []
         for (min_shape, opt_shape, max_shape) in self.profile_dicts:
@@ -352,6 +377,18 @@ class TrtConfigArgs(BaseArgs):
             data_loader_name = self.data_loader_args.add_data_loader(script)
             if self.calibration_base_class:
                 script.add_import(imports=["tensorrt as trt"])
+
+            if (
+                self.data_loader_args.is_using_random_data()
+                and (not self.calibration_cache or not os.path.exists(self.calibration_cache))
+                and self._random_data_calib_warning
+            ):
+                G_LOGGER.warning(
+                    "Int8 Calibration is using randomly generated input data.\n"
+                    "This could negatively impact accuracy if the inference-time input data is dissimilar "
+                    "to the randomly generated calibration data.\n"
+                    "You may want to consider providing real data via the --data-loader-script option."
+                )
 
             calibrator = make_invocable(
                 "Calibrator",
@@ -395,6 +432,8 @@ class TrtConfigArgs(BaseArgs):
                 algorithm_selector=algo_selector,
                 sparse_weights=self.sparse_weights,
                 tactic_sources=self.tactic_sources,
+                use_dla=self.use_dla,
+                allow_gpu_fallback=self.allow_gpu_fallback,
             )
             if config_loader_str is not None:
                 script.add_import(imports=["CreateConfig as CreateTrtConfig"], frm="polygraphy.backend.trt")

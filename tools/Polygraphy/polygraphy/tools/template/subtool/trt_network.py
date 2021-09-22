@@ -29,8 +29,8 @@ from polygraphy.tools.script import Script, inline, safe
 
 class TrtNetwork(Tool):
     """
-    Generate a template script that defines or modifies a TensorRT network
-    using the TensorRT network API.
+    Generate a template script to create a TensorRT network using the TensorRT network API,
+    optionally starting from an existing model.
     """
 
     def __init__(self):
@@ -49,7 +49,7 @@ class TrtNetwork(Tool):
 
     def run(self, args):
         script = Script(
-            summary="Defines or modifies a TensorRT Network using the Network API.", always_create_runners=False
+            summary="Creates a TensorRT Network using the Network API.", always_create_runners=False
         )
         script.add_import(imports=["func"], frm="polygraphy")
         script.add_import(imports=["tensorrt as trt"])
