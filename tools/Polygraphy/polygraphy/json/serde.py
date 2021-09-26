@@ -281,7 +281,7 @@ def save_json(obj, dest, description=None):
 
     Args:
         obj (object): The object to save.
-        src (Union[str, file-like]): The path or file-like object to save to.
+        dest (Union[str, file-like]): The path or file-like object to save to.
     """
     util.save_file(to_json(obj), dest, mode="w", description=description)
 
