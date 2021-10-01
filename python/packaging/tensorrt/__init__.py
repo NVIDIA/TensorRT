@@ -28,9 +28,10 @@ def try_load(library):
 
 
 # Try loading all packaged libraries
-CURDIR = os.path.realpath(os.path.dirname(__file__))
-for lib in glob.iglob(os.path.join(CURDIR, "*.so*")):
-    try_load(lib)
+if "__file__" in globals():
+    CURDIR = os.path.realpath(os.path.dirname(__file__))
+    for lib in glob.iglob(os.path.join(CURDIR, "*.so*")):
+        try_load(lib)
 
 
 from .tensorrt import *
