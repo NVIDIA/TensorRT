@@ -31,7 +31,7 @@ TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
 class ModelData(object):
     INPUT_NAME = "data"
-    INPUT_SHAPE = (1, 28, 28)
+    INPUT_SHAPE = (1, 1, 28, 28)
     OUTPUT_NAME = "prob"
     OUTPUT_SIZE = 10
     DTYPE = trt.float32
@@ -73,7 +73,7 @@ def populate_network(network, weights):
 def build_engine(weights):
     # For more information on TRT basics, refer to the introductory samples.
     builder = trt.Builder(TRT_LOGGER)
-    network = builder.create_network()
+    network = builder.create_network(common.EXPLICIT_BATCH)
     config = builder.create_builder_config()
     runtime = trt.Runtime(TRT_LOGGER)
 
@@ -109,7 +109,7 @@ def main():
     case_num = load_random_test_case(mnist_model, pagelocked_buffer=inputs[0].host)
     # For more information on performing inference, refer to the introductory samples.
     # The common.do_inference function will return a list of outputs - we only have one in this case.
-    [output] = common.do_inference(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+    [output] = common.do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
     pred = np.argmax(output)
     print("Test Case: " + str(case_num))
     print("Prediction: " + str(pred))

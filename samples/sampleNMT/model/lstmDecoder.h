@@ -31,7 +31,7 @@ namespace nmtSample
 class LSTMDecoder : public Decoder
 {
 public:
-    LSTMDecoder(ComponentWeights::ptr weights);
+    explicit LSTMDecoder(ComponentWeights::ptr& weights);
 
     void addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* inputEmbeddedData,
         nvinfer1::ITensor** inputStates, nvinfer1::ITensor** outputData, nvinfer1::ITensor** outputStates) override;
@@ -47,8 +47,8 @@ protected:
     std::vector<nvinfer1::Weights> mGateKernelWeights;
     std::vector<nvinfer1::Weights> mGateBiasWeights;
     bool mRNNKind;
-    int mNumLayers;
-    int mNumUnits;
+    int32_t mNumLayers;
+    int32_t mNumUnits;
 };
 } // namespace nmtSample
 

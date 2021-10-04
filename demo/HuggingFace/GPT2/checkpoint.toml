@@ -1,0 +1,15 @@
+[GPT2.all.gpt2-large.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a Deep Learning compiler used for deep learning. TensorFlow is a high-performance, open-source, cross-platform, high-performance, machine learning framework.\n\nTensorFlow is a high-performance,
+'''
+
+[GPT2.all.default.generate]
+
+input = '''
+TensorRT is a Deep Learning compiler used for deep learning.
+'''
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe main goal of the project is to create a tool that can be used to train neural networks.\n\nThe main goal of the project is to create a tool that can be used to train neural networks. The main goal of the project is
+'''

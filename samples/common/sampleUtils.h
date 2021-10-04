@@ -26,11 +26,7 @@
 #include <vector>
 
 #include <cuda.h>
-#if CUDA_VERSION < 10000
-#include <half.h>
-#else
 #include <cuda_fp16.h>
-#endif
 
 #include "NvInfer.h"
 
@@ -97,62 +93,6 @@ inline int64_t volume(nvinfer1::Dims dims, int vecDim, int comps, int batch)
     return volume(dims) * std::max(batch, 1);
 }
 
-inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
-{
-    for (int i = 0; i < dims.nbDims; ++i)
-    {
-        os << (i ? "x" : "") << dims.d[i];
-    }
-    return os;
-}
-inline std::ostream& operator<<(std::ostream& os, const nvinfer1::WeightsRole role)
-{
-    switch (role)
-    {
-    case nvinfer1::WeightsRole::kKERNEL:
-    {
-        os << "Kernel";
-        break;
-    }
-    case nvinfer1::WeightsRole::kBIAS:
-    {
-        os << "Bias";
-        break;
-    }
-    case nvinfer1::WeightsRole::kSHIFT:
-    {
-        os << "Shift";
-        break;
-    }
-    case nvinfer1::WeightsRole::kSCALE:
-    {
-        os << "Scale";
-        break;
-    }
-    case nvinfer1::WeightsRole::kCONSTANT:
-    {
-        os << "Constant";
-        break;
-    }
-    case nvinfer1::WeightsRole::kANY:
-    {
-        os << "Any";
-        break;
-    }
-    }
-
-    return os;
-}
-
-inline std::ostream& operator<<(std::ostream& os, const std::vector<int>& vec)
-{
-    for (int i = 0, e = static_cast<int>(vec.size()); i < e; ++i)
-    {
-        os << (i ? "x" : "") << vec[i];
-    }
-    return os;
-}
-
 inline nvinfer1::Dims toDims(const std::vector<int>& vec)
 {
     int limit = static_cast<int>(nvinfer1::Dims::MAX_DIMS);
@@ -196,11 +136,7 @@ inline void fillBufferHalf(void* buffer, int64_t volume, H min, H max)
     std::generate(typedBuffer, typedBuffer + volume, generator);
 }
 template <>
-#if CUDA_VERSION < 10000
-inline void fillBuffer<half_float::half>(void* buffer, int64_t volume, half_float::half min, half_float::half max)
-#else
 inline void fillBuffer<__half>(void* buffer, int64_t volume, __half min, __half max)
-#endif
 {
     fillBufferHalf(buffer, volume, min, max);
 }
@@ -239,7 +175,7 @@ inline void dumpBuffer(const void* buffer, const std::string& separator, std::os
 struct Binding
 {
     bool isInput{false};
-    MirroredBuffer buffer;
+    std::unique_ptr<IMirroredBuffer> buffer;
     int64_t volume{0};
     nvinfer1::DataType dataType{nvinfer1::DataType::kFLOAT};
 
@@ -248,8 +184,14 @@ struct Binding
         std::ifstream file(fileName, std::ios::in | std::ios::binary);
         if (file.is_open())
         {
-            file.read(static_cast<char*>(buffer.getHostBuffer()), buffer.getSize());
+            file.read(static_cast<char*>(buffer->getHostBuffer()), buffer->getSize());
             file.close();
+        }
+        else
+        {
+            std::stringstream msg;
+            msg << "Cannot open file " << fileName << "!";
+            throw std::invalid_argument(msg.str());
         }
     }
 
@@ -259,32 +201,27 @@ struct Binding
         {
         case nvinfer1::DataType::kBOOL:
         {
-            fillBuffer<bool>(buffer.getHostBuffer(), volume, 0, 1);
+            fillBuffer<bool>(buffer->getHostBuffer(), volume, 0, 1);
             break;
         }
         case nvinfer1::DataType::kINT32:
         {
-            fillBuffer<int32_t>(buffer.getHostBuffer(), volume, -128, 127);
+            fillBuffer<int32_t>(buffer->getHostBuffer(), volume, -128, 127);
             break;
         }
         case nvinfer1::DataType::kINT8:
         {
-            fillBuffer<int8_t>(buffer.getHostBuffer(), volume, -128, 127);
+            fillBuffer<int8_t>(buffer->getHostBuffer(), volume, -128, 127);
             break;
         }
         case nvinfer1::DataType::kFLOAT:
         {
-            fillBuffer<float>(buffer.getHostBuffer(), volume, -1.0, 1.0);
+            fillBuffer<float>(buffer->getHostBuffer(), volume, -1.0F, 1.0F);
             break;
         }
         case nvinfer1::DataType::kHALF:
         {
-#if CUDA_VERSION < 10000
-            fillBuffer<half_float::half>(buffer.getHostBuffer(), volume, static_cast<half_float::half>(-1.0),
-                static_cast<half_float::half>(-1.0));
-#else
-            fillBuffer<__half>(buffer.getHostBuffer(), volume, -1.0, 1.0);
-#endif
+            fillBuffer<__half>(buffer->getHostBuffer(), volume, -1.0F, 1.0F);
             break;
         }
         }
@@ -297,31 +234,27 @@ struct Binding
         {
         case nvinfer1::DataType::kBOOL:
         {
-            dumpBuffer<bool>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+            dumpBuffer<bool>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
         case nvinfer1::DataType::kINT32:
         {
-            dumpBuffer<int32_t>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+            dumpBuffer<int32_t>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
         case nvinfer1::DataType::kINT8:
         {
-            dumpBuffer<int8_t>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+            dumpBuffer<int8_t>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
         case nvinfer1::DataType::kFLOAT:
         {
-            dumpBuffer<float>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+            dumpBuffer<float>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
         case nvinfer1::DataType::kHALF:
         {
-#if CUDA_VERSION < 10000
-            dumpBuffer<half_float::half>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
-#else
-            dumpBuffer<__half>(buffer.getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
-#endif
+            dumpBuffer<__half>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
             break;
         }
         }
@@ -331,6 +264,12 @@ struct Binding
 class Bindings
 {
 public:
+    Bindings() = delete;
+    explicit Bindings(bool useManaged)
+        : mUseManaged(useManaged)
+    {
+    }
+
     void addBinding(int b, const std::string& name, bool isInput, int64_t volume, nvinfer1::DataType dataType,
         const std::string& fileName = "")
     {
@@ -340,20 +279,31 @@ public:
             mDevicePointers.emplace_back();
         }
         mNames[name] = b;
+        if (mBindings[b].buffer == nullptr)
+        {
+            if (mUseManaged)
+            {
+                mBindings[b].buffer.reset(new UnifiedMirroredBuffer);
+            }
+            else
+            {
+                mBindings[b].buffer.reset(new DiscreteMirroredBuffer);
+            }
+        }
         mBindings[b].isInput = isInput;
         // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
         // even for empty tensors, so allocate a dummy byte.
         if (volume == 0)
         {
-            mBindings[b].buffer.allocate(1);
+            mBindings[b].buffer->allocate(1);
         }
         else
         {
-            mBindings[b].buffer.allocate(static_cast<size_t>(volume) * static_cast<size_t>(dataTypeSize(dataType)));
+            mBindings[b].buffer->allocate(static_cast<size_t>(volume) * static_cast<size_t>(dataTypeSize(dataType)));
         }
         mBindings[b].volume = volume;
         mBindings[b].dataType = dataType;
-        mDevicePointers[b] = mBindings[b].buffer.getDeviceBuffer();
+        mDevicePointers[b] = mBindings[b].buffer->getDeviceBuffer();
         if (isInput)
         {
             if (fileName.empty())
@@ -378,7 +328,7 @@ public:
         {
             if (mBindings[b.second].isInput)
             {
-                mBindings[b.second].buffer.hostToDevice(stream);
+                mBindings[b.second].buffer->hostToDevice(stream);
             }
         }
     }
@@ -389,7 +339,7 @@ public:
         {
             if (!mBindings[b.second].isInput)
             {
-                mBindings[b.second].buffer.deviceToHost(stream);
+                mBindings[b.second].buffer->deviceToHost(stream);
             }
         }
     }
@@ -513,9 +463,10 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, int> mNames;
+    std::unordered_map<std::string, int32_t> mNames;
     std::vector<Binding> mBindings;
     std::vector<void*> mDevicePointers;
+    bool mUseManaged{false};
 };
 
 template <typename T>
@@ -580,6 +531,20 @@ inline void saveTimingCacheFile(const std::string outFileName, const IHostMemory
     oFile.write((char*) blob->data(), blob->size());
     oFile.close();
     sample::gLogInfo << "Saved " << blob->size() << " bytes of timing cache to " << outFileName << std::endl;
+}
+
+inline int32_t getCudaDriverVersion()
+{
+    int32_t version{-1};
+    cudaCheck(cudaDriverGetVersion(&version));
+    return version;
+}
+
+inline int32_t getCudaRuntimeVersion()
+{
+    int32_t version{-1};
+    cudaCheck(cudaRuntimeGetVersion(&version));
+    return version;
 }
 
 } // namespace sample

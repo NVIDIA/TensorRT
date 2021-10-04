@@ -470,15 +470,13 @@ SampleUffFasterRcnnParams initializeSampleParams(const FrcnnArgs& args)
         params.dataDirs.push_back("data/faster-rcnn/");
         params.dataDirs.push_back("data/samples/faster-rcnn/");
     }
-
-    ASSERT(args.batchSize == static_cast<int>(args.inputImages.size()));
+    params.batchSize = static_cast<int>(args.inputImages.size());
     params.inputImages = args.inputImages;
     params.uffFileName = "faster_rcnn.uff";
     params.inputNodeName = "input_1";
     params.outputClsName = "dense_class/Softmax";
     params.outputRegName = "dense_regress/BiasAdd";
     params.outputProposalName = "proposal";
-    params.batchSize = args.batchSize;
     params.classNames.push_back("Automobile");
     params.classNames.push_back("Bicycle");
     params.classNames.push_back("Person");
@@ -512,8 +510,13 @@ SampleUffFasterRcnnParams initializeSampleParams(const FrcnnArgs& args)
 
 void printHelpInfo()
 {
-    std::cout << "Usage: ./sample_uff_fasterRCNN [OPTIONS]" << std::endl;
-    std::cout << "--help[-h]              Display help information" << std::endl;
+    std::cout << "Usage: ./sample_uff_fasterRCNN [OPTIONS] -H [HEIGHT] -W [WIDTH] -I [INPUT IMAGES]" << std::endl;
+    std::cout << "=== Required Arguments ===" << std::endl;
+    std::cout << "--inputHeight[-H]       Specify the input height of the model." << std::endl;
+    std::cout << "--inputWidth[-W]        Specify the input width of the model." << std::endl;
+    std::cout << "--inputImages[-I]       Comma-seperated list of input images to use for inference." << std::endl;
+    std::cout << "=== Optional Arguments ===" << std::endl;
+    std::cout << "--help[-h]              Display help information and exit" << std::endl;
     std::cout << "--datadir[-d]           Specify path to a data directory, overriding "
                  "the default. This option can be repeated to add multiple directories."
                  " If the option is unspecified, the default is to search"
@@ -525,14 +528,10 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--fp16[-f]              Specify to run in fp16 mode." << std::endl;
     std::cout << "--int8[-i]              Specify to run in int8 mode." << std::endl;
-    std::cout << "--inputWidth[-W]        Specify the input width of the model." << std::endl;
-    std::cout << "--inputHeight[-H]       Specify the input height of the model." << std::endl;
-    std::cout << "--batchSize[-B]         Specify the batch size for inference." << std::endl;
     std::cout << "--profile[-p]           Whether to do per-layer profiling." << std::endl;
     std::cout << "--repeat[-r]            Specify the repeat number to execute the TRT context,"
                  " used to smooth the profiling time."
               << std::endl;
-    std::cout << "--inputImages[-I]       Specify the input images for inference." << std::endl;
     std::cout << "--saveEngine[-s]        Path to save engine." << std::endl;
     std::cout << "--loadEngine[-l]        Path to load engine." << std::endl;
 }

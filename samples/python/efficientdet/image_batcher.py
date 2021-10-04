@@ -157,6 +157,7 @@ class ImageBatcher:
         for i, batch_images in enumerate(self.batches):
             batch_data = np.zeros(self.shape, dtype=self.dtype)
             batch_scales = [None] * len(batch_images)
+            print("BATCH SCALES: ", batch_scales)
             for i, image in enumerate(batch_images):
                 self.image_index += 1
                 batch_data[i], batch_scales[i] = self.preprocess_image(image)

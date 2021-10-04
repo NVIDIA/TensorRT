@@ -36,7 +36,7 @@ Use `build.sh` to generate the installable wheels for intended python version an
 Example: for python 3.8 `x86_64` wheel,
 ```bash
 cd $TRT_OSSPATH/python
-PYTHON_MAJOR_VERSION=3 PYTHON_MINOR_VERSION=8 TARGET=x86_64 ./build.sh
+PYTHON_MAJOR_VERSION=3 PYTHON_MINOR_VERSION=8 TARGET_ARCHITECTURE=x86_64 ./build.sh
 ```
 
 ### Install the python wheel

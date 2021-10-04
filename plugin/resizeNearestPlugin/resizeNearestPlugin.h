@@ -33,11 +33,11 @@ namespace plugin
 class ResizeNearest : public IPluginV2Ext
 {
 public:
-    ResizeNearest(float scale) noexcept;
+    ResizeNearest(float scale);
 
-    ResizeNearest(const void* data, size_t length) noexcept;
+    ResizeNearest(const void* data, size_t length);
 
-    ~ResizeNearest() noexcept override = default;
+    ~ResizeNearest() override = default;
 
     int getNbOutputs() const noexcept override;
 
@@ -95,9 +95,9 @@ private:
 class ResizeNearestPluginCreator : public BaseCreator
 {
 public:
-    ResizeNearestPluginCreator() noexcept;
+    ResizeNearestPluginCreator();
 
-    ~ResizeNearestPluginCreator() noexcept {};
+    ~ResizeNearestPluginCreator(){};
 
     const char* getPluginName() const noexcept override;
 

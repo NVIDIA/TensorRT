@@ -20,6 +20,7 @@
 #include "NvInferVersion.h"
 #include <cstddef>
 #include <cstdint>
+#include <cuda_runtime_api.h>
 
 //!< Items that are marked as deprecated will be removed in a future release.
 #if __cplusplus >= 201402L
@@ -71,12 +72,6 @@ extern "C"
     struct cublasContext;
     //! Forward declaration of cudnnContext to use in other interfaces
     struct cudnnContext;
-
-    //! Forward declaration of cudaStream_t.
-    using cudaStream_t = struct CUstream_st*;
-
-    //! Forward declaration of cudaEvent_t.
-    using cudaEvent_t = struct CUevent_st*;
 }
 
 #define NV_TENSORRT_VERSION nvinfer1::kNV_TENSORRT_VERSION_IMPL
@@ -161,9 +156,9 @@ struct EnumMaxImpl<DataType>
 class Dims32
 {
 public:
-    //! The maximum number of dimensions supported for a tensor.
+    //! The maximum rank (number of dimensions) supported for a tensor.
     static constexpr int32_t MAX_DIMS{8};
-    //! The number of dimensions.
+    //! The rank (number of dimensions).
     int32_t nbDims;
     //! The extent of each dimension.
     int32_t d[MAX_DIMS];
@@ -228,8 +223,8 @@ enum class TensorFormat : int32_t
     //!
     //! If running on the DLA, this format can be used for acceleration
     //! with the caveat that C must be equal or lesser than 4.
-    //! If used as DLA input with allowGPUFallback disable, it needs to meet
-    //! line stride requirement of DLA format. Column stride in bytes should
+    //! If used as DLA input and the build option kGPU_FALLBACK is not specified,
+    //! it needs to meet line stride requirement of DLA format. Column stride in bytes should
     //! be multiple of 32.
     kCHW4 = 3,
 
@@ -395,11 +390,17 @@ public:
     //! \brief Return the plugin type. Should match the plugin name returned by the corresponding plugin creator
     //! \see IPluginCreator::getPluginName()
     //!
+    //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
+    //! terminated.
+    //!
     virtual AsciiChar const* getPluginType() const noexcept = 0;
 
     //!
     //! \brief Return the plugin version. Should match the plugin version returned by the corresponding plugin creator
     //! \see IPluginCreator::getPluginVersion()
+    //!
+    //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
+    //! terminated.
     //!
     virtual AsciiChar const* getPluginVersion() const noexcept = 0;
 
@@ -545,6 +546,11 @@ public:
     //! \brief Set the namespace that this plugin object belongs to. Ideally, all plugin
     //! objects from the same plugin library should have the same namespace.
     //!
+    //! \param pluginNamespace The namespace for the plugin object.
+    //!
+    //! \warning The string pluginNamespace must be 1024 bytes or less including the NULL terminator and must be NULL
+    //! terminated.
+    //!
     virtual void setPluginNamespace(AsciiChar const* pluginNamespace) noexcept = 0;
 
     //!
@@ -552,14 +558,18 @@ public:
     //!
     virtual AsciiChar const* getPluginNamespace() const noexcept = 0;
 
+// @cond SuppressDoxyWarnings
     IPluginV2() = default;
     virtual ~IPluginV2() noexcept = default;
+// @endcond
 
 protected:
+// @cond SuppressDoxyWarnings
     IPluginV2(IPluginV2 const&) = default;
     IPluginV2(IPluginV2&&) = default;
     IPluginV2& operator=(IPluginV2 const&) & = default;
     IPluginV2& operator=(IPluginV2&&) & = default;
+// @endcond
 };
 
 //! \class IPluginV2Ext
@@ -687,10 +697,12 @@ public:
     IPluginV2Ext* clone() const noexcept override = 0;
 
 protected:
+// @cond SuppressDoxyWarnings
     IPluginV2Ext(IPluginV2Ext const&) = default;
     IPluginV2Ext(IPluginV2Ext&&) = default;
     IPluginV2Ext& operator=(IPluginV2Ext const&) & = default;
     IPluginV2Ext& operator=(IPluginV2Ext&&) & = default;
+// @endcond
 
     //!
     //! \brief Return the API version with which this plugin was built. The
@@ -775,14 +787,18 @@ public:
     virtual bool supportsFormatCombination(
         int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) const noexcept = 0;
 
+// @cond SuppressDoxyWarnings
     IPluginV2IOExt() = default;
     ~IPluginV2IOExt() override = default;
+// @endcond
 
 protected:
+// @cond SuppressDoxyWarnings
     IPluginV2IOExt(IPluginV2IOExt const&) = default;
     IPluginV2IOExt(IPluginV2IOExt&&) = default;
     IPluginV2IOExt& operator=(IPluginV2IOExt const&) & = default;
     IPluginV2IOExt& operator=(IPluginV2IOExt&&) & = default;
+// @endcond
 
     //!
     //! \brief Return the API version with which this plugin was built. The upper byte is reserved by TensorRT and is
@@ -801,11 +817,11 @@ private:
     // Following are obsolete base class methods, and must not be implemented or used.
 
     void configurePlugin(Dims const*, int32_t, Dims const*, int32_t, DataType const*, DataType const*, bool const*,
-        bool const*, PluginFormat, int32_t) noexcept override final
+        bool const*, PluginFormat, int32_t) noexcept final
     {
     }
 
-    bool supportsFormat(DataType, PluginFormat) const noexcept override final
+    bool supportsFormat(DataType, PluginFormat) const noexcept final
     {
         return false;
     }
@@ -907,10 +923,16 @@ public:
     //!
     //! \brief Return the plugin name.
     //!
+    //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
+    //! terminated.
+    //!
     virtual AsciiChar const* getPluginName() const noexcept = 0;
 
     //!
     //! \brief Return the plugin version.
+    //!
+    //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
+    //! terminated.
     //!
     virtual AsciiChar const* getPluginVersion() const noexcept = 0;
 
@@ -941,16 +963,21 @@ public:
     //!
     //! \brief Return the namespace of the plugin creator object.
     //!
+    //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
+    //! terminated.
+    //!
     virtual AsciiChar const* getPluginNamespace() const noexcept = 0;
 
     IPluginCreator() = default;
     virtual ~IPluginCreator() = default;
 
 protected:
+// @cond SuppressDoxyWarnings
     IPluginCreator(IPluginCreator const&) = default;
     IPluginCreator(IPluginCreator&&) = default;
     IPluginCreator& operator=(IPluginCreator const&) & = default;
     IPluginCreator& operator=(IPluginCreator&&) & = default;
+// @endcond
 };
 
 //!
@@ -978,6 +1005,9 @@ public:
     //! \brief Register a plugin creator. Returns false if one with same type
     //! is already registered.
     //!
+    //! \warning The string pluginNamespace must be 1024 bytes or less including the NULL terminator and must be NULL
+    //! terminated.
+    //!
     virtual bool registerCreator(IPluginCreator& creator, AsciiChar const* const pluginNamespace) noexcept = 0;
 
     //!
@@ -990,15 +1020,20 @@ public:
     //! \brief Return plugin creator based on plugin name, version, and
     //! namespace associated with plugin during network creation.
     //!
-    virtual IPluginCreator* getPluginCreator(
-        AsciiChar const* const pluginName, AsciiChar const* const pluginVersion, AsciiChar const* const pluginNamespace = "") noexcept
+    //! \warning The strings pluginName, pluginVersion, and pluginNamespace must be 1024 bytes or less including the
+    //! NULL terminator and must be NULL terminated.
+    //!
+    virtual IPluginCreator* getPluginCreator(AsciiChar const* const pluginName, AsciiChar const* const pluginVersion,
+        AsciiChar const* const pluginNamespace = "") noexcept
         = 0;
 
+    // @cond SuppressDoxyWarnings
     IPluginRegistry() = default;
     IPluginRegistry(IPluginRegistry const&) = delete;
     IPluginRegistry(IPluginRegistry&&) = delete;
     IPluginRegistry& operator=(IPluginRegistry const&) & = delete;
     IPluginRegistry& operator=(IPluginRegistry&&) & = delete;
+// @endcond
 
 protected:
     virtual ~IPluginRegistry() noexcept = default;
@@ -1056,7 +1091,7 @@ namespace impl
 template <>
 struct EnumMaxImpl<AllocatorFlag>
 {
-    static constexpr int32_t kVALUE = 1;
+    static constexpr int32_t kVALUE = 1;        //!< maximum number of elements in AllocatorFlag enum
 };
 } // namespace impl
 
@@ -1084,7 +1119,7 @@ public:
     //!
     //! If an allocation request cannot be satisfied, nullptr should be returned.
     //!
-    //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate
+    //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
     //!
     virtual void* allocate(uint64_t const size, uint64_t const alignment, AllocatorFlags const flags) noexcept = 0;
@@ -1096,10 +1131,14 @@ public:
     //!
     //! \param memory The acquired memory.
     //!
-    //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate
+    //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
     //!
-    virtual void free(void* const memory) noexcept = 0;
+    //! \see deallocate()
+    //!
+    //! \deprecated Superseded by deallocate and will be removed in TensorRT 10.0.
+    //!
+    TRT_DEPRECATED virtual void free(void* const memory) noexcept = 0;
 
     //!
     //! Destructor declared virtual as general good practice for a class with virtual methods.
@@ -1134,29 +1173,52 @@ public:
     //! \param newSize The new memory size required.
     //! \return the address of the reallocated memory
     //!
-    //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate
+    //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
     //!
-    virtual void* reallocate(void* baseAddr, uint64_t alignment, uint64_t newSize) noexcept
+    virtual void* reallocate(void* /*baseAddr*/, uint64_t /*alignment*/, uint64_t /*newSize*/) noexcept
     {
         return nullptr;
     }
 
+    //!
+    //! A thread-safe callback implemented by the application to handle release of GPU memory.
+    //!
+    //! TensorRT may pass a nullptr to this function if it was previously returned by allocate().
+    //!
+    //! \param memory The acquired memory.
+    //! \return True if the acquired memory is released successfully.
+    //!
+    //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
+    //! requests.
+    //!
+    //! \note If user-implemented free() might hit an error condition, the user should override deallocate() as the
+    //! primary implementation and override free() to call deallocate() for backwards compatibility.
+    //!
+    //! \see free()
+    //!
+    virtual bool deallocate(void* const memory) noexcept
+    {
+        this->free(memory);
+        return true;
+    }
+
 protected:
+// @cond SuppressDoxyWarnings
     IGpuAllocator(IGpuAllocator const&) = default;
     IGpuAllocator(IGpuAllocator&&) = default;
     IGpuAllocator& operator=(IGpuAllocator const&) & = default;
     IGpuAllocator& operator=(IGpuAllocator&&) & = default;
+// @endcond
 };
 
 //!
 //! \class ILogger
 //!
-//! \brief Application-implemented logging interface for the builder, engine and runtime.
+//! \brief Application-implemented logging interface for the builder, refitter and runtime.
 //!
-//! Note that although a logger is passed on creation to each instance of a IBuilder or IRuntime interfaces, the logger
-//! is internally considered a singleton, and thus multiple instances of IRuntime and/or IBuilder must all use the same
-//! logger.
+//! The logger used to create an instance of IBuilder, IRuntime or IRefitter is used for all objects created through that interface.
+//! The logger should be valid until all objects created are released.
 //!
 class ILogger
 {
@@ -1184,7 +1246,7 @@ public:
     //! A callback implemented by the application to handle logging messages;
     //!
     //! \param severity The severity of the message.
-    //! \param msg The log message, null terminated.
+    //! \param msg A null-terminated log message.
     //!
     virtual void log(Severity severity, AsciiChar const* msg) noexcept = 0;
 
@@ -1192,10 +1254,12 @@ public:
     virtual ~ILogger() = default;
 
 protected:
+// @cond SuppressDoxyWarnings
     ILogger(ILogger const&) = default;
     ILogger(ILogger&&) = default;
     ILogger& operator=(ILogger const&) & = default;
     ILogger& operator=(ILogger&&) & = default;
+// @endcond
 };
 
 namespace impl
@@ -1324,24 +1388,26 @@ struct EnumMaxImpl<ErrorCode>
 //! The error reporting mechanism is a user defined object that interacts with the internal state of the object
 //! that it is assigned to in order to determine information about abnormalities in execution. The error recorder
 //! gets both an error enum that is more descriptive than pass/fail and also a string description that gives more
-//! detail on the exact failure modes. In the safety context, the error strings are all limited to 128 characters
+//! detail on the exact failure modes. In the safety context, the error strings are all limited to 1024 characters
 //! in length.
+//!
 //! The ErrorRecorder gets passed along to any class that is created from another class that has an ErrorRecorder
 //! assigned to it. For example, assigning an ErrorRecorder to an IBuilder allows all INetwork's, ILayer's, and
 //! ITensor's to use the same error recorder. For functions that have their own ErrorRecorder accessor functions.
 //! This allows registering a different error recorder or de-registering of the error recorder for that specific
 //! object.
 //!
-//! The ErrorRecorder object implementation must be thread safe if the same ErrorRecorder is passed to different
-//! interface objects being executed in parallel in different threads. All locking and synchronization is
-//! pushed to the interface implementation and TensorRT does not hold any synchronization primitives when accessing
-//! the interface functions.
+//! The ErrorRecorder object implementation must be thread safe. All locking and synchronization is pushed to the
+//! interface implementation and TensorRT does not hold any synchronization primitives when accessing the interface
+//! functions.
+//!
+//! The lifetime of the ErrorRecorder object must exceed the lifetime of all TensorRT objects that use it.
 //!
 class IErrorRecorder
 {
 public:
     //!
-    //! A typedef of a c-style string for reporting error descriptions.
+    //! A typedef of a C-style string for reporting error descriptions.
     //!
     using ErrorDesc = char const*;
 
@@ -1378,7 +1444,7 @@ public:
     //!
     //! \brief Returns the ErrorCode enumeration.
     //!
-    //! \param errorIdx A 32bit integer that indexes into the error array.
+    //! \param errorIdx A 32-bit integer that indexes into the error array.
     //!
     //! The errorIdx specifies what error code from 0 to getNbErrors()-1 that the application
     //! wants to analyze and return the error code enum.
@@ -1390,12 +1456,12 @@ public:
     virtual ErrorCode getErrorCode(int32_t errorIdx) const noexcept = 0;
 
     //!
-    //! \brief Returns the c-style string description of the error.
+    //! \brief Returns a null-terminated C-style string description of the error.
     //!
-    //! \param errorIdx A 32bit integer that indexes into the error array.
+    //! \param errorIdx A 32-bit integer that indexes into the error array.
     //!
     //! For the error specified by the idx value, return the string description of the error. The
-    //! error string is a c-style string that is zero delimited. In the safety context there is a
+    //! error string is a null-terminated C-style string. In the safety context there is a
     //! constant length requirement to remove any dynamic memory allocations and the error message
     //! may be truncated. The format of the string is "<EnumAsStr> - <Description>".
     //!
@@ -1438,6 +1504,9 @@ public:
     //! Report an error to the user that has a given value and human readable description. The function returns false
     //! if processing can continue, which implies that the reported error is not fatal. This does not guarantee that
     //! processing continues, but provides a hint to TensorRT.
+    //! The desc C-string data is only valid during the call to reportError and may be immediately deallocated by the
+    //! caller when reportError returns. The implementation must not store the desc pointer in the ErrorRecorder object
+    //! or otherwise access the data from desc after reportError returns.
     //!
     //! \return True if the error is determined to be fatal and processing of the current function must end.
     //!
@@ -1446,38 +1515,37 @@ public:
     //!
     //! \brief Increments the refcount for the current ErrorRecorder.
     //!
-    //! Increments the reference count for the object by one and returns the current value.
-    //! This reference count allows the application to know that an object inside of TensorRT has
-    //! taken a reference to the ErrorRecorder. If the ErrorRecorder is released before the
-    //! reference count hits zero, then behavior in TensorRT is undefined. It is strongly recommended
-    //! that the increment is an atomic operation. TensorRT guarantees that each incRefCount called on
-    //! an objects construction is paired with a decRefCount call when an object is destructed.
+    //! Increments the reference count for the object by one and returns the current value.  This reference count allows
+    //! the application to know that an object inside of TensorRT has taken a reference to the ErrorRecorder.  TensorRT
+    //! guarantees that every call to IErrorRecorder::incRefCount will be paired with a call to
+    //! IErrorRecorder::decRefCount when the reference is released.  It is undefined behavior to destruct the
+    //! ErrorRecorder when incRefCount has been called without a corresponding decRefCount.
     //!
-    //! \return The current reference counted value.
+    //! \return The reference counted value after the increment completes.
     //!
     virtual RefCount incRefCount() noexcept = 0;
 
     //!
     //! \brief Decrements the refcount for the current ErrorRecorder.
     //!
-    //! Decrements the reference count for the object by one and returns the current value. It is undefined behavior
-    //! to call decRefCount when RefCount is zero. If the ErrorRecorder is destroyed before the reference count
-    //! hits zero, then behavior in TensorRT is undefined. It is strongly recommended that the decrement is an
-    //! atomic operation. TensorRT guarantees that each decRefCount called when an object is destructed is
-    //! paired with a incRefCount call when that object was constructed.
+    //! Decrements the reference count for the object by one and returns the current value.  This reference count allows
+    //! the application to know that an object inside of TensorRT has taken a reference to the ErrorRecorder.  TensorRT
+    //! guarantees that every call to IErrorRecorder::decRefCount will be preceded by a call to
+    //! IErrorRecorder::incRefCount.  It is undefined behavior to destruct the ErrorRecorder when incRefCount has been
+    //! called without a corresponding decRefCount.
     //!
-    //! \return The current reference counted value.
+    //! \return The reference counted value after the decrement completes.
     //!
     virtual RefCount decRefCount() noexcept = 0;
 
 protected:
+// @cond SuppressDoxyWarnings
     IErrorRecorder(IErrorRecorder const&) = default;
     IErrorRecorder(IErrorRecorder&&) = default;
     IErrorRecorder& operator=(IErrorRecorder const&) & = default;
     IErrorRecorder& operator=(IErrorRecorder&&) & = default;
-
+    // @endcond
 }; // class IErrorRecorder
-
 } // namespace nvinfer1
 
 //!

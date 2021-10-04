@@ -45,7 +45,7 @@ public:
     /**
      * \brief get the upper bound for the possible values of indices
      */
-    virtual int getInputDimensionSize() = 0;
+    virtual int32_t getInputDimensionSize() = 0;
 
     ~Embedder() override = default;
 };

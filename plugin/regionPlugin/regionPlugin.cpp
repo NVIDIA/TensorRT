@@ -468,6 +468,7 @@ void Region::detachFromContext() noexcept {}
 
 RegionPluginCreator::RegionPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("num", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("coords", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("classes", nullptr, PluginFieldType::kINT32, 1));

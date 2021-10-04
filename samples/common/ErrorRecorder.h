@@ -16,17 +16,17 @@
 
 #ifndef ERROR_RECORDER_H
 #define ERROR_RECORDER_H
-#include "NvInferRuntime.h"
+#include "NvInferRuntimeCommon.h"
 #include "logger.h"
 #include <atomic>
 #include <cstdint>
 #include <exception>
 #include <mutex>
 #include <vector>
-#if NV_IS_SAFETY
-#include <iostream>
-#endif
-using namespace nvinfer1;
+
+using nvinfer1::IErrorRecorder;
+using nvinfer1::ErrorCode;
+
 //!
 //! A simple implementation of the IErrorRecorder interface for
 //! use by samples. This interface also can be used as a reference
@@ -35,8 +35,6 @@ using namespace nvinfer1;
 //! code and the error string into a single element. It also uses
 //! standard mutex's and atomics in order to make sure that the code
 //! works in a multi-threaded environment.
-//! SampleErrorRecorder is not intended for use in automotive safety
-//! environments.
 //!
 class SampleErrorRecorder : public IErrorRecorder
 {
@@ -76,11 +74,7 @@ public:
         }
         catch (const std::exception& e)
         {
-#if NV_IS_SAFETY
-            std::cerr << "Internal Error: " << e.what() << std::endl;
-#else
-            getLogger()->log(ILogger::Severity::kINTERNAL_ERROR, e.what());
-#endif
+            sample::gLogFatal << "Internal Error: " << e.what() << std::endl;
         }
     };
 
@@ -100,11 +94,7 @@ public:
         }
         catch (const std::exception& e)
         {
-#if NV_IS_SAFETY
-            std::cerr << "Internal Error: " << e.what() << std::endl;
-#else
-            getLogger()->log(ILogger::Severity::kINTERNAL_ERROR, e.what());
-#endif
+            sample::gLogFatal << "Internal Error: " << e.what() << std::endl;
         }
         // All errors are considered fatal.
         return true;

@@ -33,7 +33,7 @@ class PinnedHostBuffer
 public:
     typedef std::shared_ptr<PinnedHostBuffer<T>> ptr;
 
-    PinnedHostBuffer(size_t elementCount)
+    explicit PinnedHostBuffer(size_t elementCount)
         : mBuffer(nullptr)
     {
         CUDA_CHECK(cudaHostAlloc(&mBuffer, elementCount * sizeof(T), cudaHostAllocDefault));

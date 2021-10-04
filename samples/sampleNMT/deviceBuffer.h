@@ -29,7 +29,7 @@ class DeviceBuffer
 public:
     typedef std::shared_ptr<DeviceBuffer<T>> ptr;
 
-    DeviceBuffer(size_t elementCount)
+    explicit DeviceBuffer(size_t elementCount)
         : mBuffer(nullptr)
     {
         CUDA_CHECK(cudaMalloc(&mBuffer, elementCount * sizeof(T)));

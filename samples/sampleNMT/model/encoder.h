@@ -43,7 +43,7 @@ public:
      * last timestep (which is dependent on the sample), the function should define the tensor, it could be nullptr
      * indicating these data are not needed
      */
-    virtual void addToModel(nvinfer1::INetworkDefinition* network, int maxInputSequenceLength,
+    virtual void addToModel(nvinfer1::INetworkDefinition* network, int32_t maxInputSequenceLength,
         nvinfer1::ITensor* inputEmbeddedData, nvinfer1::ITensor* actualInputSequenceLengths,
         nvinfer1::ITensor** inputStates, nvinfer1::ITensor** memoryStates, nvinfer1::ITensor** lastTimestepStates)
         = 0;
@@ -51,7 +51,7 @@ public:
     /**
      * \brief get the size of the memory state vector
      */
-    virtual int getMemoryStatesSize() = 0;
+    virtual int32_t getMemoryStatesSize() = 0;
 
     /**
      * \brief get the sizes (vector of them) of the hidden state vectors

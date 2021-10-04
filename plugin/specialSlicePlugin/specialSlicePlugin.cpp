@@ -31,9 +31,8 @@ const char* SPECIALSLICE_PLUGIN_NAME{"SpecialSlice_TRT"};
 PluginFieldCollection SpecialSlicePluginCreator::mFC{};
 std::vector<PluginField> SpecialSlicePluginCreator::mPluginAttributes;
 
-SpecialSlicePluginCreator::SpecialSlicePluginCreator() noexcept
+SpecialSlicePluginCreator::SpecialSlicePluginCreator()
 {
-
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
@@ -112,16 +111,14 @@ void SpecialSlice::serialize(void* buffer) const noexcept
     ASSERT(d == a + getSerializationSize());
 }
 
-SpecialSlice::SpecialSlice(const void* data, size_t length) noexcept
+SpecialSlice::SpecialSlice(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mBboxesCnt = read<int>(d);
     assert(d == a + length);
 }
 
-SpecialSlice::SpecialSlice() noexcept
-{
-}
+SpecialSlice::SpecialSlice() {}
 
 int SpecialSlice::initialize() noexcept
 {
@@ -133,7 +130,7 @@ int SpecialSlice::getNbOutputs() const noexcept
     return 1;
 }
 
-void SpecialSlice::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims) noexcept
+void SpecialSlice::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims)
 {
 
     assert(nbInputDims == 1);

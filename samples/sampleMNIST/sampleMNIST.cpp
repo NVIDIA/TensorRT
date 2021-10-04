@@ -141,7 +141,6 @@ bool SampleMNIST::build()
     builder->setMaxBatchSize(mParams.batchSize);
     config->setMaxWorkspaceSize(16_MiB);
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
-    config->setFlag(BuilderFlag::kSTRICT_TYPES);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);

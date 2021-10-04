@@ -48,34 +48,34 @@ public:
     /**
      * \brief get the ID of the token
      */
-    int getId(const std::string& token) const;
+    int32_t getId(const std::string& token) const;
 
     /**
      * \brief get token by ID
      */
-    std::string getToken(int id) const;
+    std::string getToken(int32_t id) const;
 
     /**
      * \brief get the number of elements in the vocabulary
      */
-    int getSize() const;
+    int32_t getSize() const;
 
-    int getStartSequenceId() override;
+    int32_t getStartSequenceId() override;
 
-    int getEndSequenceId() override;
+    int32_t getEndSequenceId() override;
 
 private:
     static const std::string mSosStr;
     static const std::string mUnkStr;
     static const std::string mEosStr;
 
-    std::map<std::string, int> mTokenToId;
+    std::map<std::string, int32_t> mTokenToId;
     std::vector<std::string> mIdToToken;
-    int mNumTokens;
+    int32_t mNumTokens;
 
-    int mSosId;
-    int mEosId;
-    int mUnkId;
+    int32_t mSosId;
+    int32_t mEosId;
+    int32_t mUnkId;
 };
 } // namespace nmtSample
 

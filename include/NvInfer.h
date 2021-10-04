@@ -55,48 +55,54 @@ namespace nvinfer1
 //!
 enum class LayerType : int32_t
 {
-    kCONVOLUTION = 0,      //!< Convolution layer.
-    kFULLY_CONNECTED = 1,  //!< Fully connected layer.
-    kACTIVATION = 2,       //!< Activation layer.
-    kPOOLING = 3,          //!< Pooling layer.
-    kLRN = 4,              //!< LRN layer.
-    kSCALE = 5,            //!< Scale layer.
-    kSOFTMAX = 6,          //!< SoftMax layer.
-    kDECONVOLUTION = 7,    //!< Deconvolution layer.
-    kCONCATENATION = 8,    //!< Concatenation layer.
-    kELEMENTWISE = 9,      //!< Elementwise layer.
-    kPLUGIN = 10,          //!< Plugin layer.
-    kUNARY = 11,           //!< UnaryOp operation Layer.
-    kPADDING = 12,         //!< Padding layer.
-    kSHUFFLE = 13,         //!< Shuffle layer.
-    kREDUCE = 14,          //!< Reduce layer.
-    kTOPK = 15,            //!< TopK layer.
-    kGATHER = 16,          //!< Gather layer.
-    kMATRIX_MULTIPLY = 17, //!< Matrix multiply layer.
-    kRAGGED_SOFTMAX = 18,  //!< Ragged softmax layer.
-    kCONSTANT = 19,        //!< Constant layer.
-    kRNN_V2 = 20,          //!< RNNv2 layer.
-    kIDENTITY = 21,        //!< Identity layer.
-    kPLUGIN_V2 = 22,       //!< PluginV2 layer.
-    kSLICE = 23,           //!< Slice layer.
-    kSHAPE = 24,           //!< Shape layer.
-    kPARAMETRIC_RELU = 25, //!< Parametric ReLU layer.
-    kRESIZE = 26,          //!< Resize Layer.
-    kTRIP_LIMIT = 27,      //!< Loop Trip limit layer
-    kRECURRENCE = 28,      //!< Loop Recurrence layer
-    kITERATOR = 29,        //!< Loop Iterator layer
-    kLOOP_OUTPUT = 30,     //!< Loop output layer
-    kSELECT = 31,          //!< Select layer.
-    kFILL = 32,            //!< Fill layer
-    kQUANTIZE = 33,        //!< Quantize layer
-    kDEQUANTIZE = 34,      //!< Dequantize layer
+    kCONVOLUTION = 0,           //!< Convolution layer.
+    kFULLY_CONNECTED = 1,       //!< Fully connected layer.
+    kACTIVATION = 2,            //!< Activation layer.
+    kPOOLING = 3,               //!< Pooling layer.
+    kLRN = 4,                   //!< LRN layer.
+    kSCALE = 5,                 //!< Scale layer.
+    kSOFTMAX = 6,               //!< SoftMax layer.
+    kDECONVOLUTION = 7,         //!< Deconvolution layer.
+    kCONCATENATION = 8,         //!< Concatenation layer.
+    kELEMENTWISE = 9,           //!< Elementwise layer.
+    kPLUGIN = 10,               //!< Plugin layer.
+    kUNARY = 11,                //!< UnaryOp operation Layer.
+    kPADDING = 12,              //!< Padding layer.
+    kSHUFFLE = 13,              //!< Shuffle layer.
+    kREDUCE = 14,               //!< Reduce layer.
+    kTOPK = 15,                 //!< TopK layer.
+    kGATHER = 16,               //!< Gather layer.
+    kMATRIX_MULTIPLY = 17,      //!< Matrix multiply layer.
+    kRAGGED_SOFTMAX = 18,       //!< Ragged softmax layer.
+    kCONSTANT = 19,             //!< Constant layer.
+    kRNN_V2 = 20,               //!< RNNv2 layer.
+    kIDENTITY = 21,             //!< Identity layer.
+    kPLUGIN_V2 = 22,            //!< PluginV2 layer.
+    kSLICE = 23,                //!< Slice layer.
+    kSHAPE = 24,                //!< Shape layer.
+    kPARAMETRIC_RELU = 25,      //!< Parametric ReLU layer.
+    kRESIZE = 26,               //!< Resize Layer.
+    kTRIP_LIMIT = 27,           //!< Loop Trip limit layer
+    kRECURRENCE = 28,           //!< Loop Recurrence layer
+    kITERATOR = 29,             //!< Loop Iterator layer
+    kLOOP_OUTPUT = 30,          //!< Loop output layer
+    kSELECT = 31,               //!< Select layer.
+    kFILL = 32,                 //!< Fill layer
+    kQUANTIZE = 33,             //!< Quantize layer
+    kDEQUANTIZE = 34,           //!< Dequantize layer
+    kCONDITION = 35,            //!< Condition layer
+    kCONDITIONAL_INPUT = 36,    //!< Conditional Input layer
+    kCONDITIONAL_OUTPUT = 37,   //!< Conditional Output layer
+    kSCATTER = 38,              //!< Scatter layer
+    kEINSUM = 39,               //!< Einsum layer
+    kASSERTION = 40,            //!< Assertion layer
 };
 
 //! Maximum number of elements in LayerType enum. \see LayerType
 template <>
 constexpr inline int32_t EnumMax<LayerType>() noexcept
 {
-    return 35;
+    return 41;
 }
 
 //!
@@ -174,7 +180,7 @@ public:
     //!
     //! \brief Get the tensor name.
     //!
-    //! \return The name, as a pointer to a NULL-terminated character sequence.
+    //! \return The name as a null-terminated C-style string.
     //!
     //! \see setName()
     //!
@@ -378,8 +384,8 @@ public:
     //! \brief Set allowed formats for this tensor. By default all formats are allowed.
     //!        Shape tensors (for which isShapeTensor() returns true) may only have row major linear format.
     //!
-    //! When running network on DLA and allowGPUFallback is disabled, if DLA format(kCHW4 with Int8, kCHW4 with
-    //! FP16, kCHW16 with FP16, kCHW32 with Int8) is set, the input format is treated as native DLA format with
+    //! When running network on DLA and the build option kGPU_FALLBACK is not specified, if DLA format(kCHW4 with Int8,
+    //! kCHW4 with FP16, kCHW16 with FP16, kCHW32 with Int8) is set, the input format is treated as native DLA format with
     //! line stride requirement. Input/output binding with these format should have correct layout during
     //! inference.
     //!
@@ -1355,18 +1361,21 @@ public:
     //! \param index the index of the input to modify.
     //! \param tensor the new input tensor
     //!
-    //! For a IConvolutionLayer, only index 0 is valid unless explicit precision mode is enabled.
-    //! With explicit precision mode, values 0-1 are valid where value 1 overrides kernel weights.
-    //! Kernel weights tensor (computed at build-time) must be an output of dequantize scale layer (i.e. a scale layer
-    //! with int8 input and float output) in explicit precision network. Conversely, this input tensor can be overridden
-    //! via appropriate set call.
+    //! Only index 0 (data input) is valid, unless explicit-quantization mode is enabled.
+    //! In explicit-quantization mode, input with index 1 is the kernel-weights tensor, if present.
+    //! The kernel-weights tensor must be a build-time constant (computable at build-time via constant-folding)
+    //! and an output of a dequantize layer.
+    //! If input index 1 is used then the kernel-weights parameter must be set to empty Weights.
+    //!
+    //! \see getKernelWeights(), setKernelWeights()
     //!
     //! The indices are as follows:
     //!
     //! - 0: The input activation tensor.
     //! - 1: The kernel weights tensor (a constant tensor).
     //!
-    //! If this function is called with a value greater than 0, then the function getNbInputs() changes
+    //! If this function is called with the value 1, then the function getNbInputs() changes
+    //! from returning 1 to 2.
     using ILayer::setInput;
 
 protected:
@@ -1476,16 +1485,21 @@ public:
     //! \param index the index of the input to modify.
     //! \param tensor the new input tensor
     //!
-    //! For a IFullyConnectedLayer, only index 0 is valid unless explicit precision mode is enabled.
-    //! With explicit precision mode, values 0-1 are valid where value 1 overrides kernel weights.
-    //! Kernel weights tensor (computed at build-time) must be an output of dequantize scale layer (i.e. a scale layer
-    //! with int8 input and float output) in explicit precision network. Conversely, this input tensor can be overridden
-    //! via appropriate set call. The indices are as follows:
+    //! Only index 0 (data input) is valid, unless explicit-quantization mode is enabled.
+    //! In explicit-quantization mode, input with index 1 is the kernel-weights tensor, if present.
+    //! The kernel-weights tensor must be a build-time constant (computable at build-time via constant-folding)
+    //! and an output of a dequantize layer.
+    //! If input index 1 is used then the kernel-weights parameter must be set to empty Weights.
+    //!
+    //! \see getKernelWeights(), setKernelWeights()
+    //!
+    //! The indices are as follows:
     //!
     //! - 0: The input activation tensor.
     //! - 1: The kernel weights tensor (a constant tensor).
     //!
-    //! If this function is called with a value greater than 0, then the function getNbInputs() changes
+    //! If this function is called with the value 1, then the function getNbInputs() changes
+    //! from returning 1 to 2.
     using ILayer::setInput;
 
 protected:
@@ -2234,7 +2248,7 @@ public:
     //! \brief Set the axis along which softmax is computed. Currently, only one axis can be set.
     //!
     //! The axis is specified by setting the bit corresponding to the axis to 1.
-    //! Let's say we have an NCHW tensor as input (three non-batch dimensions).
+    //! For example, consider an NCHW tensor as input (three non-batch dimensions).
     //!
     //! In implicit mode :
     //! Bit 0 corresponds to the C dimension boolean.
@@ -2386,13 +2400,14 @@ public:
     }
 
     //!
-    //! \brief Get the stride of the deconvolution.
+    //! \brief Set the stride of the deconvolution.
     //!
-    //! If executing this layer on DLA, both height and width of stride must be in the range [1,32] or the combinations
-    //! of [64, 96, 128] in one dimension and 1 in the other dimensions, i.e. [1x64] or [64x1] are valid, but not
-    //! [64x64].
+    //! If executing this layer on DLA, there are two restrictions:
+    //! 1) Stride height and width must be in the range [1,32] or the combinations of [64, 96, 128] in one
+    //! dimension and 1 in the other dimensions, i.e. [1x64] or [64x1] are valid, but not [64x64].
+    //! 2) Stride values in each dimension must be equal to the corresponding kernel dimension values.
     //!
-    //! \see setStride()
+    //! \see getStride()
     //!
     //! \deprecated Superseded by setStrideNd and will be removed in TensorRT 9.0.
     //!
@@ -2611,8 +2626,10 @@ public:
     //!
     //! \brief Set the multi-dimension kernel size of the deconvolution.
     //!
-    //! If executing this layer on DLA, only support 2D kernel size, both height and width of kernel size must be in
-    //! the range [1-32].
+    //! If executing this layer on DLA, there are ttwo restrictions:
+    //! 1) Only 2D Kernel is supported.
+    //! 2) Kernel height and width must be in the range [1,32] or the combinations of [64, 96, 128] in one
+    //! dimension and 1 in the other dimensions, i.e. [1x64] or [64x1] are valid, but not [64x64].
     //!
     //! \see getKernelSizeNd() setKernelSize() getKernelSize()
     //!
@@ -2636,8 +2653,11 @@ public:
     //!
     //! Default: (1, 1, ..., 1)
     //!
-    //! If executing this layer on DLA, only support 2D stride, both height and width of stride must be in the range
-    //! [1-32].
+    //! If executing this layer on DLA, there are three restrictions:
+    //! 1) Only 2D Stride is supported.
+    //! 2) Stride height and width must be in the range [1,32] or the combinations of [64, 96, 128] in one
+    //! dimension and 1 in the other dimensions, i.e. [1x64] or [64x1] are valid, but not [64x64].
+    //! 3) Stride values in each dimension must be equal to the corresponding kernel dimension values.
     //!
     //! \see getStrideNd() setStride() getStride()
     //!
@@ -2692,17 +2712,21 @@ public:
     //! \param index the index of the input to modify.
     //! \param tensor the new input tensor
     //!
-    //! For a IDeconvolutionLayer, only index 0 is valid unless explicit precision mode is enabled.
-    //! With explicit precision mode, values 0-1 are valid where value 1 overrides kernel weights.
-    //! Kernel weights tensor (computed at build-time) must be an output of dequantize scale layer (i.e. a scale layer
-    //! with int8 input and float output) in explicit precision network. Conversely, this input tensor can be overridden
-    //! via appropriate set call. The indices are as follows:
+    //! Only index 0 (data input) is valid, unless explicit-quantization mode is enabled.
+    //! In explicit-quantization mode, input with index 1 is the kernel-weights tensor, if present.
+    //! The kernel-weights tensor must be a build-time constant (computable at build-time via constant-folding)
+    //! and an output of a dequantize layer.
+    //! If input index 1 is used then the kernel-weights parameter must be set to empty Weights.
+    //!
+    //! \see getKernelWeights(), setKernelWeights()
+    //!
+    //! The indices are as follows:
     //!
     //! - 0: The input activation tensor.
     //! - 1: The kernel weights tensor (a constant tensor).
     //!
-    //! If this function is called with a value greater than 0, then the function getNbInputs() changes
-    //!
+    //! If this function is called with the value 1, then the function getNbInputs() changes
+    //! from returning 1 to 2.
     using ILayer::setInput;
 
     //! \brief Set the multi-dimension dilation of the deconvolution.
@@ -2773,10 +2797,10 @@ struct EnumMaxImpl<ElementWiseOperation>
 //!
 //! This layer applies a per-element binary operation between corresponding elements of two tensors.
 //!
-//! The input tensors must have the same number of dimensions. For each dimension, their lengths must
+//! The input tensors must have the same rank. For each dimension, their lengths must
 //! match, or one of them must be one. In the latter case, the tensor is broadcast along that axis.
 //!
-//! The output tensor has the same number of dimensions as the inputs. For each output dimension,
+//! The output tensor has the same rank as the inputs. For each output dimension,
 //! its length is equal to the lengths of the corresponding input dimensions if they match,
 //! otherwise it is equal to the length that is not one.
 //！
@@ -2820,14 +2844,111 @@ protected:
 };
 
 //!
+//! \brief Control form of IGatherLayer
+//!
+//! \see IGatherLayer
+//!
+enum class GatherMode : int32_t
+{
+    kDEFAULT = 0, //!< Similar to ONNX Gather
+    kELEMENT = 1, //!< Similar to ONNX GatherElements
+    kND = 2       //!< Similar to ONNX GatherND
+};
+
+//! Maximum number of elements in GatherMode enum. \see GatherMode
+template <>
+constexpr inline int32_t EnumMax<GatherMode>() noexcept
+{
+    return 3;
+}
+
+//!
+//! \class IGatherLayer
+//!
+//! \brief A Gather layer in a network definition. Supports several kinds of gathering.
+//!
+//! The Gather layer has two input tensors, Data and Indices, and an output tensor Output.
+//! Additionally, there are three parameters: mode, nbElementwiseDims, and axis that control
+//! how the indices are interpreted.
+//!
+//! * Data is a tensor of rank r >= 1 that stores the values to be gathered in Output.
+//! * Indices is a tensor of rank q >= 1 that determines which locations in Data to gather.
+//!     * GatherMode::kDEFAULT: q >= 1
+//!     * GatherMode::kND:      q >= 1 and the last dimension of Indices must be a build time constant.
+//!     * GatherMode::kELEMENT: q = r
+//! * Output stores the gathered results. Its rank s depends on the mode:
+//!     * GatherMode::kDEFAULT: s = q + r - 1 - nbElementwiseDims
+//!     * GatherMode::kND:      s = q + r - indices.d[q-1] - 1 - nbElementwiseDims
+//!     * GatherMode::kELEMENT: s = q = r.
+//! The output can be a shape tensor only if the mode is GatherMode::kDEFAULT.
+//!
+//! The dimensions of the output likewise depends on the mode:
+//!
+//!     GatherMode::kDEFAULT:
+//!
+//!         First nbElementwiseDims of output are computed by applying broadcast rules to
+//!         first nbElementwiseDims of indices and data. Note that nbElementwiseDims <= 1.
+//!         Rest of dimensions are computed by copying dimensions of Data, and replacing
+//!         the dimension for axis gatherAxis with the dimensions of indices.
+//!
+//!     GatherMode::kND:
+//!         If indices.d[q-1] = r - nbElementwiseDims
+//!             output.d = [indices.d[0], ... , indices.d[q-2]]
+//!         Else if indices.d[q-1] < r - nbElementWiseDims
+//!             output.d = [indices.d[0], ... , indices.d[q-1], data.d[nbElementwiseDims + indices.d[q-1] + q],
+//!             data.d[r-1]]
+//!         Else
+//!             This is build time error
+//!
+//!     GatherMode::kELEMENT:
+//!         The output dimensions match the dimensions of the indices tensor.
+//!
+//! The types of Data and Output must be the same, and Indices shall be DataType::kINT32.
+//!
+//! How the elements of Data are gathered depends on the mode:
+//!
+//!     GatherMode::kDEFAULT:
+//!         Each index in indices is used to index Data along axis gatherAxis.
+//!
+//!     GatherMode::kND:
+//!         Indices is a rank q integer tensor, best thought of as a rank (q-1) tensor of
+//!         indices into data, where each element defines a slice of data
+//!         The operation can be formulated as output[i_1, ..., i_{q-1}] = data[indices[i_1, ..., i_{q-1}]]
+//!
+//!     GatherMode::kELEMENT:
+//!
+//!         Here "axis" denotes the result of getGatherAxis().
+//!         For each element X of indices:
+//!             Let J denote a sequence for the subscripts of X
+//!             Let K = sequence J with element [axis] replaced by X
+//!             output[J] = data[K]
+//!
+//! The handling of nbElementWiseDims depends on the mode:
+//!     * GatherMode::kDEFAULT: nbElementWiseDims <= 1. Broadcast is supported across the elementwise dimension if
+//!     present.
+//!     * GatherMode::kND:      0 <= nbElementWiseDims < rank(Data)-1. Broadcast is not supported across the elementwise
+//!     dimensions.
+//!     * GatherMode::kELEMENT: nbElementWiseDims = 0
+//!
+//! Notes:
+//! * For modes GatherMode::kND and GatherMode::kELEMENT, the first nbElementWiseDims dimensions of data and index must
+//! be equal. If not, an error will be reported at build time or run time.
+//! * Only mode GatherMode::kDEFAULT supports an implicit batch dimensions or broadcast on the elementwise dimensions.
+//! * If an axis of Data has dynamic length, using a negative index for it has undefined behavior.
+//! * No DLA support
+//! * Zero will be stored for OOB access
+//!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
 class IGatherLayer : public ILayer
 {
 public:
     //!
-    //! \brief Set the axis to gather on.
-    //!  The axis must be less than the number of dimensions in the data input.
+    //! \brief Set the axis used by GatherMode::kELEMENTS and GatherMode::kDEFAULT
+    //! The axis must be less than the number of dimensions in the data input.
+    //! The axis defaults to 0.
+    //!
+    //! \warning Undefined behavior when used with GatherMode::kND.
     //!
     //! \see getGatherAxis()
     //!
@@ -2838,6 +2959,7 @@ public:
 
     //!
     //! \brief Get the axis to gather on.
+    //! \warning Undefined behavior when used with GatherMode::kND.
     //!
     //! \see setGatherAxis()
     //!
@@ -2846,16 +2968,23 @@ public:
         return mImpl->getGatherAxis();
     }
 
-    //!
     //! \brief Set the number of leading dimensions of indices tensor to be handled elementwise.
-    //! k must be 0 if there is an implicit batch dimension.  It can be 0 or 1 if there is not an implicit batch
-    //! dimension.
+    //! The gathering of indexing starts from the dimension of data[NbElementWiseDims:].
+    //! The NbElementWiseDims must be less than the Rank of the data input.
+    //! \param elementWiseDims number of dims to be handled as elementwise.
+    //!
+    //! The value of nbElementWiseDims and GatherMode are checked during network validation:
+    //!
+    //! GatherMode::kDEFAULT: nbElementWiseDims must be 0 if there is an implicit batch dimension. It can be 0 or 1 if
+    //! there is not an implicit batch dimension.
+    //! GatherMode::kND: nbElementWiseDims can be between 0 and one less than rank(data).
+    //! GatherMode::kELEMENT: nbElementWiseDims must be 0
     //!
     //! \see getNbElementWiseDims()
     //!
-    void setNbElementWiseDims(int32_t k) noexcept
+    void setNbElementWiseDims(int32_t elementWiseDims) noexcept
     {
-        mImpl->setNbElementWiseDims(k);
+        mImpl->setNbElementWiseDims(elementWiseDims);
     }
 
     //!
@@ -2866,6 +2995,26 @@ public:
     int32_t getNbElementWiseDims() const noexcept
     {
         return mImpl->getNbElementWiseDims();
+    }
+
+    //!
+    //! \brief Set the gather mode.
+    //!
+    //! \see getMode()
+    //!
+    void setMode(GatherMode mode) noexcept
+    {
+        mImpl->setMode(mode);
+    }
+
+    //!
+    //! \brief Get the gather mode.
+    //!
+    //! \see setMode()
+    //!
+    GatherMode getMode() const noexcept
+    {
+        return mImpl->getMode();
     }
 
 protected:
@@ -2880,7 +3029,7 @@ protected:
 //!
 //! __Equation definitions__
 //!
-//! In the equations below, we use the following naming convention:
+//! The equations below have the following naming convention:
 //!
 //! ~~~
 //! t := current time step
@@ -3378,14 +3527,16 @@ enum class UnaryOperation : int32_t
     kCEIL = 17,  //!< Ceiling.
     kFLOOR = 18, //!< Floor.
     kERF = 19,   //!< Gauss error function.
-    kNOT = 20    //!< Logical NOT.
+    kNOT = 20,   //!< Logical NOT.
+    kSIGN = 21,  //!< Sign, If input > 0, output 1; if input < 0, output -1; if input == 0, output 0.
+    kROUND = 22  //!< Round to nearest even for float datatype.
 };
 
 //! Maximum number of elements in UnaryOperation enum. \see UnaryOperation
 template <>
 constexpr inline int32_t EnumMax<UnaryOperation>() noexcept
 {
-    return 21;
+    return 23;
 }
 
 //!
@@ -3460,7 +3611,7 @@ constexpr inline int32_t EnumMax<ReduceOperation>() noexcept
 //!
 //! \class IReduceLayer
 //!
-//! \brief Layer that represents a reduction operator across Shape, Int32, Float, and Half tensors.
+//! \brief Layer that represents a reduction operator across Shape, Int32, Float, Half, and Int8 tensors.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -3760,7 +3911,7 @@ public:
     //! - 0: Data or Shape tensor to be shuffled.
     //! - 1: The dimensions for the reshape operation, as a 1D Int32 shape tensor.
     //!
-    //! If this function is called with a value 1, then the function getNbInputs() changes
+    //! If this function is called with the value 1, then the function getNbInputs() changes
     //! from returning 1 to 2.
     //!
     //! The reshape dimensions are treated identically to how they are treated if set statically
@@ -3846,13 +3997,18 @@ enum class SliceMode : int32_t
 {
     kDEFAULT = 0, //!< Fail with error when the coordinates are out of bounds. This is the default.
     kWRAP = 1,    //!< Coordinates wrap around periodically.
+    kCLAMP = 2,   //!< Out of bounds indices are clamped to bounds.
+    kFILL = 3,    //!< Use fill input value when coordinates are out of bounds.
+    kREFLECT = 4, //!< Coordinates reflect. The axis of reflection is the middle of the perimeter pixel and the
+                  //!< reflections are repeated indefinitely within the padded regions. Repeats values for a single
+                  //!< pixel and throws error for zero pixels.
 };
 
 //! Maximum number of elements in SliceMode enum. \see SliceMode
 template <>
 constexpr inline int32_t EnumMax<SliceMode>() noexcept
 {
-    return 2;
+    return 5;
 }
 
 //!
@@ -4001,14 +4157,17 @@ public:
     //! \param index the index of the input to modify.
     //! \param tensor the new input tensor
     //!
-    //! For a slice layer, the values 0-3 are valid. The values 1-3 override start, size or stride
-    //! dimensions, respectively. Conversely, this input tensor can be overridden via appropriate set call.
+    //! For a slice layer, the values 0-4 are valid.
     //! The indices are as follows:
     //!
     //! - 0: Data or Shape tensor to be sliced.
     //! - 1: The start tensor to begin slicing, as a 1D Int32 shape tensor.
     //! - 2: The size tensor of the resulting slice, as a 1D Int32 shape tensor.
     //! - 3: The stride of the slicing operation, as a 1D Int32 shape tensor.
+    //! - 4: Value for the kFILL slice mode. The fill value data type should have the same
+    //!      data phylum as input data type. And this input is disallowed for other modes.
+    //!
+    //! Using the corresponding setter resets the input to null.
     //!
     //! If this function is called with a value greater than 0, then the function getNbInputs() changes
     //! from returning 1 to index + 1.
@@ -4248,10 +4407,11 @@ protected:
 //!
 //! \brief A layer that represents the identity function.
 //!
-//! If tensor precision is being explicitly specified, it can be used to convert from one precision to another.
-//! Other than conversion between the same precision (kFLOAT -> kFLOAT for example), the only valid
-//! tranformations supported are: (kHALF -> kINT32), (kHALF -> kFLOAT), (kFLOAT -> kINT32), (kINT32 -> kHALF),
-//! (kINT32 -> kFLOAT), (kBOOL -> kBOOL), (kBOOL -> kHALF), (kBOOL -> kFLOAT).
+//! If the input and/or output tensor precisions are explicitly specified, it can be used
+//! to convert from one precision to another. Other than conversion between the same
+//! precision (kFLOAT -> kFLOAT for example), the only valid conversions are:
+//!
+//!     (kFLOAT | kHALF | kINT32 | kBOOL) -> (kFLOAT | kHALF | kINT32)
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -4369,7 +4529,7 @@ struct EnumMaxImpl<ResizeMode>
 //!
 enum class ResizeCoordinateTransformation : int32_t
 {
-    //! We can think each value in tensor has a volume, and the coordinate is a point inside this volume.
+    //! Think of each value in the tensor as a unit volume, and the coordinate is a point inside this volume.
     //! The coordinate point is drawn as star(*) in below diagram, and multiple values range has a length.
     //! Let's use x_origin as the coordinate of axis x in the input tensor, x_resized as the coordinate of axis x in the
     //! output tensor, length_origin as length of the input tensor in axis x, and length_resize as length of the output
@@ -4441,7 +4601,6 @@ struct EnumMaxImpl<ResizeSelector>
 //!
 //! \brief The rounding mode for nearest neighbor resize.
 //!
-//!
 //! \see IResizeLayer::setNearestRounding()
 //!
 enum class ResizeRoundMode : int32_t
@@ -4499,6 +4658,8 @@ public:
     //! \param dimensions The output dimensions. Number of output dimensions must be the same as the number of input
     //! dimensions.
     //!
+    //! If executing this layer on DLA, setOutputDimensions() is not supported.
+    //!
     //! If there is a second input, i.e. resize layer is dynamic,
     //! calling setOutputDimensions() is an error and does not update the
     //! dimensions.
@@ -4529,6 +4690,13 @@ public:
     //!
     //! \param scales An array of resize scales.
     //! \param nbScales Number of scales. Number of scales must be equal to the number of input dimensions.
+    //!
+    //! If executing this layer on DLA, there are three restrictions:
+    //! 1) nbScales has to be exactly 4.
+    //! 2) the first two elements in scales need to be exactly 1 (for unchanged batch and channel dimensions).
+    //! 3) The last two elements in scales, representing the scale values along height and width dimensions,
+    //! respectively, need to be integer values in the range of [1, 32].
+    //! Example of DLA-supported scales: {1, 1, 2, 2}.
     //!
     //! If there is a second input, i.e. resize layer is dynamic,
     //! calling setScales() is an error and does not update the scales.
@@ -4570,6 +4738,8 @@ public:
     //! \brief Set resize mode for an input tensor.
     //!
     //! Supported resize modes are Nearest Neighbor and Linear.
+    //!
+    //! If executing this layer on DLA, only ResizeMode::kNEAREST is supported.
     //!
     //! \see ResizeMode
     //!
@@ -4634,7 +4804,7 @@ public:
     //! - 0: Data or Shape tensor to be resized.
     //! - 1: The output dimensions, as a 1D Int32 shape tensor.
     //!
-    //! If this function is called with a value 1, then the function getNbInputs() changes
+    //! If this function is called with the value 1, then the function getNbInputs() changes
     //! from returning 1 to 2.
     //!
     using ILayer::setInput;
@@ -4642,9 +4812,11 @@ public:
     //!
     //! \brief Set coordinate transformation function.
     //!
-    //! We have different functions mapping the coordinate in output tensor to the coordinate in input tensor.
+    //! The function maps a coordinate in the output tensor to a coordinate in the input tensor.
     //!
-    //! Default is ResizeCoordinateTransformation::kASYMMETRIC.
+    //! Default function is ResizeCoordinateTransformation::kASYMMETRIC.
+    //!
+    //! If executing this layer on DLA, only ResizeCoordinateTransformation::kASYMMETRIC is supported.
     //!
     //! \see ResizeCoordinateTransformation
     //!
@@ -4671,6 +4843,8 @@ public:
     //!
     //! Default is ResizeSelector::kFORMULA.
     //!
+    //! If executing this layer on DLA, only ResizeSelector::kFORMULA is supported.
+    //!
     //! \see ResizeSelector
     //!
     void setSelectorForSinglePixel(ResizeSelector selector) noexcept
@@ -4694,6 +4868,8 @@ public:
     //! This value is used for nearest neighbor interpolation rounding. It is applied after coordinate transformation.
     //!
     //! Default is kFLOOR.
+    //!
+    //! If executing this layer on DLA, only ResizeRoundMode::kFLOOR is supported.
     //!
     //! \see ResizeRoundMode
     //!
@@ -4768,6 +4944,155 @@ protected:
     apiv::VLoopBoundaryLayer* mBoundary;
 };
 
+//!
+//! This is a base class for Conditional boundary layers.
+//!
+//! Boundary layers are used to demarcate the boundaries of Conditionals.
+//!
+class IIfConditionalBoundaryLayer : public ILayer
+{
+public:
+    //! Return pointer to the IIfConditional associated with this boundary layer.
+    IIfConditional* getConditional() const noexcept
+    {
+        return mBoundary->getConditional();
+    }
+
+protected:
+    virtual ~IIfConditionalBoundaryLayer() noexcept = default;
+    apiv::VConditionalBoundaryLayer* mBoundary;
+};
+
+//!
+//! This layer represents a condition input to an IIfConditional.
+//!
+class IConditionLayer : public IIfConditionalBoundaryLayer
+{
+public:
+protected:
+    virtual ~IConditionLayer() noexcept = default;
+    apiv::VConditionLayer* mImpl;
+};
+
+//!
+//! This layer represents an output of an IIfConditional.
+//!
+//! An IIfConditionalOutputLayer has exactly one output.
+//!
+class IIfConditionalOutputLayer : public IIfConditionalBoundaryLayer
+{
+public:
+protected:
+    virtual ~IIfConditionalOutputLayer() noexcept = default;
+    apiv::VConditionalOutputLayer* mImpl;
+};
+
+//!
+//! This layer represents an input to an IIfConditional.
+//!
+class IIfConditionalInputLayer : public IIfConditionalBoundaryLayer
+{
+public:
+protected:
+    virtual ~IIfConditionalInputLayer() noexcept = default;
+    apiv::VConditionalInputLayer* mImpl;
+};
+
+//!
+//! Helper for constructing conditionally-executed subgraphs.
+//!
+//! An If-conditional conditionally executes part of the network according
+//! to the following pseudo-code:
+//!
+//! If condition is true then:
+//!     output = trueSubgraph(trueInputs);
+//! Else
+//!     output = falseSubgraph(falseInputs);
+//! Emit output
+//!
+//! Condition is a 0D boolean tensor (representing a scalar).
+//! trueSubgraph represents a network subgraph that is executed when condition is evaluated to True.
+//! falseSubgraph represents a network subgraph that is executed when condition is evaluated to False.
+//!
+//! The following constraints apply to If-conditionals:
+//! - Both the trueSubgraph and falseSubgraph must be defined.
+//! - The number of output tensors in both subgraphs is the same.
+//! - The type and shape of each output tensor from true/false subgraphs are the same.
+//!
+class IIfConditional : public INoCopy
+{
+public:
+    //!
+    //! \brief Set the condition tensor for this If-Conditional construct.
+    //!
+    //! \param condition The condition tensor that will determine which subgraph to execute.
+    //!
+    //! \p condition tensor must be a 0D data tensor (scalar) with type DataType::kBOOL.
+    //!
+    //! \see IConditionLayer
+    //!
+    IConditionLayer* setCondition(ITensor& condition) noexcept
+    {
+        return mImpl->setCondition(condition);
+    }
+
+    //!
+    //! \brief Add an If-conditional output.
+    //!
+    //! \param trueSubgraphOutput The output of the subgraph executed when the conditional evaluates to true.
+    //! \param falseSubgraphOutput The output of the subgraph executed when the conditional evaluates to false.
+    //!
+    //! Each output layer of an IIfConditional represents a single output of either the true-subgraph or the
+    //! false-subgraph of an IIfConditional, depending on which subgraph was executed.
+    //!
+    //! \see IIfConditionalOutputLayer
+    //!
+    IIfConditionalOutputLayer* addOutput(ITensor& trueSubgraphOutput, ITensor& falseSubgraphOutput) noexcept
+    {
+        return mImpl->addOutput(trueSubgraphOutput, falseSubgraphOutput);
+    }
+
+    //!
+    //! \brief Add an If-conditional input.
+    //!
+    //! \param input An input to the conditional that can be used by either or both of the conditional’s subgraphs.
+    //!
+    //! \see IIfConditionalInputLayer
+    //!
+    IIfConditionalInputLayer* addInput(ITensor& input) noexcept
+    {
+        return mImpl->addInput(input);
+    }
+
+    //!
+    //! \brief Set the name of the conditional.
+    //!
+    //! The name is used in error diagnostics.
+    //! This method copies the name string.
+    //!
+    //! \see getName()
+    //!
+    void setName(const char* name) noexcept
+    {
+        mImpl->setName(name);
+    }
+
+    //!
+    //! \brief Return the name of the conditional.
+    //!
+    //! \see setName()
+    //!
+    const char* getName() const noexcept
+    {
+        return mImpl->getName();
+    }
+
+protected:
+    virtual ~IIfConditional() noexcept = default;
+    apiv::VIfConditional* mImpl;
+};
+
+
 class IRecurrenceLayer : public ILoopBoundaryLayer
 {
 public:
@@ -4786,7 +5111,7 @@ public:
     //! - 1: The next value of the output tensor. The value usually comes from inside the loop, and must have the same
     //! dimensions as input 0.
     //!
-    //! If this function is called with a value 1, then the function getNbInputs() changes
+    //! If this function is called with the value 1, then the function getNbInputs() changes
     //! from returning 1 to 2.
     //!
     using ILayer::setInput;
@@ -4861,7 +5186,7 @@ public:
     //! - 0: Contribution to the output tensor.  The contribution must come from inside the loop.
     //! - 1: The concatenation length scalar value, must come from outside the loop, as a 0D Int32 shape tensor.
     //!
-    //! If this function is called with a value 1, then the function getNbInputs() changes
+    //! If this function is called with the value 1, then the function getNbInputs() changes
     //! from returning 1 to 2.
     //!
     using ILayer::setInput;
@@ -5021,6 +5346,52 @@ class ISelectLayer : public ILayer
 protected:
     virtual ~ISelectLayer() noexcept = default;
     apiv::VSelectLayer* mImpl;
+};
+
+//! \class IAssertionLayer
+//!
+//! \brief An assertion layer in a network
+//!
+//! The layer has a single input and no output. The input must be a boolean shape tensor.
+//! If any element of the input is provably false at build time, the network is rejected.
+//! If any element of the input is false at runtime for the supplied runtime dimensions,
+//! an error occurs, much the same as if any other runtime error (e.g. using IShuffleLayer
+//! to change the volume of a tensor) is handled.
+//!
+//! Asserting equality of input dimensions may help the optimizer.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class IAssertionLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Set the message to print if the assertion fails.
+    //!
+    //! The name is used in error diagnostics.
+    //! This method copies the message string.
+    //!
+    //! \see getMessage()
+    //!
+    void setMessage(const char* message) noexcept
+    {
+        mImpl->setMessage(message);
+    }
+
+    //!
+    //! \brief Return the assertion message.
+    //!
+    //! \see setMessage()
+    //!
+    const char* getMessage() const noexcept
+    {
+        return mImpl->getMessage();
+    }
+
+protected:
+    virtual ~IAssertionLayer() noexcept = default;
+
+    apiv::VAssertionLayer* mImpl;
 };
 
 //!
@@ -5395,6 +5766,194 @@ protected:
     apiv::VDequantizeLayer* mImpl;
 };
 
+//! \class IEinsumLayer
+//!
+//! \brief An Einsum layer in a network
+//!
+//! This layer implements a summation over the elements of the inputs along dimensions specified by the equation
+//! parameter, based on the Einstein summation convention.
+//! The layer can have one or more inputs of rank >= 0. All the inputs must be of same data type and that data type
+//! must be DataType::kFLOAT or DataType::kHALF. There is one output tensor of the same type as the input tensors.
+//! The shape of the output tensor is determined by the equation.
+//!
+//! The equation specifies ASCII lower-case letters for each dimension in the inputs in the same order as the dimensions,
+//! separated by comma for each input. The dimensions labeled with the same subscript must match.
+//! Repeated subscript labels in one input take the diagonal.
+//! Repeating a label across multiple inputs means that those axes will be multiplied.
+//! Omitting a label from the output means values along those axes will be summed.
+//! In implicit mode, the indices which appear once in the expression will be part of the output in increasing
+//! alphabetical order. In explicit mode, the output can be controlled by specifying output subscript labels by adding
+//! an arrow (‘->’) followed by subscripts for the output.
+//! For example, “ij,jk->ik” is equivalent to “ij,jk”.
+//! Ellipsis (‘...’) can be used in place of subscripts to broadcast the dimensions.
+//! See the TensorRT Developer Guide for more details on equation syntax.
+//!
+//! Many common operations can be expressed using the Einsum equation.
+//! For example:
+//! Matrix Transpose:             ij->ji
+//! Sum:                          ij->
+//! Matrix-Matrix Multiplication: ik,kj->ij
+//! Dot Product:                  i,i->
+//! Matrix-Vector Multiplication: ik,k->i
+//! Batch Matrix Multiplication:  ijk,ikl->ijl
+//! Batch Diagonal:               ...ii->...i
+//!
+//! \note TensorRT does not support ellipsis, diagonal operations or more than two inputs for Einsum.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class IEinsumLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Set the equation.
+    //! The equation is a comma-separated list of subscript labels, where each label refers to a
+    //! dimension of the corresponding tensor.
+    //!
+    //! \return true if the equation was syntactically valid and set successfully, false otherwise.
+    //!
+    //! \see setEquation()
+    //!
+    bool setEquation(const char* equation) noexcept
+    {
+        return mImpl->setEquation(equation);
+    }
+
+    //!
+    //! \brief Return the equation.
+    //!
+    //! \see setEquation()
+    //!
+    const char* getEquation() const noexcept
+    {
+        return mImpl->getEquation();
+    }
+
+protected:
+    virtual ~IEinsumLayer() noexcept = default;
+    apiv::VEinsumLayer* mImpl;
+};
+
+//!
+//! \brief Control form of IScatterLayer
+//!
+//! \see IScatterLayer
+//!
+enum class ScatterMode : int32_t
+{
+    kELEMENT = 0, //!< Similar to ONNX ScatterElements
+    kND = 1,      //!< Similar to ONNX ScatterND
+};
+
+//! Maximum number of elements in ScatterMode enum. \see ScatterMode
+template <>
+constexpr inline int32_t EnumMax<ScatterMode>() noexcept
+{
+    return 2;
+}
+
+//!
+//! \class IScatterLayer
+//!
+//! \brief A scatter layer in a network definition. Supports several kinds of scattering.
+//!
+//! The Scatter layer has three input tensors: Data, Indices, and Updates, one output tensor
+//! Output, and a scatter mode. When kELEMENT mode is used an optional axis parameter is available.
+//! * Data is a tensor of rank r >= 1 that stores the values to be duplicated in Output.
+//! * Indices is a tensor of rank q that determines which locations in Output to write new
+//!   values to. Constraints on the rank of q depend on the mode:
+//!       ScatterMode::kND: q >= 1
+//!       ScatterMode::kELEMENT: q must be the same as r
+//! * Updates is atensor of rank s >=1 that provides the data
+//!   to write to Output specified by its corresponding location in Index. Constraints the rank of Updates depend on the
+//!   mode:
+//!       ScatterMode::kND: s = r + q - shape(Indices)[-1] - 1
+//!       Scattermode::kELEMENT: s = q = r
+//! * Output is a tensor with the same dimensions as Data that stores the resulting values of the
+//!   transformation. It must not be a shape tensor.
+//! The types of Data, Update, and Output shall be the same, and Indices shall be DataType::kINT32.
+//!
+//! The output is computed by copying the data, and then updating elements of it based on indices.
+//! How Indices are interpreted depends upon the ScatterMode.
+//!
+//! ScatterMode::kND
+//!
+//!     The indices are interpreted as a tensor of rank q-1 of indexing tuples.
+//!     The axis parameter is ignored.
+//!
+//!     Given that data dims are {d_0,...,d_{r-1}} and indices dims are {i_0,...,i_{q-1}},
+//!     define k = indices[q-1], it follows that updates dims are {i_0,...,i_{q-2},d_k,...,d_{r-1}}
+//!     The updating can be computed by:
+//!         foreach slice in indices[i_0,...i_{q-2}]
+//!             output[indices[slice]] = updates[slice]
+//!
+//! ScatterMode::kELEMENT
+//!
+//!     Here "axis" denotes the result of getAxis().
+//!
+//!     For each element X of indices:
+//!         Let J denote a sequence for the subscripts of X
+//!         Let K = sequence J with element [axis] replaced by X
+//!         output[K] = updates[J]
+//!
+//!     For example, if indices has dimensions [N,C,H,W] and axis is 2, then the updates happen as:
+//!
+//!         for n in [0,n)
+//!             for c in [0,n)
+//!                 for h in [0,n)
+//!                     for w in [0,n)
+//!                         output[n,c,indices[n,c,h,w],w] = updates[n,c,h,w]]
+//!
+//! Writes to the same output element cause undefined behavior.
+//！
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class IScatterLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Set the scatter mode.
+    //!
+    //! \see getMode()
+    //!
+    void setMode(ScatterMode mode) noexcept
+    {
+        mImpl->setMode(mode);
+    }
+
+    //!
+    //! \brief Get the scatter mode.
+    //!
+    //! \see setMode()
+    //!
+    ScatterMode getMode() const noexcept
+    {
+        return mImpl->getMode();
+    }
+
+    //!
+    //! \brief Set the axis used by ScatterMode::kELEMENTS.
+    //!
+    //! The axis defaults to 0.
+    //!
+    void setAxis(int32_t axis) noexcept
+    {
+        mImpl->setAxis(axis);
+    }
+
+    //!
+    //! \brief Get the axis.
+    //!
+    int32_t getAxis() const noexcept
+    {
+        return mImpl->getAxis();
+    }
+
+protected:
+    apiv::VScatterLayer* mImpl;
+    virtual ~IScatterLayer() noexcept = default;
+}; // class IScatterLayer
+
 //!
 //! \class INetworkDefinition
 //!
@@ -5409,7 +5968,7 @@ protected:
 //! A network with implicit batch dimensions returns the dimensions of a layer without the implicit dimension,
 //! and instead the batch is specified at execute/enqueue time. If the network has all dimensions specified, then
 //! the first dimension follows elementwise broadcast rules: if it is 1 for some inputs and is some value N for all
-//! other inputs, then the first dimension of each outut is N, and the inputs with 1 for the first dimension are
+//! other inputs, then the first dimension of each output is N, and the inputs with 1 for the first dimension are
 //! broadcast. Having divergent batch sizes across inputs to a layer is not supported.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
@@ -5423,7 +5982,7 @@ public:
     //! \brief Add an input tensor to the network.
     //!
     //! The name of the input tensor is used to find the index into the buffer array for an engine built from
-    //! the network. The volume of the dimensions must be less than 2^30 elements.
+    //! the network. The volume of the dimensions must be less than 2^31 elements.
     //!
     //! For networks with an implicit batch dimension, this volume includes the batch dimension with its length set
     //! to the maximum batch size. For networks with all explicit dimensions and with wildcard dimensions, the volume
@@ -5465,6 +6024,8 @@ public:
     //! \param tensor The tensor to mark as an output tensor.
     //!
     //! \warning It is an error to mark a network input as an output.
+    //! \warning It is an error to mark a tensor inside an ILoop or an
+    //!          IIfConditional as an output.
     //!
     void markOutput(ITensor& tensor) noexcept
     {
@@ -5478,7 +6039,7 @@ public:
     //! \param nbOutputMaps The number of output feature maps for the convolution.
     //! \param kernelSize The HW-dimensions of the convolution kernel.
     //! \param kernelWeights The kernel weights for the convolution.
-    //! \param biasWeights The optional bias weights for the convolution.
+    //! \param biasWeights The bias weights for the convolution. Weights{} represents no bias.
     //!
     //! \see IConvolutionLayer
     //!
@@ -5501,7 +6062,7 @@ public:
     //! \param input The input tensor to the layer.
     //! \param nbOutputs The number of outputs of the layer.
     //! \param kernelWeights The kernel weights for the fully connected layer.
-    //! \param biasWeights The optional bias weights for the fully connected layer.
+    //! \param biasWeights The bias weights for the fully connected layer. Weights{} represents no bias.
     //!
     //! \see IFullyConnectedLayer
     //!
@@ -5637,7 +6198,7 @@ public:
     //! \param nbOutputMaps The number of output feature maps.
     //! \param kernelSize The HW-dimensions of the deconvolution kernel.
     //! \param kernelWeights The kernel weights for the deconvolution.
-    //! \param biasWeights The optional bias weights for the deconvolution.
+    //! \param biasWeights The bias weights for the deconvolution. Weights{} represents no bias.
     //!
     //! \see IDeconvolutionLayer
     //!
@@ -5661,11 +6222,11 @@ public:
     //! \param input2 The second input tensor to the layer.
     //! \param op The binary operation that the layer applies.
     //!
-    //! The input tensors must have the same number of dimensions.
+    //! The input tensors must have the same rank.
     //! For each dimension, their lengths must match, or one of them must be one.
     //! In the latter case, the tensor is broadcast along that axis.
     //!
-    //! The output tensor has the same number of dimensions as the inputs.
+    //! The output tensor has the same rank as the inputs.
     //! For each dimension, its length is the maximum of the lengths of the
     //! corresponding input dimension.
     //!
@@ -5687,7 +6248,8 @@ public:
     //!
     //! \see IUnaryLayer
     //!
-    //! \warning Int32 tensors are not valid input tensors.
+    //! \warning Int32 tensors are only valid for kSIGN.
+    //! \warning Bool tensors are only valid for kNOT.
     //!
     //! \warning Shape tensors are not supported as outputs.
     //!
@@ -5888,7 +6450,7 @@ public:
     }
 
     //!
-    //! \brief Add a gather layer to the network.
+    //! \brief Add gather with mode GatherMode::kDEFAULT and specified axis and nbElementWiseDims=0.
     //!
     //! \param data The tensor to gather values from.
     //! \param indices The tensor to get indices from to populate the output tensor.
@@ -5901,6 +6463,22 @@ public:
     IGatherLayer* addGather(ITensor& data, ITensor& indices, int32_t axis) noexcept
     {
         return mImpl->addGather(data, indices, axis);
+    }
+
+    //!
+    //! \brief Add gather with specified mode, axis=0 and nbElementWiseDims=0.
+    //!
+    //! \param data The tensor to gather values from.
+    //! \param indices The tensor to get indices from to populate the output tensor.
+    //! \param mode The gather mode.
+    //!
+    //! \see IGatherLayer
+    //!
+    //! \return The new gather layer, or nullptr if it could not be created.
+    //!
+    IGatherLayer* addGatherV2(ITensor& data, ITensor& indices, GatherMode mode)
+    {
+        return mImpl->addGatherV2(data, indices, mode);
     }
 
     //!
@@ -6122,10 +6700,10 @@ public:
     //! \param name The name to assign to this network.
     //!
     //! Set the name of the network so that it can be associated with a built
-    //! engine. The \p name must be a zero delimited C-style string of length
-    //! no greater than 128 characters. TensorRT makes no use of this string
-    //! except storing it as part of the engine so that it may be retrieved at
-    //! runtime. A name unique to the builder will be generated by default.
+    //! engine. The \p name must be a null-terminated C-style string.
+    //! TensorRT makes no use of this string except storing it as part of the engine
+    //! so that it may be retrieved at runtime.
+    //! A name unique to the builder will be generated by default.
     //!
     //! This method copies the name string.
     //!
@@ -6145,7 +6723,7 @@ public:
     //!
     //! \see INetworkDefinition::setName()
     //!
-    //! \return A zero delimited C-style string representing the name of the network.
+    //! \return A null-terminated C-style string representing the name of the network.
     //!
     const char* getName() const noexcept
     {
@@ -6244,7 +6822,7 @@ public:
     //! \param nbOutputMaps The number of output feature maps for the convolution.
     //! \param kernelSize The multi-dimensions of the convolution kernel.
     //! \param kernelWeights The kernel weights for the convolution.
-    //! \param biasWeights The optional bias weights for the convolution.
+    //! \param biasWeights The bias weights for the convolution. Weights{} represents no bias.
     //!
     //! \see IConvolutionLayer
     //!
@@ -6286,7 +6864,7 @@ public:
     //! \param nbOutputMaps The number of output feature maps.
     //! \param kernelSize The multi-dimensions of the deconvolution kernel.
     //! \param kernelWeights The kernel weights for the deconvolution.
-    //! \param biasWeights The optional bias weights for the deconvolution.
+    //! \param biasWeights The bias weights for the deconvolution. Weights{} represents no bias.
     //!
     //! \see IDeconvolutionLayer
     //!
@@ -6392,7 +6970,7 @@ public:
     //! \param thenInput The "then" input tensor to the layer.
     //! \param elseInput The "else" input tensor to the layer.
     //!
-    //! All three input tensors must have the same number of dimensions, and along each axis
+    //! All three input tensors must have the same rank, and along each axis
     //! must have the same length or a length of one. If the length is one, the tensor
     //! is broadcast along that axis. The output tensor has the dimensions of the inputs AFTER
     //! the broadcast rule is applied. For example, given:
@@ -6424,6 +7002,23 @@ public:
         return mImpl->addSelect(condition, thenInput, elseInput);
     }
 
+    //!
+    //! \brief Add an assertion layer to the network.
+    //!
+    //! \param condition The input tensor to the layer.
+    //! \param message A message to print if the assertion fails.
+    //!
+    //! \see IAssertionLayer
+    //!
+    //! \return The new assertion layer, or nullptr if it could not be created.
+    //!
+    //! The input tensor must be a boolean shape tensor.
+    //!
+    IAssertionLayer* addAssertion(ITensor& condition, const char* message) noexcept
+    {
+        return mImpl->addAssertion(condition, message);
+    }
+
     //! \brief Add a fill layer to the network.
     //!
     //! \param dimensions The output tensor dimensions.
@@ -6452,7 +7047,9 @@ public:
     //!
     //! \return The new padding layer, or nullptr if it could not be created.
     //!
-    IPaddingLayer* addPaddingNd(ITensor& input, Dims prePadding, Dims postPadding) noexcept
+    //! \deprecated Superseded by addSlice and will be removed in TensorRT 10.0.
+    //!
+    TRT_DEPRECATED IPaddingLayer* addPaddingNd(ITensor& input, Dims prePadding, Dims postPadding) noexcept
     {
         return mImpl->addPaddingNd(input, prePadding, postPadding);
     }
@@ -6531,6 +7128,26 @@ public:
     }
 
     //!
+    //! \brief Add a Scatter layer to the network with specified mode and axis=0.
+    //!
+    //! \param input The input tensor to be updated with additional values.
+    //! \param indices indices of the elements to be updated.
+    //! \param updates values to be used for updates.
+    //!
+    //! \see IScatterLayer
+    //!
+    //! \p input tensor data type must be DataType::kFLOAT.
+    //! \p indices tensor data type must be DataType::kINT32.
+    //! \p updates tensor data type must be DataType::kFLOAT.
+    //!
+    //! \return The new Scatter layer, or nullptr if it could not be created.
+    //!
+    IScatterLayer* addScatter(ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode) noexcept
+    {
+        return mImpl->addScatter(data, indices, updates, mode);
+    }
+
+    //!
     //! \brief Add a quantization layer to the network.
     //!
     //! \param input The input tensor to be quantized.
@@ -6547,6 +7164,35 @@ public:
     IQuantizeLayer* addQuantize(ITensor& input, ITensor& scale) noexcept
     {
         return mImpl->addQuantize(input, scale);
+    }
+
+    //!
+    //! \brief Add an If-conditional layer to the network.
+    //!
+    //! An IIfConditional provides a way to conditionally execute parts of the network.
+    //!
+    //! \see IIfConditional
+    //!
+    //! \return The new conditional layer, or nullptr if network has an implicit batch dimension
+    //!         or this version of TensorRT does not support conditional execution.
+    //!
+    IIfConditional* addIfConditional() noexcept
+    {
+        return mImpl->addIfConditional();
+    }
+
+    //! \brief Add an Einsum layer to the network.
+    //!
+    //! \param inputs The input tensors to the layer.
+    //! \param nbInputs The number of input tensors.
+    //! \param equation The equation of the layer
+    //! \see IEinsumLayer
+    //!
+    //! \return The new Einsum layer, or nullptr if it could not be created.
+    //!
+    IEinsumLayer* addEinsum(ITensor* const* inputs, int32_t nbInputs, const char* equation) noexcept
+    {
+        return mImpl->addEinsum(inputs, nbInputs, equation);
     }
 
 protected:
@@ -7015,8 +7661,8 @@ using QuantizationFlags = uint32_t;
 //!
 enum class QuantizationFlag : int32_t
 {
-    //!< Run int8 calibration pass before layer fusion. Only valid for IInt8LegacyCalibrator and
-    //! IInt8EntropyCalibrator. We always run int8 calibration pass before layer fusion for
+    //! Run int8 calibration pass before layer fusion. Only valid for IInt8LegacyCalibrator and
+    //! IInt8EntropyCalibrator. The builder always runs the int8 calibration pass before layer fusion for
     //! IInt8MinMaxCalibrator and IInt8EntropyCalibrator2. Disabled by default.
     kCALIBRATE_BEFORE_FUSION = 0
 };
@@ -7076,48 +7722,6 @@ constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
     return 10;
 }
 
-//!
-//! \enum ProfilingVerbosity
-//!
-//! \brief List of verbosity levels of layer information exposed in NVTX annotations.
-//!
-//! \see IBuilderConfig::setProfilingVerbosity(),
-//!      IBuilderConfig::getProfilingVerbosity()
-//!
-enum class ProfilingVerbosity : int32_t
-{
-    kDEFAULT = 0, //!< Register layer names in NVTX message field.
-    kNONE = 1,    //!< Turn off NVTX traces.
-    kVERBOSE = 2, //!< Register layer names in NVTX message field and register layer detail in NVTX JSON payload field.
-};
-
-//! Maximum number of profile verbosity levels in ProfilingVerbosity enum. \see ProfilingVerbosity
-template <>
-constexpr inline int32_t EnumMax<ProfilingVerbosity>() noexcept
-{
-    return 3;
-}
-
-//!
-//! \class ITimingCache
-//!
-//! \brief Class to handle tactic timing info collected from builder.
-//!
-//! The timing cache is created or initialized by IBuilderConfig. It can be shared across builder instances
-//! to accelerate the builder wallclock time.
-//!
-//! \see IBuilderConfig
-//!
-//!
-//! \class ITimingCache
-//!
-//! \brief Class to handle tactic timing info collected from builder.
-//!
-//! The timing cache is created or initialized by IBuilderConfig. It can be shared across builder instances
-//! to accelerate the builder wallclock time.
-//!
-//! \see IBuilderConfig
-//!
 //!
 //! \class ITimingCache
 //!
@@ -7387,7 +7991,7 @@ public:
     //! If DeviceType is not set or is reset, TensorRT will use the default DeviceType set in the builder.
     //!
     //! \note The device type for a layer must be compatible with the safety flow (if specified).
-    //! For example a layer cannot be marked for DLA execution while the builder is configured for kSAFETY.
+    //! For example a layer cannot be marked for DLA execution while the builder is configured for kSAFE_GPU.
     //!
     //! \see getDeviceType()
     //!
@@ -7483,7 +8087,7 @@ public:
     //!
     //! \brief Resets the builder configuration to defaults.
     //!
-    //! When initializing a builder config object, we can call this function.
+    //! Useful for initializing a builder config object to its original state.
     //!
     void reset() noexcept
     {
@@ -7491,11 +8095,11 @@ public:
     }
 
     //!
-    //! \brief De-allocates any internally allocated memory.
+    //! \brief Delete this IBuilderConfig.
     //!
-    //! When destroying a builder config object, we can call this function.
+    //! De-allocates any internally allocated memory.
     //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //! \deprecated Deprecated interface will be removed in TensorRT 10.0. Use `delete` instead.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
@@ -7558,11 +8162,11 @@ public:
     }
 
     //!
-    //! \brief Set verbosity level of layer information exposed in NVTX annotations.
+    //! \brief Set verbosity level of layer information exposed in NVTX annotations and IEngineInspector.
     //!
-    //! Control how much layer information will be exposed in NVTX annotations.
+    //! Control how much layer information will be exposed in NVTX annotations and IEngineInspector.
     //!
-    //! \see ProfilingVerbosity, getProfilingVerbosity()
+    //! \see ProfilingVerbosity, getProfilingVerbosity(), IEngineInspector
     //!
     void setProfilingVerbosity(ProfilingVerbosity verbosity) noexcept
     {
@@ -7570,12 +8174,12 @@ public:
     }
 
     //!
-    //! \brief Get verbosity level of layer information exposed in NVTX annotations.
+    //! \brief Get verbosity level of layer information exposed in NVTX annotations and IEngineInspector.
     //!
     //! Get the current setting of verbosity level of layer information exposed in
-    //! NVTX annotations. Default value is ProfilingVerbosity::kDEFAULT.
+    //! NVTX annotations and IEngineInspector. Default value is ProfilingVerbosity::kDEFAULT.
     //!
-    //! \see ProfilingVerbosity, setProfilingVerbosity()
+    //! \see ProfilingVerbosity, setProfilingVerbosity(), IEngineInspector
     //!
     ProfilingVerbosity getProfilingVerbosity() const noexcept
     {
@@ -8081,6 +8685,16 @@ public:
         return mImpl->isNetworkSupported(network, config);
     }
 
+    //!
+    //! \brief get the logger with which the builder was created
+    //!
+    //! \return the logger
+    //!
+    ILogger* getLogger() const noexcept
+    {
+        return mImpl->getLogger();
+    }
+
 protected:
     apiv::VBuilder* mImpl;
 };
@@ -8101,7 +8715,7 @@ namespace
 //!
 //! \brief Create an instance of an IBuilder class.
 //!
-//! This is the logging class for the builder.
+//! \param logger The logging class for the builder.
 //!
 //! unnamed namespace avoids linkage surprises when linking objects built with different versions of this header.
 //!

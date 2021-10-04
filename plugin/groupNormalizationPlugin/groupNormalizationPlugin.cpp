@@ -246,6 +246,7 @@ const char* GroupNormalizationPlugin::getPluginNamespace() const noexcept
 
 GroupNormalizationPluginCreator::GroupNormalizationPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("eps", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("num_groups", nullptr, PluginFieldType::kINT32, 1));
 

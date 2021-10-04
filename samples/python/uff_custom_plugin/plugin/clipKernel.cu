@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 #include <clipKernel.h>
 
 template <typename T>

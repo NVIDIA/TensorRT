@@ -22,9 +22,10 @@
 
 #include "NvCaffeParser.h"
 #include "NvInfer.h"
+#include "NvInferConsistency.h"
+#include "NvInferSafeRuntime.h"
 #include "NvOnnxParser.h"
 #include "NvUffParser.h"
-
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
@@ -43,11 +44,23 @@ struct Parser
     }
 };
 
+struct BuildEnvironment
+{
+    Parser parser;
+    TrtUniquePtr<INetworkDefinition> network;
+    TrtUniquePtr<nvinfer1::ICudaEngine> engine;
+    std::unique_ptr<nvinfer1::safe::ICudaEngine> safeEngine;
+    std::unique_ptr<IHostMemory> serializedEngine;
+};
+
 //!
 //! \brief Generate a network definition for a given model
 //!
 //! \return Parser The parser used to initialize the network and that holds the weights for the network, or an invalid
 //! parser (the returned parser converts to false if tested)
+//!
+//! Constant input dimensions in the model must not be changed in the corresponding
+//! network definition, because its correctness may rely on the constants.
 //!
 //! \see Parser::operator bool()
 //!
@@ -86,8 +99,8 @@ bool saveEngine(const nvinfer1::ICudaEngine& engine, const std::string& fileName
 //!
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
-std::tuple<TrtUniquePtr<nvinfer1::ICudaEngine>, TrtUniquePtr<INetworkDefinition>, Parser> getEngineNetworkParserTuple(
-    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+bool getEngineBuildEnv(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, 
+    BuildEnvironment& env, std::ostream& err);
 
 //!
 //! \brief Create an engine from model or serialized file, and optionally save engine
@@ -97,7 +110,13 @@ std::tuple<TrtUniquePtr<nvinfer1::ICudaEngine>, TrtUniquePtr<INetworkDefinition>
 inline TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(
     const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
 {
-    return std::get<0>(getEngineNetworkParserTuple(model, build, sys, err));
+    BuildEnvironment env;
+    TrtUniquePtr<nvinfer1::ICudaEngine> engine;
+    if (getEngineBuildEnv(model, build, sys, env, err))
+    {
+        engine.swap(env.engine);
+    }
+    return engine;
 }
 
 //!
@@ -131,6 +150,31 @@ bool timeRefit(const INetworkDefinition& network, nvinfer1::ICudaEngine& engine)
 void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, const std::vector<IOFormat>& inputFormats,
         const std::vector<IOFormat>& outputFormats, const std::string& calibrationFile);
 
+//!
+//! \brief Check if safe runtime is loaded.
+//!
+bool hasSafeRuntime();
+
+//!
+//! \brief Create a safe runtime object if the dynamic library is loaded.
+//!
+nvinfer1::safe::IRuntime* createSafeInferRuntime(nvinfer1::ILogger& logger) noexcept;
+
+//!
+//! \brief Check if consistency checker is loaded.
+//!
+bool hasConsistencyChecker();
+
+//!
+//! \brief Create a consistency checker object if the dynamic library is loaded.
+//!
+nvinfer1::consistency::IConsistencyChecker* createConsistencyChecker(
+    nvinfer1::ILogger& logger, IHostMemory const* engine) noexcept;
+
+//!
+//! \brief Run consistency check on serialized engine.
+//!
+bool checkSafeEngine(void const* serializedEngine, int32_t const engineSize);
 } // namespace sample
 
 #endif // TRT_SAMPLE_ENGINES_H

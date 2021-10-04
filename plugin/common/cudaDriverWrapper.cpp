@@ -25,7 +25,7 @@
 #define dllGetSym(handle, name) GetProcAddress(static_cast<HMODULE>(handle), name)
 #else
 #include <dlfcn.h>
-#define dllOpen(name) dlopen("lib" name ".so", RTLD_LAZY)
+#define dllOpen(name) dlopen("lib" name ".so.1", RTLD_LAZY)
 #define dllClose(handle) dlclose(handle)
 #define dllGetSym(handle, name) dlsym(handle, name)
 #endif

@@ -37,9 +37,9 @@ public:
                                    nvinfer1::INetworkDefinition& network,
                                    nvinfer1::DataType weightType) noexcept override;
 
-    const IBlobNameToTensor* parseBuffers(const char* deployBuffer,
+    const IBlobNameToTensor* parseBuffers(const uint8_t* deployBuffer,
                                           size_t deployLength,
-                                          const char* modelBuffer,
+                                          const uint8_t* modelBuffer,
                                           size_t modelLength,
                                           nvinfer1::INetworkDefinition& network,
                                           nvinfer1::DataType weightType) noexcept override;

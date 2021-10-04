@@ -22,7 +22,7 @@
 namespace nmtSample
 {
 
-LSTMEncoder::LSTMEncoder(ComponentWeights::ptr weights)
+LSTMEncoder::LSTMEncoder(ComponentWeights::ptr& weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
@@ -38,13 +38,13 @@ LSTMEncoder::LSTMEncoder(ComponentWeights::ptr weights)
     size_t kernelOffset = 0;
     size_t biasStartOffset = ((4 * mNumUnits + 4 * mNumUnits) * mNumUnits * mNumLayers) * elementSize;
     size_t biasOffset = biasStartOffset;
-    int numGates = 8;
-    for (int layerIndex = 0; layerIndex < mNumLayers; layerIndex++)
+    int32_t numGates = 8;
+    for (int32_t layerIndex = 0; layerIndex < mNumLayers; layerIndex++)
     {
-        for (int gateIndex = 0; gateIndex < numGates; gateIndex++)
+        for (int32_t gateIndex = 0; gateIndex < numGates; gateIndex++)
         {
             // encoder input size == mNumUnits
-            int64_t inputSize = ((layerIndex == 0) && (gateIndex < 4)) ? mNumUnits : mNumUnits;
+            int64_t inputSize = mNumUnits;
             nvinfer1::Weights gateKernelWeights{dataType, &mWeights->mWeights[0] + kernelOffset, inputSize * mNumUnits};
             nvinfer1::Weights gateBiasWeights{dataType, &mWeights->mWeights[0] + biasOffset, mNumUnits};
             mGateKernelWeights.push_back(std::move(gateKernelWeights));
@@ -56,7 +56,7 @@ LSTMEncoder::LSTMEncoder(ComponentWeights::ptr weights)
     ASSERT(kernelOffset + biasOffset - biasStartOffset == mWeights->mWeights.size());
 }
 
-void LSTMEncoder::addToModel(nvinfer1::INetworkDefinition* network, int maxInputSequenceLength,
+void LSTMEncoder::addToModel(nvinfer1::INetworkDefinition* network, int32_t maxInputSequenceLength,
     nvinfer1::ITensor* inputEmbeddedData, nvinfer1::ITensor* actualInputSequenceLengths,
     nvinfer1::ITensor** inputStates, nvinfer1::ITensor** memoryStates, nvinfer1::ITensor** lastTimestepStates)
 {
@@ -96,7 +96,7 @@ void LSTMEncoder::addToModel(nvinfer1::INetworkDefinition* network, int maxInput
     }
 }
 
-int LSTMEncoder::getMemoryStatesSize()
+int32_t LSTMEncoder::getMemoryStatesSize()
 {
     return mNumUnits;
 }

@@ -44,8 +44,8 @@ static const auto parse_buffer = [](ICaffeParser& self, py::buffer& deploy, py::
                                      nvinfer1::INetworkDefinition& network, nvinfer1::DataType dtype) {
     py::buffer_info deploy_info = deploy.request();
     py::buffer_info model_info = model.request();
-    return self.parseBuffers(static_cast<const char*>(deploy_info.ptr), deploy_info.size * deploy_info.itemsize,
-        static_cast<const char*>(model_info.ptr), model_info.size * model_info.itemsize, network, dtype);
+    return self.parseBuffers(static_cast<const uint8_t*>(deploy_info.ptr), deploy_info.size * deploy_info.itemsize,
+        static_cast<const uint8_t*>(model_info.ptr), model_info.size * model_info.itemsize, network, dtype);
 };
 
 // For IPluginFactoryV2

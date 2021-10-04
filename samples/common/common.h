@@ -330,7 +330,8 @@ public:
 
 protected:
     HostMemory(std::size_t size, DataType type)
-        : mSize(size)
+        : mData{nullptr}
+        , mSize(size)
         , mType(type)
     {
     }
@@ -343,7 +344,7 @@ template <typename ElemType, DataType dataType>
 class TypedHostMemory : public HostMemory
 {
 public:
-    TypedHostMemory(std::size_t size)
+    explicit TypedHostMemory(std::size_t size)
         : HostMemory(size, dataType)
     {
         mData = new ElemType[size];
@@ -403,7 +404,7 @@ static auto StreamDeleter = [](cudaStream_t* pStream)
 inline std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> makeCudaStream()
 {
     std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> pStream(new cudaStream_t, StreamDeleter);
-    if (cudaStreamCreate(pStream.get()) != cudaSuccess)
+    if (cudaStreamCreateWithFlags(pStream.get(), cudaStreamNonBlocking) != cudaSuccess)
     {
         pStream.reset(nullptr);
     }
@@ -531,19 +532,22 @@ inline float getMaxValue(const float* buffer, int64_t size)
     return *std::max_element(buffer, buffer + size);
 }
 
-// Ensures that every tensor used by a network has a scale.
+// Ensures that every tensor used by a network has a dynamic range set.
 //
-// All tensors in a network must have a range specified if a calibrator is not used.
-// This function is just a utility to globally fill in missing scales for the entire network.
+// All tensors in a network must have a dynamic range specified if a calibrator is not used.
+// This function is just a utility to globally fill in missing scales and zero-points for the entire network.
 //
-// If a tensor does not have a scale, it is assigned inScales or outScales as follows:
+// If a tensor does not have a dyanamic range set, it is assigned inRange or outRange as follows:
 //
-// * If the tensor is the input to a layer or output of a pooling node, its scale is assigned inScales.
-// * Otherwise its scale is assigned outScales.
+// * If the tensor is the input to a layer or output of a pooling node, its dynamic range is derived from inRange.
+// * Otherwise its dynamic range is derived from outRange.
 //
 // The default parameter values are intended to demonstrate, for final layers in the network,
-// cases where scaling factors are asymmetric.
-inline void setAllTensorScales(INetworkDefinition* network, float inScales = 2.0f, float outScales = 4.0f)
+// cases where dynamic ranges are asymmetric.
+//
+// The default parameter values choosen arbitrarily. Range values should be choosen such that
+// we avoid underflow or overflow. Also range value should be non zero to avoid uniform zero scale tensor.
+inline void setAllDynamicRanges(INetworkDefinition* network, float inRange = 2.0f, float outRange = 4.0f)
 {
     // Ensure that all layer inputs have a scale.
     for (int i = 0; i < network->getNbLayers(); i++)
@@ -555,7 +559,7 @@ inline void setAllTensorScales(INetworkDefinition* network, float inScales = 2.0
             // Optional inputs are nullptr here and are from RNN layers.
             if (input != nullptr && !input->dynamicRangeIsSet())
             {
-                input->setDynamicRange(-inScales, inScales);
+                ASSERT(input->setDynamicRange(-inRange, inRange));
             }
         }
     }
@@ -575,20 +579,15 @@ inline void setAllTensorScales(INetworkDefinition* network, float inScales = 2.0
                 // Pooling must have the same input and output scales.
                 if (layer->getType() == LayerType::kPOOLING)
                 {
-                    output->setDynamicRange(-inScales, inScales);
+                    ASSERT(output->setDynamicRange(-inRange, inRange));
                 }
                 else
                 {
-                    output->setDynamicRange(-outScales, outScales);
+                    ASSERT(output->setDynamicRange(-outRange, outRange));
                 }
             }
         }
     }
-}
-
-inline void setAllDynamicRanges(INetworkDefinition* network, float inRange = 2.0f, float outRange = 4.0f)
-{
-    return setAllTensorScales(network, inRange, outRange);
 }
 
 inline void setDummyInt8DynamicRanges(const IBuilderConfig* c, INetworkDefinition* n)
@@ -625,17 +624,17 @@ inline void enableDLA(IBuilder* builder, IBuilderConfig* config, int useDLACore,
         }
         config->setDefaultDeviceType(DeviceType::kDLA);
         config->setDLACore(useDLACore);
-        config->setFlag(BuilderFlag::kSTRICT_TYPES);
     }
 }
 
-inline int parseDLA(int argc, char** argv)
+inline int32_t parseDLA(int32_t argc, char** argv)
 {
-    for (int i = 1; i < argc; i++)
+    for (int32_t i = 1; i < argc; i++)
     {
-        std::string arg(argv[i]);
         if (strncmp(argv[i], "--useDLACore=", 13) == 0)
+        {
             return std::stoi(argv[i] + 13);
+        }
     }
     return -1;
 }
@@ -836,7 +835,7 @@ protected:
 class GpuTimer : public TimerBase
 {
 public:
-    GpuTimer(cudaStream_t stream)
+    explicit GpuTimer(cudaStream_t stream)
         : mStream(stream)
     {
         CHECK(cudaEventCreate(&mStart));
@@ -927,7 +926,16 @@ inline void loadLibrary(const std::string& path)
 #ifdef _MSC_VER
     void* handle = LoadLibrary(path.c_str());
 #else
-    void* handle = dlopen(path.c_str(), RTLD_LAZY);
+    int32_t flags{RTLD_LAZY};
+#if ENABLE_ASAN
+    // https://github.com/google/sanitizers/issues/89
+    // asan doesn't handle module unloading correctly and there are no plans on doing
+    // so. In order to get proper stack traces, don't delete the shared library on
+    // close so that asan can resolve the symbols correctly.
+    flags |= RTLD_NODELETE;
+#endif // ENABLE_ASAN
+
+    void* handle = dlopen(path.c_str(), flags);
 #endif
     if (handle == nullptr)
     {
@@ -954,8 +962,27 @@ inline int32_t getSMVersion()
 inline bool isSMSafe()
 {
     const int32_t smVersion = getSMVersion();
-    return smVersion == 0x0700 || smVersion == 0x0702 || smVersion == 0x0705;
+    return smVersion == 0x0700 || smVersion == 0x0702 || smVersion == 0x0705 ||
+           smVersion == 0x0800 || smVersion == 0x0806;
 }
+
+inline bool isDataTypeSupported(DataType dataType)
+{
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    if (!builder)
+    {
+        return false;
+    }
+
+    if ((dataType == DataType::kINT8 && !builder->platformHasFastInt8())
+        || (dataType == DataType::kHALF && !builder->platformHasFastFp16()))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace samplesCommon
 
 inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)

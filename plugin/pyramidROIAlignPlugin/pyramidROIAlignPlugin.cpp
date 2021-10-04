@@ -33,6 +33,7 @@ std::vector<PluginField> PyramidROIAlignPluginCreator::mPluginAttributes;
 
 PyramidROIAlignPluginCreator::PyramidROIAlignPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("pooled_size", nullptr, PluginFieldType::kINT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();

@@ -65,12 +65,12 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
 
 2. Run the sample to build and run a GPU inference engine for GoogleNet.
     ```bash
-	sample_googlenet --datadir=<path_to_data_directory> --useDLACore=N
+    ./sample_googlenet --datadir=<path_to_data_directory> --useDLACore=N
     ```
 
     For example:
     ```bash
-    sample_googlenet --datadir $TRT_DATADIR/googlenet
+    ./sample_googlenet --datadir $TRT_DATADIR/googlenet
     ```
 
   **NOTE:** By default, this sample assumes both `googlenet.prototxt` and `googlenet.caffemodel` files are located in either the `data/samples/googlenet/` or `data/googlenet/` directories. The default directory can be changed by supplying the `--datadir=<new_path/>` path as a command line argument.

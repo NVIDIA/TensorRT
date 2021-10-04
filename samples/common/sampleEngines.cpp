@@ -36,6 +36,10 @@
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
+#if !defined(_WIN32)
+#include <dlfcn.h>
+#endif
+
 using namespace nvinfer1;
 
 namespace sample
@@ -469,6 +473,30 @@ bool setupNetworkAndConfig(const BuildOptions& build, const SystemOptions& sys, 
 
     bool broadcastInputFormats = broadcastIOFormats(build.inputFormats, network.getNbInputs());
 
+    if (profile)
+    {
+        // Check if the provided input tensor names match the input tensors of the engine.
+        // Throw an error if the provided input tensor names cannot be found because it implies a potential typo.
+        for (const auto& shape : build.shapes)
+        {
+            bool tensorNameFound{false};
+            for (int32_t i = 0; i < network.getNbInputs(); ++i)
+            {
+                if (network.getInput(i)->getName() == shape.first)
+                {
+                    tensorNameFound = true;
+                    break;
+                }
+            }
+            if (!tensorNameFound)
+            {
+                sample::gLogError << "Cannot find input tensor with name \"" << shape.first << "\" in the network "
+                                  << "inputs! Please make sure the input tensor names are correct." << std::endl;
+                return false;
+            }
+        }
+    }
+
     for (uint32_t i = 0, n = network.getNbInputs(); i < n; i++)
     {
         // Set formats and data types of inputs
@@ -636,7 +664,7 @@ bool setupNetworkAndConfig(const BuildOptions& build, const SystemOptions& sys, 
         }
     }
 
-    config.setProfilingVerbosity(build.nvtxMode);
+    config.setProfilingVerbosity(build.profilingVerbosity);
     config.setMinTimingIterations(build.minTiming);
     config.setAvgTimingIterations(build.avgTiming);
 
@@ -745,9 +773,19 @@ bool setupNetworkAndConfig(const BuildOptions& build, const SystemOptions& sys, 
         config.setInt8Calibrator(new RndInt8Calibrator(1, elemCount, build.calibration, network, err));
     }
 
+    if (build.strictTypes)
+    {
+        config.setFlag(BuilderFlag::kSTRICT_TYPES);
+    }
+
     if (build.safe)
     {
-        config.setEngineCapability(sys.DLACore != -1 ? EngineCapability::kSAFE_DLA : EngineCapability::kSAFE_GPU);
+        config.setEngineCapability(sys.DLACore != -1 ? EngineCapability::kDLA_STANDALONE : EngineCapability::kSAFETY);
+    }
+
+    if (build.restricted)
+    {
+        config.setFlag(BuilderFlag::kSAFETY_SCOPE);
     }
 
     if (sys.DLACore != -1)
@@ -790,17 +828,14 @@ bool setupNetworkAndConfig(const BuildOptions& build, const SystemOptions& sys, 
 //!
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
-TrtUniquePtr<ICudaEngine> networkToEngine(const BuildOptions& build, const SystemOptions& sys, IBuilder& builder,
-    INetworkDefinition& network, std::ostream& err)
+bool networkToEngine(const BuildOptions& build, const SystemOptions& sys, IBuilder& builder,
+    BuildEnvironment& env, std::ostream& err)
 {
     TrtUniquePtr<IBuilderConfig> config{builder.createBuilderConfig()};
-    TrtUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
     std::vector<std::vector<char>> sparseWeights;
-    SMP_RETVAL_IF_FALSE(config != nullptr, "Config creation failed", nullptr, err);
-    SMP_RETVAL_IF_FALSE(runtime != nullptr, "Runtime creation failed", nullptr, err);
-    SMP_RETVAL_IF_FALSE(setupNetworkAndConfig(build, sys, builder, network, *config, err, sparseWeights),
-        "Network And Config setup failed", nullptr, err);
-    runtime->setErrorRecorder(&gRecorder);
+    SMP_RETVAL_IF_FALSE(config != nullptr, "Config creation failed", false, err);
+    SMP_RETVAL_IF_FALSE(setupNetworkAndConfig(build, sys, builder, *env.network, *config, err, sparseWeights),
+        "Network And Config setup failed", false, err);
 
     std::unique_ptr<ITimingCache> timingCache{nullptr};
     // Try to load cache from file. Create a fresh cache if the file doesn't exist
@@ -808,67 +843,72 @@ TrtUniquePtr<ICudaEngine> networkToEngine(const BuildOptions& build, const Syste
     {
         std::vector<char> loadedCache = loadTimingCacheFile(build.timingCacheFile);
         timingCache.reset(config->createTimingCache(static_cast<const void*>(loadedCache.data()), loadedCache.size()));
-        SMP_RETVAL_IF_FALSE(timingCache != nullptr, "TimingCache creation failed", nullptr, err);
+        SMP_RETVAL_IF_FALSE(timingCache != nullptr, "TimingCache creation failed", false, err);
         config->setTimingCache(*timingCache, false);
     }
 
     // CUDA stream used for profiling by the builder.
     auto profileStream = samplesCommon::makeCudaStream();
-    SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", nullptr, err);
+    SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", false, err);
     config->setProfileStream(*profileStream);
 
-    TrtUniquePtr<IHostMemory> plan{builder.buildSerializedNetwork(network, *config)};
-    ICudaEngine* engine{runtime->deserializeCudaEngine(plan->data(), plan->size())};
-    SMP_RETVAL_IF_FALSE(engine != nullptr, "Engine creation failed", nullptr, err);
-    if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
+    env.serializedEngine.reset(builder.buildSerializedNetwork(*env.network, *config));
+    SMP_RETVAL_IF_FALSE(env.serializedEngine != nullptr, "Engine could not be created from network", false, err);
+
+    if (build.safe)
     {
-        auto timingCache = config->getTimingCache();
-        std::unique_ptr<IHostMemory> timingCacheHostData{timingCache->serialize()};
-        SMP_RETVAL_IF_FALSE(timingCacheHostData != nullptr, "Timing Cache serialization failed", nullptr, err);
-        saveTimingCacheFile(build.timingCacheFile, timingCacheHostData.get());
+        ASSERT(sample::hasSafeRuntime());
+        std::unique_ptr<safe::IRuntime> safeRuntime{sample::createSafeInferRuntime(sample::gLogger.getTRTLogger())};
+        SMP_RETVAL_IF_FALSE(safeRuntime != nullptr, "SafeRuntime creation failed", false, err);
+        safeRuntime->setErrorRecorder(&gRecorder);
+        env.safeEngine.reset(
+            safeRuntime->deserializeCudaEngine(env.serializedEngine->data(), env.serializedEngine->size()));
+        if (build.consistency)
+        {
+            checkSafeEngine(env.serializedEngine->data(), env.serializedEngine->size());
+        }
+        SMP_RETVAL_IF_FALSE(env.safeEngine != nullptr, "SafeEngine deserialization failed", false, err);
     }
-    if (config->getInt8Calibrator())
+    else
     {
-        delete config->getInt8Calibrator();
+        TrtUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+        SMP_RETVAL_IF_FALSE(runtime != nullptr, "Runtime creation failed", false, err);
+        runtime->setErrorRecorder(&gRecorder);
+        env.engine.reset(runtime->deserializeCudaEngine(env.serializedEngine->data(), env.serializedEngine->size()));
+        SMP_RETVAL_IF_FALSE(env.engine != nullptr, "Engine deserialization failed", false, err);
+        if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
+        {
+            auto const& timingCache = config->getTimingCache();
+            std::unique_ptr<IHostMemory> timingCacheHostData{timingCache->serialize()};
+            SMP_RETVAL_IF_FALSE(timingCacheHostData != nullptr, "Timing Cache serialization failed", false, err);
+            saveTimingCacheFile(build.timingCacheFile, timingCacheHostData.get());
+        }
+        if (config->getInt8Calibrator())
+        {
+            delete config->getInt8Calibrator();
+        }
     }
-    return TrtUniquePtr<ICudaEngine>(engine);
+    return true;
 }
 
 //!
 //! \brief Parse a given model, create a network and an engine.
 //!
-std::tuple<TrtUniquePtr<nvinfer1::ICudaEngine>, TrtUniquePtr<INetworkDefinition>, Parser> modelToEngineNetworkParserTuple(
-    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
+bool modelToBuildEnv(
+    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, BuildEnvironment& env, std::ostream& err)
 {
     TrtUniquePtr<IBuilder> builder{createInferBuilder(sample::gLogger.getTRTLogger())};
-    if (builder == nullptr)
-    {
-        err << "Builder creation failed" << std::endl;
-        return {};
-    }
+    SMP_RETVAL_IF_FALSE(builder != nullptr, "Builder creation failed", false, err);
     builder->setErrorRecorder(&gRecorder);
     auto networkFlags
         = (build.maxBatch) ? 0U : 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    if (build.explicitPrecision)
-    {
-        networkFlags |= 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_PRECISION);
-    }
 
-    TrtUniquePtr<INetworkDefinition> network{builder->createNetworkV2(networkFlags)};
-    if (!network)
-    {
-        err << "Network creation failed" << std::endl;
-        return {};
-    }
-    Parser parser = modelToNetwork(model, *network, err);
-    if (!parser)
-    {
-        err << "Parsing model failed" << std::endl;
-        return {};
-    }
-
-    auto engine = networkToEngine(build, sys, *builder, *network, err);
-    return std::make_tuple(std::move(engine), std::move(network), std::move(parser));
+    env.network.reset(builder->createNetworkV2(networkFlags));
+    SMP_RETVAL_IF_FALSE(env.network != nullptr, "Network creation failed", false, err);
+    env.parser = modelToNetwork(model, *env.network, err);
+    SMP_RETVAL_IF_FALSE(env.parser.operator bool(), "Parsing model failed", false, err);
+    SMP_RETVAL_IF_FALSE(networkToEngine(build, sys, *builder, env, err), "Building engine failed", false, err);
+    return true;
 }
 
 namespace
@@ -910,6 +950,43 @@ std::pair<std::vector<std::string>, std::vector<WeightsRole>> getMissingLayerWei
     });
     return {layerNameStrs, weightsRoles};
 }
+
+bool loadEngineToEnv(const std::string& engine, int DLACore, bool safe, bool enableConsistency, BuildEnvironment& env, std::ostream& err)
+{
+    std::ifstream engineFile(engine, std::ios::binary);
+    SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error opening engine file: " << engine);
+    engineFile.seekg(0, std::ifstream::end);
+    int64_t fsize = engineFile.tellg();
+    engineFile.seekg(0, std::ifstream::beg);
+
+    std::vector<char> engineData(fsize);
+    engineFile.read(engineData.data(), fsize);
+    SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error loading engine file: " << engine);
+    // TODO: copy engine blob to env.serializedEngine
+
+    if (safe)
+    {
+        ASSERT(sample::hasSafeRuntime());
+        std::unique_ptr<safe::IRuntime> safeRuntime{sample::createSafeInferRuntime(sample::gLogger.getTRTLogger())};
+        safeRuntime->setErrorRecorder(&gRecorder);
+        env.safeEngine.reset(safeRuntime->deserializeCudaEngine(engineData.data(), fsize));
+        bool result = env.safeEngine != nullptr;
+        if (result && enableConsistency)
+        {
+            checkSafeEngine(engineData.data(), fsize);
+        }
+        return result;
+    }
+
+    TrtUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+    if (DLACore != -1)
+    {
+        runtime->setDLACore(DLACore);
+    }
+    runtime->setErrorRecorder(&gRecorder);
+    env.engine.reset(runtime->deserializeCudaEngine(engineData.data(), fsize, nullptr));
+    return env.engine != nullptr;
+}
 } // namespace
 
 void dumpRefittable(nvinfer1::ICudaEngine& engine)
@@ -920,8 +997,8 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine)
         sample::gLogError << "Failed to create a refitter." << std::endl;
         return;
     }
-    auto const& layerWeightsRolePair = getLayerWeightsRolePair(*refitter);
 
+    auto const& layerWeightsRolePair = getLayerWeightsRolePair(*refitter);
     auto const& layerNames = layerWeightsRolePair.first;
     auto const& weightsRoles = layerWeightsRolePair.second;
     auto const nbAll = layerWeightsRolePair.first.size();
@@ -933,33 +1010,8 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine)
 
 ICudaEngine* loadEngine(const std::string& engine, int DLACore, std::ostream& err)
 {
-    std::ifstream engineFile(engine, std::ios::binary);
-    if (!engineFile)
-    {
-        err << "Error opening engine file: " << engine << std::endl;
-        return nullptr;
-    }
-
-    engineFile.seekg(0, std::ifstream::end);
-    long int fsize = engineFile.tellg();
-    engineFile.seekg(0, std::ifstream::beg);
-
-    std::vector<char> engineData(fsize);
-    engineFile.read(engineData.data(), fsize);
-    if (!engineFile)
-    {
-        err << "Error loading engine file: " << engine << std::endl;
-        return nullptr;
-    }
-
-    TrtUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    if (DLACore != -1)
-    {
-        runtime->setDLACore(DLACore);
-    }
-    runtime->setErrorRecorder(&gRecorder);
-
-    return runtime->deserializeCudaEngine(engineData.data(), fsize, nullptr);
+    BuildEnvironment env;
+    return loadEngineToEnv(engine, DLACore, false, false, env, err) ? env.engine.release() : nullptr;
 }
 
 bool saveEngine(const ICudaEngine& engine, const std::string& fileName, std::ostream& err)
@@ -982,31 +1034,33 @@ bool saveEngine(const ICudaEngine& engine, const std::string& fileName, std::ost
     return !engineFile.fail();
 }
 
-std::tuple<TrtUniquePtr<nvinfer1::ICudaEngine>, TrtUniquePtr<INetworkDefinition>, Parser> getEngineNetworkParserTuple(
-    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
+bool getEngineBuildEnv(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys,
+    BuildEnvironment& env, std::ostream& err)
 {
     TrtUniquePtr<nvinfer1::ICudaEngine> engine;
     TrtUniquePtr<INetworkDefinition> network;
     Parser parser;
+
+    bool createEngineSuccess {false};
+
     if (build.load)
     {
-        engine.reset(loadEngine(build.engine, sys.DLACore, err));
+        createEngineSuccess = loadEngineToEnv(build.engine, sys.DLACore, build.safe, build.consistency, env, err);
     }
     else
     {
-        std::tie(engine, network, parser) = modelToEngineNetworkParserTuple(model, build, sys, err);
+        createEngineSuccess = modelToBuildEnv(model, build, sys, env, err);
     }
-    if (!engine)
+
+    SMP_RETVAL_IF_FALSE(createEngineSuccess, "Failed to create engine from model.", false, err);
+
+    if (build.save)
     {
-        err << "Engine creation failed" << std::endl;
-        return {};
+        std::ofstream engineFile(build.engine, std::ios::binary);
+        engineFile.write(static_cast<char*>(env.serializedEngine->data()), env.serializedEngine->size());
+        SMP_RETVAL_IF_FALSE(!engineFile.fail(), "Saving engine to file failed.", false, err);
     }
-    if (build.save && !saveEngine(*engine, build.engine, err))
-    {
-        err << "Saving engine to file failed" << std::endl;
-        return {};
-    }
-    return std::make_tuple(std::move(engine), std::move(network), std::move(parser));
+    return true;
 }
 
 IHostMemory* networkToSerialized(const BuildOptions& build, const SystemOptions& sys, IBuilder& builder,
@@ -1029,16 +1083,12 @@ IHostMemory* modelToSerialized(
 
     auto networkFlags
         = (build.maxBatch) ? 0U : 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    if (build.explicitPrecision)
-    {
-        networkFlags |= 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_PRECISION);
-    }
 
     TrtUniquePtr<INetworkDefinition> network{builder->createNetworkV2(networkFlags)};
     SMP_RETVAL_IF_FALSE(network != nullptr, "Network creation failed", nullptr, err);
 
     Parser parser = modelToNetwork(model, *network, err);
-    SMP_RETVAL_IF_FALSE(parser, "Parsing model failed", nullptr, err);
+    SMP_RETVAL_IF_FALSE(parser.operator bool(), "Parsing model failed", nullptr, err);
 
     return networkToSerialized(build, sys, *builder, *network, err);
 }
@@ -1117,7 +1167,13 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
     case LayerType::kLOOP_OUTPUT:
     case LayerType::kSELECT:
     case LayerType::kQUANTIZE:
-    case LayerType::kDEQUANTIZE: return {};
+    case LayerType::kDEQUANTIZE:
+    case LayerType::kCONDITION:
+    case LayerType::kCONDITIONAL_INPUT:
+    case LayerType::kCONDITIONAL_OUTPUT:
+    case LayerType::kSCATTER:
+    case LayerType::kEINSUM:
+    case LayerType::kASSERTION: return {};
     }
     return {};
 }
@@ -1202,4 +1258,136 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine)
     return true;
 }
 
+namespace
+{
+void* initSafeRuntime()
+{
+    void* handle{nullptr};
+#if !defined(_WIN32)
+    std::string const dllName{samplesCommon::isDebug() ? "libnvinfer_safe_debug.so.8" : "libnvinfer_safe.so.8"};
+#if SANITIZER_BUILD
+    handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
+#else
+    handle = dlopen(dllName.c_str(), RTLD_LAZY);
+#endif
+#endif
+    return handle;
+}
+
+void* initConsistencyCheckerLibrary()
+{
+    void* handle{nullptr};
+#if !defined(_WIN32)
+    std::string const dllName{samplesCommon::isDebug() ? "libnvinfer_checker_debug.so.8" : "libnvinfer_checker.so.8"};
+#if SANITIZER_BUILD
+    handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
+#else
+    handle = dlopen(dllName.c_str(), RTLD_LAZY);
+#endif
+#endif
+    return handle;
+}
+
+#if !defined(_WIN32)
+struct DllDeleter
+{
+    void operator()(void* handle)
+    {
+        if (handle != nullptr)
+        {
+            dlclose(handle);
+        }
+    }
+};
+const std::unique_ptr<void, DllDeleter> safeRuntimeLibrary{initSafeRuntime()};
+const std::unique_ptr<void, DllDeleter> consistencyCheckerLibrary{initConsistencyCheckerLibrary()};
+#endif
+} // namespace
+
+bool hasSafeRuntime()
+{
+    bool ret{false};
+#if !defined(_WIN32)
+    ret = (safeRuntimeLibrary != nullptr);
+#endif
+    return ret;
+}
+
+nvinfer1::safe::IRuntime* createSafeInferRuntime(nvinfer1::ILogger& logger) noexcept
+{
+    nvinfer1::safe::IRuntime* runtime{nullptr};
+#if !defined(_WIN32)
+    constexpr char symbolName[] = "_ZN8nvinfer14safe18createInferRuntimeERNS_7ILoggerE";
+    typedef nvinfer1::safe::IRuntime* (*CreateInferRuntimeFn)(nvinfer1::ILogger & logger);
+    if (hasSafeRuntime())
+    {
+        auto createFn = reinterpret_cast<CreateInferRuntimeFn>(dlsym(safeRuntimeLibrary.get(), symbolName));
+        if (createFn != nullptr)
+        {
+            runtime = createFn(logger);
+        }
+    }
+#endif
+    return runtime;
+}
+
+bool hasConsistencyChecker()
+{
+    bool ret{false};
+#if !defined(_WIN32)
+    ret = (consistencyCheckerLibrary != nullptr);
+#endif
+    return ret;
+}
+
+nvinfer1::consistency::IConsistencyChecker* createConsistencyChecker(
+    nvinfer1::ILogger& logger, void const* serializedEngine, int32_t const engineSize) noexcept
+{
+    nvinfer1::consistency::IConsistencyChecker* checker{nullptr};
+
+    if (serializedEngine == nullptr || engineSize == 0)
+    {
+        return checker;
+    }
+
+#if !defined(_WIN32)
+    constexpr char symbolName[] = "createConsistencyChecker_INTERNAL";
+    typedef nvinfer1::consistency::IConsistencyChecker* (*CreateCheckerFn)(
+        nvinfer1::ILogger * logger, void const* data, size_t size, uint32_t version);
+    if (hasSafeRuntime())
+    {
+        auto createFn = reinterpret_cast<CreateCheckerFn>(dlsym(consistencyCheckerLibrary.get(), symbolName));
+        if (createFn != nullptr)
+        {
+            checker = createFn(&logger, serializedEngine, engineSize, NV_TENSORRT_VERSION);
+        }
+    }
+#endif
+    return checker;
+}
+
+bool checkSafeEngine(void const* serializedEngine, int32_t const engineSize)
+{
+
+    if (!hasConsistencyChecker())
+    {
+        sample::gLogError << "Cannot perform consistency check because the checker is not loaded.." << std::endl;
+        return false;
+    }
+    auto checker = std::unique_ptr<nvinfer1::consistency::IConsistencyChecker>(
+        createConsistencyChecker(sample::gLogger.getTRTLogger(), serializedEngine, engineSize));
+    if (checker.get() == nullptr)
+    {
+        sample::gLogError << "Failed to create consistency checker." << std::endl;
+        return false;
+    }
+    sample::gLogInfo << "Start consistency checking." << std::endl;
+    if (!checker->validate())
+    {
+        sample::gLogError << "Consistency validation failed." << std::endl;
+        return false;
+    }
+    sample::gLogInfo << "Consistency validation passed." << std::endl;
+    return true;
+}
 } // namespace sample

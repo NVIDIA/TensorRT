@@ -26,7 +26,7 @@ int clz(int x)
 {
     for (int i = 31; i >= 0; --i)
     {
-        if ((1 << i) & x)
+        if ((1U << i) & x)
         {
             return 31 - i;
         }

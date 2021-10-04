@@ -28,18 +28,19 @@ namespace nmtSample
 class LimitedSamplesDataReader : public DataReader
 {
 public:
-    LimitedSamplesDataReader(int maxSamplesToRead, DataReader::ptr originalDataReader);
+    LimitedSamplesDataReader(int32_t maxSamplesToRead, DataReader::ptr originalDataReader);
 
-    int read(int samplesToRead, int maxInputSequenceLength, int* hInputData, int* hActualInputSequenceLengths) override;
+    int32_t read(int32_t samplesToRead, int32_t maxInputSequenceLength, int32_t* hInputData,
+        int32_t* hActualInputSequenceLengths) override;
 
     void reset() override;
 
     std::string getInfo() override;
 
 private:
-    int gMaxSamplesToRead;
+    int32_t gMaxSamplesToRead;
     DataReader::ptr gOriginalDataReader;
-    int gCurrentPosition;
+    int32_t gCurrentPosition;
 };
 } // namespace nmtSample
 

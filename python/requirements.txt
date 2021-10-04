@@ -1,7 +1,6 @@
 # This file should contain the minimum possible packages to be able to import tensorrt and use it correctly.
 # This must succeed during virtual builds, so be VERY CAREFUL when you add packages here.
-# Install Python 2 and 3 wheels depending on the version of python installed on this machine.
-##PYTHON_BASE_BUILDDIR##/##BUILD_TYPE##/2.7/dist/tensorrt-##TENSORRT_VERSION##-cp27-none-linux_x86_64.whl ; python_version=="2.7"
-##PYTHON_BASE_BUILDDIR##/##BUILD_TYPE##/3.##PYTHON3_MINOR##/dist/tensorrt-##TENSORRT_VERSION##-cp3##PYTHON3_MINOR##-none-linux_x86_64.whl ; python_version=="3.##PYTHON3_MINOR##"
+numpy==1.18.5; python_version<"3.6"
+##PYTHON_BASE_BUILDDIR##/##BUILD_TYPE##/3.##PYTHON3_MINOR##/dist/tensorrt-##TENSORRT_VERSION##-cp3##PYTHON3_MINOR##-none-linux_##TARGET##.whl ; python_version=="3.##PYTHON3_MINOR##"
 ##TENSORRT_ROOT##/python_builds/uff/uff-##UFF_VERSION##-py2.py3-none-any.whl
 ##TENSORRT_ROOT##/python_builds/graphsurgeon/graphsurgeon-##GRAPHSURGEON_VERSION##-py2.py3-none-any.whl

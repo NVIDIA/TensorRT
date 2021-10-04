@@ -17,21 +17,21 @@
  #include <stdio.h>
  #include <assert.h>
  #include <type_traits>
- 
+
  #include "instanceNormFwd.h"
  #include "instanceNormCommon.h"
- 
+
  namespace instance_norm_impl
  {
 
  static inline int32_t divUp(int32_t m, int32_t n) {
      return (m + n - 1) / n;
  }
- 
- 
+
+
  using kernel_params_32 = Instance_norm_kernel_params<uint16_t, uint16_t, uint16_t, 512, 8, 32>;
  using kernel_params_64 = Instance_norm_kernel_params<uint16_t, uint16_t, uint16_t, 512, 16, 64>;
- 
+
  using kernel_params_32_int8 = Instance_norm_kernel_params<int8_t, int8_t, int8_t, 512, 8, 32>;
  using kernel_params_32_int8_sm_700 = Instance_norm_kernel_params<int8_t, int8_t, int8_t, 512, 8, 32, 700>;
  using kernel_params_32_int8_sm_720 = Instance_norm_kernel_params<int8_t, int8_t, int8_t, 512, 8, 32, 720>;
@@ -42,13 +42,13 @@
  //using kernel_params_32_int8 = Instance_norm_kernel_params<int8_t, int8_t, 256, 8, 32>;
  using kernel_params_32_fp16_int8 = Instance_norm_kernel_params<uint16_t, int8_t, float, 512, 8, 32>;
 
- template< 
+ template<
      typename Storage,
      typename Input_Data_Type,
      typename Output_Data_Type,
-     int32_t THREADS_PER_CTA, 
-     int32_t THREADS_PER_PIXEL, 
-     int32_t PIXELS_PER_THREAD_IN_REGISTERS, 
+     int32_t THREADS_PER_CTA,
+     int32_t THREADS_PER_PIXEL,
+     int32_t PIXELS_PER_THREAD_IN_REGISTERS,
      int32_t PIXELS_PER_THREAD_IN_SMEM,
      int32_t ELEMENTS_PER_LDG,
      int32_t USE_ONLINE_APPROACH,
@@ -57,27 +57,27 @@
  >
  __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
      void instanceNormFwd(InstanceNormFwdParams params) {
- 
+
      // Single pass numerically stable algorithm, see:
      // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
      //
      // n = 0, mean = 0.0, M2 = 0.0
-     // 
+     //
      // for x in data:
      //     n += 1
      //     delta = x - mean
      //     mean += delta/n
      //     delta2 = x - mean
      //     M2 += delta*delta2
-     // 
+     //
      // if n < 2:
      //     return float('nan')
      // else:
      //     return M2 / (n - 1)
- 
+
      const bool IS_INPUT_INT8 = std::is_same<Input_Data_Type, int8_t>::value;
      const bool IS_OUTPUT_INT8 = std::is_same<Output_Data_Type, int8_t>::value;
- 
+
      // The number of pixels loaded in a single LDG.
      const int32_t PIXELS_PER_LDG = THREADS_PER_CTA / THREADS_PER_PIXEL;
      // The number of pixels computed per CTA stored in registers.
@@ -86,32 +86,32 @@
      const int32_t PIXELS_PER_CTA_IN_SMEM = PIXELS_PER_THREAD_IN_SMEM*PIXELS_PER_LDG;
      // The number of C elements per CTA.
      const int32_t C_ELEMENTS_PER_CTA = THREADS_PER_PIXEL*ELEMENTS_PER_LDG;
- 
+
      // Shared memory to do CTA-wide parallel sums.
      __shared__ float smem[ELEMENTS_PER_LDG*THREADS_PER_CTA];
- 
+
      // The position in the NHW dimension where the CTA starts.
      int32_t cta_nhw_regs = blockIdx.x * PIXELS_PER_CTA_IN_REGISTERS;
      // The position in the NHW dimension where the CTA starts for the portion in SMEM.
      int32_t cta_nhw_smem = blockIdx.x * PIXELS_PER_CTA_IN_SMEM;
      // Compute the NHW coordinate of the thread in the CTA.
      const int32_t thread_in_cta_nhw = threadIdx.x / THREADS_PER_PIXEL;
- 
+
      for (int32_t nc_blk_index = blockIdx.y; nc_blk_index < params.c_blks * params.n; nc_blk_index += gridDim.y) {
-     
+
      int32_t n_blk_index = nc_blk_index / params.c_blks;
      int32_t c_blk_index = nc_blk_index % params.c_blks;
- 
+
      // The position in the C dimension where the CTA starts.
      const int32_t cta_c = c_blk_index * C_ELEMENTS_PER_CTA;
-     // Compute the C coordinate of the thread in the CTA. 
+     // Compute the C coordinate of the thread in the CTA.
      const int32_t thread_in_cta_c = threadIdx.x % THREADS_PER_PIXEL;
      // Compute the C coordinate of the thread.
      const int32_t thread_c = cta_c + thread_in_cta_c*ELEMENTS_PER_LDG;
- 
+
      // Is the thread working on a valid C dimension?
      const int32_t is_valid_c = thread_c < params.c;
- 
+
      // The adapter for the storage.
      typedef PackedStorage<Storage, ELEMENTS_PER_LDG> PackedStorage_;
      // The data type for packed storage in SMEM.
@@ -120,14 +120,14 @@
      const int32_t PACKED_ELEMENTS_PER_LDG = PackedStorage_::PACKED_ELEMENTS_PER_LDG;
      // Registers to keep the data live for the persistent approach.
      PackedStorageType x_storage[PIXELS_PER_THREAD_IN_REGISTERS][PACKED_ELEMENTS_PER_LDG];
- 
+
      // Shared memory buffer to store the extra pixels.
      extern __shared__ char smem_storage_[];
      PackedStorageType * smem_storage = reinterpret_cast<PackedStorageType *>(smem_storage_);
- 
+
      float int8_in_scale = params.in_scale;
      float int8_out_scale = params.out_scale;
- 
+
      // Register to store the number of elements read so far.
      float count = 0.f, mean[ELEMENTS_PER_LDG], m2[ELEMENTS_PER_LDG];
      #pragma unroll
@@ -135,36 +135,36 @@
          mean[i] = 0.f;
          m2  [i] = 0.f;
      }
- 
+
      // The number of elements loaded by this CTA.
      int32_t cta_count = 0;
      int32_t global_batch_offset = n_blk_index * params.nhw * params.c;
      // int8 relevant
      // int8 output implies we have NC/32DHW32 input for bath fp16 and int8
-     int32_t global_thread_c_input = ( IS_INPUT_INT8 || IS_OUTPUT_INT8 )? thread_in_cta_c*ELEMENTS_PER_LDG 
+     int32_t global_thread_c_input = ( IS_INPUT_INT8 || IS_OUTPUT_INT8 )? thread_in_cta_c*ELEMENTS_PER_LDG
                                        + (cta_c % 32)  // handle C_ELEMENTS_PER_CTA == 16 case
                                        + (cta_c / 32) * 32 * params.nhw : thread_c;
      int32_t stride_c_input = ( IS_INPUT_INT8 || IS_OUTPUT_INT8 )? 32 : params.c;
-     int32_t global_thread_c_output = ( IS_OUTPUT_INT8 )? thread_in_cta_c*ELEMENTS_PER_LDG 
+     int32_t global_thread_c_output = ( IS_OUTPUT_INT8 )? thread_in_cta_c*ELEMENTS_PER_LDG
                                        + (cta_c % 32)  // handle C_ELEMENTS_PER_CTA == 16 case
                                        + (cta_c / 32) * 32 * params.nhw : thread_c;
      int32_t stride_c_output = ( IS_OUTPUT_INT8 )? 32 : params.c;
      // The base pointer to load from.
-     const Input_Data_Type *gmem_src = &reinterpret_cast<Input_Data_Type *>(params.gmem_src)[global_thread_c_input + global_batch_offset];
- 
+     const Input_Data_Type *gmem_src = &reinterpret_cast<const Input_Data_Type *>(params.gmem_src)[global_thread_c_input + global_batch_offset];
+
      // Load the batch of elements. Compute the mean/var across those elements.
      const int32_t pixels_per_iteration = PIXELS_PER_CTA_IN_REGISTERS*gridDim.x;
- 
+
      // outer loops
      int32_t OUTER_LOOPS = OUTER_LOOPS_ == 1? 1 : params.outer_loops;
- 
+
      #pragma unroll 1
      for( int32_t loop_i = 0; loop_i < OUTER_LOOPS; ++loop_i ) {
          // The nhw position.
          int32_t nhw_regs = cta_nhw_regs + loop_i*pixels_per_iteration;
- 
+
          cta_count += max(min(nhw_regs + PIXELS_PER_CTA_IN_REGISTERS, params.nhw) - max(nhw_regs, 0), 0);
- 
+
          // Load the data and compute the local mean/sum and the variance.
          if( USE_ONLINE_APPROACH ) {
              // Read the elements from memory.
@@ -179,19 +179,19 @@
                      is_valid[i] = 1.f;
                  }
              }
- 
+
              // Do the math.
              #pragma unroll
              for( int32_t i = 0; i < PIXELS_PER_THREAD_IN_REGISTERS; ++i ) {
                  // Convert to float.
                  float x_math[ELEMENTS_PER_LDG];
                  toFloat<PACKED_ELEMENTS_PER_LDG, IS_INPUT_INT8>(x_math, x_storage[i], int8_in_scale);
- 
+
                  // Update the count.
                  count += is_valid[i];
                  // Invert the count.
                  float inv_count = is_valid[i] ? 1.f / count : 0.f;
- 
+
                  // Update the mean and m2 using deltas.
                  #pragma unroll
                  for( int32_t j = 0; j < ELEMENTS_PER_LDG; ++j ) {
@@ -212,48 +212,48 @@
                      count += 1.f;
                  }
              }
- 
+
              // Sum the elements in registers.
              #pragma unroll
              for( int32_t i = 0; i < PIXELS_PER_THREAD_IN_REGISTERS; ++i ) {
                  // Convert to float.
                  float x_math[ELEMENTS_PER_LDG];
                  toFloat<PACKED_ELEMENTS_PER_LDG, IS_INPUT_INT8>(x_math, x_storage[i], int8_in_scale);
- 
+
                  // Update the mean and m2 using deltas.
                  #pragma unroll
                  for( int32_t j = 0; j < ELEMENTS_PER_LDG; ++j ) {
                      mean[j] += x_math[j];
                  }
              }
-             
+
              // Compute the mean.
              float inv_count = 1.f / count;
              #pragma unroll
              for( int32_t j = 0; j < ELEMENTS_PER_LDG; ++j ) {
                  mean[j] *= inv_count;
              }
-             
+
              // Compute the variance.
              #pragma unroll
              for( int32_t i = 0; i < PIXELS_PER_THREAD_IN_REGISTERS; ++i ) {
                  // Convert to float.
                  float x_math[ELEMENTS_PER_LDG];
                  toFloat<PACKED_ELEMENTS_PER_LDG, IS_INPUT_INT8>(x_math, x_storage[i], int8_in_scale);
- 
+
                  // Is it a valid pixel?
                  float is_valid = i < (int32_t) count ? 1.f : 0.f;
                  // Update the mean and m2 using deltas.
                  #pragma unroll
                  for( int32_t j = 0; j < ELEMENTS_PER_LDG; ++j ) {
-                     m2[j] += (x_math[j] - mean[j]) * (x_math[j] - mean[j]) * is_valid; 
+                     m2[j] += (x_math[j] - mean[j]) * (x_math[j] - mean[j]) * is_valid;
                  }
              }
          }
      }
- 
+
      // The elements to load and store in SMEM.
-     int32_t smem_nhw = OUTER_LOOPS*pixels_per_iteration + cta_nhw_smem; 
+     int32_t smem_nhw = OUTER_LOOPS*pixels_per_iteration + cta_nhw_smem;
      // Load elements from SMEM, update the CTA count.
      int32_t pixels_in_smem = min(smem_nhw + PIXELS_PER_CTA_IN_SMEM, params.nhw) - max(smem_nhw, 0);
      if( pixels_in_smem > 0 ) {
@@ -261,10 +261,10 @@
          for( int32_t i = 0; i < PIXELS_PER_THREAD_IN_SMEM; ++i ) {
              const int32_t idx = smem_nhw + thread_in_cta_nhw + i*PIXELS_PER_LDG;
              float is_pixel_valid = (idx < params.nhw && is_valid_c) ? 1.f : 0.f;
- 
+
              PackedStorageType x_storage_local[PACKED_ELEMENTS_PER_LDG];
              ldgStream(x_storage_local, &gmem_src[(is_pixel_valid ? idx : 0) * stride_c_input]);
- 
+
              // The offset to store in SMEM.
              const int32_t offset = i*THREADS_PER_CTA*PACKED_ELEMENTS_PER_LDG;
              // Store in SMEM.
@@ -273,7 +273,7 @@
              count += is_pixel_valid;
              // Invert the count.
              float inv_count = is_pixel_valid ? 1.f / count : 0.f;
- 
+
              float x_math[ELEMENTS_PER_LDG];
              toFloat<PACKED_ELEMENTS_PER_LDG, IS_INPUT_INT8>(x_math, x_storage_local, int8_in_scale);
              // Update the mean and m2 using deltas.
@@ -286,23 +286,23 @@
              }
          }
      }
- 
+
      // We scale the mean by the number of elements. It brings more stability.
      float m1[ELEMENTS_PER_LDG];
      #pragma unroll
      for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
          m1[i] = mean[i] * count;
      }
- 
+
      // Run the parallel sum accross the CTA to get the local sum.
      ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-         smem, m1, thread_in_cta_nhw); 
+         smem, m1, thread_in_cta_nhw);
      __syncthreads();
- 
+
      // The values in shared memory correspond to the CTA-wide sums.
      readFromSmem(m1, smem, thread_in_cta_c);
      __syncthreads();
- 
+
      // Adjust the variance.
      float inv_cta_count = 1.f / (float) cta_count;
      #pragma unroll
@@ -310,14 +310,14 @@
          float mean_diff = m1[i]*inv_cta_count - mean[i];
          m2[i] = m2[i] + mean_diff * mean_diff * count;
      }
-         
+
      // Run the parallel sum accross the CTA to get the local adjusted variance.
      ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-         smem, m2, thread_in_cta_nhw); 
- 
-     // The workspace in global memory is distributed across the different CTA. 
+         smem, m2, thread_in_cta_nhw);
+
+     // The workspace in global memory is distributed across the different CTA.
      int32_t gmem_sums_offset = nc_blk_index*gridDim.x*C_ELEMENTS_PER_CTA*2;
- 
+
      // Write the data for the CTA to global memory.
      GMEM_SUMS_TYPE *gmem_sums = &params.gmem_sums[gmem_sums_offset];
      if( threadIdx.x < THREADS_PER_PIXEL ) {
@@ -325,26 +325,29 @@
          writeToGmem(&gmem_sums[                           0], idx, m1);
          writeToGmem(&gmem_sums[C_ELEMENTS_PER_CTA*gridDim.x], idx, m2);
      }
- 
+
      // The memory location to store the number of pixels per CTA.
      int32_t *gmem_counts = &params.gmem_counts[nc_blk_index*gridDim.x];
      if( threadIdx.x == 0 ) {
          //gmem_counts[0] = cta_count;
          gmem_counts[blockIdx.x] = cta_count;
      }
- 
+
      // Read the bias and scale.
      float bias[ELEMENTS_PER_LDG];
      float scale[ELEMENTS_PER_LDG];
-     readFromGmem(bias, &params.gmem_bias[cta_c], thread_in_cta_c);
-     readFromGmem(scale, &params.gmem_scale[cta_c], thread_in_cta_c);
- 
+     if (is_valid_c)
+     {
+         readFromGmem(bias, &params.gmem_bias[cta_c], thread_in_cta_c);
+         readFromGmem(scale, &params.gmem_scale[cta_c], thread_in_cta_c);
+     }
+
      // The counters to count how many CTAs have retired at this point. One per chunk of C.
-     int32_t *gmem_retired_ctas = &params.gmem_retired_ctas[nc_blk_index];
- 
+     int32_t* gmem_retired_ctas = &params.gmem_retired_ctas[nc_blk_index];
+
      // Make sure the threads are done and reconverged.
      __syncthreads();
- 
+
      // Register the CTA.
      int32_t expected_count = gridDim.x;
      if( threadIdx.x == 0 ) {
@@ -357,7 +360,7 @@
          }
          atomicAdd(gmem_retired_ctas, val_to_add);
      }
- 
+
      // Are all CTAs done?
      if (threadIdx.x == 0) {
          int32_t retired_ctas = -1;
@@ -368,87 +371,87 @@
      }
      __threadfence();
      __syncthreads();
- 
+
      // Reset the mean to compute the global mean.
      #pragma unroll
      for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
          m1[i] = 0.f;
      }
- 
+
      // Build the global mean.
      #pragma unroll 1
      for( int32_t idx = threadIdx.x; idx < THREADS_PER_PIXEL*gridDim.x; idx += THREADS_PER_CTA ) {
          float tmp[ELEMENTS_PER_LDG];
          readFromGmem(tmp, gmem_sums, idx);
- 
+
          #pragma unroll
          for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
              m1[i] += tmp[i];
          }
      }
- 
+
      // Run the parallel sum accross the CTA to get the local sum.
      ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-         smem, m1, thread_in_cta_nhw); 
+         smem, m1, thread_in_cta_nhw);
      __syncthreads();
- 
+
      // The values in shared memory correspond to the CTA-wide sums.
      readFromSmem(m1, smem, thread_in_cta_c);
      __syncthreads();
- 
+
      // Normalize the mean.
      float inv_count = 1.f / (float) params.nhw;
      #pragma unroll
      for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
          m1[i] = m1[i] * inv_count;
      }
- 
+
      // Reset the variance.
      #pragma unroll
      for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
          m2[i] = 0.f;
      }
- 
+
      // Build the global variance.
      #pragma unroll 1
      for( int32_t idx = threadIdx.x; idx < THREADS_PER_PIXEL*gridDim.x; idx += THREADS_PER_CTA ) {
- 
+
          // Read the means computed by different CTAs (again). Reuse tmp if we have 1 iteration.
          float tmp_mean[ELEMENTS_PER_LDG], tmp_var[ELEMENTS_PER_LDG];
          readFromGmem(tmp_mean, &gmem_sums[                           0], idx);
          readFromGmem(tmp_var,  &gmem_sums[C_ELEMENTS_PER_CTA*gridDim.x], idx);
- 
+
          // Read the number of pixels visited by a given CTA.
-         cta_count = __ldg(&gmem_counts[idx / THREADS_PER_PIXEL]); 
- 
+         cta_count = __ldg(&gmem_counts[idx / THREADS_PER_PIXEL]);
+
          // Compute the diff to update the variance.
          float mean_diff[ELEMENTS_PER_LDG], inv_cta_count = 1.f / (float) cta_count;
-         #pragma unroll 
+         #pragma unroll
          for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
              mean_diff[i] = m1[i] - tmp_mean[i]*inv_cta_count;
          }
- 
+
          // Update the variance.
-         #pragma unroll 
+         #pragma unroll
          for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
              m2[i] += tmp_var[i] + mean_diff[i]*mean_diff[i]*(float) cta_count;
          }
      }
- 
+
      // Run the parallel sum accross the CTA to get the local sum.
      ParallelSums<THREADS_PER_PIXEL, ELEMENTS_PER_LDG>::dispatch<THREADS_PER_CTA>(
-         smem, m2, thread_in_cta_nhw); 
+         smem, m2, thread_in_cta_nhw);
      __syncthreads();
- 
+
      readFromSmem(m2, smem, thread_in_cta_c);
      __syncthreads();
- 
+
      // Finalize the stddev.
-     #pragma unroll 
+     #pragma unroll
      for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
          m2[i] *= inv_count;
      }
- 
+
      // store the saved mean/var
      float svarinv[ELEMENTS_PER_LDG];
      bool is_valid_for_saving = is_valid_c && blockIdx.x == 0 && thread_in_cta_nhw == 0;
@@ -465,7 +468,7 @@
          writeToGmem(params.gmem_saved_var + global_stats_offset, \
                        thread_c/ELEMENTS_PER_LDG, svarinv);
      }
- 
+
      // store the running mean/var
      float rmean[ELEMENTS_PER_LDG];
      float rvar[ELEMENTS_PER_LDG];
@@ -488,49 +491,49 @@
          writeToGmem(params.gmem_running_mean + global_stats_offset, thread_c/ELEMENTS_PER_LDG, rmean);
          writeToGmem(params.gmem_running_var + global_stats_offset, thread_c/ELEMENTS_PER_LDG, rvar);
      }
- #endif 
- 
+ #endif
+
      // Update the scale with the stddev and eps.
-     #pragma unroll 
+     #pragma unroll
      for( int32_t i = 0; i < ELEMENTS_PER_LDG; ++i ) {
          scale[i] *= svarinv[i];
      }
- 
+
      // The base pointer to write to.
      Output_Data_Type *const gmem_dst = &reinterpret_cast<Output_Data_Type *>(params.gmem_dst)[global_thread_c_output + global_batch_offset];
- 
+
      // Store the elements in registers.
      #pragma unroll 1
      for( int32_t loop_i = OUTER_LOOPS-1; loop_i >= 0; --loop_i ) {
- 
+
          // The value for nhw.
          int32_t out_nhw = cta_nhw_regs + loop_i*pixels_per_iteration;
- 
+
          // Normalize the elements and write to memory.
-         #pragma unroll 
+         #pragma unroll
          for( int32_t i = 0; i < PIXELS_PER_THREAD_IN_REGISTERS; ++i ) {
              // Convert to float.
              float x_math[ELEMENTS_PER_LDG];
              toFloat<PACKED_ELEMENTS_PER_LDG, IS_INPUT_INT8>(x_math, x_storage[i], int8_in_scale);
- 
+
              // Normalize and apply activation function
              normalize(x_math, bias, scale, m1);
              if( params.use_relu ) {
                  reluActivation(x_math, params.relu_alpha);
              }
- 
+
              // Write back.
              const int32_t idx = out_nhw + thread_in_cta_nhw + i*PIXELS_PER_LDG;
              if( (unsigned) idx < params.nhw && is_valid_c ) {
                  stgStream(&gmem_dst[idx*stride_c_output], x_math, int8_out_scale);
              }
          }
- 
+
          // The next value of nhw.
          out_nhw -= pixels_per_iteration;
- 
+
          // Read the next elements from memory.
-         #pragma unroll 
+         #pragma unroll
          for( int32_t i = 0; i < PIXELS_PER_THREAD_IN_REGISTERS; ++i ) {
              const int32_t idx = out_nhw + thread_in_cta_nhw + i*PIXELS_PER_LDG;
              if( (unsigned) idx < params.nhw && is_valid_c ) {
@@ -538,7 +541,7 @@
              }
          }
      }
- 
+
      // Normalize the elements from SMEM and write them out.
      if( pixels_in_smem > 0 ) {
          for( int32_t i = 0; i < PIXELS_PER_THREAD_IN_SMEM; ++i ) {
@@ -548,13 +551,13 @@
              PackedStorageType x_storage_local[PACKED_ELEMENTS_PER_LDG];
              readFromSmem(x_storage_local, &smem_storage[offset], threadIdx.x);
              toFloat<PACKED_ELEMENTS_PER_LDG, IS_INPUT_INT8>(x_math, x_storage_local, int8_in_scale);
- 
+
              // Normalize and apply activation function
              normalize(x_math, bias, scale, m1);
              if( params.use_relu ) {
                  reluActivation(x_math, params.relu_alpha);
              }
- 
+
              // Write back.
              const int32_t idx = smem_nhw + thread_in_cta_nhw + i*PIXELS_PER_LDG;
              if( (unsigned) idx < params.nhw && is_valid_c ) {
@@ -564,55 +567,54 @@
      }
      __syncthreads();
  } // blockIdx.y loop
- 
+
  }
- 
- 
+
+
  template <typename Kernel_params>
  dim3 estimateInGridDim(const InstanceNormFwdParams& params)
  {
      dim3 grid_dim;
      grid_dim.x = divUp(params.nhw, Kernel_params::MIN_PIXELS_PER_CTA); // PIXELS_PER_CTA
-     grid_dim.y = divUp(params.c * params.n, Kernel_params::C_ELEMENTS_PER_CTA);
-     grid_dim.z = 1; //params.n;
- 
+     grid_dim.y = divUp(params.c, Kernel_params::C_ELEMENTS_PER_CTA) * params.n;
+     grid_dim.z = 1; // params.n;
+
      return grid_dim;
  }
- 
- 
+
  template <typename Kernel_params>
  void instanceNormBufferSizes(const InstanceNormFwdParams& params,
                                  size_t &size_sums, size_t &size_counts, size_t &size_retired_ctas)
  {
      dim3 grid_dim = estimateInGridDim<Kernel_params>(params);
- 
+
      size_sums = grid_dim.z*grid_dim.y*grid_dim.x*Kernel_params::THREADS_PER_PIXEL*Kernel_params::ELEMENTS_PER_LDG*2*sizeof(GMEM_SUMS_TYPE);
      size_counts = grid_dim.z*grid_dim.y*grid_dim.x*sizeof(int32_t);
      size_retired_ctas = grid_dim.z*grid_dim.y*sizeof(int32_t);
- 
+
      size_sums = divUp(size_sums, 256) * 256;
      size_counts = divUp(size_counts, 256) * 256;
      size_retired_ctas = divUp(size_retired_ctas, 256) * 256;
  }
- 
- 
- 
- 
- 
+
+
+
+
+
  template <typename Kernel_params>
  int32_t instance_norm_fwd_launch(const InstanceNormFwdContext& context, InstanceNormFwdParams& params, cudaStream_t stream)
  {
- 
-     size_t smem_size = Kernel_params::PIXELS_PER_THREAD_IN_SMEM * 
-                         Kernel_params::THREADS_PER_CTA * 
+
+     size_t smem_size = Kernel_params::PIXELS_PER_THREAD_IN_SMEM *
+                         Kernel_params::THREADS_PER_CTA *
                          Kernel_params::ELEMENTS_PER_LDG * sizeof(typename Kernel_params::StorageType);
- 
+
      dim3 grid_dim = estimateInGridDim<Kernel_params>(params);
- 
+
      params.c_blks = divUp(params.c, Kernel_params::C_ELEMENTS_PER_CTA);
- 
+
      size_t size_retired_ctas = grid_dim.z*grid_dim.y*sizeof(int32_t);
- 
+
      #define KERNEL_RUN(OUTER_LOOPS, DESIRED_OCCUPANCY)  \
          {                            \
              CHECK_CUDA(cudaMemsetAsync(params.gmem_retired_ctas, 0, size_retired_ctas, stream)); \
@@ -644,7 +646,7 @@
                  Kernel_params::USE_ONLINE_APPROACH, \
                  OUTER_LOOPS, \
                  DESIRED_OCCUPANCY><<<grid_dim,Kernel_params::THREADS_PER_CTA, smem_size, stream>>>(params); }
- 
+
      size_t total_smem_bytes = smem_size + Kernel_params::ELEMENTS_PER_LDG * Kernel_params::THREADS_PER_CTA * sizeof(float);
      int32_t smem_driven_fwd_occupancy = min(int32_t(context.sm_shared_size) / (int32_t)total_smem_bytes, (int32_t)2);
      int32_t max_grid                  = context.sm_count * smem_driven_fwd_occupancy;
@@ -652,14 +654,14 @@
      {
          max_grid = max_grid - 4;
      }
- 
+
      if (max_grid / int32_t(grid_dim.x) > 1) {
          grid_dim.y = max_grid / int32_t(grid_dim.x);
          grid_dim.y = int32_t(grid_dim.y) > params.c_blks * params.n ? params.c_blks * params.n : int32_t(grid_dim.y);
      } else {
          grid_dim.y = 1;
      }
- 
+
      int32_t loop = 1;
      if( int32_t(grid_dim.x) <= max_grid ) {
          if (smem_driven_fwd_occupancy >= 2) {
@@ -678,11 +680,11 @@
              // make PIXELS_PER_THREAD_IN_SMEM <= PIXELS_PER_THREAD_IN_REGISTERS if the assert fails
              assert(pixels_per_iteration >= params.nhw);
          }
- 
+
          loop = divUp(nhw_in_regs, pixels_per_iteration);
          params.outer_loops = loop;
          assert(loop >= 1);
- 
+
          if( loop == 1 ) {
              if (smem_driven_fwd_occupancy >= 2) {
                  KERNEL_RUN(1, 2);
@@ -699,10 +701,10 @@
      }
      return loop;
  }
- 
+
  static int32_t c_cond_g = 32;
- 
- void instanceNormBufferSizesDispatch(const InstanceNormFwdContext& context, const InstanceNormFwdParams& params, 
+
+ void instanceNormBufferSizesDispatch(const InstanceNormFwdContext& context, const InstanceNormFwdParams& params,
                                  size_t &size_sums, size_t &size_counts, size_t &size_retired_ctas,
                                  int32_t input_data_type, int32_t output_data_type)
  {
@@ -731,9 +733,9 @@
          assert(0);
      }
  }
- 
- 
- int32_t instanceNormFwdDispatch(const InstanceNormFwdContext& context, InstanceNormFwdParams& params, cudaStream_t stream, 
+
+
+ int32_t instanceNormFwdDispatch(const InstanceNormFwdContext& context, InstanceNormFwdParams& params, cudaStream_t stream,
                                 int32_t input_data_type, int32_t output_data_type)
  {
      assert(context.sm_version >= 600);
@@ -760,8 +762,8 @@
          fprintf(stderr, "Unsupported format combination by the instance norm kernel\n");
          assert(0);
      }
-     
+
      return 0;
  }
- 
+
  } // namespace instance_norm_impl

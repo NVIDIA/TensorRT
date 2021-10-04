@@ -1,5 +1,44 @@
 # TensorRT OSS Release Changelog
 
+## [8.2.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-2-0-EA) - 2021-10-05
+### Added
+- [Demo applications](demo/HuggingFace) showcasing TensorRT inference of [HuggingFace Transformers](https://huggingface.co/transformers).
+  - Support is currently extended to GPT-2 and T5 models.
+- Added support for the following ONNX operators:
+  - `Einsum`
+  - `IsNan`
+  - `GatherND`
+  - `Scatter`
+  - `ScatterElements`
+  - `ScatterND`
+  - `Sign`
+  - `Round`
+- Added support for building TensorRT Python API on Windows.
+
+### Updated
+- Notable API updates in TensorRT 8.2.0.6 EA release. See [TensorRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html) for details.
+  - Added three new APIs, `IExecutionContext: getEnqueueEmitsProfile()`, `setEnqueueEmitsProfile()`, and `reportToProfiler()` which can be used to collect layer profiling info when the inference is launched as a CUDA graph.
+  - Eliminated the global logger; each `Runtime`, `Builder` or `Refitter` now has its own logger.
+  - Added new operators: `IAssertionLayer`, `IConditionLayer`, `IEinsumLayer`, `IIfConditionalBoundaryLayer`, `IIfConditionalOutputLayer`, `IIfConditionalInputLayer`, and `IScatterLayer`.
+  - Added new `IGatherLayer` modes: `kELEMENT` and `kND`
+  - Added new `ISliceLayer` modes: `kFILL`, `kCLAMP`, and `kREFLECT`
+  - Added new `IUnaryLayer` operators: `kSIGN` and `kROUND`
+  - Added new runtime class `IEngineInspector` that can be used to inspect the detailed information of an engine, including the layer parameters, the chosen tactics, the precision used, etc.
+  - `ProfilingVerbosity` enums have been updated to show their functionality more explicitly.
+- Updated TensorRT OSS container defaults to cuda 11.4
+- CMake to target C++14 builds.
+- Updated following ONNX operators:
+  - `Gather` and `GatherElements` implementations to natively support negative indices
+  - `Pad` layer to support ND padding, along with `edge` and `reflect` padding mode support
+  - `If` layer with general performance improvements.
+
+### Removed
+- Removed `sampleMLP`.
+- Several flags of trtexec have been deprecated:
+  - `--explicitBatch` flag has been deprecated and has no effect. When the input model is in UFF or in Caffe prototxt format, the implicit batch dimension mode is used automatically; when the input model is in ONNX format, the explicit batch mode is used automatically.
+  - `--explicitPrecision` flag has been deprecated and has no effect. When the input ONNX model contains Quantization/Dequantization nodes, TensorRT automatically uses explicit precision mode.
+  - `--nvtxMode=[verbose|default|none]` has been deprecated in favor of `--profilingVerbosity=[detailed|layer_names_only|none]` to show its functionality more explicitly.
+
 ## [21.10](https://github.com/NVIDIA/TensorRT/releases/tag/21.10) - 2021-10-05
 ### Added
 - Benchmark script for demoBERT-Megatron
@@ -32,7 +71,6 @@
   - Fix shape tensor unsqueeze
   - Mark BOOL tiles as unsupported
   - Remove unnecessary shape tensor checks
-
 
 ### Removed
 - N/A

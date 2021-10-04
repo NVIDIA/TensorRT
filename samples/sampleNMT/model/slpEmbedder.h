@@ -24,7 +24,7 @@
 
 #include "NvInfer.h"
 
-extern int gPadMultiple;
+extern int32_t gPadMultiple;
 
 namespace nmtSample
 {
@@ -36,12 +36,12 @@ namespace nmtSample
 class SLPEmbedder : public Embedder
 {
 public:
-    SLPEmbedder(ComponentWeights::ptr weights);
+    explicit SLPEmbedder(ComponentWeights::ptr& weights);
 
     void addToModel(
         nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* input, nvinfer1::ITensor** output) override;
 
-    int getInputDimensionSize() override;
+    int32_t getInputDimensionSize() override;
 
     std::string getInfo() override;
 
@@ -50,8 +50,8 @@ public:
 protected:
     ComponentWeights::ptr mWeights;
     nvinfer1::Weights mKernelWeights;
-    int mNumInputs;
-    int mNumOutputs;
+    int32_t mNumInputs;
+    int32_t mNumOutputs;
     std::vector<float> mResizedKernelWeights;
 };
 } // namespace nmtSample

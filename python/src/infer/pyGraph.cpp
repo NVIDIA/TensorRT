@@ -19,6 +19,10 @@
 #include "utils.h"
 #include <pybind11/stl.h>
 
+#if ENABLE_INETWORK_SERIALIZE
+#include "NvInferSerialize.h"
+#endif
+
 #include "infer/pyGraphDoc.h"
 
 // clang-format off
@@ -144,10 +148,26 @@ namespace tensorrt
             return self.addDeconvolution(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
 
+        static const auto add_scatter = [](INetworkDefinition& self, ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode)
+        {
+            return self.addScatter(data, indices, updates, mode);
+        };
+
         static const auto add_deconvolution_nd = [](INetworkDefinition& self, ITensor& input, int numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
         {
             return self.addDeconvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
+
+        static const auto add_einsum = [] (INetworkDefinition& self, const std::vector<ITensor*>& inputs, const char* equation) {
+            return self.addEinsum(inputs.data(), inputs.size(), equation);
+        };
+
+#if ENABLE_INETWORK_SERIALIZE
+        // Serialization
+        static const auto network_serialize = [] (INetworkDefinition& self) {
+            return serialize::serializeNetwork(self);
+        };
+#endif
 
         // TODO: Need to ensure that these are returning by reference rather than by copy.
         // NumPy getters for layers.
@@ -194,7 +214,6 @@ namespace tensorrt
             self.getScales(nbScales, scales.data());
             return scales;
         };
-
     } /* lambdas */
 
     void bindGraph(py::module& m)
@@ -233,9 +252,15 @@ namespace tensorrt
             .value("ITERATOR", LayerType::kITERATOR, LayerTypeDoc::ITERATOR)
             .value("LOOP_OUTPUT", LayerType::kLOOP_OUTPUT, LayerTypeDoc::LOOP_OUTPUT)
             .value("SELECT", LayerType::kSELECT, LayerTypeDoc::SELECT)
+            .value("ASSERTION", LayerType::kASSERTION, LayerTypeDoc::ASSERTION)
             .value("FILL", LayerType::kFILL, LayerTypeDoc::FILL)
             .value("QUANTIZE", LayerType::kQUANTIZE, LayerTypeDoc::QUANTIZE)
             .value("DEQUANTIZE", LayerType::kDEQUANTIZE, LayerTypeDoc::DEQUANTIZE)
+            .value("CONDITION", LayerType::kCONDITION, LayerTypeDoc::CONDITION)
+            .value("CONDITIONAL_INPUT", LayerType::kCONDITIONAL_INPUT, LayerTypeDoc::CONDITIONAL_INPUT)
+            .value("CONDITIONAL_OUTPUT", LayerType::kCONDITIONAL_OUTPUT, LayerTypeDoc::CONDITIONAL_OUTPUT)
+            .value("SCATTER", LayerType::kSCATTER, LayerTypeDoc::SCATTER)
+            .value("EINSUM", LayerType::kEINSUM, LayerTypeDoc::EINSUM)
         ; // LayerType
 
         // Bind to a Python enum called TensorLocation.
@@ -449,9 +474,26 @@ namespace tensorrt
             .def_property("op", &IElementWiseLayer::getOperation, &IElementWiseLayer::setOperation)
         ;
 
+        // Bind to a Python enum called ScatterMode.
+        py::enum_<ScatterMode>(m, "ScatterMode", ScatterModeDoc::descr)
+            .value("ELEMENT", ScatterMode::kELEMENT, ScatterModeDoc::ELEMENT)
+            .value("ND", ScatterMode::kND, ScatterModeDoc::ND)
+        ; // ScatterMode
+
+        py::class_<IScatterLayer, ILayer, std::unique_ptr<IScatterLayer,py::nodelete>>(m, "IScatterLayer", IScatterLayerDoc::descr)
+            .def_property("axis", &IScatterLayer::getAxis, &IScatterLayer::setAxis)
+            .def_property("mode", &IScatterLayer::getMode, &IScatterLayer::setMode);
+
         py::class_<IGatherLayer, ILayer, std::unique_ptr<IGatherLayer, py::nodelete>>(m, "IGatherLayer", IGatherLayerDoc::descr)
             .def_property("axis", &IGatherLayer::getGatherAxis, &IGatherLayer::setGatherAxis)
             .def_property("num_elementwise_dims", &IGatherLayer::getNbElementWiseDims, &IGatherLayer::setNbElementWiseDims)
+            .def_property("mode", &IGatherLayer::getMode, &IGatherLayer::setMode)
+        ;
+
+        py::enum_<GatherMode>(m, "GatherMode", GatherModeDoc::descr)
+            .value("DEFAULT", GatherMode::kDEFAULT, GatherModeDoc::DEFAULT)
+            .value("ELEMENT", GatherMode::kELEMENT, GatherModeDoc::ELEMENT)
+            .value("ND", GatherMode::kND, GatherModeDoc::ND)
         ;
 
         py::enum_<RNNOperation>(m, "RNNOperation", RNNOperationDoc::descr)
@@ -524,6 +566,8 @@ namespace tensorrt
             .value("FLOOR", UnaryOperation::kFLOOR, UnaryOperationDoc::FLOOR)
             .value("ERF", UnaryOperation::kERF, UnaryOperationDoc::ERF)
             .value("NOT", UnaryOperation::kNOT, UnaryOperationDoc::NOT)
+            .value("SIGN", UnaryOperation::kSIGN, UnaryOperationDoc::SIGN)
+            .value("ROUND", UnaryOperation::kROUND, UnaryOperationDoc::ROUND)
         ;
 
         py::class_<IUnaryLayer, ILayer, std::unique_ptr<IUnaryLayer, py::nodelete>>(m, "IUnaryLayer", IUnaryLayerDoc::descr)
@@ -585,6 +629,9 @@ namespace tensorrt
         py::enum_<SliceMode>(m, "SliceMode", SliceModeDoc::descr)
             .value("DEFAULT", SliceMode::kDEFAULT, SliceModeDoc::DEFAULT)
             .value("WRAP", SliceMode::kWRAP, SliceModeDoc::WRAP)
+            .value("CLAMP", SliceMode::kCLAMP, SliceModeDoc::CLAMP)
+            .value("FILL", SliceMode::kFILL, SliceModeDoc::FILL)
+            .value("REFLECT", SliceMode::kREFLECT, SliceModeDoc::REFLECT)
         ;
 
         py::class_<IShapeLayer, ILayer, std::unique_ptr<IShapeLayer, py::nodelete>>(m, "IShapeLayer", IShapeLayerDoc::descr);
@@ -701,6 +748,10 @@ namespace tensorrt
         py::class_<ISelectLayer, ILayer, std::unique_ptr<ISelectLayer, py::nodelete>>(m, "ISelectLayer", ISelectLayerDoc::descr)
         ;
 
+        py::class_<IAssertionLayer, ILayer, std::unique_ptr<IAssertionLayer, py::nodelete>>(m, "IAssertionLayer", IAssertionLayerDoc::descr)
+            .def_property("message", &IAssertionLayer::getMessage, &IAssertionLayer::setMessage);
+        ;
+
         py::enum_<FillOperation>(m, "FillOperation", FillOperationDoc::descr)
             .value("LINSPACE", FillOperation::kLINSPACE, FillOperationDoc::LINSPACE)
             .value("RANDOM_UNIFORM", FillOperation::kRANDOM_UNIFORM, FillOperationDoc::RANDOM_UNIFORM)
@@ -712,6 +763,30 @@ namespace tensorrt
             .def_property("alpha", &IFillLayer::getAlpha, &IFillLayer::setAlpha)
             .def_property("beta", &IFillLayer::getBeta, &IFillLayer::setBeta)
             .def("set_input", &IFillLayer::setInput, "index"_a, "tensor"_a, IFillLayerDoc::set_input)
+        ;
+
+        py::class_<IIfConditionalBoundaryLayer, ILayer, std::unique_ptr<IIfConditionalBoundaryLayer, py::nodelete>>(m, "IIfConditionalBoundaryLayer", IIfConditionalBoundaryLayerDoc::descr)
+            .def_property_readonly("conditional", &IIfConditionalBoundaryLayer::getConditional)
+        ;
+
+        py::class_<IIfConditionalOutputLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IIfConditionalOutputLayer, py::nodelete>>(m, "IIfConditionalOutputLayer", IIfConditionalOutputLayerDoc::descr)
+        ;
+
+        py::class_<IIfConditionalInputLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IIfConditionalInputLayer, py::nodelete>>(m, "IIfConditionalInputLayer", IIfConditionalInputLayerDoc::descr)
+        ;
+
+        py::class_<IConditionLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IConditionLayer, py::nodelete>>(m, "IConditionLayer", IConditionLayerDoc::descr)
+        ;
+
+        py::class_<IIfConditional, std::unique_ptr<IIfConditional, py::nodelete>>(m, "IIfConditional", IIfConditionalDoc::descr)
+            .def("set_condition", &IIfConditional::setCondition, "condition"_a, IIfConditionalDoc::set_condition)
+            .def("add_output", &IIfConditional::addOutput, "true_subgraph_output"_a, "false_subgraph_output"_a, IIfConditionalDoc::add_output)
+            .def("add_input", &IIfConditional::addInput, "input"_a, IIfConditionalDoc::add_input)
+            .def_property("name", &IIfConditional::getName, &IIfConditional::setName)
+        ;
+
+        py::class_<IEinsumLayer, ILayer, std::unique_ptr<IEinsumLayer, py::nodelete>>(m, "IEinsumLayer", IEinsumLayerDoc::descr)
+            .def_property("equation", &IEinsumLayer::getEquation, &IEinsumLayer::setEquation)
         ;
 
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
@@ -795,6 +870,12 @@ namespace tensorrt
             .def("add_gather", &INetworkDefinition::addGather, "input"_a, "indices"_a, "axis"_a,
                 INetworkDefinitionDoc::add_gather,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_scatter", &INetworkDefinition::addScatter, "data"_a, "indices"_a, "updates"_a, "mode"_a,
+                INetworkDefinitionDoc::add_scatter,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_gather_v2", &INetworkDefinition::addGatherV2, "input"_a, "indices"_a, "mode"_a,
+                INetworkDefinitionDoc::add_gather_v2,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_ragged_softmax", &INetworkDefinition::addRaggedSoftMax, "input"_a, "bounds"_a,
                 INetworkDefinitionDoc::add_ragged_softmax,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
@@ -826,12 +907,19 @@ namespace tensorrt
             .def("add_select", &INetworkDefinition::addSelect, "condition"_a, "then_input"_a,
                 "else_input"_a, INetworkDefinitionDoc::add_select,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_assertion", &INetworkDefinition::addAssertion, "condition"_a, "message"_a,
+                 INetworkDefinitionDoc::add_assertion, INetworkDefinitionDoc::add_assertion,
+                py::keep_alive<1, 0>{}, py::keep_alive<1, 3>{}, py::return_value_policy::reference_internal)
             .def("add_fill", &INetworkDefinition::addFill, "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
             .def("add_quantize",  &INetworkDefinition::addQuantize, "input"_a, "scale"_a,
                 INetworkDefinitionDoc::add_quantize,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_dequantize", &INetworkDefinition::addDequantize, "input"_a, "scale"_a,
                 INetworkDefinitionDoc::add_dequantize,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_if_conditional", &INetworkDefinition::addIfConditional, INetworkDefinitionDoc::add_if_conditional,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_einsum", lambdas::add_einsum, "inputs"_a, "equation"_a, INetworkDefinitionDoc::add_einsum,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
@@ -845,6 +933,10 @@ namespace tensorrt
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("get_output", &INetworkDefinition::getOutput, "index"_a, INetworkDefinitionDoc::get_output,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+#if ENABLE_INETWORK_SERIALIZE
+            // Serialization
+            .def("serialize", lambdas::network_serialize, INetworkDefinitionDoc::serialize)
+#endif
             // Allow iteration over the layers of a network
             .def("__len__", &INetworkDefinition::getNbLayers)
             .def("__getitem__", lambdas::network_getitem, py::return_value_policy::reference_internal,

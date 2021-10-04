@@ -42,7 +42,7 @@ public:
     /**
      * \brief add calculation of likelihood and TopK indices to the network
      */
-    virtual void addToModel(nvinfer1::INetworkDefinition* network, int beamWidth, nvinfer1::ITensor* inputLogits,
+    virtual void addToModel(nvinfer1::INetworkDefinition* network, int32_t beamWidth, nvinfer1::ITensor* inputLogits,
         nvinfer1::ITensor* inputLikelihoods, nvinfer1::ITensor** newCombinedLikelihoods,
         nvinfer1::ITensor** newRayOptionIndices, nvinfer1::ITensor** newVocabularyIndices)
         = 0;

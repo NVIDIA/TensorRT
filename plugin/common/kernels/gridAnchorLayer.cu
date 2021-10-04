@@ -17,10 +17,10 @@
 #include "reducedMathPlugin.h"
 #include <iostream>
 
-using nvinfer1::plugin::reduced_divisor;
+using nvinfer1::plugin::ReducedDivisor;
 template <unsigned nthdsPerCTA>
 __launch_bounds__(nthdsPerCTA) __global__ void gridAnchorKernel(const GridAnchorParameters param,
-    const int numAspectRatios, reduced_divisor divObj, const float* widths, const float* heights, float* outputData)
+    const int numAspectRatios, ReducedDivisor divObj, const float* widths, const float* heights, float* outputData)
 {
     // output dims: (H, W, param.numMinSize, (1+haveMaxSize+numAR-1), 4)
     const int dim = param.H * param.W * numAspectRatios;
@@ -77,7 +77,7 @@ pluginStatus_t anchorGridInference(cudaStream_t stream, const GridAnchorParamete
     const void* widths, const void* heights, void* outputData)
 {
     const int dim = param.H * param.W * numAspectRatios;
-    reduced_divisor divObj(numAspectRatios);
+    ReducedDivisor divObj(numAspectRatios);
     if (dim > 5120)
     {
         const int BS = 128;
@@ -104,7 +104,7 @@ pluginStatus_t anchorGridInference(cudaStream_t stream, const GridAnchorParamete
     const void* widths, const void* heights, void* outputData)
 {
     const int dim = param.H * param.W * numAspectRatios;
-    reduced_divisor divObj(numAspectRatios);
+    ReducedDivisor divObj(numAspectRatios);
     if (dim > 5120)
     {
         const int BS = 128;

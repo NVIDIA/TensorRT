@@ -27,13 +27,6 @@
 #else
 #define FN_NAME __func__
 #endif
-#if __cplusplus < 201103L
-#define OVERRIDE
-#define NORETURN
-#else
-#define OVERRIDE override
-#define NORETURN [[noreturn]]
-#endif
 
 #endif // TRT_TUT_HELPERS_H
 #endif // TRT_CHECK_MACROS_H
@@ -65,9 +58,12 @@ extern LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 void reportAssertion(const char* msg, const char* file, int line);
 void logError(const char* msg, const char* file, const char* fn, int line);
 
-NORETURN void throwCudaError(const char* file, const char* function, int line, int status, const char* msg = nullptr);
-NORETURN void throwCudnnError(const char* file, const char* function, int line, int status, const char* msg = nullptr);
-NORETURN void throwCublasError(const char* file, const char* function, int line, int status, const char* msg = nullptr);
+[[noreturn]] void throwCudaError(
+    const char* file, const char* function, int line, int status, const char* msg = nullptr);
+[[noreturn]] void throwCudnnError(
+    const char* file, const char* function, int line, int status, const char* msg = nullptr);
+[[noreturn]] void throwCublasError(
+    const char* file, const char* function, int line, int status, const char* msg = nullptr);
 
 class TRTException : public std::exception
 {

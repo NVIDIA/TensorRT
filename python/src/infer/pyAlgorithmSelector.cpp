@@ -57,7 +57,7 @@ public:
         std::copy(choices, choices + nbChoices, std::back_inserter(choicesVector));
 
         py::function pySelectAlgorithms
-            = utils::getOverload(static_cast<IAlgorithmSelector*>(this), "select_algorithms");
+            = utils::getOverride(static_cast<IAlgorithmSelector*>(this), "select_algorithms");
         if (!pySelectAlgorithms)
         {
             return -1;
@@ -101,7 +101,7 @@ public:
         std::copy(algoChoices, algoChoices + size, std::back_inserter(choices));
 
         py::function pyReportAlgorithms
-            = utils::getOverload(static_cast<IAlgorithmSelector*>(this), "report_algorithms");
+            = utils::getOverride(static_cast<IAlgorithmSelector*>(this), "report_algorithms");
         if (!pyReportAlgorithms)
         {
             return;

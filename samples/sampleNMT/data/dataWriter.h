@@ -39,7 +39,9 @@ public:
     /**
      * \brief write the generated sequence
      */
-    virtual void write(const int* hOutputData, int actualOutputSequenceLength, int actualInputSequenceLength) = 0;
+    virtual void write(
+        const int32_t* hOutputData, int32_t actualOutputSequenceLength, int32_t actualInputSequenceLength)
+        = 0;
 
     /**
      * \brief it is called right before inference starts
@@ -54,7 +56,8 @@ public:
     ~DataWriter() override = default;
 
 protected:
-    static std::string generateText(int sequenceLength, const int* currentOutputData, Vocabulary::ptr vocabulary);
+    static std::string generateText(
+        int32_t sequenceLength, const int32_t* currentOutputData, Vocabulary::ptr vocabulary);
 };
 } // namespace nmtSample
 

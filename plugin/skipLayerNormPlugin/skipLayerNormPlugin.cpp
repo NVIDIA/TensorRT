@@ -89,7 +89,7 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
     , mBetaDev(nullptr)
     , mBiasDev(nullptr)
 {
-    gLogVerbose << "SkipLayerNormPluginDynamic deserialize\n";
+    BERT_DEBUG_MSG("SkipLayerNormPluginDynamic deserialize");
 
     // Deserialize in the same order as serialization
     deserialize_value(&data, &length, &mType);
@@ -112,7 +112,7 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
 // IPluginV2DynamicExt Methods
 IPluginV2DynamicExt* SkipLayerNormPluginDynamic::clone() const noexcept
 {
-    gLogVerbose << "SkipLayerNormPluginDynamic clone\n";
+    BERT_DEBUG_MSG("SkipLayerNormPluginDynamic clone");
 
     auto* p = new SkipLayerNormPluginDynamic(mLayerName, mType, mLd, mBeta, mGamma, mBias);
     p->initialize();
@@ -146,13 +146,11 @@ bool SkipLayerNormPluginDynamic::supportsFormatCombination(
             if (mLd < 32)
             {
                 myFmt = TensorFormat::kCHW4;
-                gLogVerbose << "SkipLayerNormDQQ: TensorFormat CHW4"
-                            << " for LD=" << mLd << std::endl;
+                BERT_DEBUG_VALUE("SkipLayerNormDQQ: TensorFormat CHW4 for LD=", mLd);
             }
             else
             {
-                gLogVerbose << "SkipLayerNormDQQ: TensorFormat CHW32"
-                            << " for LD=" << mLd << std::endl;
+                BERT_DEBUG_VALUE("SkipLayerNormDQQ: TensorFormat CHW32 for LD=", mLd);
             }
             // TODO do we need to check if the vectorization divides mLd?
             return ((in.type == mType) && (in.format == myFmt));
@@ -167,7 +165,7 @@ bool SkipLayerNormPluginDynamic::supportsFormatCombination(
 void SkipLayerNormPluginDynamic::configurePlugin(
     const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs) noexcept
 {
-    gLogVerbose << "SkipLayerNormPluginDynamic configurePlugin\n";
+    BERT_DEBUG_MSG("SkipLayerNormPluginDynamic configurePlugin");
 
     // Validate input arguments
     assert(nbOutputs == 1);
@@ -315,13 +313,13 @@ int SkipLayerNormPluginDynamic::getNbOutputs() const noexcept
 }
 int SkipLayerNormPluginDynamic::initialize() noexcept
 {
-    gLogVerbose << "SkipLayerNormPluginDynamic initialize\n";
+    BERT_DEBUG_MSG("SkipLayerNormPluginDynamic initialize");
     return 0;
 }
 
 void SkipLayerNormPluginDynamic::terminate() noexcept
 {
-    gLogVerbose << "SkipLayerNormPluginDynamic terminate\n";
+    BERT_DEBUG_MSG("SkipLayerNormPluginDynamic terminate");
 }
 
 size_t SkipLayerNormPluginDynamic::getSerializationSize() const noexcept
@@ -348,7 +346,7 @@ void SkipLayerNormPluginDynamic::serialize(void* buffer) const noexcept
 
 void SkipLayerNormPluginDynamic::destroy() noexcept
 {
-    gLogVerbose << "SkipLayerNormPluginDynamic destroy\n";
+    BERT_DEBUG_MSG("SkipLayerNormPluginDynamic destroy");
     // This gets called when the network containing plugin is destroyed
     mGammaDev.reset(nullptr);
     mBetaDev.reset(nullptr);
@@ -393,7 +391,7 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, con
 {
     try
     {
-        gLogVerbose << "SkipLayerNormPluginDynamicCreator createPlugin\n";
+        BERT_DEBUG_MSG("SkipLayerNormPluginDynamicCreator createPlugin");
 
         int ld = 0;
         Weights beta{DataType::kFLOAT, nullptr, 0};
@@ -407,18 +405,18 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, con
             if (field_name.compare("ld") == 0)
             {
                 ld = *static_cast<const int*>(fc->fields[i].data);
-                gLogVerbose << "Building ld: " << ld << std::endl;
+                BERT_DEBUG_VALUE("Building ld: ", ld);
             }
 
             if (field_name.compare("type_id") == 0)
             {
                 typeId = *static_cast<const int*>(fc->fields[i].data);
-                gLogVerbose << "Building typeId: " << typeId << std::endl;
+                BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
 
             if (field_name.compare("beta") == 0)
             {
-                gLogVerbose << "Building beta...\n";
+                BERT_DEBUG_MSG("Building beta...");
                 beta.values = fc->fields[i].data;
                 beta.count = fc->fields[i].length;
                 beta.type = fieldTypeToDataType(fc->fields[i].type);
@@ -426,7 +424,7 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, con
 
             if (field_name.compare("gamma") == 0)
             {
-                gLogVerbose << "Building gamma...\n";
+                BERT_DEBUG_MSG("Building gamma...");
                 gamma.values = fc->fields[i].data;
                 gamma.count = fc->fields[i].length;
                 gamma.type = fieldTypeToDataType(fc->fields[i].type);
@@ -434,13 +432,13 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, con
 
             if (field_name.compare("bias") == 0)
             {
-                gLogVerbose << "Building bias...\n";
+                BERT_DEBUG_MSG("Building bias...");
                 bias.values = fc->fields[i].data;
                 bias.count = fc->fields[i].length;
                 bias.type = fieldTypeToDataType(fc->fields[i].type);
             }
         }
-        gLogVerbose << "Type " << typeId << std::endl;
+        BERT_DEBUG_VALUE("Type ", typeId);
 
         if (typeId < 0 || typeId > 3)
         {
@@ -528,7 +526,7 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string nam
     , mBiasDev(nullptr)
     , mParamsOnDevice(false)
 {
-    gLogVerbose << "SkipLayerNormVarSeqlenPlugin deserialize\n";
+    BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPlugin deserialize");
 
     // Deserialize in the same order as serialization
     deserialize_value(&data, &length, &mType);
@@ -551,7 +549,7 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string nam
 // IPluginV2DynamicExt Methods
 IPluginV2DynamicExt* SkipLayerNormVarSeqlenPlugin::clone() const noexcept
 {
-    gLogVerbose << "SkipLayerNormVarSeqlenPlugin clone\n";
+    BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPlugin clone");
 
     auto* p = new SkipLayerNormVarSeqlenPlugin(mLayerName, mType, mBeta, mGamma, mBias);
     p->initialize();
@@ -587,13 +585,11 @@ bool SkipLayerNormVarSeqlenPlugin::supportsFormatCombination(
             if (mLd < 32)
             {
                 myFmt = TensorFormat::kCHW4;
-                gLogVerbose << "SkipLayerNormDQQ: TensorFormat CHW4"
-                            << " for LD=" << mLd << std::endl;
+                BERT_DEBUG_VALUE("SkipLayerNormDQQ: TensorFormat CHW4 for LD=", mLd);
             }
             else
             {
-                gLogVerbose << "SkipLayerNormDQQ: TensorFormat CHW32"
-                            << " for LD=" << mLd << std::endl;
+                BERT_DEBUG_VALUE("SkipLayerNormDQQ: TensorFormat CHW32 for LD=", mLd);
             }
             // TODO do we need to check if the vectorization divides mLd?
             return in.format == myFmt;
@@ -754,13 +750,13 @@ int SkipLayerNormVarSeqlenPlugin::getNbOutputs() const noexcept
 }
 int SkipLayerNormVarSeqlenPlugin::initialize() noexcept
 {
-    gLogVerbose << "SkipLayerNormVarSeqlenPlugin initialize\n";
+    BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPlugin initialize");
     return 0;
 }
 
 void SkipLayerNormVarSeqlenPlugin::terminate() noexcept
 {
-    gLogVerbose << "SkipLayerNormVarSeqlenPlugin terminate\n";
+    BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPlugin terminate");
 }
 
 size_t SkipLayerNormVarSeqlenPlugin::getSerializationSize() const noexcept
@@ -787,7 +783,7 @@ void SkipLayerNormVarSeqlenPlugin::serialize(void* buffer) const noexcept
 
 void SkipLayerNormVarSeqlenPlugin::destroy() noexcept
 {
-    gLogVerbose << "SkipLayerNormVarSeqlenPlugin destroy\n";
+    BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPlugin destroy");
     // This gets called when the network containing plugin is destroyed
     mGammaDev.reset(nullptr);
     mBetaDev.reset(nullptr);
@@ -832,7 +828,7 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(const char* name, c
 {
     try
     {
-        gLogVerbose << "SkipLayerNormVarSeqlenPluginCreator createPlugin\n";
+        BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPluginCreator createPlugin");
 
         Weights beta{DataType::kFLOAT, nullptr, 0};
         Weights gamma{DataType::kFLOAT, nullptr, 0};
@@ -846,12 +842,12 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(const char* name, c
             if (field_name.compare("type_id") == 0)
             {
                 typeId = *static_cast<const int*>(fc->fields[i].data);
-                gLogVerbose << "Building typeId: " << typeId << std::endl;
+                BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
 
             if (field_name.compare("beta") == 0)
             {
-                gLogVerbose << "Building beta...\n";
+                BERT_DEBUG_MSG("Building beta...");
                 beta.values = fc->fields[i].data;
                 beta.count = fc->fields[i].length;
                 beta.type = fieldTypeToDataType(fc->fields[i].type);
@@ -859,7 +855,7 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(const char* name, c
 
             if (field_name.compare("gamma") == 0)
             {
-                gLogVerbose << "Building gamma...\n";
+                BERT_DEBUG_MSG("Building gamma...");
                 gamma.values = fc->fields[i].data;
                 gamma.count = fc->fields[i].length;
                 gamma.type = fieldTypeToDataType(fc->fields[i].type);
@@ -867,13 +863,13 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(const char* name, c
 
             if (field_name.compare("bias") == 0)
             {
-                gLogVerbose << "Building bias...\n";
+                BERT_DEBUG_MSG("Building bias...");
                 bias.values = fc->fields[i].data;
                 bias.count = fc->fields[i].length;
                 bias.type = fieldTypeToDataType(fc->fields[i].type);
             }
         }
-        gLogVerbose << "Type " << typeId << std::endl;
+        BERT_DEBUG_VALUE("Type ", typeId);
 
         if (typeId < 0 || typeId > 3)
         {

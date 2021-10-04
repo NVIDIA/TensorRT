@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-set(CMAKE_SYSTEM_NAME qnx)
+set(CMAKE_SYSTEM_NAME QNX)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
 if(DEFINED ENV{QNX_BASE})
@@ -39,8 +39,8 @@ message(STATUS "QNX_TARGET = ${QNX_TARGET}")
 set(CMAKE_C_COMPILER ${QNX_HOST}/usr/bin/aarch64-unknown-nto-qnx7.0.0-gcc)
 set(CMAKE_CXX_COMPILER ${QNX_HOST}/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++)
 
-set(CMAKE_C_COMPILER_TARGET aarch64)
-set(CMAKE_CXX_COMPILER_TARGET aarch64)
+set(CMAKE_C_COMPILER_TARGET aarch64-unknown-nto-qnx)
+set(CMAKE_CXX_COMPILER_TARGET aarch64-unknown-nto-qnx)
 
 set(CMAKE_C_COMPILER_FORCED TRUE)
 set(CMAKE_CXX_COMPILER_FORCED TRUE)
@@ -54,8 +54,6 @@ set(CMAKE_CUDA_COMPILER_FORCED TRUE)
 
 set(CUDA_LIBS -L${CUDA_ROOT}/lib)
 
-set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcublas  -lcudart)
-#...Disable swig
-set(DISABLE_SWIG TRUE)
+set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcudart)
 
 set(TRT_PLATFORM_ID "aarch64-qnx")

@@ -35,8 +35,9 @@ const char* RESIZE_PLUGIN_NAME{"ResizeNearest_TRT"};
 PluginFieldCollection ResizeNearestPluginCreator::mFC{};
 std::vector<PluginField> ResizeNearestPluginCreator::mPluginAttributes;
 
-ResizeNearestPluginCreator::ResizeNearestPluginCreator() noexcept
+ResizeNearestPluginCreator::ResizeNearestPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("scale", nullptr, PluginFieldType::kFLOAT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();
@@ -78,7 +79,7 @@ IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(const char* name, co
     return new ResizeNearest(data, length);
 }
 
-ResizeNearest::ResizeNearest(float scale) noexcept
+ResizeNearest::ResizeNearest(float scale)
     : mScale(scale)
 {
     assert(mScale > 0);
@@ -148,7 +149,7 @@ void ResizeNearest::serialize(void* buffer) const noexcept
     ASSERT(d == a + getSerializationSize());
 }
 
-ResizeNearest::ResizeNearest(const void* data, size_t length) noexcept
+ResizeNearest::ResizeNearest(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mScale = read<float>(d);

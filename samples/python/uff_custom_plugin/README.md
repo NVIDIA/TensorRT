@@ -82,25 +82,42 @@ For specific software versions, see the [TensorRT Installation Guide](https://do
    ```bash
    python3 -m pip install -r requirements.txt
    ```
+
 2. [Install CMake](https://cmake.org/download/).
+
+3. (For Windows builds) [Visual Studio](https://visualstudio.microsoft.com/vs/older-downloads/) 2017 Community or Enterprise edition
 
 ## Running the sample
 
 1.  Build the plugin and its corresponding Python bindings.
-   ```bash
-   mkdir build && pushd build
-   cmake .. && make -j
-   popd
-   ```
 
-  **NOTE:** If any of the dependencies are not installed in their default locations, you can manually specify them. For example:
-   ```
-   cmake .. -DCMAKE_CUDA_COMPILER=/usr/local/cuda-x.x/bin/nvcc  (Or adding /path/to/nvcc into $PATH)
-            -DCUDA_INC_DIR=/usr/local/cuda-x.x/include/  (Or adding /path/to/cuda/include into $CPLUS_INCLUDE_PATH)
-            -DPYTHON3_INC_DIR=/usr/include/python3.6/
-            -DTRT_LIB=/path/to/tensorrt/lib/
-            -DTRT_INCLUDE=/path/to/tensorrt/include/
-   ```
+   - On Linux, run:
+      ```bash
+      mkdir build && pushd build
+      cmake .. && make -j
+      popd
+      ```
+
+      **NOTE:** If any of the dependencies are not installed in their default locations, you can manually specify them. For example:
+      ```bash
+      cmake .. -DCMAKE_CUDA_COMPILER=/usr/local/cuda-x.x/bin/nvcc # (Or adding /path/to/nvcc into $PATH)
+               -DCUDA_INC_DIR=/usr/local/cuda-x.x/include/  # (Or adding /path/to/cuda/include into $CPLUS_INCLUDE_PATH)
+               -DTRT_LIB=/path/to/tensorrt/lib/
+               -DTRT_INCLUDE=/path/to/tensorrt/include/
+      ```
+
+   - On Windows, run the following in Powershell, replacing paths appropriately:
+      ```ps1
+      mkdir build; pushd build
+      cmake .. -G "Visual Studio 15 Win64" /
+         -DTRT_LIB=C:\path\to\tensorrt\lib /
+         -DTRT_INCLUDE=C:\path\to\tensorrt\lib /
+         -DCUDA_INC_DIR="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v<CUDA_VERSION>\include"
+      # NOTE: msbuild is usually located under C:\Program Files (x86)\Microsoft Visual Studio\2017\<EDITION>\MSBuild\<VERSION>\Bin
+      #   You should add this path to your PATH environment variable.
+      msbuild ALL_BUILD.vcxproj
+      popd
+      ```
 
 	`cmake ..` displays a complete list of configurable variables. If a variable is set to `VARIABLE_NAME-NOTFOUND`, then you’ll need to specify it manually or set the variable it is derived from correctly.
 
@@ -136,6 +153,9 @@ The following resources provide a deeper understanding about getting started wit
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+
+September 2021
+Updated with instructions for building the plugin on Windows.
 
 March 2019
 This `README.md` file was recreated, updated and reviewed.

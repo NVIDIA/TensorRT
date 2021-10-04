@@ -14,7 +14,6 @@
     * [Verifying the output](#verifying-the-output)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Preparing sample data](#preparing-sample-data)
-    * [Batch files for calibration](#batch-files-for-calibration)
 - [Running the sample](#running-the-sample)
     * [Sample `--help` options](#sample-help-options)
 - [Additional resources](#additional-resources)
@@ -31,7 +30,7 @@ Specifically, this sample demonstrates how to perform inference in 8-bit integer
 
 ## How does this sample work?
 
-INT8 engines are build from 32-bit network definitions, similarly to 32-bit and 16-bit engines, but with more configuration steps. In particular, the builder and network must be configured to use INT8, which requires per-tensor dynamic ranges. The INT8 calibrator can determine how best to represent weights and activations as 8-bit integers and sets the per tensor dynamic ranges accordingly. Alternatively, you can set custom per tensor dynamic ranges; this is covered in sampleINT8API.
+INT8 engines are build from 32-bit network definitions, similarly to 32-bit and 16-bit engines, but with more configuration steps. In particular, the builder and network must be configured to use INT8, which requires per-tensor dynamic ranges. The INT8 calibrator can determine how best to represent weights and activations as 8-bit integers and sets the per-tensor dynamic ranges accordingly. Alternatively, you can set custom per-tensor dynamic ranges; this is covered in sampleINT8API.
 
 This sample requires the [MNIST training set](https://github.com/BVLC/caffe/blob/master/data/mnist/get_mnist.sh). Download this script into the `TensorRT-x.x.x.x/data/mnist` directory, where `x.x.x.x` is your installed version of TensorRT, and execute the script to download the required data. The packaged MNIST model that is shipped with this sample is based on [lenet.prototxt](https://github.com/BVLC/caffe/edit/master/examples/mnist/lenet.prototxt). For more information, see the [MNIST BVLC Caffe example](https://github.com/BVLC/caffe/tree/master/examples/mnist).
 
@@ -50,7 +49,7 @@ Specifically, this sample performs the following steps:
 
 Defining a network for INT8 execution is exactly the same as for any other precision. Weights should be imported as FP32 values, and the builder will calibrate the network to find appropriate quantization factors to reduce the network to INT8 precision. This sample imports the network using the NvCaffeParser:
 
-```
+```cpp
 const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor =
 parser->parse(locateFile(mParams.prototxtFileName, mParams.dataDirs).c_str(),
 locateFile(mParams.weightsFileName, mParams.dataDirs).c_str(),
@@ -67,7 +66,7 @@ Calibration is an additional step required when building networks for INT8. The 
 Calibration must be performed using images representative of those which will be used at runtime. Since the sample is based around Caffe, any image preprocessing that caffe would perform prior to running the network (such as scaling, cropping, or mean subtraction) will be done in Caffe and captured as a set of files. The sample uses a utility class (MNISTBatchStream) to read these files and create appropriate input for calibration. Generation of these files is discussed in [Batch files for calibration](#batch-files-for-calibration).
 
 You can create calibration data stream (calibrationStream), for example:
-```
+```cpp
 MNISTBatchStream calibrationStream(mParams.calBatchSize, mParams.nbCalBatches, "train-images-idx3-ubyte","train-labels-idx1-ubyte", mParams.dataDirs);
 ```
 
@@ -92,7 +91,7 @@ See `NvInfer.h` for more information on the `IInt8Calibrator` interface variants
 
 This sample uses `IInt8EntropyCalibrator2` by default. We can set the calibrator interface to use `IInt8EntropyCalibrator2` as shown:
 
-```
+```cpp
 calibrator.reset(new Int8EntropyCalibrator2<MNISTBatchStream>(
 calibrationStream, 0, mParams.networkName.c_str(), mParams.inputTensorNames[0].c_str()));
 ```
@@ -103,7 +102,7 @@ In order to perform calibration, the interface must provide implementation for `
 
 The builder calls the `getBatchSize()` method once, at the start of calibration, to obtain the batch size for the calibration set. The method `getBatch()` is then called repeatedly to obtain batches from the application, until the method returns false. Every calibration batch must include exactly the number of images specified as the batch size.
 
-```
+```cpp
 bool getBatch(void* bindings[], const char* names[], int nbBindings) override
 {
     return mImpl.getBatch(bindings, names, nbBindings);
@@ -142,7 +141,7 @@ Where:
 -   `<TRT-xxxx>-<xxxxxxx>` The TensorRT version followed by the calibration algorithm, for example, EntropyCalibration2.
 -   `<layer name> :` value corresponds to the floating point activation scales determined during calibration for each tensor in the network.
 
-The `CalibrationTable` file is generated during the build phase while running the calibration algorithm. After the calibration file is created, it can be read for subsequent runs without running the calibration again. You can provide implementation for `readCalibrationCache()` to load calibration file from a desired location. If the read calibration file is compatible with calibrator type (which was used to generate the file) and TensorRT version, builder would skip the calibration step and use per tensor scales values from the calibration file instead.
+The `CalibrationTable` file is generated during the build phase while running the calibration algorithm. After the calibration file is created, it can be read for subsequent runs without running the calibration again. You can provide implementation for `readCalibrationCache()` to load calibration file from a desired location. If the read calibration file is compatible with calibrator type (which was used to generate the file) and TensorRT version, builder would skip the calibration step and use per-tensor scales values from the calibration file instead.
 
 ### Configuring for the builder
 
@@ -165,9 +164,13 @@ The `CalibrationTable` file is generated during the build phase while running th
 ### Building the engine
 
 After we configure the builder, we can build the engine similar to any FP32 engine.
-```
+
+```cpp
+SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
+
 mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
+    runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
 ````
 
 ### Running the engine
@@ -175,38 +178,38 @@ builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter()
 After the engine has been built, it can be used just like an FP32 engine. For example, inputs and outputs remain in 32-bit floating point.
 
 1.  Allocate memory for input and output buffers.
-    ```
+    ```cpp
     samplesCommon::BufferManager buffers(mEngine, mParams.batchSize);
     ```
 
 2.  Create execution context.
-    ```
+    ```cpp
     auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     ```
 
 3.  Get data dimensions.
-    ```
+    ```cpp
     Dims outputDims = context->getEngine().getBindingDimensions(
     context->getEngine().getBindingIndex(mParams.outputTensorNames[0].c_str()));
     ```
 
 4.  Read the input data into the managed buffers.
-    ```
+    ```cpp
     processInput(buffers, batchStream.getBatch())
     ```
 
 5.  Copy data from host input buffers to device input buffers
-    ```
+    ```cpp
     buffers.copyInputToDevice();
     ```
 
 6.  Run Inference.
-    ```
+    ```cpp
     context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr);
     ```
 
 7.  Copy the CUDA buffer output to CPU output buffers for post processing.
-    ```
+    ```cpp
     buffers.copyOutputToHost();
     ```
 
@@ -254,13 +257,14 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
 
 2. Run the sample to generate characters based on the trained model:
     ```bash
-    sample_int8 --datadir=<path/to/data> --useDLACore=N batch=N start=N score=N
+    ./sample_int8 --datadir=<path/to/data> --useDLACore=N batch=N start=N score=N
     ```
 
     For example:
     ```bash
-    sample_int8 --datadir $TRT_DATADIR/mnist
+    ./sample_int8 --datadir $TRT_DATADIR/mnist
     ```
+
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 
     ```

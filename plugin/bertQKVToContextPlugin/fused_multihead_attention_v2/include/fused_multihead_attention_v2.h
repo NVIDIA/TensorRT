@@ -141,6 +141,23 @@ extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin[
 extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin[];
 extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin[];
 
+extern unsigned char cubin_fmha_v2_int8_512_64_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_512_32_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_256_32_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_128_32_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_512_64_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_512_32_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_256_32_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_128_32_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_512_64_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_512_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_256_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_128_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_512_64_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_512_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_256_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_128_32_sm75_cu_cubin[];
+
 extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm75_cubin_len;
 extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm80_cubin_len;
 extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin_len;
@@ -172,6 +189,23 @@ extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin_len;
+
+extern uint32_t cubin_fmha_v2_int8_512_64_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_512_32_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_256_32_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_512_64_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_512_32_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_256_32_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_128_32_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_512_64_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_512_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_256_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_128_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_512_64_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_512_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_256_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_128_32_sm75_cu_cubin_len;
 
 static const struct FusedMultiHeadAttentionKernelMetaInfoV2
 {
@@ -288,7 +322,93 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
         fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin_len,
         "fused_multihead_attention_v2_int8_384_64_kernel_sm75", 51200, 128, 0, false},
 
+    // {fp16} x {512} x {64, 32} x {sm75} x {normal, noloop}
+    {DATA_TYPE_FP16, 512, 64, kSM_75, cubin_fmha_v2_fp16_512_64_sm75_cu_cubin,
+        cubin_fmha_v2_fp16_512_64_sm75_cu_cubin_len, "fmha_v2_fp16_512_64_sm75_kernel", 69632, 256, 0, false},
+    {DATA_TYPE_FP16, 512, 64, kSM_75, cubin_fmha_v2_fp16_512_64_sm75_cu_cubin,
+        cubin_fmha_v2_fp16_512_64_sm75_cu_cubin_len, "fmha_v2_fp16_512_64_sm75_kernel_nl", 69632, 256, 32, false},
+    {DATA_TYPE_FP16, 512, 32, kSM_75, cubin_fmha_v2_fp16_512_32_sm75_cu_cubin,
+        cubin_fmha_v2_fp16_512_32_sm75_cu_cubin_len, "fmha_v2_fp16_512_32_sm75_kernel", 36864, 256, 0, false},
+    {DATA_TYPE_FP16, 512, 32, kSM_75, cubin_fmha_v2_fp16_512_32_sm75_cu_cubin,
+        cubin_fmha_v2_fp16_512_32_sm75_cu_cubin_len, "fmha_v2_fp16_512_32_sm75_kernel_nl", 36864, 256, 32, false},
+
+    // {fp16, int8} x {128} x {32} x {sm75} x {normal, noloop}
+    {DATA_TYPE_INT8, 128, 32, kSM_75, cubin_fmha_v2_int8_128_32_sm75_cu_cubin,
+        cubin_fmha_v2_int8_128_32_sm75_cu_cubin_len, "fmha_v2_int8_128_32_sm75_kernel", 12288, 128, 0, false},
+    {DATA_TYPE_INT8, 128, 32, kSM_75, cubin_fmha_v2_int8_128_32_sm75_cu_cubin,
+        cubin_fmha_v2_int8_128_32_sm75_cu_cubin_len, "fmha_v2_int8_128_32_sm75_kernel_nl", 10240, 128, 32, false},
+    {DATA_TYPE_FP16, 128, 32, kSM_75, cubin_fmha_v2_fp16_128_32_sm75_cu_cubin,
+        cubin_fmha_v2_fp16_128_32_sm75_cu_cubin_len, "fmha_v2_fp16_128_32_sm75_kernel", 16384, 128, 0, false},
+    {DATA_TYPE_FP16, 128, 32, kSM_75, cubin_fmha_v2_fp16_128_32_sm75_cu_cubin,
+        cubin_fmha_v2_fp16_128_32_sm75_cu_cubin_len, "fmha_v2_fp16_128_32_sm75_kernel_nl", 10240, 128, 32, false},
+
+    // {fp16, int8} x {256} x {32} x {sm75} x {normal, noloop}
+    {DATA_TYPE_INT8, 256, 32, kSM_75, cubin_fmha_v2_int8_256_32_sm75_cu_cubin,
+        cubin_fmha_v2_int8_256_32_sm75_cu_cubin_len, "fmha_v2_int8_256_32_sm75_kernel", 18432, 128, 0, false},
+    {DATA_TYPE_INT8, 256, 32, kSM_75, cubin_fmha_v2_int8_256_32_sm75_cu_cubin,
+        cubin_fmha_v2_int8_256_32_sm75_cu_cubin_len, "fmha_v2_int8_256_32_sm75_kernel_nl", 18432, 128, 32, false},
+    {DATA_TYPE_FP16, 256, 32, kSM_75, cubin_fmha_v2_fp16_256_32_sm75_cu_cubin,
+        cubin_fmha_v2_fp16_256_32_sm75_cu_cubin_len, "fmha_v2_fp16_256_32_sm75_kernel", 18432, 128, 0, false},
+    {DATA_TYPE_FP16, 256, 32, kSM_75, cubin_fmha_v2_fp16_256_32_sm75_cu_cubin,
+        cubin_fmha_v2_fp16_256_32_sm75_cu_cubin_len, "fmha_v2_fp16_256_32_sm75_kernel_nl", 18432, 128, 32, false},
+
+    // {int8} x {512} x {64, 32} x {sm75} x {normal, noloop}
+    {DATA_TYPE_INT8, 512, 64, kSM_75, cubin_fmha_v2_int8_512_64_sm75_cu_cubin,
+        cubin_fmha_v2_int8_512_64_sm75_cu_cubin_len, "fmha_v2_int8_512_64_sm75_kernel", 69632, 256, 0, false},
+    {DATA_TYPE_INT8, 512, 64, kSM_75, cubin_fmha_v2_int8_512_64_sm75_cu_cubin,
+        cubin_fmha_v2_int8_512_64_sm75_cu_cubin_len, "fmha_v2_int8_512_64_sm75_kernel_nl", 69632, 256, 32, false},
+    {DATA_TYPE_INT8, 512, 32, kSM_75, cubin_fmha_v2_int8_512_32_sm75_cu_cubin,
+        cubin_fmha_v2_int8_512_32_sm75_cu_cubin_len, "fmha_v2_int8_512_32_sm75_kernel", 36864, 256, 0, false},
+    {DATA_TYPE_INT8, 512, 32, kSM_75, cubin_fmha_v2_int8_512_32_sm75_cu_cubin,
+        cubin_fmha_v2_int8_512_32_sm75_cu_cubin_len, "fmha_v2_int8_512_32_sm75_kernel_nl", 36864, 256, 32, false},
+
 #if CUDA_VERSION >= 11000
+    // {fp16} x {128} x {32} x {sm80} x {normal, noloop}
+    {DATA_TYPE_FP16, 128, 32, kSM_80, cubin_fmha_v2_fp16_128_32_sm80_cu_cubin,
+        cubin_fmha_v2_fp16_128_32_sm80_cu_cubin_len, "fmha_v2_fp16_128_32_sm80_kernel", 32768, 128, 0, false},
+    {DATA_TYPE_FP16, 128, 32, kSM_80, cubin_fmha_v2_fp16_128_32_sm80_cu_cubin,
+        cubin_fmha_v2_fp16_128_32_sm80_cu_cubin_len, "fmha_v2_fp16_128_32_sm80_kernel_nl", 20480, 128, 16, false},
+
+    // {int8} x {128} x {32} x {sm80} x {normal, noloop, interleave, interleave_noloop}
+    {DATA_TYPE_INT8, 128, 32, kSM_80, cubin_fmha_v2_int8_128_32_sm80_cu_cubin,
+        cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len, "fmha_v2_int8_128_32_sm80_kernel", 16384, 128, 0, false},
+    {DATA_TYPE_INT8, 128, 32, kSM_80, cubin_fmha_v2_int8_128_32_sm80_cu_cubin,
+        cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len, "fmha_v2_int8_128_32_sm80_kernel_nl", 12288, 128, 16, false},
+    {DATA_TYPE_INT8, 128, 32, kSM_80, cubin_fmha_v2_int8_128_32_sm80_cu_cubin,
+        cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len, "fmha_v2_int8_128_32_sm80_kernel", 12288, 128, 0, true},
+    {DATA_TYPE_INT8, 128, 32, kSM_80, cubin_fmha_v2_int8_128_32_sm80_cu_cubin,
+        cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len, "fmha_v2_il_int8_128_32_sm80_kernel_nl", 10240, 128, 16, true},
+
+    // {fp16, int8} x {256} x {32} x {sm80} x {normal, noloop}
+    {DATA_TYPE_INT8, 256, 32, kSM_80, cubin_fmha_v2_int8_256_32_sm80_cu_cubin,
+        cubin_fmha_v2_int8_256_32_sm80_cu_cubin_len, "fmha_v2_int8_256_32_sm80_kernel", 20480, 128, 0, false},
+    {DATA_TYPE_INT8, 256, 32, kSM_80, cubin_fmha_v2_int8_256_32_sm80_cu_cubin,
+        cubin_fmha_v2_int8_256_32_sm80_cu_cubin_len, "fmha_v2_int8_256_32_sm80_kernel_nl", 20480, 128, 32, false},
+    {DATA_TYPE_FP16, 256, 32, kSM_80, cubin_fmha_v2_fp16_256_32_sm80_cu_cubin,
+        cubin_fmha_v2_fp16_256_32_sm80_cu_cubin_len, "fmha_v2_fp16_256_32_sm80_kernel", 20480, 128, 0, false},
+    {DATA_TYPE_FP16, 256, 32, kSM_80, cubin_fmha_v2_fp16_256_32_sm80_cu_cubin,
+        cubin_fmha_v2_fp16_256_32_sm80_cu_cubin_len, "fmha_v2_fp16_256_32_sm80_kernel_nl", 20480, 128, 32, false},
+
+    // {int8} x {512} x {64, 32} x {sm80} x {normal, noloop}
+    {DATA_TYPE_INT8, 512, 64, kSM_80, cubin_fmha_v2_int8_512_64_sm80_cu_cubin,
+        cubin_fmha_v2_int8_512_64_sm80_cu_cubin_len, "fmha_v2_int8_512_64_sm80_kernel", 73728, 256, 0, false},
+    {DATA_TYPE_INT8, 512, 64, kSM_80, cubin_fmha_v2_int8_512_64_sm80_cu_cubin,
+        cubin_fmha_v2_int8_512_64_sm80_cu_cubin_len, "fmha_v2_int8_512_64_sm80_kernel_nl", 73728, 256, 32, false},
+    {DATA_TYPE_INT8, 512, 32, kSM_80, cubin_fmha_v2_int8_512_32_sm80_cu_cubin,
+        cubin_fmha_v2_int8_512_32_sm80_cu_cubin_len, "fmha_v2_int8_512_32_sm80_kernel", 40960, 256, 0, false},
+    {DATA_TYPE_INT8, 512, 32, kSM_80, cubin_fmha_v2_int8_512_32_sm80_cu_cubin,
+        cubin_fmha_v2_int8_512_32_sm80_cu_cubin_len, "fmha_v2_int8_512_32_sm80_kernel_nl", 40960, 256, 32, false},
+
+    // {fp16} x {512} x {64, 32} x {sm80} x {normal, noloop}
+    {DATA_TYPE_FP16, 512, 64, kSM_80, cubin_fmha_v2_fp16_512_64_sm80_cu_cubin,
+        cubin_fmha_v2_fp16_512_64_sm80_cu_cubin_len, "fmha_v2_fp16_512_64_sm80_kernel", 73728, 256, 0, false},
+    {DATA_TYPE_FP16, 512, 64, kSM_80, cubin_fmha_v2_fp16_512_64_sm80_cu_cubin,
+        cubin_fmha_v2_fp16_512_64_sm80_cu_cubin_len, "fmha_v2_fp16_512_64_sm80_kernel_nl", 73728, 256, 32, false},
+    {DATA_TYPE_FP16, 512, 32, kSM_80, cubin_fmha_v2_fp16_512_32_sm80_cu_cubin,
+        cubin_fmha_v2_fp16_512_32_sm80_cu_cubin_len, "fmha_v2_fp16_512_32_sm80_kernel", 40960, 256, 0, false},
+    {DATA_TYPE_FP16, 512, 32, kSM_80, cubin_fmha_v2_fp16_512_32_sm80_cu_cubin,
+        cubin_fmha_v2_fp16_512_32_sm80_cu_cubin_len, "fmha_v2_fp16_512_32_sm80_kernel_nl", 40960, 256, 32, false},
+
     // Ampere
     {DATA_TYPE_FP16, 64, 64, kSM_80, fused_multihead_attention_v2_fp16_64_64_kernel_sm80_cubin,
         fused_multihead_attention_v2_fp16_64_64_kernel_sm80_cubin_len,
@@ -391,7 +511,6 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
         fused_multihead_attention_v2_fp16_384_64_kernel_sm86_cubin_len,
         "fused_multihead_attention_v2_fp16_384_64_kernel_sm80", 65536, 256, 0, false},
 
-
     {DATA_TYPE_INT8, 128, 64, kSM_86, fused_multihead_attention_v2_int8_128_64_kernel_sm86_cubin,
         fused_multihead_attention_v2_int8_128_64_kernel_sm86_cubin_len,
         "fused_multihead_attention_v2_int8_128_64_kernel_sm80_interleaved_noloop", 20480, 128, 16, true},
@@ -455,20 +574,20 @@ public:
     {
     }
 
-    inline uint64_t hashID(uint32_t s, bool interleaved, bool unroll) const
+    inline uint64_t hashID(uint32_t s, uint32_t headsize, bool interleaved, bool unroll) const
     {
-        return (uint64_t) s << 32 | (interleaved ? 2ull : 0ull) | (unroll ? 1ull : 0ull);
+        // we only have 30 bits room for head size
+        ASSERT(headsize <= 0x3FFFFFFF);
+        return static_cast<uint64_t>(s) << 32 | (headsize << 2) | (interleaved ? 2U : 0U) | (unroll ? 1U : 0U);
     }
 
     virtual uint64_t hashID(const KernelMeta& kernelMeta) const
     {
-        assert(kernelMeta.mD == 64);
-        return hashID(kernelMeta.mS, kernelMeta.mInterleaved, kernelMeta.mUnrollStep);
+        return hashID(kernelMeta.mS, kernelMeta.mD, kernelMeta.mInterleaved, kernelMeta.mUnrollStep);
     }
 
     virtual void run(Fused_multihead_attention_params_v2& params, cudaStream_t ss) const
     {
-        assert(params.d == 64);
         if (params.interleaved)
         {
             assert(mDataType == bert::DATA_TYPE_INT8);
@@ -518,7 +637,7 @@ public:
             }
         }
 
-        const auto findIter = mFunctions.find(hashID(params.s, params.interleaved, forceUnroll));
+        const auto findIter = mFunctions.find(hashID(params.s, params.d, params.interleaved, forceUnroll));
         ASSERT(findIter != mFunctions.end());
 
         const auto& kernelMeta = mKernelMeta[findIter->second.mMetaInfoIndex];

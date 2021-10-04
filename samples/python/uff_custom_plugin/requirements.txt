@@ -1,3 +1,4 @@
-Pillow>=8.1.2
+Pillow; python_version<"3.6"
+Pillow==8.3.2; python_version>="3.6"
 pycuda<2021.1
 numpy
