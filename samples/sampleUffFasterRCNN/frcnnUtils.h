@@ -54,11 +54,10 @@ struct FrcnnArgs
     bool help{false};
     int useDLACore{-1};
     std::vector<std::string> dataDirs;
-    int inputHeight;
-    int inputWidth;
+    int inputHeight{0};
+    int inputWidth{0};
     int repeat{1};
     bool profile{false};
-    int batchSize{1};
     std::vector<std::string> inputImages;
     std::string saveEngine{""};
     std::string loadEngine{""};
@@ -78,13 +77,12 @@ bool parseFrcnnArgs(FrcnnArgs& args, int argc, char* argv[])
         int arg;
         static struct option long_options[] = {{"help", no_argument, 0, 'h'}, {"datadir", required_argument, 0, 'd'},
             {"int8", no_argument, 0, 'i'}, {"fp16", no_argument, 0, 'f'}, {"useDLACore", required_argument, 0, 'u'},
-            {"inputHeight", required_argument, 0, 'H'}, {"inputWidth", required_argument, 0, 'w'},
-            {"repeat", required_argument, 0, 'r'}, {"profile", no_argument, 0, 'p'},
-            {"batchSize", required_argument, 0, 'b'}, {"inputImages", required_argument, 0, 'I'},
+            {"inputHeight", required_argument, 0, 'H'}, {"inputWidth", required_argument, 0, 'W'},
+            {"repeat", required_argument, 0, 'r'}, {"profile", no_argument, 0, 'p'}, {"inputImages", required_argument, 0, 'I'},
             {"saveEngine", required_argument, 0, 's'}, {"loadEngine", required_argument, 0, 'l'},
             {nullptr, 0, nullptr, 0}};
         int option_index = 0;
-        arg = getopt_long(argc, argv, "hd:ifuH:W:r:pB:I:s:l:", long_options, &option_index);
+        arg = getopt_long(argc, argv, "hd:ifuH:W:r:pI:s:l:", long_options, &option_index);
 
         if (arg == -1)
         {
@@ -128,13 +126,16 @@ bool parseFrcnnArgs(FrcnnArgs& args, int argc, char* argv[])
 
         case 'p': args.profile = true; break;
 
-        case 'B': args.batchSize = std::stoi(optarg); break;
-
         case 'I': splitStr(optarg, args.inputImages); break;
         case 's': args.saveEngine = optarg; break;
         case 'l': args.loadEngine = optarg; break;
-        default: return false;
+        default:  args.help = true; return false;
         }
+    }
+    if (args.inputHeight == 0 || args.inputWidth == 0 || args.inputImages.empty())
+    {
+        args.help = true;
+        return false;
     }
 
     return true;

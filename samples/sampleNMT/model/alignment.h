@@ -55,12 +55,12 @@ public:
     /**
      * \brief get the size of the source states
      */
-    virtual int getSourceStatesSize() = 0;
+    virtual int32_t getSourceStatesSize() = 0;
 
     /**
      * \brief get the size of the attention keys
      */
-    virtual int getAttentionKeySize() = 0;
+    virtual int32_t getAttentionKeySize() = 0;
 
     ~Alignment() override = default;
 };

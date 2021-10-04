@@ -21,7 +21,7 @@
 
 namespace nmtSample
 {
-SLPEmbedder::SLPEmbedder(ComponentWeights::ptr weights)
+SLPEmbedder::SLPEmbedder(ComponentWeights::ptr& weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
@@ -54,7 +54,7 @@ void SLPEmbedder::addToModel(
     ASSERT(*output != nullptr);
 }
 
-int SLPEmbedder::getInputDimensionSize()
+int32_t SLPEmbedder::getInputDimensionSize()
 {
     return mNumInputs;
 }

@@ -37,7 +37,7 @@ public:
     friend std::istream& operator>>(std::istream& input, ComponentWeights& value);
 
 public:
-    std::vector<int> mMetaData;
+    std::vector<int32_t> mMetaData;
     std::vector<char> mWeights;
 };
 } // namespace nmtSample

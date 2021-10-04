@@ -31,14 +31,14 @@ namespace nmtSample
 class LSTMEncoder : public Encoder
 {
 public:
-    LSTMEncoder(ComponentWeights::ptr weights);
+    explicit LSTMEncoder(ComponentWeights::ptr& weights);
 
-    void addToModel(nvinfer1::INetworkDefinition* network, int maxInputSequenceLength,
+    void addToModel(nvinfer1::INetworkDefinition* network, int32_t maxInputSequenceLength,
         nvinfer1::ITensor* inputEmbeddedData, nvinfer1::ITensor* actualInputSequenceLengths,
         nvinfer1::ITensor** inputStates, nvinfer1::ITensor** memoryStates,
         nvinfer1::ITensor** lastTimestepStates) override;
 
-    int getMemoryStatesSize() override;
+    int32_t getMemoryStatesSize() override;
 
     std::vector<nvinfer1::Dims> getStateSizes() override;
 
@@ -51,8 +51,8 @@ protected:
     std::vector<nvinfer1::Weights> mGateKernelWeights;
     std::vector<nvinfer1::Weights> mGateBiasWeights;
     bool mRNNKind;
-    int mNumLayers;
-    int mNumUnits;
+    int32_t mNumLayers;
+    int32_t mNumUnits;
 };
 } // namespace nmtSample
 

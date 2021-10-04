@@ -28,10 +28,15 @@
 #include "NvInfer.h"
 #include "plugin.h"
 
-// CUB's bug workaround:
-// To work properly for large batch size CUB segmented sort needs ridiculous
-// workspace alignment.
-constexpr uintptr_t ALIGNMENT = 1 << 20;
+#define CHECK_CUDA(call)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        cudaError_t status = call;                                                                                     \
+        if (status != cudaSuccess)                                                                                     \
+        {                                                                                                              \
+            return status;                                                                                             \
+        }                                                                                                              \
+    } while (0)
 
 template <typename TFloat>
 struct Bbox
@@ -60,7 +65,6 @@ typedef pluginStatus_t frcnnStatus_t;
             return STATUS_BAD_PARAM;                                                    \
         }                                                                               \
     } while (0)
-
 
 #define DEBUG_FPRINTF(...)        \
     do                            \
@@ -305,21 +309,17 @@ frcnnStatus_t nmsLaunch(cudaStream_t stream,
 }
 // }}}
 
-
 // NMS GPU {{{
 template <typename T_SCORES, typename T_ROIS>
-frcnnStatus_t nmsGpu(cudaStream_t stream,
-                     const int N,
-                     const int R,
-                     const int preNmsTop,
-                     const int nmsMaxOut,
-                     const float iouThreshold,
-                     void* fgScores,
-                     const void* proposals,
-                     void* workspace,
-                     void* rois)
+frcnnStatus_t nmsGpu(cudaStream_t stream, const int N, const int R, const int preNmsTop, const int nmsMaxOut,
+    const float iouThreshold, void* fgScores, const void* proposals, void* workspace, void* rois)
 {
-    int8_t* vworkspace = alignPtr((int8_t*) workspace, ALIGNMENT);
+    // CUB's bug workaround:
+    // To work properly for large batch size CUB segmented sort needs ridiculous
+    // workspace alignment.
+    constexpr uintptr_t kALIGNMENT = 1 << 20;
+
+    int8_t* vworkspace = alignPtr((int8_t*) workspace, kALIGNMENT);
     DEBUG_PRINTF("&&&& [NMS] PROPOSALS %u\n", hash(proposals, N * R * 4 * sizeof(float)));
     DEBUG_PRINTF("&&&& [NMS] SCORES %u\n", hash(fgScores, N * R * sizeof(float)));
     frcnnStatus_t error;
@@ -328,31 +328,24 @@ frcnnStatus_t nmsGpu(cudaStream_t stream,
     DEBUG_PRINTF("&&&& [NMS] SCORES %u\n", hash(fgScores, N * R * sizeof(float)));
     // Generate offsets
     int* offsets = (int*) vworkspace;
-    setOffset <<< 1, 1024, 0, stream>>>(R, N + 1, offsets);
+    setOffset<<<1, 1024, 0, stream>>>(R, N + 1, offsets);
     CSC(cudaGetLastError(), STATUS_FAILURE);
     vworkspace = vworkspace + N + 1;
-    vworkspace = alignPtr(vworkspace, ALIGNMENT);
+    vworkspace = alignPtr(vworkspace, kALIGNMENT);
     // Sort (batched)
     std::size_t tempStorageBytes = 0;
-    cub::DeviceSegmentedRadixSort::SortPairsDescending(
-        NULL, tempStorageBytes,
-        (T_SCORES*) fgScores, (T_SCORES*) fgScores,
-        (Bbox<T_ROIS>*) proposals, (Bbox<T_ROIS>*) proposals,
-        N * R, N,
-        offsets, offsets + 1, 0, 8 * sizeof(T_SCORES), stream);
+    cub::DeviceSegmentedRadixSort::SortPairsDescending(NULL, tempStorageBytes, (T_SCORES*) fgScores,
+        (T_SCORES*) fgScores, (Bbox<T_ROIS>*) proposals, (Bbox<T_ROIS>*) proposals, N * R, N, offsets, offsets + 1, 0,
+        8 * sizeof(T_SCORES), stream);
     CSC(cudaGetLastError(), STATUS_FAILURE);
     T_SCORES* scoresOut = (T_SCORES*) vworkspace;
     vworkspace = (int8_t*) (scoresOut + N * R);
-    vworkspace = alignPtr(vworkspace, ALIGNMENT);
+    vworkspace = alignPtr(vworkspace, kALIGNMENT);
     Bbox<T_ROIS>* proposalsOut = (Bbox<T_ROIS>*) vworkspace;
     vworkspace = (int8_t*) (proposalsOut + N * R);
-    vworkspace = alignPtr(vworkspace, ALIGNMENT);
-    cub::DeviceSegmentedRadixSort::SortPairsDescending(
-        vworkspace, tempStorageBytes,
-        (T_SCORES*) fgScores, (T_SCORES*) scoresOut,
-        (Bbox<T_ROIS>*) proposals, (Bbox<T_ROIS>*) proposalsOut,
-        N * R, N,
-        offsets, offsets + 1,
+    vworkspace = alignPtr(vworkspace, kALIGNMENT);
+    cub::DeviceSegmentedRadixSort::SortPairsDescending(vworkspace, tempStorageBytes, (T_SCORES*) fgScores,
+        (T_SCORES*) scoresOut, (Bbox<T_ROIS>*) proposals, (Bbox<T_ROIS>*) proposalsOut, N * R, N, offsets, offsets + 1,
         0, 8 * sizeof(T_SCORES), stream);
     CSC(cudaGetLastError(), STATUS_FAILURE);
     DEBUG_PRINTF("&&&& [NMS] POST CUB\n");
@@ -512,7 +505,7 @@ __global__ void _inverse_transform_gpu(const float* RPN_prob, const float* RPN_r
 
 
 
-void _inverse_transform_wrapper(const float* RPN_prob, const float* RPN_regr, int N, int INPUT_H,
+cudaError_t _inverse_transform_wrapper(const float* RPN_prob, const float* RPN_regr, int N, int INPUT_H,
                                 int INPUT_W, int RPN_H, int RPN_W, float RPN_STD_SCALING, int RPN_STRIDE,  float* ANCHOR_SIZES,
                                 int anc_size_num, float* ANCHOR_RATIOS, int anc_ratio_num, float bbox_min_size, float* fg_scores,
                                 float* proposal_out, cudaStream_t stream)
@@ -523,6 +516,8 @@ void _inverse_transform_wrapper(const float* RPN_prob, const float* RPN_regr, in
     _inverse_transform_gpu <<< grid_size, block_size, 0, stream>>> (RPN_prob, RPN_regr, N, INPUT_H,
             INPUT_W, RPN_H, RPN_W, RPN_STD_SCALING, RPN_STRIDE, ANCHOR_SIZES, anc_size_num, ANCHOR_RATIOS,
             anc_ratio_num, bbox_min_size, fg_scores, proposal_out);
+
+    return cudaGetLastError();
 }
 
 size_t _proposalsForwardNMSWorkspaceSize(int N,
@@ -597,13 +592,15 @@ frcnnStatus_t extractFgScores_gpu(cudaStream_t stream,
 
 
 
-void _copy_anchors_to_gpu(cudaStream_t stream, float* ANCHOR_SIZES, int anc_size_num,
+cudaError_t _copy_anchors_to_gpu(cudaStream_t stream, float* ANCHOR_SIZES, int anc_size_num,
                           float* ANCHOR_RATIOS, int anc_ratio_num, void* anchor_size_buf)
 {
-    cudaMemcpyAsync(anchor_size_buf, static_cast<void*>(ANCHOR_SIZES), sizeof(float) * anc_size_num,
-                    cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(static_cast<void*>(static_cast<float*>(anchor_size_buf) + anc_size_num), static_cast<void*>(ANCHOR_RATIOS), sizeof(float) * anc_ratio_num,
-                                           cudaMemcpyHostToDevice, stream);
+    CHECK_CUDA(cudaMemcpyAsync(anchor_size_buf, static_cast<void*>(ANCHOR_SIZES), sizeof(float) * anc_size_num,
+                    cudaMemcpyHostToDevice, stream));
+    CHECK_CUDA(cudaMemcpyAsync(static_cast<void*>(static_cast<float*>(anchor_size_buf) + anc_size_num), static_cast<void*>(ANCHOR_RATIOS), sizeof(float) * anc_ratio_num,
+                                           cudaMemcpyHostToDevice, stream));
+
+    return cudaSuccess;
 }
 
 
@@ -624,13 +621,15 @@ __global__ void _normalize_rois_kernel(float* roi_after_nms, int nthreads, int w
 
 
 
-void _normalize_rois(float* roi_after_nms, int n, int max_box_num, int input_width,
+cudaError_t _normalize_rois(float* roi_after_nms, int n, int max_box_num, int input_width,
                      int input_height, cudaStream_t stream)
 {
     const int block_size = 1024;
     const int grid_size = (n * max_box_num + block_size - 1) / block_size;
     _normalize_rois_kernel <<< grid_size, block_size, 0, stream>>>(roi_after_nms, n * max_box_num,
             input_width, input_height);
+
+    return cudaGetLastError();
 }
 
 
@@ -670,8 +669,11 @@ int proposalInference_gpu(
     void* anchor_size_buf = nextWorkspacePtr((int8_t*) fg_scores, fg_scores_size);
     void* anchor_ratio_buf = static_cast<void*>(static_cast<float*>(anchor_size_buf) + anc_size_num);
     frcnnStatus_t status;
-    _copy_anchors_to_gpu(stream, ANCHOR_SIZES, anc_size_num, ANCHOR_RATIOS, anc_ratio_num,
-                         anchor_size_buf);
+    CHECK_CUDA(_copy_anchors_to_gpu(stream, ANCHOR_SIZES, anc_size_num, ANCHOR_RATIOS, anc_ratio_num,
+                         anchor_size_buf));
+
+
+
     status = extractFgScores_gpu<float>(stream,
                                         batch_size,
                                         anc_size_num * anc_ratio_num,
@@ -679,12 +681,13 @@ int proposalInference_gpu(
                                         rpn_width,
                                         rpn_prob,
                                         fg_scores);
-    ASSERT(status == 0);
-    _inverse_transform_wrapper(static_cast<const float*>(rpn_prob), static_cast<const float*>(rpn_regr),
+    ASSERT(status == STATUS_SUCCESS);
+    CHECK_CUDA(_inverse_transform_wrapper(static_cast<const float*>(rpn_prob), static_cast<const float*>(rpn_regr),
                                batch_size, input_height, input_width, rpn_height, rpn_width, rpn_std_scaling, rpn_stride,
                                static_cast<float*>(anchor_size_buf), anc_size_num, static_cast<float*>(anchor_ratio_buf),
                                anc_ratio_num, bbox_min_size, static_cast<float*>(fg_scores), static_cast<float*>(proposals),
-                               stream);
+                               stream));
+
     status = nms(stream,
                  batch_size,
                  anc_size_num * anc_ratio_num * rpn_height * rpn_width,
@@ -700,8 +703,12 @@ int proposalInference_gpu(
                  workspace,
                  nvinfer1::DataType::kFLOAT,
                  output);
-    ASSERT(status == 0);
-    _normalize_rois(static_cast<float*>(output), batch_size, MAX_BOX_NUM, input_width, input_height,
-                    stream);
-    return 0;
+
+    ASSERT(status == STATUS_SUCCESS);
+
+    CHECK_CUDA(_normalize_rois(static_cast<float*>(output), batch_size, MAX_BOX_NUM, input_width, input_height,
+                    stream));
+
+
+    return STATUS_SUCCESS;
 }

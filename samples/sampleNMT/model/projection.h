@@ -46,7 +46,7 @@ public:
     /**
      * \brief get the size of raw logits vector
      */
-    virtual int getOutputSize() = 0;
+    virtual int32_t getOutputSize() = 0;
 
     ~Projection() override = default;
 };

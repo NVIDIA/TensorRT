@@ -45,7 +45,7 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
     ```bash
     export TRT_DATADIR=/usr/src/tensorrt/data
     pushd $TRT_DATADIR/mnist
-    pip install Pillow
+    pip3 install Pillow
     python3 download_pgms.py
     popd
     ```
@@ -56,12 +56,12 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
 
 2. Run the sample to perform inference on the digit:
     ```bash
-	sample_algorithm_selector [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
-	```
+    ./sample_algorithm_selector [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
+    ```
 
     For example:
     ```bash
-    sample_algorithm_selector --datadir $TRT_DATADIR/mnist --fp16
+    ./sample_algorithm_selector --datadir $TRT_DATADIR/mnist --fp16
     ```
 
 	This sample reads three Caffe files to build the network:

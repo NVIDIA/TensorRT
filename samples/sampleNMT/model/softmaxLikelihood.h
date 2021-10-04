@@ -49,7 +49,7 @@ public:
 
     LikelihoodCombinationOperator::ptr getLikelihoodCombinationOperator() const override;
 
-    void addToModel(nvinfer1::INetworkDefinition* network, int beamWidth, nvinfer1::ITensor* inputLogits,
+    void addToModel(nvinfer1::INetworkDefinition* network, int32_t beamWidth, nvinfer1::ITensor* inputLogits,
         nvinfer1::ITensor* inputLikelihoods, nvinfer1::ITensor** newCombinedLikelihoods,
         nvinfer1::ITensor** newRayOptionIndices, nvinfer1::ITensor** newVocabularyIndices) override;
 

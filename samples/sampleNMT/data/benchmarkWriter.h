@@ -33,7 +33,8 @@ class BenchmarkWriter : public DataWriter
 public:
     BenchmarkWriter();
 
-    void write(const int* hOutputData, int actualOutputSequenceLength, int actualInputSequenceLength) override;
+    void write(
+        const int32_t* hOutputData, int32_t actualOutputSequenceLength, int32_t actualInputSequenceLength) override;
 
     void initialize() override;
 
@@ -44,9 +45,9 @@ public:
     ~BenchmarkWriter() override = default;
 
 private:
-    int mSampleCount;
-    int mInputTokenCount;
-    int mOutputTokenCount;
+    int32_t mSampleCount;
+    int32_t mInputTokenCount;
+    int32_t mOutputTokenCount;
     std::chrono::high_resolution_clock::time_point mStartTS;
 };
 } // namespace nmtSample

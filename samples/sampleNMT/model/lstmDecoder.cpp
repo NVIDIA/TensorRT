@@ -22,7 +22,7 @@
 
 namespace nmtSample
 {
-LSTMDecoder::LSTMDecoder(ComponentWeights::ptr weights)
+LSTMDecoder::LSTMDecoder(ComponentWeights::ptr& weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
@@ -39,10 +39,10 @@ LSTMDecoder::LSTMDecoder(ComponentWeights::ptr weights)
     size_t biasStartOffset = ((4 * dataSize + 4 * mNumUnits) * mNumUnits) * elementSize
         + 8 * mNumUnits * mNumUnits * (mNumLayers - 1) * elementSize;
     size_t biasOffset = biasStartOffset;
-    int numGates = 8;
-    for (int layerIndex = 0; layerIndex < mNumLayers; layerIndex++)
+    int32_t numGates = 8;
+    for (int32_t layerIndex = 0; layerIndex < mNumLayers; layerIndex++)
     {
-        for (int gateIndex = 0; gateIndex < numGates; gateIndex++)
+        for (int32_t gateIndex = 0; gateIndex < numGates; gateIndex++)
         {
             // encoder input size == mNumUnits
             int64_t inputSize = ((layerIndex == 0) && (gateIndex < 4)) ? dataSize : mNumUnits;
@@ -60,8 +60,8 @@ LSTMDecoder::LSTMDecoder(ComponentWeights::ptr weights)
 void LSTMDecoder::addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* inputEmbeddedData,
     nvinfer1::ITensor** inputStates, nvinfer1::ITensor** outputData, nvinfer1::ITensor** outputStates)
 {
-    int beamWidth;
-    int inputWidth;
+    int32_t beamWidth;
+    int32_t inputWidth;
     {
         auto dims = inputEmbeddedData->getDimensions();
         ASSERT(dims.nbDims == 2);

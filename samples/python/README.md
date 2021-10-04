@@ -57,9 +57,7 @@ def getFilePath(path):
     return fullpath
 ```
 
-The helper function `getFilePath` in `downloader.py` can also be used to obtain the
-full path to the downloaded data files. It only works when the sample doesn't have 
-any other command line argument.
+The helper function `getFilePath` in `downloader.py` can also be used to obtain the full path to the downloaded data files. It only works when the sample doesn't have any other command line argument.
 
 ```py
 from downloader import getFilePath

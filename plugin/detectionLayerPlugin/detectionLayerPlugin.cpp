@@ -33,7 +33,7 @@ std::vector<PluginField> DetectionLayerPluginCreator::mPluginAttributes;
 
 DetectionLayerPluginCreator::DetectionLayerPluginCreator()
 {
-
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("num_classes", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("keep_topk", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));

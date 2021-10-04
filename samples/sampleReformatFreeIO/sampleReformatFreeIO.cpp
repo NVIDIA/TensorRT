@@ -251,7 +251,7 @@ private:
     //! \brief uses a Caffe parser to create the single layer Network and marks the
     //!        output layers
     //!
-    void constructNetwork(
+    bool constructNetwork(
         SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
@@ -304,7 +304,10 @@ bool SampleReformatFreeIO::build(int dataWidth)
         return false;
     }
 
-    constructNetwork(parser, network);
+    if (!constructNetwork(parser, network))
+    {
+        return false;
+    }
 
     network->getInput(0)->setAllowedFormats(static_cast<TensorFormats>(1 << static_cast<int>(mTensorFormat)));
     network->getOutput(0)->setAllowedFormats(static_cast<TensorFormats>(1 << static_cast<int>(mTensorFormat)));
@@ -372,7 +375,7 @@ bool SampleReformatFreeIO::build(int dataWidth)
 //! \brief Uses a caffe parser to create the single layer Network and marks the
 //!        output layers
 //!
-void SampleReformatFreeIO::constructNetwork(
+bool SampleReformatFreeIO::constructNetwork(
     SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
 {
     const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor = parser->parse(
@@ -396,9 +399,23 @@ void SampleReformatFreeIO::constructNetwork(
         = samplesCommon::getMaxValue(static_cast<const float*>(meanWeights.values), samplesCommon::volume(inputDims));
 
     auto mean = network->addConstant(nvinfer1::Dims3(1, inputDims.d[1], inputDims.d[2]), meanWeights);
+    if (!mean->getOutput(0)->setDynamicRange(-maxMean, maxMean))
+    {
+        return false;
+    }
+    if (!network->getInput(0)->setDynamicRange(-maxMean, maxMean))
+    {
+        return false;
+    }
     auto meanSub = network->addElementWise(*network->getInput(0), *mean->getOutput(0), ElementWiseOperation::kSUB);
+    if (!meanSub->getOutput(0)->setDynamicRange(-maxMean, maxMean))
+    {
+        return false;
+    }
     network->getLayer(0)->setInput(0, *meanSub->getOutput(0));
-    samplesCommon::setAllDynamicRanges(network.get(), maxMean / maxMean * 128, 128);
+    samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
+
+    return true;
 }
 
 //!

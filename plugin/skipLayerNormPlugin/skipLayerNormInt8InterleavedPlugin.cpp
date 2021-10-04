@@ -121,20 +121,20 @@ SkipLayerNormInterleavedPluginHFace::SkipLayerNormInterleavedPluginHFace(
     const std::string name, const void* data, size_t length)
     : SkipLayerNormInterleavedPluginBase(name, data, length)
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginHFace deserialize\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace deserialize");
 }
 
 SkipLayerNormInterleavedPluginMTron::SkipLayerNormInterleavedPluginMTron(
     const std::string name, const void* data, size_t length)
     : SkipLayerNormInterleavedPluginBase(name, data, length)
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginMTron deserialize\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron deserialize");
 }
 
 // IPluginV2DynamicExt Methods
 IPluginV2DynamicExt* SkipLayerNormInterleavedPluginHFace::clone() const noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginHFace clone\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace clone");
 
     auto* p = new SkipLayerNormInterleavedPluginHFace(mLayerName, mBeta, mGamma);
     p->initialize();
@@ -144,7 +144,7 @@ IPluginV2DynamicExt* SkipLayerNormInterleavedPluginHFace::clone() const noexcept
 
 IPluginV2DynamicExt* SkipLayerNormInterleavedPluginMTron::clone() const noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginMTron clone\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron clone");
 
     auto* p = new SkipLayerNormInterleavedPluginMTron(mLayerName, mBeta, mGamma);
     p->initialize();
@@ -324,24 +324,24 @@ int32_t SkipLayerNormInterleavedPluginMTron::getNbOutputs() const noexcept
 
 int32_t SkipLayerNormInterleavedPluginHFace::initialize() noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginHFace initialize\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace initialize");
     return 0;
 }
 
 int32_t SkipLayerNormInterleavedPluginMTron::initialize() noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginMTron initialize\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron initialize");
     return 0;
 }
 
 void SkipLayerNormInterleavedPluginHFace::terminate() noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginHFace terminate\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace terminate");
 }
 
 void SkipLayerNormInterleavedPluginMTron::terminate() noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginMTron terminate\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron terminate");
 }
 
 size_t SkipLayerNormInterleavedPluginBase::getSerializationSize() const noexcept
@@ -368,13 +368,13 @@ void SkipLayerNormInterleavedPluginBase::destroy() noexcept
 
 void SkipLayerNormInterleavedPluginHFace::destroy() noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginHFace destroy\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace destroy");
     SkipLayerNormInterleavedPluginBase::destroy();
 }
 
 void SkipLayerNormInterleavedPluginMTron::destroy() noexcept
 {
-    gLogVerbose << "SkipLayerNormInterleavedPluginMTron destroy\n";
+    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron destroy");
     SkipLayerNormInterleavedPluginBase::destroy();
 }
 
@@ -434,7 +434,7 @@ void buildBetaAndGamma(const PluginFieldCollection* fc, Weights& beta, Weights& 
 
         if (field_name.compare("beta") == 0)
         {
-            gLogVerbose << "Building beta...\n";
+            BERT_DEBUG_MSG("Building beta...");
             beta.values = fc->fields[i].data;
             beta.count = fc->fields[i].length;
             beta.type = fieldTypeToDataType(fc->fields[i].type);
@@ -442,7 +442,7 @@ void buildBetaAndGamma(const PluginFieldCollection* fc, Weights& beta, Weights& 
 
         if (field_name.compare("gamma") == 0)
         {
-            gLogVerbose << "Building gamma...\n";
+            BERT_DEBUG_MSG("Building gamma...");
             gamma.values = fc->fields[i].data;
             gamma.count = fc->fields[i].length;
             gamma.type = fieldTypeToDataType(fc->fields[i].type);
@@ -465,7 +465,7 @@ IPluginV2* SkipLayerNormInterleavedPluginHFaceCreator::createPlugin(
 {
     try
     {
-        gLogVerbose << "SkipLayerNormInterleavedPluginHFaceCreator createPlugin\n";
+        BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFaceCreator createPlugin");
 
         Weights beta{DataType::kFLOAT, nullptr, 0};
         Weights gamma{DataType::kFLOAT, nullptr, 0};
@@ -485,7 +485,7 @@ IPluginV2* SkipLayerNormInterleavedPluginMTronCreator::createPlugin(
 {
     try
     {
-        gLogVerbose << "SkipLayerNormInterleavedPluginMTronCreator createPlugin\n";
+        BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTronCreator createPlugin");
 
         Weights beta{DataType::kFLOAT, nullptr, 0};
         Weights gamma{DataType::kFLOAT, nullptr, 0};
@@ -507,7 +507,7 @@ IPluginV2* SkipLayerNormInterleavedPluginHFaceCreator::deserializePlugin(
     // call SkipLayerNormInterleavedPlugin::destroy()
     try
     {
-        gLogVerbose << "SkipLayerNormInterleavedPluginHFaceCreator deserializePlugin\n";
+        BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFaceCreator deserializePlugin");
         return new SkipLayerNormInterleavedPluginHFace(name, serialData, serialLength);
     }
     catch (const std::exception& e)
@@ -524,7 +524,7 @@ IPluginV2* SkipLayerNormInterleavedPluginMTronCreator::deserializePlugin(
     // call SkipLayerNormInterleavedPlugin::destroy()
     try
     {
-        gLogVerbose << "SkipLayerNormInterleavedPluginMTronCreator deserializePlugin\n";
+        BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTronCreator deserializePlugin");
         return new SkipLayerNormInterleavedPluginMTron(name, serialData, serialLength);
     }
     catch (const std::exception& e)

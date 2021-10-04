@@ -2350,18 +2350,18 @@ __global__ void apply_delta_kernel(int samples, const void* anchors, const void*
             // cy, cx, h, w
             BBOX cur_anchor_cyxhw;
 
-            cur_anchor_cyxhw.y1 = (cur_anchor_yxyx.y1 + cur_anchor_yxyx.y2) / 2;
-            cur_anchor_cyxhw.x1 = (cur_anchor_yxyx.x1 + cur_anchor_yxyx.x2) / 2;
+            cur_anchor_cyxhw.y1 = (cur_anchor_yxyx.y1 + cur_anchor_yxyx.y2) / 2.f;
+            cur_anchor_cyxhw.x1 = (cur_anchor_yxyx.x1 + cur_anchor_yxyx.x2) / 2.f;
             cur_anchor_cyxhw.y2 = (cur_anchor_yxyx.y2 - cur_anchor_yxyx.y1);
             cur_anchor_cyxhw.x2 = (cur_anchor_yxyx.x2 - cur_anchor_yxyx.x1);
 
             DELTA cur_delta = delta_in[blockOffset + cur_id];
 
             // multiply std_dev
-            cur_delta.dy *= 0.1;
-            cur_delta.dx *= 0.1;
-            cur_delta.logdh *= 0.2;
-            cur_delta.logdw *= 0.2;
+            cur_delta.dy *= 0.1f;
+            cur_delta.dx *= 0.1f;
+            cur_delta.logdh *= 0.2f;
+            cur_delta.logdw *= 0.2f;
 
             // apply delta
             cur_anchor_cyxhw.y1 += cur_delta.dy * cur_anchor_cyxhw.y2;
@@ -2369,16 +2369,16 @@ __global__ void apply_delta_kernel(int samples, const void* anchors, const void*
             cur_anchor_cyxhw.y2 *= expf(cur_delta.logdh);
             cur_anchor_cyxhw.x2 *= expf(cur_delta.logdw);
 
-            cur_anchor_yxyx.y1 = cur_anchor_cyxhw.y1 - 0.5 * cur_anchor_cyxhw.y2;
-            cur_anchor_yxyx.x1 = cur_anchor_cyxhw.x1 - 0.5 * cur_anchor_cyxhw.x2;
+            cur_anchor_yxyx.y1 = cur_anchor_cyxhw.y1 - 0.5f * cur_anchor_cyxhw.y2;
+            cur_anchor_yxyx.x1 = cur_anchor_cyxhw.x1 - 0.5f * cur_anchor_cyxhw.x2;
             cur_anchor_yxyx.y2 = cur_anchor_yxyx.y1 + cur_anchor_cyxhw.y2;
             cur_anchor_yxyx.x2 = cur_anchor_yxyx.x1 + cur_anchor_cyxhw.x2;
 
             // clip bbox: a more precision clip method based on real window could be implemented
-            cur_anchor_yxyx.y1 = dMAX(dMIN(cur_anchor_yxyx.y1, 1.0), 0.0);
-            cur_anchor_yxyx.x1 = dMAX(dMIN(cur_anchor_yxyx.x1, 1.0), 0.0);
-            cur_anchor_yxyx.y2 = dMAX(dMIN(cur_anchor_yxyx.y2, 1.0), 0.0);
-            cur_anchor_yxyx.x2 = dMAX(dMIN(cur_anchor_yxyx.x2, 1.0), 0.0);
+            cur_anchor_yxyx.y1 = dMAX(dMIN(cur_anchor_yxyx.y1, 1.f), 0.f);
+            cur_anchor_yxyx.x1 = dMAX(dMIN(cur_anchor_yxyx.x1, 1.f), 0.f);
+            cur_anchor_yxyx.y2 = dMAX(dMIN(cur_anchor_yxyx.y2, 1.f), 0.f);
+            cur_anchor_yxyx.x2 = dMAX(dMIN(cur_anchor_yxyx.x2, 1.f), 0.f);
 
             bbox_out[blockOffset + cur_id].y1 = cur_anchor_yxyx.y1;
             bbox_out[blockOffset + cur_id].x1 = cur_anchor_yxyx.x1;
@@ -2805,8 +2805,6 @@ __global__ void roiAlignHalfCenter_kernel<__half, __half>(int featureCount, int 
         *dst = result;
     }
 }
-
-
 
 cudaError_t roiAlignHalfCenter(cudaStream_t stream, int batchSize, int featureCount, int roiCount, float firstThreshold,
 

@@ -16,7 +16,8 @@
 
 PYTHON_MAJOR_VERSION=${PYTHON_MAJOR_VERSION:-3}
 PYTHON_MINOR_VERSION=${PYTHON_MINOR_VERSION:-8}
-TARGET=${TARGET:-x86_64}
+TARGET=${TARGET_ARCHITECTURE:-x86_64}
+CUDA_ROOT=${CUDA_ROOT:-/usr/local/cuda}
 ROOT_PATH=${TRT_OSSPATH:-/workspace/TensorRT}
 EXT_PATH=${EXT_PATH:-/tmp/external}
 WHEEL_OUTPUT_DIR=${ROOT_PATH}/python/build
@@ -25,13 +26,12 @@ mkdir -p ${WHEEL_OUTPUT_DIR}
 pushd ${WHEEL_OUTPUT_DIR}
 
 # Generate tensorrt.so
-echo $(ls ${ROOT_PATH}/python/include)
 cmake .. -DCMAKE_BUILD_TYPE=Release \
          -DTARGET=${TARGET} \
          -DPYTHON_MAJOR_VERSION=${PYTHON_MAJOR_VERSION} \
          -DPYTHON_MINOR_VERSION=${PYTHON_MINOR_VERSION} \
          -DEXT_PATH=${EXT_PATH} \
-         -DCUDA_INCLUDE_DIRS=/usr/local/cuda/include \
+         -DCUDA_INCLUDE_DIRS=${CUDA_ROOT}/include \
          -DTENSORRT_ROOT=${ROOT_PATH} \
          -DTENSORRT_BUILD=${ROOT_PATH}/build/
 make -j12

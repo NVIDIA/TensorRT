@@ -34,6 +34,9 @@ Dependencies required for this sample
 
 ## Running the sample
 
+The data directory needs to be specified (either via `-d /path/to/data` or environment varaiable `TRT_DATA_DIR`)
+when running these scripts. An error will be thrown if not. Taking `TRT_DATA_DIR` approach in following example.
+
 * Prepare the ONNX model. (The data directory needs to be specified.)
   ```sh
   python3 prepare_model.py

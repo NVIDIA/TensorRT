@@ -30,11 +30,11 @@ namespace nmtSample
 {
 
 typedef std::vector<std::string> Segment_t;
-typedef std::map<Segment_t, int> Count_t;
-int read(std::vector<Segment_t>& samples, std::shared_ptr<std::istream> input, int samplesToRead = 1)
+typedef std::map<Segment_t, int32_t> Count_t;
+int32_t read(std::vector<Segment_t>& samples, std::shared_ptr<std::istream>& input, int32_t samplesToRead = 1)
 {
     std::string line;
-    int lineCounter = 0;
+    int32_t lineCounter = 0;
     Segment_t tokens;
     samples.resize(0);
     std::string pattern("@@ ");
@@ -67,16 +67,16 @@ int read(std::vector<Segment_t>& samples, std::shared_ptr<std::istream> input, i
     return lineCounter;
 }
 
-Count_t ngramCounts(const Segment_t& segment, int maxOrder = 4)
+Count_t ngramCounts(const Segment_t& segment, int32_t maxOrder = 4)
 {
     Count_t ngramCounts;
 
-    for (int order = 1; order < maxOrder + 1; order++)
+    for (int32_t order = 1; order < maxOrder + 1; order++)
     {
-        for (int i = 0; i < static_cast<int>(segment.size()) - order + 1; i++)
+        for (int32_t i = 0; i < static_cast<int32_t>(segment.size()) - order + 1; i++)
         {
             Segment_t ngram;
-            for (int j = i; j < i + order; j++)
+            for (int32_t j = i; j < i + order; j++)
                 ngram.emplace_back(segment[j]);
 
             auto it = ngramCounts.find(ngram);
@@ -117,7 +117,7 @@ Count_t ngramCountIntersection(const Count_t& cnt0, const Count_t& cnt1)
 }
 
 void accumulateBLEU(const std::vector<Segment_t>& referenceSamples, const std::vector<Segment_t>& outputSamples,
-    int maxOrder, size_t& referenceLength, size_t& translationLength, std::vector<size_t>& matchesByOrder,
+    int32_t maxOrder, size_t& referenceLength, size_t& translationLength, std::vector<size_t>& matchesByOrder,
     std::vector<size_t>& possibleMatchesByOrder)
 {
     ASSERT(referenceSamples.size() == outputSamples.size());
@@ -136,9 +136,9 @@ void accumulateBLEU(const std::vector<Segment_t>& referenceSamples, const std::v
         {
             matchesByOrder[ngram.first.size() - 1] += ngram.second;
         }
-        for (int order = 1; order < maxOrder + 1; order++)
+        for (int32_t order = 1; order < maxOrder + 1; order++)
         {
-            int possibleMatches = static_cast<int>(translation->size()) - order + 1;
+            int32_t possibleMatches = static_cast<int32_t>(translation->size()) - order + 1;
             if (possibleMatches > 0)
                 possibleMatchesByOrder[order - 1] += possibleMatches;
         }
@@ -148,7 +148,7 @@ void accumulateBLEU(const std::vector<Segment_t>& referenceSamples, const std::v
 }
 
 BLEUScoreWriter::BLEUScoreWriter(
-    std::shared_ptr<std::istream> referenceTextInput, Vocabulary::ptr vocabulary, int maxOrder)
+    std::shared_ptr<std::istream>& referenceTextInput, Vocabulary::ptr& vocabulary, int32_t maxOrder)
     : mReferenceInput(referenceTextInput)
     , mVocabulary(vocabulary)
     , mReferenceLength(0)
@@ -160,11 +160,12 @@ BLEUScoreWriter::BLEUScoreWriter(
 {
 }
 
-void BLEUScoreWriter::write(const int* hOutputData, int actualOutputSequenceLength, int actualInputSequenceLength)
+void BLEUScoreWriter::write(
+    const int32_t* hOutputData, int32_t actualOutputSequenceLength, int32_t actualInputSequenceLength)
 {
     std::vector<Segment_t> outputSamples;
     std::vector<Segment_t> referenceSamples;
-    int numReferenceSamples = read(referenceSamples, mReferenceInput, 1);
+    int32_t numReferenceSamples = read(referenceSamples, mReferenceInput, 1);
     ASSERT(numReferenceSamples == 1);
 
     Segment_t segment;
@@ -190,7 +191,7 @@ void BLEUScoreWriter::finalize()
 float BLEUScoreWriter::getScore() const
 {
     std::vector<double> precisions(mMaxOrder, 0.0);
-    for (int i = 0; i < mMaxOrder; i++)
+    for (int32_t i = 0; i < mMaxOrder; i++)
     {
         if (mSmooth)
         {
@@ -199,21 +200,29 @@ float BLEUScoreWriter::getScore() const
         else
         {
             if (mPossibleMatchesByOrder[i] > 0)
+            {
                 precisions[i] = (static_cast<double>(mMatchesByOrder[i]) / mPossibleMatchesByOrder[i]);
+            }
             else
+            {
                 precisions[i] = 0.0;
+            }
         }
     }
-    double pLogSum, geoMean;
+    double geoMean;
     if (*std::min_element(precisions.begin(), precisions.end()) > 0.0)
     {
-        pLogSum = 0.0;
+        double pLogSum = 0.0;
         for (auto p : precisions)
+        {
             pLogSum += (1. / mMaxOrder) * log(p);
+        }
         geoMean = exp(pLogSum);
     }
     else
+    {
         geoMean = 0.0;
+    }
 
     double ratio = static_cast<double>(mTranslationLength) / mReferenceLength;
     double bp;

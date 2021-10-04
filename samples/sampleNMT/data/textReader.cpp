@@ -23,23 +23,24 @@
 
 namespace nmtSample
 {
-TextReader::TextReader(std::shared_ptr<std::istream> textInput, Vocabulary::ptr vocabulary)
+TextReader::TextReader(std::shared_ptr<std::istream>& textInput, Vocabulary::ptr& vocabulary)
     : mInput(textInput)
     , mVocabulary(vocabulary)
 {
 }
 
-int TextReader::read(int samplesToRead, int maxInputSequenceLength, int* hInputData, int* hActualInputSequenceLengths)
+int32_t TextReader::read(
+    int32_t samplesToRead, int32_t maxInputSequenceLength, int32_t* hInputData, int32_t* hActualInputSequenceLengths)
 {
     std::setlocale(LC_ALL, "en_US.UTF-8");
     std::string line;
 
-    int lineCounter = 0;
+    int32_t lineCounter = 0;
     while (lineCounter < samplesToRead && std::getline(*mInput, line))
     {
         std::istringstream ss(line);
         std::string token;
-        int tokenCounter = 0;
+        int32_t tokenCounter = 0;
         while ((ss >> token) && (tokenCounter < maxInputSequenceLength))
         {
             hInputData[maxInputSequenceLength * lineCounter + tokenCounter] = mVocabulary->getId(token);

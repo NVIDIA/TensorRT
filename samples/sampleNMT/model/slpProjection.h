@@ -22,7 +22,7 @@
 
 #include "componentWeights.h"
 
-extern int gPadMultiple;
+extern int32_t gPadMultiple;
 
 namespace nmtSample
 {
@@ -36,12 +36,12 @@ namespace nmtSample
 class SLPProjection : public Projection
 {
 public:
-    SLPProjection(ComponentWeights::ptr weights);
+    explicit SLPProjection(ComponentWeights::ptr& weights);
 
     void addToModel(
         nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* input, nvinfer1::ITensor** outputLogits) override;
 
-    int getOutputSize() override;
+    int32_t getOutputSize() override;
 
     std::string getInfo() override;
 
@@ -50,8 +50,8 @@ public:
 protected:
     ComponentWeights::ptr mWeights;
     nvinfer1::Weights mKernelWeights;
-    int mInputChannelCount;
-    int mOutputChannelCount;
+    int32_t mInputChannelCount;
+    int32_t mOutputChannelCount;
     std::vector<float> mResizedKernelWeights;
 };
 } // namespace nmtSample

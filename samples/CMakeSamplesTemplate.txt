@@ -70,7 +70,7 @@ if(BUILD_PLUGINS OR BUILD_PARSERS)
 endif()
 
 set(ONNX_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/parsers/onnx CACHE STRING "ONNX include directory")
-
+message(ONNX_INCLUDE_DIR)
 target_include_directories(${TARGET_NAME}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
     PUBLIC ${ONNX_INCLUDE_DIR}

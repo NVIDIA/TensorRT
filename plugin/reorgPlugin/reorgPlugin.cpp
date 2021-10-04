@@ -180,6 +180,7 @@ IPluginV2Ext* Reorg::clone() const noexcept
 
 ReorgPluginCreator::ReorgPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("stride", nullptr, PluginFieldType::kINT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();

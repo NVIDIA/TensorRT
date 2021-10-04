@@ -103,23 +103,18 @@ private:
     int32_t mNchan;
     std::vector<float> mHostScale;
     std::vector<float> mHostBias;
-    float* mDeviceScale;
-    float* mDeviceBias;
-    size_t mDeviceBytes;
-    cudnnHandle_t mCudnnHandle;
-    cudnnTensorDescriptor_t mXDescriptor;
-    cudnnTensorDescriptor_t mYDescriptor;
-    cudnnTensorDescriptor_t mBDescriptor;
+    float* mDeviceScale{nullptr};
+    float* mDeviceBias{nullptr};
+    cudnnHandle_t mCudnnHandle{nullptr};
+    cudnnTensorDescriptor_t mXDescriptor{nullptr};
+    cudnnTensorDescriptor_t mYDescriptor{nullptr};
+    cudnnTensorDescriptor_t mBDescriptor{nullptr};
     std::string mPluginNamespace;
     std::string mNamespace;
     bool mInitialized{false};
 
     // NDHWC implementation
-    InstanceNormFwdParams mParams;
     InstanceNormFwdContext mContext;
-
-    float mInputScale;
-    float mOutputScale;
 };
 
 class InstanceNormalizationPluginCreator : public BaseCreator
@@ -143,7 +138,6 @@ public:
 private:
     static PluginFieldCollection mFC;
     static std::vector<PluginField> mPluginAttributes;
-    std::string mNamespace;
 };
 } // namespace plugin
 } // namespace nvinfer1

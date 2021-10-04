@@ -45,7 +45,7 @@ returns the dimensions of the output.
 ```
     Dims UffPoolPluginV2::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
     {
-        assert(index == 0 && nbInputDims == 1 && inputs[0].nbDims == 3);
+        ASSERT(index == 0 && nbInputDims == 1 && inputs[0].nbDims == 3);
         int height = (inputs[0].d[1] + mPoolingParams.pH * 2 - mPoolingParams.mR) / mPoolingParams.mU + 1;
         int width = (inputs[0].d[2] + mPoolingParams.pW * 2 - mPoolingParams.mS) / mPoolingParams.mV + 1;
         DimsHW outDims(height, width);
@@ -235,7 +235,7 @@ by calling this method when the engine is destroyed.
     ```bash
     export TRT_DATADIR=/usr/src/tensorrt/data
     pushd $TRT_DATADIR/mnist
-    pip install Pillow
+    pip3 install Pillow
     python3 download_pgms.py
     popd
     ```
@@ -246,14 +246,14 @@ by calling this method when the engine is destroyed.
 
 2. Run inference on the digit looping from 0 to 9:
 
-```bash
-    sample_uff_plugin_v2_ext --datadir=<path/to/data>
-```
+    ```bash
+    ./sample_uff_plugin_v2_ext --datadir=<path/to/data>
+    ```
 
     For example:
-```bash
-    sample_uff_plugin_v2_ext --datadir=$TRT_DATADIR/mnist --fp16
-```
+    ```bash
+    ./sample_uff_plugin_v2_ext --datadir=$TRT_DATADIR/mnist --fp16
+    ```
 
 3. Verify that all the 10 digits match properly. If the sample runs successfully you should see output similar to the
 following.

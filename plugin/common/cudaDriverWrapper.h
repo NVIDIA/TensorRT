@@ -35,6 +35,10 @@ public:
 
     ~CUDADriverWrapper();
 
+    // Delete default copy constructor and copy assignment constructor
+    CUDADriverWrapper(const CUDADriverWrapper&) = delete;
+    CUDADriverWrapper& operator=(const CUDADriverWrapper&) = delete;
+
     CUresult cuGetErrorName(CUresult error, const char** pStr) const;
 
     CUresult cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attrib, int value) const;

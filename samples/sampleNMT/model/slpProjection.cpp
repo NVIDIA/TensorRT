@@ -20,7 +20,7 @@
 
 namespace nmtSample
 {
-SLPProjection::SLPProjection(ComponentWeights::ptr weights)
+SLPProjection::SLPProjection(ComponentWeights::ptr& weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
@@ -53,7 +53,7 @@ void SLPProjection::addToModel(
     ASSERT(*outputLogits != nullptr);
 }
 
-int SLPProjection::getOutputSize()
+int32_t SLPProjection::getOutputSize()
 {
     return mOutputChannelCount;
 }

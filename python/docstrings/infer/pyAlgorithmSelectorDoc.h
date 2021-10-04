@@ -61,7 +61,6 @@ constexpr const char* descr = R"trtdoc(
 
 constexpr const char* get_shape = R"trtdoc(
     Get the minimum / optimum / maximum dimensions for a dynamic input tensor.
-    choices --> (min, max, opt)
 
     :arg index: Index of the input or output of the algorithm. Incremental numbers assigned to indices of inputs and the outputs.
 
@@ -96,6 +95,14 @@ constexpr const char* descr = R"trtdoc(
     builder.
     note A layer in context of algorithm selection may be different from ILayer in INetworkDefiniton.
     For example, an algorithm might be implementing a conglomeration of multiple ILayers in INetworkDefinition.
+
+    To implement a custom algorithm selector, ensure that you explicitly instantiate the base class in :func:`__init__` :
+    ::
+
+        class MyAlgoSelector(trt.IAlgorithmSelector):
+            def __init__(self):
+                trt.IAlgorithmSelector.__init__(self)
+
 )trtdoc";
 
 constexpr const char* select_algorithms = R"trtdoc(
@@ -105,7 +112,7 @@ constexpr const char* select_algorithms = R"trtdoc(
     If the returned list is empty, TRT’s default algorithm selection is used unless strict type constraints are set.
     The list of choices is valid only for this specific algorithm context.
 
-    A possible implementation may look like this:
+    For example, the simplest implementation looks like this:
     ::
 
         def select_algorithms(self, context, choices):
@@ -125,7 +132,7 @@ constexpr const char* report_algorithms = R"trtdoc(
     Note: For a given optimization profile, this call comes after all calls to select_algorithms.
     choices[i] is the choice that TensorRT made for algoContexts[i], for i in [0, num_algorithms-1]
 
-    A possible implementation may look like this:
+    For example, a possible implementation may look like this:
     ::
 
         def report_algorithms(self, contexts, choices):

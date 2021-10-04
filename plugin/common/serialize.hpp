@@ -43,7 +43,7 @@ template <typename T>
 struct Serializer<T,
     typename std::enable_if<std::is_arithmetic<T>::value || std::is_enum<T>::value || std::is_pod<T>::value>::type>
 {
-    static size_t serialized_size(T const& value)
+    static size_t serialized_size(T const&)
     {
         return sizeof(T);
     }

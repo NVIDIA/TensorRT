@@ -441,7 +441,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
                 // 1. Scale Image to range [0.f, 1.0f]
                 // 2. Normalize Image using per channel Mean and per channel Standard Deviation
                 // 3. Shuffle HWC to CHW form
-                hostInputBuffer[dstIdx] = (2.0 / 255.0) * static_cast<const float>(fileData[srcIdx]) - 1.0;
+                hostInputBuffer[dstIdx] = (2.0 / 255.0) * static_cast<float>(fileData[srcIdx]) - 1.0;
             }
         }
     }

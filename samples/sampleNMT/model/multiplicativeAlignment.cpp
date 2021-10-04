@@ -20,7 +20,7 @@
 
 namespace nmtSample
 {
-MultiplicativeAlignment::MultiplicativeAlignment(ComponentWeights::ptr weights)
+MultiplicativeAlignment::MultiplicativeAlignment(ComponentWeights::ptr& weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
@@ -62,12 +62,12 @@ void MultiplicativeAlignment::addAttentionKeys(
     ASSERT(*attentionKeys != nullptr);
 }
 
-int MultiplicativeAlignment::getSourceStatesSize()
+int32_t MultiplicativeAlignment::getSourceStatesSize()
 {
     return mInputChannelCount;
 }
 
-int MultiplicativeAlignment::getAttentionKeySize()
+int32_t MultiplicativeAlignment::getAttentionKeySize()
 {
     return mOutputChannelCount;
 }

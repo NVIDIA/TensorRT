@@ -40,7 +40,7 @@ public:
     {
         py::gil_scoped_acquire gil{};
 
-        py::function pyGetBatch = utils::getOverload(static_cast<Derived*>(this), "get_batch");
+        py::function pyGetBatch = utils::getOverride(static_cast<Derived*>(this), "get_batch");
         std::vector<const char*> namesVec(names, names + nbBindings);
         py::object result = pyGetBatch(namesVec);
         // Copy over into the other data structure.
@@ -56,11 +56,18 @@ public:
     {
         py::gil_scoped_acquire gil{};
 
-        py::function pyReadCalibrationCache = utils::getOverload(static_cast<Derived*>(this), "read_calibration_cache");
-        py::buffer cache = pyReadCalibrationCache();
-        if (!cache.is_none())
+        py::function pyReadCalibrationCache = utils::getOverride(static_cast<Derived*>(this), "read_calibration_cache");
+
+        // Cannot cast `None` to py::buffer.
+        auto cacheRaw = pyReadCalibrationCache();
+        if (cacheRaw.is_none())
         {
-            py::buffer_info info = cache.request();
+            return nullptr;
+        }
+
+        mCache = py::buffer{cacheRaw};
+        {
+            py::buffer_info info = mCache.request();
             length = info.size * info.itemsize;
             return info.ptr;
         }
@@ -72,7 +79,7 @@ public:
         py::gil_scoped_acquire gil{};
 
         py::function pyWriteCalibrationCache
-            = utils::getOverload(static_cast<Derived*>(this), "write_calibration_cache");
+            = utils::getOverride(static_cast<Derived*>(this), "write_calibration_cache");
 
 #if PYBIND11_VERSION_MAJOR < 2 || PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR < 6
         py::buffer_info info{
@@ -90,6 +97,9 @@ public:
 #endif
         pyWriteCalibrationCache(cache);
     }
+
+private:
+    py::buffer mCache{};
 };
 
 class pyIInt8Calibrator : public pyCalibratorTrampoline<IInt8Calibrator>

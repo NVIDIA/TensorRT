@@ -32,6 +32,7 @@ namespace nvinfer1
 class IExecutionContext; //!< Forward declaration of IExecutionContext for use by other interfaces.
 class ICudaEngine;       //!< Forward declaration of ICudaEngine for use by other interfaces.
 class IPluginFactory;    //!< Forward declaration of IPluginFactory for use by other interfaces.
+class IEngineInspector;  //!< Forward declaration of IEngineInspector for use by other interfaces.
 
 //!
 //! \class INoCopy
@@ -115,6 +116,8 @@ struct EnumMaxImpl<EngineCapability>
 //!
 //! The weights are held by reference until the engine has been built. Therefore the data referenced
 //! by \p values field should be preserved until the build is complete.
+//!
+//! The term "empty weights" refers to Weights with weight coefficients ( \p count == 0 and \p values == nullptr).
 //!
 class Weights
 {
@@ -732,14 +735,26 @@ public:
     //!
     //! \brief Deserialize an engine from a stream.
     //!
+    //! If an error recorder has been set for the runtime, it will also be passed to the engine.
+    //!
     //! \param blob The memory that holds the serialized engine.
     //! \param size The size of the memory.
     //!
     //! \return The engine, or nullptr if it could not be deserialized.
     //!
-    nvinfer1::ICudaEngine* deserializeCudaEngine(const void* blob, std::size_t size) noexcept
+    ICudaEngine* deserializeCudaEngine(const void* blob, std::size_t size) noexcept
     {
         return mImpl->deserializeCudaEngine(blob, size, nullptr);
+    }
+
+    //!
+    //! \brief get the logger with which the runtime was created
+    //!
+    //! \return the logger
+    //!
+    ILogger* getLogger() const noexcept
+    {
+        return mImpl->getLogger();
     }
 
 protected:
@@ -981,6 +996,16 @@ public:
         return mImpl->getAllWeights(size, weightsNames);
     }
 
+    //!
+    //! \brief get the logger with which the refitter was created
+    //!
+    //! \return the logger
+    //!
+    ILogger* getLogger() const noexcept
+    {
+        return mImpl->getLogger();
+    }
+
 protected:
     apiv::VRefitter* mImpl;
 };
@@ -1214,6 +1239,31 @@ constexpr inline int32_t EnumMax<TacticSource>() noexcept
 //! \see IBuilderConfig::setTacticSources(), IBuilderConfig::getTacticSources()
 //!
 using TacticSources = uint32_t;
+
+//!
+//! \enum ProfilingVerbosity
+//!
+//! \brief List of verbosity levels of layer information exposed in NVTX annotations and in IEngineInspector.
+//!
+//! \see IBuilderConfig::setProfilingVerbosity(),
+//!      IBuilderConfig::getProfilingVerbosity(),
+//!      IEngineInspector
+//!
+enum class ProfilingVerbosity : int32_t
+{
+    kLAYER_NAMES_ONLY = 0, //!< Print only the layer names. This is the default setting.
+    kNONE = 1,             //!< Do not print any layer information.
+    kDETAILED = 2,         //!< Print detailed layer information including layer names and layer parameters.
+    kDEFAULT TRT_DEPRECATED_ENUM = kLAYER_NAMES_ONLY,
+    kVERBOSE TRT_DEPRECATED_ENUM = kDETAILED
+};
+
+//! Maximum number of profile verbosity levels in ProfilingVerbosity enum. \see ProfilingVerbosity
+template <>
+constexpr inline int32_t EnumMax<ProfilingVerbosity>() noexcept
+{
+    return 3;
+}
 
 //!
 //! \class ICudaEngine
@@ -1524,7 +1574,7 @@ public:
     //!
     //! \see INetworkDefinition::setName(), INetworkDefinition::getName()
     //!
-    //! \return A zero delimited C-style string representing the name of the network.
+    //! \return A null-terminated C-style string representing the name of the network.
     //!
     const char* getName() const noexcept
     {
@@ -1722,6 +1772,27 @@ public:
         return mImpl->getTacticSources();
     }
 
+    //! \brief Return the \ref ProfilingVerbosity the builder config was set to when the engine was built.
+    //!
+    //! \return the profiling verbosity the builder config was set to when the engine was built.
+    //!
+    //! \see IBuilderConfig::setProfilingVerbosity()
+    //!
+    ProfilingVerbosity getProfilingVerbosity() const noexcept
+    {
+        return mImpl->getProfilingVerbosity();
+    }
+
+    //!
+    //! \brief Create a new engine inspector which prints the layer information in an engine or an execution context.
+    //!
+    //! \see IEngineInspector.
+    //!
+    IEngineInspector* createEngineInspector() const noexcept
+    {
+        return mImpl->createEngineInspector();
+    }
+
 protected:
     apiv::VCudaEngine* mImpl;
 };
@@ -1890,8 +1961,6 @@ public:
     //!
     //! \see ICudaEngine::getDeviceMemorySize() ICudaEngine::createExecutionContextWithoutDeviceMemory()
     //!
-
-    TRT_DEPRECATED
     void setDeviceMemory(void* memory) noexcept
     {
         mImpl->setDeviceMemory(memory);
@@ -2248,9 +2317,221 @@ public:
         return mImpl->setOptimizationProfileAsync(profileIndex, stream);
     }
 
+    //!
+    //! \brief Set whether enqueue emits layer timing to the profiler
+    //!
+    //! If set to true (default), enqueue is synchronous and does layer timing profiling implicitly if
+    //! there is a profiler attached.
+    //! If set to false, enqueue will be asynchronous if there is a profiler attached. An extra method
+    //! reportToProfiler() needs to be called to obtain the profiling data and report to the profiler attached.
+    //!
+    //! \see IExecutionContext::getEnqueueEmitsProfile()
+    //! \see IExecutionContext::reportToProfiler()
+    void setEnqueueEmitsProfile(bool enqueueEmitsProfile) noexcept
+    {
+        mImpl->setEnqueueEmitsProfile(enqueueEmitsProfile);
+    }
+
+    //!
+    //! \brief Get the enqueueEmitsProfile state.
+    //!
+    //! \return The enqueueEmitsProfile state.
+    //!
+    //! \see IExecutionContext::setEnqueueEmitsProfile()
+    bool getEnqueueEmitsProfile() const noexcept
+    {
+        return mImpl->getEnqueueEmitsProfile();
+    }
+
+    //!
+    //! \brief Calculate layer timing info for the current optimization profile in IExecutionContext
+    //! and update the profiler after one iteration of inference launch.
+    //!
+    //! If IExecutionContext::getEnqueueEmitsProfile() returns true, the enqueue function will calculate layer timing
+    //! implicitly if a profiler is provided. There is no need to call this function.
+    //!
+    //! If IExecutionContext::getEnqueueEmitsProfile() returns false, the enqueue function will record the CUDA event
+    //! timers if a profiler is provided. But it will not perform the layer timing calculation.
+    //! IExecutionContext::reportToProfiler() needs to be called explicitly to calculate layer timing for the previous
+    //! inference launch.
+    //!
+    //! In the CUDA graph launch scenario, it will record the same set of CUDA events
+    //! as in regular enqueue functions if the graph is captured from an IExecutionContext with profiler enabled.
+    //! This function needs to be called after graph launch to report the layer timing info to the profiler.
+    //!
+    //! \warning profiling CUDA graphs is only available from CUDA 11.1 onwards.
+    //!
+    //! \return true if the call succeeded, else false (e.g. profiler not provided, in CUDA graph capture mode, etc.)
+    //!
+    //! \see IExecutionContext::setEnqueueEmitsProfile()
+    //! \see IExecutionContext::getEnqueueEmitsProfile()
+    bool reportToProfiler() const noexcept
+    {
+        return mImpl->reportToProfiler();
+    }
+
 protected:
     apiv::VExecutionContext* mImpl;
 }; // class IExecutionContext
+
+//!
+//! \enum LayerInformationFormat
+//!
+//! \brief The format in which the IEngineInspector prints the layer information.
+//!
+//! \see IEngineInspector::getLayerInformation(), IEngineInspector::getEngineInformation()
+//!
+enum class LayerInformationFormat : int32_t
+{
+    kONELINE = 0, //!< Print layer information in one line per layer.
+    kJSON = 1,    //!< Print layer information in JSON format.
+};
+
+//! Maximum number of layer information formats in LayerInformationFormat enum.
+//! \see LayerInformationFormat
+template <>
+constexpr inline int32_t EnumMax<LayerInformationFormat>() noexcept
+{
+    return 2;
+}
+
+//!
+//! \class IEngineInspector
+//!
+//! \brief An engine inspector which prints out the layer information of an engine or an execution context.
+//!
+//! The amount of printed information depends on the profiling verbosity setting of the builder config when the engine
+//! is built:
+//! - ProfilingVerbosity::kLAYER_NAMES_ONLY: only layer names will be printed.
+//! - ProfilingVerbosity::kNONE: no layer information will be printed.
+//! - ProfilingVerbosity::kDETAILED: layer names and layer parameters will be printed.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+//! \see ProfilingVerbosity, IEngineInspector
+//!
+class IEngineInspector : public INoCopy
+{
+public:
+    virtual ~IEngineInspector() noexcept = default;
+
+    //!
+    //! \brief Set an execution context as the inspection source.
+    //!
+    //! Setting the execution context and specifying all the input shapes allows the inspector
+    //! to calculate concrete dimensions for any dynamic shapes and display their format information.
+    //! Otherwise, values dependent on input shapes will be displayed as -1 and format information
+    //! will not be shown.
+    //!
+    //! Passing nullptr will remove any association with an execution context.
+    //!
+    //! \return Whether the action succeeds.
+    //!
+    bool setExecutionContext(IExecutionContext const* context) noexcept
+    {
+        return mImpl->setExecutionContext(context);
+    }
+
+    //!
+    //! \brief Get the context currently being inspected.
+    //!
+    //! \return The pointer to the context currently being inspected.
+    //!
+    //! \see setExecutionContext()
+    //!
+    IExecutionContext const* getExecutionContext() const noexcept
+    {
+        return mImpl->getExecutionContext();
+    }
+
+    //!
+    //! \brief Get a string describing the information about a specific layer in the current engine or the execution
+    //!        context.
+    //!
+    //! \param layerIndex the index of the layer. It must lie in range [0, engine.getNbLayers()).
+    //!
+    //! \param format the format the layer information should be printed in.
+    //!
+    //! \return A null-terminated C-style string describing the information about a specific layer in the current
+    //!         engine or the execution context.
+    //!
+    //! \warning The content of the returned string may change when another execution context has
+    //!          been set, or when another getLayerInformation() or getEngineInformation() has been called.
+    //!
+    //! \warning In a multi-threaded environment, this function must be protected from other threads changing the
+    //!          inspection source. If the inspection source changes, the data that is being pointed to can change.
+    //!          Copy the string to another buffer before releasing the lock in order to guarantee consistency.
+    //!
+    //! \see LayerInformationFormat
+    //!
+    AsciiChar const* getLayerInformation(int32_t layerIndex, LayerInformationFormat format) const noexcept
+    {
+        return mImpl->getLayerInformation(layerIndex, format);
+    }
+
+    //!
+    //! \brief Get a string describing the information about all the layers in the current engine or the execution
+    //!        context.
+    //!
+    //! \param layerIndex the index of the layer. It must lie in range [0, engine.getNbLayers()).
+    //!
+    //! \param format the format the layer information should be printed in.
+    //!
+    //! \return A null-terminated C-style string describing the information about all the layers in the current
+    //!         engine or the execution context.
+    //!
+    //! \warning The content of the returned string may change when another execution context has
+    //!          been set, or when another getLayerInformation() or getEngineInformation() has been called.
+    //!
+    //! \warning In a multi-threaded environment, this function must be protected from other threads changing the
+    //!          inspection source. If the inspection source changes, the data that is being pointed to can change.
+    //!          Copy the string to another buffer before releasing the lock in order to guarantee consistency.
+    //!
+    //! \see LayerInformationFormat
+    //!
+    AsciiChar const* getEngineInformation(LayerInformationFormat format) const noexcept
+    {
+        return mImpl->getEngineInformation(format);
+    }
+
+    //!
+    //! \brief Set the ErrorRecorder for this interface
+    //!
+    //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
+    //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
+    //! a recorder has been registered.
+    //!
+    //! If an error recorder is not set, messages will be sent to the global log stream.
+    //!
+    //! \param recorder The error recorder to register with this interface.
+    //
+    //! \see getErrorRecorder()
+    //!
+    void setErrorRecorder(IErrorRecorder* recorder) noexcept
+    {
+        mImpl->setErrorRecorder(recorder);
+    }
+
+    //!
+    //! \brief Get the ErrorRecorder assigned to this interface.
+    //!
+    //! Retrieves the assigned error recorder object for the given class. A nullptr will be returned if
+    //! an error handler has not been set.
+    //!
+    //! \return A pointer to the IErrorRecorder object that has been registered.
+    //!
+    //! \see setErrorRecorder()
+    //!
+    IErrorRecorder* getErrorRecorder() const noexcept
+    {
+        return mImpl->getErrorRecorder();
+    }
+
+protected:
+    apiv::VEngineInspector* mImpl;
+}; // class IEngineInspector
+
 } // namespace nvinfer1
 
 //!
@@ -2272,6 +2553,8 @@ extern "C" TENSORRTAPI nvinfer1::IPluginRegistry* getPluginRegistry() noexcept;
 
 //!
 //! \brief Return the logger object.
+//! \note the global logger is used only by standalone functions which have no associated builder, runtime
+//! or refitter.
 //!
 extern "C" TENSORRTAPI nvinfer1::ILogger* getLogger() noexcept;
 
@@ -2283,7 +2566,7 @@ namespace // unnamed namespace avoids linkage surprises when linking objects bui
 //!
 //! \brief Create an instance of an IRuntime class.
 //!
-//! This class is the logging class for the runtime.
+//! \param logger The logging class for the runtime.
 //!
 inline IRuntime* createInferRuntime(ILogger& logger) noexcept
 {
@@ -2293,7 +2576,7 @@ inline IRuntime* createInferRuntime(ILogger& logger) noexcept
 //!
 //! \brief Create an instance of an IRefitter class.
 //!
-//! This is the logging class for the refitter.
+//! \param logger The logging class for the refitter.
 //!
 inline IRefitter* createInferRefitter(ICudaEngine& engine, ILogger& logger) noexcept
 {

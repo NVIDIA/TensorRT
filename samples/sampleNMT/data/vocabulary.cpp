@@ -28,6 +28,9 @@ const std::string Vocabulary::mUnkStr = "<unk>";
 
 Vocabulary::Vocabulary()
     : mNumTokens(0)
+    , mSosId(0)
+    , mEosId(0)
+    , mUnkId(0)
 {
 }
 
@@ -39,7 +42,7 @@ void Vocabulary::add(const std::string& token)
     mNumTokens++;
 }
 
-int Vocabulary::getId(const std::string& token) const
+int32_t Vocabulary::getId(const std::string& token) const
 {
     auto it = mTokenToId.find(token);
     if (it != mTokenToId.end())
@@ -47,22 +50,22 @@ int Vocabulary::getId(const std::string& token) const
     return mUnkId;
 }
 
-std::string Vocabulary::getToken(int id) const
+std::string Vocabulary::getToken(int32_t id) const
 {
     ASSERT(id < mNumTokens);
     return mIdToToken[id];
 }
 
-int Vocabulary::getSize() const
+int32_t Vocabulary::getSize() const
 {
     return mNumTokens;
 }
 
+// cppcheck-suppress unusedFunction
 std::istream& operator>>(std::istream& input, Vocabulary& value)
 {
     // stream should contain "<s>", "</s>" and "<unk>" tokens
     std::setlocale(LC_ALL, "en_US.UTF-8");
-    std::string line;
     std::string word;
     while (input >> word)
     {
@@ -90,12 +93,12 @@ std::istream& operator>>(std::istream& input, Vocabulary& value)
     return input;
 }
 
-int Vocabulary::getStartSequenceId()
+int32_t Vocabulary::getStartSequenceId()
 {
     return mSosId;
 }
 
-int Vocabulary::getEndSequenceId()
+int32_t Vocabulary::getEndSequenceId()
 {
     return mEosId;
 }

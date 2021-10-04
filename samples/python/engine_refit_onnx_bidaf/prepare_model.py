@@ -73,6 +73,7 @@ def save_weights_for_refitting(graph):
     # Save weights for refitting
     tmap = graph.tensors()
     np.save("Parameter576_B_0.npy", tmap["Parameter576_B_0"].values)
+    np.save("W_0.npy", tmap["W_0"].values)
 
 
 def main():

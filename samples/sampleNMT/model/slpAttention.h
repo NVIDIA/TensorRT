@@ -34,20 +34,20 @@ namespace nmtSample
 class SLPAttention : public Attention
 {
 public:
-    SLPAttention(ComponentWeights::ptr weights);
+    explicit SLPAttention(ComponentWeights::ptr& weights);
 
     void addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* inputFromDecoder,
         nvinfer1::ITensor* context, nvinfer1::ITensor** attentionOutput) override;
 
-    int getAttentionSize() override;
+    int32_t getAttentionSize() override;
 
     std::string getInfo() override;
 
 protected:
     ComponentWeights::ptr mWeights;
     nvinfer1::Weights mKernelWeights;
-    int mInputChannelCount;
-    int mOutputChannelCount;
+    int32_t mInputChannelCount;
+    int32_t mOutputChannelCount;
 };
 } // namespace nmtSample
 

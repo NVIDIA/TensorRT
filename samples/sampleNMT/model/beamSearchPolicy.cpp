@@ -27,14 +27,16 @@
 namespace nmtSample
 {
 BeamSearchPolicy::BeamSearchPolicy(
-    int endSequenceId, LikelihoodCombinationOperator::ptr likelihoodCombinationOperator, int beamWidth)
+    int32_t endSequenceId, LikelihoodCombinationOperator::ptr& likelihoodCombinationOperator, int32_t beamWidth)
     : mEndSequenceId(endSequenceId)
     , mLikelihoodCombinationOperator(likelihoodCombinationOperator)
     , mBeamWidth(beamWidth)
+    , mSampleCount(0)
+    , mTimestepId(0)
 {
 }
 
-void BeamSearchPolicy::initialize(int sampleCount, int* maxOutputSequenceLengths)
+void BeamSearchPolicy::initialize(int32_t sampleCount, int32_t* maxOutputSequenceLengths)
 {
     mSampleCount = sampleCount;
     mMaxOutputSequenceLengths.resize(mSampleCount);
@@ -56,20 +58,21 @@ void BeamSearchPolicy::initialize(int sampleCount, int* maxOutputSequenceLengths
         mLikelihoodCombinationOperator->smallerThanMinimalLikelihood());
 }
 
-void BeamSearchPolicy::processTimestep(int validSampleCount, const float* hCombinedLikelihoods,
-    const int* hVocabularyIndices, const int* hRayOptionIndices, int* hSourceRayIndices, float* hSourceLikelihoods)
+void BeamSearchPolicy::processTimestep(int32_t validSampleCount, const float* hCombinedLikelihoods,
+    const int32_t* hVocabularyIndices, const int32_t* hRayOptionIndices, int32_t* hSourceRayIndices,
+    float* hSourceLikelihoods)
 {
     ++mTimestepId;
     mBeamSearchTable.resize(mTimestepId * mSampleCount * mBeamWidth);
     auto baseBeamSearchTable = mBeamSearchTable.begin() + (mTimestepId - 1) * mSampleCount * mBeamWidth;
 
-    for (int sampleId = 0; sampleId < validSampleCount; ++sampleId)
+    for (int32_t sampleId = 0; sampleId < validSampleCount; ++sampleId)
     {
         auto currentSourceRayIndices = hSourceRayIndices + sampleId * mBeamWidth;
         auto currentLikelihoods = hSourceLikelihoods + sampleId * mBeamWidth;
         auto currentBeamSearchTable = baseBeamSearchTable + sampleId * mBeamWidth;
 
-        int rayId = 0;
+        int32_t rayId = 0;
         if (mValidSamples[sampleId])
         {
             for (; rayId < mBeamWidth; ++rayId)
@@ -80,8 +83,8 @@ void BeamSearchPolicy::processTimestep(int validSampleCount, const float* hCombi
                 if (optionCombinedLikelihood <= mCandidateLikelihoods[sampleId])
                     break; // The remaining options are even worse
 
-                int optionOriginalRayId = hRayOptionIndices[sampleId * mBeamWidth + rayId] / mBeamWidth;
-                int optionVocabularyId = hVocabularyIndices[sampleId * mBeamWidth + rayId];
+                int32_t optionOriginalRayId = hRayOptionIndices[sampleId * mBeamWidth + rayId] / mBeamWidth;
+                int32_t optionVocabularyId = hVocabularyIndices[sampleId * mBeamWidth + rayId];
 
                 if ((optionVocabularyId == mEndSequenceId) || (mTimestepId >= mMaxOutputSequenceLengths[sampleId]))
                 {
@@ -116,9 +119,9 @@ void BeamSearchPolicy::processTimestep(int validSampleCount, const float* hCombi
     }
 }
 
-int BeamSearchPolicy::getTailWithNoWorkRemaining()
+int32_t BeamSearchPolicy::getTailWithNoWorkRemaining()
 {
-    for (int sampleId = mSampleCount - 1; sampleId >= 0; --sampleId)
+    for (int32_t sampleId = mSampleCount - 1; sampleId >= 0; --sampleId)
     {
         if (mValidSamples[sampleId])
             return sampleId + 1;
@@ -127,15 +130,15 @@ int BeamSearchPolicy::getTailWithNoWorkRemaining()
 }
 
 void BeamSearchPolicy::readGeneratedResult(
-    int sampleCount, int maxOutputSequenceLength, int* hOutputData, int* hActualOutputSequenceLengths)
+    int32_t sampleCount, int32_t maxOutputSequenceLength, int32_t* hOutputData, int32_t* hActualOutputSequenceLengths)
 {
-    for (int sampleId = 0; sampleId < sampleCount; ++sampleId)
+    for (int32_t sampleId = 0; sampleId < sampleCount; ++sampleId)
     {
         if (mCandidateLikelihoods[sampleId] > mLikelihoodCombinationOperator->smallerThanMinimalLikelihood())
         {
             // We have a candidate (finished sequence)
             std::copy_n(mCandidates[sampleId].begin(),
-                std::min(static_cast<int>(mCandidates[sampleId].size()), maxOutputSequenceLength),
+                std::min(static_cast<int32_t>(mCandidates[sampleId].size()), maxOutputSequenceLength),
                 hOutputData + sampleId * maxOutputSequenceLength);
             hActualOutputSequenceLengths[sampleId] = mCandidates[sampleId].size();
         }
@@ -150,11 +153,11 @@ void BeamSearchPolicy::readGeneratedResult(
     }
 }
 
-void BeamSearchPolicy::backtrack(
-    int lastTimestepId, int sampleId, int lastTimestepRayId, int* hOutputData, int lastTimestepWriteId) const
+void BeamSearchPolicy::backtrack(int32_t lastTimestepId, int32_t sampleId, int32_t lastTimestepRayId,
+    int32_t* hOutputData, int32_t lastTimestepWriteId) const
 {
-    int rayId = lastTimestepRayId;
-    for (int timestepId = lastTimestepId; timestepId >= 0; --timestepId)
+    int32_t rayId = lastTimestepRayId;
+    for (int32_t timestepId = lastTimestepId; timestepId >= 0; --timestepId)
     {
         const auto& entry = mBeamSearchTable[(timestepId * mSampleCount + sampleId) * mBeamWidth + rayId];
         rayId = entry.backtrackId;

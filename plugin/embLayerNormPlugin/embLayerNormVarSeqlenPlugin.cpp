@@ -128,7 +128,7 @@ EmbLayerNormVarSeqlenPluginHFace::EmbLayerNormVarSeqlenPluginHFace(
     const std::string& name, const void* data, size_t length)
     : EmbLayerNormVarSeqlenPluginBase(name, data, length)
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginHFace deserialize\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace deserialize");
 }
 
 EmbLayerNormVarSeqlenPluginMTron::EmbLayerNormVarSeqlenPluginMTron(const std::string& name, const DataType type,
@@ -141,13 +141,13 @@ EmbLayerNormVarSeqlenPluginMTron::EmbLayerNormVarSeqlenPluginMTron(
     const std::string& name, const void* data, size_t length)
     : EmbLayerNormVarSeqlenPluginBase(name, data, length)
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginMTron deserialize\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron deserialize");
 }
 
 // IPluginV2DynamicExt Methods
 IPluginV2DynamicExt* EmbLayerNormVarSeqlenPluginHFace::clone() const noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginHFace clone\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace clone");
 
     auto p = new EmbLayerNormVarSeqlenPluginHFace(mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
     p->setPluginNamespace(mNamespace.c_str());
@@ -157,7 +157,7 @@ IPluginV2DynamicExt* EmbLayerNormVarSeqlenPluginHFace::clone() const noexcept
 
 IPluginV2DynamicExt* EmbLayerNormVarSeqlenPluginMTron::clone() const noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginMTron clone\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron clone");
 
     auto p = new EmbLayerNormVarSeqlenPluginMTron(mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
     p->setPluginNamespace(mNamespace.c_str());
@@ -298,7 +298,7 @@ void checkConfigurationInputs(const DynamicPluginTensorDesc* inputs, int32_t nbI
 void EmbLayerNormVarSeqlenPluginHFace::configurePlugin(const DynamicPluginTensorDesc* inputs, int32_t nbInputs,
     const DynamicPluginTensorDesc* outputs, int32_t nbOutputs) noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginHFace configurePlugin\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace configurePlugin");
     checkConfigurationInputs(inputs, nbInputs, outputs, nbOutputs);
     ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[1]) == static_cast<size_t>(mLd));
 
@@ -320,7 +320,7 @@ void EmbLayerNormVarSeqlenPluginHFace::configurePlugin(const DynamicPluginTensor
 void EmbLayerNormVarSeqlenPluginMTron::configurePlugin(const DynamicPluginTensorDesc* inputs, int32_t nbInputs,
     const DynamicPluginTensorDesc* outputs, int32_t nbOutputs) noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginMTron configurePlugin\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron configurePlugin");
     checkConfigurationInputs(inputs, nbInputs, outputs, nbOutputs);
     ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[1]) == static_cast<size_t>(mLd));
 
@@ -517,24 +517,24 @@ int32_t EmbLayerNormVarSeqlenPluginBase::getNbOutputs() const noexcept
 
 int32_t EmbLayerNormVarSeqlenPluginHFace::initialize() noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginHFace initialize\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace initialize");
     return 0;
 }
 
 int32_t EmbLayerNormVarSeqlenPluginMTron::initialize() noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginMTron initialize\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron initialize");
     return 0;
 }
 
 void EmbLayerNormVarSeqlenPluginHFace::terminate() noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginHFace terminate\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace terminate");
 }
 
 void EmbLayerNormVarSeqlenPluginMTron::terminate() noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginMTron terminate\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron terminate");
 }
 
 size_t EmbLayerNormVarSeqlenPluginBase::getSerializationSize() const noexcept
@@ -583,13 +583,13 @@ void EmbLayerNormVarSeqlenPluginBase::destroy() noexcept
 
 void EmbLayerNormVarSeqlenPluginHFace::destroy() noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginHFace destroy\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace destroy");
     EmbLayerNormVarSeqlenPluginBase::destroy();
 }
 
 void EmbLayerNormVarSeqlenPluginMTron::destroy() noexcept
 {
-    gLogVerbose << "EmbLayerNormVarSeqlenPluginMTron destroy\n";
+    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron destroy");
     EmbLayerNormVarSeqlenPluginBase::destroy();
 }
 
@@ -647,7 +647,7 @@ bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights
         std::string field_name(fc->fields[i].name);
         if (field_name.compare("bert_embeddings_layernorm_beta") == 0)
         {
-            gLogVerbose << "Building bert_embeddings_layernorm_beta...\n";
+            BERT_DEBUG_MSG("Building bert_embeddings_layernorm_beta...");
             beta.values = fc->fields[i].data;
             beta.count = fc->fields[i].length;
             beta.type = fieldTypeToDataType(fc->fields[i].type);
@@ -655,7 +655,7 @@ bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights
 
         if (field_name.compare("bert_embeddings_layernorm_gamma") == 0)
         {
-            gLogVerbose << "Building bert_embeddings_layernorm_gamma...\n";
+            BERT_DEBUG_MSG("Building bert_embeddings_layernorm_gamma...");
             gamma.values = fc->fields[i].data;
             gamma.count = fc->fields[i].length;
             gamma.type = fieldTypeToDataType(fc->fields[i].type);
@@ -663,7 +663,7 @@ bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights
 
         if (field_name.compare("bert_embeddings_word_embeddings") == 0)
         {
-            gLogVerbose << "Building bert_embeddings_word_embeddings...\n";
+            BERT_DEBUG_MSG("Building bert_embeddings_word_embeddings...");
             word_emb.values = fc->fields[i].data;
             word_emb.count = fc->fields[i].length;
             word_emb.type = fieldTypeToDataType(fc->fields[i].type);
@@ -671,7 +671,7 @@ bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights
 
         if (field_name.compare("bert_embeddings_token_type_embeddings") == 0)
         {
-            gLogVerbose << "Building bert_embeddings_token_type_embeddings...\n";
+            BERT_DEBUG_MSG("Building bert_embeddings_token_type_embeddings...");
             tok_emb.values = fc->fields[i].data;
             tok_emb.count = fc->fields[i].length;
             tok_emb.type = fieldTypeToDataType(fc->fields[i].type);
@@ -679,14 +679,14 @@ bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights
 
         if (field_name.compare("bert_embeddings_position_embeddings") == 0)
         {
-            gLogVerbose << "Building bert_embeddings_position_embeddings...\n";
+            BERT_DEBUG_MSG("Building bert_embeddings_position_embeddings...");
             pos_emb.values = fc->fields[i].data;
             pos_emb.count = fc->fields[i].length;
             pos_emb.type = fieldTypeToDataType(fc->fields[i].type);
         }
         if (field_name.compare("output_fp16") == 0)
         {
-            gLogVerbose << "Building output_fp16...\n";
+            BERT_DEBUG_MSG("Building output_fp16...");
             ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
             output_fp16 = static_cast<const int32_t*>(fc->fields[i].data)[0] != 0;
         }
@@ -698,7 +698,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(const char* nam
 {
     try
     {
-        gLogVerbose << "EmbLayerNormVarSeqlenHFace createPlugin\n";
+        BERT_DEBUG_MSG("EmbLayerNormVarSeqlenHFace createPlugin");
 
         Weights beta;
         Weights gamma;
@@ -707,7 +707,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(const char* nam
         Weights tok_emb;
         bool output_fp16 = initializeFields(name, fc, beta, gamma, word_emb, pos_emb, tok_emb);
 
-        gLogVerbose << "Building the Plugin...\n";
+        BERT_DEBUG_MSG("Building the Plugin...");
         EmbLayerNormVarSeqlenPluginHFace* p = new EmbLayerNormVarSeqlenPluginHFace(
             name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, beta, gamma, word_emb, pos_emb, tok_emb);
         return p;
@@ -723,7 +723,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(const char* nam
 {
     try
     {
-        gLogVerbose << "EmbLayerNormVarSeqlenMTron createPlugin\n";
+        BERT_DEBUG_MSG("EmbLayerNormVarSeqlenMTron createPlugin");
 
         Weights beta;
         Weights gamma;
@@ -732,7 +732,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(const char* nam
         Weights tok_emb;
         bool output_fp16 = initializeFields(name, fc, beta, gamma, word_emb, pos_emb, tok_emb);
 
-        gLogVerbose << "Building the Plugin...\n";
+        BERT_DEBUG_MSG("Building the Plugin...");
         EmbLayerNormVarSeqlenPluginMTron* p = new EmbLayerNormVarSeqlenPluginMTron(
             name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, beta, gamma, word_emb, pos_emb, tok_emb);
         return p;

@@ -308,9 +308,9 @@ std::vector<nvinfer1::PluginField> CaffeParser::parseRPROIParam(const trtcaffe::
     return f;
 }
 
-const IBlobNameToTensor* CaffeParser::parseBuffers(const char* deployBuffer,
+const IBlobNameToTensor* CaffeParser::parseBuffers(const uint8_t* deployBuffer,
                                                    std::size_t deployLength,
-                                                   const char* modelBuffer,
+                                                   const uint8_t* modelBuffer,
                                                    std::size_t modelLength,
                                                    INetworkDefinition& network,
                                                    DataType weightType) noexcept

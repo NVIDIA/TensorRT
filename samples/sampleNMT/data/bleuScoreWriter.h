@@ -34,9 +34,11 @@ namespace nmtSample
 class BLEUScoreWriter : public DataWriter
 {
 public:
-    BLEUScoreWriter(std::shared_ptr<std::istream> referenceTextInput, Vocabulary::ptr vocabulary, int maxOrder = 4);
+    BLEUScoreWriter(
+        std::shared_ptr<std::istream>& referenceTextInput, Vocabulary::ptr& vocabulary, int32_t maxOrder = 4);
 
-    void write(const int* hOutputData, int actualOutputSequenceLength, int actualInputSequenceLength) override;
+    void write(
+        const int32_t* hOutputData, int32_t actualOutputSequenceLength, int32_t actualInputSequenceLength) override;
 
     void initialize() override;
 
@@ -53,7 +55,7 @@ private:
     Vocabulary::ptr mVocabulary;
     size_t mReferenceLength;
     size_t mTranslationLength;
-    int mMaxOrder;
+    int32_t mMaxOrder;
     bool mSmooth;
     std::vector<size_t> mMatchesByOrder;
     std::vector<size_t> mPossibleMatchesByOrder;

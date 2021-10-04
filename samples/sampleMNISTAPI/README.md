@@ -22,7 +22,7 @@ This sample, sampleMNISTAPI, uses the TensorRT API to build an engine for a mode
 
 This sample uses a Caffe model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md).
 
-In contrast to sampleMNIST, which uses the Caffe parser to import the MNIST model, this sample uses the C++ API, individually creating every layer and loading weights from a trained weights file. For a detailed description of how to create layers using the C++ API, see [Creating A Network Definition In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#network_c).
+In contrast to sampleMNIST, which uses the Caffe parser to import the MNIST model, this sample uses the C++ API, individually creating every layer and loading weights from a trained weights file. This sample also uses the explicit batch representation of TensorRT networks. For a detailed description of how to create layers using the C++ API, see [Creating A Network Definition In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#network_c).
 
 ### TensorRT API layers
 
@@ -64,7 +64,7 @@ When you build a network by individually creating every layer, ensure you provid
     In this statement, we are loading the filter weights weightsMap["conv1filter"] and bias weightsMap["conv1bias"] to the
     convolution layer.
 	```
-	IConvolutionLayer* conv1 = network->addConvolutionNd(*scale_1->getOutput(0), 20, Dims{2, {5, 5}, {}}, weightMap["conv1filter"], weightMap["conv1bias"]);
+	IConvolutionLayer* conv1 = network->addConvolutionNd(*scale_1->getOutput(0), 20, Dims{2, {5, 5}}, weightMap["conv1filter"], weightMap["conv1bias"]);
 	```
 
 ## Preparing sample data
@@ -79,13 +79,13 @@ When you build a network by individually creating every layer, ensure you provid
 1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2.  Run the sample to perform inference on the digit:
-	```bash
-	sample_mnist_api [-h] [--datadir=/path/to/data/dir/] [--useDLACore=N]
-	```
+    ```bash
+    ./sample_mnist_api [-h] [--datadir=/path/to/data/dir/] [--useDLACore=N]
+    ```
 
     For example:
     ```bash
-    sample_mnist_api --datadir $TRT_DATADIR/mnist
+    ./sample_mnist_api --datadir $TRT_DATADIR/mnist
     ```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following; ASCII rendering of the input image with digit 9:
@@ -164,6 +164,7 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+- Septemeber 2021: This sample was updated to use an explicit batch network definition.
 - March 2019: This is the first release of this `README.md` file.
 
 

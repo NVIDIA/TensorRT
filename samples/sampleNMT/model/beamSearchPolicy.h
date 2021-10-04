@@ -36,17 +36,17 @@ public:
     typedef std::shared_ptr<BeamSearchPolicy> ptr;
 
     BeamSearchPolicy(
-        int endSequenceId, LikelihoodCombinationOperator::ptr likelihoodCombinationOperator, int beamWidth);
+        int32_t endSequenceId, LikelihoodCombinationOperator::ptr& likelihoodCombinationOperator, int32_t beamWidth);
 
-    void initialize(int sampleCount, int* maxOutputSequenceLengths);
+    void initialize(int32_t sampleCount, int32_t* maxOutputSequenceLengths);
 
-    void processTimestep(int validSampleCount, const float* hCombinedLikelihoods, const int* hVocabularyIndices,
-        const int* hRayOptionIndices, int* hSourceRayIndices, float* hSourceLikelihoods);
+    void processTimestep(int32_t validSampleCount, const float* hCombinedLikelihoods, const int32_t* hVocabularyIndices,
+        const int32_t* hRayOptionIndices, int32_t* hSourceRayIndices, float* hSourceLikelihoods);
 
-    int getTailWithNoWorkRemaining();
+    int32_t getTailWithNoWorkRemaining();
 
-    void readGeneratedResult(
-        int sampleCount, int maxOutputSequenceLength, int* hOutputData, int* hActualOutputSequenceLengths);
+    void readGeneratedResult(int32_t sampleCount, int32_t maxOutputSequenceLength, int32_t* hOutputData,
+        int32_t* hActualOutputSequenceLengths);
 
     std::string getInfo() override;
 
@@ -55,25 +55,25 @@ public:
 protected:
     struct Ray
     {
-        int vocabularyId;
-        int backtrackId;
+        int32_t vocabularyId;
+        int32_t backtrackId;
     };
 
-    void backtrack(
-        int lastTimestepId, int sampleId, int lastTimestepRayId, int* hOutputData, int lastTimestepWriteId) const;
+    void backtrack(int32_t lastTimestepId, int32_t sampleId, int32_t lastTimestepRayId, int32_t* hOutputData,
+        int32_t lastTimestepWriteId) const;
 
 protected:
-    int mEndSequenceId;
+    int32_t mEndSequenceId;
     LikelihoodCombinationOperator::ptr mLikelihoodCombinationOperator;
-    int mBeamWidth;
+    int32_t mBeamWidth;
     std::vector<bool> mValidSamples;
     std::vector<float> mCurrentLikelihoods;
     std::vector<Ray> mBeamSearchTable;
-    int mSampleCount;
-    std::vector<int> mMaxOutputSequenceLengths;
-    int mTimestepId;
+    int32_t mSampleCount;
+    std::vector<int32_t> mMaxOutputSequenceLengths;
+    int32_t mTimestepId;
 
-    std::vector<std::vector<int>> mCandidates;
+    std::vector<std::vector<int32_t>> mCandidates;
     std::vector<float> mCandidateLikelihoods;
 };
 } // namespace nmtSample

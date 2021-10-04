@@ -31,7 +31,7 @@ namespace nmtSample
 class MultiplicativeAlignment : public Alignment
 {
 public:
-    MultiplicativeAlignment(ComponentWeights::ptr weights);
+    explicit MultiplicativeAlignment(ComponentWeights::ptr& weights);
 
     void addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* attentionKeys,
         nvinfer1::ITensor* queryStates, nvinfer1::ITensor** alignmentScores) override;
@@ -39,9 +39,9 @@ public:
     void addAttentionKeys(nvinfer1::INetworkDefinition* network, nvinfer1::ITensor* memoryStates,
         nvinfer1::ITensor** attentionKeys) override;
 
-    int getSourceStatesSize() override;
+    int32_t getSourceStatesSize() override;
 
-    int getAttentionKeySize() override;
+    int32_t getAttentionKeySize() override;
 
     std::string getInfo() override;
 
@@ -50,8 +50,8 @@ public:
 protected:
     ComponentWeights::ptr mWeights;
     nvinfer1::Weights mKernelWeights;
-    int mInputChannelCount;
-    int mOutputChannelCount;
+    int32_t mInputChannelCount;
+    int32_t mOutputChannelCount;
 };
 } // namespace nmtSample
 

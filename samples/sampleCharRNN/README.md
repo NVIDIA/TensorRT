@@ -75,12 +75,12 @@ The TopK layer is used to identify the character that has the maximum probabilit
 
 2.  Run the sample to generate characters based on the trained model:
     ```bash
-	sample_char_rnn --datadir=<path/to/data>
+    ./sample_char_rnn --datadir=<path/to/data>
     ```
 
     For example:
     ```bash
-    sample_char_rnn --datadir $TRT_DATADIR/char-rnn
+    ./sample_char_rnn --datadir $TRT_DATADIR/char-rnn
     ```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

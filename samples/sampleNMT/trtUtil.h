@@ -21,12 +21,12 @@
 
 namespace nmtSample
 {
-int inferTypeToBytes(nvinfer1::DataType t);
+int32_t inferTypeToBytes(nvinfer1::DataType t);
 
-int getVolume(nvinfer1::Dims dims);
+int32_t getVolume(nvinfer1::Dims dims);
 
 // Resize weights matrix to larger size
-std::vector<float> resizeWeights(int rows, int cols, int rowsNew, int colsNew, const float* memory);
+std::vector<float> resizeWeights(int32_t rows, int32_t cols, int32_t rowsNew, int32_t colsNew, const float* memory);
 
 } // namespace nmtSample
 

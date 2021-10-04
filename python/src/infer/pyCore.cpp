@@ -17,6 +17,8 @@
 // This contains the core elements of the API, i.e. builder, logger, engine, runtime, context.
 #include "ForwardDeclarations.h"
 #include "utils.h"
+#include <chrono>
+#include <iomanip>
 #include <pybind11/stl.h>
 
 #include "infer/pyCoreDoc.h"
@@ -307,7 +309,7 @@ public:
     void* allocHelper(const char* pyFuncName, bool showWarning, Args&&... args) noexcept
     {
         py::gil_scoped_acquire gil{};
-        py::function pyAllocFunc = utils::getOverload(static_cast<IGpuAllocator*>(this), pyFuncName, showWarning);
+        py::function pyAllocFunc = utils::getOverride(static_cast<IGpuAllocator*>(this), pyFuncName, showWarning);
 
         if (!pyAllocFunc)
         {
@@ -350,7 +352,7 @@ public:
     void free(void* memory) noexcept override
     {
         py::gil_scoped_acquire gil{};
-        py::function pyFree = utils::getOverload(static_cast<IGpuAllocator*>(this), "free");
+        py::function pyFree = utils::getOverride(static_cast<IGpuAllocator*>(this), "free");
         if (!pyFree)
         {
             return;
@@ -365,6 +367,28 @@ public:
             std::cerr << "[ERROR] Exception caught in free()" << std::endl;
         }
     }
+
+    bool deallocate(void* memory) noexcept override
+    {
+        py::gil_scoped_acquire gil{};
+        py::function pyDeallocate = utils::getOverride(static_cast<IGpuAllocator*>(this), "deallocate");
+        if (!pyDeallocate)
+        {
+            return false;
+        }
+
+        py::object status{};
+        try
+        {
+            status = pyDeallocate(reinterpret_cast<size_t>(memory));
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in deallocate()" << std::endl;
+            return false;
+        }
+        return status.cast<bool>();
+    }
 };
 
 void bindCore(py::module& m)
@@ -378,10 +402,17 @@ void bindCore(py::module& m)
         }
     };
 
-    py::class_<ILogger, PyLogger>(m, "ILogger", ILoggerDoc::descr)
-        .def(py::init<>())
-        .def("log", &ILogger::log, "severity"_a, "msg"_a, ILoggerDoc::log);
-    ;
+    py::class_<ILogger, PyLogger> baseLoggerBinding{m, "ILogger", ILoggerDoc::descr};
+    baseLoggerBinding.def(py::init<>()).def("log", &ILogger::log, "severity"_a, "msg"_a, ILoggerDoc::log);
+
+    py::enum_<ILogger::Severity>(baseLoggerBinding, "Severity", py::arithmetic(), SeverityDoc::descr)
+        .value("INTERNAL_ERROR", ILogger::Severity::kINTERNAL_ERROR, SeverityDoc::internal_error)
+        .value("ERROR", ILogger::Severity::kERROR, SeverityDoc::error)
+        .value("WARNING", ILogger::Severity::kWARNING, SeverityDoc::warning)
+        .value("INFO", ILogger::Severity::kINFO, SeverityDoc::info)
+        .value("VERBOSE", ILogger::Severity::kVERBOSE, SeverityDoc::verbose)
+        // We export into the outer scope, so we can access with trt.ILogger.X.
+        .export_values();
 
     class DefaultLogger : public ILogger
     {
@@ -397,37 +428,53 @@ void bindCore(py::module& m)
             if (severity > mMinSeverity)
                 return;
 
-            std::string loggingPrefix = "[TensorRT] ";
-            if (severity == Severity::kINTERNAL_ERROR)
-                loggingPrefix += "INTERNAL ERROR: ";
-            else if (severity == Severity::kERROR)
-                loggingPrefix += "ERROR: ";
-            else if (severity == Severity::kWARNING)
-                loggingPrefix += "WARNING: ";
-            else if (severity == Severity::kINFO)
-                loggingPrefix += "INFO: ";
-            else if (severity == Severity::kVERBOSE)
-                loggingPrefix += "VERBOSE: ";
-            std::cerr << loggingPrefix << msg << std::endl;
+            // prepend timestamp
+            std::time_t timestamp = std::time(nullptr);
+            tm* tm_local = std::localtime(&timestamp);
+            std::cout << "[";
+            std::cout << std::setw(2) << std::setfill('0') << 1 + tm_local->tm_mon << "/";
+            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_mday << "/";
+            std::cout << std::setw(4) << std::setfill('0') << 1900 + tm_local->tm_year << "-";
+            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_hour << ":";
+            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_min << ":";
+            std::cout << std::setw(2) << std::setfill('0') << tm_local->tm_sec << "] ";
+            std::string loggingPrefix = "[TRT] ";
+            switch (severity)
+            {
+            case Severity::kINTERNAL_ERROR:
+            {
+                loggingPrefix += "[F] ";
+                break;
+            }
+            case Severity::kERROR:
+            {
+                loggingPrefix += "[E] ";
+                break;
+            }
+            case Severity::kWARNING:
+            {
+                loggingPrefix += "[W] ";
+                break;
+            }
+            case Severity::kINFO:
+            {
+                loggingPrefix += "[I] ";
+                break;
+            }
+            case Severity::kVERBOSE:
+            {
+                loggingPrefix += "[V] ";
+                break;
+            }
+            }
+            std::cout << loggingPrefix << msg << std::endl;
         }
 
         Severity mMinSeverity;
     };
 
-    // Need to instantiate so we can put the Severity enum under DefaultLogger.
-    py::class_<DefaultLogger, ILogger> loggerBinding(m, "Logger", LoggerDoc::descr);
-
-    py::enum_<ILogger::Severity>(loggerBinding, "Severity", py::arithmetic())
-        .value("INTERNAL_ERROR", ILogger::Severity::kINTERNAL_ERROR, SeverityDoc::internal_error)
-        .value("ERROR", ILogger::Severity::kERROR, SeverityDoc::error)
-        .value("WARNING", ILogger::Severity::kWARNING, SeverityDoc::warning)
-        .value("INFO", ILogger::Severity::kINFO, SeverityDoc::info)
-        .value("VERBOSE", ILogger::Severity::kVERBOSE, SeverityDoc::verbose)
-        // We export into the parent class, so we can access with trt.ILogger.X.
-        .export_values();
-
-    // Need to do this after, so that the severity enum is available.
-    loggerBinding.def(py::init<ILogger::Severity>(), "min_severity"_a = ILogger::Severity::kWARNING)
+    py::class_<DefaultLogger, ILogger>(m, "Logger", LoggerDoc::descr)
+        .def(py::init<ILogger::Severity>(), "min_severity"_a = ILogger::Severity::kWARNING)
         .def_readwrite("min_severity", &DefaultLogger::mMinSeverity)
         .def("log", &DefaultLogger::log, "severity"_a, "msg"_a, LoggerDoc::log);
 
@@ -579,6 +626,9 @@ void bindCore(py::module& m)
             py::call_guard<py::gil_scoped_release>{})
         .def_property("error_recorder", &IExecutionContext::getErrorRecorder,
             py::cpp_function(&IExecutionContext::setErrorRecorder, py::keep_alive<1, 2>{}))
+        .def_property("enqueue_emits_profile", &IExecutionContext::getEnqueueEmitsProfile,
+            py::cpp_function(&IExecutionContext::setEnqueueEmitsProfile, py::keep_alive<1, 2>{}))
+        .def("report_to_profiler", &IExecutionContext::reportToProfiler, IExecutionContextDoc::report_to_profiler)
         .def("__del__", &utils::doNothingDel<IExecutionContext>);
 
     py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr)
@@ -635,7 +685,9 @@ void bindCore(py::module& m)
         .def_property("error_recorder", &ICudaEngine::getErrorRecorder,
             py::cpp_function(&ICudaEngine::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property_readonly("tactic_sources", &ICudaEngine::getTacticSources)
-        .def("__del__", &utils::doNothingDel<ICudaEngine>);
+        .def_property_readonly("profiling_verbosity", &ICudaEngine::getProfilingVerbosity)
+        .def("__del__", &utils::doNothingDel<ICudaEngine>)
+        .def("create_engine_inspector", &ICudaEngine::createEngineInspector, ICudaEngineDoc::create_engine_inspector);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr)
         .value("RESIZABLE", AllocatorFlag::kRESIZABLE, AllocatorFlagDoc::RESIZABLE);
@@ -645,7 +697,8 @@ void bindCore(py::module& m)
         .def("allocate", &IGpuAllocator::allocate, "size"_a, "alignment"_a, "flags"_a, GpuAllocatorDoc::allocate)
         .def("reallocate", &IGpuAllocator::reallocate, "address"_a, "alignment"_a, "new_size"_a,
             GpuAllocatorDoc::reallocate)
-        .def("free", &IGpuAllocator::free, "memory"_a, GpuAllocatorDoc::free);
+        .def("free", &IGpuAllocator::free, "memory"_a, GpuAllocatorDoc::free)
+        .def("deallocate", &IGpuAllocator::deallocate, "memory"_a, GpuAllocatorDoc::deallocate);
 
     py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr)
         .value("FP16", BuilderFlag::kFP16, BuilderFlagDoc::FP16)
@@ -669,8 +722,10 @@ void bindCore(py::module& m)
 
     // Bind to a Python enum called ProfilingVerbosity.
     py::enum_<ProfilingVerbosity>(m, "ProfilingVerbosity", ProfilingVerbosityDoc::descr)
-        .value("DEFAULT", ProfilingVerbosity::kDEFAULT, ProfilingVerbosityDoc::DEFAULT)
+        .value("LAYER_NAMES_ONLY", ProfilingVerbosity::kLAYER_NAMES_ONLY, ProfilingVerbosityDoc::LAYER_NAMES_ONLY)
+        .value("DETAILED", ProfilingVerbosity::kDETAILED, ProfilingVerbosityDoc::DETAILED)
         .value("NONE", ProfilingVerbosity::kNONE, ProfilingVerbosityDoc::NONE)
+        .value("DEFAULT", ProfilingVerbosity::kDEFAULT, ProfilingVerbosityDoc::DEFAULT)
         .value("VERBOSE", ProfilingVerbosity::kVERBOSE, ProfilingVerbosityDoc::VERBOSE);
 
     py::enum_<TacticSource>(m, "TacticSource", py::arithmetic{}, TacticSourceDoc::descr)
@@ -685,6 +740,10 @@ void bindCore(py::module& m)
         .value("STANDARD", EngineCapability::kSTANDARD, EngineCapabilityDoc::STANDARD)
         .value("SAFETY", EngineCapability::kSAFETY, EngineCapabilityDoc::SAFETY)
         .value("DLA_STANDALONE", EngineCapability::kDLA_STANDALONE, EngineCapabilityDoc::DLA_STANDALONE);
+
+    py::enum_<LayerInformationFormat>(m, "LayerInformationFormat", LayerInformationFormatDoc::descr)
+        .value("ONELINE", LayerInformationFormat::kONELINE, LayerInformationFormatDoc::ONELINE)
+        .value("JSON", LayerInformationFormat::kJSON, LayerInformationFormatDoc::JSON);
 
     py::class_<ITimingCache>(m, "ITimingCache", ITimingCacheDoc::descr)
         .def("serialize", &ITimingCache::serialize, ITimingCacheDoc::serialize)
@@ -776,6 +835,8 @@ void bindCore(py::module& m)
             BuilderDoc::build_serialized_network, py::call_guard<py::gil_scoped_release>{})
         .def("is_network_supported", &IBuilder::isNetworkSupported, "network"_a, "config"_a,
             BuilderDoc::is_network_supported, py::call_guard<py::gil_scoped_release>{})
+        .def_property_readonly("logger", &IBuilder::getLogger)
+        .def("reset", &IBuilder::reset, BuilderDoc::reset)
         .def("__del__", &utils::doNothingDel<IBuilder>);
 
     // Runtime
@@ -788,7 +849,19 @@ void bindCore(py::module& m)
         .def_property("gpu_allocator", nullptr, py::cpp_function(&IRuntime::setGpuAllocator, py::keep_alive<1, 2>{}))
         .def_property("error_recorder", &IRuntime::getErrorRecorder,
             py::cpp_function(&IRuntime::setErrorRecorder, py::keep_alive<1, 2>{}))
+        .def_property_readonly("logger", &IRuntime::getLogger)
         .def("__del__", &utils::doNothingDel<IRuntime>);
+
+    // EngineInspector
+    py::class_<IEngineInspector>(m, "EngineInspector", RuntimeInspectorDoc::descr)
+        .def_property(
+            "execution_context", &IEngineInspector::getExecutionContext, &IEngineInspector::setExecutionContext)
+        .def("get_layer_information", &IEngineInspector::getLayerInformation, "layer_index"_a, "format"_a,
+            RuntimeInspectorDoc::get_layer_information)
+        .def("get_engine_information", &IEngineInspector::getEngineInformation, "format"_a,
+            RuntimeInspectorDoc::get_engine_information)
+        .def_property("error_recorder", &IEngineInspector::getErrorRecorder,
+            py::cpp_function(&IEngineInspector::setErrorRecorder, py::keep_alive<1, 2>{}));
 
     // Refitter
     py::class_<IRefitter>(m, "Refitter", RefitterDoc::descr)
@@ -810,6 +883,7 @@ void bindCore(py::module& m)
             RefitterDoc::get_tensors_with_dynamic_range)
         .def_property("error_recorder", &IRefitter::getErrorRecorder,
             py::cpp_function(&IRefitter::setErrorRecorder, py::keep_alive<1, 2>{}))
+        .def_property_readonly("logger", &IRefitter::getLogger)
         .def("__del__", &utils::doNothingDel<IRefitter>);
 }
 

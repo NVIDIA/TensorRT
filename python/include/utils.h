@@ -14,7 +14,14 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef TRT_PYTHON_UTILS_H
+#define TRT_PYTHON_UTILS_H
+
+// These headers must be included before pybind11.h as some dependencies are otherwise missing on Windows.
+// clang-format off
+#include "ForwardDeclarations.h"
+// clang-format on
+
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
@@ -102,7 +109,7 @@ inline size_t volume(const nvinfer1::Dims& dims)
 // classes. Prints an error if no such method is overriden in python.
 // T* must NOT be a trampoline class!
 template <typename T>
-py::function getOverload(const T* self, const std::string& overloadName, bool showWarning = true)
+py::function getOverride(const T* self, const std::string& overloadName, bool showWarning = true)
 {
     py::function overload = py::get_override(self, overloadName.c_str());
     if (!overload && showWarning)
@@ -175,3 +182,5 @@ void doNothingDel(const T& self)
 
 } // namespace utils
 } // namespace tensorrt
+
+#endif // TRT_PYTHON_UTILS_H

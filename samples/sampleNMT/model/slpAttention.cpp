@@ -20,7 +20,7 @@
 
 namespace nmtSample
 {
-SLPAttention::SLPAttention(ComponentWeights::ptr weights)
+SLPAttention::SLPAttention(ComponentWeights::ptr& weights)
     : mWeights(weights)
 {
     // please refer to chpt_to_bin.py for the details on the format
@@ -64,7 +64,7 @@ void SLPAttention::addToModel(nvinfer1::INetworkDefinition* network, nvinfer1::I
     ASSERT(*attentionOutput != nullptr);
 }
 
-int SLPAttention::getAttentionSize()
+int32_t SLPAttention::getAttentionSize()
 {
     return mOutputChannelCount;
 }
