@@ -1,6 +1,6 @@
 # TensorRT OSS Release Changelog
 
-## [21.10](https://github.com/NVIDIA/TensorRT/releases/tag/21.10) - TBD
+## [21.10](https://github.com/NVIDIA/TensorRT/releases/tag/21.10) - 2021-10-05
 ### Added
 - Benchmark script for demoBERT-Megatron
 - Dynamic Input Shape support for EfficientNMS plugin
