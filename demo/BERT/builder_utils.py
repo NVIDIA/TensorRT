@@ -1,4 +1,5 @@
-import re 
+import re
+import sys
 import pickle
 
 import numpy as np
@@ -144,7 +145,7 @@ def onnx_to_trt_name(onnx_name):
     if toks[0] == 'bert': #embeddings or encoder
         if toks[1] == 'encoder': #transformer
             # Token conversions for sparse checkpoints
-            if toks[-2] == 'dense_act': 
+            if toks[-2] == 'dense_act':
                 toks[-2] = 'dense'
             elif toks[-3] == 'dense_act':
                 if toks[-2] == 'input_quantizer':
@@ -170,7 +171,7 @@ def onnx_to_trt_name(onnx_name):
                     toks[-2] = 'kernel'
                 elif toks[-2] == 'input_quantizer':
                     toks[-2] = 'input'
-            
+
             if 'final_input_quantizer' not in toks[2]:
                 ind = toks.index('layers')+1 if 'layers' in toks else 3
                 toks = toks[ind:]
@@ -212,14 +213,14 @@ def get_onnx_weight_dict(tensor_dict, config):
             Bqkv[0,:] = tensor
             Bqkv[1,:] = tensor_dict[prefix + BK]
             Bqkv[2,:] = tensor_dict[prefix + BV]
-    
+
             if config.use_int8 and getattr(config, 'interleaved', False):
                 Wqkv = np.ascontiguousarray(Wqkv.reshape((3, N, H, N, H)))
                 Bqkv = np.ascontiguousarray(Bqkv.reshape((3, N, H)))
             else:
                 Wqkv = np.ascontiguousarray(Wqkv.reshape((3, N, H, N, H)).transpose((1,0,2,3,4)))
                 Bqkv = np.ascontiguousarray(Bqkv.reshape((3, N, H)).transpose((1,0,2)))
-    
+
             weights_dict[prefix + WQKV] = trt.Weights(Wqkv)
             weights_dict[prefix + BQKV] = trt.Weights(Bqkv)
             weights_dict[prefix + WQKV + "_notrans"] = trt.Weights(Wqkv.T)
@@ -244,7 +245,7 @@ def load_onnx_weights_and_quant(path, config):
     model = onnx.load(path)
     weights = model.graph.initializer
     tensor_dict = dict((onnx_to_trt_name(w.name), np.frombuffer(w.raw_data, np.int8).reshape(w.dims))
-                       if w.name.split('_')[-1] == 'mask' else 
+                       if w.name.split('_')[-1] == 'mask' else
                        (onnx_to_trt_name(w.name), np.frombuffer(w.raw_data, np.float32).reshape(w.dims))
                        for w in weights)
     return get_onnx_weight_dict(tensor_dict, config)
