@@ -25,11 +25,11 @@ else()
     set(CUDA_PLATFORM_ID "aarch64-linux")
 endif()
 
-set(CMAKE_C_COMPILER $ENV{AARCH64_CC})
-set(CMAKE_CXX_COMPILER $ENV{AARCH64_CC})
+set(CMAKE_C_COMPILER /usr/bin/aarch64-linux-gnu-gcc)
+set(CMAKE_CXX_COMPILER /usr/bin/aarch64-linux-gnu-g++)
 
-set(CMAKE_C_FLAGS "$ENV{AARCH64_CFLAGS}" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS "$ENV{AARCH64_CFLAGS}" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS "" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS "" CACHE STRING "" FORCE)
 
 set(CMAKE_C_COMPILER_TARGET aarch64-linux-gnu)
 set(CMAKE_CXX_COMPILER_TARGET aarch64-linux-gnu)
@@ -53,4 +53,4 @@ set(CMAKE_CUDA_COMPILER_FORCED TRUE)
 
 set(CUDA_LIBS -L${CUDA_ROOT}/lib)
 
-set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcudart -lstdc++ -lm)
+set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcublas -lcudart -lstdc++ -lm)
