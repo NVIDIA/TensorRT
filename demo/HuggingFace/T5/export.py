@@ -37,7 +37,7 @@ from transformers.modeling_outputs import Seq2SeqLMOutput
 
 # TRT-HuggingFace
 from T5.T5ModelConfig import T5ModelTRTConfig
-from NNDF.tensorrt_utils import clamp_weights_onnx_to_fp16_bounds
+from NNDF.tensorrt_utils import clamp_weights_onnx_to_fp16_bounds, move_t5_cast_op
 from NNDF.networks import NetworkMetadata
 from NNDF.logger import G_LOGGER
 from NNDF.models import (
@@ -48,55 +48,58 @@ from NNDF.models import (
 )
 
 def add_extra_fp32(network_definition):
-    def window(seq, n=2):
-        "Returns a sliding window (of width n) over data from the iterable"
-        "   s -> (s0,s1,...s[n-1]), (s1,s2,...,sn), ...                   "
-        it = iter(seq)
-        result = tuple(islice(it, n))
-        if len(result) == n:
-            yield result
-        for elem in it:
-            result = result[1:] + (elem,)
-            yield result
+    """
+    Force operations involved in layer norm to run in FP32 precision.
+    """
+    pow_ops = {}
+    for layer_index, layer in enumerate(network_definition[1]):        
+        if layer.type == trt.LayerType.IDENTITY:
+            all_fp32 = all([layer.output_type_is_set(o) and layer.get_output_type(o) == trt.float32 for o in range(layer.num_outputs)])
+            if all_fp32:
+                if layer.get_input(0).dtype == trt.float32:
+                    layer.precision = trt.float32
 
-    indices = list(range(0, network_definition[1].num_layers))
-    for i, i_1, i_2, i_3, i_4, i_5 in window(indices, 6):
-        l = network_definition[1].get_layer(i)
-        l_1 = network_definition[1].get_layer(i_1)
-        l_2 = network_definition[1].get_layer(i_2)
-        l_3 = network_definition[1].get_layer(i_3)
-        l_4 = network_definition[1].get_layer(i_4)
-        l_5 = network_definition[1].get_layer(i_5)
+        if layer.type == trt.LayerType.ELEMENTWISE:
+            layer.__class__ = getattr(trt, "IElementWiseLayer")
+            if layer.op == trt.ElementWiseOperation.POW:
+                pow_ops[layer] = layer_index
+                layer.precision = trt.float32
+                layer.set_output_type(0, trt.float32)
 
-        if not all([l.get_output(k).is_execution_tensor for k in range(l.num_outputs)]):
-            continue
-
-        if l.get_output_type(0) != trt.float32:
-            continue
-
-        if l.type == trt.LayerType.ELEMENTWISE and \
-           l_1.type == trt.LayerType.REDUCE and \
-           l_2.type == trt.LayerType.CONSTANT and \
-           l_4.type == trt.LayerType.ELEMENTWISE and \
-           l_5.type == trt.LayerType.UNARY:
-
-            l.__class__ = getattr(trt, "IElementWiseLayer")
-            if l.op == trt.ElementWiseOperation.POW:
+    for _, index in pow_ops.items():
+        # Iterate from few layers before pow to include residual add and cast op.
+        # Iterate till 10 layers after pow op to include all operations included in layer norm. 
+        START_OFFSET = 4
+        END_OFFSET = 10
+        for i in range(index-START_OFFSET, index+END_OFFSET):
+            l = network_definition[1].get_layer(i)
+            if l.type == trt.LayerType.REDUCE:
                 l.precision = trt.float32
                 l.set_output_type(0, trt.float32)
 
-            l_1.precision = trt.float32
-            l_1.set_output_type(0, trt.float32)
+            if l.type == trt.LayerType.ELEMENTWISE:
+                l.__class__ = getattr(trt, "IElementWiseLayer")
+                if l.op == trt.ElementWiseOperation.SUM:
+                    l.precision = trt.float32
+                    l.set_output_type(0, trt.float32)
 
-            l_4.__class__ = getattr(trt, "IElementWiseLayer")
-            if l_4.op == trt.ElementWiseOperation.SUM:
-                l_4.precision = trt.float32
-                l_4.set_output_type(0, trt.float32)
+            if l.type == trt.LayerType.UNARY:
+                l.__class__ = getattr(trt, "IUnaryLayer")
+                if l.op == trt.UnaryOperation.SQRT:
+                    l.precision = trt.float32
+                    l.set_output_type(0, trt.float32)
+            
+            if l.type == trt.LayerType.ELEMENTWISE:
+                l.__class__ = getattr(trt, "IElementWiseLayer")
+                if l.op == trt.ElementWiseOperation.DIV:
+                    l.precision = trt.float32
+                    l.set_output_type(0, trt.float32)
 
-            l_5.__class__ = getattr(trt, "IUnaryLayer")
-            if l_5.op == trt.UnaryOperation.SQRT:
-                l_5.precision = trt.float32
-                l_5.set_output_type(0, trt.float32)
+            if l.type == trt.LayerType.ELEMENTWISE:
+                l.__class__ = getattr(trt, "IElementWiseLayer")
+                if l.op == trt.ElementWiseOperation.PROD:
+                    l.precision = trt.float32
+                    l.set_output_type(0, trt.float32)
 
     return network_definition
 
@@ -285,6 +288,7 @@ class T5DecoderConverter(ModelFileConverter):
 
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for T5")
+            move_t5_cast_op(output_fpath, output_fpath)
             clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
 
         return T5DecoderONNXFile(output_fpath, network_metadata)
@@ -332,6 +336,7 @@ class T5EncoderConverter(ModelFileConverter):
 
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for T5")
+            move_t5_cast_op(output_fpath, output_fpath)            
             clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
 
         return T5EncoderONNXFile(output_fpath, network_metadata)

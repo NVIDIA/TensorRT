@@ -72,12 +72,13 @@ class T5Metadata(_T5Metadata, MetadataArgparseInteropMixin):
 
 class T5ModelTRTConfig(NNConfig):
 
-    TARGET_MODELS = ["t5-small", "t5-base", "t5-large"]
-    NUMBER_OF_LAYERS = {TARGET_MODELS[0]: 6, TARGET_MODELS[1]: 12, TARGET_MODELS[2]: 24}
+    TARGET_MODELS = ["t5-small", "t5-base", "t5-large", "t5-3b"]
+    NUMBER_OF_LAYERS = {TARGET_MODELS[0]: 6, TARGET_MODELS[1]: 12, TARGET_MODELS[2]: 24, TARGET_MODELS[3]: 24}
     MAX_SEQUENCE_LENGTH = {
         TARGET_MODELS[0]: 512,
         TARGET_MODELS[1]: 768,
         TARGET_MODELS[2]: 1024,
+        TARGET_MODELS[3]: 1024,
     }
 
     NETWORK_FULL_NAME = "full"

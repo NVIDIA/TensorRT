@@ -66,13 +66,52 @@ def clamp_weights_onnx(onnx_input_fpath: str, onnx_output_fpath: str, min: float
             np.clip(node_attr.values, min, max, out=node_attr.values)
 
     model = gs.export_onnx(graph)
-    onnx.save(model, onnx_output_fpath)
+    onnx.save(model, onnx_output_fpath, save_as_external_data=True)
 
 
 def clamp_weights_onnx_to_fp16_bounds(onnx_input_fpath: str, onnx_output_fpath: str, ignore_nodes: List = None):
     upper_bound = 65504
     return clamp_weights_onnx(onnx_input_fpath, onnx_output_fpath, -upper_bound, upper_bound, ignore_nodes)
 
+
+def move_t5_cast_op(onnx_input_fpath: str, onnx_output_fpath: str):
+    """
+    T5 encoder and decoder have cast ops after residual add operation.
+    Moving the cast operation before add helps with FP16 accuracy as addition operation
+    can cause overflow in FP16.
+    """
+
+    graph = gs.import_onnx(onnx.load(onnx_input_fpath))
+    cast_nodes = [node for node in graph.nodes if node.op == "Cast"]
+    for n in cast_nodes:
+        # Cast appears at the output of add and feeds into a Pow op.
+        if n.i().op == "Add":
+            found_pow = False
+            for o in n.outputs:
+                for o1 in o.outputs:
+                    if o1.op == "Pow":
+                        found_pow = True
+
+            if found_pow:
+                n.i().outputs = n.outputs
+                n.outputs.clear()
+
+    graph.cleanup().toposort()
+    add_nodes = [node for node in graph.nodes if node.op == "Add"]
+    for n in add_nodes:
+        if n.o().op == "Pow":
+            add_inputs = n.inputs
+            outs = []
+            for i in  add_inputs:
+                identity_out = gs.Variable("identity_out" + i.name, dtype=np.float32)
+                new_cast = gs.Node(op="Cast", inputs=[i], outputs=[identity_out], attrs={"to": 1})
+                outs.append(identity_out)
+                graph.nodes.append(new_cast)
+            n.inputs = outs
+
+    graph.cleanup().toposort()
+    model = gs.export_onnx(graph)
+    onnx.save(model, onnx_output_fpath, save_as_external_data=True)
 
 # Helper Classes
 class TRTNativeRunner:
