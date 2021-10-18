@@ -157,7 +157,8 @@ Dims BatchedNMSPlugin::getOutputDimensions(int index, const Dims* inputs, int nb
         if (index == 0)
         {
             Dims dim0{};
-            dim0.nbDims = 0;
+            dim0.nbDims = 1;
+            dim0.d[0] = 1;
             return dim0;
         }
         // nmsed_boxes
