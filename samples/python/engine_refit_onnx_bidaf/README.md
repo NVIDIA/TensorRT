@@ -28,7 +28,7 @@ Dependencies required for this sample
 
 2. TensorRT
 
-3. [ONNX-GraphSurgeon](https://github.com/NVIDIA/TensorRT/tree/master/tools/onnx-graphsurgeon)
+3. [ONNX-GraphSurgeon](https://github.com/NVIDIA/TensorRT/tree/main/tools/onnx-graphsurgeon)
 
 4. Download sample data. See the "Download Sample Data" section of [the general setup guide](../README.md).
 

@@ -101,7 +101,7 @@ shape=[config.IMAGE_SHAPE[2], 1024, 1024 ], name="input_image")
         self.keras_model.predict([molded_input_images, image_metas, anchors], verbose=0)
     mrcnn_mask = np.transpose(mrcnn_mask, (0, 1, 3, 4, 2))
     ```
-- For conversion to UFF, please refer to [these instructions](https://github.com/NVIDIA/TensorRT/tree/master/samples/opensource/sampleUffMaskRCNN#generating-uff-model).
+- For conversion to UFF, please refer to [these instructions](https://github.com/NVIDIA/TensorRT/tree/main/samples/opensource/sampleUffMaskRCNN#generating-uff-model).
 
 >  NOTE: For reference, the successful converted model should contain 3049 nodes.
 
