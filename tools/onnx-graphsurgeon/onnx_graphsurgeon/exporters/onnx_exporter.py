@@ -69,6 +69,12 @@ class OnnxExporter(BaseExporter):
                 val = OnnxExporter.export_tensor_proto(val)
             elif isinstance(val, Graph):
                 val = OnnxExporter.export_graph(val, do_type_check)
+            elif isinstance(val, type):
+                # May be a numpy type
+                try:
+                    val = dtype_to_onnx(val)
+                except TypeError:
+                    pass
             onnx_node.attribute.extend([onnx.helper.make_attribute(key, val)])
         return onnx_node
 

@@ -87,7 +87,7 @@ class ModelFileConverter:
         )
 
     def onnx_to_trt(
-        self, output_fpath: str, input_fpath: str, network_metadata: NetworkMetadata
+        self, output_fpath: str, input_fpath: str, network_metadata: NetworkMetadata, batch_size: int = 1
     ):
         """
         Converts ONNX file to TRT engine.
@@ -102,12 +102,12 @@ class ModelFileConverter:
         Returns:
             TRTEngineFile: Newly generated engine.
         """
-        result = self.trt_engine_class(output_fpath, network_metadata)
+        result = self.trt_engine_class(output_fpath, network_metadata, batch_size=batch_size)
         self.trt_inference_config = CreateConfig(
             fp16=network_metadata.precision.fp16,
             max_workspace_size=result.DEFAULT_TRT_WORKSPACE_MB * 1024 * 1024,
             profiles=result.get_dynamic_shape_profiles(),
-            strict_types=result.use_strict_types()
+            obey_precision_constraints=result.use_obey_precision_constraints()
         )
 
         g_logger_verbosity = (
@@ -406,6 +406,7 @@ class ONNXModelFile(NNModelFile):
         output_fpath: str,
         converter: ModelFileConverter = None,
         force_overwrite: bool = False,
+        batch_size: int = 1,
     ):
         """
         Converts the onnx model into an trt engine.
@@ -421,9 +422,9 @@ class ONNXModelFile(NNModelFile):
         converter = self.default_converter if converter is None else converter()
         # TODO: Need to check if the old engine file is compatible with current setting
         if not force_overwrite and os.path.exists(output_fpath):
-            return converter.trt_engine_class(output_fpath, self.network_metadata)
+            return converter.trt_engine_class(output_fpath, self.network_metadata, batch_size)
 
-        return converter.onnx_to_trt(output_fpath, self.fpath, self.network_metadata)
+        return converter.onnx_to_trt(output_fpath, self.fpath, self.network_metadata, batch_size=batch_size)
 
 
 class TRTEngineFile(NNModelFile):
@@ -434,7 +435,7 @@ class TRTEngineFile(NNModelFile):
         pass
 
     @abstractmethod
-    def use_strict_types(self):
+    def use_obey_precision_constraints(self):
         pass
 
     # get_network_definition can be overloaded to alter the network definition.
@@ -448,9 +449,11 @@ class TRTEngineFile(NNModelFile):
         model: str,
         default_converter: ModelFileConverter = None,
         network_metadata: NetworkMetadata = None,
+        batch_size: int = 1
     ):
         super().__init__(default_converter, network_metadata)
         self.fpath = model
+        self.batch_size = batch_size
 
         if os.path.exists(self.fpath):
             # Engine already exists, do nothing

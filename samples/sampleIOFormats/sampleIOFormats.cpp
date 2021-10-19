@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-//! \file SampleReformatFreeIO.cpp
+//! \file SampleIOFormats.cpp
 //! \brief This file contains the implementation of the reformat free I/O sample.
 //!
-//! It builds a TensorRT engine by constructing a conv layer. It uses the engine to run
-//! a conv layer with random input and weights.
+//! It builds a TensorRT engine by from an MNIST network.
+//! It uses the engine to identify input images.
 //! The goal of this sample is to show how to specify allowed I/O formats.
 //! It can be run with the following command line:
-//! Command: ./sample_reformat_free_io
+//! Command: ./sample_io_formats
 
 #include "argsParser.h"
 #include "buffers.h"
@@ -47,7 +47,7 @@
 
 using samplesCommon::SampleUniquePtr;
 
-const std::string gSampleName = "TensorRT.sample_reformat_free_io";
+const std::string gSampleName = "TensorRT.sample_io_formats";
 
 int divUp(int a, int b)
 {
@@ -198,14 +198,14 @@ public:
 };
 
 //!
-//! \brief  The SampleReformatFreeIO class implements the reformat free I/O sample
+//! \brief  The SampleIOFormats class implements the reformat free I/O sample
 //!
-//! \details It creates the network using a single conv layer
+//! \details It creates the network using the Caffe parser.
 //!
-class SampleReformatFreeIO
+class SampleIOFormats
 {
 public:
-    SampleReformatFreeIO(const samplesCommon::CaffeSampleParams& params)
+    SampleIOFormats(const samplesCommon::CaffeSampleParams& params)
         : mParams(params)
     {
     }
@@ -278,7 +278,7 @@ public:
 //!
 //! \return Returns true if the engine was created successfully and false otherwise
 //!
-bool SampleReformatFreeIO::build(int dataWidth)
+bool SampleIOFormats::build(int dataWidth)
 {
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
@@ -331,7 +331,6 @@ bool SampleReformatFreeIO::build(int dataWidth)
     }
 
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
-    config->setFlag(BuilderFlag::kSTRICT_TYPES);
 
     // CUDA stream used for profiling by the builder.
     auto profileStream = samplesCommon::makeCudaStream();
@@ -375,7 +374,7 @@ bool SampleReformatFreeIO::build(int dataWidth)
 //! \brief Uses a caffe parser to create the single layer Network and marks the
 //!        output layers
 //!
-bool SampleReformatFreeIO::constructNetwork(
+bool SampleIOFormats::constructNetwork(
     SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
 {
     const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor = parser->parse(
@@ -424,7 +423,7 @@ bool SampleReformatFreeIO::constructNetwork(
 //! \details This function is the main execution function of the sample. It allocates
 //!          the buffer, sets inputs, executes the engine, and verifies the output.
 //!
-bool SampleReformatFreeIO::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf)
+bool SampleIOFormats::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf)
 {
     const auto devInput = mallocCudaMem<uint8_t>(inputBuf.getBufferSize());
     auto devOutput = mallocCudaMem<uint8_t>(outputBuf.getBufferSize());
@@ -463,7 +462,7 @@ bool SampleReformatFreeIO::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf
 //!
 //! \brief Used to clean up any state created in the sample class
 //!
-bool SampleReformatFreeIO::teardown()
+bool SampleIOFormats::teardown()
 {
     //! Clean up the libprotobuf files as the parsing is complete
     //! \note It is not safe to use any other part of the protocol buffers library after
@@ -475,7 +474,7 @@ bool SampleReformatFreeIO::teardown()
 //!
 //! \brief Reads the digit map from file
 //!
-bool SampleReformatFreeIO::readDigits(SampleBuffer& buffer, int groundTruthDigit)
+bool SampleIOFormats::readDigits(SampleBuffer& buffer, int groundTruthDigit)
 {
     const int inputH = buffer.dims.d[1];
     const int inputW = buffer.dims.d[2];
@@ -507,7 +506,7 @@ bool SampleReformatFreeIO::readDigits(SampleBuffer& buffer, int groundTruthDigit
 //! \brief Verifies that the output is correct and prints it
 //!
 template <typename T>
-bool SampleReformatFreeIO::verifyOutput(SampleBuffer& outputBuf, int groundTruthDigit) const
+bool SampleIOFormats::verifyOutput(SampleBuffer& outputBuf, int groundTruthDigit) const
 {
     const T* prob = reinterpret_cast<const T*>(outputBuf.buffer);
 
@@ -652,7 +651,7 @@ samplesCommon::CaffeSampleParams initializeSampleParams(const samplesCommon::Arg
 //!
 void printHelpInfo()
 {
-    std::cout << "Usage: ./sample_reformat_free_io [-h or --help] [-d or --datadir=<path to data directory>] "
+    std::cout << "Usage: ./sample_io_formats [-h or --help] [-d or --datadir=<path to data directory>] "
                  "[--useDLACore=<int>]\n";
     std::cout << "--help          Display help information\n";
     std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
@@ -668,7 +667,7 @@ void printHelpInfo()
 //! \brief Used to run the engine build and inference/reference functions
 //!
 template <typename T>
-bool process(SampleReformatFreeIO& sample, const sample::Logger::TestAtom& sampleTest, SampleBuffer& inputBuf,
+bool process(SampleIOFormats& sample, const sample::Logger::TestAtom& sampleTest, SampleBuffer& inputBuf,
     SampleBuffer& outputBuf, SampleBuffer& goldenInput, SampleBuffer& goldenOutput)
 {
     sample::gLogInfo << "Building and running a GPU inference engine for reformat free I/O" << std::endl;
@@ -700,7 +699,7 @@ bool process(SampleReformatFreeIO& sample, const sample::Logger::TestAtom& sampl
     return true;
 }
 
-bool runFP32Reference(SampleReformatFreeIO& sample, const sample::Logger::TestAtom& sampleTest,
+bool runFP32Reference(SampleIOFormats& sample, const sample::Logger::TestAtom& sampleTest,
     SampleBuffer& goldenInput, SampleBuffer& goldenOutput)
 {
     sample::gLogInfo << "Building and running a FP32 GPU inference to get golden input/output" << std::endl;
@@ -729,6 +728,14 @@ bool runFP32Reference(SampleReformatFreeIO& sample, const sample::Logger::TestAt
     return true;
 }
 
+//! Specification for a network I/O tensor.
+class IOSpec
+{
+public:
+    TensorFormat format;    //!< format
+    std::string formatName; //!< name of the format
+};
+
 int main(int argc, char** argv)
 {
     samplesCommon::Args args;
@@ -751,20 +758,20 @@ int main(int argc, char** argv)
 
     samplesCommon::CaffeSampleParams params = initializeSampleParams(args);
 
-    std::vector<std::pair<TensorFormat, std::string>> vecFP16TensorFmt = {
-        std::make_pair(TensorFormat::kLINEAR, "kLINEAR"),
-        std::make_pair(TensorFormat::kCHW2, "kCHW2"),
-        std::make_pair(TensorFormat::kHWC8, "kHWC8"),
+    std::vector<IOSpec> vecFP16TensorFmt = {
+        IOSpec{TensorFormat::kLINEAR, "kLINEAR"},
+        IOSpec{TensorFormat::kCHW2, "kCHW2"},
+        IOSpec{TensorFormat::kHWC8, "kHWC8"},
     };
-    std::vector<std::pair<TensorFormat, std::string>> vecINT8TensorFmt = {
-        std::make_pair(TensorFormat::kLINEAR, "kLINEAR"),
-        std::make_pair(TensorFormat::kCHW4, "kCHW4"),
-        std::make_pair(TensorFormat::kCHW32, "kCHW32"),
+    std::vector<IOSpec> vecINT8TensorFmt = {
+        IOSpec{TensorFormat::kLINEAR, "kLINEAR"},
+        IOSpec{TensorFormat::kCHW4, "kCHW4"},
+        IOSpec{TensorFormat::kCHW32, "kCHW32"},
     };
 
     SampleBuffer goldenInput, goldenOutput;
 
-    SampleReformatFreeIO sample(params);
+    SampleIOFormats sample(params);
 
     srand(unsigned(time(nullptr)));
     sample.mDigit = rand() % 10;
@@ -781,10 +788,10 @@ int main(int argc, char** argv)
     }
 
     // Test INT8 formats
-    for (auto elem : vecINT8TensorFmt)
+    for (auto spec : vecINT8TensorFmt)
     {
-        sample::gLogInfo << "Testing datatype INT8 with format " << elem.second << std::endl;
-        sample.mTensorFormat = elem.first;
+        sample::gLogInfo << "Testing datatype INT8 with format " << spec.formatName << std::endl;
+        sample.mTensorFormat = spec.format;
         SampleBuffer inputBuf, outputBuf;
 
         if (!process<int8_t>(sample, sampleTest, inputBuf, outputBuf, goldenInput, goldenOutput))
@@ -794,10 +801,10 @@ int main(int argc, char** argv)
     }
 
     // Test FP16 formats
-    for (auto elem : vecFP16TensorFmt)
+    for (auto spec : vecFP16TensorFmt)
     {
-        sample::gLogInfo << "Testing datatype FP16 with format " << elem.second << std::endl;
-        sample.mTensorFormat = elem.first;
+        sample::gLogInfo << "Testing datatype FP16 with format " << spec.formatName << std::endl;
+        sample.mTensorFormat = spec.format;
         SampleBuffer inputBuf, outputBuf;
 
         if (!process<half_float::half>(sample, sampleTest, inputBuf, outputBuf, goldenInput, goldenOutput))

@@ -83,6 +83,7 @@ enum class EngineCapability : int32_t
     //! See safety documentation for list of supported layers and formats.
     //! This flow supports only DeviceType::kGPU.
     //!
+    //! This flag is only supported in NVIDIA Drive(R) products.
     kSAFETY = 1,
     kSAFE_GPU TRT_DEPRECATED_ENUM = kSAFETY,
 

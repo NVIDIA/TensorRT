@@ -65,12 +65,13 @@ class TestWheel(object):
         assert set(all_poly_files) == EXPECTED_FILES
 
         # Check CLI is installed
-        bin_path = virtualenv.virtualenv.dirs()[1]
+        bin_path = os.path.join(virtualenv.virtualenv, "bin")
+
         poly_path = os.path.join(bin_path, "polygraphy")
         assert os.path.exists(poly_path)
         assert polygraphy.__version__ in virtualenv.run([poly_path, "-v"], capture=True)
 
-        lib_path = virtualenv.virtualenv.dirs()[0]
+        lib_path = os.path.join(virtualenv.virtualenv, "lib")
         output = virtualenv.run(["polygraphy", "-v"], capture=True)
         assert polygraphy.__version__ in output
         assert lib_path in output  # Make sure we're using the binary from the venv.

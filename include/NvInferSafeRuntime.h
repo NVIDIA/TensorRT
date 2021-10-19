@@ -24,6 +24,7 @@
 //!
 //! \file NvInferSafeRuntime.h
 //!
+//! The functionality in this file is only supported in NVIDIA Drive(R) products.
 
 //!
 //! \namespace nvinfer1
@@ -71,6 +72,11 @@ public:
     //!
     //! \see IPluginRegistry::registerCreator()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, if called from different instances of safe::IRuntime. Calling deserializeCudaEngine
+    //!                  of the same safety runtime from multiple threads is not guaranteed to be thread safe.
+    //!
     virtual ICudaEngine* deserializeCudaEngine(void const* const blob, std::size_t const size) noexcept = 0;
 
     //!
@@ -81,6 +87,10 @@ public:
     //! Default: uses cudaMalloc/cudaFree.
     //!
     //! If nullptr is passed, the default allocator will be used.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
     //!
     virtual void setGpuAllocator(IGpuAllocator* const allocator) noexcept = 0;
 
@@ -96,6 +106,10 @@ public:
     //
     //! \see getErrorRecorder()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
     virtual void setErrorRecorder(IErrorRecorder* const recorder) noexcept = 0;
 
     //!
@@ -107,6 +121,10 @@ public:
     //! \return A pointer to the IErrorRecorder object that has been registered.
     //!
     //! \see setErrorRecorder()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
 
@@ -133,6 +151,10 @@ public:
     //!
     //! \see getBindingIndex()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual std::int32_t getNbBindings() const noexcept = 0;
 
     //!
@@ -151,6 +173,10 @@ public:
     //!
     //! \see getNbBindings()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual std::int32_t getBindingIndex(AsciiChar const* const name) const noexcept = 0;
 
     //!
@@ -163,6 +189,10 @@ public:
     //!
     //! \see getBindingIndex()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual AsciiChar const* getBindingName(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
@@ -172,6 +202,10 @@ public:
     //! \return True if the index corresponds to an input binding and the index is in range.
     //!
     //! \see getBindingIndex()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual bool bindingIsInput(std::int32_t const bindingIndex) const noexcept = 0;
 
@@ -183,6 +217,10 @@ public:
     //!
     //! \see getBindingIndex()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual Dims getBindingDimensions(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
@@ -193,12 +231,22 @@ public:
     //!
     //! \see getBindingIndex()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual DataType getBindingDataType(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Create an execution context.
     //!
     //! \see safe::IExecutionContext.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes; if createExecutionContext fails, users should treat this as a critical
+    //!                  error and not perform any subsequent TensorRT operations apart from outputting
+    //!                  the error logs.
     //!
     virtual IExecutionContext* createExecutionContext() noexcept = 0;
 
@@ -209,12 +257,22 @@ public:
     //!
     //! \see getDeviceMemorySize() safe::IExecutionContext::setDeviceMemory()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes; if createExecutionContext fails, users should treat this as a critical
+    //!                  error and not perform any subsequent TensorRT operations apart from outputting
+    //!                  the error logs.
+    //!
     virtual IExecutionContext* createExecutionContextWithoutDeviceMemory() noexcept = 0;
 
     //!
     //! \brief Return the amount of device memory required by an execution context.
     //!
     //! \see safe::IExecutionContext::setDeviceMemory()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual size_t getDeviceMemorySize() const noexcept = 0;
 
@@ -227,6 +285,10 @@ public:
     //!
     //! \see safe::ICudaEngine::getBindingVectorizedDim()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual std::int32_t getBindingBytesPerComponent(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
@@ -238,12 +300,20 @@ public:
     //!
     //! \see safe::ICudaEngine::getBindingVectorizedDim()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual std::int32_t getBindingComponentsPerElement(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Return the binding format.
     //!
     //! \param bindingIndex The binding Index.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual TensorFormat getBindingFormat(std::int32_t const bindingIndex) const noexcept = 0;
 
@@ -253,6 +323,10 @@ public:
     //! Specifically -1 is returned if scalars per vector is 1.
     //!
     //! \param bindingIndex The binding Index.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual std::int32_t getBindingVectorizedDim(std::int32_t const bindingIndex) const noexcept = 0;
 
@@ -265,6 +339,10 @@ public:
     //! \see INetworkDefinition::setName(), INetworkDefinition::getName()
     //!
     //! \return A null-terminated C-style string representing the name of the network.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual AsciiChar const* getName() const noexcept = 0;
 
@@ -280,6 +358,10 @@ public:
     //
     //! \see getErrorRecorder()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
     virtual void setErrorRecorder(IErrorRecorder* const recorder) noexcept = 0;
 
     //!
@@ -292,6 +374,10 @@ public:
     //! \return A pointer to the IErrorRecorder object that has been registered.
     //!
     //! \see setErrorRecorder()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
 
@@ -338,6 +424,10 @@ public:
     //!
     //! \see safe::ICudaEngine
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual const ICudaEngine& getEngine() const noexcept = 0;
 
     //!
@@ -350,12 +440,20 @@ public:
     //!
     //! \see getName()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
     virtual void setName(AsciiChar const* const name) noexcept = 0;
 
     //!
     //! \brief Return the name of the execution context.
     //!
     //! \see setName()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
     //!
     virtual AsciiChar const* getName() const noexcept = 0;
 
@@ -370,12 +468,20 @@ public:
     //!
     //! \see safe::ICudaEngine::getDeviceMemorySize() safe::ICudaEngine::createExecutionContextWithoutDeviceMemory()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
     virtual void setDeviceMemory(void* const memory) noexcept = 0;
 
     //!
     //! \brief Return the strides of the buffer for the given binding.
     //!
     //! \param bindingIndex The binding index.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual Dims getStrides(std::int32_t const bindingIndex) const noexcept = 0;
 
@@ -391,6 +497,10 @@ public:
     //
     //! \see getErrorRecorder()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
     virtual void setErrorRecorder(IErrorRecorder* const recorder) noexcept = 0;
 
     //!
@@ -402,6 +512,10 @@ public:
     //! \return A pointer to the IErrorRecorder object that has been registered.
     //!
     //! \see setErrorRecorder()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
     //!
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
 
@@ -419,6 +533,10 @@ public:
     //! \return True if the kernels were enqueued successfully.
     //!
     //! \see safe::ICudaEngine::getBindingIndex()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
     //!
     virtual bool enqueueV2(
         void* const* const bindings, cudaStream_t const stream, cudaEvent_t* const inputConsumed) noexcept
@@ -446,6 +564,10 @@ public:
     //!
     //! \see getErrorBuffer()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
     virtual void setErrorBuffer(FloatingPointErrorInformation* const buffer) noexcept = 0;
 
     //!
@@ -455,6 +577,10 @@ public:
     //!
     //! \see setErrorBuffer()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual FloatingPointErrorInformation* getErrorBuffer() const noexcept = 0;
 };
 
@@ -463,10 +589,18 @@ public:
 //!
 //! This class is the logging class for the runtime.
 //!
+//! \usage
+//! - Allowed context for the API call
+//!   - Thread-safe: Yes
+//!
 IRuntime* createInferRuntime(ILogger& logger) noexcept;
 
 //!
 //! \brief Return the safe plugin registry
+//!
+//! \usage
+//! - Allowed context for the API call
+//!   - Thread-safe: Yes
 //!
 extern "C" TENSORRTAPI nvinfer1::IPluginRegistry* getSafePluginRegistry() noexcept;
 

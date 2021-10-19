@@ -85,10 +85,10 @@ def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
 
 @mod.export()
 class TrtConfigArgs(BaseArgs):
-    def __init__(self, strict_types_default=None, random_data_calib_warning=True):
+    def __init__(self, obey_precision_constraints_default=None, random_data_calib_warning=True):
         """
         Args:
-            strict_types_default (bool): Whether strict types should be enabled by default.
+            obey_precision_constraints_default (bool): Whether obeying precision constraints should be enabled by default.
             random_data_calib_warning (bool):
                     Whether to issue a warning when randomly generated data is being used
                     for calibration.
@@ -96,7 +96,7 @@ class TrtConfigArgs(BaseArgs):
         super().__init__()
         self.model_args = None
         self.data_loader_args = None
-        self._strict_types_default = strict_types_default
+        self._obey_precision_constraints_default = obey_precision_constraints_default
         self._random_data_calib_warning = random_data_calib_warning
 
     def add_to_parser(self, parser):
@@ -145,24 +145,34 @@ class TrtConfigArgs(BaseArgs):
             action="store_true",
             default=None,
         )
-        if self._strict_types_default:
+
+        if self._obey_precision_constraints_default:
             trt_config_args.add_argument(
-                "--no-strict-types",
-                help="Disables strict types in TensorRT, allowing it to choose tactics outside the "
+                "--no-obey-precision-constraints",
+                help="Disables enforcing precision constraints in TensorRT, allowing it to choose tactics outside the "
                 "layer precision set.",
                 action="store_false",
                 default=True,
-                dest="strict_types",
+                dest="obey_precision_constraints",
             )
         else:
             trt_config_args.add_argument(
-                "--strict-types",
-                help="Enable strict types in TensorRT, forcing it to choose tactics based on the "
-                "layer precision set, even if another precision is faster.",
+                "--obey-precision-constraints",
+                help="Enable enforcing precision constraints in TensorRT, forcing it to use tactics based on the "
+                "layer precision set, even if another precision is faster. Build fails if such an engine cannot be built.",
                 action="store_true",
                 default=None,
-                dest="strict_types",
+                dest="obey_precision_constraints",
             )
+
+        trt_config_args.add_argument(
+            "--strict-types",
+            help="[DEPRECATED] Enable preference for precision constraints and avoidance of I/O reformatting in TensorRT, "
+            "and fall back to ignoring the request if such an engine cannot be built.",
+            action="store_true",
+            default=None,
+            dest="strict_types",
+        )
 
         trt_config_args.add_argument(
             "--sparse-weights",
@@ -226,13 +236,13 @@ class TrtConfigArgs(BaseArgs):
         )
         replay.add_argument(
             "--save-tactics",
-            help="Path to save a tactic replay file. "
-            "Tactics selected by TensorRT will be recorded and stored at this location. ",
+            help="Path to save a Polygraphy tactic replay file. "
+            "Details about tactics selected by TensorRT will be recorded and stored at this location as a JSON file. ",
             default=None,
         )
         replay.add_argument(
             "--load-tactics",
-            help="Path to load a tactic replay file. "
+            help="Path to load a Polygraphy tactic replay file, such as one created by --save-tactics. "
             "The tactics specified in the file will be used to override TensorRT's default selections. ",
             default=None,
         )
@@ -306,6 +316,7 @@ class TrtConfigArgs(BaseArgs):
         self.tf32 = args_util.get(args, "tf32")
         self.fp16 = args_util.get(args, "fp16")
         self.int8 = args_util.get(args, "int8")
+        self.obey_precision_constraints = args_util.get(args, "obey_precision_constraints")
         self.strict_types = args_util.get(args, "strict_types")
         self.restricted = args_util.get(args, "restricted")
 
@@ -422,6 +433,7 @@ class TrtConfigArgs(BaseArgs):
                 tf32=self.tf32,
                 fp16=self.fp16,
                 int8=self.int8,
+                obey_precision_constraints=self.obey_precision_constraints,
                 strict_types=self.strict_types,
                 restricted=self.restricted,
                 profiles=profile_name,

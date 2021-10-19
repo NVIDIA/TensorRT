@@ -46,8 +46,10 @@ struct Parser
 
 struct BuildEnvironment
 {
-    Parser parser;
     TrtUniquePtr<INetworkDefinition> network;
+    //! Parser that creates the network. Must be declared *after* network, so that when
+    //! ~BuildEnvironment() executes, the parser is destroyed before the network is destroyed.
+    Parser parser;
     TrtUniquePtr<nvinfer1::ICudaEngine> engine;
     std::unique_ptr<nvinfer1::safe::ICudaEngine> safeEngine;
     std::unique_ptr<IHostMemory> serializedEngine;

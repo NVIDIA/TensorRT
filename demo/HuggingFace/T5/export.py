@@ -38,7 +38,7 @@ from transformers.modeling_outputs import Seq2SeqLMOutput
 # TRT-HuggingFace
 from T5.T5ModelConfig import T5ModelTRTConfig
 from NNDF.tensorrt_utils import clamp_weights_onnx_to_fp16_bounds, move_t5_cast_op
-from NNDF.networks import NetworkMetadata
+from NNDF.networks import NetworkMetadata, Precision
 from NNDF.logger import G_LOGGER
 from NNDF.models import (
     TRTEngineFile,
@@ -52,7 +52,7 @@ def add_extra_fp32(network_definition):
     Force operations involved in layer norm to run in FP32 precision.
     """
     pow_ops = {}
-    for layer_index, layer in enumerate(network_definition[1]):        
+    for layer_index, layer in enumerate(network_definition[1]):
         if layer.type == trt.LayerType.IDENTITY:
             all_fp32 = all([layer.output_type_is_set(o) and layer.get_output_type(o) == trt.float32 for o in range(layer.num_outputs)])
             if all_fp32:
@@ -68,9 +68,9 @@ def add_extra_fp32(network_definition):
 
     for _, index in pow_ops.items():
         # Iterate from few layers before pow to include residual add and cast op.
-        # Iterate till 10 layers after pow op to include all operations included in layer norm. 
+        # Iterate till 10 layers after pow op to include all operations included in layer norm.
         START_OFFSET = 4
-        END_OFFSET = 10
+        END_OFFSET = 12
         for i in range(index-START_OFFSET, index+END_OFFSET):
             l = network_definition[1].get_layer(i)
             if l.type == trt.LayerType.REDUCE:
@@ -88,7 +88,7 @@ def add_extra_fp32(network_definition):
                 if l.op == trt.UnaryOperation.SQRT:
                     l.precision = trt.float32
                     l.set_output_type(0, trt.float32)
-            
+
             if l.type == trt.LayerType.ELEMENTWISE:
                 l.__class__ = getattr(trt, "IElementWiseLayer")
                 if l.op == trt.ElementWiseOperation.DIV:
@@ -176,8 +176,8 @@ class T5DecoderONNXFile(ONNXModelFile):
 class T5DecoderTRTEngine(TRTEngineFile):
     DEFAULT_TRT_WORKSPACE_MB = 3072
 
-    def __init__(self, model, network_metadata):
-        super().__init__(model, T5DecoderConverter, network_metadata)
+    def __init__(self, model, network_metadata, batch_size = 1):
+        super().__init__(model, T5DecoderConverter, network_metadata, batch_size = batch_size)
 
     def get_network_definition(self, network_definition):
         return add_extra_fp32(network_definition)
@@ -189,27 +189,27 @@ class T5DecoderTRTEngine(TRTEngineFile):
         profile = Profile()
         profile.add(
             "input_ids",
-            min=(1, 1),
-            opt=(1, max_sequence_length // 2),
-            max=(1, max_sequence_length),
+            min=(self.batch_size, 1),
+            opt=(self.batch_size, max_sequence_length // 2),
+            max=(self.batch_size, max_sequence_length),
         )
         profile.add(
             "encoder_hidden_states",
-            min=(1, 1, max_sequence_length),
-            opt=(1, max_sequence_length // 2, max_sequence_length),
-            max=(1, max_sequence_length, max_sequence_length),
+            min=(self.batch_size, 1, max_sequence_length),
+            opt=(self.batch_size, max_sequence_length // 2, max_sequence_length),
+            max=(self.batch_size, max_sequence_length, max_sequence_length),
         )
         return [profile]
 
-    def use_strict_types(self):
+    def use_obey_precision_constraints(self):
         return self.network_metadata.precision.fp16
 
 
 class T5EncoderTRTEngine(TRTEngineFile):
     DEFAULT_TRT_WORKSPACE_MB = 2048
 
-    def __init__(self, model, network_metadata):
-        super().__init__(model, T5EncoderConverter, network_metadata)
+    def __init__(self, model, network_metadata, batch_size = 1):
+        super().__init__(model, T5EncoderConverter, network_metadata, batch_size = batch_size)
 
     def get_network_definition(self, network_definition):
         return add_extra_fp32(network_definition)
@@ -218,16 +218,17 @@ class T5EncoderTRTEngine(TRTEngineFile):
         max_sequence_length = T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[
             self.network_metadata.variant
         ]
+
         return [
             Profile().add(
                 "input_ids",
-                min=(1, 1),
-                opt=(1, max_sequence_length // 2),
-                max=(1, max_sequence_length),
+                min=(self.batch_size, 1),
+                opt=(self.batch_size, max_sequence_length // 2),
+                max=(self.batch_size, max_sequence_length),
             )
         ]
 
-    def use_strict_types(self):
+    def use_obey_precision_constraints(self):
         return self.network_metadata.precision.fp16
 
 # Converters #
@@ -298,6 +299,23 @@ class T5EncoderConverter(ModelFileConverter):
     def __init__(self):
         super().__init__(T5EncoderTorchFile, T5EncoderONNXFile, T5EncoderTRTEngine)
 
+    def onnx_to_trt(
+        self, output_fpath: str, input_fpath: str, network_metadata: NetworkMetadata, batch_size: int
+    ):
+        """
+        Override onnx_to_trt function from base.
+        Workaround: T5-base and T5-large are too large and cause FP16 to overflow. Encoder should not use FP16 tactics even in FP16 mode.
+        The perf decreases by less than 10% end-to-end. Usage with TRT is still substantial compared to frameworks.
+        """
+        # Force encoder to FP32 only if variants are anything larger than small
+        # because of overflow and underflow issues
+        if network_metadata.precision.fp16 and network_metadata.variant != "t5-small":
+            network_metadata_cp_dct = network_metadata._asdict()
+            del network_metadata_cp_dct["precision"]
+            network_metadata = NetworkMetadata(**network_metadata_cp_dct, precision=Precision(fp16=False))
+
+        return super().onnx_to_trt(output_fpath, input_fpath, network_metadata, batch_size)
+
     def torch_to_onnx(
         self, output_fpath: str, model: Module, network_metadata: NetworkMetadata
     ):
@@ -336,7 +354,7 @@ class T5EncoderConverter(ModelFileConverter):
 
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for T5")
-            move_t5_cast_op(output_fpath, output_fpath)            
+            move_t5_cast_op(output_fpath, output_fpath)
             clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
 
         return T5EncoderONNXFile(output_fpath, network_metadata)

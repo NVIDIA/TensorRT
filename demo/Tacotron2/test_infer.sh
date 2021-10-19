@@ -101,7 +101,7 @@ else
 fi
 
 set -x
-python $TEST_PROGRAM \
+python3 $TEST_PROGRAM \
        $TACOTRON2_PARAMS \
        --waveglow $WAVEGLOW_CKPT \
        --batch-size $BATCH_SIZE \

@@ -26,7 +26,7 @@ class MissingTool(Tool):
         super().__init__(name)
         self.err = err
         # NOTE: When modifying this error message, make sure to update the checks in
-        # tests/test_public_imports.py so that we don't miss errors!
+        # tests/test_dependencies.py so that we don't miss errors!
         self.__doc__ = (
             "[!] This tool could not be loaded due to an error:\n{:}\nRun 'polygraphy {:}' for details.".format(
                 self.err, self.name

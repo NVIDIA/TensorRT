@@ -7,5 +7,6 @@ onnxruntime==1.8.1
 pytest
 pytest-virtualenv
 pytest-xdist
-tensorflow<2.0
+requests==2.25.1
+tensorflow<2.0; python_version<'3.8'
 tf2onnx

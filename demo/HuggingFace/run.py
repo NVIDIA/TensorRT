@@ -40,7 +40,7 @@ WRAPPER_COMPARE_ACTION = "compare"
 WRAPPER_ACTIONS = [WRAPPER_RUN_ACTION, WRAPPER_LIST_ACTION, WRAPPER_COMPARE_ACTION]
 
 # NNDF
-from NNDF.general_utils import process_results, register_network_folders, RANDOM_SEED
+from NNDF.general_utils import process_per_result_entries, process_results, register_network_folders, RANDOM_SEED
 from NNDF.logger import G_LOGGER
 
 # huggingface
@@ -151,9 +151,16 @@ class CompareAction(NetworkScriptAction):
             finally:
                 os.chdir(cwd)
 
+        headers, rows = process_per_result_entries(modified_compare_group, results)
+        # Rows are grouped by input, flatten to show as one large table
+        flattened_rows = [r for input_row in rows.values() for r in input_row]
+        print()
+        print(tabulate(flattened_rows, headers=headers))
+
         headers, rows = process_results(modified_compare_group, results, nconfig)
         print()
         print(tabulate(rows, headers=headers))
+
         return 0
 
     def add_args(self, parser: argparse.ArgumentParser):

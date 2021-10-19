@@ -48,10 +48,18 @@ constexpr int32_t defaultIterations{10};
 constexpr int32_t defaultWarmUp{200};
 constexpr int32_t defaultDuration{3};
 constexpr int32_t defaultSleep{0};
+constexpr int32_t defaultIdle{0};
 
 // Reporting default params
 constexpr int32_t defaultAvgRuns{10};
 constexpr float defaultPercentile{99};
+
+enum class PrecisionConstraints
+{
+    kNONE,
+    kOBEY,
+    kPREFER
+};
 
 enum class ModelFormat
 {
@@ -127,7 +135,8 @@ struct BuildOptions : public Options
     bool tf32{true};
     bool fp16{false};
     bool int8{false};
-    bool strictTypes{false};
+    bool directIO{false};
+    PrecisionConstraints precisionConstraints{PrecisionConstraints::kNONE};
     bool safe{false};
     bool consistency{false};
     bool restricted{false};
@@ -171,6 +180,7 @@ struct InferenceOptions : public Options
     int32_t duration{defaultDuration};
     int32_t sleep{defaultSleep};
     int32_t streams{defaultStreams};
+    int32_t idle{defaultIdle};
     bool overlap{true};
     bool skipTransfers{false};
     bool useManaged{false};

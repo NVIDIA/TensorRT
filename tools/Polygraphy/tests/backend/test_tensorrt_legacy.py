@@ -13,14 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.trt_legacy import TrtLegacyRunner, LoadNetworkFromUff, ConvertToUff, ParseNetworkFromOnnxLegacy
-
-from tests.models.meta import TF_MODELS, ONNX_MODELS
-
 import numpy as np
+import pytest
+from polygraphy.backend.trt_legacy import ConvertToUff, LoadNetworkFromUff, ParseNetworkFromOnnxLegacy, TrtLegacyRunner
+from tests.models.meta import ONNX_MODELS, TF_MODELS
 
 
 def test_uff_identity():
+    pytest.importorskip("tensorflow")
+
     model = TF_MODELS["identity"]
     loader = model.loader
     with TrtLegacyRunner(LoadNetworkFromUff(ConvertToUff(loader))) as runner:

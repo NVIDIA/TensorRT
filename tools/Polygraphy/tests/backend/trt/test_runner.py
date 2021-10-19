@@ -256,7 +256,7 @@ class TestTrtRunner(object):
                 lambda: runner.infer(feed_dict, check_inputs=False, copy_outputs_to_host=copy_outputs)
             )
 
-        # The overhead should be less than 0.5ms, or the runtime should be within 5%
+        # The overhead should be less than 0.75ms, or the runtime should be within 8%
         print("Absolute difference: {:.5g}".format(runner_time - native_time))
         print("Relative difference: {:.5g}".format(runner_time / native_time))
-        assert (runner_time - native_time) < 0.5e-3 or runner_time <= (native_time * 1.05)
+        assert (runner_time - native_time) < 0.75e-3 or runner_time <= (native_time * 1.08)

@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 SET(SAMPLE_SOURCES
-    sampleReformatFreeIO.cpp
+    sampleIOFormats.cpp
 )
 
 set(SAMPLE_PARSERS "caffe")

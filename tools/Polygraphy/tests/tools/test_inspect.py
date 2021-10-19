@@ -396,6 +396,8 @@ class TestInspectModel(object):
         run_inspect_model([identity_engine, "--model-type=engine"])
 
     def test_model_tf_sanity(self, run_inspect_model):
+        pytest.importorskip("tensorflow")
+
         run_inspect_model([TF_MODELS["identity"].path, "--model-type=frozen"])
 
 

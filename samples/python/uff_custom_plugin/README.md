@@ -79,9 +79,15 @@ This file specifies all the Python packages required to run this Python sample.
 For specific software versions, see the [TensorRT Installation Guide](https://docs.nvidia.com/deeplearning/sdk/tensorrt-archived/index.html).
 
 1. Switch back to test container (if applicable) and install the dependencies for Python.
-   ```bash
-   python3 -m pip install -r requirements.txt
-   ```
+
+```bash
+pip3 install -r requirements.txt
+```
+
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
+```
 
 2. [Install CMake](https://cmake.org/download/).
 

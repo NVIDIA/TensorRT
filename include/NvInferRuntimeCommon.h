@@ -318,6 +318,7 @@ template <>
 struct EnumMaxImpl<TensorFormat>
 {
     //! Declaration of kVALUE that represents maximum number of elements in TensorFormat enum
+    // coverity[autosar_cpp14_m0_1_4_violation] Approved RFD: https://jirasw.nvidia.com/browse/TID-489
     static constexpr int32_t kVALUE = 12;
 };
 } // namespace impl
@@ -379,7 +380,12 @@ public:
     //!
     //! \brief Return the API version with which this plugin was built.
     //!
-    //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with plugins.
+    //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with
+    //! plugins.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, the implementation provided here is safe to call from any thread.
     //!
     virtual int32_t getTensorRTVersion() const noexcept
     {
@@ -393,6 +399,11 @@ public:
     //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
     //! terminated.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
     virtual AsciiChar const* getPluginType() const noexcept = 0;
 
     //!
@@ -401,6 +412,11 @@ public:
     //!
     //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
     //! terminated.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
     //!
     virtual AsciiChar const* getPluginVersion() const noexcept = 0;
 
@@ -411,6 +427,11 @@ public:
     //!
     //! This function is called by the implementations of INetworkDefinition and IBuilder. In particular, it is called
     //! prior to any call to initialize().
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
     //!
     virtual int32_t getNbOutputs() const noexcept = 0;
 
@@ -423,6 +444,11 @@ public:
     //!
     //! This function is called by the implementations of INetworkDefinition and IBuilder. In particular, it is called
     //! prior to any call to initialize().
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
     //!
     virtual Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept = 0;
 
@@ -442,6 +468,11 @@ public:
     //! or PluginV2DynamicExt for other PluginFormats.
     //!
     //! \warning DataType:kBOOL not supported.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
     //!
     virtual bool supportsFormat(DataType type, PluginFormat format) const noexcept = 0;
 
@@ -468,13 +499,28 @@ public:
     //!
     //! \warning DataType:kBOOL not supported.
     //!
+    //! \see clone()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin. However, TensorRT
+    //!                  will not call this method from two threads simultaneously on a given clone of a plugin.
+    //!
     virtual void configureWithFormat(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-        DataType type, PluginFormat format, int32_t maxBatchSize) noexcept = 0;
+        DataType type, PluginFormat format, int32_t maxBatchSize) noexcept
+        = 0;
 
     //!
     //! \brief Initialize the layer for execution. This is called when the engine is created.
     //!
     //! \return 0 for success, else non-zero (which will cause engine termination).
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when using multiple
+    //!                  execution contexts using this plugin.
     //!
     virtual int32_t initialize() noexcept = 0;
 
@@ -482,6 +528,13 @@ public:
     //! \brief Release resources acquired during plugin layer initialization. This is called when the engine is
     //! destroyed.
     //! \see initialize()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when using multiple
+    //!                  execution contexts using this plugin. However, TensorRT will not call this method from
+    //!                  two threads simultaneously on a given clone of a plugin.
     //!
     virtual void terminate() noexcept = 0;
 
@@ -492,6 +545,12 @@ public:
     //! sufficient for any batch size up to the maximum.
     //!
     //! \return The workspace size.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin. However, TensorRT
+    //!                  will not call this method from two threads simultaneously on a given clone of a plugin.
     //!
     virtual size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept = 0;
 
@@ -506,6 +565,11 @@ public:
     //!
     //! \return 0 for success, else non-zero (which will cause engine termination).
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
+    //!
     virtual int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept
         = 0;
@@ -514,6 +578,11 @@ public:
     //! \brief Find the size of the serialization buffer required.
     //!
     //! \return The size of the serialization buffer.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
     //!
     virtual size_t getSerializationSize() const noexcept = 0;
 
@@ -525,10 +594,20 @@ public:
     //!
     //! \see getSerializationSize()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
     virtual void serialize(void* buffer) const noexcept = 0;
 
     //!
     //! \brief Destroy the plugin object. This will be called when the network, builder or engine is destroyed.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
     //!
     virtual void destroy() noexcept = 0;
 
@@ -539,6 +618,12 @@ public:
     //! The TensorRT runtime calls clone() to clone the plugin when an execution context is created for an engine,
     //! after the engine has been created.  The runtime does not call initialize() on the cloned plugin,
     //! so the cloned plugin should be created in an initialized state.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when creating multiple
+    //!                  execution contexts.
     //!
     virtual IPluginV2* clone() const noexcept = 0;
 
@@ -551,14 +636,24 @@ public:
     //! \warning The string pluginNamespace must be 1024 bytes or less including the NULL terminator and must be NULL
     //! terminated.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
     virtual void setPluginNamespace(AsciiChar const* pluginNamespace) noexcept = 0;
 
     //!
     //! \brief Return the namespace of the plugin object.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
     virtual AsciiChar const* getPluginNamespace() const noexcept = 0;
 
-// @cond SuppressDoxyWarnings
+    // @cond SuppressDoxyWarnings
     IPluginV2() = default;
     virtual ~IPluginV2() noexcept = default;
 // @endcond
@@ -587,14 +682,22 @@ class IPluginV2Ext : public IPluginV2
 public:
     //!
     //! \brief Return the DataType of the plugin output at the requested index.
-    //! The default behavior should be to return the type of the first input, or DataType::kFLOAT if the layer has no inputs.
-    //! The returned data type must have a format that is supported by the plugin.
+    //!
+    //! The default behavior should be to return the type of the first input, or DataType::kFLOAT if the layer has no
+    //! inputs. The returned data type must have a format that is supported by the plugin.
+    //!
     //! \see supportsFormat()
     //!
     //! \warning DataType:kBOOL not supported.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
     virtual nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept = 0;
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+        = 0;
 
     //! \brief Return true if output tensor is broadcast across a batch.
     //!
@@ -606,8 +709,14 @@ public:
     //! i.e. are unaffected by whether method canBroadcastInputAcrossBatch requests
     //! physical replication of the values.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
     virtual bool isOutputBroadcastAcrossBatch(
-        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept = 0;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+        = 0;
 
     //! \brief Return true if plugin can use input that is broadcast across batch without replication.
     //!
@@ -621,6 +730,11 @@ public:
     //! so that it appears like a non-broadcasted tensor.
     //!
     //! This method is called only for inputs that can be broadcast.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
     //!
     virtual bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept = 0;
 
@@ -652,16 +766,23 @@ public:
     //! PluginFormat::kCHW32 will not be passed in, this is to keep backward compatibility with TensorRT 5.x series. Use
     //! PluginV2IOExt or PluginV2DynamicExt for other PluginFormats.
     //!
-
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin. However, TensorRT
+    //!                  will not call this method from two threads simultaneously on a given clone of a plugin.
+    //!
     virtual void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
         DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept = 0;
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+        = 0;
 
     IPluginV2Ext() = default;
     ~IPluginV2Ext() override = default;
 
     //!
-    //! \brief Attach the plugin object to an execution context and grant the plugin the access to some context resource.
+    //! \brief Attach the plugin object to an execution context and grant the plugin the access to some context
+    //! resource.
     //!
     //! \param cudnn The CUDNN context handle of the execution context
     //! \param cublas The cublas context handle of the execution context
@@ -677,7 +798,15 @@ public:
     //! \note In the automotive safety context, the CUDNN and CUBLAS parameters will be nullptr because CUDNN and CUBLAS
     //!       is not used by the safe runtime.
     //!
-    virtual void attachToContext(cudnnContext* /*cudnn*/, cublasContext* /*cublas*/, IGpuAllocator* /*allocator*/) noexcept {}
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
+    virtual void attachToContext(
+        cudnnContext* /*cudnn*/, cublasContext* /*cublas*/, IGpuAllocator* /*allocator*/) noexcept
+    {
+    }
 
     //!
     //! \brief Detach the plugin object from its execution context.
@@ -687,17 +816,29 @@ public:
     //!
     //! If the plugin owns per-context resource, it can be released here.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
     virtual void detachFromContext() noexcept {}
 
     //!
-    //! \brief Clone the plugin object. This copies over internal plugin parameters as well and returns a new plugin object with these parameters.
-    //! If the source plugin is pre-configured with configurePlugin(), the returned object should also be pre-configured. The returned object should allow attachToContext() with a new execution context.
-    //! Cloned plugin objects can share the same per-engine immutable resource (e.g. weights) with the source object (e.g. via ref-counting) to avoid duplication.
+    //! \brief Clone the plugin object. This copies over internal plugin parameters as well and returns a new plugin
+    //! object with these parameters. If the source plugin is pre-configured with configurePlugin(), the returned object
+    //! should also be pre-configured. The returned object should allow attachToContext() with a new execution context.
+    //! Cloned plugin objects can share the same per-engine immutable resource (e.g. weights) with the source object
+    //! (e.g. via ref-counting) to avoid duplication.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
     //!
     IPluginV2Ext* clone() const noexcept override = 0;
 
 protected:
-// @cond SuppressDoxyWarnings
+    // @cond SuppressDoxyWarnings
     IPluginV2Ext(IPluginV2Ext const&) = default;
     IPluginV2Ext(IPluginV2Ext&&) = default;
     IPluginV2Ext& operator=(IPluginV2Ext const&) & = default;
@@ -710,6 +851,10 @@ protected:
     //!
     //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with
     //! plugins.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, the implementation provided here is safe to call from any thread.
     //!
     int32_t getTensorRTVersion() const noexcept override
     {
@@ -749,8 +894,15 @@ public:
     //! \param out The output tensors attributes that are used for configuration.
     //! \param nbOutput Number of output tensors.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin. However, TensorRT
+    //!                  will not call this method from two threads simultaneously on a given clone of a plugin.
+    //!
     virtual void configurePlugin(
-        PluginTensorDesc const* in, int32_t nbInput, PluginTensorDesc const* out, int32_t nbOutput) noexcept = 0;
+        PluginTensorDesc const* in, int32_t nbInput, PluginTensorDesc const* out, int32_t nbOutput) noexcept
+        = 0;
 
     //!
     //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
@@ -784,10 +936,16 @@ public:
     //!
     //! Warning: TensorRT will stop asking for formats once it finds kFORMAT_COMBINATION_LIMIT on combinations.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin.
+    //!
     virtual bool supportsFormatCombination(
-        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) const noexcept = 0;
+        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) const noexcept
+        = 0;
 
-// @cond SuppressDoxyWarnings
+    // @cond SuppressDoxyWarnings
     IPluginV2IOExt() = default;
     ~IPluginV2IOExt() override = default;
 // @endcond
@@ -806,6 +964,10 @@ protected:
     //!
     //! Do not override this method as it is used by the TensorRT library to maintain backwards-compatibility with
     //! plugins.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, the implementation provided here is safe to call from any thread.
     //!
     int32_t getTensorRTVersion() const noexcept override
     {
@@ -915,6 +1077,10 @@ public:
     //!
     //! \brief Return the version of the API the plugin creator was compiled with.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, the implementation provided here is safe to call from any thread.
+    //!
     virtual int32_t getTensorRTVersion() const noexcept
     {
         return NV_TENSORRT_VERSION;
@@ -926,6 +1092,12 @@ public:
     //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
     //! terminated.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when deserializing
+    //!                  multiple engines concurrently sharing plugins.
+    //!
     virtual AsciiChar const* getPluginName() const noexcept = 0;
 
     //!
@@ -934,29 +1106,60 @@ public:
     //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
     //! terminated.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when deserializing
+    //!                  multiple engines concurrently sharing plugins.
+    //!
     virtual AsciiChar const* getPluginVersion() const noexcept = 0;
 
     //!
     //! \brief Return a list of fields that needs to be passed to createPlugin.
     //! \see PluginFieldCollection
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when deserializing
+    //!                  multiple engines concurrently sharing plugins.
+    //!
     virtual PluginFieldCollection const* getFieldNames() noexcept = 0;
 
     //!
     //! \brief Return a plugin object. Return nullptr in case of error.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when deserializing
+    //!                  multiple engines concurrently sharing plugins.
     //!
     virtual IPluginV2* createPlugin(AsciiChar const* name, PluginFieldCollection const* fc) noexcept = 0;
 
     //!
     //! \brief Called during deserialization of plugin layer. Return a plugin object.
     //!
-    virtual IPluginV2* deserializePlugin(AsciiChar const* name, void const* serialData, size_t serialLength) noexcept = 0;
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when deserializing
+    //!                  multiple engines concurrently sharing plugins.
+    //!
+    virtual IPluginV2* deserializePlugin(AsciiChar const* name, void const* serialData, size_t serialLength) noexcept
+        = 0;
 
     //!
     //! \brief Set the namespace of the plugin creator based on the plugin
     //! library it belongs to. This can be set while registering the plugin creator.
     //!
     //! \see IPluginRegistry::registerCreator()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when deserializing
+    //!                  multiple engines concurrently sharing plugins.
     //!
     virtual void setPluginNamespace(AsciiChar const* pluginNamespace) noexcept = 0;
 
@@ -965,6 +1168,12 @@ public:
     //!
     //! \warning The string returned must be 1024 bytes or less including the NULL terminator and must be NULL
     //! terminated.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when building networks on multiple devices sharing the same plugin or when deserializing
+    //!                  multiple engines concurrently sharing plugins.
     //!
     virtual AsciiChar const* getPluginNamespace() const noexcept = 0;
 
@@ -1008,11 +1217,19 @@ public:
     //! \warning The string pluginNamespace must be 1024 bytes or less including the NULL terminator and must be NULL
     //! terminated.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes; calls to this method will be synchronized by a mutex.
+    //!
     virtual bool registerCreator(IPluginCreator& creator, AsciiChar const* const pluginNamespace) noexcept = 0;
 
     //!
     //! \brief Return all the registered plugin creators and the number of
     //! registered plugin creators. Returns nullptr if none found.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
     //!
     virtual IPluginCreator* const* getPluginCreatorList(int32_t* const numCreators) const noexcept = 0;
 
@@ -1022,6 +1239,10 @@ public:
     //!
     //! \warning The strings pluginName, pluginVersion, and pluginNamespace must be 1024 bytes or less including the
     //! NULL terminator and must be NULL terminated.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual IPluginCreator* getPluginCreator(AsciiChar const* const pluginName, AsciiChar const* const pluginVersion,
         AsciiChar const* const pluginNamespace = "") noexcept
@@ -1051,6 +1272,10 @@ public:
     //
     //! \see getErrorRecorder()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
     virtual void setErrorRecorder(IErrorRecorder* const recorder) noexcept = 0;
 
     //!
@@ -1064,6 +1289,10 @@ public:
     //!
     //! \see setErrorRecorder()
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
 
     //!
@@ -1076,6 +1305,10 @@ public:
     //! \return True if the plugin creator was deregistered, false if it was not found in the registry or otherwise
     //! could
     //!     not be deregistered.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
     //!
     virtual bool deregisterCreator(IPluginCreator const& creator) noexcept = 0;
 };
@@ -1122,6 +1355,10 @@ public:
     //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
+    //!
     virtual void* allocate(uint64_t const size, uint64_t const alignment, AllocatorFlags const flags) noexcept = 0;
 
     //!
@@ -1137,6 +1374,10 @@ public:
     //! \see deallocate()
     //!
     //! \deprecated Superseded by deallocate and will be removed in TensorRT 10.0.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
     //!
     TRT_DEPRECATED virtual void free(void* const memory) noexcept = 0;
 
@@ -1176,6 +1417,10 @@ public:
     //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
+    //!
     virtual void* reallocate(void* /*baseAddr*/, uint64_t /*alignment*/, uint64_t /*newSize*/) noexcept
     {
         return nullptr;
@@ -1196,6 +1441,10 @@ public:
     //! primary implementation and override free() to call deallocate() for backwards compatibility.
     //!
     //! \see free()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
     //!
     virtual bool deallocate(void* const memory) noexcept
     {
@@ -1247,6 +1496,10 @@ public:
     //!
     //! \param severity The severity of the message.
     //! \param msg A null-terminated log message.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No, this method is not required to be thread-safe and will not be called from multiple threads.
     //!
     virtual void log(Severity severity, AsciiChar const* msg) noexcept = 0;
 
@@ -1414,7 +1667,8 @@ public:
     //!
     //! The length limit for an error description, excluding the '\0' string terminator.
     //!
-    static constexpr size_t kMAX_DESC_LENGTH = 127U;
+    // coverity[autosar_cpp14_m0_1_4_violation] Approved RFD: https://jirasw.nvidia.com/browse/TID-489
+    static constexpr size_t kMAX_DESC_LENGTH{127U};
 
     //!
     //! A typedef of a 32bit integer for reference counting.
@@ -1439,6 +1693,11 @@ public:
     //!
     //! \see clear
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
+    //!
     virtual int32_t getNbErrors() const noexcept = 0;
 
     //!
@@ -1452,6 +1711,11 @@ public:
     //! \return Returns the enum corresponding to errorIdx.
     //!
     //! \see getErrorDesc, ErrorCode
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
     //!
     virtual ErrorCode getErrorCode(int32_t errorIdx) const noexcept = 0;
 
@@ -1469,6 +1733,11 @@ public:
     //!
     //! \see getErrorCode
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
+    //!
     virtual ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept = 0;
 
     //!
@@ -1480,6 +1749,11 @@ public:
     //!
     //! \return true if errors have been dropped due to overflowing the error stack.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
+    //!
     virtual bool hasOverflowed() const noexcept = 0;
 
     //!
@@ -1490,6 +1764,11 @@ public:
     //! zero.
     //!
     //! \see getNbErrors
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
     //!
     virtual void clear() noexcept = 0;
 
@@ -1510,6 +1789,11 @@ public:
     //!
     //! \return True if the error is determined to be fatal and processing of the current function must end.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
+    //!
     virtual bool reportError(ErrorCode val, ErrorDesc desc) noexcept = 0;
 
     //!
@@ -1522,6 +1806,11 @@ public:
     //! ErrorRecorder when incRefCount has been called without a corresponding decRefCount.
     //!
     //! \return The reference counted value after the increment completes.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
     //!
     virtual RefCount incRefCount() noexcept = 0;
 
@@ -1536,10 +1825,15 @@ public:
     //!
     //! \return The reference counted value after the decrement completes.
     //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime.
+    //!
     virtual RefCount decRefCount() noexcept = 0;
 
 protected:
-// @cond SuppressDoxyWarnings
+    // @cond SuppressDoxyWarnings
     IErrorRecorder(IErrorRecorder const&) = default;
     IErrorRecorder(IErrorRecorder&&) = default;
     IErrorRecorder& operator=(IErrorRecorder const&) & = default;

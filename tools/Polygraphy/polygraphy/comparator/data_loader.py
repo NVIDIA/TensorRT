@@ -159,9 +159,9 @@ class DataLoader(object):
                             )
                         )
                     G_LOGGER.warning(
-                        "Input tensor: {:} | Will generate data of shape: {:}.\n"
+                        "Input tensor: {:} [shape={:}] | Will generate data of shape: {:}.\n"
                         "If this is incorrect, please set input_metadata "
-                        "or provide a custom data loader.".format(name, static_shape),
+                        "or provide a custom data loader.".format(name, shape, static_shape),
                         mode=LogMode.ONCE,
                     )
             return static_shape
@@ -222,15 +222,17 @@ class DataLoader(object):
 
                 if util.is_shape_dynamic(user_shape):
                     G_LOGGER.warning(
-                        "Input tensor: {:} | Provided input shape: {:} is dynamic.\n"
+                        "Input tensor: {:} [shape={:}] | Provided input shape: {:} is dynamic.\n"
                         "Dynamic shapes cannot be used to generate inference data. "
                         "Will use default shape instead.\n"
-                        "To avoid this, please provide a fixed shape to the data loader. ".format(name, user_shape)
+                        "To avoid this, please provide a fixed shape to the data loader. ".format(
+                            name, shape, user_shape
+                        )
                     )
                 elif not is_valid_shape_override and not is_shape_tensor(name, dtype):
                     G_LOGGER.warning(
-                        "Input tensor: {:} | Cannot use provided custom shape: {:} "
-                        "to override: {:}. Will use default shape instead.".format(name, user_shape, shape),
+                        "Input tensor: {:} [shape={:}] | Cannot use provided custom shape: {:} "
+                        "to override tensor shape. Will use default shape instead.".format(name, shape, user_shape),
                         mode=LogMode.ONCE,
                     )
                 else:
@@ -247,7 +249,7 @@ class DataLoader(object):
                 )
                 close_match = util.find_in_dict(name, self.input_metadata)
                 if close_match:
-                    msg += "\nMaybe you meant to set: {:}".format(close_match)
+                    msg += "\nMaybe you meant to set: {:}?".format(close_match)
                 G_LOGGER.warning(msg)
 
         # Warn about unused val_range

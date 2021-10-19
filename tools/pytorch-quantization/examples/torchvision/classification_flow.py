@@ -30,7 +30,7 @@ from tqdm import tqdm
 
 import torchvision
 from torchvision import transforms
-from torchvision.models.utils import load_state_dict_from_url
+from torch.hub import load_state_dict_from_url
 
 from pytorch_quantization import nn as quant_nn
 from pytorch_quantization import calib

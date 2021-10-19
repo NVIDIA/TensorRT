@@ -40,8 +40,7 @@ string(REGEX REPLACE "([a-z0-9])([A-Z])" "\\1_\\2" SAMPLE_NAME_SNAKE_MIXED ${SAM
 string(TOLOWER ${SAMPLE_NAME_SNAKE_MIXED} SAMPLE_NAME_SNAKE)
 
 # fix a few sample names
-string(REGEX REPLACE "movie_lens" "movielens" SAMPLE_NAME_FIXED ${SAMPLE_NAME_SNAKE})
-string(REGEX REPLACE "google_net" "googlenet" SAMPLE_NAME_FIXED ${SAMPLE_NAME_FIXED})
+string(REGEX REPLACE "google_net" "googlenet" SAMPLE_NAME_FIXED ${SAMPLE_NAME_SNAKE})
 string(REGEX REPLACE "([a-zA-Z0-0])api" "\\1_api" SAMPLE_NAME_FIXED ${SAMPLE_NAME_FIXED})
 string(REGEX REPLACE "_rcnn" "RCNN" SAMPLE_NAME_FIXED ${SAMPLE_NAME_FIXED})
 

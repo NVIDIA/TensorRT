@@ -148,7 +148,7 @@ class TestDeviceBuffer(object):
             copy_from_time = time_func(lambda: dev_buf.copy_from(host_buf))
 
         print("memcpy time: {:}, copy_from time: {:}".format(memcpy_time, copy_from_time))
-        assert copy_from_time <= (memcpy_time * 1.02)
+        assert copy_from_time <= (memcpy_time * 1.04)
 
     @pytest.mark.serial
     def test_copy_to_overhead(self):

@@ -39,12 +39,28 @@ The Pooling layer implements pooling within a channel. Supported pooling types a
 
 ## Prerequisites
 
-1. Install the dependencies for Python.
-    `python3 -m pip install -r requirements.txt`
+1. Upgrade pip version and install the sample dependencies.
+    ```bash
+    pip3 install --upgrade pip
+    pip3 install -r requirements.txt
+    ```
 
 To run this sample you must be using Python 3.6 or newer.
 
 On PowerPC systems, you will need to manually install PyTorch using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
+
+On Jetson Nano,
+a. you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
+```
+b. you will need to manually install PyTorch using the following steps:
+```bash
+wget -O torch-1.9.0-cp36-cp36m-linux_aarch64.whl https://nvidia.box.com/shared/static/h1z9sw4bb1ybi0rm3tu8qdj8hs05ljbm.whl
+sudo apt-get install libopenblas-base libopenmpi-dev
+pip3 install torch-1.9.0-cp36-cp36m-linux_aarch64.whl --force-reinstall
+```
+
 
 ## Running the sample
 
@@ -54,7 +70,7 @@ On PowerPC systems, you will need to manually install PyTorch using IBM's [Power
     to run the sample with Python 3.
 
     **Note:** If the TensorRT sample data is not installed in the default location, for example `/usr/src/tensorrt/data/`, the data directory must be specified. For example:
-    `python sample.py -d /path/to/my/data/`.
+    `python3 sample.py -d /path/to/my/data/`.
 
 2.  Verify that the sample ran successfully. If the sample runs successfully you should see a match between the test case and the prediction after refitting.
     ```

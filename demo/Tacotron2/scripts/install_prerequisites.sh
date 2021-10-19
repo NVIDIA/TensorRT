@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-pip3 install numba==0.48 torch==1.4.0
+pip3 install numba==0.48 torch==1.9.1
 pip3 install -r requirements.txt
 echo "nvidia" | sudo -S apt-get install -y libsndfile1
 
 pushd /tmp
 git clone https://github.com/NVIDIA/apex
 cd apex
-pip install -v --no-cache-dir ./
+pip3 install -v --no-cache-dir ./
 popd

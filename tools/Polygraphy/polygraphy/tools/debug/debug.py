@@ -18,8 +18,36 @@ from polygraphy.tools.debug.subtool import Build, DiffTactics, Precision, Reduce
 
 
 class Debug(Tool):
-    """
-    [EXPERIMENTAL] Debug model accuracy issues.
+    r"""
+    [EXPERIMENTAL] Debug a wide variety of model issues.
+
+    Most of the `debug` subtools work on the same general principles:
+
+    1. Iteratively perform some task that generates some output
+    2. Evaluate the generated output to determine if it should be considered `good` or `bad`
+    3. Sort any tracked artifacts into `good` and `bad` directories based on (2)
+
+    The "some output" referred to in (1) is usually a model file and is written to the current
+    directory (by default) during each iteration.
+
+    In order to distinguish between `good` and `bad`, the subtool uses the `--check` command provided by
+    the user (that's you!). It can be virtually any command, which makes `debug` extremely flexible.
+
+    Artifacts to track can be specified with `--artifacts`. When the `--check` command exits with a failure,
+    they are moved into the `bad` directory and otherwise into the `good` directory.
+
+    By default, if the status code of the `--check` command is non-zero, the iteration is considered a failure.
+    You can optionally use additional command-line options to control what counts as a failure in a more fine-grained way.
+    For example:
+        * `--fail-regex` allows you to count faliures only when the output of `--check` (on `stdout` or `stderr`)
+            matches one or more regular expression(s) and ignore any other errors.
+        * `--fail-returncode` lets you specify a status code to count as a failure, excluding all other non-zeros status
+            codes.
+
+    The general usage of most `debug` subtools is:
+
+        polygraphy debug <subtool> <model> [--artifacts files_to_sort_each_iteration...] \
+            --check <checker_command>
     """
 
     def __init__(self):

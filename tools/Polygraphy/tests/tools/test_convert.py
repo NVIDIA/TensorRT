@@ -27,6 +27,8 @@ from tests.tools.common import run_polygraphy_convert
 
 class TestConvertToOnnx(object):
     def test_tf2onnx(self):
+        pytest.importorskip("tensorflow")
+
         with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
             run_polygraphy_convert([TF_MODELS["identity"].path, "--model-type=frozen", "-o", outmodel.name])
             assert onnx.load(outmodel.name)
@@ -54,6 +56,8 @@ class TestConvertToTrt(object):
         mod.version(trt.__version__) < mod.version("8.0"), reason="Bug in older versions of TRT breaks this test"
     )
     def test_tf_to_onnx_to_trt(self):
+        pytest.importorskip("tensorflow")
+
         with util.NamedTemporaryFile() as outmodel:
             run_polygraphy_convert(
                 [TF_MODELS["identity"].path, "--model-type=frozen", "--convert-to=trt", "-o", outmodel.name]

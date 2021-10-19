@@ -64,9 +64,7 @@ def get_layer_class_mapping():
             layer_cls = getattr(trt, layer_cls)
         except AttributeError:
             if config.INTERNAL_CORRECTNESS_CHECKS:
-                G_LOGGER.warning(
-                    "Could not find layer type: {:} or layer class: {:}".format(layer_type, layer_cls)
-                )
+                G_LOGGER.warning("Could not find layer type: {:} or layer class: {:}".format(layer_type, layer_cls))
         else:
             layer_class_mapping[layer_type] = layer_cls
 
@@ -117,7 +115,8 @@ def get_layer_class_mapping():
 
 
 def np_dtype_from_trt(trt_dtype):
-    _ = mod.has_mod(np)  # Force numpy to be imported
+    # trt.nptype uses NumPy, so to make autoinstall work, we need to trigger it before that.
+    mod.autoinstall(np)
     return np.dtype(trt.nptype(trt_dtype))
 
 
@@ -329,30 +328,35 @@ def unmark_outputs(network, outputs):
 
 
 def str_from_config(config):
-    config_str = "{:20} | {:} bytes ({:.2f} MiB)\n".format(
+    config_str = "{:20} | {:} bytes ({:.2f} MiB)".format(
         "Workspace", config.max_workspace_size, config.max_workspace_size / (1024.0 ** 2)
     )
-    config_str += "{:20} | ".format("Precision")
+    config_str += "\n{:20} | ".format("Precision")
     with contextlib.suppress(AttributeError):
         config_str += "TF32: {:}, ".format(config.get_flag(trt.BuilderFlag.TF32))
-    config_str += "FP16: {:}, INT8: {:}, Strict Types: {:}\n".format(
-        config.get_flag(trt.BuilderFlag.FP16),
-        config.get_flag(trt.BuilderFlag.INT8),
-        config.get_flag(trt.BuilderFlag.STRICT_TYPES),
+    config_str += "FP16: {:}, INT8: {:}, ".format(
+        config.get_flag(trt.BuilderFlag.FP16), config.get_flag(trt.BuilderFlag.INT8)
     )
+
+    with contextlib.suppress(AttributeError):
+        config_str += "Obey Precision Constraints: {:}, ".format(
+            config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
+        )
+
+    config_str += "Strict Types: {:}".format(config.get_flag(trt.BuilderFlag.STRICT_TYPES))
 
     with contextlib.suppress(AttributeError):
         source_vals = [
             val.name for val in trt.TacticSource.__members__.values() if (1 << int(val)) & config.get_tactic_sources()
         ]
-        config_str += "{:20} | {:}\n".format("Tactic Sources", source_vals)
+        config_str += "\n{:20} | {:}".format("Tactic Sources", source_vals)
 
     with contextlib.suppress(AttributeError):
-        config_str += "{:20} | {:}\n".format("Safety Restricted", config.get_flag(trt.BuilderFlag.SAFETY_SCOPE))
+        config_str += "\n{:20} | {:}".format("Safety Restricted", config.get_flag(trt.BuilderFlag.SAFETY_SCOPE))
 
     if config.int8_calibrator:
-        config_str += "{:20} | {:}\n".format("Calibrator", config.int8_calibrator)
-    config_str += "{:20} | {:} profile(s)".format("Profiles", config.num_optimization_profiles)
+        config_str += "\n{:20} | {:}".format("Calibrator", config.int8_calibrator)
+    config_str += "\n{:20} | {:} profile(s)".format("Profiles", config.num_optimization_profiles)
     return config_str
 
 

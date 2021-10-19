@@ -114,6 +114,16 @@ def generate_summary(model_file, runners, load_results):
 class Run(Tool):
     """
     Run inference and compare results across backends.
+
+    The typical usage of `run` is:
+
+        polygraphy run [model_file] [runners...] [runner_options...]
+
+    `run` will then run inference on the specified model with all the specified runners
+    and compare inference outputs between them.
+
+    TIP: You can use `--gen-script` to generate a Python script that does exactly what the `run`
+    command would otherwise do.
     """
 
     def __init__(self):

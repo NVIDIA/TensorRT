@@ -95,11 +95,11 @@ class Insert(BaseSurgeonSubtool):
         for name in self.arg_groups[OnnxNodeArgs].outputs:
             if name in self.arg_groups[OnnxNodeArgs].inputs:
                 # When the new node's input == output, we need to generate a new tensor
-                # If the tensor was a graph output, try to preserve the name.
+                # If the tensor was a graph output, preserve the name and data type.
                 inp_tensor = get_tensor(name)
                 if inp_tensor in graph.outputs:
                     inp_tensor.name += TENSOR_NAME_SUFFIX
-                    tensor = gs.Variable(name=name)
+                    tensor = gs.Variable(name=name, dtype=inp_tensor.dtype)
                 else:
                     tensor = gs.Variable(name=name + TENSOR_NAME_SUFFIX)
 

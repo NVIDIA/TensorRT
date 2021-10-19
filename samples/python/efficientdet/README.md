@@ -23,21 +23,26 @@ Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/dee
 
 Install all dependencies listed in `requirements.txt`:
 
+```bash
+pip3 install -r requirements.txt
 ```
-pip install -r requirements.txt
+
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
 ```
 
 You will also need the latest `onnx_graphsurgeon` python module. If not already installed by TensorRT, you can install it manually by running:
 
-```
-pip install onnx-graphsurgeon --index-url https://pypi.ngc.nvidia.com
+```bash
+pip3 install onnx-graphsurgeon --index-url https://pypi.ngc.nvidia.com
 ```
 
 **NOTE:** Please make sure that the `onnx-graphsurgeon` module installed by pip is version >= 0.3.9.
 
 Finally, you may want to clone the EfficientDet code from the [AutoML Repository](https://github.com/google/automl) to use some helper utilities from it:
 
-```
+```bash
 git clone https://github.com/google/automl
 ```
 
@@ -56,7 +61,7 @@ The starting point of conversion is a TensorFlow saved model. This can be export
 
 You can download one of the pre-trained AutoML saved models from the [EfficientDet TFHub](https://tfhub.dev/s?network-architecture=efficientdet), such as:
 
-```
+```bash
 wget https://storage.googleapis.com/tfhub-modules/tensorflow/efficientdet/d0/1.tar.gz
 ```
 
@@ -75,9 +80,9 @@ efficientdet-d0
 
 To export a saved model from here, clone and install the [AutoML](https://github.com/google/automl) repository, and run:
 
-```
+```bash
 cd /path/to/automl/efficientdet
-python model_inspect.py \
+python3 model_inspect.py \
     --runmode saved_model \
     --model_name efficientdet-d0 \
     --ckpt_path /path/to/efficientdet-d0 \
@@ -92,7 +97,7 @@ Where the `--model_name` argument is the network name corresponding to this chec
 
 You can download one of the pre-trained TFOD models from the [TF2 Detection Model Zoo](https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2_detection_zoo.md), such as:
 
-```
+```bash
 wget http://download.tensorflow.org/models/object_detection/tf2/20200711/efficientdet_d0_coco17_tpu-32.tar.gz
 ```
 
@@ -110,11 +115,11 @@ efficientdet_d0_coco17_tpu-32
     └── saved_model.pb
 ```
 
-To (re-)export a saved model from here, clone and install the TFOD API from the [TF Models Repository](https://github.com/tensorflow/models) repository, and run: 
+To (re-)export a saved model from here, clone the TFOD API repository from [TF Models Repository](https://github.com/tensorflow/models) repository, and install it following the [instructions](https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2.md#installation). Then run:
 
-```
+```bash
 cd /path/to/models/research/object_detection
-python exporter_main_v2.py \
+python3 exporter_main_v2.py \
     --input_type image_tensor \
     --trained_checkpoint_dir /path/to/efficientdet_d0_coco17_tpu-32/checkpoint \
     --pipeline_config_path /path/to/efficientdet_d0_coco17_tpu-32/pipeline.config \
@@ -147,8 +152,8 @@ The ONNX conversion process supports both `NHWC` and `NCHW` input formats, so if
 
 With the correct input shape selected, and the TF saved model ready to be converted, run:
 
-```
-python create_onnx.py \
+```bash
+python3 create_onnx.py \
     --input_shape '1,512,512,3' \
     --saved_model /path/to/saved_model \
     --onnx /path/to/model.onnx
@@ -167,18 +172,18 @@ Optionally, you may wish to visualize the resulting ONNX graph with a tool such 
 
 The input to the graph is a `float32` tensor with the selected input shape, containing RGB pixel data in the range of 0 to 255. Normalization, mean subtraction and scaling will be performed inside the EfficientDet graph, so it is not required to further pre-process the input data.
 
-The outputs of the graph are the same as the outputs of the [EfficientNMS](https://github.com/NVIDIA/TensorRT/tree/main/plugin/efficientNMSPlugin) plugin. If the ONNX graph was created with `--legacy_plugins` for TensorRT 7 compatibility, the outputs will correspond to those of the [BatchedNMS](https://github.com/NVIDIA/TensorRT/tree/main/plugin/batchedNMSPlugin) plugin instead. 
+The outputs of the graph are the same as the outputs of the [EfficientNMS](https://github.com/NVIDIA/TensorRT/tree/master/plugin/efficientNMSPlugin) plugin. If the ONNX graph was created with `--legacy_plugins` for TensorRT 7 compatibility, the outputs will correspond to those of the [BatchedNMS](https://github.com/NVIDIA/TensorRT/tree/master/plugin/batchedNMSPlugin) plugin instead. 
 
 ### Build TensorRT Engine
 
-It is possible to build the TensorRT engine directly with `trtexec` using the ONNX graph generated in the previous step. However, the script `build_engine.py` is provided for convenience, as it has been tailored to EfficientDet engine building and calibration. Run `python build_engine.py --help` for details on available settings.
+It is possible to build the TensorRT engine directly with `trtexec` using the ONNX graph generated in the previous step. However, the script `build_engine.py` is provided for convenience, as it has been tailored to EfficientDet engine building and calibration. Run `python3 build_engine.py --help` for details on available settings.
 
 #### FP16 Precision
 
 To build the TensorRT engine file with FP16 precision, run:
 
-```
-python build_engine.py \
+```bash
+python3 build_engine.py \
     --onnx /path/to/model.onnx \
     --engine /path/to/engine.trt \
     --precision fp16
@@ -192,8 +197,8 @@ For best results, make sure no other processes are using the GPU during engine b
 
 To build and calibrate an engine for INT8 precision, run:
 
-```
-python build_engine.py \
+```bash
+python3 build_engine.py \
     --onnx /path/to/model.onnx \
     --engine /path/to/engine.trt \
     --precision int8 \
@@ -209,7 +214,7 @@ The `--calib_cache` controls where the calibration cache file will be written to
 
 Optionally, you can obtain execution timing information for the built engine by using the `trtexec` utility, as:
 
-```
+```bash
 trtexec \
     --loadEngine=/path/to/engine.trt \
     --useCudaGraph --noDataTransfers \
@@ -234,8 +239,8 @@ However, for convenience, a python inference script is provided here for quick t
 
 To perform object detection on a set of images with TensorRT, run:
 
-```
-python infer.py \
+```bash
+python3 infer.py \
     --engine /paht/to/engine.trt \
     --input /path/to/images \
     --output /path/to/output
@@ -253,8 +258,8 @@ The detection results will be written out to the specified output directory, con
 
 Given a validation dataset (such as [COCO val2017 data](http://images.cocodataset.org/zips/val2017.zip)) and ground truth annotations (such as [COCO instances_val2017.json](http://images.cocodataset.org/annotations/annotations_trainval2017.zip)), you can get the mAP metrics for the built TensorRT engine. This will use the mAP metrics calculation script from the [AutoML](https://github.com/google/automl) repository.
 
-```
-python eval_coco.py \
+```bash
+python3 eval_coco.py \
     --engine /path/to/engine.trt \
     --input /path/to/coco/val2017 \
     --annotations /path/to/coco/annotations/instances_val2017.json \
@@ -269,8 +274,8 @@ The mAP metric is sensitive to the NMS score threshold used, as using a high thr
 
 To compare how the TensorRT detections match the original TensorFlow model results, you can run:
 
-```
-python compare_tf.py \
+```bash
+python3 compare_tf.py \
     --engine /path/to/engine.trt \
     --saved_model /path/to/saved_model \
     --input /path/to/images \

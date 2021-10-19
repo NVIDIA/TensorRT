@@ -34,7 +34,7 @@ namespace bert
 class MHARunner
 {
 public:
-    MHARunner(const nvinfer1::DataType type, const int numHeads, const int headSize)
+    MHARunner(const nvinfer1::DataType type, const int32_t numHeads, const int32_t headSize)
         : mType(type)
         , mS(0)
         , mB(0)
@@ -47,13 +47,13 @@ public:
         , mStrideQKV(0)
         , mLdOut(0)
         , mStrideOut(0)
-        , mRsqrtHeadSize(1.f / sqrtf(headSize))
+        , mRsqrtHeadSize(1.F / sqrtf(headSize))
     {
     }
 
     virtual ~MHARunner() = default;
 
-    virtual void setup(const int S, const int B)
+    virtual void setup(const int32_t S, const int32_t B)
     {
         assert(S);
         assert(B);
@@ -83,35 +83,35 @@ public:
 
     virtual size_t getWorkspaceSize() const = 0;
 
-    virtual bool isValid(int s) const = 0;
+    virtual bool isValid(int32_t s) const = 0;
 
 protected:
     nvinfer1::DataType mType;
 
-    int mS;
-    int mB;
-    int mOmatSize;
-    int mNumMats;
-    int mNumHeads;
-    int mHeadSize;
-    int mWordSize;
-    int mLdQKV;
-    int mStrideQKV;
-    int mLdOut;
-    int mStrideOut;
+    int32_t mS;
+    int32_t mB;
+    int32_t mOmatSize;
+    int32_t mNumMats;
+    int32_t mNumHeads;
+    int32_t mHeadSize;
+    int32_t mWordSize;
+    int32_t mLdQKV;
+    int32_t mStrideQKV;
+    int32_t mLdOut;
+    int32_t mStrideOut;
 
     float mRsqrtHeadSize;
 };
 
-std::pair<int, int> tuneBatchedGemm(const int B, const int S, const int numHeads, const int headSize);
+std::pair<int, int> tuneBatchedGemm(const int32_t B, const int32_t S, const int32_t numHeads, const int32_t headSize);
 
 template <typename T>
-int computeScaledSoftmax(
-    cudaStream_t stream, const int ld, const int B, const int N, const float rsqrtHeadSize, const T* input, T* output);
+int32_t computeScaledSoftmax(cudaStream_t stream, const int32_t ld, const int32_t B, const int32_t N,
+    const float rsqrtHeadSize, const T* input, T* output);
 
 template <typename T>
-int computeMaskedScaledSoftmax(cudaStream_t stream, const int ld, const int B, const int N, const float rsqrtHeadSize,
-    const int* maskIdx, const T* input, T* output);
+int32_t computeMaskedScaledSoftmax(cudaStream_t stream, const int32_t ld, const int32_t B, const int32_t N,
+    const float rsqrtHeadSize, const int* maskIdx, const T* input, T* output);
 
 // One of the preferred ways of making TensorRT to be able to see
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.
@@ -120,8 +120,8 @@ int computeMaskedScaledSoftmax(cudaStream_t stream, const int ld, const int B, c
 class QKVToContextPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    QKVToContextPluginDynamic(const std::string name, const nvinfer1::DataType type, const int hiddenSize,
-        const int numHeads, const float dqProbs, bool hasImask = false);
+    QKVToContextPluginDynamic(const std::string name, const nvinfer1::DataType type, const int32_t hiddenSize,
+        const int32_t numHeads, const float dqProbs, bool hasImask = false);
 
     QKVToContextPluginDynamic(const std::string name, const void* data, size_t length);
 
@@ -131,26 +131,26 @@ public:
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, const nvinfer1::DimsExprs* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
-    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        int32_t pos, const nvinfer1::PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int32_t nbInputs,
+        const nvinfer1::DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int32_t nbInputs,
+        const nvinfer1::PluginTensorDesc* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
         const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    nvinfer1::DataType getOutputDataType(int32_t index, const nvinfer1::DataType* inputTypes, int32_t nbInputs) const
         noexcept override;
 
     // IPluginV2 Methods
     const char* getPluginType() const noexcept override;
     const char* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
@@ -171,12 +171,12 @@ private:
     // used for other sequence, precision fp32 and fp16
     std::unique_ptr<MHARunner> unfusedDispatcher;
 
-    int mS;
-    int mB;
-    int mSM;
-    int mHeadSize;
-    int mHiddenSize;
-    int mNumHeads;
+    int32_t mS;
+    int32_t mB;
+    int32_t mSM;
+    int32_t mHeadSize;
+    int32_t mHiddenSize;
+    int32_t mNumHeads;
     bool mHasImask;
     nvinfer1::DataType mType;
     float mDqProbs;
@@ -210,8 +210,8 @@ private:
 class QKVToContextVarSeqlenPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    QKVToContextVarSeqlenPlugin(const std::string name, const nvinfer1::DataType type, const int hiddenSize,
-        const int numHeads, const float dqProbs, bool hasImask = false, bool varSeqlen = false);
+    QKVToContextVarSeqlenPlugin(const std::string name, const nvinfer1::DataType type, const int32_t hiddenSize,
+        const int32_t numHeads, const float dqProbs, bool hasImask = false, bool varSeqlen = false);
 
     QKVToContextVarSeqlenPlugin(const std::string name, const void* data, size_t length);
 
@@ -221,26 +221,26 @@ public:
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, const nvinfer1::DimsExprs* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
-    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        int32_t pos, const nvinfer1::PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int32_t nbInputs,
+        const nvinfer1::DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int32_t nbInputs,
+        const nvinfer1::PluginTensorDesc* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
         const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    nvinfer1::DataType getOutputDataType(int32_t index, const nvinfer1::DataType* inputTypes, int32_t nbInputs) const
         noexcept override;
 
     // IPluginV2 Methods
     const char* getPluginType() const noexcept override;
     const char* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
@@ -258,18 +258,18 @@ private:
     std::unique_ptr<MHARunner> dispatcher;
     std::unique_ptr<QkvPaddingRunner> patcher;
 
-    int mS;
-    int mB;
-    int mSM;
-    int mHeadSize;
-    int mHiddenSize;
-    int mNumHeads;
+    int32_t mS;
+    int32_t mB;
+    int32_t mSM;
+    int32_t mHeadSize;
+    int32_t mHiddenSize;
+    int32_t mNumHeads;
     bool mHasImask;
     nvinfer1::DataType mType;
 
     float mDqProbs;
 
-    int mHdim;
+    int32_t mHdim;
     bool mUseVarSeqlen;
 };
 
@@ -301,10 +301,11 @@ private:
 class UnfusedMHARunner : public MHARunner
 {
 public:
-    UnfusedMHARunner(const nvinfer1::DataType type, const int numHeads, const int headSize, const int smVersion);
+    UnfusedMHARunner(
+        const nvinfer1::DataType type, const int32_t numHeads, const int32_t headSize, const int32_t smVersion);
     virtual ~UnfusedMHARunner();
 
-    virtual void setup(const int S, const int B) override;
+    virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
@@ -317,23 +318,23 @@ public:
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
     void deserialize(const void* data, size_t length) override;
-    bool isValid(int s) const override;
+    bool isValid(int32_t s) const override;
 
 private:
     bool mIsBestAlgoFound;
-    int mAlgoBatchedEx1;
-    int mAlgoBatchedEx2;
+    int32_t mAlgoBatchedEx1;
+    int32_t mAlgoBatchedEx2;
     cublasHandle_t mCublas;
-    int mSm;
+    int32_t mSm;
 };
 
 class FusedMHARunnerFP16 : public MHARunner
 {
 public:
-    FusedMHARunnerFP16(const int numHeads, const int headSize, const int sm);
+    FusedMHARunnerFP16(const int32_t numHeads, const int32_t headSize, const int32_t sm);
     ~FusedMHARunnerFP16() = default; // for pimpl
 
-    virtual void setup(const int S, const int B) override;
+    virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
@@ -345,10 +346,10 @@ public:
 
     void deserialize(const void* data, size_t length) override;
 
-    bool isValid(int s) const override;
+    bool isValid(int32_t s) const override;
 
 private:
-    int mSm;
+    int32_t mSm;
     class mhaImpl;
     std::unique_ptr<mhaImpl> pimpl;
 };
@@ -356,10 +357,10 @@ private:
 class FusedMHARunnerInt8 : public MHARunner
 {
 public:
-    FusedMHARunnerInt8(const int numHeads, const int headSize, const int sm, const float dqProbs);
+    FusedMHARunnerInt8(const int32_t numHeads, const int32_t headSize, const int32_t sm, const float dqProbs);
     ~FusedMHARunnerInt8() = default; // for pimpl
 
-    virtual void setup(const int S, const int B) override;
+    virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
@@ -371,11 +372,11 @@ public:
 
     void deserialize(const void* data, size_t length) override;
 
-    bool isValid(int s) const override;
+    bool isValid(int32_t s) const override;
 
 private:
     float mDqProbs;
-    int mSm;
+    int32_t mSm;
     class mhaImpl;
     std::unique_ptr<mhaImpl> pimpl;
 };
@@ -383,10 +384,10 @@ private:
 class FusedMHARunnerFP16v2 : public MHARunner
 {
 public:
-    FusedMHARunnerFP16v2(const int numHeads, const int headSize, const int sm);
+    FusedMHARunnerFP16v2(const int32_t numHeads, const int32_t headSize, const int32_t sm);
     ~FusedMHARunnerFP16v2() = default; // for pimpl
 
-    virtual void setup(const int S, const int B) override;
+    virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
@@ -398,10 +399,10 @@ public:
 
     void deserialize(const void* data, size_t length) override;
 
-    bool isValid(int s) const override;
+    bool isValid(int32_t s) const override;
 
 private:
-    int mSm;
+    int32_t mSm;
     class mhaImpl;
     std::unique_ptr<mhaImpl> pimpl;
 };
@@ -409,10 +410,10 @@ private:
 class FusedMHARunnerInt8v2 : public MHARunner
 {
 public:
-    FusedMHARunnerInt8v2(const int numHeads, const int headSize, const int sm, const float dqProbs);
+    FusedMHARunnerInt8v2(const int32_t numHeads, const int32_t headSize, const int32_t sm, const float dqProbs);
     ~FusedMHARunnerInt8v2() = default; // for pimpl
 
-    virtual void setup(const int S, const int B) override;
+    virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(const nvinfer1::PluginTensorDesc& inputDesc, const nvinfer1::PluginTensorDesc& outputDesc,
         const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
@@ -424,11 +425,11 @@ public:
 
     void deserialize(const void* data, size_t length) override;
 
-    bool isValid(int s) const override;
+    bool isValid(int32_t s) const override;
 
 private:
     float mDqProbs;
-    int mSm;
+    int32_t mSm;
     class mhaImpl;
     std::unique_ptr<mhaImpl> pimpl;
 };

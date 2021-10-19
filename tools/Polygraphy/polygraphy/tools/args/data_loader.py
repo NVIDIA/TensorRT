@@ -39,7 +39,7 @@ class DataLoaderArgs(BaseArgs):
         data_loader_args.add_argument(
             "--val-range",
             help="Range of values to generate in the data loader. "
-            "To specify per-input ranges, use the format: --val-range <out_name>:[min,max]. "
+            "To specify per-input ranges, use the format: --val-range <input_name>:[min,max]. "
             "If no input name is provided, the range is used for any inputs not explicitly specified. "
             "For example: --val-range [0,1] inp0:[2,50] inp1:[3.0,4.6]",
             nargs="+",

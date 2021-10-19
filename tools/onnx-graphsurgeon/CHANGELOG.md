@@ -3,6 +3,11 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.14 (2021-10-14)
+### Fixed
+- Fixed a bug where `numpy.dtype` would not be exported correctly when specified as a node attribute.
+
+
 ## v0.3.13 (2021-09-21)
 ### Added
 - `Graph.tensors()` will now display a warning when duplicate tensors are detected in the graph, even if `check_duplicates=False`.

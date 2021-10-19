@@ -7,15 +7,13 @@ NVIDIA TensorRT is a platform for high-performance deep learning inference. It i
 
 ### Software Versions
 
-Software version configuration tested for the instructions that follow:
-
 |Software|Version|
 |--------|-------|
 |Python|3.6.9|
-|CUDA|11.3.109|
+|CUDA|11.4.2|
 |Apex|0.1|
-|TensorRT|8.0.1.6|
-|PyTorch|1.7.0|
+|TensorRT|8.2.0.6|
+|PyTorch|1.9.1|
 
 
 ## Quick Start Guide
@@ -32,7 +30,7 @@ Software version configuration tested for the instructions that follow:
 3. Install prerequisite software for TTS sample:
     ```bash
     cd $TRT_OSSPATH/demo/Tacotron2
-    sh ./scripts/install_prerequisites.sh
+    bash ./scripts/install_prerequisites.sh
     ```
 4. Download pretrained checkpoints from [NGC](https://ngc.nvidia.com/catalog/models) into the `./checkpoints` directory:
 
@@ -40,7 +38,7 @@ Software version configuration tested for the instructions that follow:
 - [WaveGlow checkpoint](https://ngc.nvidia.com/models/nvidia:waveglow256pyt_fp16)
 
     ```bash
-    sh ./scripts/download_checkpoints.sh
+    bash ./scripts/download_checkpoints.sh
     ```
 
 5. Export the models to ONNX intermediate representation (ONNX IR).
@@ -48,13 +46,13 @@ Software version configuration tested for the instructions that follow:
 
 	```bash
 	mkdir -p output
-	python tensorrt/convert_tacotron22onnx.py --tacotron2 checkpoints/tacotron2_pyt_ckpt_amp_v19.09.0/nvidia_tacotron2pyt_fp16_20190427 -o output/ --fp16
+	python3 tensorrt/convert_tacotron22onnx.py --tacotron2 checkpoints/tacotron2_pyt_ckpt_amp_v19.09.0/nvidia_tacotron2pyt_fp16_20190427 -o output/ --fp16
 	```
 
     Convert WaveGlow to ONNX IR:
 
 	```bash
-	python tensorrt/convert_waveglow2onnx.py --waveglow ./checkpoints/waveglow_ckpt_amp_256_v19.10.0/nvidia_waveglow256pyt_fp16 --config-file config.json --wn-channels 256 -o output/ --fp16
+	python3 tensorrt/convert_waveglow2onnx.py --waveglow ./checkpoints/waveglow_ckpt_amp_256_v19.10.0/nvidia_waveglow256pyt_fp16 --config-file config.json --wn-channels 256 -o output/ --fp16
     ```
 
 	The above commands store the generated ONNX files under the `./output/` directory:
@@ -63,7 +61,7 @@ Software version configuration tested for the instructions that follow:
 6. Export the ONNX IRs to TensorRT engines with fp16 mode enabled:
 
 	```bash
-	python tensorrt/convert_onnx2trt.py --encoder output/encoder.onnx --decoder output/decoder.onnx --postnet output/postnet.onnx --waveglow output/waveglow.onnx -o output/ --fp16
+	python3 tensorrt/convert_onnx2trt.py --encoder output/encoder.onnx --decoder output/decoder.onnx --postnet output/postnet.onnx --waveglow output/waveglow.onnx -o output/ --fp16
 	```
 
 	After running the command, there should be four new engine files in `./output/` directory:
@@ -73,7 +71,7 @@ Software version configuration tested for the instructions that follow:
 
 	
 	```bash
-	python tensorrt/inference_trt.py -i phrases/phrase.txt --encoder output/encoder_fp16.engine --decoder output/decoder_with_outer_loop_fp16.engine --postnet output/postnet_fp16.engine --waveglow output/waveglow_fp16.engine -o output/ --fp16
+	python3 tensorrt/inference_trt.py -i phrases/phrase.txt --encoder output/encoder_fp16.engine --decoder output/decoder_with_outer_loop_fp16.engine --postnet output/postnet_fp16.engine --waveglow output/waveglow_fp16.engine -o output/ --fp16
 	```
 
     On TensorRT <8.0 use `decoder_iter_fp16.engine` for the decoder instead.
@@ -97,6 +95,8 @@ bash scripts/inference_benchmark.sh
 *Note*: For benchmarking we use WaveGlow with 256 residual channels, and Tacotron2 decoder with outer loop for TensorRT inference.
 
 ### Results
+
+> Note: Results last updated for TensorRT 8.0.1.6 release.
 
 #### Inference performance: NVIDIA T4 (16GB)
 

@@ -24,6 +24,7 @@ from polygraphy.backend.onnx import (
     ConvertToFp16,
     FoldConstants,
     ModifyOutputs,
+    OnnxFromBytes,
     OnnxFromPath,
     OnnxFromTfGraph,
     SaveOnnx,
@@ -49,12 +50,22 @@ class TestLoggerCallbacks(object):
 class TestOnnxFromPath(object):
     def test_basic(self):
         loader = OnnxFromPath(ONNX_MODELS["identity"].path)
-        assert isinstance(loader(), onnx.ModelProto)
+        model = loader()
+        assert isinstance(model, onnx.ModelProto)
+        assert len(model.graph.node) == 1
 
     def test_external_data(self):
         model = ONNX_MODELS["ext_weights"]
         loader = OnnxFromPath(model.path, model.ext_data)
         assert isinstance(loader(), onnx.ModelProto)
+
+
+class TestOnnxFromBytes(object):
+    def test_basic(self):
+        loader = OnnxFromBytes(ONNX_MODELS["identity"].loader)
+        model = loader()
+        assert isinstance(model, onnx.ModelProto)
+        assert len(model.graph.node) == 1
 
 
 class TestGsFromOnnx(object):
@@ -64,6 +75,8 @@ class TestGsFromOnnx(object):
 
 
 class TestExportOnnxFromTf(object):
+    pytest.importorskip("tensorflow")
+
     def test_no_optimize(self):
         loader = OnnxFromTfGraph(TF_MODELS["identity"].loader, optimize=False, fold_constant=False)
         model = loader()

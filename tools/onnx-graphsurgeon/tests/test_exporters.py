@@ -132,6 +132,7 @@ class TestOnnxExporter(object):
         attrs["floats_attr"] = [1.0, 2.0, 3.0, 4.0]
         attrs["ints_attr"] = [4, 3, 2, 1]
         attrs["strings_attr"] = ["constant", "and", "variable"]
+        attrs["dtype_attr"] = np.float32
         node = Node(op=op, name=name, inputs=inputs, outputs=outputs, attrs=attrs)
 
         onnx_node = OnnxExporter.export_node(node, do_type_check=True)
@@ -160,6 +161,8 @@ class TestOnnxExporter(object):
                     raise AssertionError(
                         "Unrecognized list attribute: ({:}: {:}) of type: {:}".format(name, attr, type(attr))
                     )
+            elif isinstance(attr, type):
+                assert onnx_attr.i == onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(attr)]
             else:
                 raise AssertionError("Unrecognized attribute: ({:}: {:}) of type: {:}".format(name, attr, type(attr)))
 

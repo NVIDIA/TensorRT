@@ -1,4 +1,4 @@
-# Specifying I/O Formats Using The Reformat Free I/O APIs
+# Specifying I/O Formats
 
 
 **Table Of Contents**
@@ -14,24 +14,19 @@
 
 ## Description
 
-This sample, sampleReformatFreeIO, uses a Caffe model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md) and performs engine building and inference using TensorRT. The correctness of outputs is then compared to the golden reference. Specifically, it shows how to use reformat free I/O APIs to explicitly specify I/O formats to `TensorFormat::kLINEAR`, `TensorFormat::kCHW2` and `TensorFormat::kHWC8` for Float16 and INT8 precision.
+This sample, sampleIOFormats, uses a Caffe model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md) and performs engine building and inference using TensorRT. The correctness of outputs is then compared to the golden reference. Specifically, it shows how to use APIs to explicitly specify I/O formats to `TensorFormat::kLINEAR` for Float32, and additionally `TensorFormat::kCHW2` and `TensorFormat::kHWC8` for Float16 and INT8 precision.
 
 ## How does this sample work?
 
-`ITensor::setAllowedFormats` is invoked to specify which format is expected to be supported so that the unnecessary reformatting will not be inserted to convert from/to FP32 formats for I/O tensors. `BuilderFlag::kSTRICT_TYPES` is also assigned to the builder configuration to let the builder choose a reformat free path rather than the fastest path.
-
-**Note:** If a reformat free path cannot be found, then the fastest path with reformatting will be selected with the following warning message:
-`Warning: no implementation obeys reformatting-free rules, ....`
+`ITensor::setAllowedFormats` is invoked to specify which format is expected to be supported. 
 
 	```
-	bool SampleReformatFreeIO::build(int dataWidth)
+	bool SampleIOFormats::build(int dataWidth)
 	{
 		...
 
 		network->getInput(0)->setAllowedFormats(static_cast<TensorFormats>(1 << static_cast<int>(mTensorFormat)));
 		network->getOutput(0)->setAllowedFormats(static_cast<TensorFormats>(1 << static_cast<int>(mTensorFormat)));
-		...
-		config->setFlag(BuilderFlag::kSTRICT_TYPES);
 		...
 	}
 	```
@@ -53,17 +48,17 @@ This sample, sampleReformatFreeIO, uses a Caffe model that was trained on the [M
 
 2.  Run inference on the digit looping from 0 to 9:
     ```bash
-    ./sample_reformat_free_io --datadir=<path/to/data> --useDLACore=N
+    ./sample_io_formats --datadir=<path/to/data> --useDLACore=N
     ```
 
     For example:
     ```bash
-    ./sample_reformat_free_io --datadir $TRT_DATADIR/mnist
+    ./sample_io_formats --datadir $TRT_DATADIR/mnist
     ```
 
 3.  Verify that all 10 digits match correctly. If the sample runs successfully, you should see output similar to the following:
 	```
-	&&&& RUNNING TensorRT.sample_reformat_free_io # ./sample_reformat_free_io
+	&&&& RUNNING TensorRT.sample_io_formats # ./sample_io_formats
 	[I] The test chooses MNIST as the network and recognizes a randomly generated digit
 	[I] Firstly it runs the FP32 as the golden data, then INT8/FP16 with different formats will be tested
 	[I]
@@ -71,7 +66,7 @@ This sample, sampleReformatFreeIO, uses a Caffe model that was trained on the [M
 	[I] [TRT] Detected 1 input and 1 output network tensors.
 	[I] Input:
 	... (omitted message)
-	&&&& PASSED TensorRT.sample_reformat_free_io
+	&&&& PASSED TensorRT.sample_io_formats
 	```
 	This output shows that the sample ran successfully; `PASSED`.
 
@@ -99,6 +94,12 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 
 ## Changelog
+
+Oct 2021
+Change names and topic from "reformat-free" to "I/O formats", because `BuilderFlag::kSTRICT_TYPES`
+is deprecated. "Reformat-free I/O" (see `BuilderFlag::kDIRECT_IO`) is generally counterproductive
+and fragile, since it constrains the optimizer from choosing the fastest implementation,
+and depends upon what kernels are available on a particular target.
 
 June 2019
 This is the first release of the `README.md` file and sample.

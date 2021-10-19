@@ -10,7 +10,8 @@ def register_logger_callback():
         from polygraphy import mod
 
         tf = mod.lazy_import("tensorflow", version="<2.0")
-        if not mod.has_mod(tf):
+
+        if not mod.has_mod("tensorflow"):
             return
 
         if sev > G_LOGGER.WARNING:

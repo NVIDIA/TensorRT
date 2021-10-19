@@ -710,7 +710,11 @@ void bindCore(py::module& m)
         .value("DISABLE_TIMING_CACHE", BuilderFlag::kDISABLE_TIMING_CACHE, BuilderFlagDoc::DISABLE_TIMING_CACHE)
         .value("TF32", BuilderFlag::kTF32, BuilderFlagDoc::TF32)
         .value("SPARSE_WEIGHTS", BuilderFlag::kSPARSE_WEIGHTS, BuilderFlagDoc::SPARSE_WEIGHTS)
-        .value("SAFETY_SCOPE", BuilderFlag::kSAFETY_SCOPE, BuilderFlagDoc::SAFETY_SCOPE);
+        .value("SAFETY_SCOPE", BuilderFlag::kSAFETY_SCOPE, BuilderFlagDoc::SAFETY_SCOPE)
+        .value("OBEY_PRECISION_CONSTRAINTS", BuilderFlag::kOBEY_PRECISION_CONSTRAINTS, BuilderFlagDoc::OBEY_PRECISION_CONSTRAINTS)
+        .value("PREFER_PRECISION_CONSTRAINTS", BuilderFlag::kPREFER_PRECISION_CONSTRAINTS, BuilderFlagDoc::PREFER_PRECISION_CONSTRAINTS)
+        .value("DIRECT_IO", BuilderFlag::kDIRECT_IO, BuilderFlagDoc::DIRECT_IO)
+        .value("REJECT_EMPTY_ALGORITHMS", BuilderFlag::kREJECT_EMPTY_ALGORITHMS, BuilderFlagDoc::REJECT_EMPTY_ALGORITHMS);
 
     py::enum_<QuantizationFlag>(m, "QuantizationFlag", py::arithmetic{}, QuantizationFlagDoc::descr)
         .value("CALIBRATE_BEFORE_FUSION", QuantizationFlag::kCALIBRATE_BEFORE_FUSION,

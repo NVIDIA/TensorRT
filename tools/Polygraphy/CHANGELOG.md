@@ -3,6 +3,25 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.33.2 (2021-10-21)
+### Changed
+- Improved the help messages of various subtools, including `run`, `debug build`, and `debug reduce`.
+- Added a default value for `--artifacts-dir` in `debug` subtools.
+
+### Fixed
+- Fixed a bug in `surgeon insert` where data types of graph output tensors would not be preserved.
+- Fixed broken links in various READMEs.
+
+
+## v0.33.1 (2021-10-08)
+### Added
+- Added an `OnnxFromBytes` loader that can deserialize ONNX models.
+- Added an `obey_precision_constraints` argument to `CreateConfig` and corresponding `--obey-precision-constraints` CLI argument.
+
+### Changed
+- Deprecated `strict_types` option in `CreateConfig` and corresponding `--strict-types` CLI argument.
+
+
 ## v0.33.0 (2021-09-16)
 ### Added
 - Added various examples, a [CLI User Guide](polygraphy/tools/) and [directory for how-to guides](./how-to).
@@ -474,7 +493,7 @@ Dates are in YYYY-MM-DD format.
 - Added support for loading TensorRT networks from Python scripts to various CLI tools.
     CLI tools can now accept a Python script in place of a model file.
     The script should define a `load_network` function that takes no arguments and returns a TensorRT builder, network, and optionally parser.
-    See [the example](examples/cli/run/04_defining_a_trt_network_manually/) for details.
+    See [the example](examples/cli/run/04_defining_a_tensorrt_network_or_config_manually/) for details.
 - Added an experimental `template` tool that can generate template files.
     - Added a `trt-network` subtool that can generate a template script for defining TensorRT networks using the network API.
 - Added a `SaveBytes` loader to facilitate writing bytes to a file between loaders.

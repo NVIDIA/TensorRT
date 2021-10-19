@@ -72,6 +72,29 @@ def process_results(category: List[str], results: List[NetworkResult], nconfig: 
     headers = general_stats + [r + " (sec)" for r in runtime_result_row_names]
     return headers, rows
 
+def process_per_result_entries(script_category: List[str], results: List[NetworkResult], max_output_char:int = 30):
+    """Prints tabulations for each entry returned by the runtime result."""
+    def _shorten_text(w):
+        l = len(w)
+        if l > max_output_char:
+            return w[0:max_output_char // 2] + " ... " + w[-max_output_char//2:]
+        return w
+
+    headers = ["script", "network_part", "accuracy", "runtime", "input", "output"]
+    row_data_by_input = defaultdict(list)
+    for cat, result in zip(script_category, results):
+        for nr in result.network_results:
+            for runtime in  nr.median_runtime:
+                row_data_by_input[hash(nr.input)].append([
+                    cat,
+                    runtime.name,
+                    result.accuracy,
+                    runtime.runtime,
+                    _shorten_text(nr.input),
+                    _shorten_text(nr.semantic_output)
+                ])
+
+    return headers, dict(row_data_by_input)
 
 # IO #
 def confirm_folder_delete(
@@ -144,7 +167,10 @@ def measure_python_inference_code(
     return median(timeit.repeat(stmt, number=number, repeat=iterations)) / number
 
 class NNFolderWorkspace:
-    """For keeping track of workspace folder and for cleaning them up."""
+    """
+    For keeping track of workspace folder and for cleaning them up.
+    Due to potential corruption of ONNX model conversion, the workspace is split up by model variants.
+    """
 
     def __init__(
         self, network_name: str, metadata: NetworkMetadata, working_directory: str
@@ -152,12 +178,11 @@ class NNFolderWorkspace:
         self.rootdir = working_directory
         self.metadata = metadata
         self.network_name = network_name
-        self.dpath = os.path.join(self.rootdir, self.network_name)
+        self.dpath = os.path.join(self.rootdir, self.network_name, metadata.variant)
         os.makedirs(self.dpath, exist_ok=True)
 
     def get_path(self) -> str:
-        dpath = os.path.join(self.rootdir, self.network_name)
-        return dpath
+        return self.dpath
 
     def cleanup(self, force_remove: bool = False) -> None:
         fpath = self.get_path()

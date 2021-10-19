@@ -15,7 +15,7 @@ This repository contains the Open Source Software (OSS) components of NVIDIA Ten
 To build the TensorRT-OSS components, you will first need the following software packages.
 
 **TensorRT GA build**
-* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.2.0.6
+* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.2.1.8
 
 **System Packages**
 * [CUDA](https://developer.nvidia.com/cuda-toolkit)
@@ -70,16 +70,16 @@ To build the TensorRT-OSS components, you will first need the following software
 
     ```bash
     cd ~/Downloads
-    tar -xvzf TensorRT-8.2.0.6.Linux.x86_64-gnu.cuda-11.4.cudnn8.2.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-8.2.0.6
+    tar -xvzf TensorRT-8.2.1.8.Linux.x86_64-gnu.cuda-11.4.cudnn8.2.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-8.2.1.8
     ```
 
     **Example: Windows on x86-64 with cuda-11.4**
 
     ```powershell
     cd ~\Downloads
-    Expand-Archive .\TensorRT-8.2.0.6.Windows10.x86_64.cuda-11.4.cudnn8.2.zip
-    $Env:TRT_LIBPATH = '$(Get-Location)\TensorRT-8.2.0.6'
+    Expand-Archive .\TensorRT-8.2.1.8.Windows10.x86_64.cuda-11.4.cudnn8.2.zip
+    $Env:TRT_LIBPATH = '$(Get-Location)\TensorRT-8.2.1.8'
     $Env:PATH += 'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\MSBuild\15.0\Bin\'
     ```
 
@@ -110,6 +110,10 @@ For Linux platforms, we recommend that you generate a docker container for build
     ```bash
     ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda10.2 --cuda 10.2
     ```
+    **Example: Ubuntu 20.04 on aarch64 with cuda-11.4.2**
+    ```bash
+    ./docker/build.sh --file docker/ubuntu-20.04-aarch64.Dockerfile --tag tensorrt-aarch64-ubuntu20.04-cuda11.4
+    ```
 
 2. #### Launch the TensorRT-OSS build container.
     **Example: Ubuntu 18.04 build container**
@@ -132,6 +136,23 @@ For Linux platforms, we recommend that you generate a docker container for build
 	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
 	make -j$(nproc)
 	```
+
+    > NOTE: On CentOS7, the default g++ version does not support C++14. For native builds (not using the CentOS7 build container), first install devtoolset-8 to obtain the updated g++ toolchain as follows:
+    ```bash
+    yum -y install centos-release-scl
+    yum-config-manager --enable rhel-server-rhscl-7-rpms
+    yum -y install devtoolset-8
+    export PATH="/opt/rh/devtoolset-8/root/bin:${PATH}
+    ```
+
+    **Example: Linux (aarch64) build with default cuda-11.4.2**
+	```bash
+	cd $TRT_OSSPATH
+	mkdir -p build && cd build
+	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64-native.toolchain
+	make -j$(nproc)
+	```
+
     **Example: Native build on Jetson (aarch64) with cuda-10.2**
     ```bash
     cd $TRT_OSSPATH
@@ -141,13 +162,15 @@ For Linux platforms, we recommend that you generate a docker container for build
     ```
     > NOTE: C compiler must be explicitly specified via `CC=` for native `aarch64` builds of protobuf.
 
-    **Example: Ubuntu 18.04 Cross-Compile for Jetson (arm64) with cuda-10.2 (JetPack)**
+    **Example: Ubuntu 18.04 Cross-Compile for Jetson (aarch64) with cuda-10.2 (JetPack)**
 	```bash
 	cd $TRT_OSSPATH
 	mkdir -p build && cd build
-	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=10.2
+	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=10.2 -DCUDNN_LIB=/pdk_files/cudnn/usr/lib/aarch64-linux-gnu/libcudnn.so -DCUBLAS_LIB=/usr/local/cuda-10.2/targets/aarch64-linux/lib/stubs/libcublas.so -DCUBLASLT_LIB=/usr/local/cuda-10.2/targets/aarch64-linux/lib/stubs/libcublasLt.so
 	make -j$(nproc)
 	```
+    > NOTE: The latest JetPack SDK v4.6 only supports TensorRT 8.0.1.
+
     **Example: Windows (x86-64) build in Powershell**
 	```powershell
 	cd $Env:TRT_OSSPATH
@@ -191,4 +214,4 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 ## Known Issues
 
-* None
+* Please refer to [TensorRT 8.2 Release Notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8)

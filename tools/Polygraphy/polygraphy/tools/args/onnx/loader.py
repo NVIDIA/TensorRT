@@ -180,7 +180,7 @@ class OnnxShapeInferenceArgs(BaseArgs):
                 "--force-fallback-shape-inference",
                 help="Force Polygraphy to use ONNX-Runtime to determine metadata for "
                 "tensors in the graph. This can be useful in cases where ONNX shape inference does not generate correct information. "
-                "Note that this will cause dynamic dimensions to become fixed. ",
+                "Note that this will cause dynamic dimensions to become static. ",
                 action="store_true",
                 default=None,
             )

@@ -26,6 +26,7 @@
 #include "serialize.hpp"
 
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <tuple>
@@ -207,7 +208,7 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
         bool isFormatSupported = in->format == TensorFormat::kLINEAR;
         if (mType == DataType::kINT8)
         {
-            if (in->dims.d[HDIM] % 32 == 0)
+            if (in->dims.d[HDIM] % 32U == 0)
             {
                 isFormatSupported = in->format == TensorFormat::kCHW32;
             }
@@ -218,12 +219,12 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
         }
 
         // must not check descriptions > pos
-        return (in->type == mType) &&        // precision
-            isFormatSupported &&             // format
-            (in->dims.nbDims == 5) &&        // num dims
-            ((in->dims.d[HDIM] % 3) == 0) && // see getOutputDimensions
-            ((in->dims.d[3]) == 1) &&        // for fc
-            ((in->dims.d[4]) == 1)           // for fc
+        return (in->type == mType) &&         // precision
+            isFormatSupported &&              // format
+            (in->dims.nbDims == 5) &&         // num dims
+            ((in->dims.d[HDIM] % 3U) == 0) && // see getOutputDimensions
+            ((in->dims.d[3]) == 1) &&         // for fc
+            ((in->dims.d[4]) == 1)            // for fc
             ;
     }
     else
@@ -250,7 +251,7 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
             bool isFormatSupported = out->format == TensorFormat::kLINEAR;
             if (mType == DataType::kINT8)
             {
-                if (out->dims.d[HDIM] % 32 == 0)
+                if (out->dims.d[HDIM] % 32U == 0)
                 {
                     isFormatSupported = out->format == TensorFormat::kCHW32;
                 }
@@ -722,7 +723,7 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     auto supportedFormat = TensorFormat::kLINEAR;
     if (mType == DataType::kINT8)
     {
-        supportedFormat = (inDims.d[mHdim] % 32 == 0) ? TensorFormat::kCHW32 : TensorFormat::kCHW4;
+        supportedFormat = (inDims.d[mHdim] % 32U == 0) ? TensorFormat::kCHW32 : TensorFormat::kCHW4;
     }
 
     int32_t supportedNbDims = 5;
@@ -731,7 +732,7 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
         supportedNbDims = 4;
     }
 
-    bool supportedHdim = (pos == 0) ? (inDims.d[mHdim] % 3 == 0) : (inDims.d[mHdim] / 3 == outDims.d[mHdim]);
+    bool supportedHdim = (pos == 0) ? (inDims.d[mHdim] % 3U == 0) : (inDims.d[mHdim] / 3 == outDims.d[mHdim]);
 
     if (pos == 0 || pos == nbInputs)
     { // check input and output

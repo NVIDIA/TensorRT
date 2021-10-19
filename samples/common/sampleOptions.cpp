@@ -375,9 +375,13 @@ std::ostream& printPrecision(std::ostream& os, const BuildOptions& options)
     {
         os << "+INT8";
     }
-    if (options.strictTypes)
+    if (options.precisionConstraints == PrecisionConstraints::kOBEY)
     {
-        os << " (strict types)";
+        os << " (obey precision constraints)";
+    }
+    if (options.precisionConstraints == PrecisionConstraints::kPREFER)
+    {
+        os << " (prefer precision constraints)";
     }
     return os;
 }
@@ -586,7 +590,27 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--safe", safe);
     getAndDelOption(arguments, "--consistency", consistency);
     getAndDelOption(arguments, "--restricted", restricted);
-    getAndDelOption(arguments, "--strictTypes", strictTypes);
+
+    getAndDelOption(arguments, "--directIO", directIO);
+
+    std::string precisionConstraintsString;
+    getAndDelOption(arguments, "--precisionConstraints", precisionConstraintsString);
+    if (!precisionConstraintsString.empty())
+    {
+        const std::unordered_map<std::string, PrecisionConstraints> precisionConstraintsMap
+            = {{"obey", PrecisionConstraints::kOBEY}, {"prefer", PrecisionConstraints::kPREFER},
+                {"none", PrecisionConstraints::kNONE}};
+        auto it = precisionConstraintsMap.find(precisionConstraintsString);
+        if (it == precisionConstraintsMap.end())
+        {
+            throw std::invalid_argument(std::string("Unknown precision constraints: ") + precisionConstraintsString);
+        }
+        precisionConstraints = it->second;
+    }
+    else
+    {
+        precisionConstraints = PrecisionConstraints::kNONE;
+    }
 
     std::string sparsityString;
     getAndDelOption(arguments, "--sparsity", sparsityString);
@@ -763,6 +787,7 @@ void InferenceOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--duration", duration);
     getAndDelOption(arguments, "--warmUp", warmup);
     getAndDelOption(arguments, "--sleepTime", sleep);
+    getAndDelOption(arguments, "--idleTime", idle);
     bool exposeDMA{false};
     if (getAndDelOption(arguments, "--exposeDMA", exposeDMA))
     {
@@ -1149,7 +1174,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
           "Sparsity: ";         printSparsity(os, options)                                                              << std::endl <<
           "Safe mode: "      << boolToEnabled(options.safe)                                                             << std::endl <<
-          "Strict mode: "    << boolToEnabled(options.strictTypes)                                                      << std::endl <<
+          "DirectIO mode: "  << boolToEnabled(options.directIO)                                                         << std::endl <<
           "Restricted mode: " << boolToEnabled(options.restricted)                                                      << std::endl <<
           "Save engine: "    << (options.save ? options.engine : "")                                                    << std::endl <<
           "Load engine: "    << (options.load ? options.engine : "")                                                    << std::endl <<
@@ -1220,6 +1245,7 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
           "Duration: "           << options.duration   << "s (+ "
                                  << options.warmup     << "ms warm up)"   << std::endl <<
           "Sleep time: "         << options.sleep      << "ms"            << std::endl <<
+          "Idle time: "          << options.idle       << "ms"            << std::endl <<
           "Streams: "            << options.streams                       << std::endl <<
           "ExposeDMA: "          << boolToEnabled(!options.overlap)       << std::endl <<
           "Data transfers: "     << boolToEnabled(!options.skipTransfers) << std::endl <<
@@ -1391,7 +1417,12 @@ void BuildOptions::help(std::ostream& os)
           "  --fp16                      Enable fp16 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --int8                      Enable int8 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --best                      Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
-          "  --strictTypes               Enables strict type constraints. (default = disabled)"                                              "\n"
+          "  --directIO                  Avoid reformatting at network boundaries. (default = disabled)"                                     "\n"
+          "  --precisionConstraints=spec Control precision constraints. (default = none)"                                                    "\n"
+          "                                  Precision Constaints: spec ::= \"none\" | \"obey\" | \"prefer\""                                "\n"
+          "                                  none = no constraints"                                                                          "\n"
+          "                                  prefer = meet precision constraints if possible"                                                "\n"
+          "                                  obey = meet precision constraints or fail otherwise"                                            "\n"
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   "\n"
           "  --safe                      Enable build safety certified engine"                                                               "\n"
           "  --consistency               Perform consistency checking on safety certified engine"                                            "\n"
@@ -1449,6 +1480,8 @@ void InferenceOptions::help(std::ostream& os)
                                                                                                           << defaultDuration << ")"  << std::endl <<
           "  --sleepTime=N               Delay inference start with a gap of N milliseconds between launch and compute "
                                                                                                "(default = " << defaultSleep << ")"  << std::endl <<
+          "  --idleTime=N                Sleep N milliseconds between two continuous iterations"
+                                                                                               "(default = " << defaultIdle << ")"   << std::endl <<
           "  --streams=N                 Instantiate N engines to use concurrently (default = "            << defaultStreams << ")"  << std::endl <<
           "  --exposeDMA                 Serialize DMA transfers to and from device (default = disabled)."                           << std::endl <<
           "  --noDataTransfers           Disable DMA transfers to and from device (default = enabled)."                              << std::endl <<

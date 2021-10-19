@@ -21,18 +21,25 @@
 #include "efficientNMSInference.cuh"
 #include "efficientNMSInference.h"
 
+#define NMS_TILES 5
+
 using namespace nvinfer1;
 
 template <typename T>
 __device__ float IOU(EfficientNMSParameters param, BoxCorner<T> box1, BoxCorner<T> box2)
 {
     // Regardless of the selected box coding, IOU is always performed in BoxCorner coding.
-    float intersectArea = BoxCorner<T>::intersect(box1, box2).area();
+    // The boxes are copied so that they can be reordered without affecting the originals.
+    BoxCorner<T> b1 = box1;
+    BoxCorner<T> b2 = box2;
+    b1.reorder();
+    b2.reorder();
+    float intersectArea = BoxCorner<T>::intersect(b1, b2).area();
     if (intersectArea <= 0.f)
     {
         return 0.f;
     }
-    float unionArea = box1.area() + box2.area() - intersectArea;
+    float unionArea = b1.area() + b2.area() - intersectArea;
     if (unionArea <= 0.f)
     {
         return 0.f;
@@ -47,12 +54,12 @@ __device__ BoxCorner<T> DecodeBoxes(EfficientNMSParameters param, int boxIdx, in
     // The inputs will be in the selected coding format, as well as the decoding function. But the decoded box
     // will always be returned as BoxCorner.
     Tb box = boxesInput[boxIdx];
-    box.reorder();
     if (!param.boxDecoder)
     {
         return BoxCorner<T>(box);
     }
     Tb anchor = anchorsInput[anchorIdx];
+    box.reorder();
     anchor.reorder();
     return BoxCorner<T>(box.decode(anchor));
 }
@@ -125,7 +132,14 @@ __device__ void WriteNMSResult(EfficientNMSParameters param, int* __restrict__ n
         nmsScoresOutput[outputIdx] = threadScore;
     }
     nmsClassesOutput[outputIdx] = threadClass;
-    nmsBoxesOutput[outputIdx] = threadBox;
+    if (param.clipBoxes)
+    {
+        nmsBoxesOutput[outputIdx] = threadBox.clip((T) 0, (T) 1);
+    }
+    else
+    {
+        nmsBoxesOutput[outputIdx] = threadBox;
+    }
     numDetectionsOutput[imageIdx] = resultsCounter;
 }
 
@@ -188,12 +202,12 @@ __global__ void EfficientNMS(EfficientNMSParameters param, const int* topNumData
         resultsCounter = 0;
     }
 
-    int threadState[4];
-    unsigned int boxIdx[4];
-    T threadScore[4];
-    int threadClass[4];
-    BoxCorner<T> threadBox[4];
-    int boxIdxMap[4];
+    int threadState[NMS_TILES];
+    unsigned int boxIdx[NMS_TILES];
+    T threadScore[NMS_TILES];
+    int threadClass[NMS_TILES];
+    BoxCorner<T> threadBox[NMS_TILES];
+    int boxIdxMap[NMS_TILES];
     for (int tile = 0; tile < numTiles; tile++)
     {
         threadState[tile] = 0;
@@ -207,6 +221,7 @@ __global__ void EfficientNMS(EfficientNMSParameters param, const int* topNumData
     for (int i = 0; i < numSelectedBoxes; i++)
     {
         int tile = i / tileSize;
+
         if (boxIdx[tile] == i)
         {
             // Iteration lead thread, figure out what the other threads should do,
@@ -319,7 +334,7 @@ cudaError_t EfficientNMSLauncher(EfficientNMSParameters& param, int* topNumData,
     const void* boxesInput, const void* anchorsInput, int* numDetectionsOutput, T* nmsScoresOutput,
     int* nmsClassesOutput, int* nmsIndicesOutput, void* nmsBoxesOutput, cudaStream_t stream)
 {
-    unsigned int tileSize = param.numSelectedBoxes / 4;
+    unsigned int tileSize = param.numSelectedBoxes / NMS_TILES;
     if (param.numSelectedBoxes <= 512)
     {
         tileSize = 512;
@@ -350,7 +365,7 @@ cudaError_t EfficientNMSLauncher(EfficientNMSParameters& param, int* topNumData,
 
     if (param.outputONNXIndices)
     {
-        PadONNXResult<<<{1}, {1}, 0, stream>>>(param, outputIndexData, nmsIndicesOutput);
+        PadONNXResult<<<1, 1, 0, stream>>>(param, outputIndexData, nmsIndicesOutput);
     }
 
     return cudaGetLastError();
@@ -417,7 +432,7 @@ __global__ void EfficientNMSFilter(EfficientNMSParameters param, const T* __rest
 
         if (param.scoreBits > 0)
         {
-            add_mp(score, (T) 1);
+            score = add_mp(score, (T) 1);
             if (gt_mp(score, (T) (2.f - 1.f / 1024.f)))
             {
                 // Ensure the incremented score fits in the mantissa without changing the exponent
@@ -475,11 +490,11 @@ __global__ void EfficientNMSDenseIndex(EfficientNMSParameters param, int* __rest
         T score = topScoresData[dataIdx];
         if (lt_mp(score, (T) param.scoreThreshold))
         {
-            topScoresData[dataIdx] = -1 << 15;
+            topScoresData[dataIdx] = -(1 << 15);
         }
         else if (classIdx == param.backgroundClass)
         {
-            topScoresData[dataIdx] = -1 << 15;
+            topScoresData[dataIdx] = -(1 << 15);
         }
     }
 
@@ -514,7 +529,7 @@ cudaError_t EfficientNMSFilterLauncher(EfficientNMSParameters& param, const T* s
         // Inverse Sigmoid
         if (param.scoreThreshold <= 0.f)
         {
-            param.scoreThreshold = -1 << 15;
+            param.scoreThreshold = -(1 << 15);
         }
         else
         {
@@ -666,12 +681,12 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
     if (properties.regsPerBlock >= 65536)
     {
         // Most Devices
-        param.numSelectedBoxes = 4096;
+        param.numSelectedBoxes = 5000;
     }
     else
     {
         // Jetson TX1/TX2
-        param.numSelectedBoxes = 2048;
+        param.numSelectedBoxes = 2000;
     }
 
     // Kernels

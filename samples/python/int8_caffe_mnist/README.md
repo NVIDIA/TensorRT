@@ -14,7 +14,7 @@
 
 ## Description
 
-This sample, int8_caffe_mnist, demonstrates how to create an INT8 calibrator, build and calibrate an engine for INT8 mode, and finally run inference in INT8 mode.
+This sample, `int8_caffe_mnist`, demonstrates how to create an INT8 calibrator, build and calibrate an engine for INT8 mode, and finally run inference in INT8 mode.
 
 ## How does this sample work?
 
@@ -25,10 +25,18 @@ During inference, the sample loads a random batch from the calibrator, then perf
 ## Prerequisites
 
 1. Install the dependencies for Python.
-	`python3 -m pip install -r requirements.txt`
+    ```bash
+    pip3 install -r requirements.txt
+    ```
+
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
+```
 
 2. The MNIST dataset can be found under the data directory (usually `/usr/src/tensorrt/data/mnist`) if using the TensorRT containers. It is also bundled along with the [TensorRT tarball](https://developer.nvidia.com/nvidia-tensorrt-download).
    - This sample requires the [training set](http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz), [test set](http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz) and [test labels](http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz).
+   - Unzip these files once they are downloaded - Note that on Windows depending on how you decompress these files the resulting file extention may be changed to <FILENAME>.idx3-ubyte. If this happens, rename the files to <FILENAME>-idx3-ubyte
 
 
 ## Running the sample
@@ -39,7 +47,7 @@ During inference, the sample loads a random batch from the calibrator, then perf
 	to run the sample with Python 3.
 
 	**Note:** If the TensorRT sample data is not installed in the default location, for example `/usr/src/tensorrt/data/`, the `data` directory must be specified. For example:
-	`python sample.py -d /path/to/my/data/`.
+	`python3 sample.py -d /path/to/my/data/`.
 
 
 2.  Verify that the sample ran successfully. If the sample runs successfully, the accuracy should be close to 99%.

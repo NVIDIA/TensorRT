@@ -85,6 +85,7 @@ class T5ModelTRTConfig(NNConfig):
     NETWORK_DECODER_SEGMENT_NAME = "decoder"
     NETWORK_ENCODER_SEGMENT_NAME = "encoder"
     NETWORK_SEGMENTS = [NETWORK_DECODER_SEGMENT_NAME, NETWORK_ENCODER_SEGMENT_NAME]
+    VOCAB_SIZE = 32128
 
     def __init__(self):
         precision_fp16 = [False, True]

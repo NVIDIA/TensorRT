@@ -22,6 +22,9 @@ from typing import Callable
 # pytorch
 import torch
 
+# NNDF
+from NNDF.logger import G_LOGGER
+
 # Function Decorators #
 def use_cuda(func: Callable):
     """
@@ -33,21 +36,45 @@ def use_cuda(func: Callable):
     or disables toggling of cuda.
     """
 
+    def _send_args_to_device(caller_kwargs, device):
+        new_kwargs = {}
+        for k, v in caller_kwargs.items():
+            if getattr(v, "to", False):
+                new_kwargs[k] = v.to(device)
+            else:
+                new_kwargs[k] = v
+        return new_kwargs
+
     def wrapper(*args, **kwargs):
         caller_kwargs = inspect.getcallargs(func, *args, **kwargs)
         assert (
             "use_cuda" in caller_kwargs
         ), "Function must have 'use_cuda' as a parameter."
 
-        if caller_kwargs["use_cuda"] and torch.cuda.is_available():
+        if caller_kwargs["use_cuda"]:
             new_kwargs = {}
-            for k, v in caller_kwargs.items():
-                if getattr(v, "to", False):
-                    new_kwargs[k] = v.to("cuda")
-                else:
-                    new_kwargs[k] = v
+            used_cuda = False
+            if torch.cuda.is_available() and caller_kwargs["use_cuda"]:
+                new_kwargs = _send_args_to_device(caller_kwargs, "cuda")
+                used_cuda = True
+            else:
+                new_kwargs = _send_args_to_device(caller_kwargs, "cpu")
 
-            return func(**new_kwargs)
+            try:
+                return func(**new_kwargs)
+            except RuntimeError as e:
+                # If a device has cuda installed but no compatible kernels, cuda.is_available() will still return True.
+                # This exception is necessary to catch remaining incompat errors.
+                if used_cuda:
+                    G_LOGGER.warning("Unable to execute program using cuda compatible device: {}".format(e))
+                    G_LOGGER.warning("Retrying using CPU only.")
+                    new_kwargs = _send_args_to_device(caller_kwargs, "cpu")
+                    new_kwargs["use_cuda"] = False
+                    cpu_result = func(**new_kwargs)
+                    G_LOGGER.warning("Successfully obtained result using CPU.")
+                    return cpu_result
+                else:
+                    raise e
         else:
             return func(**caller_kwargs)
 

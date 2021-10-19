@@ -27,8 +27,8 @@ algorithm_selector = mod.lazy_import("polygraphy.backend.trt.algorithm_selector"
 
 class DiffTactics(Tool):
     """
-    Determine potentially bad tactics given sets of good and bad tactic
-    replay files.
+    Determine potentially bad tactics given sets of good and bad Polygraphy tactic
+    replay files, such as the ones saved by `--save-tactics`.
     """
 
     def __init__(self):
@@ -37,18 +37,18 @@ class DiffTactics(Tool):
     def add_parser_args(self, parser):
         parser.add_argument(
             "--dir",
-            help="A directory containing good and bad tactic replay files. "
+            help="A directory containing good and bad Polygraphy tactic replay files, such as the ones saved by --save-tactics. "
             "By default, this tool will search for files in directories called 'good' and 'bad'",
             default="",
         )
         parser.add_argument(
             "--good",
-            help="A directory containing good tactic replay files or a single good tactic replay file. ",
+            help="Either a directory containing good Polygraphy tactic replay files or a single good file. ",
             default=None,
         )
         parser.add_argument(
             "--bad",
-            help="A directory containing bad tactic replay files or a single bad tactic replay file. ",
+            help="Either a directory containing bad Polygraphy tactic replay files or a single bad file. ",
             default=None,
         )
 

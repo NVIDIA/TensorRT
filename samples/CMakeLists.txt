@@ -28,7 +28,7 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleMNISTAPI
     sampleNMT
     sampleOnnxMNIST
-    sampleReformatFreeIO
+    sampleIOFormats
     sampleSSD
     sampleUffFasterRCNN
     sampleUffMaskRCNN

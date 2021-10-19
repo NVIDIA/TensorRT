@@ -355,7 +355,7 @@ class Logger(object):
             self.log(message, Logger.CRITICAL, stack_depth=3)
             from polygraphy.exception import PolygraphyInternalException
 
-            raise PolygraphyInternalException(message) from None
+            raise PolygraphyInternalException(message)
 
     def _str_from_module_info(self, module, name=None):
         ret = ""
@@ -368,7 +368,7 @@ class Logger(object):
                 pass
 
         try_append(lambda: name or "Loaded Module: {:<18}".format(module.__name__))
-        try_append(lambda: " | Version: {:<8}".format(module.__version__))
+        try_append(lambda: " | Version: {:}".format(module.__version__))
         try_append(lambda: " | Path: {:}".format(list(map(os.path.realpath, module.__path__))))
         return ret
 

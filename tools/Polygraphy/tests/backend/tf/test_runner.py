@@ -21,6 +21,8 @@ from polygraphy.exception import PolygraphyException
 from tests.helper import is_file_non_empty
 from tests.models.meta import TF_MODELS
 
+pytest.importorskip("tensorflow")
+
 
 class TestTfRunner(object):
     def test_can_name_runner(self):

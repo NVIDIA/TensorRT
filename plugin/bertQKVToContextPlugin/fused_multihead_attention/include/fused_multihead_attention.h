@@ -36,8 +36,8 @@ static inline size_t get_size_in_bytes(size_t n, Data_type dtype)
     case DATA_TYPE_FP16: return n * 2;
     case DATA_TYPE_INT32: return n * 4;
     case DATA_TYPE_INT8: return n;
-    case DATA_TYPE_INT4: return n / 2;
-    case DATA_TYPE_BOOL: return n / 8;
+    case DATA_TYPE_INT4: return n / 2U;
+    case DATA_TYPE_BOOL: return n / 8U;
     case DATA_TYPE_E8M7: return n * 2;
     default: assert(false); return 0;
     }
@@ -48,41 +48,59 @@ static inline size_t get_size_in_bytes(size_t n, Data_type dtype)
 struct Fused_multihead_attention_params
 {
     // The QKV matrices.
-    void* qkv_ptr;
+    void* qkv_ptr{};
     // The mask to implement drop-out.
-    void* packed_mask_ptr;
+    void* packed_mask_ptr{};
     // The O matrix (output).
-    void* o_ptr;
+    void* o_ptr{};
 
     // The stride between rows of the Q, K and V matrices.
-    int64_t qkv_stride_in_bytes;
+    int64_t qkv_stride_in_bytes{};
     // The stride between matrices of packed mask.
-    int64_t packed_mask_stride_in_bytes;
+    int64_t packed_mask_stride_in_bytes{};
     // The stride between rows of O.
-    int64_t o_stride_in_bytes;
+    int64_t o_stride_in_bytes{};
 
 #if defined(STORE_P)
     // The pointer to the P matrix (for debugging).
-    void* p_ptr;
+    void* p_ptr{};
     // The stride between rows of the P matrix (for debugging).
-    int64_t p_stride_in_bytes;
+    int64_t p_stride_in_bytes{};
 #endif // defined(STORE_P)
 
 #if defined(STORE_S)
     // The pointer to the S matrix (for debugging).
-    void* s_ptr;
+    void* s_ptr{};
     // The stride between rows of the S matrix (for debugging).
-    int64_t s_stride_in_bytes;
+    int64_t s_stride_in_bytes{};
 #endif // defined(STORE_S)
 
     // The dimensions.
-    int b, h, s, d;
+    int32_t b{};
+    int32_t h{};
+    int32_t s{};
+    int32_t d{};
     // The scaling factors for the kernel.
-    uint32_t scale_bmm1, scale_softmax, scale_bmm2;
+    uint32_t scale_bmm1{};
+    uint32_t scale_softmax{};
+    uint32_t scale_bmm2{};
 
     // Do we use Niall's trick to avoid I2F/F2I in the INT8 kernel.
     // See https://confluence.nvidia.com/pages/viewpage.action?pageId=302779721 for details.
-    bool enable_i2f_trick;
+    bool enable_i2f_trick{};
+
+    // The number of heads computed by one iteration of the wave.
+    int32_t heads_per_wave{};
+    // Buffers to perform a global sync and a critical section.
+    int32_t* counters{};
+    int32_t* max_barriers{};
+    int32_t* sum_barriers{};
+    int32_t* locks{};
+    // Scratch buffers to finalize softmax.
+    float* max_scratch_ptr{};
+    float* sum_scratch_ptr{};
+    // Scratch buffer to finalize the output (not needed for FP16).
+    int* o_scratch_ptr{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -222,6 +240,22 @@ public:
             if (kernelMeta.mSM == smVersion && kernelMeta.mDataType == mDataType
                 && mFunctions.find(kernelKey) == mFunctions.end())
             {
+                const uint32_t DEFAULT_SMEM_SIZE{48 * 1024};
+                if (kernelMeta.mSharedMemBytes >= DEFAULT_SMEM_SIZE)
+                {
+                    int32_t deviceID{0};
+                    cudaGetDevice(&deviceID);
+                    int32_t sharedMemPerMultiprocessor{0};
+                    if (cudaDeviceGetAttribute(
+                            &sharedMemPerMultiprocessor, cudaDevAttrMaxSharedMemoryPerBlockOptin, deviceID)
+                            != cudaSuccess
+                        || sharedMemPerMultiprocessor < static_cast<int32_t>(kernelMeta.mSharedMemBytes))
+                    {
+                        // skip load function because not enough shared memory to launch the kernel
+                        continue;
+                    }
+                }
+
                 CUmodule hmod{0};
                 auto findModuleIter = mModules.find(kernelMeta.mCubin);
                 if (findModuleIter != mModules.end())
@@ -237,7 +271,6 @@ public:
                 FusedMultiHeadAttentionKernelInfo funcInfo;
                 funcInfo.mMetaInfoIndex = i;
                 cuErrCheck(mDriver.cuModuleGetFunction(&funcInfo.mDeviceFunction, hmod, kernelMeta.mFuncName), mDriver);
-                const uint32_t DEFAULT_SMEM_SIZE{48 * 1024};
                 if (kernelMeta.mSharedMemBytes >= DEFAULT_SMEM_SIZE)
                 {
                     if (mDriver.cuFuncSetAttribute(funcInfo.mDeviceFunction,

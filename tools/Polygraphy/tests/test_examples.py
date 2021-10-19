@@ -141,7 +141,10 @@ CLI_EXAMPLES = [
     ),
     Example(["cli", "run", "05_comparing_with_custom_data"]),
     # Convert
-    Example(["cli", "convert", "01_int8_calibration_in_tensorrt"], artifact_names=["identity.engine"]),
+    Example(
+        ["cli", "convert", "01_int8_calibration_in_tensorrt"],
+        artifact_names=["identity.engine", "identity_calib.cache"],
+    ),
     Example(
         ["cli", "convert", "02_deterministic_engine_builds_in_tensorrt"],
         artifact_names=["0.engine", "1.engine", "replay.json"],
@@ -156,6 +159,7 @@ CLI_EXAMPLES = [
     Example(
         ["cli", "debug", "02_reducing_failing_onnx_models"],
         artifact_names=[
+            "folded.onnx",
             "inputs.json",
             "layerwise_golden.json",
             "layerwise_inputs.json",
@@ -184,15 +188,17 @@ CLI_INSPECT_EXAMPLES = [
     Example(["cli", "inspect", "01_inspecting_a_tensorrt_network"]),
     Example(["cli", "inspect", "02_inspecting_a_tensorrt_engine"], artifact_names=["dynamic_identity.engine"]),
     Example(["cli", "inspect", "03_inspecting_an_onnx_model"]),
-    Example(["cli", "inspect", "04_inspecting_a_tensorflow_graph"]),
     Example(["cli", "inspect", "05_inspecting_inference_outputs"], artifact_names=["outputs.json"]),
     Example(["cli", "inspect", "06_inspecting_input_data"], artifact_names=["inputs.json"]),
 ]
 
 if mod.version(trt.__version__) >= mod.version("8.0"):
-    CLI_INSPECT_EXAMPLES += [
-        Example(["cli", "inspect", "07_inspecting_tactic_replays"], artifact_names=["replay.json"]),
-    ]
+    CLI_INSPECT_EXAMPLES.append(
+        Example(["cli", "inspect", "07_inspecting_tactic_replays"], artifact_names=["replay.json"])
+    )
+
+if mod.has_mod("tensorflow"):
+    CLI_INSPECT_EXAMPLES.append(Example(["cli", "inspect", "04_inspecting_a_tensorflow_graph"]))
 
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")

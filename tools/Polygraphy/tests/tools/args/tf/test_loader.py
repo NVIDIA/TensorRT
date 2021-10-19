@@ -14,10 +14,12 @@
 # limitations under the License.
 #
 
-import tensorflow as tf
+import pytest
 from polygraphy.tools.args import ModelArgs, TfLoaderArgs
 from tests.models.meta import TF_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
+
+tf = pytest.importorskip("tensorflow")
 
 
 class TestTfLoaderArgs(object):

@@ -16,6 +16,20 @@
 import os
 import time
 
+ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), os.path.pardir))
+
+
+# CLI tools and all their subtools
+ALL_TOOLS = {
+    "run": [],
+    "convert": [],
+    "inspect": ["data", "model", "tactics", "capability"],
+    "surgeon": ["extract", "insert", "sanitize"],
+    "template": ["trt-network", "trt-config"],
+    "debug": ["build", "precision", "diff-tactics", "reduce", "repeat"],
+    "data": ["to-input"],
+}
+
 
 def get_file_size(path):
     return os.stat(path).st_size
@@ -29,7 +43,7 @@ def is_file_non_empty(path):
     return not is_file_empty(path)
 
 
-def time_func(func, warm_up=10, iters=100):
+def time_func(func, warm_up=50, iters=100):
     for _ in range(warm_up):
         func()
 
