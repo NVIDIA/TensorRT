@@ -16,7 +16,30 @@ reduce the model: `bisect` operates in O(log(N)) time, while `linear` operates i
 lead to smaller models. A good compromise is to use `bisect` on the original model, then further reduce
 the result using `linear`. This is the approach that will be outlined in this example.
 
-For more details on how the `debug` tools work, see [here](polygraphy/tools/debug/).
+For more details on how the `debug` tools work, see [here](../../../../polygraphy/tools/debug/).
+
+
+## A Note On Models With Dynamic Input Shapes
+
+For models with dynamic input shapes, we may not always know the shapes of all intermediate
+tensors in the model. Thus, when we check subgraphs, our `--check` command may end up using
+incorrect tensor shapes.
+
+There are two ways to get around this:
+
+1. Use `polygraphy surgeon sanitize --override-input-shapes <shapes>` to freeze the input shapes in the model
+2. Supply `--model-input-shapes` to `debug reduce`, which will use ONNX shape inference to infer shapes
+    of intermediate tensors.
+
+If your model uses shape operations, it is generally best to use option (1) and fold the shape
+operations away with `--fold-constants`.
+
+In either case, if there's a problem with ONNX shape inference, you can use
+`--force-fallback-shape-inference` to infer shapes using ONNX-Runtime instead.
+
+Alternatively, you can use `--no-reduce-inputs` so that the model inputs are not modified.
+The `polygraphy_debug.onnx` subgraph generated during each iteration will always use the inputs
+of the original model; only layers from the end will be removed.
 
 
 ## Running The Example
@@ -32,11 +55,19 @@ Our simulated failures will trigger whenever there's a `Mul` node in the model:
 
 Hence, the final reduced model should contain just the `Mul` node (since the other nodes don't cause a failure).
 
-1. To start with, let's assume ONNX-Runtime gives us correct outputs. We'll start by generating golden
+1. For models that use dynamic input shapes or contains shape operations, freeze the input
+    shapes and fold the shape operations with:
+
+    ```bash
+    polygraphy surgeon sanitize model.onnx -o folded.onnx --fold-constants \
+        --override-input-shapes x0:[1,3,224,224] x1:[1,3,224,224]
+    ```
+
+2. Let's assume ONNX-Runtime gives us correct outputs. We'll start by generating golden
     values for every tensor in the network. We'll also save the inputs we use:
 
     ```bash
-    polygraphy run model.onnx --onnxrt \
+    polygraphy run folded.onnx --onnxrt \
         --save-inputs inputs.json \
         --onnx-outputs mark all --save-outputs layerwise_golden.json
     ```
@@ -49,10 +80,10 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
     ```
 
 
-2. Next, we'll use `debug reduce` in `bisect` mode:
+3. Next, we'll use `debug reduce` in `bisect` mode:
 
     ```bash
-    polygraphy debug reduce model.onnx -o initial_reduced.onnx --mode=bisect \
+    polygraphy debug reduce folded.onnx -o initial_reduced.onnx --mode=bisect \
         --check polygraphy run polygraphy_debug.onnx --trt \
                 --load-inputs layerwise_inputs.json --load-outputs layerwise_golden.json
     ```
@@ -81,18 +112,18 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
     a failure whenever the model contains a `Mul` node:
 
     ```bash
-    polygraphy debug reduce model.onnx -o initial_reduced.onnx --mode=bisect \
+    polygraphy debug reduce folded.onnx -o initial_reduced.onnx --mode=bisect \
         --fail-regex "Op: Mul" \
         --check polygraphy inspect model polygraphy_debug.onnx --mode=basic
     ```
 
-3. **[Optional]** As a sanity check, we can inspect our reduced model to ensure that it does contain the `Mul` node:
+4. **[Optional]** As a sanity check, we can inspect our reduced model to ensure that it does contain the `Mul` node:
 
     ```bash
     polygraphy inspect model initial_reduced.onnx --mode=basic
     ```
 
-4. Since we used `bisect` mode in the previous step, the model may not be as minimal as it could be.
+5. Since we used `bisect` mode in the previous step, the model may not be as minimal as it could be.
     To further refine it, we'll run `debug reduce` again in `linear` mode:
 
     ```bash
@@ -109,28 +140,9 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
         --check polygraphy inspect model polygraphy_debug.onnx --mode=basic
     ```
 
-5. **[Optional]** At this stage, `final_reduced.onnx` should contain just the failing node - the `Mul`.
+6. **[Optional]** At this stage, `final_reduced.onnx` should contain just the failing node - the `Mul`.
     We can verify this with `inspect model`:
 
     ```bash
     polygraphy inspect model final_reduced.onnx --mode=basic
     ```
-
-
-## A Note On Models With Dynamic Input Shapes
-
-For models with dynamic input shapes, we may not always know the shapes of intermediate
-tensors in the model. Thus, when we check subgraphs, our `--check` command may end up using
-incorrect tensor shapes.
-
-To get around this, you can specify fixed shapes to use for the inputs of the original model
-with `--model-input-shapes`. `debug reduce` will use ONNX shape inference to infer the shapes
-of the intermediate tensors based on these. The `polygraphy_debug.onnx` subgraph generated during
-each iteration will then have fixed shapes.
-
-In case there's a problem with ONNX shape inference, you can set `--force-fallback-shape-inference`
-to infer shapes using ONNX-Runtime instead.
-
-Alternatively, you can use `--no-reduce-inputs` so that the model inputs are not modified.
-The `polygraphy_debug.onnx` subgraph generated during each iteration will always use the inputs
-of the original model; only layers from the end will be removed.

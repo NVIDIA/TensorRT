@@ -19,7 +19,6 @@ Executes ONNX Runtime framework code. See README.md for more information.
 """
 
 import os
-from re import S
 import sys
 from typing import Dict, List, Tuple
 
@@ -120,10 +119,12 @@ class T5ONNXRT(OnnxRTCommand):
         onnx_fpaths: Dict[str, NetworkModel],
         inference_input: str,
         timing_profile: TimingProfile,
+        batch_size: int=1,
     ) -> NetworkResult:
 
         tokenizer = T5Tokenizer.from_pretrained(metadata.variant)
-        input_ids = tokenizer(inference_input, return_tensors="pt").input_ids
+        input_ids = tokenizer([inference_input] * batch_size, padding=True, return_tensors="pt").input_ids
+
         encoder_last_hidden_state, encoder_e2e_median_time = encoder_inference(
             self.t5_trt_encoder, input_ids, timing_profile
         )
@@ -142,20 +143,21 @@ class T5ONNXRT(OnnxRTCommand):
             timing_profile,
             max_length=T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
             use_cuda=False,
+            batch_size=batch_size
         )
 
         # Remove the padding and end tokens.
-        semantic_outputs = tokenizer.convert_ids_to_tokens(
-            decoder_output_greedy.tolist()[0]
-        )[1:-1]
-        remove_underscore = "".join(
-            [s.replace("\u2581", " ") for s in semantic_outputs]
+        semantic_outputs = tokenizer.decode(
+            decoder_output_greedy[-1, :], skip_special_tokens=True
         )
+
+        if isinstance(semantic_outputs, list):
+            semantic_outputs = " ".join(semantic_outputs).strip()
 
         return NetworkResult(
             input=inference_input,
             output_tensor=encoder_last_hidden_state,
-            semantic_output=remove_underscore.strip(),
+            semantic_output=semantic_outputs,
             median_runtime=[
                 NetworkRuntime(
                     name=T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
@@ -186,6 +188,7 @@ class T5ONNXRT(OnnxRTCommand):
         keep_onnx_model: bool,
         keep_torch_model: bool,
         timing_profile: TimingProfile,
+        batch_size: int = 1
     ) -> List[NetworkResult]:
         workspace = NNFolderWorkspace(
             self.frameworks_cmd.config.network_name, metadata, working_directory
@@ -202,7 +205,7 @@ class T5ONNXRT(OnnxRTCommand):
                 keep_onnx_model = True
                 keep_torch_model = True
 
-            # Output networks shall not exceed number of network segments explicitly defined by configuraiton file.
+            # Output networks shall not exceed number of network segments explicitly defined by configuration file.
             assert len(onnx_fpaths) == len(
                 T5ModelTRTConfig.NETWORK_SEGMENTS
             ), "There should only be {} exported ONNX segments in T5 model.".format(
@@ -225,7 +228,7 @@ class T5ONNXRT(OnnxRTCommand):
             for ninput in network_input:
                 results.append(
                     self.execute_inference(
-                        metadata, lookup_onnx_table, ninput, timing_profile
+                        metadata, lookup_onnx_table, ninput, timing_profile, batch_size
                     )
                 )
 

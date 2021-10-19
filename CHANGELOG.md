@@ -1,5 +1,63 @@
 # TensorRT OSS Release Changelog
 
+## [8.2.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-2-1) - 2021-11-24
+
+TensorRT OSS release corresponding to TensorRT 8.2.1.8 GA release.
+- Updates since [TensorRT 8.2.0 EA release](https://github.com/NVIDIA/TensorRT/releases/tag/8.2.0-EA).
+- Please refer to the [TensorRT 8.2.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-2-1) for more information.
+
+- ONNX parser [v8.2.1](https://github.com/onnx/onnx-tensorrt/releases/tag/release%2F8.2-GA)
+  - Removed duplicate constant layer checks that caused some performance regressions
+  - Fixed expand dynamic shape calculations
+  - Added parser-side checks for `Scatter` layer support
+
+- Sample updates
+  - Added [Tensorflow Object Detection API converter samples](samples/python/tensorflow_object_detection_api), including Single Shot Detector, Faster R-CNN and Mask R-CNN models
+  - Multiple enhancements in HuggingFace transformer demos
+    - Added multi-batch support
+    - Fixed resultant performance regression in batchsize=1
+    - Fixed T5 large/T5-3B accuracy issues
+    - Added [notebooks](demo/HuggingFace/notebooks) for T5 and GPT-2
+    - Added CPU benchmarking option
+  - Deprecated `kSTRICT_TYPES` (strict type constraints). Equivalent behaviour now achieved by setting `PREFER_PRECISION_CONSTRAINTS`, `DIRECT_IO`, and `REJECT_EMPTY_ALGORITHMS`
+  - Removed `sampleMovieLens`
+  - Renamed sampleReformatFreeIO to sampleIOFormats
+  - Add `idleTime` option for samples to control qps
+  - Specify default value for `precisionConstraints`
+  - Fixed reporting of TensorRT build version in trtexec
+  - Fixed `combineDescriptions` typo in trtexec/tracer.py
+  - Fixed usages of of `kDIRECT_IO`
+
+- Plugin updates
+  - `EfficientNMS` plugin support extended to TF-TRT, and for clang builds.
+  - Sanitize header definitions for BERT fused MHA plugin
+  - Separate C++ and cu files in `splitPlugin` to avoid PTX generation (required for CUDA enhanced compatibility support)
+  - Enable C++14 build for plugins
+
+- ONNX tooling updates
+  - [onnx-graphsurgeon](tools/onnx-graphsurgeon/CHANGELOG.md) upgraded to v0.3.14
+  - [Polygraphy](tools/Polygraphy/CHANGELOG.md) upgraded to v0.33.2
+  - [pytorch-quantization](tools/pytorch-quantization) toolkit upgraded to v2.1.2
+
+- Build and container fixes
+  - Add `SM86` target to default `GPU_ARCHS` for platforms with cuda-11.1+
+  - Remove deprecated `SM_35` and add `SM_60` to default `GPU_ARCHS`
+  - Skip CUB builds for cuda 11.0+ [#1455](https://github.com/NVIDIA/TensorRT/pull/1455)
+  - Fixed cuda-10.2 container build failures in Ubuntu 20.04
+  - Add native ARM server build container
+  - Install devtoolset-8 for updated g++ version in CentOS7
+  - Added a note on supporting c++14 builds for CentOS7
+  - Fixed docker build for large UIDs [#1373](https://github.com/NVIDIA/TensorRT/issues/1373)
+  - Updated README instructions for Jetpack builds
+
+- demo enhancements
+  - Updated Tacotron2 instructions and add CPU benchmarking
+  - Fixed issues in demoBERT python notebook
+
+- Documentation updates
+  - Updated Python documentation for `add_reduce`, `add_top_k`, and `ISoftMaxLayer`
+  - Renamed default GitHub branch to `main` and updated hyperlinks
+
 ## [8.2.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-2-0-EA) - 2021-10-05
 ### Added
 - [Demo applications](demo/HuggingFace) showcasing TensorRT inference of [HuggingFace Transformers](https://huggingface.co/transformers).

@@ -260,6 +260,7 @@ class CreateConfig(BaseLoader):
         int8=None,
         profiles=None,
         calibrator=None,
+        obey_precision_constraints=None,
         strict_types=None,
         load_timing_cache=None,
         algorithm_selector=None,
@@ -297,9 +298,13 @@ class CreateConfig(BaseLoader):
                     the network does not have explicit precision. For networks with
                     dynamic shapes, the last profile provided (or default profile if
                     no profiles are provided) is used during calibration.
+            obey_precision_constraints (bool):
+                    If True, require that layers execute in specified precisions.
+                    Defaults to False.
             strict_types (bool):
-                    Whether to enable strict types in the builder. This will constrain the builder from
-                    using data types other than those specified in the network.
+                    [DEPRECATED] If True, prefer that layers execute in specified precisions and avoid I/O reformatting.
+                    Fall back to ignoring the preferences if such an engine cannot be built.
+                    obey_precision_constraints is recommended instead.
                     Defaults to False.
             load_timing_cache (Union[str, file-like]):
                     A path or file-like object from which to load a tactic timing cache.
@@ -334,6 +339,7 @@ class CreateConfig(BaseLoader):
         self.int8 = util.default(int8, False)
         self.profiles = util.default(profiles, [Profile()])
         self.calibrator = calibrator
+        self.obey_precision_constraints = util.default(obey_precision_constraints, False)
         self.strict_types = util.default(strict_types, False)
         self.restricted = util.default(restricted, False)
         self.timing_cache_path = load_timing_cache
@@ -383,7 +389,11 @@ class CreateConfig(BaseLoader):
 
             config.max_workspace_size = int(self.max_workspace_size)
 
+            if self.obey_precision_constraints:
+                try_set_flag("OBEY_PRECISION_CONSTRAINTS")
+
             if self.strict_types:
+                mod.warn_deprecated("strict_types", use_instead="obey_precision_constraints", remove_in="0.36.0")
                 try_set_flag("STRICT_TYPES")
 
             if self.restricted:

@@ -32,8 +32,10 @@ struct EfficientNMSParameters
     float scoreThreshold = 0.5f;
     int numOutputBoxes = 100;
     int numOutputBoxesPerClass = -1;
+    bool padOutputBoxesPerClass = false;
     int backgroundClass = -1;
     bool scoreSigmoid = false;
+    bool clipBoxes = false;
     int boxCoding = 0;
 
     // Related to NMS Internals

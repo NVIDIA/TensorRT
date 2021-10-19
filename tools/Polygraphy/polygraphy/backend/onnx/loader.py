@@ -29,7 +29,7 @@ onnxmltools = mod.lazy_import("onnxmltools")
 tf = mod.lazy_import("tensorflow", version="<2.0")
 tf2onnx = mod.lazy_import("tf2onnx")
 tf_util = mod.lazy_import("polygraphy.backend.tf.util", log=False)
-gs = mod.lazy_import("onnx_graphsurgeon", version=mod.LATEST_VERSION)
+gs = mod.lazy_import("onnx_graphsurgeon", version=">=0.3.13")
 shape_inference = mod.lazy_import("onnx.shape_inference")
 external_data_helper = mod.lazy_import("onnx.external_data_helper")
 
@@ -382,7 +382,8 @@ class FoldConstants(BaseLoadOnnxCopy):
                 model = infer_shapes(model)
             return model
 
-        if not mod.has_mod(onnxrt):
+        mod.autoinstall(onnxrt)
+        if not mod.has_mod("onnxruntime"):
             G_LOGGER.error(
                 "ONNX-Runtime is not installed, so constant folding may be suboptimal or not work at all.\n"
                 "Consider installing ONNX-Runtime: {:} -m pip install onnxruntime".format(sys.executable)
@@ -700,3 +701,30 @@ class BytesFromOnnx(BaseLoader):
         """
         model, _ = util.invoke_if_callable(self._model)
         return model.SerializeToString()
+
+
+@mod.export(funcify=True)
+class OnnxFromBytes(BaseLoader):
+    """
+    Functor that deserializes an ONNX model.
+    """
+
+    def __init__(self, serialized_onnx):
+        """
+        Deserializes an ONNX model.
+
+        Args:
+            serialized_onnx (Union[bytes, Callable() -> bytes]):
+                    A serialized ONNX model or a callable that returns one.
+        """
+        self._serialized_onnx = serialized_onnx
+
+    def call_impl(self):
+        """
+        Returns:
+            onnx.ModelProto: The ONNX model.
+        """
+        serialized_onnx, _ = util.invoke_if_callable(self._serialized_onnx)
+        model = onnx.ModelProto()
+        model.ParseFromString(serialized_onnx)
+        return model

@@ -101,6 +101,13 @@ class NetworkCommand(metaclass=ABCMeta):
             help="Location of where to save the model and other downloaded files.",
             required=True,
         )
+        general_group.add_argument(
+            "--batch-size", "-b",
+            help="Chosen batch size for given network",
+            required=False,
+            type=int,
+            default=1
+        )
 
         timing_group = parser.add_argument_group("inference measurement")
         timing_group.add_argument(
@@ -152,6 +159,7 @@ class FrameworkCommand(NetworkCommand):
         keep_onnx_model: bool,
         keep_pytorch_model: bool,
         timing_profile: TimingProfile,
+        batch_size: int
     ) -> List[NetworkResult]:
         pass
 
@@ -178,6 +186,8 @@ class FrameworkCommand(NetworkCommand):
                 number=int(self._args.number),
                 warmup=int(self._args.warmup),
             ),
+            use_cpu=self._args.cpu,
+            batch_size=self._args.batch_size,
         )
 
         return NetworkCheckpointResult(
@@ -187,7 +197,12 @@ class FrameworkCommand(NetworkCommand):
 
     def add_args(self, parser) -> argparse.ArgumentParser:
         super().add_args(parser)
-
+        device_group = parser.add_argument_group("device")
+        device_group.add_argument(
+            "--cpu",
+            help="Run inference using CPU for frameworks.",
+            action="store_true",
+        )
 
 class TRTInferenceCommand(NetworkCommand):
     """Base class that is associated with Polygraphy related scripts."""
@@ -213,6 +228,7 @@ class TRTInferenceCommand(NetworkCommand):
         keep_onnx_model: bool,
         keep_torch_model: bool,
         timing_profile: TimingProfile,
+        batch_size: bool = 1,
     ) -> List[NetworkResult]:
         pass
 
@@ -243,6 +259,7 @@ class TRTInferenceCommand(NetworkCommand):
                 number=int(self._args.number),
                 warmup=int(self._args.warmup),
             ),
+            batch_size=self._args.batch_size,
         )
 
         return NetworkCheckpointResult(
@@ -314,6 +331,7 @@ class OnnxRTCommand(NetworkCommand):
                 number=int(self._args.number),
                 warmup=int(self._args.warmup),
             ),
+            batch_size=self._args.batch_size,
         )
 
         return NetworkCheckpointResult(

@@ -61,7 +61,7 @@ def lazy_import(name, log=True, version=None):
     """
     Lazily import a module.
 
-    If the POLYGRAPHY_AUTOINSTALL_DEPS environment variable is set to 1,
+    If config.AUTOINSTALL_DEPS is set to 1,
     missing modules are automatically installed, and existing modules may be
     upgraded if newer versions are required.
 
@@ -164,22 +164,38 @@ def lazy_import(name, log=True, version=None):
     return LazyModule()
 
 
-def has_mod(lazy_mod, with_attr="__version__"):
+def has_mod(modname):
     """
     Checks whether a module is available.
 
     Args:
-        lazy_mod (LazyModule):
-                A lazy module, like that returned by ``lazy_import``.
-        with_attr (str):
-                The name of an attribute to check for.
-                This helps distinguish mock modules from real ones.
+        modname (str): The name of the module to check.
+
+    Returns:
+        bool: Whether the module is available.
     """
     try:
-        getattr(lazy_mod, with_attr)
-    except:
+        importlib.import_module(modname)
+    except ImportError:
         return False
     return True
+
+
+def autoinstall(lazy_mod):
+    """
+    If the config.AUTOINSTALL_DEPS is set to 1, automatically install or upgrade a module.
+    Does nothing if autoinstallation is disabled.
+
+    Args:
+        lazy_mod (LazyModule):
+                A lazy module, like that returned by ``lazy_import``.
+    """
+    try:
+        # It doesn't matter which attribute we try to get as any call to `__getattr__` will
+        # trigger the automatic installation.
+        getattr(lazy_mod, "__fake_polygraphy_autoinstall_attr")
+    except:
+        pass
 
 
 def import_from_script(path, name):
@@ -218,4 +234,5 @@ def import_from_script(path, name):
                     ext
                 )
             err_msg += "\nNote: Error was: {:}".format(err)
+            err_msg += "\nNote: sys.path was: {:}".format(sys.path)
             G_LOGGER.critical(err_msg)

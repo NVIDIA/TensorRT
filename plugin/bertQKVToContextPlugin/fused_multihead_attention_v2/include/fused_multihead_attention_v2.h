@@ -25,87 +25,72 @@ namespace bert
 struct Fused_multihead_attention_params_v2
 {
     // The QKV matrices.
-    void* qkv_ptr;
+    void* qkv_ptr{};
     // The mask to implement drop-out.
-    void* packed_mask_ptr;
+    void* packed_mask_ptr{};
     // The O matrix (output).
-    void* o_ptr;
+    void* o_ptr{};
 
     // The stride between rows of the Q, K and V matrices.
-    int64_t qkv_stride_in_bytes;
+    int64_t qkv_stride_in_bytes{};
     // The stride between matrices of packed mask.
-    int64_t packed_mask_stride_in_bytes;
+    int64_t packed_mask_stride_in_bytes{};
     // The stride between rows of O.
     int64_t o_stride_in_bytes;
 
 #if defined(STORE_P)
     // The pointer to the P matrix (for debugging).
-    void* p_ptr;
+    void* p_ptr{};
     // The stride between rows of the P matrix (for debugging).
-    int64_t p_stride_in_bytes;
+    int64_t p_stride_in_bytes{};
 #endif // defined(STORE_P)
 
 #if defined(STORE_S)
     // The pointer to the S matrix (for debugging).
-    void* s_ptr;
+    void* s_ptr{};
     // The stride between rows of the S matrix (for debugging).
-    int64_t s_stride_in_bytes;
+    int64_t s_stride_in_bytes{};
 #endif // defined(STORE_S)
 
     // The dimensions.
-    int b, h, s, d;
+    int32_t b{};
+    int32_t h{};
+    int32_t s{};
+    int32_t d{};
     // The scaling factors for the kernel.
-    uint32_t scale_bmm1, scale_softmax, scale_bmm2;
+    uint32_t scale_bmm1{};
+    uint32_t scale_softmax{};
+    uint32_t scale_bmm2{};
 
     // Do we use Niall's trick to avoid I2F/F2I in the INT8 kernel.
     // See https://confluence.nvidia.com/pages/viewpage.action?pageId=302779721 for details.
-    bool enable_i2f_trick;
+    bool enable_i2f_trick{};
 
     // array of length b+1 holding prefix sum of actual sequence lenghts
-    int* cu_seqlens;
+    int32_t* cu_seqlens{};
 
     // use C/32 Format.
-    bool interleaved = false;
-    bool ignore_b1opt = false;
-    bool force_unroll = false;
-    bool use_int8_scale_max = false;
+    bool interleaved{};
+    bool ignore_b1opt{};
+    bool force_unroll{};
+    bool use_int8_scale_max{};
+
+    // The number of heads computed by one iteration of the wave.
+    int32_t heads_per_wave{};
+    // Buffers to perform a global sync and a critical section.
+    int32_t* counters{};
+    int32_t* max_barriers{};
+    int32_t* sum_barriers{};
+    int32_t* locks{};
+    // Scratch buffers to finalize softmax.
+    float* max_scratch_ptr{};
+    float* sum_scratch_ptr{};
+    // Scratch buffer to finalize the output (not needed for FP16).
+    int* o_scratch_ptr{};
 
     void clear()
     {
-        qkv_ptr = nullptr;
-        packed_mask_ptr = nullptr;
-        o_ptr = nullptr;
-
-        qkv_stride_in_bytes = 0;
-        packed_mask_stride_in_bytes = 0;
-        o_stride_in_bytes = 0;
-#if defined(STORE_P)
-        p_ptr = nullptr;
-        p_stride_in_bytes = 0
-#endif // defined(STORE_P)
-
-#if defined(STORE_S)
-            s_ptr
-            = nullptr;
-        s_stride_in_bytes = 0;
-#endif // defined(STORE_S)
-
-        b = 0;
-        h = 0;
-        s = 0;
-        d = 0;
-        // The scaling factors for the kernel.
-        scale_bmm1 = 0;
-        scale_softmax = 0;
-        scale_bmm2 = 0;
-
-        enable_i2f_trick = false;
-
-        cu_seqlens = nullptr;
-        interleaved = false;
-        ignore_b1opt = false;
-        force_unroll = false;
-        use_int8_scale_max = false;
+        *this = Fused_multihead_attention_params_v2();
     }
 };
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -600,8 +585,8 @@ public:
             {
                 uint32_t mSM;
                 Data_type mDataType;
-                int mS;
-                int mMaxBatch;
+                int32_t mS;
+                int32_t mMaxBatch;
             } unrollList[]
                 = { {kSM_75, bert::DATA_TYPE_FP16, 256, 1},
                       {kSM_75, bert::DATA_TYPE_FP16, 384, 1},
@@ -652,7 +637,7 @@ public:
         }
         else
         {
-            int unroll = kernelMeta.mS / kernelMeta.mUnrollStep;
+            int32_t unroll = kernelMeta.mS / kernelMeta.mUnrollStep;
             assert(kernelMeta.mS == kernelMeta.mUnrollStep * unroll);
             cuErrCheck(mDriver.cuLaunchKernel(func, params.h, params.b, unroll, kernelMeta.mThreadsPerCTA, 1, 1,
                            kernelMeta.mSharedMemBytes, ss, kernelParams, nullptr),

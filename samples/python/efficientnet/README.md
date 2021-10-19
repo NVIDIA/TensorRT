@@ -23,14 +23,19 @@ Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/dee
 
 Make sure all other packages listed in `requirements.txt`:
 
-```
-pip install -r requirements.txt
+```bash
+pip3 install -r requirements.txt
 ```
 
 You will also need the latest `onnx_graphsurgeon` python module. If not already installed by TensorRT, you can install it manually by running:
 
+```bash
+pip3 install onnx-graphsurgeon --index-url https://pypi.ngc.nvidia.com
 ```
-pip install onnx-graphsurgeon --index-url https://pypi.ngc.nvidia.com
+
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
 ```
 
 ## Model Conversion
@@ -48,7 +53,7 @@ The starting point of conversion is a TensorFlow saved model. This can be export
 
 You can download one of the pre-trained saved models from the [EfficientNet TFHub](https://tfhub.dev/google/collections/efficientnet), such as:
 
-```
+```bash
 wget https://storage.googleapis.com/tfhub-modules/tensorflow/efficientnet/b0/classification/1.tar.gz
 ```
 
@@ -58,9 +63,9 @@ Alternatively, if you are training your own model, or if you need to re-export t
 
 To export a saved model from the checkpoint, clone and install the [TensorFlow TPU Models](https://github.com/tensorflow/tpu) repository, and run:
 
-```
+```bash
 cd /path/to/tpu/models/official/efficientnet
-python export_model.py \
+python3 export_model.py \
     --ckpt_dir /path/to/efficientnet-b0 \
     --image_size 224 \
     --model_name efficientnet-b0 \
@@ -77,15 +82,15 @@ At the time of this writing, there exist no EfficientNet V2 saved models in TFHu
 
 To do so, you will need your training checkpoint (or a pre-trained "ckpt" from the [EfficientNet V2 Repository](https://github.com/google/automl/tree/master/efficientnetv2) such as [this](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/v2/efficientnetv2-s.tgz)):
 
-```
+```bash
 wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/v2/efficientnetv2-s.tgz
 ```
 
 To export a saved model from here, clone and install the [AutoML](https://github.com/google/automl) repository, and run:
 
-```
+```bash
 cd /path/to/automl/efficientnetv2
-python infer.py \
+python3 infer.py \
     --mode tf2bm \
     --model_name efficientnetv2-s \
     --model_dir ../../../models/effnetv2/effnetv2-s/checkpoint/ \
@@ -98,8 +103,8 @@ Where you should adapt `--model_name` to the corresponding model for the checkpo
 
 To generate an ONNX model file, find the saved model as described above, select a batch size and input size, and run:
 
-```
-python create_onnx.py \
+```bash
+python3 create_onnx.py \
     --saved_model /path/to/saved_model \
     --onnx /path/to/model.onnx \
     --batch_size 1 \
@@ -114,14 +119,14 @@ Optionally, you may wish to visualize the resulting ONNX graph with a tool such 
 
 ### Build TensorRT Engine
 
-It is possible to build the TensorRT engine directly with `trtexec` using the ONNX graph generated in the previous step. However, the script `build_engine.py` is provided for convenience, as it has been tailored to EfficientNet engine building and calibration. Run `python build_engine.py --help` for details on available settings.
+It is possible to build the TensorRT engine directly with `trtexec` using the ONNX graph generated in the previous step. However, the script `build_engine.py` is provided for convenience, as it has been tailored to EfficientNet engine building and calibration. Run `python3 build_engine.py --help` for details on available settings.
 
 #### FP16 Precision
 
 To build the TensorRT engine file with FP16 precision, run:
 
-```
-python build_engine.py \
+```bash
+python3 build_engine.py \
     --onnx /path/to/model.onnx \
     --engine /path/to/engine.trt \
     --precision fp16
@@ -135,8 +140,8 @@ For best results, make sure no other processes are using the GPU during engine b
 
 To build and calibrate an engine for INT8 precision, run:
 
-```
-python build_engine.py \
+```bash
+python3 build_engine.py \
     --onnx /path/to/model.onnx \
     --engine /path/to/engine.trt \
     --precision int8 \
@@ -151,13 +156,13 @@ The `--calib_cache` argument controls where the calibration cache file will be w
 
 Finally, the `--calib_preprocessor` option sets the preprocessing algorithm to apply on calibration images. Please refer to the [Input Preprocessing](#input-preprocessing) section below for more details.
 
-Run `python build_engine.py --help` for additional build options.
+Run `python3 build_engine.py --help` for additional build options.
 
 ### Benchmark TensorRT Engine
 
 Optionally, you can obtain execution timing information for the built engine by using the `trtexec` utility, as:
 
-```
+```bash
 trtexec \
     --loadEngine=/path/to/engine.trt \
     --useCudaGraph --noDataTransfers \
@@ -202,8 +207,8 @@ These are the supported values for `--preprocessor` and `--calib_preprocessor` a
 
 To classify a set of images with TensorRT, run:
 
-```
-python infer.py \
+```bash
+python3 infer.py \
     --engine /paht/to/engine.trt \
     --input /path/to/images \
     --preprocessor V2
@@ -217,8 +222,8 @@ Where the input path can be either a single image file, or a directory of jpg/pn
 
 You can also redirect these results to a file, and optionally set a separator character (such as for CSV file creation):
 
-```
-python infer.py \
+```bash
+python3 infer.py \
     --engine /path/to/engine.trt \
     --input /path/to/ILSVRC2012_img_val \
     --preprocessor V2 \
@@ -229,23 +234,29 @@ python infer.py \
 
 To validate the TensorRT inference results accuracy against ground truth labels, run:
 
-```
-python eval_gt.py \
+```bash
+python3 eval_gt.py \
     --engine /path/to/engine.trt \
-    --annotations /path/to/annotations.txt \
+    --annotations /path/to/val.txt \
     --input /path/to/images \
     --preprocessor V2
 ```
 
-The labels file is expected to have one line per image, where the first column is the image filename, and the second column is the ground truth class label. For example:
+The annotations file is expected to have one line per image, where the first column is the image filename, and the second column is the ground truth class label. For example:
 
 ```
-val/ILSVRC2012_val_00000001.JPEG 65
-val/ILSVRC2012_val_00000002.JPEG 970
-val/ILSVRC2012_val_00000003.JPEG 230
-val/ILSVRC2012_val_00000004.JPEG 809
+ILSVRC2012_val_00000001.JPEG 65
+ILSVRC2012_val_00000002.JPEG 970
+ILSVRC2012_val_00000003.JPEG 230
+ILSVRC2012_val_00000004.JPEG 809
 [...]
 ```
+
+> **NOTE:** The ImageNet pre-trained models follow the label mapping introduced by [Caffe](https://github.com/BVLC/caffe/blob/master/data/ilsvrc12/get_ilsvrc_aux.sh), which indexes labels according to their synset number. The validation file for this format can be downloaded from Caffe's ILSVRC2012 auxiliary package at:
+>
+> http://dl.caffe.berkeleyvision.org/caffe_ilsvrc12.tar.gz
+>
+> You can use the `val.txt` file bundled in this package for ImageNet evaluation purposes.
 
 Upon a successful run of `EfficientNet V2-S` on the `ILSVRC2012_img_val` [ImageNet](https://www.image-net.org/download.php) dataset, for example, you should see something like:
 
@@ -258,8 +269,8 @@ Top-5 Accuracy: 96.615%
 
 Another method to validate the engine is to compare the TensorRT inference results with what TensorFlow produces, to make sure both frameworks give similar results. For this, run:
 
-```
-python compare_tf.py \
+```bash
+python3 compare_tf.py \
     --engine /path/to/engine.trt \
     --saved_model /path/to/saved_model \
     --input /path/to/images \

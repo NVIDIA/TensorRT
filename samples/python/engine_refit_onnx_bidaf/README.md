@@ -24,7 +24,14 @@ The engine is then refitted with fake weights and correct weights, each followed
 Dependencies required for this sample
 
 1. Install the dependencies for Python:
-`python3 -m pip install -r requirements.txt`
+```bash
+pip3 install -r requirements.txt
+```
+
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
+```
 
 2. TensorRT
 
@@ -38,7 +45,7 @@ The data directory needs to be specified (either via `-d /path/to/data` or envir
 when running these scripts. An error will be thrown if not. Taking `TRT_DATA_DIR` approach in following example.
 
 * Prepare the ONNX model. (The data directory needs to be specified.)
-  ```sh
+  ```bash
   python3 prepare_model.py
   ```
 

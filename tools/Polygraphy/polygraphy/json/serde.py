@@ -202,7 +202,7 @@ def try_register_numpy_json(func):
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         global NUMPY_REGISTRATION_SUCCESS
-        if not NUMPY_REGISTRATION_SUCCESS and mod.has_mod(np):
+        if not NUMPY_REGISTRATION_SUCCESS and mod.has_mod("numpy"):
             # We define this alongside load_json/save_json so that it is guaranteed to be
             # imported before we need to encode/decode NumPy arrays.
             @Encoder.register(np.ndarray)

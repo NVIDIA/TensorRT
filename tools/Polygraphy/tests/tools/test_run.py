@@ -294,6 +294,8 @@ class TestTrt(object):
 
 
 class TestTf(object):
+    pytest.importorskip("tensorflow")
+
     def test_tf(self):
         run_polygraphy_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5"])
 
@@ -489,7 +491,7 @@ class TestOther(object):
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_runner_coexistence(self):
-        run_polygraphy_run([TF_MODELS["identity"].path, "--model-type=frozen", "--tf", "--onnxrt", "--trt"])
+        run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--trt"])
 
 
 class TestPluginRef(object):

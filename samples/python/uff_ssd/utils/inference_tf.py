@@ -14,6 +14,8 @@
 # limitations under the License.
 #
 
+# Utility functions for performing image inference
+
 import tensorflow as tf
 from PIL import Image
 import numpy as np

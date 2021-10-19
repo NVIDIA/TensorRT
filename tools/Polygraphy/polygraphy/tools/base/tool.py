@@ -16,6 +16,7 @@
 import argparse
 import sys
 from collections import OrderedDict
+from textwrap import dedent
 
 import polygraphy
 from polygraphy import mod
@@ -73,13 +74,27 @@ class Tool(object):
         assert self.__doc__, "No help output was provided for this tool!"
 
         allow_abbrev = all(not maker.disable_abbrev for maker in self.arg_groups.values())
+
+        description = dedent(self.__doc__)
         if subparsers is not None:
+            summary = []
+            for line in description.strip().splitlines():
+                if line.isspace() or not line:
+                    break
+                summary.append(line)
+            summary = "\n".join(summary)
+
             parser = subparsers.add_parser(
-                self.name, help=self.__doc__, add_help=True, description=self.__doc__, allow_abbrev=allow_abbrev
+                self.name,
+                help=summary,
+                add_help=True,
+                description=description,
+                allow_abbrev=allow_abbrev,
+                formatter_class=argparse.RawDescriptionHelpFormatter,
             )
             parser.set_defaults(subcommand=self)
         else:
-            parser = argparse.ArgumentParser(add_help=True, description=self.__doc__, allow_abbrev=allow_abbrev)
+            parser = argparse.ArgumentParser(add_help=True, description=description, allow_abbrev=allow_abbrev)
 
         for maker in self.arg_groups.values():
             # Register each maker with every other maker

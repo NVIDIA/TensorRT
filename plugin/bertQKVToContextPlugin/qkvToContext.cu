@@ -622,7 +622,6 @@ public:
         , sm(interface->mSm)
         , xmmaKernel(getXMMAKernels(DATA_TYPE_FP16, sm))
     {
-        memset(&params, 0, sizeof(params));
     }
 
     ~mhaImpl() {}
@@ -763,7 +762,6 @@ public:
         , xmmaKernel(getXMMAKernels(DATA_TYPE_INT8, sm))
         , mDqProbs(interface->mDqProbs)
     {
-        memset(&params, 0, sizeof(params));
     }
 
     ~mhaImpl() {}

@@ -18,15 +18,14 @@ import subprocess as sp
 import numpy as np
 import pytest
 import tensorrt as trt
-from polygraphy.backend.onnx import BytesFromOnnx, OnnxFromTfGraph, GsFromOnnx
+from polygraphy import mod
+from polygraphy.backend.onnx import GsFromOnnx, OnnxFromBytes
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
 from polygraphy.backend.pluginref import PluginRefRunner
-from polygraphy.backend.tf import SessionFromGraph, TfRunner
 from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxBytes, TrtRunner
-from polygraphy.exception import PolygraphyException
 from polygraphy.comparator import Comparator, CompareFunc, DataLoader, IterationResult, PostprocessFunc, RunResults
-from polygraphy import mod
-from tests.models.meta import ONNX_MODELS, TF_MODELS
+from polygraphy.exception import PolygraphyException
+from tests.models.meta import ONNX_MODELS
 
 
 class TestComparator(object):
@@ -62,16 +61,12 @@ class TestComparator(object):
             assert np.all(actual["y"] == expected["x"])
 
     def test_multiple_runners(self):
-        load_tf = TF_MODELS["identity"].loader
-        build_tf_session = SessionFromGraph(load_tf)
-        onnx_model = OnnxFromTfGraph(load_tf)
-        load_serialized_onnx = BytesFromOnnx(onnx_model)
-        build_onnxrt_session = SessionFromOnnx(load_serialized_onnx)
-        load_engine = EngineFromNetwork(NetworkFromOnnxBytes(load_serialized_onnx))
-        gs_graph = GsFromOnnx(onnx_model)
+        onnx_bytes = ONNX_MODELS["identity"].loader()
+        build_onnxrt_session = SessionFromOnnx(onnx_bytes)
+        load_engine = EngineFromNetwork(NetworkFromOnnxBytes(onnx_bytes))
+        gs_graph = GsFromOnnx(OnnxFromBytes(onnx_bytes))
 
         runners = [
-            TfRunner(build_tf_session),
             OnnxrtRunner(build_onnxrt_session),
             PluginRefRunner(gs_graph),
             TrtRunner(load_engine),

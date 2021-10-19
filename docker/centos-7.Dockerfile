@@ -18,13 +18,13 @@ ARG OS_VERSION=7
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-centos${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 8.2.0.6
+ENV TRT_VERSION 8.2.1.8
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
 ARG uid=1000
 ARG gid=1000
-RUN groupadd -r -f -g ${gid} trtuser && useradd -o -r -u ${uid} -g ${gid} -ms /bin/bash trtuser
+RUN groupadd -r -f -g ${gid} trtuser && useradd -o -r -l -u ${uid} -g ${gid} -ms /bin/bash trtuser
 RUN usermod -aG wheel trtuser
 RUN echo 'trtuser:nvidia' | chpasswd
 RUN mkdir -p /workspace && chown trtuser /workspace
@@ -47,11 +47,24 @@ RUN yum -y install \
 RUN yum install -y python36 python3-devel
 
 # Install TensorRT
-RUN v="${TRT_VERSION%.*}-1.cuda${CUDA_VERSION%.*}" &&\
+RUN if [ "${CUDA_VERSION}" = "10.2" ] ; then \
+    v="${TRT_VERSION%.*}-1.cuda${CUDA_VERSION}" &&\
     yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo &&\
     yum -y install libnvinfer8-${v} libnvparsers8-${v} libnvonnxparsers8-${v} libnvinfer-plugin8-${v} \
         libnvinfer-devel-${v} libnvparsers-devel-${v} libnvonnxparsers-devel-${v} libnvinfer-plugin-devel-${v} \
-        python3-libnvinfer-${v}
+        python3-libnvinfer-${v}; \
+else \
+    v="${TRT_VERSION%.*}-1.cuda${CUDA_VERSION%.*}" &&\
+    yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo &&\
+    yum -y install libnvinfer8-${v} libnvparsers8-${v} libnvonnxparsers8-${v} libnvinfer-plugin8-${v} \
+        libnvinfer-devel-${v} libnvparsers-devel-${v} libnvonnxparsers-devel-${v} libnvinfer-plugin-devel-${v} \
+        python3-libnvinfer-${v}; \
+fi 
+
+# Install dev-toolset-8 for g++ version that supports c++14
+RUN yum -y install centos-release-scl
+RUN yum-config-manager --enable rhel-server-rhscl-7-rpms
+RUN yum -y install devtoolset-8
 
 # Install PyPI packages
 RUN pip3 install --upgrade pip
@@ -77,6 +90,8 @@ RUN rm /usr/bin/python && ln -s /usr/bin/python3 /usr/bin/python
 ENV TRT_LIBPATH /usr/lib/x86_64-linux-gnu
 ENV TRT_OSSPATH /workspace/TensorRT
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
+# Use devtoolset-8 as default compiler
+ENV PATH="/opt/rh/devtoolset-8/root/bin:${PATH}"
 WORKDIR /workspace
 
 USER trtuser

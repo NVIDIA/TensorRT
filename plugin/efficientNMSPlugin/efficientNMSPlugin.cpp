@@ -22,6 +22,7 @@ using nvinfer1::plugin::EfficientNMSPlugin;
 using nvinfer1::plugin::EfficientNMSParameters;
 using nvinfer1::plugin::EfficientNMSPluginCreator;
 using nvinfer1::plugin::EfficientNMSONNXPluginCreator;
+using nvinfer1::plugin::EfficientNMSTFTRTPluginCreator;
 
 namespace
 {
@@ -29,12 +30,9 @@ const char* EFFICIENT_NMS_PLUGIN_VERSION{"1"};
 const char* EFFICIENT_NMS_PLUGIN_NAME{"EfficientNMS_TRT"};
 const char* EFFICIENT_NMS_ONNX_PLUGIN_VERSION{"1"};
 const char* EFFICIENT_NMS_ONNX_PLUGIN_NAME{"EfficientNMS_ONNX_TRT"};
+const char* EFFICIENT_NMS_TFTRT_PLUGIN_VERSION{"1"};
+const char* EFFICIENT_NMS_TFTRT_PLUGIN_NAME{"EfficientNMS_TFTRT_TRT"};
 } // namespace
-
-PluginFieldCollection EfficientNMSPluginCreator::mFC{};
-PluginFieldCollection EfficientNMSONNXPluginCreator::mFC{};
-std::vector<PluginField> EfficientNMSPluginCreator::mPluginAttributes;
-std::vector<PluginField> EfficientNMSONNXPluginCreator::mPluginAttributes;
 
 EfficientNMSPlugin::EfficientNMSPlugin(EfficientNMSParameters param)
     : mParam(param)
@@ -155,6 +153,20 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
     {
         DimsExprs out_dim;
 
+        // When pad per class is set, the output size may need to be reduced:
+        // i.e.: outputBoxes = min(outputBoxes, outputBoxesPerClass * numClasses)
+        // As the number of classes may not be static, numOutputBoxes must be a dynamic
+        // expression. The corresponding parameter can not be set at this time, so the
+        // value will be calculated again in configurePlugin() and the param overwritten.
+        const IDimensionExpr *numOutputBoxes = exprBuilder.constant(mParam.numOutputBoxes);
+        if (mParam.padOutputBoxesPerClass && mParam.numOutputBoxesPerClass > 0)
+        {
+            const IDimensionExpr *numOutputBoxesPerClass = exprBuilder.constant(mParam.numOutputBoxesPerClass);
+            const IDimensionExpr *numClasses = inputs[1].d[2];
+            numOutputBoxes = exprBuilder.operation(DimensionOperation::kMIN, *numOutputBoxes,
+                *exprBuilder.operation(DimensionOperation::kPROD, *numOutputBoxesPerClass, *numClasses));
+        }
+
         if (mParam.outputONNXIndices)
         {
             // ONNX NMS
@@ -163,7 +175,7 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
             // detection_indices
             out_dim.nbDims = 2;
             out_dim.d[0] = exprBuilder.operation(
-                DimensionOperation::kPROD, *inputs[0].d[0], *exprBuilder.constant(mParam.numOutputBoxes));
+                DimensionOperation::kPROD, *inputs[0].d[0], *numOutputBoxes);
             out_dim.d[1] = exprBuilder.constant(3);
         }
         else
@@ -183,7 +195,7 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
             {
                 out_dim.nbDims = 3;
                 out_dim.d[0] = inputs[0].d[0];
-                out_dim.d[1] = exprBuilder.constant(mParam.numOutputBoxes);
+                out_dim.d[1] = numOutputBoxes;
                 out_dim.d[2] = exprBuilder.constant(4);
             }
             // detection_scores
@@ -191,14 +203,14 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
             {
                 out_dim.nbDims = 2;
                 out_dim.d[0] = inputs[0].d[0];
-                out_dim.d[1] = exprBuilder.constant(mParam.numOutputBoxes);
+                out_dim.d[1] = numOutputBoxes;
             }
             // detection_classes
             else if (outputIndex == 3)
             {
                 out_dim.nbDims = 2;
                 out_dim.d[0] = inputs[0].d[0];
-                out_dim.d[1] = exprBuilder.constant(mParam.numOutputBoxes);
+                out_dim.d[1] = numOutputBoxes;
             }
         }
 
@@ -288,6 +300,17 @@ void EfficientNMSPlugin::configurePlugin(
         mParam.numScoreElements = in[1].desc.dims.d[1] * in[1].desc.dims.d[2];
         mParam.numClasses = in[1].desc.dims.d[2];
 
+        // When pad per class is set, the total ouput boxes size may need to be reduced.
+        // This operation is also done in getOutputDimension(), but for dynamic shapes, the
+        // numOutputBoxes param can't be set until the number of classes is fully known here.
+        if (mParam.padOutputBoxesPerClass && mParam.numOutputBoxesPerClass > 0)
+        {
+            if (mParam.numOutputBoxesPerClass * mParam.numClasses < mParam.numOutputBoxes)
+            {
+                mParam.numOutputBoxes = mParam.numOutputBoxesPerClass * mParam.numClasses;
+            }
+        }
+
         // Shape of boxes input should be
         // [batch_size, num_boxes, 4] or [batch_size, num_boxes, 1, 4] or [batch_size, num_boxes, num_classes, 4]
         ASSERT(in[0].desc.dims.nbDims == 3 || in[0].desc.dims.nbDims == 4);
@@ -376,6 +399,9 @@ int EfficientNMSPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginT
     }
     return -1;
 }
+
+
+// Standard NMS Plugin Operation
 
 EfficientNMSPluginCreator::EfficientNMSPluginCreator()
     : mParam{}
@@ -474,6 +500,9 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::deserializePlugin(
     return nullptr;
 }
 
+
+// ONNX NonMaxSuppression Op Compatibility
+
 EfficientNMSONNXPluginCreator::EfficientNMSONNXPluginCreator()
     : mParam{}
 {
@@ -548,6 +577,108 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
 }
 
 IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
+{
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call EfficientNMSPlugin::destroy()
+        auto* plugin = new EfficientNMSPlugin(serialData, serialLength);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+
+// TF-TRT CombinedNMS Op Compatibility
+
+EfficientNMSTFTRTPluginCreator::EfficientNMSTFTRTPluginCreator()
+    : mParam{}
+{
+    mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(PluginField("max_output_size_per_class", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("max_total_size", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
+    mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
+    mPluginAttributes.emplace_back(PluginField("pad_per_class", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("clip_boxes", nullptr, PluginFieldType::kINT32, 1));
+    mFC.nbFields = mPluginAttributes.size();
+    mFC.fields = mPluginAttributes.data();
+}
+
+const char* EfficientNMSTFTRTPluginCreator::getPluginName() const noexcept
+{
+    return EFFICIENT_NMS_TFTRT_PLUGIN_NAME;
+}
+
+const char* EfficientNMSTFTRTPluginCreator::getPluginVersion() const noexcept
+{
+    return EFFICIENT_NMS_TFTRT_PLUGIN_VERSION;
+}
+
+const PluginFieldCollection* EfficientNMSTFTRTPluginCreator::getFieldNames() noexcept
+{
+    return &mFC;
+}
+
+IPluginV2DynamicExt* EfficientNMSTFTRTPluginCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
+{
+    try
+    {
+        const PluginField* fields = fc->fields;
+        for (int i = 0; i < fc->nbFields; ++i)
+        {
+            const char* attrName = fields[i].name;
+            if (!strcmp(attrName, "max_output_size_per_class"))
+            {
+                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                mParam.numOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "max_total_size"))
+            {
+                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                mParam.numOutputBoxes = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "iou_threshold"))
+            {
+                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "score_threshold"))
+            {
+                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "pad_per_class"))
+            {
+                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                mParam.padOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "clip_boxes"))
+            {
+                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                mParam.clipBoxes = *(static_cast<const int*>(fields[i].data));
+            }
+        }
+
+        auto* plugin = new EfficientNMSPlugin(mParam);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+IPluginV2DynamicExt* EfficientNMSTFTRTPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength) noexcept
 {
     try

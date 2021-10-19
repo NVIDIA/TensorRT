@@ -57,7 +57,7 @@ public:
     //!
     //! \details Lets TRT use its default tactic selection method.
     //! Writes all the possible choices to the selection buffer and returns the length of it.
-    //! If BuilderFlag::kSTRICT_TYPES is not set, just returning 0 forces default tactic selection.
+    //! If BuilderFlag::kREJECT_EMPTY_ALGORITHMS is not set, just returning 0 forces default tactic selection.
     //!
     int32_t selectAlgorithms(const nvinfer1::IAlgorithmContext& context, const nvinfer1::IAlgorithm* const* choices,
         int32_t nbChoices, int32_t* selection) noexcept override
@@ -420,8 +420,8 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
 
     if (mParams.int8)
     {
-        // The sample fails for Int8 with kSTRICT_TYPES flag set.
-        config->clearFlag(BuilderFlag::kSTRICT_TYPES);
+        // The sample fails for Int8 with kREJECT_EMPTY_ALGORITHMS flag set.
+        config->clearFlag(BuilderFlag::kREJECT_EMPTY_ALGORITHMS);
     }
 
     SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};

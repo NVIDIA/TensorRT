@@ -17,12 +17,13 @@ import os
 import tempfile
 
 import pytest
-import tensorflow as tf
 from polygraphy import constants, util
 from polygraphy.backend.tf import GraphFromFrozen, ModifyGraphOutputs, SaveGraph, graph_from_frozen
 from polygraphy.logger import G_LOGGER
 from tests.helper import is_file_non_empty
 from tests.models.meta import TF_MODELS
+
+tf = pytest.importorskip("tensorflow")
 
 
 class TestLoggerCallbacks(object):

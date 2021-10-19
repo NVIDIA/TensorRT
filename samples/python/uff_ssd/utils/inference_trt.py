@@ -14,6 +14,8 @@
 # limitations under the License.
 #
 
+# Utility functions for performing image inference with TensorRT
+
 import os
 import sys
 import time

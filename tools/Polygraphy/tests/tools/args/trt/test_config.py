@@ -49,11 +49,15 @@ class TestTrtConfigArgs(object):
             ("--fp16", "FP16"),
             ("--tf32", "TF32"),
             ("--allow-gpu-fallback", "GPU_FALLBACK"),
+            ("--obey-precision-constraints", "OBEY_PRECISION_CONSTRAINTS"),
         ],
     )
     def test_precision_flags(self, trt_config_args, arg, flag):
         if flag == "TF32" and mod.version(trt.__version__) < mod.version("7.1"):
             pytest.skip("TF32 support was added in 7.1")
+
+        if flag == "OBEY_PRECISION_CONSTRAINTS" and mod.version(trt.__version__) < mod.version("8.2"):
+            pytest.skip("OBEY_PRECISION_CONSTRAINTS support was added in 8.2")
 
         trt_config_args.parse_args([arg])
 

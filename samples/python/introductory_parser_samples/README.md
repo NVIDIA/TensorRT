@@ -38,19 +38,27 @@ This sample demonstrates how to build an engine from a UFF model file (converted
 ## Prerequisites
 
 1. Install the dependencies for Python.
-	`python3 -m pip install -r requirements.txt`
+
+```bash
+pip3 install -r requirements.txt
+```
+
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
+```
 
 ## Running the sample
 
 1.  Run the sample to create a TensorRT inference engine and run inference:
-	`python <parser>_resnet50.py`
+	`python3 <parser>_resnet50.py`
 
 	Where `<parser>` is either `caffe`, `onnx`, or `uff`.
 
 	**Note:** If the TensorRT sample data is not installed in the default location, for example `/usr/src/tensorrt/data/`, the `data` directory must be specified.
-	`python <parser>_resnet50.py [-d DATA_DIR]`
+	`python3 <parser>_resnet50.py [-d DATA_DIR]`
 
-	For example: `python caffe_resnet50.py -d /path/to/my/data/`
+	For example: `python3 caffe_resnet50.py -d /path/to/my/data/`
 
 2.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	`Correctly recognized data/samples/resnet50/reflex_camera.jpeg as reflex camera`

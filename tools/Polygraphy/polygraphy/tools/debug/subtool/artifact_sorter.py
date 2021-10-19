@@ -52,6 +52,7 @@ class ArtifactSorterArgs(BaseArgs):
             metavar="DIR",
             dest="artifacts_dir",
             help="The directory in which to move artifacts and sort them into 'good' and 'bad'. ",
+            default="polygraphy_artifacts",
         )
 
         artifact_sorter_args.add_argument(
@@ -163,12 +164,6 @@ class ArtifactSorterArgs(BaseArgs):
             self.fail_regexes = []
             for regex in fail_regex:
                 self.fail_regexes.append(re.compile(regex))
-
-        if self.artifacts and not self.output:
-            G_LOGGER.critical(
-                "An output directory must be specified if artifacts are enabled! "
-                "Note: Artifacts specified were: {:}".format(self.artifacts)
-            )
 
         if not self.artifacts and self._prefer_artifacts:
             G_LOGGER.warning(

@@ -37,7 +37,10 @@ from polygraphy.exception import PolygraphyException
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Polygraphy: A Deep Learning Debugging Toolkit")
+    parser = argparse.ArgumentParser(
+        description="Polygraphy: A Deep Learning Debugging Toolkit",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "-v", "--version", action="version", version=G_LOGGER._str_from_module_info(polygraphy, name="Polygraphy")
     )

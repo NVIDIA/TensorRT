@@ -721,7 +721,7 @@ private:
 template <class ContextType>
 bool inferenceLoop(std::vector<std::unique_ptr<Iteration<ContextType>>>& iStreams, const TimePoint& cpuStart,
     const TrtCudaEvent& gpuStart, int iterations, float maxDurationMs, float warmupMs,
-    std::vector<InferenceTrace>& trace, bool skipTransfers)
+    std::vector<InferenceTrace>& trace, bool skipTransfers, int idleMs)
 {
     float durationMs = 0;
     int32_t skip = 0;
@@ -746,6 +746,10 @@ bool inferenceLoop(std::vector<std::unique_ptr<Iteration<ContextType>>>& iStream
                 ++skip;
             }
             continue;
+        }
+        if(idleMs != 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(idleMs));
         }
     }
     for (auto& s : iStreams)
@@ -785,7 +789,7 @@ void inferenceExecution(const InferenceOptions& inference, InferenceEnvironment&
 
     std::vector<InferenceTrace> localTrace;
     if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs, localTrace,
-            inference.skipTransfers))
+            inference.skipTransfers, inference.idle))
     {
         iEnv.error = true;
     }

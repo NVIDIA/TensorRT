@@ -29,9 +29,14 @@ After inference, post-processing including bounding-box clustering is applied. T
 For specific software versions, see the [TensorRT Installation Guide](https://docs.nvidia.com/deeplearning/sdk/tensorrt-archived/index.html).
 
 1.  Install the dependencies for Python.
-    ```sh
-    python3 -m pip install -r requirements.txt
+    ```bash
+    pip3 install -r requirements.txt
     ```
+
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
+```
 
 2.  Download sample data. See the "Download Sample Data" section of [the general setup guide](../README.md).
 
@@ -42,7 +47,7 @@ The data directory needs to be specified (either via `-d /path/to/data` or envir
 when running these scripts. An error will be thrown if not. Taking `TRT_DATA_DIR` approach in following example.
 
 1.  Create an ONNX version of YOLOv3 with the following command.
-    ```sh
+    ```bash
     python3 yolov3_to_onnx.py
     ```
     When running the above command for the first time, the output should look similar to the following:
@@ -55,7 +60,7 @@ when running these scripts. An error will be thrown if not. Taking `TRT_DATA_DIR
     ```
 
 2.  Build a TensorRT engine from the generated ONNX file and run inference on a sample image
-    ```sh
+    ```bash
     python3 onnx_to_tensorrt.py
     ```
     When running the above command for the first time, the output should look similar to the following:

@@ -123,7 +123,8 @@ class ComparatorCompareArgs(BaseArgs):
             help="Relative tolerance for output comparison. "
             "To specify per-output tolerances, use the format: --rtol [<out_name>:]<rtol>. If no output name is provided, "
             "the tolerance is used for any outputs not explicitly specified. For example: "
-            "--rtol 1e-5 out0:1e-4 out1:1e-3",
+            "--rtol 1e-5 out0:1e-4 out1:1e-3. "
+            "Note that the default tolerance typically works well for FP32, but may be too strict for lower precisions like FP16 or INT8.",
             nargs="+",
             default=None,
         )
@@ -134,7 +135,8 @@ class ComparatorCompareArgs(BaseArgs):
             help="Absolute tolerance for output comparison. "
             "To specify per-output tolerances, use the format: --atol [<out_name>:]<atol>. If no output name is provided, "
             "the tolerance is used for any outputs not explicitly specified. For example: "
-            "--atol 1e-5 out0:1e-4 out1:1e-3",
+            "--atol 1e-5 out0:1e-4 out1:1e-3. "
+            "Note that the default tolerance typically works well for FP32, but may be too strict for lower precisions like FP16 or INT8.",
             nargs="+",
             default=None,
         )

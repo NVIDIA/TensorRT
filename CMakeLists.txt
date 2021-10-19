@@ -141,8 +141,8 @@ if (DEFINED GPU_ARCHS)
   separate_arguments(GPU_ARCHS)
 else()
   list(APPEND GPU_ARCHS
-      35
       53
+      60
       61
       70
       75
@@ -157,8 +157,9 @@ else()
   if (CUDA_VERSION VERSION_GREATER_EQUAL 11.0)
     # Ampere GPU (SM80) support is only available in CUDA versions > 11.0
     list(APPEND GPU_ARCHS 80)
-  else()
-    message(WARNING "Detected CUDA version is < 11.0. SM80 not supported.")
+  endif()
+  if (CUDA_VERSION VERSION_GREATER_EQUAL 11.1)
+    list(APPEND GPU_ARCHS 86)
   endif()
 
   message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${GPU_ARCHS}")

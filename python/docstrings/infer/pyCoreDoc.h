@@ -814,7 +814,7 @@ constexpr const char* INT8 = R"trtdoc(Enable Int8 layer selection)trtdoc";
 constexpr const char* DEBUG = R"trtdoc(Enable debugging of layers via synchronizing after every layer)trtdoc";
 constexpr const char* GPU_FALLBACK
     = R"trtdoc(Enable layers marked to execute on GPU if layer cannot execute on DLA)trtdoc";
-constexpr const char* STRICT_TYPES = R"trtdoc(Enables strict type constraints)trtdoc";
+constexpr const char* STRICT_TYPES = R"trtdoc(Deprecated: Enables strict type constraints. Equivalent to setting PREFER_PRECISION_CONSTRAINTS, DIRECT_IO, and REJECT_EMPTY_ALGORITHMS.)trtdoc";
 constexpr const char* REFIT = R"trtdoc(Enable building a refittable engine)trtdoc";
 constexpr const char* DISABLE_TIMING_CACHE
     = R"trtdoc(Disable reuse of timing information across identical layers.)trtdoc";
@@ -823,7 +823,15 @@ constexpr const char* TF32
 constexpr const char* SPARSE_WEIGHTS
     = R"trtdoc(Allow the builder to examine weights and use optimized functions when weights have suitable sparsity.)trtdoc";
 constexpr const char* SAFETY_SCOPE
-    = R"trtdoc(Change the allowed parameters in the EngineCapability::kSTANDARD flow to match the restrictions that EngineCapability::kSAFETY check against for DeviceType::kGPU and EngineCapability::kDLA_STANDALONE check against the DeviceType::kDLA case. This flag is forced to true if EngineCapability::kSAFETY at build time if it is unset.)trtdoc";
+    = R"trtdoc(Change the allowed parameters in the EngineCapability.STANDARD flow to match the restrictions that EngineCapability.SAFETY check against for DeviceType.GPU and EngineCapability.DLA_STANDALONE check against the DeviceType.DLA case. This flag is forced to true if EngineCapability.SAFETY at build time if it is unset.)trtdoc";
+constexpr const char* OBEY_PRECISION_CONSTRAINTS
+    = R"trtdoc(Require that layers execute in specified precisions. Build fails otherwise.)trtdoc";
+constexpr const char* PREFER_PRECISION_CONSTRAINTS
+    = R"trtdoc(Prefer that layers execute in specified precisions. Fall back (with warning) to another precision if build would otherwise fail.)trtdoc";
+constexpr const char* DIRECT_IO
+    = R"trtdoc(Require that no reformats be inserted between a layer and a network I/O tensor for which ITensor.allowed_formats was set. Build fails if a reformat is required for functional correctness.)trtdoc";
+constexpr const char* REJECT_EMPTY_ALGORITHMS
+    = R"trtdoc(Fail if IAlgorithmSelector.select_algorithms returns an empty set of algorithms.)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace QuantizationFlagDoc
@@ -837,7 +845,7 @@ constexpr const char* CALIBRATE_BEFORE_FUSION
 namespace NetworkDefinitionCreationFlagDoc
 {
 constexpr const char* descr
-    = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable explicit batch mode, pass a value of ``1 << NetworkDefinitionCreationFlag.EXPLICIT_BATCH`` to :func:`create_network` )trtdoc";
+    = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable explicit batch mode, pass a value of ``1 << int(NetworkDefinitionCreationFlag.EXPLICIT_BATCH)`` to :func:`create_network` )trtdoc";
 constexpr const char* EXPLICIT_BATCH
     = R"trtdoc(Specify that the network should be created with an explicit batch dimension.)trtdoc";
 constexpr const char* EXPLICIT_PRECISION

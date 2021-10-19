@@ -15,8 +15,8 @@
 #
 
 """
-Helpers for abstracting hik concepts. Different from 'models.py' which dealsgh-level neural networ
-with IO abstraction. This file deals with high level network configurations.
+Helpers for abstracting high-level network concepts. Different from 'models.py' which deals
+with IO abstraction.
 """
 
 import string

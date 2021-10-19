@@ -24,6 +24,7 @@ import torch
 # TRT-HuggingFace
 from NNDF.general_utils import measure_python_inference_code
 from NNDF.torch_utils import use_cuda
+from NNDF.tensorrt_utils import TRTNativeRunner
 
 
 @use_cuda
@@ -37,9 +38,13 @@ def gpt2_inference(gpt2, input_ids, timing_profile, use_cuda=True):
 
 # Code specifically for Pythonic inference measurement used across all GPT2 related scripts
 @use_cuda
-def full_inference_greedy(gpt2, input_ids, timing_profile, max_length, use_cuda=True):
+def full_inference_greedy(gpt2, input_ids, timing_profile, max_length, use_cuda=True, batch_size=1):
+
+    if isinstance(gpt2, TRTNativeRunner):
+        gpt2.set_return_device("cuda" if use_cuda else "cpu")
+
     def _e2e():
-        return gpt2.generate(input_ids, max_length=max_length)  # greedy search
+        return gpt2.generate(input_ids, max_length=max_length, batch_size=batch_size)  # greedy search
 
     full_e2e_median_time = measure_python_inference_code(
         _e2e,

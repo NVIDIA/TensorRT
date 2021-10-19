@@ -61,7 +61,7 @@ def save(model, filename):
 2. Run the sample to train the model and write out the frozen graph:
     ```bash
     mkdir -p models
-    python model.py
+    python3 model.py
     ```
 
 3. Install the UFF toolkit and graph surgeon depending on your [TensorRT installation method](https://docs.nvidia.com/deeplearning/sdk/tensorrt-install-guide/index.html#installing), or from PyPI:
@@ -82,9 +82,15 @@ def save(model, filename):
 ## Prerequisites
 
 1. Switch back to test container (if applicable) and install the dependencies for Python.
-    ```bash
-    python3 -m pip install -r requirements.txt
-    ```
+
+```bash
+pip3 install -r requirements.txt
+```
+
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+```bash
+export PATH=${PATH}:/usr/local/cuda/bin/
+```
 
 ## Running the sample
 

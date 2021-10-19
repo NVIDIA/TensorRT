@@ -16,7 +16,7 @@
 
 import math
 
-from polygraphy import mod
+from polygraphy import mod, util
 from polygraphy.logger.logger import G_LOGGER
 from polygraphy.tools import util as tools_util
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
@@ -127,9 +127,30 @@ class BisectMarker(MarkerBase):
 
 
 class Reduce(Tool):
-    """
+    r"""
     [EXPERIMENTAL] Reduce a failing ONNX model to the minimum set of nodes that cause the failure.
-    Each iteration will generate an ONNX model called 'polygraphy_debug.onnx' in the current directory.
+
+    `debug reduce` follows the same general process as other `debug` subtools.
+    Specifically, it does the following during each iteration:
+
+    1. Generates a successively smaller subgraph of a given ONNX model and saves it in the
+        current directory as `polygraphy_debug.onnx` by default.
+    2. Evaluates it using the provided `--check` command; if the command fails, it further reduces the model
+        during the subsequent iteration. Otherwise, it expands the model to include more nodes from the original.
+    3. When the model cannot be reduced further, it saves it to the path specfied by `--output`.
+    4. Optionally, as with other `debug` subtools, it can track and sort additional files specified by `--artifacts`.
+
+    NOTE: When your model includes dynamic input shapes, it is generally a good idea to tell `debug reduce` what
+        shapes to use with the `--model-input-shapes` argument. Further, if your model uses shape operations,
+        you should freeze the input shapes and then fold the shape operations with:
+            `polygraphy surgeon sanitize --fold-constants --override-input-shapes <static_input_shapes>`
+
+    The typical usage of `debug reduce` is:
+
+        polygraphy debug reduce <onnx_model> --output <reduced_model> \
+            --check <check_command>
+
+    `polygraphy run` is usually a good choice for the `--check` command.
     """
 
     def __init__(self):
@@ -218,6 +239,33 @@ class Reduce(Tool):
         if self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
             G_LOGGER.info("Freezing shapes in the model according to values determined by fallback shape inference")
             onnx_util.set_shapes_from_layerwise_meta(GRAPH, layerwise(model))
+
+        if any(util.is_shape_dynamic(inp.shape) for inp in GRAPH.inputs):
+            G_LOGGER.warning(
+                "This model uses dynamic input shapes.\n"
+                "You may want to provide input shapes to `debug reduce` using the "
+                "`--model-input-shapes` option to prevent unexpected behavior.\n"
+            )
+        elif any(tensor.shape is None or util.is_shape_dynamic(tensor.shape) for tensor in GRAPH.tensors().values()):
+            msg = ""
+            if self.arg_groups[OnnxShapeInferenceArgs].do_shape_inference:
+                msg += "ONNX shape inference was unable to infer some shapes in this model.\n"
+                msg += "You may want to use `--force-fallback-shape-inference` to freeze the shapes of intermediate tensors to prevent unexpected behavior."
+            elif self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
+                msg += "Fallback shape inference was unable to infer some shapes in this model.\n"
+                msg += "The shapes for those tensors will remain dynamic. Please ensure that your `--check` command can handle this."
+            else:
+                msg += "Shape inference was not run on this model.\n"
+                msg += "You may want to enable shape inference to freeze the shapes of intermediate tensors to prevent unexpected behavior."
+            G_LOGGER.warning(msg)
+
+        if any(node.op == "Shape" for node in GRAPH.nodes):
+            G_LOGGER.warning(
+                "This model includes shape operations, which may cause issues while reducing.\n"
+                "You may want to freeze the input shapes and fold the shape operations away with:\n"
+                "\t`polygraphy surgeon sanitize --override-input-shapes <shapes> --fold-constants [--force-fallback-shape-inference]`\n"
+                "You only need to use `--force-fallback-shape-inference` if ONNX shape inference is unable to infer shapes."
+            )
 
         def fix_graph(graph, model):
             """

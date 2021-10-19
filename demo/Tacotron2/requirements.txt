@@ -1,3 +1,4 @@
+pycuda
 matplotlib
 numpy
 inflect

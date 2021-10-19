@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 import contextlib
-import os
 
 from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
@@ -33,17 +32,18 @@ from polygraphy.tools.base import Tool
 from polygraphy.tools.debug.subtool.artifact_sorter import ArtifactSorterArgs
 
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
+trt = mod.lazy_import("tensorrt")
 
 
 class BaseCheckerSubtool(Tool):
-    def __init__(self, name, strict_types_default=None, prefer_artifacts=True):
+    def __init__(self, name, obey_precision_constraints_default=None, prefer_artifacts=True):
         super().__init__(name)
         self.subscribe_args(ArtifactSorterArgs("polygraphy_debug.engine", prefer_artifacts=prefer_artifacts))
         self.subscribe_args(ModelArgs(model_required=True, inputs=None))
         self.subscribe_args(OnnxShapeInferenceArgs())
         self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
         self.subscribe_args(DataLoaderArgs())  # For int8 calibration
-        self.subscribe_args(TrtConfigArgs(strict_types_default=strict_types_default))
+        self.subscribe_args(TrtConfigArgs(obey_precision_constraints_default=obey_precision_constraints_default))
         self.subscribe_args(TrtPluginLoaderArgs())
         self.subscribe_args(TrtNetworkLoaderArgs())
         self.subscribe_args(TrtEngineLoaderArgs())
@@ -88,6 +88,18 @@ class BaseCheckerSubtool(Tool):
 
     def run(self, args):
         G_LOGGER.start("Starting iterations")
+
+        # Hack to switch obey_precision_constraints to strict_types on older versions
+        if (
+            mod.version(trt.__version__) < mod.version("8.2")
+            and self.arg_groups[TrtConfigArgs].obey_precision_constraints
+        ):
+            G_LOGGER.warning(
+                "--obey-precision-constraints is not supported on this version of TensorRT. "
+                "Treating it as --strict-types instead."
+            )
+            self.arg_groups[TrtConfigArgs].obey_precision_constraints = False
+            self.arg_groups[TrtConfigArgs].strict_types = True
 
         builder, network, parser = util.unpack_args(self.arg_groups[TrtNetworkLoaderArgs].load_network(), 3)
 

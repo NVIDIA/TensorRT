@@ -99,7 +99,7 @@ This allows the `Comparator` to optionally provide each runner with exclusive ac
 
 ## Comparator
 
-The `Comparator` is used to run inference for runners, and then compare accuracy (see [Comparator.py](./comparator/Comparator.py)).
+The `Comparator` is used to run inference for runners, and then compare accuracy (see [Comparator.py](./comparator/comparator.py)).
 This process is divided into two phases:
 
 1. Running inference:
@@ -108,7 +108,7 @@ This process is divided into two phases:
     run_results = Comparator.run(runners)
     ```
 
-    This function accepts a list of runners and returns a `RunResults` object (see [Comparator.py](./comparator/Comparator.py))
+    This function accepts a list of runners and returns a `RunResults` object (see [Comparator.py](./comparator/comparator.py))
     containing the inference outputs of each run.
     It also accepts an optional `data_loader` argument to control the input data. If not provided, it will use the
     default data loader. `Comparator.run()` continues until inputs from the data loader are exhausted.
@@ -124,13 +124,13 @@ This process is divided into two phases:
 **IMPORTANT:** The Comparator is designed for scenarios where you need to compare a small number
 of inputs across multiple runners. It is **not** a good idea to use it
 to validate a model with an entire dataset! Instead, runners should be used directly for such
-cases (see the [example](../examples/api/02_using_real_data)).
+cases (see the [example](../examples/api/02_validating_on_a_dataset)).
 
 
 ### Data Loaders
 
 A data loader is used by the `Comparator` to load input data to feed to each runner
-(see [DataLoader.py](./comparator/DataLoader.py)).
+(for example, see Polygraphy's [default data loader](./comparator/data_loader.py)).
 
 A data loader can be any generator or iterable that yields
 a dictionary of input buffers. In the simplest case, this can just be a `list` of `dict`s.

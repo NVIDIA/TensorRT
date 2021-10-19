@@ -15,7 +15,7 @@ is likely to be the source of error.
 
 The `debug build` subtool allows us to automate this process.
 
-For more details on how the `debug` tools work, see [here](polygraphy/tools/debug/).
+For more details on how the `debug` tools work, see [here](../../../../polygraphy/tools/debug/).
 
 ## Running The Example
 

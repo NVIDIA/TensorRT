@@ -22,11 +22,13 @@ import tensorrt as trt
 from polygraphy import mod, util
 from polygraphy.mod.importer import _version_ok
 
+from tests.helper import ROOT_DIR, ALL_TOOLS
 from tests.models.meta import ONNX_MODELS
 
-# The tests here ensure that no additional dependencies are introduced into
-# the various modules under Polygraphy.
-ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), os.path.pardir))
+"""
+The tests here ensure that no additional dependencies are introduced into
+the various modules under Polygraphy.
+"""
 
 
 @pytest.fixture()
@@ -66,20 +68,9 @@ class TestPublicImports(object):
         print(output)
 
 
-# CLI tools and all their subtools
-TOOLS = {
-    "run": [],
-    "convert": [],
-    "inspect": ["data", "model", "tactics", "capability"],
-    "surgeon": ["extract", "insert", "sanitize"],
-    "template": ["trt-network"],
-    "debug": ["build", "precision", "diff-tactics", "reduce", "repeat"],
-}
-
-
 class TestToolImports(object):
     # We should be able to at least launch tools with no dependencies installed.
-    @pytest.mark.parametrize("tool, subtools", TOOLS.items())
+    @pytest.mark.parametrize("tool, subtools", ALL_TOOLS.items())
     def test_can_run_tool_without_deps(self, virtualenv_with_poly, tool, subtools):
         POLYGRAPHY_BIN = os.path.join(ROOT_DIR, "bin", "polygraphy")
         BASE_TOOL_CMD = ["python3", POLYGRAPHY_BIN, tool, "-h"]
@@ -154,6 +145,20 @@ class TestAutoinstallDeps(object):
             ]
         )
         assert _version_ok(get_colored_version(), expected)
+
+    def test_autoinstall(self, virtualenv_with_poly):
+        virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
+        assert "colored" not in virtualenv_with_poly.installed_packages()
+
+        virtualenv_with_poly.run(
+            [
+                "python3",
+                "-c",
+                "from polygraphy import mod; " "colored = mod.lazy_import('colored'); " "mod.autoinstall(colored)",
+            ]
+        )
+
+        assert "colored" in virtualenv_with_poly.installed_packages()
 
     # We can import inner modules, and Polygraphy should still autoinstall the outermost one.
     def test_can_install_for_nested_import(self, virtualenv_with_poly):

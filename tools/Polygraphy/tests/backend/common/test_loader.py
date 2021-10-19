@@ -28,16 +28,16 @@ class TestImporter(object):
     def test_import_from_script(self, loader):
         script = dedent(
             """
-        from polygraphy.backend.trt import CreateNetwork
-        from polygraphy import func
-        import tensorrt as trt
+            from polygraphy.backend.trt import CreateNetwork
+            from polygraphy import func
+            import tensorrt as trt
 
-        @func.extend(CreateNetwork())
-        def load_network(builder, network):
-            inp = network.add_input("input", dtype=trt.float32, shape=(1, 1))
-            out = network.add_identity(inp).get_output(0)
-            network.mark_output(out)
-        """
+            @func.extend(CreateNetwork())
+            def load_network(builder, network):
+                inp = network.add_input("input", dtype=trt.float32, shape=(1, 1))
+                out = network.add_identity(inp).get_output(0)
+                network.mark_output(out)
+            """
         )
 
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
@@ -58,9 +58,9 @@ class TestImporter(object):
     def test_import_non_existent(self):
         script = dedent(
             """
-        def example():
-            pass
-        """
+            def example():
+                pass
+            """
         )
 
         with util.NamedTemporaryFile("w+", suffix=".py") as f:

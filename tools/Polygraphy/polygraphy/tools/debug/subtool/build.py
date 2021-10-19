@@ -19,10 +19,24 @@ from polygraphy.tools.debug.subtool.base import BaseCheckerSubtool
 
 
 class Build(BaseCheckerSubtool):
-    """
-    Repeatedly build an engine to isolate flaky behavior, sorting generated artifacts
-    into `good` and `bad` directories.
-    Each iteration will generate an engine called 'polygraphy_debug.engine' in the current directory.
+    r"""
+    Repeatedly build an engine to isolate faulty tactics.
+
+    `debug build` follows the same general process as other `debug` subtools.
+    Specifically, it does the following during each iteration:
+
+    1. Builds a TensorRT engine and saves it in the current directory as `polygraphy_debug.engine` by default.
+    2. Evaluates it using the provided `--check` command.
+    3. Sorts files specified by `--artifacts` into `good` and `bad` directories based on (2).
+        This is useful for sorting tactic replays, which can then be further analyzed with `debug diff-tactics`.
+
+    The typical usage of `debug build` is:
+
+        polygraphy debug build <model> [trt_build_options...] [--save-tactics <replay_file>] \
+            [--artifacts <replay_file>] --until <num_iterations> \
+            --check <check_command>
+
+    `polygraphy run` is usually a good choice for the `--check` command.
     """
 
     def __init__(self):

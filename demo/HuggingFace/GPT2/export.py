@@ -78,10 +78,10 @@ class GPT2ONNXFile(ONNXModelFile):
 
 # TRT Engine File Encoding #
 class GPT2TRTEngine(TRTEngineFile):
-    def __init__(self, model, network_metadata):
-        super().__init__(model, GPT2Converter, network_metadata)
+    def __init__(self, model, network_metadata, batch_size = 1):
+        super().__init__(model, GPT2Converter, network_metadata, batch_size = batch_size)
 
-    def use_strict_types(self):
+    def use_obey_precision_constraints(self):
         return self.network_metadata.precision.fp16
 
     def get_dynamic_shape_profiles(self):
@@ -91,9 +91,9 @@ class GPT2TRTEngine(TRTEngineFile):
         profile = Profile()
         profile.add(
             "input_ids",
-            min=(1, 1),
-            opt=(1, max_sequence_length // 2),
-            max=(1, max_sequence_length),
+            min=(self.batch_size, 1),
+            opt=(self.batch_size, max_sequence_length // 2),
+            max=(self.batch_size, max_sequence_length),
         )
         return [profile]
 

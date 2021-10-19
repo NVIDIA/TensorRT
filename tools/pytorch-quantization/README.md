@@ -21,9 +21,9 @@ Install PyTorch and prerequisites
 ```bash
 pip install -r requirements.txt
 # for CUDA 10.2 users
-pip install torch>=1.8.0
+pip install torch>=1.9.1
 # for CUDA 11.1 users
-pip install torch>=1.8.0+cu111
+pip install torch>=1.9.1+cu111
 ```
 
 Build and install pytorch-quantization
@@ -34,7 +34,7 @@ python setup.py install
 
 #### NGC Container
 
-`pytorch-quantization` is preinstalled in NVIDIA NGC PyTorch container since 20.12, e.g. `nvcr.io/nvidian/pytorch:20.12-py3`
+`pytorch-quantization` is preinstalled in NVIDIA NGC PyTorch container, e.g. `nvcr.io/nvidian/pytorch:21.09-py3`
 
 ## Resources
 

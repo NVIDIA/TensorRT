@@ -221,13 +221,23 @@ class TestConfigLoader(object):
                 if mod.version(trt.__version__) < mod.version("8.0"):
                     assert config.get_tactic_sources() == 3
                 else:
-                    assert config.get_tactic_sources() == 7
+                    assert config.get_tactic_sources() == 7  
+            with contextlib.suppress(AttributeError):
+                assert not config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
 
     def test_workspace_size(self, identity_builder_network):
         builder, network = identity_builder_network
         loader = CreateConfig(max_workspace_size=0)
         with loader(builder, network) as config:
             assert config.max_workspace_size == 0
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported before TRT 8.2")
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_obey_precision_constraints(self, identity_builder_network, flag):
+        builder, network = identity_builder_network
+        loader = CreateConfig(obey_precision_constraints=flag)
+        with loader(builder, network) as config:
+            assert config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS) == flag
 
     @pytest.mark.parametrize("flag", [True, False])
     def test_strict_types(self, identity_builder_network, flag):

@@ -32,8 +32,6 @@ premise: If I fall asleep then I am going to wake up in 8 hours. hypothesis: I f
 
 label = "contradiction"
 
-
-
 # t5-small is gets some results differently
 [T5.all.t5-small.premise_a]
 

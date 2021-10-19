@@ -491,7 +491,29 @@ constexpr const char* descr = R"trtdoc(
 
     The output size is the same as the input size.
 
-    :ivar axes: :class:`int` The axes along which softmax is computed. Currently, only one axis can be set. The axis is specified by setting the bit corresponding to the axis, after excluding the batch dimension, to 1. Let's say we have an NCHW tensor as input (three non-batch dimensions). Bit 0 corresponds to the C dimension boolean. Bit 1 corresponds to the H dimension boolean. Bit 2 corresponds to the W dimension boolean. For example, to perform softmax on axis R of a NPQRCHW input, set bit 2. By default, softmax is performed on the axis which is the number of non-batch axes minus three. It is 0 if there are fewer than 3 non-batch axes. For example, if the input is NCHW, the default axis is C. If the input is NHW, then the default axis is H.
+    :ivar axes: :class:`int` The axis along which softmax is computed. Currently, only one axis can be set.
+
+    |  The axis is specified by setting the bit corresponding to the axis to 1, as a bit mask.
+    |  For example, consider an NCHW tensor as input (three non-batch dimensions).
+    |
+    |  In implicit mode :
+    |  Bit 0 corresponds to the C dimension boolean.
+    |  Bit 1 corresponds to the H dimension boolean.
+    |  Bit 2 corresponds to the W dimension boolean.
+
+    By default, softmax is performed on the axis which is the number of axes minus three. It is 0 if there are fewer than 3 non-batch axes. For example, if the input is NCHW, the default axis is C. If the input is NHW, then the default axis is H.
+
+    |  In explicit mode :
+    |  Bit 0 corresponds to the N dimension boolean.
+    |  Bit 1 corresponds to the C dimension boolean.
+    |  Bit 2 corresponds to the H dimension boolean.
+    |  Bit 3 corresponds to the W dimension boolean.
+    |  By default, softmax is performed on the axis which is the number of axes minus three. It is 0 if
+    |  there are fewer than 3 axes. For example, if the input is NCHW, the default axis is C. If the input
+    |  is NHW, then the default axis is N.
+    |
+    |  For example, to perform softmax on axis R of a NPQRCHW input, set bit 2 with implicit batch mode,
+    |  set bit 3 with explicit batch mode.
 )trtdoc";
 } // namespace ISoftMaxLayerDoc
 
@@ -1924,14 +1946,9 @@ constexpr const char* add_reduce = R"trtdoc(
     :arg input: The input tensor to the layer.
     :arg op: The reduction operation to perform.
     :arg axes: The reduction dimensions.
-
-        |  Bit 0 of the uint32_t type corresponds to the non-batch dimension 0 boolean and so on.
-        |  If a bit is set, then the corresponding dimension will be reduced.
-        |  Let's say we have an NCHW tensor as input (three non-batch dimensions).
-        |  Bit 0 corresponds to the C dimension boolean.
-        |  Bit 1 corresponds to the H dimension boolean.
-        |  Bit 2 corresponds to the W dimension boolean.
-        |  Note that reduction is not permitted over the batch size dimension.
+        The bit in position i of bitmask axes corresponds to explicit dimension i of the result.
+        E.g., the least significant bit corresponds to the first explicit dimension and the next to least
+        significant bit corresponds to the second explicit dimension.
     :arg keep_dims: The boolean that specifies whether or not to keep the reduced dimensions in the output of the layer.
 
     :returns: The new reduce layer, or :class:`None` if it could not be created.
@@ -1950,13 +1967,10 @@ constexpr const char* add_topk = R"trtdoc(
     :arg k: Number of elements to keep.
 
     :arg axes: The reduction dimensions.
-        Bit 0 of the uint32_t type corresponds to the non-batch dimension 0 boolean and so on.
-        If a bit is set, then the corresponding dimension will be reduced.
-        Let's say we have an NCHW tensor as input (three non-batch dimensions).
-        Bit 0 corresponds to the C dimension boolean.
-        Bit 1 corresponds to the H dimension boolean.
-        Bit 2 corresponds to the W dimension boolean.
-        Note that TopK reduction is currently only permitted over one dimension.
+        The bit in position i of bitmask axes corresponds to explicit dimension i of the result.
+        E.g., the least significant bit corresponds to the first explicit dimension and the next to least
+        significant bit corresponds to the second explicit dimension.
+        Currently axes must specify exactly one dimension, and it must be one of the last four dimensions.
 
     :returns: The new TopK layer, or :class:`None` if it could not be created.
 )trtdoc";

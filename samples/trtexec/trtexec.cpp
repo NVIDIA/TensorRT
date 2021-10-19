@@ -150,8 +150,8 @@ int main(int argc, char** argv)
 
     setCudaDevice(options.system.device, sample::gLogInfo);
     sample::gLogInfo << std::endl;
-
-    sample::gLogInfo << "TensorRT version: " << getInferLibVersion() << std::endl;
+    sample::gLogInfo << "TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR
+        << "." << NV_TENSORRT_PATCH << std::endl;
     initLibNvInferPlugins(&sample::gLogger.getTRTLogger(), "");
 
     for (const auto& pluginPath : options.system.plugins)

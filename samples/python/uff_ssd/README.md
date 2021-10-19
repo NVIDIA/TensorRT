@@ -16,7 +16,7 @@
 
 ## Description
 
-This sample, uff_ssd, implements a full UFF-based pipeline for performing inference with an SSD (InceptionV2 feature extractor) network.
+This sample, `uff_ssd`, implements a full UFF-based pipeline for performing inference with an SSD (InceptionV2 feature extractor) network.
 
 This sample is based on the [SSD: Single Shot MultiBox Detector](https://arxiv.org/abs/1512.02325) paper. The SSD network, built on the VGG-16 network, performs the task of object detection and localization in a single forward pass of the network. This approach discretizes the output space of bounding boxes into a set of default boxes over different aspect ratios and scales per feature map location. At prediction time, the network generates scores for the presence of each object category in each default box and produces adjustments to the box to better match the object shape. Additionally, the network combines predictions from multiple features with different resolutions to naturally handle objects of various sizes.
 
@@ -143,14 +143,18 @@ The outputs of the SSD network are human interpretable. The post-processing work
     Alternatively, install Tensorflow 1.15
     `pip3 install tensorflow>=1.15.5,<2.0`
 
-  NOTE:
-  - On PowerPC systems, you will need to manually install TensorFlow using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
-  - On Jetson boards, you will need to manually install TensorFlow by following the documentation for [Xavier](https://docs.nvidia.com/deeplearning/dgx/install-tf-xavier/index.html) or [TX2](https://docs.nvidia.com/deeplearning/dgx/install-tf-jetsontx2/index.html).
+    NOTE:
+    - On PowerPC systems, you will need to manually install TensorFlow using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
+    - On Jetson boards, you will need to manually install TensorFlow by following the documentation for [Xavier](https://docs.nvidia.com/deeplearning/dgx/install-tf-xavier/index.html) or [TX2](https://docs.nvidia.com/deeplearning/dgx/install-tf-jetsontx2/index.html).
 
 2. Install the dependencies for Python.
-   ```bash
-   python3 -m pip install -r requirements.txt
-   ```
+    ```bash
+    pip3 install -r requirements.txt
+    ```
+
+    On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
+    ```bash
+    export PATH=${PATH}:/usr/local/cuda/bin/
 
 3. Download the Tensorflow SSD model with inception backbone.
    ```bash
@@ -185,7 +189,7 @@ Both the `detect_objects.py` and `voc_evaluation.py` scripts support separate ad
 
 1. Return to the test container, install prerequisites and run the TensorRT inference script:
    ```bash
-   python3 -m pip install -r requirements.txt
+   pip3 install -r requirements.txt
    python3 detect_objects.py <IMAGE_PATH>
    ```
    Where `<IMAGE_PATH>` contains the image you want to run inference on using the SSD network. The script should work for all popular image formats, like PNG, JPEG, and BMP. Since the model is trained for images of size 300 x 300, the input image will be resized to this size (using bilinear interpolation), if needed.

@@ -20,6 +20,7 @@ import onnx
 import onnx_graphsurgeon as gs
 import pytest
 from polygraphy import util
+from polygraphy.backend.onnx import util as onnx_util
 from tests.helper import is_file_non_empty
 from tests.models.meta import ONNX_MODELS
 from tests.tools.common import run_polygraphy_run, run_polygraphy_surgeon
@@ -109,6 +110,7 @@ class TestSurgeonInsert(object):
 
         graph_output_names = set([out.name for out in model.graph.output])
         assert graph_output_names == set(expected_graph_output_names)
+        assert all(onnx_util.get_dtype(out) for out in model.graph.output)
 
         graph_input_names = set([out.name for out in model.graph.input])
         assert graph_input_names == set(expected_graph_input_names)

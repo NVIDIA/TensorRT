@@ -16,7 +16,7 @@
 | [sampleNMT](sampleNMT) | C++ | INetwork | Neural Machine Translation Using A seq2seq Model |
 | [sampleOnnxMNIST](sampleOnnxMNIST) | C++ | ONNX | “Hello World” For TensorRT With ONNX |
 | [sampleOnnxMnistCoordConvAC](sampleOnnxMnistCoordConvAC) | C++ | ONNX | Implementing CoordConv with a custom plugin |
-| [sampleReformatFreeIO](sampleReformatFreeIO) | C++ | Caffe | Specifying I/O Formats Via Reformat-Free-I/O API |
+| [sampleIOFormats](sampleIOFormats) | C++ | Caffe | Specifying TensorRT I/O Formats |
 | [sampleSSD](sampleSSD) | C++ | Caffe | Object Detection With SSD |
 | [sampleUffFasterRCNN](sampleUffFasterRCNN) | C++ | UFF | Object Detection With A TensorFlow FasterRCNN Network |
 | [sampleUffMNIST](sampleUffMNIST) | C++ | UFF | Import A TensorFlow Model And Run Inference |
@@ -32,6 +32,7 @@
 | [introductory_parser_samples](python/introductory_parser_samples) | Python | Any | Introduction To Importing Models Using TensorRT Parsers |
 | [network_api_pytorch_mnist](python/network_api_pytorch_mnist) | Python | INetwork | “Hello World” For TensorRT |
 | [onnx_packnet](python/onnx_packnet) | Python | ONNX | TensorRT Inference Of ONNX Models With Custom Layers |
+| [tensorflow_object_detection_api](python/tensorflow_object_detection_api) | Python | ONNX | TensorFlow Object Detection API Models in TensorRT |
 | [uff_custom_plugin](python/uff_custom_plugin) | Python | INetwork | Adding A Custom Layer To Your TensorFlow Network In TensorRT |
 | [uff_ssd](python/uff_ssd) | Python | UFF | Object Detection with SSD |
 | [yolov3_onnx](python/yolov3_onnx) | Python | ONNX | Object Detection Using YOLOv3 With TensorRT ONNX Backend |

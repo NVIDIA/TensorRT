@@ -79,11 +79,20 @@ def main():
         bench_times = {}
 
         stream = cuda.Stream()
-        for idx, batch_size in enumerate(sorted(args.batch_size)):
-            context.set_optimization_profile_async(idx, stream.handle)
+        for batch_size in sorted(args.batch_size):
+            # Select engine profile
+            selected_profile = -1
+            for idx in range(engine.num_optimization_profiles):
+                profile_shape = engine.get_profile_shape(profile_index = idx, binding = idx * num_binding_per_profile)
+                if profile_shape[0][0] <= batch_size and profile_shape[2][0] >= batch_size and profile_shape[0][1] <= args.sequence_length and profile_shape[2][1] >= args.sequence_length:
+                    selected_profile = idx
+                    break
+            if selected_profile == -1:
+                raise RuntimeError("None of the dynamic shape profiles meets the requirement batch = {} and sequence = {}.".format(batch_size, args.sequence_length))
+            context.set_optimization_profile_async(selected_profile, stream.handle)
 
             # Each profile has unique bindings
-            binding_idx_offset = idx * num_binding_per_profile
+            binding_idx_offset = selected_profile * num_binding_per_profile
             bindings = [0] * binding_idx_offset + [buf.binding() for buf in buffers]
 
             shapes = {

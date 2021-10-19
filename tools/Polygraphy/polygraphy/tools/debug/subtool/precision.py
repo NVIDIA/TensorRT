@@ -118,7 +118,7 @@ class Precision(BaseCheckerSubtool):
     """
 
     def __init__(self):
-        super().__init__("precision", strict_types_default=True, prefer_artifacts=False)
+        super().__init__("precision", obey_precision_constraints_default=True, prefer_artifacts=False)
 
     def add_parser_args(self, parser):
         parser.add_argument(

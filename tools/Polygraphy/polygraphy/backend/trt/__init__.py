@@ -13,7 +13,8 @@ def register_logger_callback():
         from polygraphy import mod
 
         trt = mod.lazy_import("tensorrt")
-        if not mod.has_mod(trt):
+
+        if not mod.has_mod("tensorrt"):
             return
 
         if sev >= G_LOGGER.CRITICAL:

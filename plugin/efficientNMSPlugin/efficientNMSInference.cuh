@@ -201,9 +201,9 @@ struct __align__(4 * sizeof(T)) BoxCorner
 
     __device__ operator BoxCenterSize<T>() const
     {
-        T w = x2 - x1;
-        T h = y2 - y1;
-        return BoxCenterSize<T>{y1 + (T) 0.5 * h, x1 + (T) 0.5 * w, h, w};
+        T w = sub_mp(x2, x1);
+        T h = sub_mp(y2, y1);
+        return BoxCenterSize<T>{add_mp(y1, mul_mp((T) 0.5, h)), add_mp(x1, mul_mp((T) 0.5, w)), h, w};
     }
 
     __device__ static BoxCorner<T> intersect(BoxCorner<T> a, BoxCorner<T> b)
