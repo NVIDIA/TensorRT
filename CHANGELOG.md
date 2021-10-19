@@ -125,7 +125,7 @@ Identical to the TensorRT-OSS [8.0.1](https://github.com/NVIDIA/TensorRT/release
   - Added support for per-axis quantization.
 - Added `EfficientNMS_TRT`, `EfficientNMS_ONNX_TRT` plugins and experimental support for ONNX `NonMaxSuppression` operator.
 - Added `ScatterND` plugin.
-- Added TensorRT [QuickStart Guide](https://github.com/NVIDIA/TensorRT/tree/master/quickstart).
+- Added TensorRT [QuickStart Guide](https://github.com/NVIDIA/TensorRT/tree/main/quickstart).
 - Added new samples: [engine_refit_onnx_bidaf](https://docs.nvidia.com/deeplearning/tensorrt/sample-support-guide/index.html#engine_refit_onnx_bidaf) builds an engine from ONNX BiDAF model and refits engine with new weights, [efficientdet](samples/python/efficientdet) and [efficientnet](samples/python/efficientnet) samples for demonstrating Object Detection using TensorRT.
 - Added support for Ubuntu20.04 and RedHat/CentOS 8.3.
 - Added Python 3.9 support.
@@ -264,11 +264,11 @@ Identical to the TensorRT-OSS [8.0.1](https://github.com/NVIDIA/TensorRT/release
 
 ## [20.11](https://github.com/NVIDIA/TensorRT/releases/tag/20.11) - 2020-11-20
 ### Added
-- API documentation for [ONNX-GraphSurgeon](https://github.com/NVIDIA/TensorRT/tree/master/tools/onnx-graphsurgeon/docs)
+- API documentation for [ONNX-GraphSurgeon](https://github.com/NVIDIA/TensorRT/tree/main/tools/onnx-graphsurgeon/docs)
 
 ### Changed
-- Support for SM86 in [demoBERT](https://github.com/NVIDIA/TensorRT/tree/master/demo/BERT)
-- Updated NGC checkpoint URLs for [demoBERT](https://github.com/NVIDIA/TensorRT/tree/master/demo/BERT) and [Tacotron2](https://github.com/NVIDIA/TensorRT/tree/master/demo/Tacotron2).
+- Support for SM86 in [demoBERT](https://github.com/NVIDIA/TensorRT/tree/main/demo/BERT)
+- Updated NGC checkpoint URLs for [demoBERT](https://github.com/NVIDIA/TensorRT/tree/main/demo/BERT) and [Tacotron2](https://github.com/NVIDIA/TensorRT/tree/main/demo/Tacotron2).
 
 ### Removed
 - N/A
@@ -276,9 +276,9 @@ Identical to the TensorRT-OSS [8.0.1](https://github.com/NVIDIA/TensorRT/release
 
 ## [20.10](https://github.com/NVIDIA/TensorRT/releases/tag/20.10) - 2020-10-22
 ### Added
-- [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/master/tools/Polygraphy) v0.20.13 - Deep Learning Inference Prototyping and Debugging Toolkit
-- [PyTorch-Quantization Toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization) v2.0.0
-- Updated BERT plugins for [variable sequence length inputs](https://github.com/NVIDIA/TensorRT/tree/master/demo/BERT#variable-sequence-length)
+- [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy) v0.20.13 - Deep Learning Inference Prototyping and Debugging Toolkit
+- [PyTorch-Quantization Toolkit](https://github.com/NVIDIA/TensorRT/tree/main/tools/pytorch-quantization) v2.0.0
+- Updated BERT plugins for [variable sequence length inputs](https://github.com/NVIDIA/TensorRT/tree/main/demo/BERT#variable-sequence-length)
 - Optimized kernels for sequence lengths of 64 and 96 added
 - Added Tacotron2 + Waveglow TTS demo [#677](https://github.com/NVIDIA/TensorRT/pull/677)
 - Re-enable `GridAnchorRect_TRT` plugin with rectangular feature maps [#679](https://github.com/NVIDIA/TensorRT/pull/679)

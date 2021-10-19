@@ -97,7 +97,7 @@ hostDataBuffer[i] = ((1.0 - float(fileData[i] / 255.0)) - PYTORCH_NORMALIZE_MEAN
 
 In this sample, the following layers and plugins are used. For more information about these layers, see the [TensorRT Developer Guide: Layers](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#layers) documentation.
 
-[CoordConvAC layer](https://github.com/NVIDIA/TensorRT/tree/master/plugin/coordConvACPlugin)
+[CoordConvAC layer](https://github.com/NVIDIA/TensorRT/tree/main/plugin/coordConvACPlugin)
 Custom layer implemented with CUDA API that implements operation AddChannels. This layer expands the input data by adding additional channels with relative coordinates.
 
 [Activation layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#activation-layer)
@@ -214,7 +214,7 @@ The following resources provide a deeper understanding about the ONNX project an
 **CoordConv Layer**
 - [Arxiv paper by Uber AI Labs](https://arxiv.org/abs/1807.03247)
 - [Blog post about the CoordConv layer](https://eng.uber.com/coordconv/)
-- [Path to the layer's plugin in repository](https://github.com/NVIDIA/TensorRT/tree/master/plugin/coordConvACPlugin)
+- [Path to the layer's plugin in repository](https://github.com/NVIDIA/TensorRT/tree/main/plugin/coordConvACPlugin)
 
 **ONNX**
 - [GitHub: ONNX](https://github.com/onnx/onnx)

@@ -6,7 +6,7 @@ This page includes the Python API documentation for ONNX GraphSurgeon. ONNX Grap
 provides a convenient way to create and modify ONNX models.
 
 For installation instructions and examples see
-`this page <https://github.com/NVIDIA/TensorRT/tree/master/tools/onnx-graphsurgeon>`_ instead.
+`this page <https://github.com/NVIDIA/TensorRT/tree/main/tools/onnx-graphsurgeon>`_ instead.
 
 
 .. toctree::

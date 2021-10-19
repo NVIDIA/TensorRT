@@ -167,7 +167,7 @@ Optionally, you may wish to visualize the resulting ONNX graph with a tool such 
 
 The input to the graph is a `float32` tensor with the selected input shape, containing RGB pixel data in the range of 0 to 255. Normalization, mean subtraction and scaling will be performed inside the EfficientDet graph, so it is not required to further pre-process the input data.
 
-The outputs of the graph are the same as the outputs of the [EfficientNMS](https://github.com/NVIDIA/TensorRT/tree/master/plugin/efficientNMSPlugin) plugin. If the ONNX graph was created with `--legacy_plugins` for TensorRT 7 compatibility, the outputs will correspond to those of the [BatchedNMS](https://github.com/NVIDIA/TensorRT/tree/master/plugin/batchedNMSPlugin) plugin instead. 
+The outputs of the graph are the same as the outputs of the [EfficientNMS](https://github.com/NVIDIA/TensorRT/tree/main/plugin/efficientNMSPlugin) plugin. If the ONNX graph was created with `--legacy_plugins` for TensorRT 7 compatibility, the outputs will correspond to those of the [BatchedNMS](https://github.com/NVIDIA/TensorRT/tree/main/plugin/batchedNMSPlugin) plugin instead. 
 
 ### Build TensorRT Engine
 
