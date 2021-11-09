@@ -291,7 +291,7 @@ class TensorQuantizer(nn.Module):
             quant_dim = list(amax.shape).index(list(amax_sequeeze.shape)[0])
             scale = amax_sequeeze / bound
             outputs = torch.fake_quantize_per_channel_affine(
-                inputs, scale.data, torch.zeros_like(scale, dtype=torch.long).data, quant_dim,
+                inputs, scale.data, torch.zeros_like(scale, dtype=torch.int32).data, quant_dim,
                 -bound - 1 if not self._unsigned else 0, bound)
 
         return outputs
