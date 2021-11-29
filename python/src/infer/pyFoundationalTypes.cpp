@@ -239,6 +239,9 @@ void bindFoundationalTypes(py::module& m)
         .def("__eq__", lambdas::dimsEqual<Dims, py::tuple>)
         // These functions allow us to use Dims like an iterable.
         .def("__len__", lambdas::dims_len)
+        .def("__iter__", [](const Dims &s) {
+              return py::make_iterator(&s.d[0], &s.d[s.nbDims]); },
+              py::keep_alive<0, 1>())
         .def("__getitem__", lambdas::dims_getter)
         .def("__getitem__", lambdas::dims_getter_slice)
         .def("__setitem__", lambdas::dims_setter)
