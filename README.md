@@ -55,7 +55,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
 1. #### Download TensorRT OSS
 	```bash
-	git clone -b master https://github.com/nvidia/TensorRT TensorRT
+	git clone -b main https://github.com/nvidia/TensorRT TensorRT
 	cd TensorRT
 	git submodule update --init --recursive
 	```
