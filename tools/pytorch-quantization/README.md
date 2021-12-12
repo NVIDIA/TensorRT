@@ -34,7 +34,7 @@ python setup.py install
 
 #### NGC Container
 
-`pytorch-quantization` is preinstalled in NVIDIA NGC PyTorch container, e.g. `nvcr.io/nvidian/pytorch:21.09-py3`
+`pytorch-quantization` is preinstalled in NVIDIA NGC PyTorch container, e.g. `nvcr.io/nvidia/pytorch:21.09-py3`
 
 ## Resources
 
