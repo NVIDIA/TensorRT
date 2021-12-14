@@ -173,14 +173,12 @@ class GPT2Polygraphy(TRTInferenceCommand):
         # get single decoder iteration inference timing profile
         _, decoder_e2e_median_time = gpt2_inference(
             self.gpt2_trt, input_ids, timing_profile,
-            use_cuda=False
         )
 
         # get complete decoder inference result and its timing profile
         sample_output, full_e2e_median_runtime = full_inference_greedy(
             self.gpt2_trt, input_ids, timing_profile,
             max_length=GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
-            use_cuda=False
         )
 
         semantic_outputs = []
