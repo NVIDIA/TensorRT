@@ -130,6 +130,7 @@ extern unsigned char cubin_fmha_v2_int8_512_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_512_32_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_256_32_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_128_32_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_il_int8_128_32_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_512_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_512_32_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_256_32_sm80_cu_cubin[];
@@ -179,6 +180,7 @@ extern uint32_t cubin_fmha_v2_int8_512_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_512_32_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_256_32_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_il_int8_128_32_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_512_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_512_32_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_256_32_sm80_cu_cubin_len;
@@ -361,8 +363,8 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
         cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len, "fmha_v2_int8_128_32_sm80_kernel_nl", 12288, 128, 16, false},
     {DATA_TYPE_INT8, 128, 32, kSM_80, cubin_fmha_v2_int8_128_32_sm80_cu_cubin,
         cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len, "fmha_v2_int8_128_32_sm80_kernel", 12288, 128, 0, true},
-    {DATA_TYPE_INT8, 128, 32, kSM_80, cubin_fmha_v2_int8_128_32_sm80_cu_cubin,
-        cubin_fmha_v2_int8_128_32_sm80_cu_cubin_len, "fmha_v2_il_int8_128_32_sm80_kernel_nl", 10240, 128, 16, true},
+    {DATA_TYPE_INT8, 128, 32, kSM_80, cubin_fmha_v2_il_int8_128_32_sm80_cu_cubin,
+        cubin_fmha_v2_il_int8_128_32_sm80_cu_cubin_len, "fmha_v2_il_int8_128_32_sm80_kernel_nl", 10240, 128, 16, true},
 
     // {fp16, int8} x {256} x {32} x {sm80} x {normal, noloop}
     {DATA_TYPE_INT8, 256, 32, kSM_80, cubin_fmha_v2_int8_256_32_sm80_cu_cubin,
