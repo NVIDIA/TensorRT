@@ -31,6 +31,7 @@ using namespace nvinfer1::plugin;
 #include "batchedNMSPlugin.h"
 #include "coordConvACPlugin.h"
 #include "cropAndResizePlugin.h"
+#include "decodeBbox3D.h"
 #include "detectionLayerPlugin.h"
 #include "efficientNMSPlugin.h"
 #include "flattenConcat.h"
@@ -44,6 +45,7 @@ using namespace nvinfer1::plugin;
 #include "nmsPlugin.h"
 #include "normalizePlugin.h"
 #include "nvFasterRCNNPlugin.h"
+#include "pillarScatter.h"
 #include "priorBoxPlugin.h"
 #include "proposalLayerPlugin.h"
 #include "proposalPlugin.h"
@@ -51,9 +53,10 @@ using namespace nvinfer1::plugin;
 #include "regionPlugin.h"
 #include "reorgPlugin.h"
 #include "resizeNearestPlugin.h"
+#include "scatterPlugin.h"
 #include "specialSlicePlugin.h"
 #include "split.h"
-#include "scatterPlugin.h"
+#include "voxelGenerator.h"
 
 using nvinfer1::plugin::RPROIParams;
 
@@ -169,6 +172,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::CoordConvACPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::CropAndResizePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::CropAndResizeDynamicPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::DecodeBbox3DPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::DetectionLayerPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::EfficientNMSPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::EfficientNMSONNXPluginCreator>(logger, libNamespace);
@@ -184,6 +188,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::NMSPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::NMSDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::NormalizePluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::PillarScatterPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::PriorBoxPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ProposalLayerPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
@@ -196,6 +201,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::ScatterNDPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SplitPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::VoxelGeneratorPluginCreator>(logger, libNamespace);
         return true;
     }
 } // extern "C"

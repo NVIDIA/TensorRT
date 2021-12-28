@@ -239,5 +239,79 @@ int proposalInference_gpu(cudaStream_t stream, const void* rpn_prob, const void*
 
 size_t _get_workspace_size(int N, int anc_size_num, int anc_ratio_num, int H, int W, int nmsMaxOut);
 
+void  decodeBbox3DLaunch(
+    const int batch_size,
+    const float *cls_input,
+    float *box_input,
+    const float *dir_cls_input,
+    float *anchors,
+    float *anchors_bottom_height,
+    float *bndbox_output,
+    int *object_counter,
+    const float min_x_range,
+    const float max_x_range,
+    const float min_y_range,
+    const float max_y_range,
+    const int feature_x_size,
+    const int feature_y_size,
+    const int num_anchors,
+    const int num_classes,
+    const int num_box_values,
+    const float score_thresh,
+    const float dir_offset,
+    const float dir_limit_offset,
+    const int num_dir_bins,
+    cudaStream_t stream = 0);
+
+void pillarScatterKernelLaunch(
+  int batch_size,
+  int max_pillar_num,
+  int num_features,
+  const float *pillar_features_data,
+  const unsigned int *coords_data,
+  const unsigned int *params_data,
+  unsigned int featureX, unsigned int featureY,
+  float *spatial_feature_data,
+  cudaStream_t stream);
+
+void generateVoxels_launch(
+        int batch_size, int max_num_points,
+        float *points, unsigned int* points_size,
+        float min_x_range, float max_x_range,
+        float min_y_range, float max_y_range,
+        float min_z_range, float max_z_range,
+        float pillar_x_size, float pillar_y_size, float pillar_z_size,
+        int grid_y_size, int grid_x_size, int num_point_values,
+        int max_points_per_voxel,
+        unsigned int *mask, float *voxels,
+        cudaStream_t stream);
+
+void generateBaseFeatures_launch(
+        int batch_size,
+        unsigned int *mask, float *voxels,
+        int grid_y_size, int grid_x_size,
+        unsigned int *pillar_num,
+        int max_pillar_num,
+        int max_points_per_voxel,
+        int num_point_values,
+        float *voxel_features,
+        unsigned int *voxel_num_points,
+        unsigned int *coords,
+        cudaStream_t stream);
+
+int generateFeatures_launch(
+    int batch_size,
+    int dense_pillar_num,
+    float* voxel_features,
+    unsigned int* voxel_num_points,
+    unsigned int* coords,
+    unsigned int *params,
+    float voxel_x, float voxel_y, float voxel_z,
+    float range_min_x, float range_min_y, float range_min_z,
+    unsigned int voxel_features_size, unsigned int max_points,
+    unsigned int max_voxels, unsigned int num_point_values,
+    float* features,
+    cudaStream_t stream);
+
 #endif // TRT_RPNLAYER_H
 #endif

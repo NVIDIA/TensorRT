@@ -10,6 +10,7 @@
 | [bertQKVToContextPlugin](bertQKVToContextPlugin) | CustomQKVToContextPluginDynamic | 1, 2, 3 |
 | [coordConvACPlugin](coordConvACPlugin) | CoordConvAC | 1 |
 | [cropAndResizePlugin](cropAndResizePlugin) | CropAndResize | 1 |
+| [decodeBbox3DPlugin](decodeBbox3DPlugin) | DecodeBbox3DPlugin | 1 |
 | [detectionLayerPlugin](detectionLayerPlugin) | DetectionLayer_TRT | 1 |
 | [efficientNMSPlugin](efficientNMSPlugin) | EfficientNMS_TRT | 1 |
 | [efficientNMSONNXPlugin](efficientNMSPlugin) | EfficientNMS_ONNX_TRT | 1 |
@@ -28,6 +29,7 @@
 | [nmsPlugin](nmsPlugin) | NMS_TRT | 1 |
 | [normalizePlugin](normalizePlugin) | Normalize_TRT | 1 |
 | [nvFasterRCNN](nvFasterRCNN) | RPROI_TRT | 1 |
+| [pillarScatterPlugin](pillarScatterPlugin) | PillarScatterPlugin | 1 |
 | [priorBoxPlugin](priorBoxPlugin) | PriorBox_TRT | 1 |
 | [proposalLayerPlugin](proposalLayerPlugin) | ProposalLayer_TRT | 1 |
 | [proposalPlugin](proposalPlugin) | Proposal | 1 |
@@ -39,6 +41,7 @@
 | [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 1, 2, 3 |
 | [specialSlicePlugin](specialSlicePlugin) | SpecialSlice_TRT | 1 |
 | [splitPlugin](splitPlugin) | Split | 1 |
+| [voxelGeneratorPlugin](voxelGeneratorPlugin) | VoxelGeneratorPlugin | 1 |
 
 ## Known Limitations
 

@@ -30,10 +30,11 @@ set(PLUGIN_SOURCES)
 set(PLUGIN_CU_SOURCES)
 
 set(PLUGIN_LISTS
-    batchedNMSPlugin
     batchTilePlugin
+    batchedNMSPlugin
     coordConvACPlugin
     cropAndResizePlugin
+    decodeBbox3DPlugin
     detectionLayerPlugin
     efficientNMSPlugin
     flattenConcat
@@ -47,6 +48,7 @@ set(PLUGIN_LISTS
     nmsPlugin
     normalizePlugin
     nvFasterRCNN
+    pillarScatterPlugin
     priorBoxPlugin
     proposalLayerPlugin
     proposalPlugin
@@ -57,6 +59,7 @@ set(PLUGIN_LISTS
     scatterPlugin
     specialSlicePlugin
     splitPlugin
+    voxelGeneratorPlugin
     )
 
 # Add BERT sources if ${BERT_GENCODES} was populated
