@@ -102,7 +102,7 @@ inline bool parseArgs(Args& args, int32_t argc, char* argv[])
         int32_t arg;
         static struct option long_options[] = {{"help", no_argument, 0, 'h'}, {"datadir", required_argument, 0, 'd'},
             {"int8", no_argument, 0, 'i'}, {"fp16", no_argument, 0, 'f'}, {"useILoop", no_argument, 0, 'l'},
-            {"saveEngine", required_argument, 0, 's'}, {"loadEngine", no_argument, 0, 'o'},
+            {"saveEngine", required_argument, 0, 's'}, {"loadEngine", required_argument, 0, 'o'},
             {"useDLACore", required_argument, 0, 'u'}, {"batch", required_argument, 0, 'b'}, {nullptr, 0, nullptr, 0}};
         int32_t option_index = 0;
         arg = getopt_long(argc, argv, "hd:iu", long_options, &option_index);

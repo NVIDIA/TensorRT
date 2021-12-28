@@ -193,7 +193,7 @@ struct SimpleProfiler : public nvinfer1::IProfiler
         auto old_precision = out.precision();
         // Output header
         {
-            out << std::setw(maxLayerNameLength) << layerNameStr << " ";
+            out << std::setfill(' ') << std::setw(maxLayerNameLength) << layerNameStr << " ";
             out << std::setw(12) << "Runtime, "
                 << "%"
                 << " ";
