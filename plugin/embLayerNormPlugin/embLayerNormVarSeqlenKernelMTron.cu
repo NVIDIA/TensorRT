@@ -127,26 +127,53 @@ __global__ void embLayerNormKernelVarSeqlenMTron(int ld, const uint32_t* cuSeqle
 }
 
 template <typename T>
-int embSkipLayerNormVarSeqlenMTron(cudaStream_t stream, int ld, int B, int S, const uint32_t* cuSeqlens,
-    const int* inputIds, const int* token_ids, const T* beta, const T* gamma, const T* wordEmb, const T* posEmb,
-    const T* tokEmb, T* output, T* skip)
+int32_t embSkipLayerNormVarSeqlenMTron(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, uint32_t const* cuSeqlens,
+    int32_t const* inputIds, int32_t const* token_ids, T const* beta, T const* gamma, T const* wordEmb, T const* posEmb,
+    T const* tokEmb, T* output, T* skip)
 {
 
-    const dim3 grid(B, S, 1);
+    dim3 const grid(B, S, 1);
+    int32_t constexpr VPT = 16 / sizeof(T);
 
-    if (ld == 1024)
+    if (ld == 768)
     {
-        constexpr int VPT = 16 / sizeof(T);
-        constexpr int TPB = 1024 / VPT;
-        const dim3 block(TPB, 1, 1);
+        int32_t constexpr TPB = 768 / VPT;
+        dim3 const block(TPB, 1, 1);
         embLayerNormKernelVarSeqlenMTron<T, TPB, VPT><<<grid, block, 0, stream>>>(
             ld, cuSeqlens, inputIds, token_ids, beta, gamma, wordEmb, posEmb, tokEmb, output, skip);
     }
-    else if (ld == 768)
+    else if (ld == 1024)
     {
-        constexpr int VPT = 16 / sizeof(T);
-        constexpr int TPB = 768 / VPT;
-        const dim3 block(TPB, 1, 1);
+        int32_t constexpr TPB = 1024 / VPT;
+        dim3 const block(TPB, 1, 1);
+        embLayerNormKernelVarSeqlenMTron<T, TPB, VPT><<<grid, block, 0, stream>>>(
+            ld, cuSeqlens, inputIds, token_ids, beta, gamma, wordEmb, posEmb, tokEmb, output, skip);
+    }
+    else if (ld == 1536)
+    {
+        int32_t constexpr TPB = 1536 / VPT;
+        dim3 const block(TPB, 1, 1);
+        embLayerNormKernelVarSeqlenMTron<T, TPB, VPT><<<grid, block, 0, stream>>>(
+            ld, cuSeqlens, inputIds, token_ids, beta, gamma, wordEmb, posEmb, tokEmb, output, skip);
+    }
+    else if (ld == 2048)
+    {
+        int32_t constexpr TPB = 2048 / VPT;
+        dim3 const block(TPB, 1, 1);
+        embLayerNormKernelVarSeqlenMTron<T, TPB, VPT><<<grid, block, 0, stream>>>(
+            ld, cuSeqlens, inputIds, token_ids, beta, gamma, wordEmb, posEmb, tokEmb, output, skip);
+    }
+    else if (ld == 3072)
+    {
+        int32_t constexpr TPB = 3072 / VPT;
+        dim3 const block(TPB, 1, 1);
+        embLayerNormKernelVarSeqlenMTron<T, TPB, VPT><<<grid, block, 0, stream>>>(
+            ld, cuSeqlens, inputIds, token_ids, beta, gamma, wordEmb, posEmb, tokEmb, output, skip);
+    }
+    else if (ld == 4096)
+    {
+        int32_t constexpr TPB = 4096 / VPT;
+        dim3 const block(TPB, 1, 1);
         embLayerNormKernelVarSeqlenMTron<T, TPB, VPT><<<grid, block, 0, stream>>>(
             ld, cuSeqlens, inputIds, token_ids, beta, gamma, wordEmb, posEmb, tokEmb, output, skip);
     }
@@ -160,11 +187,12 @@ int embSkipLayerNormVarSeqlenMTron(cudaStream_t stream, int ld, int B, int S, co
     return 0;
 }
 
-template int embSkipLayerNormVarSeqlenMTron<float>(cudaStream_t, int, int, int, const uint32_t*, const int*, const int*,
-    const float*, const float*, const float*, const float*, const float*, float*, float*);
+template int32_t embSkipLayerNormVarSeqlenMTron<float>(cudaStream_t, int32_t, int32_t, int32_t, uint32_t const*,
+    int32_t const*, int32_t const*, float const*, float const*, float const*, float const*, float const*, float*,
+    float*);
 
-template int embSkipLayerNormVarSeqlenMTron<half>(cudaStream_t, int, int, int, const uint32_t*, const int*, const int*,
-    const half*, const half*, const half*, const half*, const half*, half*, half*);
+template int32_t embSkipLayerNormVarSeqlenMTron<half>(cudaStream_t, int32_t, int32_t, int32_t, uint32_t const*,
+    int32_t const*, int32_t const*, half const*, half const*, half const*, half const*, half const*, half*, half*);
 
 /// REDO BASED ON OLD KERNEL TO REPRODUCE EXACT RESULTS
 
