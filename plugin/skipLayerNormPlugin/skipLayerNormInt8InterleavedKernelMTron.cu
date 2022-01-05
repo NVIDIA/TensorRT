@@ -357,18 +357,42 @@ int32_t launch_small_mtron(cudaStream_t stream, const int32_t ld, const int tota
     const int8_t* skip, const half* beta, const half* gamma, int8_t* output, int8_t* preln, const float dqScaleIn,
     const float dqScaleSkip, const float qScale, const float qSkipScale)
 {
-    const int32_t gridSize = total;
+    int32_t const gridSize = total;
     // we align reads with the number of parameters, i.e. 8-wide instead of 16
-    constexpr int32_t VPT = 16 / sizeof(half); // 8
+    int32_t constexpr VPT = 16 / sizeof(half); // 8
     if (ld == 768)
     {
-        constexpr int32_t TPB = 768 / VPT;
+        int32_t constexpr TPB = 768 / VPT;
         skiplnDQQ_vec4<TPB, VPT><<<gridSize, TPB, 0, stream>>>(
             ld, input, skip, output, preln, beta, gamma, dqScaleIn, dqScaleSkip, qScale, qSkipScale, total);
     }
     else if (ld == 1024)
     {
-        constexpr int32_t TPB = 1024 / VPT; // 128
+        int32_t constexpr TPB = 1024 / VPT; // 128
+        skiplnDQQ_vec4<TPB, VPT><<<gridSize, TPB, 0, stream>>>(
+            ld, input, skip, output, preln, beta, gamma, dqScaleIn, dqScaleSkip, qScale, qSkipScale, total);
+    }
+    else if (ld == 1536)
+    {
+        int32_t constexpr TPB = 1536 / VPT; // 192
+        skiplnDQQ_vec4<TPB, VPT><<<gridSize, TPB, 0, stream>>>(
+            ld, input, skip, output, preln, beta, gamma, dqScaleIn, dqScaleSkip, qScale, qSkipScale, total);
+    }
+    else if (ld == 2048)
+    {
+        int32_t constexpr TPB = 2048 / VPT; // 256
+        skiplnDQQ_vec4<TPB, VPT><<<gridSize, TPB, 0, stream>>>(
+            ld, input, skip, output, preln, beta, gamma, dqScaleIn, dqScaleSkip, qScale, qSkipScale, total);
+    }
+    else if (ld == 3072)
+    {
+        int32_t constexpr TPB = 3072 / VPT; // 384
+        skiplnDQQ_vec4<TPB, VPT><<<gridSize, TPB, 0, stream>>>(
+            ld, input, skip, output, preln, beta, gamma, dqScaleIn, dqScaleSkip, qScale, qSkipScale, total);
+    }
+    else if (ld == 4096)
+    {
+        int32_t constexpr TPB = 4096 / VPT; // 512
         skiplnDQQ_vec4<TPB, VPT><<<gridSize, TPB, 0, stream>>>(
             ld, input, skip, output, preln, beta, gamma, dqScaleIn, dqScaleSkip, qScale, qSkipScale, total);
     }
