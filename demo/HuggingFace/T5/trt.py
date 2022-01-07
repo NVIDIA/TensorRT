@@ -220,6 +220,7 @@ class T5TRTDecoder(TRTHFRunner):
 
         # Optimization bit
         self.persist_encoder_hidden_states = False
+        self.return_device = "cuda"
 
     def set_encoder_hidden_states_for_inference_cycle(self, encoder_hidden_states):
         """Used to cache encoder hidden state runs across same encoder sessions"""
