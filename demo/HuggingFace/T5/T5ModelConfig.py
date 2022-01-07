@@ -107,7 +107,7 @@ class T5ModelTRTConfig(NNConfig):
 
     def get_python_requirements(self):
         base_requirements = super().get_python_requirements()
-        base_requirements.append("transformers==4.6.1")
+        base_requirements.append("transformers>=4.8.0")
         return base_requirements
 
     def get_network_segments(self):
@@ -119,8 +119,8 @@ class T5ModelTRTConfig(NNConfig):
         return T5ModelTRTConfig.NETWORK_SEGMENTS
 
     def get_metadata_string(self, metadata: NetworkMetadata) -> str:
-        # Remove redundant t5 name
-        metadata = metadata._replace(variant=metadata.variant.lstrip("t5-"))
+        # Remove redundant google/ if present
+        metadata = metadata._replace(variant=metadata.variant.lstrip("google/"))
         return super().get_metadata_string(metadata)
 
     @staticmethod
