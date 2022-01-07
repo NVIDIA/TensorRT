@@ -71,7 +71,7 @@ fi
 
 echo "Downloading newstests..."
 curl -o ${OUTPUT_DIR}/dev.tgz \
-  http://data.statmt.org/wmt16/translation-task/dev.tgz
+  https://data.statmt.org/wmt16/translation-task/dev.tgz
 
 # Extract everything
 echo "Extracting newstest data..."
