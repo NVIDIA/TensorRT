@@ -248,6 +248,9 @@ const char* GeluPluginDynamic::getPluginNamespace() const noexcept
 
 GeluPluginDynamicCreator::GeluPluginDynamicCreator()
 {
+    mPluginAttributes.emplace_back(PluginField("type_id", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("bias", nullptr, PluginFieldType::kFLOAT32, 1));
+
     // Fill PluginFieldCollection with PluginField arguments metadata
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
