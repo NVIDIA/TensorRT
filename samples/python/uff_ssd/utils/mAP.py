@@ -96,7 +96,9 @@ def do_python_eval(results_dir):
            ovthresh=0.5)
         aps += [ap]
         print('AP for {} = {:.4f}'.format(cls, ap))
-    print('Mean AP = {:.4f}'.format(np.mean(aps)))
+    mAP = np.mean(aps)
+    print('Mean AP = {:.4f}'.format(mAP))
+    return mAP
 
 def voc_ap(rec, prec):
     ap = 0.
