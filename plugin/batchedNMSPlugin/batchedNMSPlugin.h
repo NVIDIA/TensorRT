@@ -53,6 +53,7 @@ public:
     const char* getPluginNamespace() const noexcept override;
     void setClipParam(bool clip) noexcept;
     void setScoreBits(int32_t scoreBits) noexcept;
+    void setCaffeSemantics(bool caffeSemantics) noexcept;
 
     // IPluginV2Ext methods
     nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
@@ -74,6 +75,7 @@ private:
     bool mClipBoxes{};
     DataType mPrecision;
     int32_t mScoreBits;
+    bool mCaffeSemantics{true};
     pluginStatus_t mPluginStatus{};
 };
 
@@ -97,6 +99,7 @@ public:
     const char* getPluginNamespace() const noexcept override;
     void setClipParam(bool clip) noexcept;
     void setScoreBits(int32_t scoreBits) noexcept;
+    void setCaffeSemantics(bool caffeSemantics) noexcept;
 
     // IPluginV2Ext methods
     nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const noexcept override;
@@ -122,6 +125,7 @@ private:
     bool mClipBoxes{};
     DataType mPrecision;
     int32_t mScoreBits;
+    bool mCaffeSemantics{true};
     pluginStatus_t mPluginStatus{};
 };
 
