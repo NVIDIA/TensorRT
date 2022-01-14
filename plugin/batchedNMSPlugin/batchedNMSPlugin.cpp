@@ -91,6 +91,7 @@ BatchedNMSPlugin::BatchedNMSPlugin(const void* data, size_t length)
     mClipBoxes = read<bool>(d);
     mPrecision = read<DataType>(d);
     mScoreBits = read<int32_t>(d);
+    mCaffeSemantics = read<bool>(d);
     ASSERT(d == a + length);
 
     mPluginStatus = checkParams(param);
@@ -112,6 +113,7 @@ BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(const void* data, size_t length
     mClipBoxes = read<bool>(d);
     mPrecision = read<DataType>(d);
     mScoreBits = read<int32_t>(d);
+    mCaffeSemantics = read<bool>(d);
     ASSERT(d == a + length);
 
     mPluginStatus = checkParams(param);
@@ -290,7 +292,7 @@ int BatchedNMSPlugin::enqueue(
         pluginStatus_t status = nmsInference(stream, batchSize, boxesSize, scoresSize, param.shareLocation,
             param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
             param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses,
-            workspace, param.isNormalized, false, mClipBoxes, mScoreBits);
+            workspace, param.isNormalized, false, mClipBoxes, mScoreBits, mCaffeSemantics);
         return status == STATUS_SUCCESS ? 0 : -1;
     }
     catch (const std::exception& e)
@@ -321,7 +323,7 @@ int BatchedNMSDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const Pl
         pluginStatus_t status = nmsInference(stream, inputDesc[0].dims.d[0], boxesSize, scoresSize, param.shareLocation,
             param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
             param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses,
-            workspace, param.isNormalized, false, mClipBoxes, mScoreBits);
+            workspace, param.isNormalized, false, mClipBoxes, mScoreBits, mCaffeSemantics);
         return status;
     }
     catch (const std::exception& e)
@@ -334,7 +336,7 @@ int BatchedNMSDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const Pl
 size_t BatchedNMSPlugin::getSerializationSize() const noexcept
 {
     // NMSParameters, boxesSize,scoresSize,numPriors
-    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) + sizeof(DataType) + sizeof(int32_t);
+    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) * 2 + sizeof(DataType) + sizeof(int32_t);
 }
 
 void BatchedNMSPlugin::serialize(void* buffer) const noexcept
@@ -347,13 +349,14 @@ void BatchedNMSPlugin::serialize(void* buffer) const noexcept
     write(d, mClipBoxes);
     write(d, mPrecision);
     write(d, mScoreBits);
+    write(d, mCaffeSemantics);
     ASSERT(d == a + getSerializationSize());
 }
 
 size_t BatchedNMSDynamicPlugin::getSerializationSize() const noexcept
 {
     // NMSParameters, boxesSize,scoresSize,numPriors
-    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) + sizeof(DataType) + sizeof(int32_t);
+    return sizeof(NMSParameters) + sizeof(int) * 3 + sizeof(bool) * 2 + sizeof(DataType) + sizeof(int32_t);
 }
 
 void BatchedNMSDynamicPlugin::serialize(void* buffer) const noexcept
@@ -366,6 +369,7 @@ void BatchedNMSDynamicPlugin::serialize(void* buffer) const noexcept
     write(d, mClipBoxes);
     write(d, mPrecision);
     write(d, mScoreBits);
+    write(d, mCaffeSemantics);
     ASSERT(d == a + getSerializationSize());
 }
 
@@ -514,6 +518,7 @@ IPluginV2Ext* BatchedNMSPlugin::clone() const noexcept
         plugin->setClipParam(mClipBoxes);
         plugin->mPrecision = mPrecision;
         plugin->setScoreBits(mScoreBits);
+        plugin->setCaffeSemantics(mCaffeSemantics);
         return plugin;
     }
     catch (const std::exception& e)
@@ -535,6 +540,7 @@ IPluginV2DynamicExt* BatchedNMSDynamicPlugin::clone() const noexcept
         plugin->setClipParam(mClipBoxes);
         plugin->mPrecision = mPrecision;
         plugin->setScoreBits(mScoreBits);
+        plugin->setCaffeSemantics(mCaffeSemantics);
         return plugin;
     }
     catch (const std::exception& e)
@@ -618,6 +624,16 @@ void BatchedNMSDynamicPlugin::setScoreBits(int32_t scoreBits) noexcept
     mScoreBits = scoreBits;
 }
 
+void BatchedNMSPlugin::setCaffeSemantics(bool caffeSemantics) noexcept
+{
+    mCaffeSemantics = caffeSemantics;
+}
+
+void BatchedNMSDynamicPlugin::setCaffeSemantics(bool caffeSemantics) noexcept
+{
+    mCaffeSemantics = caffeSemantics;
+}
+
 bool BatchedNMSPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
@@ -641,6 +657,7 @@ BatchedNMSBasePluginCreator::BatchedNMSBasePluginCreator()
     mPluginAttributes.emplace_back(PluginField("isNormalized", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("clipBoxes", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("scoreBits", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("caffeSemantics", nullptr, PluginFieldType::kINT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
@@ -673,6 +690,7 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const Plug
         const PluginField* fields = fc->fields;
         bool clipBoxes = true;
         int32_t scoreBits = 16;
+        bool caffeSemantics = true;
 
         for (int i = 0; i < fc->nbFields; ++i)
         {
@@ -723,11 +741,17 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const Plug
             {
                 scoreBits = *(static_cast<const int32_t*>(fields[i].data));
             }
+            else if (!strcmp(attrName, "caffeSemantics"))
+            {
+                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                caffeSemantics = *(static_cast<const bool*>(fields[i].data));
+            }
         }
 
         auto* plugin = new BatchedNMSPlugin(params);
         plugin->setClipParam(clipBoxes);
         plugin->setScoreBits(scoreBits);
+        plugin->setCaffeSemantics(caffeSemantics);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
@@ -747,6 +771,7 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
         const PluginField* fields = fc->fields;
         bool clipBoxes = true;
         int32_t scoreBits = 16;
+        bool caffeSemantics = true;
 
         for (int i = 0; i < fc->nbFields; ++i)
         {
@@ -797,11 +822,17 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
             {
                 scoreBits = *(static_cast<const int32_t*>(fields[i].data));
             }
+            else if (!strcmp(attrName, "caffeSemantics"))
+            {
+                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                caffeSemantics = *(static_cast<const bool*>(fields[i].data));
+            }
         }
 
         auto* plugin = new BatchedNMSDynamicPlugin(params);
         plugin->setClipParam(clipBoxes);
         plugin->setScoreBits(scoreBits);
+        plugin->setCaffeSemantics(caffeSemantics);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
