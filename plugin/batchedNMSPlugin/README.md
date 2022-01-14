@@ -65,6 +65,7 @@ The `batchedNMSPlugin` is created using `BatchedNMSPluginCreator` with `NMSParam
 |`bool`    |`isNormalized`            |Set to `false` if the box coordinates are not normalized, meaning they are not in the range `[0,1]`. Defaults to `true`.
 |`bool`    |`clipBoxes`               |Forcibly restrict bounding boxes to the normalized range `[0,1]`. Only applicable if `isNormalized` is also `true`. Defaults to `true`.
 |`int`     |`scoreBits`               |The number of bits to represent the score values during radix sort. The number of bits to represent score values(confidences) during radix sort. This valid range is 0 < scoreBits <= 10. The default value is 16(which means to use full bits in radix sort). Setting this parameter to any invalid value will result in the same effect as setting it to 16. This parameter can be tuned to strike for a best trade-off between performance and accuracy. Lowering scoreBits will improve performance but with some minor degradation to the accuracy. This parameter is only valid for FP16 data type for now.
+|`bool`    |`caffeSemantics`          |Set to `false` to disable [Caffe semantics](https://github.com/weiliu89/caffe/blob/ssd/src/caffe/util/bbox_util.cpp#L92-L97) for IOU calculation. In Caffe, `width` and `height` are incremented by '1' if bbox coordinates are not normalized. Defaults to `true`.
 
 ## Algorithms
 
@@ -104,6 +105,9 @@ documentation.
 
 
 ## Changelog
+
+January 2022
+BatchedNMS plugin now supports IOU calculation that matches Torch/Tensorflow and defaults to the [Caffe semantics](https://github.com/weiliu89/caffe/blob/ssd/src/caffe/util/bbox_util.cpp#L92-L97). This is selected using an optional `caffeSemantics` plugin attribute.
 
 May 2019
 This is the first release of this `README.md` file.

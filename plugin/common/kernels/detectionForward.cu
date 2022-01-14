@@ -182,7 +182,8 @@ pluginStatus_t detectionInference(
                          postNMSScores,
                          postNMSIndices,
                          false,
-                         scoreShift);
+                         scoreShift,
+                         true);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Sort the bounding boxes after NMS using scores
@@ -389,7 +390,8 @@ namespace plugin
                          postNMSScores,
                          postNMSIndices,
                          false,
-                         scoreShift);
+                         scoreShift,
+                         true);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Sort the bounding boxes after NMS using scores
