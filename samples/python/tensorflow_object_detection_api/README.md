@@ -181,6 +181,8 @@ The file `engine.trt` will be created, which can now be used to infer with Tenso
 
 For best results, make sure no other processes are using the GPU during engine build, as it may affect the optimal tactic selection process.
 
+**Note:** If you receive any error messages about non sufficient workspace size, especially when converting models with a larger batch size, increase the max workspace by adding an argument such as `--workspace 8` to assign up to an 8 Gb workspace size.
+
 #### INT8 Precision
 
 To build and calibrate an engine for INT8 precision, run:
