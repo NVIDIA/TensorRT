@@ -123,7 +123,8 @@ template <typename T_BBOX>
 __device__ float jaccardOverlap(
     const Bbox<T_BBOX>& bbox1,
     const Bbox<T_BBOX>& bbox2,
-    const bool normalized)
+    const bool normalized,
+    const bool caffeSemantics)
 {
     Bbox<T_BBOX> intersect_bbox;
 
@@ -131,8 +132,11 @@ __device__ float jaccardOverlap(
     Bbox<T_BBOX> localbbox2 = getDiagonalMinMaxSortedBox(bbox2);
 
     intersectBbox(localbbox1, localbbox2, &intersect_bbox);
+
     float intersect_width, intersect_height;
-    if (normalized)
+    // Only when using Caffe semantics, IOU calculation adds "1" to width and height if bbox is not normalized.
+    // https://github.com/weiliu89/caffe/blob/ssd/src/caffe/util/bbox_util.cpp#L92-L97
+    if (normalized || !caffeSemantics)
     {
         intersect_width = float(intersect_bbox.xmax) - float(intersect_bbox.xmin);
         intersect_height = float(intersect_bbox.ymax) - float(intersect_bbox.ymin);
@@ -181,7 +185,8 @@ __global__ void allClassNMS_kernel(
     T_SCORE* afterNMS_scores,
     int* afterNMS_index_array,
     bool flipXY,
-    const float score_shift)
+    const float score_shift,
+    bool caffeSemantics)
 {
     //__shared__ bool kept_bboxinfo_flag[CAFFE_CUDA_NUM_THREADS * TSIZE];
     extern __shared__ bool kept_bboxinfo_flag[];
@@ -252,8 +257,7 @@ __global__ void allClassNMS_kernel(
 
                 if ((kept_bboxinfo_flag[cur_idx]) && (item_idx > ref_item_idx))
                 {
-                    // TODO: may need to add bool normalized as argument, HERE true means normalized
-                    if (jaccardOverlap(ref_bbox, loc_bbox[t], isNormalized) > nms_threshold)
+                    if (jaccardOverlap(ref_bbox, loc_bbox[t], isNormalized, caffeSemantics) > nms_threshold)
                     {
                         kept_bboxinfo_flag[cur_idx] = false;
                     }
@@ -305,13 +309,14 @@ pluginStatus_t allClassNMS_gpu(
     void* afterNMS_scores,
     void* afterNMS_index_array,
     bool flipXY,
-    const float score_shift)
+    const float score_shift,
+    bool caffeSemantics)
 {
 #define P(tsize) allClassNMS_kernel<T_SCORE, T_BBOX, (tsize)>
 
     void (*kernel[8])(const int, const int, const int, const int, const float,
                       const bool, const bool, T_BBOX*, T_SCORE*, int*, T_SCORE*,
-                      int*, bool, const float)
+                      int*, bool, const float, bool)
         = {
             P(1), P(2), P(3), P(4), P(5), P(6), P(7), P(8),
         };
@@ -328,7 +333,8 @@ pluginStatus_t allClassNMS_gpu(
                                                                        (T_SCORE*) afterNMS_scores,
                                                                        (int*) afterNMS_index_array,
                                                                        flipXY,
-                                                                       score_shift);
+                                                                       score_shift,
+                                                                       caffeSemantics);
 
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
@@ -349,7 +355,8 @@ typedef pluginStatus_t (*nmsFunc)(cudaStream_t,
                                void*,
                                void*,
                                bool,
-                               const float);
+                               const float,
+                               bool);
 
 struct nmsLaunchConfigSSD
 {
@@ -395,7 +402,8 @@ pluginStatus_t allClassNMS(cudaStream_t stream,
                         void* afterNMS_scores,
                         void* afterNMS_index_array,
                         bool flipXY,
-                        const float score_shift)
+                        const float score_shift,
+                        bool caffeSemantics)
 {
     nmsLaunchConfigSSD lc = nmsLaunchConfigSSD(DT_SCORE, DT_BBOX);
     for (unsigned i = 0; i < nmsSsdLCOptions.size(); ++i)
@@ -417,7 +425,8 @@ pluginStatus_t allClassNMS(cudaStream_t stream,
                                           afterNMS_scores,
                                           afterNMS_index_array,
                                           flipXY,
-                                          score_shift);
+                                          score_shift,
+                                          caffeSemantics);
         }
     }
     return STATUS_BAD_PARAM;
