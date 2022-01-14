@@ -241,7 +241,7 @@ To perform object detection on a set of images with TensorRT, run:
 
 ```bash
 python3 infer.py \
-    --engine /paht/to/engine.trt \
+    --engine /path/to/engine.trt \
     --input /path/to/images \
     --output /path/to/output
 ```
