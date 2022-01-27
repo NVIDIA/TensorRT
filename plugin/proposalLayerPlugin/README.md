@@ -49,6 +49,12 @@ The following parameters were used to create `ProposalLayer` instance:
 |`float`            |`iou_threshold`                   |IOU threshold value used in NMS.
 |`int[3]`           |`image_size`                      |Input image size in CHW. Only supports C=3 and defaults to [3,1024,1024].
 
+## Limitations
+
+The number of anchors is capped at 1024 to support embedded devices with smaller shared memory capacity.
+
+To enable support for a device with higher memory, calls to `sortPerClass`, `PerClassNMS` and `KeepTopKGather` can be modified in `proposalRefineBatchClassNMS` ([maskRCNNKernels.cu](https://github.com/NVIDIA/TensorRT/blob/main/plugin/common/kernels/maskRCNNKernels.cu)).
+
 
 ## Additional resources
 
@@ -65,7 +71,10 @@ documentation.
 
 ## Changelog
 
+January 2022: The [Limitations](#limitations) section was added to this `README.md` file to document limitations of the plugin related to the maximum number of anchors it can support. 
+
 July 2020: Add (optional) plugin parameter for specifying image size.
+
 June 2019: First release of proposeLayerPlugin.
 
 
