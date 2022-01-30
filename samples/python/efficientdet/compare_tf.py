@@ -23,103 +23,16 @@ import numpy as np
 import tensorflow as tf
 
 from infer import TensorRTInfer
+from infer_tf import TensorFlowInfer
 from image_batcher import ImageBatcher
 from visualize import visualize_detections, concat_visualizations
-
-
-class TensorFlowInfer:
-    """
-    Implements TensorFlow inference of a saved model, following the same API as the TensorRTInfer class.
-    """
-
-    def __init__(self, saved_model_path):
-        gpus = tf.config.experimental.list_physical_devices('GPU')
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-
-        self.model = tf.saved_model.load(saved_model_path)
-        self.pred_fn = self.model.signatures['serving_default']
-
-        # Setup I/O bindings
-        self.inputs = []
-        fn_inputs = self.pred_fn.structured_input_signature[1]
-        for i, input in enumerate(list(fn_inputs.values())):
-            self.inputs.append({
-                'index': i,
-                'name': input.name,
-                'dtype': np.dtype(input.dtype.as_numpy_dtype()),
-                'shape': [1, 512, 512, 3],  # This can be overridden later
-            })
-        self.outputs = []
-        fn_outputs = self.pred_fn.structured_outputs
-        for i, output in enumerate(list(fn_outputs.values())):
-            self.outputs.append({
-                'index': i,
-                'name': output.name,
-                'dtype': np.dtype(output.dtype.as_numpy_dtype()),
-                'shape': output.shape.as_list(),
-            })
-
-    def override_input_shape(self, input, shape):
-        self.inputs[input]['shape'] = shape
-
-    def input_spec(self):
-        return self.inputs[0]['shape'], self.inputs[0]['dtype']
-
-    def output_spec(self):
-        return self.outputs[0]['shape'], self.outputs[0]['dtype']
-
-    def infer(self, batch, scales=None, nms_threshold=None):
-        # Process I/O and execute the network
-        input = {self.inputs[0]['name']: tf.convert_to_tensor(batch)}
-        output = self.pred_fn(**input)
-
-        # Extract the results depending on what kind of saved model this is
-        boxes = None
-        scores = None
-        classes = None
-        if len(self.outputs) == 1:
-            # Detected as AutoML Saved Model
-            assert len(self.outputs[0]['shape']) == 3 and self.outputs[0]['shape'][2] == 7
-            results = output[self.outputs[0]['name']].numpy()
-            boxes = results[:, :, 1:5]
-            scores = results[:, :, 5]
-            classes = results[:, :, 6].astype(np.int32)
-        elif len(self.outputs) >= 4:
-            # Detected as TFOD Saved Model
-            assert output['num_detections']
-            num = int(output['num_detections'].numpy().flatten()[0])
-            boxes = output['detection_boxes'].numpy()[:, 0:num, :]
-            scores = output['detection_scores'].numpy()[:, 0:num]
-            classes = output['detection_classes'].numpy()[:, 0:num]
-
-        # Process the results
-        detections = [[]]
-        normalized = (np.max(boxes) < 2.0)
-        for n in range(scores.shape[1]):
-            if scores[0][n] == 0.0:
-                break
-            scale = self.inputs[0]['shape'][2] if normalized else 1.0
-            if scales:
-                scale /= scales[0]
-            if nms_threshold and scores[0][n] < nms_threshold:
-                continue
-            detections[0].append({
-                'ymin': boxes[0][n][0] * scale,
-                'xmin': boxes[0][n][1] * scale,
-                'ymax': boxes[0][n][2] * scale,
-                'xmax': boxes[0][n][3] * scale,
-                'score': scores[0][n],
-                'class': int(classes[0][n]) - 1,
-            })
-        return detections
 
 
 def run(batcher, inferer, framework, nms_threshold=None):
     res_images = []
     res_detections = []
     for batch, images, scales in batcher.get_batch():
-        res_detections += inferer.infer(batch, scales, nms_threshold)
+        res_detections += inferer.process(batch, scales, nms_threshold)
         res_images += images
         print("Processing {} / {} images ({})".format(batcher.image_index, batcher.num_images, framework), end="\r")
     print()
