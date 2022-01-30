@@ -39,7 +39,7 @@ def main(args):
     evaluator = coco_metric.EvaluationMetric(filename=args.annotations)
     for batch, images, scales in batcher.get_batch():
         print("Processing Image {} / {}".format(batcher.image_index, batcher.num_images), end="\r")
-        detections = trt_infer.infer(batch, scales, args.nms_threshold)
+        detections = trt_infer.process(batch, scales, args.nms_threshold)
         coco_det = np.zeros((len(images), max([len(d) for d in detections]), 7))
         coco_det[:, :, -1] = -1
         for i in range(len(images)):
