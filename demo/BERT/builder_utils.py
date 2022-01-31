@@ -125,8 +125,7 @@ def load_tf_weights(inputbase, config):
 
                 additional_dict[prefix + WQKV] = trt.Weights(Wall)
                 additional_dict[prefix + BQKV] = trt.Weights(Ball)
-
-                additional_dict[prefix + WQKV + "_notrans"] = trt.Weights(Wall.T)
+                additional_dict[prefix + WQKV + "_notrans"] = trt.Weights(np.ascontiguousarray(Wall.T))
 
     except Exception as error:
         TRT_LOGGER.log(TRT_LOGGER.ERROR, str(error))
@@ -222,7 +221,7 @@ def get_onnx_weight_dict(tensor_dict, config):
     
             weights_dict[prefix + WQKV] = trt.Weights(Wqkv)
             weights_dict[prefix + BQKV] = trt.Weights(Bqkv)
-            weights_dict[prefix + WQKV + "_notrans"] = trt.Weights(Wqkv.T)
+            weights_dict[prefix + WQKV + "_notrans"] = trt.Weights(np.ascontiguousarray(Wqkv.T))
 
         elif outname.find(BK) != -1 or outname.find(BV) != -1 or outname.find(WQ) != -1 or outname.find(WK) != -1 or outname.find(WV) != -1:
             pass
