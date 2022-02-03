@@ -126,9 +126,6 @@ def check_outputs_match(
     mean_absdiff = comp_util.compute_mean(absdiff)
     median_absdiff = comp_util.compute_median(absdiff)
 
-    max_elemwiseabs = "Unknown"
-    max_elemwiserel = "Unknown"
-
     if per_out_err_stat == "mean":
         failed = mean_absdiff > per_out_atol and (np.isnan(mean_reldiff) or mean_reldiff > per_out_rtol)
     elif per_out_err_stat == "median":
@@ -143,12 +140,6 @@ def check_outputs_match(
 
         failed = np.any(mismatches)
         try:
-            with np.testing.suppress_warnings() as sup:
-                sup.filter(RuntimeWarning)
-                # Special because we need to account for tolerances too.
-                max_elemwiseabs = comp_util.compute_max(absdiff[mismatches])
-                max_elemwiserel = comp_util.compute_max(reldiff[mismatches])
-
             with G_LOGGER.indent():
                 G_LOGGER.super_verbose("Mismatched indices:\n{:}".format(np.argwhere(mismatches)))
                 G_LOGGER.extra_verbose("{:35} | Mismatched values:\n{:}".format(runner0_name, out0[mismatches]))
@@ -167,21 +158,23 @@ def check_outputs_match(
     G_LOGGER.info("Error Metrics: {:}".format(out0_name))
     with G_LOGGER.indent():
 
-        def req_tol(mean_diff, median_diff, max_diff, elemwise_diff):
+        def req_tol(mean_diff, median_diff, max_diff):
             return {
                 "mean": mean_diff,
                 "median": median_diff,
                 "max": max_diff,
-                "elemwise": elemwise_diff,
+                "elemwise": max_diff,
             }[per_out_err_stat]
 
-        G_LOGGER.info(
-            "Minimum Required Tolerance: {:} error | [abs={:.5g}] OR [rel={:.5g}]".format(
-                per_out_err_stat,
-                req_tol(mean_absdiff, median_absdiff, max_absdiff, max_elemwiseabs),
-                req_tol(mean_reldiff, median_reldiff, max_reldiff, max_elemwiserel),
-            )
+        msg = "Minimum Required Tolerance: {:} error | [abs={:.5g}] OR [rel={:.5g}]".format(
+            per_out_err_stat,
+            req_tol(mean_absdiff, median_absdiff, max_absdiff),
+            req_tol(mean_reldiff, median_reldiff, max_reldiff),
         )
+        if per_out_err_stat == "elemwise":
+            msg += " (requirements may be lower if both abs/rel tolerances are set)"
+        G_LOGGER.info(msg)
+
         comp_util.log_output_stats(absdiff, failed, "Absolute Difference")
         with np.testing.suppress_warnings() as sup:
             sup.filter(RuntimeWarning)
@@ -235,6 +228,9 @@ class CompareFunc(object):
                     Defaults to True.
             rtol (Union[float, Dict[str, float]]):
                     The relative tolerance to use when checking accuracy.
+                    This is expressed as a percentage of the second set of output values.
+                    For example, a value of 0.01 would check that the first set of outputs is within 1% of the second.
+
                     This can be provided on a per-output basis using a dictionary. In that case,
                     use an empty string ("") as the key to specify default tolerance for outputs not explicitly listed.
                     Defaults to 1e-5.
@@ -256,6 +252,10 @@ class CompareFunc(object):
                     The error statistic to check. Possible values are:
 
                     - "elemwise": Checks each element in the output to determine if it exceeds both tolerances specified.
+                                The minimum required tolerances displayed in this mode are only applicable when just one type of tolerance
+                                is set. Because of the nature of the check, when both absolute/relative tolerance are specified, the required
+                                minimum tolerances may be lower.
+
                     - "max": Checks the maximum absolute/relative errors against the respective tolerances. This is the strictest possible check.
                     - "mean" Checks the mean absolute/relative errors against the respective tolerances.
                     - "median": Checks the median absolute/relative errors against the respective tolerances.
@@ -320,11 +320,11 @@ class CompareFunc(object):
                 G_LOGGER.info("Strict shape checking disabled. Will attempt to match output shapes before comparisons")
 
             def default_find_output_func(output_name, index, iter_result):
-                found_name = util.find_in_dict(output_name, iter_result, index)
+                found_name = util.find_str_in_iterable(output_name, iter_result.keys(), index)
                 if found_name is None:
                     return None
                 elif found_name != output_name:
-                    exact_match = util.find_in_dict(found_name, iter_result0)
+                    exact_match = util.find_str_in_iterable(found_name, iter_result0.keys())
                     if exact_match == found_name:
                         G_LOGGER.verbose(
                             "Will not compare {:} with {:}, since the former already has an exact match: {:}".format(

@@ -17,7 +17,7 @@ from collections import OrderedDict
 
 from polygraphy import util
 from polygraphy.comparator import RunResults
-from polygraphy.json import load_json
+from polygraphy.json import load_json, save_json
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.base import Tool
 
@@ -68,4 +68,4 @@ class ToInput(Tool):
                     data = [data]
                 update_inputs(data, path)
 
-        util.save_json(inputs, args.output, description="input file containing {:} iteration(s)".format(len(inputs)))
+        save_json(inputs, args.output, description="input file containing {:} iteration(s)".format(len(inputs)))

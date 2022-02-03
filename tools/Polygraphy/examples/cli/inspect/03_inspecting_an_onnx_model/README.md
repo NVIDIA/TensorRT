@@ -11,7 +11,7 @@ The `inspect model` subtool can display ONNX models.
 1. Inspect the ONNX model:
 
     ```bash
-    polygraphy inspect model identity.onnx --mode=basic
+    polygraphy inspect model identity.onnx --show layers
     ```
 
     This will display something like:
@@ -35,4 +35,4 @@ The `inspect model` subtool can display ONNX models.
              -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
     ```
 
-    It is also possible to show detailed layer information, including layer attributes, using `--mode=full`.
+    It is also possible to show detailed layer information, including layer attributes, using `--show layers attrs weights`.

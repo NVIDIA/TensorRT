@@ -124,7 +124,7 @@ class DataLoaderArgs(BaseArgs):
                 "Please use `--val-range` instead, which allows you to specify per-input data ranges."
             )
 
-        self.val_range = args_util.parse_dict_with_default(args_util.get(args, "val_range"), cast_to=tuple)
+        self.val_range = args_util.parse_dict_with_default(args_util.get(args, "val_range"), cast_to=lambda x: tuple(args_util.cast(x)))
         if self.val_range is not None:
             for name, vals in self.val_range.items():
                 if len(vals) != 2:

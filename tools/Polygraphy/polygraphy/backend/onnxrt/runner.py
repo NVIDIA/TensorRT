@@ -54,7 +54,7 @@ class OnnxrtRunner(BaseRunner):
             "tensor(uint32)": np.uint32,
             "tensor(uint64)": np.uint64,
             "tensor(uint8)": np.uint8,
-            "tensor(bool)": np.bool,
+            "tensor(bool)": bool,
             "tensor(string)": np.unicode,
         }
 

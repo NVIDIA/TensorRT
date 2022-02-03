@@ -39,9 +39,10 @@ def assert_identifier(inp):
 
 def safe(base_str, *args, **kwargs):
     """
-    Marks a string as being safe.
+    Indicates a string is safe to use and will not compromise security.
 
     NOTE: The caller is reponsible for checking that the string is actually safe.
+    This function serves only to mark the string as such.
 
     Can work with format strings as well. For example:
     ::

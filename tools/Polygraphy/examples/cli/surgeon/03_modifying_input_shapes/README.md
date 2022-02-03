@@ -27,5 +27,5 @@ Output shapes can be inferred and so these are not modified (nor do they need to
 2. **[Optional]** You can use `inspect model` to confirm whether it looks correct:
 
     ```bash
-    polygraphy inspect model dynamic_identity.onnx --mode=basic
+    polygraphy inspect model dynamic_identity.onnx --show layers
     ```

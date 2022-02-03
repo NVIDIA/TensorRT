@@ -51,7 +51,7 @@ class TestPluginRefRunner(object):
         model = ONNX_MODELS["and"]
         with PluginRefRunner(GsFromOnnx(OnnxFromPath(model.path))) as runner:
             with pytest.raises(PolygraphyException, match="does not have a reference implementation registered!"):
-                runner.infer({"x": np.ones(shape=(3, 4), dtype=np.bool), "y": np.ones(shape=(3, 4), dtype=np.bool)})
+                runner.infer({"x": np.ones(shape=(3, 4), dtype=bool), "y": np.ones(shape=(3, 4), dtype=bool)})
 
     @pytest.mark.parametrize(
         "names, err",

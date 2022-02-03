@@ -91,9 +91,9 @@ class OnnxSaveArgs(BaseArgs):
             "--external-data-size-threshold",
             help="The size threshold, in bytes, above which tensor data will be stored in the external file. "
             "Tensors smaller that this threshold will remain in the ONNX file. "
-            "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively."
-            "For example, `--external-data-size-threshold=16M` is equivalent to `--external-data-size-threshold=16777216`"
-            "Has no effect if `--save-external-data` is not set",
+            "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively. "
+            "For example, `--external-data-size-threshold=16M` is equivalent to `--external-data-size-threshold=16777216`. "
+            "Has no effect if `--save-external-data` is not set. ",
             default=None,
         )
         self.group.add_argument(

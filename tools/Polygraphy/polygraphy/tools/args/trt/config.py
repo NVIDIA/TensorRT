@@ -184,9 +184,9 @@ class TrtConfigArgs(BaseArgs):
         trt_config_args.add_argument(
             "--workspace",
             metavar="BYTES",
-            help="Amount of memory, in bytes, to allocate for the TensorRT builder's workspace. "
-            "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively."
-            "For example, `--workspace=16M` is equivalent to `--workspace=16777216`",
+            help="[DEPRECATED - use --pool-limit] Amount of memory, in bytes, to allocate for the TensorRT builder's workspace. "
+            "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively. "
+            "For example, `--workspace=16M` is equivalent to `--workspace=16777216`. ",
             default=None,
         )
         trt_config_args.add_argument(
@@ -227,14 +227,6 @@ class TrtConfigArgs(BaseArgs):
 
         replay = trt_config_args.add_mutually_exclusive_group()
         replay.add_argument(
-            "--tactic-replay",
-            help="[DEPRECATED - use --load/save-tactics] Path to load/save a tactic replay file. "
-            "Used to record and replay tactics selected by TensorRT to provide deterministic engine builds. "
-            "If the provided path does not yet exist, tactics will be recorded and written to it. "
-            "If the provided path does exist, it will be read and used to replay previously recorded tactics. ",
-            default=None,
-        )
-        replay.add_argument(
             "--save-tactics",
             help="Path to save a Polygraphy tactic replay file. "
             "Details about tactics selected by TensorRT will be recorded and stored at this location as a JSON file. ",
@@ -251,7 +243,7 @@ class TrtConfigArgs(BaseArgs):
             "--tactic-sources",
             help="Tactic sources to enable. This controls which libraries "
             "(e.g. cudnn, cublas, etc.) TensorRT is allowed to load tactics from. "
-            "Values come from the names of the values in the trt.TacticSource enum, and are case-insensitive. "
+            "Values come from the names of the values in the trt.TacticSource enum and are case-insensitive. "
             "If no arguments are provided, e.g. '--tactic-sources', then all tactic sources are disabled.",
             nargs="*",
             default=None,
@@ -289,6 +281,17 @@ class TrtConfigArgs(BaseArgs):
             action="store_true",
             default=None,
         )
+        trt_config_args.add_argument(
+            "--pool-limit",
+            "--memory-pool-limit",
+            dest="memory_pool_limit",
+            help="Set memory pool limits. Memory pool names come from the names of values in the trt.MemoryPoolType enum and are case-insensitive"
+            "Format: `--pool-limit <pool_name>:<pool_limit> ...`. For example, `--pool-limit dla_local_dram:1e9 workspace:16777216`. "
+            "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively. "
+            "For example, `--pool-limit workspace:16M` is equivalent to `--pool-limit workspace:16777216`. ",
+            nargs="*",
+            default=None,
+        )
 
     def register(self, maker):
         from polygraphy.tools.args.data_loader import DataLoaderArgs
@@ -312,6 +315,10 @@ class TrtConfigArgs(BaseArgs):
         self.profile_dicts = parse_profile_shapes(default_shapes, trt_min_shapes, trt_opt_shapes, trt_max_shapes)
 
         self.workspace = args_util.parse_num_bytes(args_util.get(args, "workspace"))
+        if self.workspace is not None:
+            mod.warn_deprecated(
+                "--workspace", use_instead="--pool-limit workspace:<workspace_size>", remove_in="0.45.0"
+            )
 
         self.tf32 = args_util.get(args, "tf32")
         self.fp16 = args_util.get(args, "fp16")
@@ -333,16 +340,8 @@ class TrtConfigArgs(BaseArgs):
         self.sparse_weights = args_util.get(args, "sparse_weights")
         self.timing_cache = args_util.get(args, "timing_cache")
 
-        tactic_replay = args_util.get(args, "tactic_replay")
         self.load_tactics = args_util.get(args, "load_tactics")
         self.save_tactics = args_util.get(args, "save_tactics")
-        if tactic_replay is not None:
-            mod.warn_deprecated("--tactic-replay", "--save-tactics or --load-tactics", remove_in="0.35.0")
-            G_LOGGER.warning("--tactic-replay is deprecated. Use either --save-tactics or --load-tactics instead.")
-            if os.path.exists(tactic_replay) and util.get_file_size(tactic_replay) > 0:
-                self.load_tactics = tactic_replay
-            else:
-                self.save_tactics = tactic_replay
 
         tactic_sources = args_util.get(args, "tactic_sources")
         self.tactic_sources = None
@@ -358,6 +357,17 @@ class TrtConfigArgs(BaseArgs):
 
         self.use_dla = args_util.get(args, "use_dla")
         self.allow_gpu_fallback = args_util.get(args, "allow_gpu_fallback")
+
+        memory_pool_limits = args_util.parse_dict_with_default(
+            args_util.get(args, "memory_pool_limit"), cast_to=args_util.parse_num_bytes, allow_empty_key=False
+        )
+        self.memory_pool_limits = None
+        if memory_pool_limits is not None:
+            self.memory_pool_limits = {}
+            for pool_type, pool_size in memory_pool_limits.items():
+                pool_type = safe(assert_identifier(pool_type.upper()))
+                pool_type_str = safe("trt.MemoryPoolType.{:}", inline(pool_type))
+                self.memory_pool_limits[inline(pool_type_str)] = pool_size
 
     def add_trt_config_loader(self, script):
         profiles = []
@@ -418,7 +428,7 @@ class TrtConfigArgs(BaseArgs):
             script.add_import(imports=["TacticRecorder"], frm="polygraphy.backend.trt")
             algo_selector = make_invocable("TacticRecorder", record=self.save_tactics)
 
-        if self.tactic_sources is not None:
+        if self.tactic_sources is not None or self.memory_pool_limits is not None:
             script.add_import(imports=["tensorrt as trt"])
 
         if self.trt_config_script is not None:
@@ -446,6 +456,7 @@ class TrtConfigArgs(BaseArgs):
                 tactic_sources=self.tactic_sources,
                 use_dla=self.use_dla,
                 allow_gpu_fallback=self.allow_gpu_fallback,
+                memory_pool_limits=self.memory_pool_limits,
             )
             if config_loader_str is not None:
                 script.add_import(imports=["CreateConfig as CreateTrtConfig"], frm="polygraphy.backend.trt")

@@ -275,6 +275,10 @@ class TestTrt(object):
     def test_tactic_sources(self):
         run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--tactic-sources", "CUBLAS", "CUBLAS_LT"])
 
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.3"), reason="Unsupported before TRT 8.3")
+    def test_pool_limits(self):
+        run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--pool-limit", "workspace:32M"])
+
     def test_data_loader_script_calibration(self):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
@@ -395,6 +399,9 @@ class TestOnnxrt(object):
     def test_external_data(self):
         model = ONNX_MODELS["ext_weights"]
         assert run_polygraphy_run([model.path, "--onnxrt", "--external-data-dir", model.ext_data])
+
+    def test_providers(self):
+        run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--providers", "cpu"])
 
 
 class TestOther(object):

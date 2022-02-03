@@ -25,17 +25,38 @@ from tests.models.meta import ONNX_MODELS, TF_MODELS
 from tests.tools.common import run_polygraphy_inspect, run_polygraphy_run
 
 
-@pytest.fixture(scope="session", params=["none", "basic", "attrs", "full"])
+@pytest.fixture(
+    scope="session",
+    params=[
+        [],
+        ["layers"],
+        ["layers", "attrs"],
+        ["layers", "attrs", "weights"],
+        ["weights"],
+    ],
+)
 def run_inspect_model(request):
-    yield lambda additional_opts: run_polygraphy_inspect(
-        ["model"] + ["--mode={:}".format(request.param)] + additional_opts
-    )
+    show_args = (["--show"] if request.param else []) + request.param
+    yield lambda additional_opts: run_polygraphy_inspect(["model"] + additional_opts + show_args)
 
 
 @pytest.fixture(scope="session")
-def identity_engine():
-    with util.NamedTemporaryFile() as outpath:
-        run_polygraphy_run([ONNX_MODELS["identity"].path, "--trt", "--save-engine", outpath.name])
+def dynamic_identity_engine():
+    with util.NamedTemporaryFile(suffix=".engine") as outpath:
+        run_polygraphy_run(
+            [
+                ONNX_MODELS["dynamic_identity"].path,
+                "--trt",
+                "--trt-min-shapes=X:[1,2,1,1]",
+                "--trt-opt-shapes=X:[1,2,3,3]",
+                "--trt-max-shapes=X:[1,2,5,5]",
+                "--trt-min-shapes=X:[1,2,2,2]",
+                "--trt-opt-shapes=X:[1,2,4,4]",
+                "--trt-max-shapes=X:[1,2,6,6]",
+                "--save-engine",
+                outpath.name,
+            ]
+        )
         yield outpath.name
 
 
@@ -55,11 +76,10 @@ def check_lines_match(actual, expected, should_check_line=lambda x: True):
             assert acline == exline
 
 
-# ONNX cases
 ONNX_CASES = [
     [
         "identity",
-        "none",
+        [],
         r"""
         [I] ==== ONNX Model ====
             Name: test_identity | Opset: 8
@@ -77,7 +97,7 @@ ONNX_CASES = [
     ],
     [
         "identity",
-        "basic",
+        ["layers"],
         r"""
         [I] ==== ONNX Model ====
             Name: test_identity | Opset: 8
@@ -99,7 +119,7 @@ ONNX_CASES = [
     ],
     [
         "identity_with_initializer",
-        "basic",
+        ["layers"],
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -121,7 +141,7 @@ ONNX_CASES = [
     ],
     [
         "identity_with_initializer",
-        "full",
+        ["layers", "attrs", "weights"],
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -145,7 +165,7 @@ ONNX_CASES = [
     ],
     [
         "tensor_attr",
-        "basic",
+        ["layers"],
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -166,7 +186,7 @@ ONNX_CASES = [
     ],
     [
         "tensor_attr",
-        "attrs",
+        ["layers", "attrs"],
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -189,7 +209,7 @@ ONNX_CASES = [
     ],
     [
         "tensor_attr",
-        "full",
+        ["layers", "attrs", "weights"],
         r"""
         [I] ==== ONNX Model ====
             Name: onnx_graphsurgeon | Opset: 11
@@ -226,7 +246,7 @@ ONNX_CASES = [
     ],
     [
         "scan",
-        "full",
+        ["layers", "attrs", "weights"],
         r"""
         [I] ==== ONNX Model ====
             Name: graph | Opset: 10
@@ -276,7 +296,7 @@ ONNX_CASES = [
     ],
     [
         "dim_param",
-        "basic",
+        ["layers"],
         r"""
         [I] ==== ONNX Model ====
             Name: tf2onnx | Opset: 10
@@ -297,6 +317,217 @@ ONNX_CASES = [
         """,
     ],
 ]
+
+# Format: List[Tuple[show_opts, expected]]
+ENGINE_CASES = [
+    (
+        [],
+        r"""
+        [I] ==== TensorRT Engine ====
+            Name: Unnamed Network 0 | Explicit Batch Engine
+
+            ---- 1 Engine Input(s) ----
+            {X [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- 1 Engine Output(s) ----
+            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- Memory ----
+            Device Memory: 0 bytes
+
+            ---- 2 Profile(s) (2 Binding(s) Each) ----
+            - Profile: 0
+                Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
+                Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
+
+            - Profile: 1
+                Binding Index: 2 (Input)  [Name: X [profile 1]] | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
+                Binding Index: 3 (Output) [Name: Y [profile 1]] | Shape: (1, 2, -1, -1)
+
+            ---- 1 Layer(s) Per Profile ----
+        """,
+    ),
+    (
+        ["layers"],
+        r"""
+        [I] ==== TensorRT Engine ====
+            Name: Unnamed Network 0 | Explicit Batch Engine
+
+            ---- 1 Engine Input(s) ----
+            {X [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- 1 Engine Output(s) ----
+            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- Memory ----
+            Device Memory: 0 bytes
+
+            ---- 2 Profile(s) (2 Binding(s) Each) ----
+            - Profile: 0
+                Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
+                Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
+
+            - Profile: 1
+                Binding Index: 2 (Input)  [Name: X [profile 1]] | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
+                Binding Index: 3 (Output) [Name: Y [profile 1]] | Shape: (1, 2, -1, -1)
+
+            ---- 1 Layer(s) Per Profile ----
+            - Profile: 0
+                Layer 0    | node_of_Y [Op: Reformat]
+                    {X [shape=(1, 2, -1, -1)]}
+                     -> {Y [shape=(1, 2, -1, -1)]}
+
+            - Profile: 1
+                Layer 0    | node_of_Y [profile 1] [Op: Reformat]
+                    {X [profile 1] [shape=(1, 2, -1, -1)]}
+                     -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
+        """,
+    ),
+    (
+        ["layers", "attrs"],
+        r"""
+        [I] ==== TensorRT Engine ====
+            Name: Unnamed Network 0 | Explicit Batch Engine
+
+            ---- 1 Engine Input(s) ----
+            {X [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- 1 Engine Output(s) ----
+            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- Memory ----
+            Device Memory: 0 bytes
+
+            ---- 2 Profile(s) (2 Binding(s) Each) ----
+            - Profile: 0
+                Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
+                Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
+
+            - Profile: 1
+                Binding Index: 2 (Input)  [Name: X [profile 1]] | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
+                Binding Index: 3 (Output) [Name: Y [profile 1]] | Shape: (1, 2, -1, -1)
+
+            ---- 1 Layer(s) Per Profile ----
+            - Profile: 0
+                Layer 0    | node_of_Y [Op: Reformat]
+                    {X [shape=(1, 2, -1, -1)]}
+                     -> {Y [shape=(1, 2, -1, -1)]}
+                    ---- Attributes ----
+                    Origin = IDENTITY
+                    Tactic = 0x0
+
+            - Profile: 1
+                Layer 0    | node_of_Y [profile 1] [Op: Reformat]
+                    {X [profile 1] [shape=(1, 2, -1, -1)]}
+                     -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
+                    ---- Attributes ----
+                    Origin = IDENTITY
+                    Tactic = 0x0
+        """,
+    ),
+]
+
+
+class TestInspectModel(object):
+    @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: "{:}-{:}".format(case[0], case[1]))
+    def test_onnx(self, case):
+        model, show, expected = case
+        status = run_polygraphy_inspect(["model", ONNX_MODELS[model].path, "--show"] + show, disable_verbose=True)
+
+        expected = dedent(expected).strip()
+        actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
+
+        check_lines_match(actual, expected)
+
+    @pytest.mark.parametrize("model", ["identity", "scan", "tensor_attr"])
+    def test_trt_sanity(self, run_inspect_model, model):
+        import tensorrt as trt
+
+        if model == "tensor_attr" and mod.version(trt.__version__) < mod.version("7.2"):
+            pytest.skip("Models with constant outputs were not supported before 7.2")
+
+        if model == "scan" and mod.version(trt.__version__) < mod.version("7.0"):
+            pytest.skip("Scan was not supported until 7.0")
+
+        run_inspect_model([ONNX_MODELS[model].path, "--display-as=trt"])
+
+    def test_trt_network_script(self):
+        script = dedent(
+            """
+            from polygraphy.backend.trt import CreateNetwork
+            from polygraphy import func
+            import tensorrt as trt
+
+            @func.extend(CreateNetwork())
+            def load_network(builder, network):
+                inp = network.add_input("input", dtype=trt.float32, shape=(1, 1))
+                out = network.add_identity(inp).get_output(0)
+                network.mark_output(out)
+        """
+        )
+
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
+            f.write(script)
+            f.flush()
+
+            run_polygraphy_inspect(["model", f.name])
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported for TRT 8.0 and older")
+    @pytest.mark.parametrize("case", ENGINE_CASES, ids=lambda case: "{:}".format(case[0]))
+    def test_trt_engine(self, case, dynamic_identity_engine):
+        show, expected = case
+        status = run_polygraphy_inspect(["model", dynamic_identity_engine, "--show"] + show, disable_verbose=True)
+
+        expected = dedent(expected).strip()
+        actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
+
+        check_lines_match(actual, expected)
+
+    def test_tf_sanity(self, run_inspect_model):
+        pytest.importorskip("tensorflow")
+
+        run_inspect_model([TF_MODELS["identity"].path, "--model-type=frozen"])
+
+
+class TestInspectData(object):
+    @pytest.mark.parametrize("opts", [[], ["--show-values"]])
+    def test_outputs(self, opts):
+        with util.NamedTemporaryFile() as outpath:
+            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", outpath.name])
+            run_polygraphy_inspect(["data", outpath.name] + opts)
+
+    @pytest.mark.parametrize("opts", [[], ["--show-values"]])
+    def test_inputs(self, opts):
+        with util.NamedTemporaryFile() as outpath:
+            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
+            run_polygraphy_inspect(["data", outpath.name] + opts)
+
+
+TACTIC_REPLAY_CASES = [
+    [
+        "identity",
+        r"""
+        [I] Layer: node_of_y
+                Algorithm: (Implementation: -2147483642, Tactic: 0) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),)
+        """,
+    ],
+]
+
+
+@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
+class TestInspectTactics(object):
+    @pytest.mark.parametrize("case", TACTIC_REPLAY_CASES, ids=lambda case: case[0])
+    def test_show_tactics(self, case):
+        with util.NamedTemporaryFile() as replay:
+            model_name, expected = case
+
+            run_polygraphy_run([ONNX_MODELS[model_name].path, "--trt", "--save-tactics", replay.name])
+            status = run_polygraphy_inspect(["tactics", replay.name], disable_verbose=True)
+
+            expected = dedent(expected).strip()
+            actual = status.stdout
+
+            check_lines_match(actual, expected, should_check_line=lambda line: "Algorithm: " not in line)
 
 
 # List[model, expected_files, expected_output]
@@ -344,99 +575,3 @@ class TestCapability(object):
                 expected_files
             )
             assert dedent(expected_summary).strip() in status.stdout
-
-
-class TestInspectModel(object):
-    @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: "{:}-{:}".format(case[0], case[1]))
-    def test_model_onnx(self, case):
-        model, mode, expected = case
-        status = run_polygraphy_inspect(
-            ["model", ONNX_MODELS[model].path, "--mode={:}".format(mode)], disable_verbose=True
-        )
-
-        expected = dedent(expected).strip()
-        actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
-
-        check_lines_match(actual, expected)
-
-    @pytest.mark.parametrize("model", ["identity", "scan", "tensor_attr"])
-    def test_model_trt_sanity(self, run_inspect_model, model):
-        import tensorrt as trt
-
-        if model == "tensor_attr" and mod.version(trt.__version__) < mod.version("7.2"):
-            pytest.skip("Models with constant outputs were not supported before 7.2")
-
-        if model == "scan" and mod.version(trt.__version__) < mod.version("7.0"):
-            pytest.skip("Scan was not supported until 7.0")
-
-        run_inspect_model([ONNX_MODELS[model].path, "--display-as=trt"])
-
-    def test_model_trt_network_script(self):
-        script = dedent(
-            """
-            from polygraphy.backend.trt import CreateNetwork
-            from polygraphy import func
-            import tensorrt as trt
-
-            @func.extend(CreateNetwork())
-            def load_network(builder, network):
-                inp = network.add_input("input", dtype=trt.float32, shape=(1, 1))
-                out = network.add_identity(inp).get_output(0)
-                network.mark_output(out)
-        """
-        )
-
-        with util.NamedTemporaryFile("w+", suffix=".py") as f:
-            f.write(script)
-            f.flush()
-
-            run_polygraphy_inspect(["model", f.name])
-
-    def test_model_trt_engine_sanity(self, run_inspect_model, identity_engine):
-        run_inspect_model([identity_engine, "--model-type=engine"])
-
-    def test_model_tf_sanity(self, run_inspect_model):
-        pytest.importorskip("tensorflow")
-
-        run_inspect_model([TF_MODELS["identity"].path, "--model-type=frozen"])
-
-
-class TestInspectData(object):
-    @pytest.mark.parametrize("opts", [[], ["--show-values"]])
-    def test_outputs(self, opts):
-        with util.NamedTemporaryFile() as outpath:
-            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", outpath.name])
-            run_polygraphy_inspect(["data", outpath.name] + opts)
-
-    @pytest.mark.parametrize("opts", [[], ["--show-values"]])
-    def test_inputs(self, opts):
-        with util.NamedTemporaryFile() as outpath:
-            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
-            run_polygraphy_inspect(["data", outpath.name] + opts)
-
-
-TACTIC_REPLAY_CASES = [
-    [
-        "identity",
-        r"""
-        [I] Layer: node_of_y
-                Algorithm: (Implementation: -2147483642, Tactic: 0) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),)
-        """,
-    ],
-]
-
-
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
-class TestInspectTactics(object):
-    @pytest.mark.parametrize("case", TACTIC_REPLAY_CASES, ids=lambda case: case[0])
-    def test_show_tactics(self, case):
-        with util.NamedTemporaryFile() as replay:
-            model_name, expected = case
-
-            run_polygraphy_run([ONNX_MODELS[model_name].path, "--trt", "--save-tactics", replay.name])
-            status = run_polygraphy_inspect(["tactics", replay.name], disable_verbose=True)
-
-            expected = dedent(expected).strip()
-            actual = status.stdout
-
-            check_lines_match(actual, expected, should_check_line=lambda line: "Algorithm: " not in line)

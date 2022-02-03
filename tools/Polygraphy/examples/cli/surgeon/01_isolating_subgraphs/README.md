@@ -10,7 +10,7 @@ In this example, we'll extract a subgraph from a model that computes `Y = x0 + (
 ![./model.png](./model.png)
 
 Let's assume that we want to isolate the subgraph that computes `(a * x1 + b)`, and that we've
-used `polygraphy inspect model model.onnx --mode=basic` to determine the names of the input/output tensors
+used `polygraphy inspect model model.onnx --show layers` to determine the names of the input/output tensors
 of this subgraph, but that we don't know the shapes or data types of any of the tensors involved.
 
 When shapes and data types are unknown, you can use `auto` to indicate that Polygraphy should
@@ -47,7 +47,7 @@ type - hence `--inputs` requires 2 `auto`s and `--outputs` requires only 1.
     to confirm whether it looks correct:
 
     ```bash
-    polygraphy inspect model subgraph.onnx --mode=basic
+    polygraphy inspect model subgraph.onnx --show layers
     ```
 
 ## A Note On `auto`

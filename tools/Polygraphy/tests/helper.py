@@ -16,6 +16,9 @@
 import os
 import time
 
+import tensorrt as trt
+from polygraphy.backend.trt import get_trt_logger
+
 ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), os.path.pardir))
 
 
@@ -54,3 +57,15 @@ def time_func(func, warm_up=50, iters=100):
         end = time.time()
         total += end - start
     return total / float(iters)
+
+
+HAS_DLA = None
+
+
+def has_dla():
+    global HAS_DLA
+    if HAS_DLA is None:
+        builder = trt.Builder(get_trt_logger())
+        HAS_DLA = builder.num_DLA_cores > 0
+
+    return HAS_DLA

@@ -10,7 +10,7 @@ with a real dataset that includes labels or golden values - especially if the da
 In such cases, it is recommended to use a runner directly instead.
 
 *NOTE: It is possible to provide custom input data to `Comparator.run()` using the `data_loader`*
-    *parameter. This is may be a viable option when using a smaller dataset.*
+    *parameter. This may be a viable option when using a smaller dataset.*
 
 In this example, we use a `TrtRunner` directly to validate an identity model on
 a trivial dataset. Unlike using the `Comparator`, using a runner gives you complete
