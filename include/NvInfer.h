@@ -6640,8 +6640,6 @@ public:
     //!
     //! \see IIdentityLayer
     //!
-    //! \warning Int32 tensors are not valid input tensors.
-    //!
     //! \return The new identity layer, or nullptr if it could not be created.
     //!
     IIdentityLayer* addIdentity(ITensor& input) noexcept
