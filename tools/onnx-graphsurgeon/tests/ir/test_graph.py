@@ -50,6 +50,13 @@ def identity(self, inp):
 
 
 @Graph.register()
+def relu(self, inp):
+    out = self.layer(op="Relu", inputs=[inp], outputs=["relu_out"])[0]
+    out.dtype = inp.dtype
+    return out
+
+
+@Graph.register()
 def add(self, a, b, name=None):
     outputs = [Variable(name=name)] if name else ["add_out"]
     out = self.layer(op="Add", inputs=[a, b], outputs=outputs)[0]
@@ -396,10 +403,72 @@ def toposort_multi_tier_input_graph():
     return Graph(nodes=nodes, inputs=inputs, outputs=outputs), expected_node_order
 
 
+# Graph structure:
+# x0
+# |
+# Add
+# |
+# x1
+# |
+# Relu
+# |
+# x2
+#
+# If:
+#   Then:
+#          x1  x2
+#           |  |
+#           Add
+#            |
+#           res
+#   Else:
+#          x1  x2
+#           |  |
+#           Add
+#            |
+#           res
+#  |
+# out
+#
+# In this graph, the subgraph of If implicitly depends on x1/x2 from the outer graph, so the parent If
+# node must come after the outer Add/ReLU nodes.
+# If we fail to consider such implicit inputs, the If will remain the first node.
+def toposort_implicit_subgraph_inputs_graph():
+    def make_var(name):
+        return Variable(name, shape=(1, 1), dtype=np.float32)
+
+    # Main graph
+    inputs = [make_var("x0")]
+    const = Constant(name="const", values=np.array([[1.5]], dtype=np.float32))
+    cond = Constant(name="cond", values=np.array([True]))
+    x1, x2 = [make_var("x1"), make_var("x2")]
+    outputs = [make_var("out")]
+
+    # Subgraphs for If
+    subgraph_outputs = [make_var("res")]
+    subgraph_nodes = [Node(op="Add", name="SubgraphTest0", inputs=[x1, x2], outputs=subgraph_outputs)]
+    subgraph = Graph(nodes=subgraph_nodes, outputs=subgraph_outputs)
+
+    nodes = [
+        Node(
+            op="If",
+            name="Test2",
+            inputs=[cond],
+            outputs=outputs,
+            attrs={"then_branch": subgraph, "else_branch": subgraph},
+        ),
+        Node(op="Relu", name="Test1", inputs=[x1], outputs=[x2]),
+        Node(op="Add", name="Test0", inputs=inputs + [const], outputs=[x1]),
+    ]
+    expected_node_order = [nodes[2], nodes[1], nodes[0]]
+    return Graph(nodes=nodes, inputs=inputs, outputs=outputs), expected_node_order
+
+
 TOPOSORT_TEST_CASES = [
     toposort_linear_graph,
     toposort_multi_tier_output_graph,
     toposort_multi_tier_input_graph,
+    toposort_implicit_subgraph_inputs_graph,
 ]
 
 

@@ -3,6 +3,13 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.15 (2022-01-18)
+### Fixed
+- Fixed a bug where `Graph.toposort()` would not consider implicit inputs of nodes with subgraphs.
+    For example, a graph including an `If` node whose subgraphs used tensors from the outer graph
+    may previously have been sorted such that it occurred before the nodes producing those tensors.
+
+
 ## v0.3.14 (2021-10-14)
 ### Fixed
 - Fixed a bug where `numpy.dtype` would not be exported correctly when specified as a node attribute.
