@@ -7,11 +7,15 @@ from polygraphy.comparator.struct import LazyNumpyArray
 from polygraphy.exception import PolygraphyException
 
 
+def make_outputs():
+    return {"dummy_out": np.zeros((4, 4))}
+
+
 def make_iter_results(runner_name):
-    return [IterationResult(outputs={"dummy_out": np.zeros((4, 4))}, runner_name=runner_name)] * 2
+    return [IterationResult(outputs=make_outputs(), runner_name=runner_name)] * 2
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def run_results():
     results = RunResults()
     results.append(("runner0", make_iter_results("runner0")))
@@ -53,7 +57,7 @@ class TestRunResults(object):
             for iter_res in results["runner1"]:
                 if is_none:
                     assert not iter_res
-                    assert iter_res.runner_name == ""
+                    assert iter_res.runner_name == "custom_runner"
                 else:
                     assert iter_res
                     assert iter_res.runner_name
@@ -76,6 +80,23 @@ class TestRunResults(object):
         assert "runner0" in run_results
         assert "runner1" in run_results
         assert "runner3" not in run_results
+
+    def test_add_new(self):
+        results = RunResults()
+        results.add([make_outputs()], runner_name="custom")
+
+        iter_results = results["custom"]
+        assert len(iter_results) == 1
+        assert all(isinstance(iter_result, IterationResult) for iter_result in iter_results)
+
+    def test_add_new_default_name(self):
+        results = RunResults()
+        results.add([make_outputs()])
+
+        name = results[0][0]
+        iter_results = results[name]
+        assert len(iter_results) == 1
+        assert all(isinstance(iter_result, IterationResult) for iter_result in iter_results)
 
 
 class TestLazyNumpyArray(object):

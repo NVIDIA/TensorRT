@@ -22,6 +22,7 @@ import subprocess as sp
 import time
 
 from polygraphy import util
+from polygraphy.json import save_json
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
@@ -268,7 +269,7 @@ class ArtifactSorterArgs(BaseArgs):
                 stack.callback(try_remove(self.iter_artifact))
 
             if self.iteration_info:
-                util.save_json({"iteration": iteration}, self.iteration_info)
+                save_json({"iteration": iteration}, self.iteration_info)
                 stack.callback(try_remove(self.iteration_info))
 
             G_LOGGER.info("Running check command: {:}".format(" ".join(self.check)))

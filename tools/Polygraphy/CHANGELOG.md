@@ -3,6 +3,62 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.35.1 (2022-01-14)
+### Added
+- Added a `providers` parameter to `SessionFromOnnx` to specify execution providers for ONNX-Runtime and a
+    corresponding `--providers` argument to CLI tools.
+
+### Changed
+- `CompareFunc.simple()` will now correctly display the minimum required tolerances when using `elemwise` mode.
+    Note that in elementwise comparison mode, each element of the output is compared against both tolerances, and
+    only counted as a mismatch if both are exceeded. Hence, the minimum required tolerances apply if only one type
+    of tolerance is being used. When both absolute/relative tolerance are set, the requirements may be lower.
+
+
+## v0.35.0 (2022-01-06)
+### Added
+- Added a `memory_pool_limits` parameter to `CreateConfig`.
+- Added a `--pool-limit`/`--memory-pool-limit` argument to command-line tools.
+
+### Changed
+- Changed the default base calibrator class to `IInt8EntropyCalibrator2` since it works across both GPU and DLA.
+    To preserve the old behavior, specify `--calibration-base-class=IInt8MinMaxCalibrator` on the command-line
+    or specify the `BaseClass` argument in `Calibrator` in the Python API.
+- Deprecated `--workspace` command-line option and `max_workspace_size` parameter in `CreateConfig`.
+    Use `--pool-limit` and `memory_pool_limits` respectively instead.
+
+### Removed
+- Removed deprecated module `polygraphy.util.serde`. Use `polygraphy.json` instead.
+- Removed `--tactic-replay` command-line option. Use `--load-tactics`/`--save-tactics` instead.
+
+
+## v0.34.2 (2021-11-29)
+### Added
+- Added support for `MeanVarianceNormalization` to `PluginRefRunner`.
+
+
+## v0.34.1 (2021-11-24)
+### Added
+- Added a `profiling_verbosity` parameter to `CreateConfig()`.
+- Added support for displaying layer-level engine information in `inspect model` for newer versions of TensorRT.
+
+
+## v0.34.0 (2021-11-22)
+### Added
+- Added a new `add()` API to `RunResults` to make it easier to create custom output data.
+    Added [a new example](./examples/cli/run/06_comparing_with_custom_output_data/) to demonstrate how to use this API.
+
+### Changed
+- Deprecated `--mode` option in `inspect model`; a new `--show` option has been introduced
+    which can be used to individually control what is displayed.
+- Command-line tools will now use `IInt8EntropyCalibrator2` for calbration if DLA and int8 mode are enabled
+    since the default does not work with DLA.
+
+### Removed
+- Removed several deprecated submodules of `polygraphy.common`: `constants`, `cuda`, `exception`, `func`.
+    These can now be found under the top-level `polygraphy` module instead.
+
+
 ## v0.33.2 (2021-10-21)
 ### Changed
 - Improved the help messages of various subtools, including `run`, `debug build`, and `debug reduce`.

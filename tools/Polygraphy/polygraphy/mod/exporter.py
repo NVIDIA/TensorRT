@@ -205,17 +205,19 @@ def export(funcify=False, func_name=None):
     return export_impl
 
 
-def warn_deprecated(name, use_instead, remove_in, module_name=None):
+def warn_deprecated(name, use_instead, remove_in, module_name=None, always_show_warning=False):
+
     if config.INTERNAL_CORRECTNESS_CHECKS and version(polygraphy.__version__) >= version(remove_in):
         G_LOGGER.internal_error("{:} should have been removed in version: {:}".format(name, remove_in))
 
     full_obj_name = "{:}.{:}".format(module_name, name) if module_name else name
-    warnings.warn(
-        "{:} is deprecated and will be removed in Polygraphy {:}. "
-        "Use {:} instead.".format(full_obj_name, remove_in, use_instead),
-        DeprecationWarning,
-        stacklevel=3,
+    msg = "{:} is deprecated and will be removed in Polygraphy {:}. Use {:} instead.".format(
+        full_obj_name, remove_in, use_instead
     )
+
+    warnings.warn(msg, DeprecationWarning, stacklevel=3)
+    if always_show_warning:
+        G_LOGGER.warning(msg)
 
 
 def deprecate(remove_in, use_instead, module_name=None, name=None):
@@ -314,7 +316,6 @@ def export_deprecated_alias(name, remove_in, use_instead=None):
             obj
         )
         _define_in_module(name, new_obj, module)
-        _add_to_all(name, module)
         return obj
 
     return export_deprecated_alias_impl

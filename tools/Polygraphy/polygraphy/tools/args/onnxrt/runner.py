@@ -21,26 +21,14 @@ from polygraphy.tools.script import make_invocable
 @mod.export()
 class OnnxrtRunnerArgs(BaseArgs):
     def register(self, maker):
-        from polygraphy.tools.args.model import ModelArgs
-        from polygraphy.tools.args.onnx.loader import OnnxLoaderArgs
+        from polygraphy.tools.args.onnxrt.loader import OnnxrtSessionArgs
 
-        if isinstance(maker, OnnxLoaderArgs):
-            self.onnx_loader_args = maker
-        if isinstance(maker, ModelArgs):
-            self.model_args = maker
+        if isinstance(maker, OnnxrtSessionArgs):
+            self.session_args = maker
 
     def check_registered(self):
-        assert self.onnx_loader_args is not None, "OnnxLoaderArgs is required!"
-        assert self.model_args is not None, "ModelArgs is required!"
+        assert self.session_args is not None, "OnnxrtSessionArgs is required!"
 
     def add_to_script(self, script):
         script.add_import(imports=["OnnxrtRunner"], frm="polygraphy.backend.onnxrt")
-        if self.onnx_loader_args.should_use_onnx_loader():
-            onnx_name = self.onnx_loader_args.add_serialized_onnx_loader(script)
-        else:
-            onnx_name = self.model_args.model_file
-
-        script.add_import(imports=["SessionFromOnnx"], frm="polygraphy.backend.onnxrt")
-        loader_name = script.add_loader(make_invocable("SessionFromOnnx", onnx_name), "build_onnxrt_session")
-
-        script.add_runner(make_invocable("OnnxrtRunner", loader_name))
+        script.add_runner(make_invocable("OnnxrtRunner", self.session_args.add_onnxrt_session(script)))

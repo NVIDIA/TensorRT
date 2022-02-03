@@ -161,9 +161,7 @@ def get_output_metadata(graph, layerwise=False):
             "logging verbosity to EXTRA_VERBOSE to view them.".format(len(output_nodes) - len(output_tensors))
         )
 
-    G_LOGGER.extra_verbose(
-        "Found output op types in graph: {:}".format({tensor.op.type for tensor in output_tensors})
-    )
+    G_LOGGER.extra_verbose("Found output op types in graph: {:}".format({tensor.op.type for tensor in output_tensors}))
     G_LOGGER.verbose("Retrieved TensorFlow output_tensors: {:}".format(output_tensors))
     return get_tensor_metadata(output_tensors)
 
@@ -172,7 +170,11 @@ def get_graph_output_names(graph):
     return list(get_output_metadata(graph).keys())
 
 
-def str_from_graph(graph, mode):
+def str_from_graph(graph, show_layers=None, show_attrs=None, show_weights=None):
+    show_layers = util.default(show_layers, False)
+    show_attrs = util.default(show_attrs, False)
+    show_weights = util.default(show_weights, False)
+
     graph_str = ""
     input_metadata = get_input_metadata(graph)
     output_metadata = get_output_metadata(graph)
@@ -180,12 +182,12 @@ def str_from_graph(graph, mode):
     graph_str += "---- {:} Graph Inputs ----\n{:}\n\n".format(len(input_metadata), input_metadata)
     graph_str += "---- {:} Graph Outputs ----\n{:}\n\n".format(len(output_metadata), output_metadata)
     graph_str += "---- {:} Nodes ----\n".format(len(graph.as_graph_def().node))
-    if mode == "basic":
+    if show_layers:
         G_LOGGER.warning(
             "Displaying layer information is unsupported for TensorFlow graphs. "
-            "Please use --mode=full if you would like to see the raw nodes"
+            "Please use --show layers attrs weights if you would like to see the raw nodes"
         )
-        if mode == "full":
+        if show_attrs or show_weights:
             for node in graph.as_graph_def().node:
                 graph_str += str(node) + "\n"
         graph_str += "\n"

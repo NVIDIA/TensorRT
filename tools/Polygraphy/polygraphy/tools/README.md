@@ -98,7 +98,7 @@ You can find the complete listing of `run` examples [here](../../examples/cli/ru
 For any tools that use inference input data, such as `run` or `convert`, Polygraphy
 provides 2 ways to supply custom input data:
 
-1. `--load-input-data`, which takes a path to a JSON file containing a `List[Dict[str, np.ndarray]]`.
+1. `--load-inputs`/`--load-input-data`, which takes a path to a JSON file containing a `List[Dict[str, np.ndarray]]`.
     This will cause Polygraphy to load the entire object into memory.
     *NOTE: This may be impractical or impossible if the data is very large.*
 
@@ -111,7 +111,7 @@ provides 2 ways to supply custom input data:
         *a separate script just for the sake of `--data-loader-script`. You can simply use the existing script*
         *and optionally use the `--data-loader-func-name` argument to specify the name of the function if it's not `load_data`*
 
-For more information, refer to [`run` example 05](../../examples/cli/run/05_comparing_with_custom_data/).
+For more information, refer to [`run` example 05](../../examples/cli/run/05_comparing_with_custom_input_data/).
 
 
 ### Modifying Input Shapes In An ONNX Model

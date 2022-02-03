@@ -96,11 +96,12 @@ class TestModifyOnnx(object):
         assert len(original_model.graph.output) == 1 or not copy
         assert len(model.graph.output) == 2
 
-    def test_custom_outputs(self):
-        loader = ModifyOutputs(OnnxFromPath(ONNX_MODELS["identity_identity"].path), outputs=["identity_out_0"])
+    @pytest.mark.parametrize("output", ["identity_out_0", "identity_out_2"])
+    def test_custom_outputs(self, output):
+        loader = ModifyOutputs(OnnxFromPath(ONNX_MODELS["identity_identity"].path), outputs=[output])
         model = loader()
         assert len(model.graph.output) == 1
-        assert model.graph.output[0].name == "identity_out_0"
+        assert model.graph.output[0].name == output
 
     def test_exclude_outputs_with_layerwise(self):
         loader = ModifyOutputs(
@@ -154,7 +155,7 @@ class TestConvertToFp16:
         model = loader()
 
         assert original_model.graph.input[0].type.tensor_type.elem_type == 1 or not copy
-        assert model.graph.value_info[0].type.tensor_type.elem_type == 10
+        assert model.graph.input[0].type.tensor_type.elem_type == 10
 
 
 class TestFoldConstants:

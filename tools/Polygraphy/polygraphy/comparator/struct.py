@@ -14,9 +14,10 @@
 # limitations under the License.
 #
 
+import time
 from collections import OrderedDict
 
-from polygraphy import mod, util, config
+from polygraphy import config, mod, util
 from polygraphy.common.interface import TypedDict, TypedList
 from polygraphy.json import Decoder, Encoder, add_json_methods, load_json, save_json
 from polygraphy.logger import G_LOGGER
@@ -111,9 +112,12 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
         Args:
             outputs (Dict[str, np.array]): The outputs of this iteration, mapped to their names.
 
-
-            runtime (float): The time required for this iteration, in seconds.
-            runner_name (str): The name of the runner that produced this output.
+            runtime (float):
+                    The time required for this iteration, in seconds.
+                    Only used for logging purposes.
+            runner_name (str):
+                    The name of the runner that produced this output.
+                    If this is omitted, a default name is generated.
         """
         if outputs and config.ARRAY_SWAP_THRESHOLD_MB < 0:
             total_size_gb = sum(arr.nbytes for arr in outputs.values() if isinstance(arr, np.ndarray)) / (1024.0 ** 3)
@@ -126,7 +130,7 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
 
         super().__init__(IterationResult._to_lazy_dict(outputs))
         self.runtime = runtime
-        self.runner_name = util.default(runner_name, "")
+        self.runner_name = util.default(runner_name, "custom_runner")
 
     # Convenience methods to preserve np.ndarray in the interface.
     def update(self, other):
@@ -178,7 +182,18 @@ def decode(dct):
 @add_json_methods("inference results")
 class RunResults(TypedList(lambda: tuple)):
     """
-    Maps runner names to zero or more IterationResults.
+    Maps runners to per-iteration outputs (in the form of a ``List[IterationResult]``).
+
+    For example, if ``results`` is an instance of ``RunResults()``, then
+    to access the outputs of the first iteration from a specified runner, do:
+    ::
+
+        iteration = 0
+        runner_name = "trt-runner"
+        outputs = results[runner_name][iteration]
+
+        # `outputs` is a `Dict[str, np.ndarray]`
+
 
     Note: Technically, this is a ``List[Tuple[str, List[IterationResult]]]``, but includes
     helpers that make it behave like an OrderedDict that can contain duplicates.
@@ -217,6 +232,35 @@ class RunResults(TypedList(lambda: tuple)):
         for name, iteration_results in other.items():
             self.lst[name] = iteration_results
         return self
+
+    def add(self, out_list, runtime=None, runner_name=None):
+        """
+        A helper to create a ``List[IterationResult]`` and map it to the specified runner_name.
+
+        This method cannot be used to modify an existing entry.
+
+        Calling this method is equivalent to:
+        ::
+
+            results[runner_name] = []
+            for out in out_list:
+                results[runner_name].append(IterationResult(out, runtime, runner_name))
+
+        Args:
+            out_list (List[Dict[str, np.array]]):
+                One or more set of outputs where each output is a dictionary
+                of output names mapped to NumPy arrays.
+
+            runtime (float):
+                    The time required for this iteration, in seconds.
+                    Only used for logging purposes.
+            runner_name (str):
+                    The name of the runner that produced this output.
+                    If this is omitted, a default name is generated.
+        """
+        runner_name = util.default(runner_name, "custom_runner")
+        iter_results = [IterationResult(out, runtime, runner_name) for out in out_list]
+        self[runner_name] = iter_results
 
     def __getitem__(self, key):
         if isinstance(key, int):

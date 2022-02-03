@@ -31,5 +31,5 @@ where `a`, `b`, and `d` are constants:
 2. **[Optional]** You can use `inspect model` to confirm whether it looks correct:
 
     ```bash
-    polygraphy inspect model folded.onnx --mode=basic
+    polygraphy inspect model folded.onnx --show layers
     ```

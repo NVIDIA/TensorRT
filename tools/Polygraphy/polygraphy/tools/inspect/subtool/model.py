@@ -56,10 +56,23 @@ class Model(Tool):
             choices=["trt"],
             dest="display_as",
         )
-        parser.add_argument(
+
+        dispopts = parser.add_mutually_exclusive_group()
+        dispopts.add_argument(
+            "--show",
+            help="Controls what is displayed: {{"
+            "'layers': Display basic layer information like name, op, inputs, and outputs, "
+            "'attrs': Display all available per-layer attributes; has no effect if 'layers' is not enabled, "
+            "'weights': Display all weights in the model; if 'layers' is enabled, also shows per-layer constants"
+            "}}. More than one option may be specified",
+            choices=["layers", "attrs", "weights"],
+            nargs="*",
+            default=[],
+        )
+        dispopts.add_argument(
             "--mode",
             "--layer-info",
-            help="Display layers: {{"
+            help="[DEPRECATED - use --show instead] Display layers: {{"
             "'none': Display no layer information, "
             "'basic': Display layer inputs and outputs, "
             "'attrs': Display layer inputs, outputs and attributes, "
@@ -67,50 +80,61 @@ class Model(Tool):
             "}}",
             choices=["none", "basic", "attrs", "full"],
             dest="mode",
-            default="none",
+            default=None,
         )
 
     def run(self, args):
+        if args.mode:
+            mod.warn_deprecated("--mode", "--show", remove_in="0.40.0", always_show_warning=True)
+            args.show = {
+                "none": [],
+                "basic": ["layers"],
+                "attrs": ["layers", "attrs"],
+                "full": ["layers", "attrs", "weights"],
+            }[args.mode]
+            args.mode = None
+
+        def show(aspect):
+            return aspect in args.show
+
+        def inspect_trt():
+            if self.arg_groups[ModelArgs].model_type == "engine":
+                with self.arg_groups[TrtEngineLoaderArgs].load_serialized_engine() as engine:
+                    engine_str = trt_util.str_from_engine(engine, show_layers=show("layers"), show_attrs=show("attrs"))
+                    G_LOGGER.info("==== TensorRT Engine ====\n{:}".format(engine_str))
+            else:
+                builder, network, parser = util.unpack_args(self.arg_groups[TrtNetworkLoaderArgs].load_network(), 3)
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(builder)
+                    stack.enter_context(network)
+                    if parser:
+                        stack.enter_context(parser)
+                    network_str = trt_util.str_from_network(
+                        network, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
+                    ).strip()
+                    G_LOGGER.info("==== TensorRT Network ====\n{:}".format(network_str))
+
+        def inspect_onnx():
+            onnx_model = self.arg_groups[OnnxLoaderArgs].load_onnx()
+            model_str = onnx_util.str_from_onnx(
+                onnx_model, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
+            ).strip()
+            G_LOGGER.info("==== ONNX Model ====\n{:}".format(model_str))
+
+        def inspect_tf():
+            tf_graph, _ = self.arg_groups[TfLoaderArgs].load_graph()
+            graph_str = tf_util.str_from_graph(
+                tf_graph, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
+            ).strip()
+            G_LOGGER.info("==== TensorFlow Graph ====\n{:}".format(graph_str))
+
         func = None
-
         if self.arg_groups[ModelArgs].model_type.is_tf():
-            func = self.inspect_tf
-
+            func = inspect_tf
         if self.arg_groups[ModelArgs].model_type.is_onnx():
-            func = self.inspect_onnx
-
+            func = inspect_onnx
         if self.arg_groups[ModelArgs].model_type.is_trt() or args.display_as == "trt":
-            func = self.inspect_trt
-
+            func = inspect_trt
         if func is None:
             G_LOGGER.critical("Could not determine how to display this model. Maybe you need to specify --display-as?")
-
-        func(args)
-
-    def inspect_trt(self, args):
-        if self.arg_groups[ModelArgs].model_type == "engine":
-            if args.mode != "none":
-                G_LOGGER.warning("Displaying layer information for TensorRT engines is not currently supported")
-
-            with self.arg_groups[TrtEngineLoaderArgs].load_serialized_engine() as engine:
-                engine_str = trt_util.str_from_engine(engine)
-                G_LOGGER.info("==== TensorRT Engine ====\n{:}".format(engine_str))
-        else:
-            builder, network, parser = util.unpack_args(self.arg_groups[TrtNetworkLoaderArgs].load_network(), 3)
-            with contextlib.ExitStack() as stack:
-                stack.enter_context(builder)
-                stack.enter_context(network)
-                if parser:
-                    stack.enter_context(parser)
-                network_str = trt_util.str_from_network(network, mode=args.mode).strip()
-                G_LOGGER.info("==== TensorRT Network ====\n{:}".format(network_str))
-
-    def inspect_onnx(self, args):
-        onnx_model = self.arg_groups[OnnxLoaderArgs].load_onnx()
-        model_str = onnx_util.str_from_onnx(onnx_model, mode=args.mode).strip()
-        G_LOGGER.info("==== ONNX Model ====\n{:}".format(model_str))
-
-    def inspect_tf(self, args):
-        tf_graph, _ = self.arg_groups[TfLoaderArgs].load_graph()
-        graph_str = tf_util.str_from_graph(tf_graph, mode=args.mode).strip()
-        G_LOGGER.info("==== TensorFlow Graph ====\n{:}".format(graph_str))
+        func()

@@ -25,6 +25,7 @@ from polygraphy.tools.args import (
     ModelArgs,
     OnnxLoaderArgs,
     OnnxrtRunnerArgs,
+    OnnxrtSessionArgs,
     OnnxSaveArgs,
     OnnxShapeInferenceArgs,
     PluginRefArgs,
@@ -136,6 +137,7 @@ class Run(Tool):
         self.subscribe_args(OnnxSaveArgs(output="save-onnx", short_opt=None))
         self.subscribe_args(OnnxShapeInferenceArgs())
         self.subscribe_args(OnnxLoaderArgs(save=True))
+        self.subscribe_args(OnnxrtSessionArgs())
         self.subscribe_args(OnnxrtRunnerArgs())
         self.subscribe_args(PluginRefArgs())
         self.subscribe_args(

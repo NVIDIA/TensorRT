@@ -31,7 +31,7 @@ we will focus on cases where you may want to:
     generated TensorRT network, which should be named `"MyIdentity"`:
 
     ```bash
-    polygraphy inspect model example.py --trt-network-func load_network --mode=full
+    polygraphy inspect model example.py --trt-network-func load_network --show layers attrs weights
     ```
 
 3. Run the example:
