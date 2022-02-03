@@ -29,7 +29,7 @@ Bounding box (region proposal) objectness scores. scores has shape `[N, A, H, W]
 Predicted bounding box offsets. `deltas` has shape `[N, A x 4, H, W]` where `N` is the batch size, `A` is the number anchor boxes per pixel on the feature map, `H` is the height of feature map, and `W` is the width of feature map. The second dimension is `A x 4` because each anchor box or bounding box consists of four parameters.
 
 
-The `proposalPlugin` generates the following two outputs:
+The `proposalPlugin` generates the following output:
 
 `rois`
 Coordinates of region of interest bounding boxes on the original input image. `rois` has shape `[N, B, 4, 1]`, where `N` is the batch size, `B` is the maximum number of region of interest bounding boxes, and `4` represents and region of interest bounding box coordinates `[y_1, x_1, y_2, x_2]`. Here, `x_1` and `y_1` are the coordinates of bounding box at the top-left corner, and `x_2` and `y_2` are the coordinates of bounding box at the bottom-right corner. The four coordinates are normalized to the range of (0, 1).
@@ -54,8 +54,8 @@ The plugin parameters are defined below and consists of the following attributes
 |`int`     |`rpn_stride`                  |The cummulative stride from model input to the region proposal network(RPN), usually is 16.
 |`float`   |`roi_min_size`                |The minimum size of the ROIs(at model input scaling), this is used to filter out small ROIs.
 |`float`   |`nms_iou_threshold`           |The IoU threshold for non-maximum-suppression(NMS).
-|`int`     |`pre_nms_top_N`               |The number of ROIs to be retained before doing NMS.
-|`int`     |`post_nms_top_N`              |The number of ROIs to be retained after doing NMS.
+|`int`     |`pre_nms_top_n`               |The number of ROIs to be retained before doing NMS.
+|`int`     |`post_nms_top_n`              |The number of ROIs to be retained after doing NMS.
 |`list`    |`anchor_sizes`                |The list of anchor sizes, used to construct the anchor boxes.
 |`list`    |`anchor_ratios`               |The list of anchor aspect ratios, used to construct the anchor boxes.
 
