@@ -83,3 +83,19 @@ def run_instancenorm(attrs, x, weights, bias):
 
     res = weights * (x - mean) / np.sqrt(var + epsilon) + bias
     return [res]
+
+
+@register("MeanVarianceNormalization")
+def run_meanvarnorm(attrs, x):
+    epsilon = 1.0e-9
+    axes = attrs.get("axes", [0, 2, 3])
+    axes = tuple(axes)
+
+    data_mean = np.mean(x, axis=axes, keepdims=True)
+    data_mean_squared = np.power(data_mean, 2)
+    data_squared = np.power(x, 2)
+    data_squared_mean = np.mean(data_squared, axis=axes, keepdims=True)
+    std = np.sqrt(data_squared_mean - data_mean_squared)
+    res = (x - data_mean) / (std + epsilon)
+
+    return [res]

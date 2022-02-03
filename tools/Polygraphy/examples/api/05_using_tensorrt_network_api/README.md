@@ -21,7 +21,7 @@ loader to seamlessly integrate a network defined using TensorRT APIs with Polygr
     This will invoke `create_network()` from within the script and display the generated TensorRT network:
 
     ```bash
-    polygraphy inspect model example.py --trt-network-func create_network --mode=full
+    polygraphy inspect model example.py --trt-network-func create_network --show layers attrs weights
     ```
 
 3. Run the example:

@@ -13,7 +13,7 @@ into TensorRT networks, and then display them.
 
     ```bash
     polygraphy inspect model identity.onnx \
-        --mode=basic --display-as=trt
+        --show layers --display-as=trt
     ```
 
     This will display something like:
@@ -34,4 +34,4 @@ into TensorRT networks, and then display them.
              -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
     ```
 
-    It is also possible to show detailed layer information, including layer attributes, using `--mode=full`.
+    It is also possible to show detailed layer information, including layer attributes, using `--show layers attrs weights`.

@@ -38,7 +38,7 @@ from polygraphy.backend.trt import (
     onnx_like_from_network,
 )
 from polygraphy.comparator import DataLoader
-from tests.helper import get_file_size, is_file_non_empty
+from tests.helper import get_file_size, has_dla, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
 
 ##
@@ -201,7 +201,7 @@ class TestModifyNetwork(object):
             assert network.num_outputs == 1
 
 
-class TestConfigLoader(object):
+class TestCreateConfig(object):
     def test_defaults(self, identity_builder_network):
         builder, network = identity_builder_network
         loader = CreateConfig()
@@ -221,7 +221,7 @@ class TestConfigLoader(object):
                 if mod.version(trt.__version__) < mod.version("8.0"):
                     assert config.get_tactic_sources() == 3
                 else:
-                    assert config.get_tactic_sources() == 7  
+                    assert config.get_tactic_sources() == 7
             with contextlib.suppress(AttributeError):
                 assert not config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
 
@@ -369,6 +369,42 @@ class TestConfigLoader(object):
             with cache.serialize() as buffer:
                 new_cache_size = len(bytes(buffer))
             assert cache_size == new_cache_size
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
+    def test_profiling_verbosity(self, identity_builder_network):
+        builder, network = identity_builder_network
+        expected = trt.ProfilingVerbosity.NONE
+        loader = CreateConfig(profiling_verbosity=expected)
+        with loader(builder, network) as config:
+            assert config.profiling_verbosity == expected
+
+    with contextlib.suppress(AttributeError):
+        POOL_LIMITS = [
+            {trt.MemoryPoolType.WORKSPACE: 25},
+            {trt.MemoryPoolType.DLA_MANAGED_SRAM: 25},
+            {trt.MemoryPoolType.DLA_LOCAL_DRAM: 25},
+            {trt.MemoryPoolType.DLA_GLOBAL_DRAM: 25},
+            # Multiple limits
+            {
+                trt.MemoryPoolType.DLA_LOCAL_DRAM: 20,
+                trt.MemoryPoolType.DLA_GLOBAL_DRAM: 25,
+                trt.MemoryPoolType.WORKSPACE: 39,
+            },
+        ]
+
+        @pytest.mark.skipif(
+            mod.version(trt.__version__) < mod.version("8.3"), reason="Unsupported for TRT versions prior to 8.3"
+        )
+        @pytest.mark.parametrize("pool_limits", POOL_LIMITS)
+        def test_memory_pool_limits(self, pool_limits, identity_builder_network):
+            if any("dla" in key.name.lower() for key in pool_limits) and not has_dla():
+                pytest.skip("DLA is not available on this system")
+
+            builder, network = identity_builder_network
+            loader = CreateConfig(memory_pool_limits=pool_limits)
+            with loader(builder, network) as config:
+                for pool_type, pool_size in pool_limits.items():
+                    assert config.get_memory_pool_limit(pool_type) == pool_size
 
 
 class TestEngineBytesFromNetwork(object):

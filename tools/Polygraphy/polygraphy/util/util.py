@@ -44,27 +44,28 @@ def check(cond, msg=None):
 
 
 @mod.export()
-def find_in_dict(name, mapping, index=None):
+def find_str_in_iterable(name, seq, index=None):
     """
-    Attempts to partially match keys in a dictionary. Checks for exact matches and
-    substring matches, falling back to index based matching.
+    Attempts to find matching strings in a sequence. Checks for exact matches, then
+    case-insensitive substring matches, finally falling back to index based matching.
 
     Args:
         name (str): The key to search for.
-        mapping (dict): The dictionary to search in.
-        index (int): An index to fall back to if the key could not be found by name.
+        seq (Sequence[str]): The dictionary to search in.
+        index (int): An index to fall back to if the string could not be found.
 
     Returns:
-        str: The key found in the dict, or None if it could not be found.
+        str: The element found in the sequence, or None if it could not be found.
     """
-    G_LOGGER.ultra_verbose("Searching for key: {:}. Fallback index is set to {:}".format(name, index))
-    if name in mapping:
+    if name in seq:
         return name
-    for key in mapping.keys():
-        if name.lower() in key.lower() or key.lower() in name.lower():
-            return key
-    if index is not None and index >= 0 and index < len(mapping.keys()):
-        return list(mapping.keys())[index]
+
+    for elem in seq:
+        if name.lower() in elem.lower() or elem.lower() in name.lower():
+            return elem
+
+    if index is not None and index < len(seq):
+        return list(seq)[index]
     return None
 
 

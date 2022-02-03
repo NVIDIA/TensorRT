@@ -52,4 +52,4 @@ For more details on working with dynamic shapes in TensorRT, refer to
 [`convert` example 03](../../convert/03_dynamic_shapes_in_tensorrt/) or
 [API example 07](../../../api/07_tensorrt_and_dynamic_shapes/).
 
-For details on how to supply real input data, see [`run` example 05](../05_comparing_with_custom_data/).
+For details on how to supply real input data, see [`run` example 05](../05_comparing_with_custom_input_data/).

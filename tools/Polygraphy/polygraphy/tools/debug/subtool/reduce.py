@@ -413,7 +413,7 @@ class Reduce(Tool):
                     "You may want to reduce {:} again using --mode=linear. ".format(self.arg_groups[OnnxSaveArgs].path)
                 )
 
-            G_LOGGER.info("Minimum Bad Model:\n{:}\n\n".format(onnx_util.str_from_onnx(reduced_model, mode="none")))
+            G_LOGGER.info("Minimum Bad Model:\n{:}\n\n".format(onnx_util.str_from_onnx(reduced_model)))
             self.arg_groups[OnnxSaveArgs].save_onnx(reduced_model)
 
         # == Write Good Model ==
@@ -425,7 +425,5 @@ class Reduce(Tool):
                     "Could not find a minimal model close in size to the reduced model that does not cause a failure."
                 )
             else:
-                G_LOGGER.info(
-                    "Minimum Good Model:\n{:}\n\n".format(onnx_util.str_from_onnx(min_good_model, mode="none"))
-                )
+                G_LOGGER.info("Minimum Good Model:\n{:}\n\n".format(onnx_util.str_from_onnx(min_good_model)))
                 self.arg_groups[OnnxSaveArgs].save_onnx(min_good_model, args.min_good)

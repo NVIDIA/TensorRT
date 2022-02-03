@@ -269,14 +269,13 @@ class CreateConfig(BaseLoader):
         restricted=None,
         use_dla=None,
         allow_gpu_fallback=None,
+        profiling_verbosity=None,
+        memory_pool_limits=None,
     ):
         """
         Creates a TensorRT IBuilderConfig that can be used by EngineFromNetwork.
 
         Args:
-            max_workspace_size (int):
-                    The maximum workspace size, in bytes, when building the engine.
-                    Defaults to 16 MiB.
             tf32 (bool):
                     Whether to build the engine with TF32 precision enabled.
                     Defaults to False.
@@ -332,8 +331,23 @@ class CreateConfig(BaseLoader):
                     [EXPERIMENTAL] When DLA is enabled, whether to allow layers to fall back to GPU if they cannot be run on DLA.
                     Has no effect if DLA is not enabled.
                     Defaults to False.
+            profiling_verbosity (trt.ProfilingVerbosity):
+                    The verbosity of NVTX annotations in the generated engine.
+                    Higher verbosity allows you to determine more information about the engine.
+                    Defaults to ``trt.ProfilingVerbosity.VERBOSE``.
+            memory_pool_limits (Dict[trt.MemoryPoolType, int]):
+                    Limits for different memory pools.
+                    This should be a mapping of pool types to their respective limits in bytes.
+            max_workspace_size (int):
+                    [DEPRECATED - use memory_pool_limits]
+                    The maximum workspace size, in bytes, when building the engine.
+                    Defaults to 16 MiB.
+
         """
         self.max_workspace_size = util.default(max_workspace_size, 1 << 24)
+        if max_workspace_size is not None:
+            mod.warn_deprecated("max_workspace_size", use_instead="memory_pool_limits", remove_in="0.45.0")
+
         self.tf32 = util.default(tf32, False)
         self.fp16 = util.default(fp16, False)
         self.int8 = util.default(int8, False)
@@ -348,6 +362,8 @@ class CreateConfig(BaseLoader):
         self.tactic_sources = tactic_sources
         self.use_dla = util.default(use_dla, False)
         self.allow_gpu_fallback = util.default(allow_gpu_fallback, False)
+        self.profiling_verbosity = profiling_verbosity
+        self.memory_pool_limits = memory_pool_limits
 
         if self.calibrator is not None and not self.int8:
             G_LOGGER.warning(
@@ -436,6 +452,22 @@ class CreateConfig(BaseLoader):
             if self.allow_gpu_fallback:
                 try_set_flag("GPU_FALLBACK")
 
+            if self.profiling_verbosity is not None:
+
+                def set_profiling_verbosity():
+                    config.profiling_verbosity = self.profiling_verbosity
+
+                try_run(set_profiling_verbosity, name="profiling_verbosity")
+            else:
+                try:
+                    config.profiling_verbosity = trt.ProfilingVerbosity.VERBOSE
+                except AttributeError:
+                    pass
+
+            if self.memory_pool_limits is not None:
+                for pool_type, pool_size in self.memory_pool_limits.items():
+                    try_run(lambda: config.set_memory_pool_limit(pool_type, pool_size), name="memory_pool_limits")
+
             if self.tactic_sources is not None:
                 tactic_sources_flag = 0
                 for source in self.tactic_sources:
@@ -461,7 +493,7 @@ class CreateConfig(BaseLoader):
                 def set_algo_selector():
                     config.algorithm_selector = self.algorithm_selector
 
-                try_run(set_algo_selector, "algorithm_selector")
+                try_run(set_algo_selector, name="algorithm_selector")
 
             return config
 
@@ -538,9 +570,16 @@ class EngineBytesFromNetwork(BaseLoader):
             else:
                 stack.enter_context(config.int8_calibrator)
 
-            network_log_mode = "full" if G_LOGGER.severity <= G_LOGGER.ULTRA_VERBOSE else "attrs"
             G_LOGGER.super_verbose(
-                lambda: ("Displaying TensorRT Network:\n" + trt_util.str_from_network(network, mode=network_log_mode))
+                lambda: (
+                    "Displaying TensorRT Network:\n"
+                    + trt_util.str_from_network(
+                        network,
+                        show_layers=True,
+                        show_attrs=True,
+                        show_weights=G_LOGGER.severity <= G_LOGGER.ULTRA_VERBOSE,
+                    )
+                )
             )
 
             G_LOGGER.start("Building engine with configuration:\n{:}".format(trt_util.str_from_config(config)))
@@ -561,15 +600,15 @@ class EngineBytesFromNetwork(BaseLoader):
 
             G_LOGGER.finish("Finished engine building in {:.3f} seconds".format(end_time - start_time))
 
-            try:
-                timing_cache = config.get_timing_cache()
-            except AttributeError:
-                if self.timing_cache_path:
+            if self.timing_cache_path:
+                try:
+                    timing_cache = config.get_timing_cache()
+                except AttributeError:
                     trt_util.fail_unavailable("save_timing_cache in EngineBytesFromNetwork")
-            else:
-                if timing_cache and self.timing_cache_path:
-                    with timing_cache.serialize() as buffer:
-                        util.save_file(buffer, self.timing_cache_path, description="tactic timing cache")
+                else:
+                    if timing_cache:
+                        with timing_cache.serialize() as buffer:
+                            util.save_file(buffer, self.timing_cache_path, description="tactic timing cache")
 
             return engine_bytes
 

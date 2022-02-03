@@ -114,13 +114,13 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
     ```bash
     polygraphy debug reduce folded.onnx -o initial_reduced.onnx --mode=bisect \
         --fail-regex "Op: Mul" \
-        --check polygraphy inspect model polygraphy_debug.onnx --mode=basic
+        --check polygraphy inspect model polygraphy_debug.onnx --show layers
     ```
 
 4. **[Optional]** As a sanity check, we can inspect our reduced model to ensure that it does contain the `Mul` node:
 
     ```bash
-    polygraphy inspect model initial_reduced.onnx --mode=basic
+    polygraphy inspect model initial_reduced.onnx --show layers
     ```
 
 5. Since we used `bisect` mode in the previous step, the model may not be as minimal as it could be.
@@ -137,12 +137,12 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
     ```bash
     polygraphy debug reduce initial_reduced.onnx -o final_reduced.onnx --mode=linear \
         --fail-regex "Op: Mul" \
-        --check polygraphy inspect model polygraphy_debug.onnx --mode=basic
+        --check polygraphy inspect model polygraphy_debug.onnx --show layers
     ```
 
 6. **[Optional]** At this stage, `final_reduced.onnx` should contain just the failing node - the `Mul`.
     We can verify this with `inspect model`:
 
     ```bash
-    polygraphy inspect model final_reduced.onnx --mode=basic
+    polygraphy inspect model final_reduced.onnx --show layers
     ```

@@ -88,12 +88,12 @@ class DataLoader(object):
 
         self.int_range_set = int_range is not None
         if self.int_range_set:
-            mod.warn_deprecated("The int_range parameter in DataLoader", "val_range", remove_in="0.35.0")
+            mod.warn_deprecated("The int_range parameter in DataLoader", "val_range", remove_in="0.50.0")
         self.int_range = default_tuple(int_range, (1, 25))
 
         self.float_range_set = float_range is not None
         if self.float_range_set:
-            mod.warn_deprecated("The float_range parameter in DataLoader", "val_range", remove_in="0.35.0")
+            mod.warn_deprecated("The float_range parameter in DataLoader", "val_range", remove_in="0.50.0")
         self.float_range = default_tuple(float_range, (-1.0, 1.0))
 
         self.input_metadata = None
@@ -247,7 +247,7 @@ class DataLoader(object):
                 msg = "Input tensor: {:} | Metadata was provided, but the input does not exist in one or more runners.".format(
                     name
                 )
-                close_match = util.find_in_dict(name, self.input_metadata)
+                close_match = util.find_str_in_iterable(name, self.input_metadata.keys())
                 if close_match:
                     msg += "\nMaybe you meant to set: {:}?".format(close_match)
                 G_LOGGER.warning(msg)
@@ -282,7 +282,7 @@ class DataLoaderCache(object):
         # Attempts to match existing input buffers to the requested input_metadata
         def coerce_cached_input(index, name, dtype, shape):
             cached_feed_dict = self.cache[iteration]
-            cached_name = util.find_in_dict(name, cached_feed_dict, index)
+            cached_name = util.find_str_in_iterable(name, cached_feed_dict.keys(), index)
             util.check(cached_name is not None)
 
             if cached_name != name:

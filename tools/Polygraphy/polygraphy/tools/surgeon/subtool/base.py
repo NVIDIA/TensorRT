@@ -30,7 +30,7 @@ class BaseSurgeonSubtool(Tool):
     def load_model(self, log_model=True):
         model = self.arg_groups[OnnxLoaderArgs].load_onnx()
         if log_model:
-            G_LOGGER.info("Original Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model, mode="none")))
+            G_LOGGER.info("Original Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model)))
         return model
 
     # Since new graph outputs may be added, and we don't know the types,
@@ -41,7 +41,7 @@ class BaseSurgeonSubtool(Tool):
     def save_model(self, model, log_model=True):
         model = self.arg_groups[OnnxSaveArgs].save_onnx(model)
         if log_model:
-            G_LOGGER.info("New Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model, mode="none")))
+            G_LOGGER.info("New Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model)))
 
     def run_impl(self, args):
         raise NotImplementedError("Subclasses must implement run_impl!")

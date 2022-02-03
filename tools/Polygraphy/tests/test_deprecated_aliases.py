@@ -13,44 +13,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import pytest
+
+from tests.models.meta import ONNX_MODELS, TF_MODELS
+from tests.tools.common import run_polygraphy_inspect
 
 
-class TestCuda(object):
-    def test_cuda(self):
-        from polygraphy.common import cuda
-
-        assert cuda.DeviceArray
-
-
-class TestFunc(object):
-    def test_func(self):
-        from polygraphy.common import func
-
-        assert hasattr(func, "extend")
+@pytest.fixture(scope="session", params=["none", "basic", "attrs", "full"])
+def run_inspect_model_deprecated(request):
+    yield lambda additional_opts: run_polygraphy_inspect(
+        ["model"] + ["--mode={:}".format(request.param)] + additional_opts
+    )
 
 
-class TestException(object):
-    def test_exception(self):
-        from polygraphy.common import exception
+class TestInspectModelDeprecated(object):
+    def test_model_onnx(self, run_inspect_model_deprecated):
+        run_inspect_model_deprecated([ONNX_MODELS["identity"].path])
 
-        assert hasattr(exception, "PolygraphyException")
+    def test_model_trt_sanity(self, run_inspect_model_deprecated):
+        run_inspect_model_deprecated([ONNX_MODELS["identity"].path, "--display-as=trt"])
+
+    def test_model_tf_sanity(self, run_inspect_model_deprecated):
+        pytest.importorskip("tensorflow")
+
+        run_inspect_model_deprecated([TF_MODELS["identity"].path, "--model-type=frozen"])
 
 
 class TestConstants(object):
-    def test_constants(self):
-        from polygraphy.common import constants
-
-        assert constants.MARK_ALL
-
     def test_config(self):
         from polygraphy import constants
 
         assert (constants.INTERNAL_CORRECTNESS_CHECKS, constants.AUTOINSTALL_DEPS)
-
-
-class TestUtilJson(object):
-    def test_json(self):
-        from polygraphy.util import Decoder, Encoder, from_json, load_json, save_json, to_json
 
 
 class TestCompareFunc(object):

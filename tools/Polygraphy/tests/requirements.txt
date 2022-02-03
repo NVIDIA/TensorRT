@@ -1,9 +1,9 @@
 colored
 numpy
 onnx_graphsurgeon>=0.3.4
-onnx==1.9.0
+onnx==1.10.0
 onnxmltools
-onnxruntime==1.8.1
+onnxruntime==1.10.0
 pytest
 pytest-virtualenv
 pytest-xdist

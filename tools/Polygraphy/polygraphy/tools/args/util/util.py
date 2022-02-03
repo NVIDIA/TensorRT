@@ -155,7 +155,7 @@ def np_type_from_str(dt_str):
 
 
 @mod.export()
-def parse_dict_with_default(arg_lst, cast_to=None, sep=None):
+def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=None):
     """
     Generate a dictionary from a list of arguments of the form:
     ``<key>:<val>``. If ``<key>`` is empty, the value will be assigned
@@ -165,15 +165,19 @@ def parse_dict_with_default(arg_lst, cast_to=None, sep=None):
         arg_lst (List[str]):
                 The arguments to map.
 
-        cast_to (type):
-                The type to cast the values in the map. By default,
-                uses the type returned by ``cast``.
+        cast_to (Callable):
+                A callable to cast types before adding them to the map.
+                Defaults to `cast()`.
         sep (str):
                 The separator between the key and value strings.
+        allow_empty_key (bool):
+                Whether empty keys should be allowed.
     Returns:
         Dict[str, obj]: The mapping.
     """
     sep = util.default(sep, ":")
+    cast_to = util.default(cast_to, cast)
+    allow_empty_key = util.default(allow_empty_key, True)
 
     if arg_lst is None:
         return
@@ -181,15 +185,16 @@ def parse_dict_with_default(arg_lst, cast_to=None, sep=None):
     arg_map = {}
     for arg in arg_lst:
         key, _, val = arg.rpartition(sep)
-        val = cast(val)
-        if cast_to:
-            val = cast_to(val)
-        arg_map[key] = val
+        if not key and not allow_empty_key:
+            G_LOGGER.critical(
+                "Could not parse argument: {:}. Expected an argument in the format: `key{:}value`.\n".format(arg, sep)
+            )
+        arg_map[key] = cast_to(val)
     return arg_map
 
 
 @mod.deprecate(
-    remove_in="0.35.0",
+    remove_in="0.42.0",
     use_instead=": as a separator and write shapes in the form [dim0,...,dimN]",
     name="Using , as a separator",
 )

@@ -14,3 +14,4 @@
 # limitations under the License.
 #
 from polygraphy.tools.args.onnxrt.runner import *
+from polygraphy.tools.args.onnxrt.loader import *
