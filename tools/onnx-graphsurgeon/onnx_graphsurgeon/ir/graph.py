@@ -372,10 +372,22 @@ class Graph(object):
             # Return all local nodes that contribute to this node.
             def get_input_nodes(node):
                 inputs = {}
-                for tensor in node.inputs:
+
+                def add_local_producers(tensor):
+                    nonlocal inputs
                     if tensor.name in local_tensors:
                         for inp_node in tensor.inputs:
                             inputs[self._get_node_id(inp_node)] = inp_node
+
+                for tensor in node.inputs:
+                    add_local_producers(tensor)
+
+                # If a node includes a subgraph, get any tensors that it uses from the outer graph.
+                for attr in node.attrs.values():
+                    if isinstance(attr, Graph):
+                        for tensor in attr._foreign_tensors().values():
+                            add_local_producers(tensor)
+
                 return inputs.values()
 
             if self._get_node_id(node) in hierarchy_levels:
