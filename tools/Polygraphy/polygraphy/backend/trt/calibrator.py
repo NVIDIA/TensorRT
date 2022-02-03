@@ -48,7 +48,7 @@ def Calibrator(
                 By default, the calibration cache is not saved.
         BaseClass (type):
                 The type of calibrator to inherit from.
-                Defaults to ``trt.IInt8MinMaxCalibrator``.
+                Defaults to ``trt.IInt8EntropyCalibrator2``.
         batch_size (int):
                 [DEPRECATED] The size of each batch provided by the data loader.
         quantile (float):
@@ -64,7 +64,7 @@ def Calibrator(
                 Has no effect for other calibrator types.
                 Defaults to ``trt.CalibrationAlgoType.MINMAX_CALIBRATION``.
     """
-    BaseClass = util.default(BaseClass, trt.IInt8MinMaxCalibrator)
+    BaseClass = util.default(BaseClass, trt.IInt8EntropyCalibrator2)
 
     class CalibratorClass(BaseClass):
         """

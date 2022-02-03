@@ -149,17 +149,22 @@ def get_output_metadata(graph):
     return get_tensor_metadata(graph.output)
 
 
-def str_from_onnx(model, mode="full"):
+def str_from_onnx(model, show_layers=None, show_attrs=None, show_weights=None):
     """
     Converts an ONNX Graph to a human-readable representation
 
     Args:
         graph (onnx.GraphProto): The onnx graph.
-        mode (str): Controls what is displayed. Choices: ["none", "basic", "attrs", "full"]
+        show_layers (bool): Whether to display per-layer information.
+        show_attrs (bool): Whether to display per-layer attributes.
+        show_weights (bool): Whether to display the value of weights.
 
     Returns:
         str
     """
+    show_layers = util.default(show_layers, False)
+    show_attrs = util.default(show_attrs, False)
+    show_weights = util.default(show_weights, False)
 
     def get_opset():
         try:
@@ -172,11 +177,14 @@ def str_from_onnx(model, mode="full"):
     onnx_str += "Name: {:} | Opset: {:}\n".format(model.graph.name, get_opset())
     onnx_str += "\n"
 
-    onnx_str += str_from_onnx_graph(model.graph, mode=mode, tensors={})
+    onnx_str += str_from_onnx_graph(
+        model.graph, tensors={}, show_layers=show_layers, show_attrs=show_attrs, show_weights=show_weights
+    )
     return onnx_str
 
 
-def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
+def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, indent_level=0):
+
     input_metadata = get_input_metadata(graph)
     output_metadata = get_output_metadata(graph)
     initializer_metadata = get_tensor_metadata(graph.initializer)
@@ -195,14 +203,14 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
     onnx_str += "---- {:} {:} Output(s) ----\n{:}\n\n".format(len(output_metadata), graph_type, output_metadata)
 
     onnx_str += "---- {:} Initializer(s) ----\n".format(len(initializer_metadata))
-    if mode == "full":
+    if show_weights:
         for init in graph.initializer:
             onnx_str += "Initializer | {:} [dtype={:}, shape={:}] | Values:\n{:}\n\n".format(
                 init.name, get_dtype(init), get_shape(init), util.indent_block(str(get_values(init)))
             )
         if not graph.initializer:
             onnx_str += "{}\n\n"
-    elif mode != "none":
+    elif show_layers:
         onnx_str += str(initializer_metadata)
         onnx_str += "\n\n"
     else:
@@ -242,11 +250,18 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
                     processed = processed.decode()
                 elif attr_str == "TENSOR":
                     tensor_str = "Tensor: [dtype={:}, shape={:}]".format(get_dtype(processed), get_shape(processed))
-                    if mode == "full":
+                    if show_weights:
                         tensor_str += " | Values:\n" + util.indent_block(str(get_values(processed)))
                     processed = tensor_str
                 elif attr_str == "GRAPH":
-                    processed = "\n" + str_from_onnx_graph(processed, mode, tensors, indent_level=indent_level + 2)
+                    processed = "\n" + str_from_onnx_graph(
+                        processed,
+                        tensors,
+                        indent_level=indent_level + 2,
+                        show_layers=show_layers,
+                        show_attrs=show_attrs,
+                        show_weights=show_weights,
+                    )
                 elif attr_str == "FLOATS" or attr_str == "INTS":
                     # Proto hacky list to normal Python list
                     processed = [p for p in processed]
@@ -270,14 +285,14 @@ def str_from_onnx_graph(graph, mode, tensors, indent_level=0):
         return attr_dict
 
     onnx_str += "---- {:} Node(s) ----\n".format(len(graph.node))
-    if mode != "none":
+    if show_layers:
         for index, node in enumerate(graph.node):
             input_info = metadata_from_names(node.input)
             output_info = metadata_from_names(node.output)
 
             onnx_str += util.str_from_layer("Node", index, node.name, node.op_type, input_info, output_info)
 
-            if mode in ["attrs", "full"]:
+            if show_attrs:
                 attrs = attrs_to_dict(node.attribute)
                 if attrs:
                     onnx_str += util.indent_block("---- Attributes ----") + "\n"

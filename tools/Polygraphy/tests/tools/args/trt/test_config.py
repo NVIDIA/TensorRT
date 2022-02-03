@@ -14,14 +14,17 @@
 # limitations under the License.
 #
 
+import contextlib
 from textwrap import dedent
 
+import polygraphy.tools.args.util as args_util
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util
 from polygraphy.backend.trt import TacticRecorder, TacticReplayData, TacticReplayer, create_network
 from polygraphy.exception import PolygraphyException
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, TrtConfigArgs
+from tests.helper import has_dla
 from tests.tools.args.helper import ArgGroupTestHelper
 
 
@@ -90,6 +93,13 @@ class TestTrtConfigArgs(object):
             assert config.default_device_type == trt.DeviceType.DLA
             assert config.DLA_core == 0
 
+    def test_calibrator_when_dla(self, trt_config_args):
+        trt_config_args.parse_args(["--use-dla", "--int8"])
+
+        builder, network = create_network()
+        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+            assert isinstance(config.int8_calibrator, trt.IInt8EntropyCalibrator2)
+
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="SAFETY_SCOPE was added in TRT 8")
     def test_restricted_flags(self, trt_config_args):
         trt_config_args.parse_args(["--trt-safety-restricted"])
@@ -97,17 +107,6 @@ class TestTrtConfigArgs(object):
 
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
             assert config.get_flag(getattr(trt.BuilderFlag, "SAFETY_SCOPE"))
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Bugged before TRT 8")
-    def test_tactic_replay(self, trt_config_args):
-        with util.NamedTemporaryFile(suffix=".json") as f:
-            trt_config_args.parse_args(["--tactic-replay", f.name])
-            builder, network = create_network()
-
-            with builder, network, trt_config_args.create_config(builder, network=network) as config:
-                recorder = config.algorithm_selector
-                assert recorder.make_func == TacticRecorder
-                assert recorder.path == f.name
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Bugged before TRT 8")
     @pytest.mark.parametrize(
@@ -259,3 +258,47 @@ class TestTrtConfigArgs(object):
     def test_code_injection_checks(self, trt_config_args, args):
         with pytest.raises(PolygraphyException):
             trt_config_args.parse_args(args)
+
+    with contextlib.suppress(AttributeError):
+
+        @pytest.mark.skipif(
+            mod.version(trt.__version__) < mod.version("8.3"), reason="Unsupported for TRT versions prior to 8.3"
+        )
+        @pytest.mark.parametrize(
+            "args,expected",
+            [
+                (["--pool-limit", "workspace:250"], {trt.MemoryPoolType.WORKSPACE: 250}),
+                (["--pool-limit", "dla_managed_sram:250"], {trt.MemoryPoolType.DLA_MANAGED_SRAM: 250}),
+                (["--pool-limit", "dla_local_dram:250"], {trt.MemoryPoolType.DLA_LOCAL_DRAM: 250}),
+                (["--pool-limit", "dla_global_dram:250"], {trt.MemoryPoolType.DLA_GLOBAL_DRAM: 250}),
+                # Test case insensitivity
+                (["--pool-limit", "wOrkSpaCE:250"], {trt.MemoryPoolType.WORKSPACE: 250}),
+                # Test works with K/M/G suffixes
+                (["--pool-limit", "workspace:2M"], {trt.MemoryPoolType.WORKSPACE: 2 << 20}),
+                # Test works with scientific notation
+                (["--pool-limit", "workspace:2e3"], {trt.MemoryPoolType.WORKSPACE: 2e3}),
+            ],
+        )
+        def test_memory_pool_limits(self, args, expected, trt_config_args):
+            trt_config_args.parse_args(args)
+            builder, network = create_network()
+            loader = args_util.run_script(trt_config_args.add_trt_config_loader)
+            assert loader.memory_pool_limits == expected
+            with builder, network, loader(builder, network=network) as config:
+                for pool_type, pool_size in expected.items():
+                    if "dla" in pool_type.name.lower() and not has_dla():
+                        pytest.skip("DLA is not available on this system")
+                    config.get_memory_pool_limit(pool_type) == pool_size
+
+        @pytest.mark.skipif(
+            mod.version(trt.__version__) < mod.version("8.3"), reason="Unsupported for TRT versions prior to 8.3"
+        )
+        @pytest.mark.parametrize(
+            "args",
+            [
+                ["--pool-limit", "250"],
+            ],
+        )
+        def test_memory_pool_limits_empty_key_not_allowed(self, args, trt_config_args):
+            with pytest.raises(PolygraphyException, match="Could not parse argument"):
+                trt_config_args.parse_args(args)

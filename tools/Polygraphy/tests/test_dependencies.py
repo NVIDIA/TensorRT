@@ -32,8 +32,9 @@ the various modules under Polygraphy.
 
 
 @pytest.fixture()
-def virtualenv_with_poly(virtualenv):
+def polygraphy_venv(virtualenv):
     virtualenv.env["PYTHONPATH"] = ROOT_DIR
+    virtualenv.env["LD_LIBRARY_PATH"] = ""
     yield virtualenv
 
 
@@ -52,31 +53,35 @@ SUBMODULE_PATHS = [
 
 
 class TestPublicImports(object):
-    def test_no_extra_submodule_dependencies_required(self, virtualenv_with_poly):
+    def test_no_extra_submodule_dependencies_required(self, polygraphy_venv):
         # Submodules should not require any extra dependencies to import.
         for submodule_path in SUBMODULE_PATHS:
             submodule_name = ".".join(submodule_path.split(os.path.sep))
-            cmd = ["python3", "-c", "from {:} import *".format(submodule_name)]
+            cmd = [polygraphy_venv.python, "-c", "from {:} import *".format(submodule_name)]
             print(" ".join(cmd))
-            output = virtualenv_with_poly.run(cmd, capture=True)
+            output = polygraphy_venv.run(cmd, capture=True)
             print(output)
 
-    def test_can_json_without_numpy(self, virtualenv_with_poly):
-        cmd = ["python3", "-c", "from polygraphy.json import to_json, from_json; x = to_json(1); x = from_json(x)"]
+    def test_can_json_without_numpy(self, polygraphy_venv):
+        cmd = [
+            polygraphy_venv.python,
+            "-c",
+            "from polygraphy.json import to_json, from_json; x = to_json(1); x = from_json(x)",
+        ]
         print(" ".join(cmd))
-        output = virtualenv_with_poly.run(cmd, capture=True)
+        output = polygraphy_venv.run(cmd, capture=True)
         print(output)
 
 
 class TestToolImports(object):
     # We should be able to at least launch tools with no dependencies installed.
     @pytest.mark.parametrize("tool, subtools", ALL_TOOLS.items())
-    def test_can_run_tool_without_deps(self, virtualenv_with_poly, tool, subtools):
+    def test_can_run_tool_without_deps(self, polygraphy_venv, tool, subtools):
         POLYGRAPHY_BIN = os.path.join(ROOT_DIR, "bin", "polygraphy")
-        BASE_TOOL_CMD = ["python3", POLYGRAPHY_BIN, tool, "-h"]
+        BASE_TOOL_CMD = [polygraphy_venv.python, POLYGRAPHY_BIN, tool, "-h"]
 
         def check_tool(tool):
-            output = virtualenv_with_poly.run(tool, capture=True)
+            output = polygraphy_venv.run(tool, capture=True)
             assert "This tool could not be loaded due to an error:" not in output
             assert "error:" not in output
             assert "could not be loaded" not in output
@@ -103,18 +108,15 @@ class TestAutoinstallDeps(object):
             ],
         ],
     )
-    def test_can_automatically_install_deps(self, virtualenv_with_poly, cmd):
+    def test_can_automatically_install_deps(self, polygraphy_venv, cmd):
         if "--trt" in cmd and mod.version(trt.__version__) < mod.version("7.0"):
             pytest.skip("TRT 6 container has an old version of CUDA")
 
-        if "--trt" in cmd:
-            pytest.xfail("TensorRT 8.0.1.6 wheels are currently broken")
-
-        virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
+        polygraphy_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
         POLYGRAPHY_BIN = os.path.join(ROOT_DIR, "bin", "polygraphy")
-        cmd = ["python3", POLYGRAPHY_BIN] + cmd
+        cmd = [polygraphy_venv.python, POLYGRAPHY_BIN] + cmd
         print("Running: {:}".format(" ".join(cmd)))
-        output = virtualenv_with_poly.run(cmd, capture=True)
+        output = polygraphy_venv.run(cmd, capture=True)
         print(output)
         assert "is required, but not installed. Attempting to install now" in output
 
@@ -125,19 +127,19 @@ class TestAutoinstallDeps(object):
             (mod.LATEST_VERSION, ">=1.4.2"),
         ],
     )
-    def test_can_automatically_upgrade_deps(self, virtualenv_with_poly, new_ver, expected):
-        virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
+    def test_can_automatically_upgrade_deps(self, polygraphy_venv, new_ver, expected):
+        polygraphy_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
 
         def get_colored_version():
-            return virtualenv_with_poly.installed_packages()["colored"].version
+            return polygraphy_venv.installed_packages()["colored"].version
 
-        virtualenv_with_poly.run(["python3", "-m", "pip", "install", "colored==1.4.0"])
+        polygraphy_venv.run([polygraphy_venv.python, "-m", "pip", "install", "colored==1.4.0"])
         assert get_colored_version() == "1.4.0"
 
         # Insert our own preferred version to make sure it upgrades.
-        virtualenv_with_poly.run(
+        polygraphy_venv.run(
             [
-                "python3",
+                polygraphy_venv.python,
                 "-c",
                 "from polygraphy import mod; "
                 "colored = mod.lazy_import('colored', version='{:}'); "
@@ -146,27 +148,27 @@ class TestAutoinstallDeps(object):
         )
         assert _version_ok(get_colored_version(), expected)
 
-    def test_autoinstall(self, virtualenv_with_poly):
-        virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
-        assert "colored" not in virtualenv_with_poly.installed_packages()
+    def test_autoinstall(self, polygraphy_venv):
+        polygraphy_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
+        assert "colored" not in polygraphy_venv.installed_packages()
 
-        virtualenv_with_poly.run(
+        polygraphy_venv.run(
             [
-                "python3",
+                polygraphy_venv.python,
                 "-c",
                 "from polygraphy import mod; " "colored = mod.lazy_import('colored'); " "mod.autoinstall(colored)",
             ]
         )
 
-        assert "colored" in virtualenv_with_poly.installed_packages()
+        assert "colored" in polygraphy_venv.installed_packages()
 
     # We can import inner modules, and Polygraphy should still autoinstall the outermost one.
-    def test_can_install_for_nested_import(self, virtualenv_with_poly):
-        virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
+    def test_can_install_for_nested_import(self, polygraphy_venv):
+        polygraphy_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
 
-        virtualenv_with_poly.run(
+        polygraphy_venv.run(
             [
-                "python3",
+                polygraphy_venv.python,
                 "-c",
                 "from polygraphy import mod; "
                 "shape_inference = mod.lazy_import('onnx.shape_inference'); "
@@ -174,7 +176,7 @@ class TestAutoinstallDeps(object):
             ]
         )
 
-        assert "onnx" in virtualenv_with_poly.installed_packages()
+        assert "onnx" in polygraphy_venv.installed_packages()
 
     def test_all_lazy_imports(self):
         # NOTE: If this test fails, it means a new lazy dependency has been

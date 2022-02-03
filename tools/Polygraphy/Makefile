@@ -19,6 +19,7 @@ leak_check:
 	export PYTHONPATH=$(CURDIR):$${PYTHONPATH} && \
 	    export PATH=$(CURDIR)/bin:$${PATH} && \
 	    export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1 && \
+		export PYTHONMALLOC=malloc && \
 		valgrind --leak-check=full python3 -m pytest tests/ -v --durations=5 2>&1 | tee leak-check.log
 
 clean:

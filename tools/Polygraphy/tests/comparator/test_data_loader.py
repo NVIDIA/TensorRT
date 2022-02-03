@@ -28,7 +28,7 @@ def meta(dtype):
 
 
 class TestDataLoader(object):
-    @pytest.mark.parametrize("dtype", [np.int32, np.bool, np.float32, np.int64])
+    @pytest.mark.parametrize("dtype", [np.int32, bool, np.float32, np.int64])
     def test_default_ranges(self, dtype):
         data_loader = DataLoader(input_metadata=meta(dtype))
         x, y = data_loader[0].values()
@@ -47,7 +47,7 @@ class TestDataLoader(object):
         feed_dict = data_loader[0]
         assert tuple(feed_dict["X"].shape) == shape
 
-    @pytest.mark.parametrize("dtype", [np.int32, np.bool, np.float32, np.int64])
+    @pytest.mark.parametrize("dtype", [np.int32, bool, np.float32, np.int64])
     @pytest.mark.parametrize("range_val", [0, 1])
     def test_range_min_max_equal(self, dtype, range_val):
         data_loader = DataLoader(input_metadata=meta(dtype), val_range=(range_val, range_val))
@@ -60,7 +60,7 @@ class TestDataLoader(object):
         [
             (0, 1, np.int32),
             (5.0, 5.5, np.float32),
-            (0, 1, np.bool),
+            (0, 1, bool),
         ],
     )
     def test_val_ranges(self, range):

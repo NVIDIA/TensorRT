@@ -35,33 +35,28 @@ def test_volume(case):
     assert util.volume(it) == vol
 
 
-class FindInDictCase(object):
-    def __init__(self, name, map, index, expected):
+class FindStrInIterableCase(object):
+    def __init__(self, name, seq, index, expected):
         self.name = name
-        self.map = map
+        self.seq = seq
         self.index = index
         self.expected = expected
 
 
-FIND_IN_DICT_CASES = [
-    FindInDictCase(
-        "resnet50_v1.5/output/Softmax:0",
-        map={"resnet50_v1.5/output/Softmax:0": "x"},
-        index=None,
-        expected="resnet50_v1.5/output/Softmax:0",
-    ),
-    FindInDictCase(
-        "resnet50_v1.5/output/Softmax:0",
-        map={"resnet50_v1.5/output/softmax:0": "x"},
-        index=None,
-        expected="resnet50_v1.5/output/softmax:0",
-    ),
+FIND_STR_IN_ITERABLE_CASES = [
+    # Case insensitve, plus function should return element from sequence, not name.
+    FindStrInIterableCase("Softmax:0", seq=["Softmax:0"], index=None, expected="Softmax:0"),
+    FindStrInIterableCase("Softmax:0", seq=["softmax:0"], index=None, expected="softmax:0"),
+    # Exact matches should take priority
+    FindStrInIterableCase("exact_name", seq=["exact_name_plus", "exact_name"], index=0, expected="exact_name"),
+    # Index should come into play when no matches are found
+    FindStrInIterableCase("non-existent", seq=["test", "test2"], index=1, expected="test2"),
 ]
 
 
-@pytest.mark.parametrize("case", FIND_IN_DICT_CASES)
-def test_find_in_dict(case):
-    actual = util.find_in_dict(case.name, case.map, case.index)
+@pytest.mark.parametrize("case", FIND_STR_IN_ITERABLE_CASES)
+def test_find_str_in_iterable(case):
+    actual = util.find_str_in_iterable(case.name, case.seq, case.index)
     assert actual == case.expected
 
 

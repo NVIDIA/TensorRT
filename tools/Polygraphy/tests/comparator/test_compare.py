@@ -23,8 +23,8 @@ from polygraphy.logger import G_LOGGER
 
 class TestBasicCompareFunc(object):
     def test_can_compare_bool(self):
-        iter_result0 = IterationResult(outputs={"output": np.zeros((4, 4), dtype=np.bool)})
-        iter_result1 = IterationResult(outputs={"output": np.ones((4, 4), dtype=np.bool)})
+        iter_result0 = IterationResult(outputs={"output": np.zeros((4, 4), dtype=bool)})
+        iter_result1 = IterationResult(outputs={"output": np.ones((4, 4), dtype=bool)})
 
         compare_func = CompareFunc.simple()
         acc = compare_func(iter_result0, iter_result1)

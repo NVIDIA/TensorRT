@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 import contextlib
+import json
 
 from polygraphy import config, mod, util
 from polygraphy.common import TensorMetadata
@@ -188,17 +189,23 @@ def get_layer_attribute_names(layer):
     ]
 
 
-def str_from_network(network, mode="full"):
+def str_from_network(network, show_layers=None, show_attrs=None, show_weights=None):
     """
     Converts a TensorRT network to a human-readable representation
 
     Args:
         network (trt.INetworkDefinition): The network.
-        mode (str): Controls what is displayed for each layer. Choices: ["none", "basic", "attrs", "full"]
+        show_layers (bool): Whether to display per-layer information.
+        show_attrs (bool): Whether to display per-layer attributes.
+        show_weights (bool): Whether to display the value of weights.
 
     Returns:
         str
     """
+    show_layers = util.default(show_layers, False)
+    show_attrs = util.default(show_attrs, False)
+    show_weights = util.default(show_weights, False)
+
     LAYER_TYPE_CLASS_MAPPING = get_layer_class_mapping()
 
     network_str = "Name: {:} | {:} Batch Network{:}\n".format(
@@ -217,14 +224,14 @@ def str_from_network(network, mode="full"):
     output_metadata = get_network_output_metadata(network)
     network_str += "---- {:} Network Output(s) ----\n{:}\n\n".format(len(output_metadata), output_metadata)
     network_str += "---- {:} Layer(s) ----\n".format(network.num_layers)
-    if mode != "none":
+    if show_layers:
         for index, layer in enumerate(network):
             if layer.type in LAYER_TYPE_CLASS_MAPPING:
                 layer.__class__ = LAYER_TYPE_CLASS_MAPPING[layer.type]
 
             network_str += str_from_layer(layer, index)
 
-            if mode in ["attrs", "full"]:
+            if show_attrs:
                 # Exclude special attributes, as well as any attributes of the base layer class (those can be displayed above).
                 attrs = get_layer_attribute_names(layer)
                 if attrs:
@@ -232,7 +239,7 @@ def str_from_network(network, mode="full"):
                 for attr in attrs:
                     with G_LOGGER.verbosity():
                         val = getattr(layer, attr)
-                    if mode == "full" or not isinstance(val, np.ndarray):
+                    if show_weights or not isinstance(val, np.ndarray):
                         attr_str = ""
                         if layer.name:
                             attr_str += "{:}.".format(layer.name)
@@ -436,15 +443,17 @@ def get_output_metadata_from_engine(engine, start_binding, end_binding):
     return outputs
 
 
-def str_from_engine(engine):
+def str_from_engine(engine, show_layers=None, show_attrs=None):
+    show_layers = util.default(show_layers, False)
+    show_attrs = util.default(show_attrs, False)
+
     bindings_per_profile = get_bindings_per_profile(engine)
-    engine_str = "Name: {:} | {:}{:} Batch Engine ({:} layers)\n".format(
+    engine_str = "Name: {:} | {:}{:} Batch Engine\n".format(
         engine.name,
         "Refittable " if engine.refittable else "",
         "Implicit"
         if hasattr(engine, "has_implicit_batch_dimension") and engine.has_implicit_batch_dimension
         else "Explicit",
-        engine.num_layers,
     )
     engine_str += "\n"
 
@@ -481,6 +490,82 @@ def str_from_engine(engine):
             else:
                 engine_str += " | Shape: {:}\n".format(engine.get_binding_shape(binding))
         engine_str += "\n"
+
+    layers_per_profile = engine.num_layers // engine.num_optimization_profiles
+    engine_str += "---- {:} Layer(s){:} ----\n".format(
+        layers_per_profile, " Per Profile" if engine.num_optimization_profiles > 1 else ""
+    )
+    if show_layers:
+        try:
+            inspector = engine.create_engine_inspector()
+        except AttributeError:
+            G_LOGGER.warning(
+                "Cannot show layer information because IEngineInspector is not available in this version of TensorRT ({:})".format(
+                    trt.__version__
+                )
+            )
+        else:
+            for profile_idx in range(engine.num_optimization_profiles):
+                indent_level = 0
+                if engine.num_optimization_profiles >= 1:
+                    indent_level = 1
+                    engine_str += "- Profile: {:}\n".format(profile_idx)
+
+                offset = profile_idx * layers_per_profile
+                for index in range(layers_per_profile):
+                    layer_info = json.loads(
+                        inspector.get_layer_information(offset + index, trt.LayerInformationFormat.JSON)
+                    )
+
+                    op = "Unknown"
+                    input_info = TensorMetadata()
+                    output_info = TensorMetadata()
+                    origin = "Unknown"
+                    tactic = "Unknown"
+                    if engine.profiling_verbosity == trt.ProfilingVerbosity.DETAILED:
+                        name = layer_info.get("Name", "Unknown")
+                        op = layer_info.get("LayerType", "Unknown")
+
+                        def meta_from_inspector(key):
+                            meta = TensorMetadata()
+                            info = layer_info.get(key)
+                            if info is None:
+                                return meta
+                            for elem in info:
+                                meta.add(name=elem["Name"], dtype=None, shape=elem["Dimensions"])
+                            return meta
+
+                        input_info = meta_from_inspector("Inputs")
+                        output_info = meta_from_inspector("Outputs")
+                        origin = layer_info.get("Origin", "Unknown")
+                        tactic = layer_info.get("TacticValue", "Unknown")
+                    else:
+                        G_LOGGER.warning(
+                            "This engine was created with a profiling verbosity of: {:}. Some layer information may be missing. "
+                            "Try setting a higher profiling verbosity to see more detailed layer information. ".format(
+                                engine.profiling_verbosity
+                            ),
+                            mode=LogMode.ONCE,
+                        )
+                        name = layer_info
+
+                    engine_str += (
+                        util.indent_block(
+                            util.str_from_layer(
+                                "Layer", index, name, op, input_info=input_info, output_info=output_info
+                            ),
+                            indent_level,
+                        )
+                        + "\n"
+                    )
+
+                    if show_attrs:
+                        engine_str += util.indent_block("---- Attributes ----", indent_level + 1) + "\n"
+                        engine_str += util.indent_block("Origin = {:}".format(origin), indent_level + 1) + "\n"
+                        engine_str += util.indent_block("Tactic = {:}".format(tactic), indent_level + 1) + "\n"
+
+                    engine_str += "\n"
+
     return util.indent_block(engine_str, level=0)
 
 

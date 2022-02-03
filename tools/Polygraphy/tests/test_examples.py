@@ -139,7 +139,11 @@ CLI_EXAMPLES = [
         ["cli", "run", "04_defining_a_tensorrt_network_or_config_manually"],
         artifact_names=["my_define_network.py", "my_create_config.py"],
     ),
-    Example(["cli", "run", "05_comparing_with_custom_data"]),
+    Example(["cli", "run", "05_comparing_with_custom_input_data"], artifact_names=["custom_inputs.json"]),
+    Example(
+        ["cli", "run", "06_comparing_with_custom_output_data"],
+        artifact_names=["custom_inputs.json", "custom_outputs.json"],
+    ),
     # Convert
     Example(
         ["cli", "convert", "01_int8_calibration_in_tensorrt"],
@@ -204,6 +208,9 @@ if mod.has_mod("tensorflow"):
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
 @pytest.mark.parametrize("example", CLI_INSPECT_EXAMPLES, ids=lambda case: str(case))
 def test_cli_inspect_examples(example):
+    if mod.version(trt.__version__) < mod.version("8.2") and example.path.endswith("02_inspecting_a_tensorrt_engine"):
+        pytest.skip("Engine layer inspection is not supported on older versions of TRT")
+
     # Last block should be the expected output, and last command should generate it.
     with example as blocks:
         commands, expected_output = blocks[:-1], blocks[-1]

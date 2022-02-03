@@ -38,7 +38,7 @@ class TestConvertToOnnx(object):
             run_polygraphy_convert(
                 [ONNX_MODELS["identity_identity"].path, "--convert-to=onnx", "--fp-to-fp16", "-o", outmodel.name]
             )
-            assert onnx.load(outmodel.name).graph.value_info[0].type.tensor_type.elem_type == 10
+            assert onnx.load(outmodel.name).graph.input[0].type.tensor_type.elem_type == 10
 
 
 class TestConvertToTrt(object):

@@ -15,6 +15,7 @@
 #
 import numpy as np
 from polygraphy import util
+from polygraphy.json import load_json
 from tests.models.meta import ONNX_MODELS
 from tests.tools.common import run_polygraphy_data, run_polygraphy_run
 
@@ -29,7 +30,7 @@ class TestToInput(object):
 
             run_polygraphy_data(["to-input", inps.name, outs.name, "-o", merged.name])
 
-            merged_data = util.load_json(merged.name)
+            merged_data = load_json(merged.name)
             assert len(merged_data) == 1
             assert list(merged_data[0].keys()) == ["x", "y"]
             assert all(isinstance(val, np.ndarray) for val in merged_data[0].values())
