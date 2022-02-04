@@ -40,7 +40,7 @@ struct EfficientNMSParameters
 
     // Related to NMS Internals
     int numSelectedBoxes = 4096;
-    int scoreBits = 10;
+    int scoreBits = -1;
     bool outputONNXIndices = false;
 
     // Related to Tensor Configuration
