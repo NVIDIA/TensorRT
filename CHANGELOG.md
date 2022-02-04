@@ -1,5 +1,25 @@
 # TensorRT OSS Release Changelog
 
+## [22.02](https://github.com/NVIDIA/TensorRT/releases/tag/22.02) - 2022-02-04
+### Added
+- New plugins: [decodeBbox3DPlugin](plugin/decodeBbox3DPlugin), [pillarScatterPlugin](plugin/pillarScatterPlugin), and [voxelGeneratorPlugin](plugin/voxelGeneratorPlugin)
+
+### Changed
+- Extend Megatron LayerNorm plugins to support larger hidden sizes
+- Refactored EfficientNMS plugin for TFTRT and added implicit batch mode support
+- Update base TensorRT version to 8.2.3.0
+- GPT-2 greedy search speedup - now runs on GPU
+- Updates to TensorRT developer tools
+  - Polygraphy [v0.35.1](tools/Polygraphy/CHANGELOG.md#v0351-2022-01-14)
+  - onnx-graphsurgeon [v0.3.15](tools/onnx-graphsurgeon/CHANGELOG.md#v0315-2022-01-18)
+- Updated ONNX parser to v8.2.3.0
+- Minor updates and bugfixes
+  - Samples: TFOD, GPT-2, demo/BERT
+  - Plugins: proposalPlugin, geluPlugin, bertQKVToContextPlugin, batchedNMS
+
+### Removed
+- Unused source file(s) in demo/BERT
+
 ## [8.2.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-2-1) - 2021-11-24
 
 TensorRT OSS release corresponding to TensorRT 8.2.1.8 GA release.
