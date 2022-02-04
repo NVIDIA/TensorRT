@@ -64,7 +64,7 @@ public:
     int enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-private:
+protected:
     EfficientNMSParameters mParam{};
     std::string mNamespace;
 };
@@ -97,28 +97,6 @@ class EfficientNMSONNXPluginCreator : public BaseCreator
 public:
     EfficientNMSONNXPluginCreator();
     ~EfficientNMSONNXPluginCreator() override = default;
-
-    const char* getPluginName() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
-    const PluginFieldCollection* getFieldNames() noexcept override;
-
-    IPluginV2DynamicExt* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
-    IPluginV2DynamicExt* deserializePlugin(
-        const char* name, const void* serialData, size_t serialLength) noexcept override;
-
-protected:
-    PluginFieldCollection mFC;
-    EfficientNMSParameters mParam;
-    std::vector<PluginField> mPluginAttributes;
-    std::string mPluginName;
-};
-
-// TF-TRT CombinedNMS Op Compatibility
-class EfficientNMSTFTRTPluginCreator : public BaseCreator
-{
-public:
-    EfficientNMSTFTRTPluginCreator();
-    ~EfficientNMSTFTRTPluginCreator() override = default;
 
     const char* getPluginName() const noexcept override;
     const char* getPluginVersion() const noexcept override;
