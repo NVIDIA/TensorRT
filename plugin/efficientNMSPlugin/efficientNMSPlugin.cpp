@@ -22,7 +22,6 @@ using nvinfer1::plugin::EfficientNMSPlugin;
 using nvinfer1::plugin::EfficientNMSParameters;
 using nvinfer1::plugin::EfficientNMSPluginCreator;
 using nvinfer1::plugin::EfficientNMSONNXPluginCreator;
-using nvinfer1::plugin::EfficientNMSTFTRTPluginCreator;
 
 namespace
 {
@@ -30,8 +29,6 @@ const char* EFFICIENT_NMS_PLUGIN_VERSION{"1"};
 const char* EFFICIENT_NMS_PLUGIN_NAME{"EfficientNMS_TRT"};
 const char* EFFICIENT_NMS_ONNX_PLUGIN_VERSION{"1"};
 const char* EFFICIENT_NMS_ONNX_PLUGIN_NAME{"EfficientNMS_ONNX_TRT"};
-const char* EFFICIENT_NMS_TFTRT_PLUGIN_VERSION{"1"};
-const char* EFFICIENT_NMS_TFTRT_PLUGIN_NAME{"EfficientNMS_TFTRT_TRT"};
 } // namespace
 
 EfficientNMSPlugin::EfficientNMSPlugin(EfficientNMSParameters param)
@@ -577,108 +574,6 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
 }
 
 IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
-{
-    try
-    {
-        // This object will be deleted when the network is destroyed, which will
-        // call EfficientNMSPlugin::destroy()
-        auto* plugin = new EfficientNMSPlugin(serialData, serialLength);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
-    }
-    catch (const std::exception& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-
-// TF-TRT CombinedNMS Op Compatibility
-
-EfficientNMSTFTRTPluginCreator::EfficientNMSTFTRTPluginCreator()
-    : mParam{}
-{
-    mPluginAttributes.clear();
-    mPluginAttributes.emplace_back(PluginField("max_output_size_per_class", nullptr, PluginFieldType::kINT32, 1));
-    mPluginAttributes.emplace_back(PluginField("max_total_size", nullptr, PluginFieldType::kINT32, 1));
-    mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
-    mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
-    mPluginAttributes.emplace_back(PluginField("pad_per_class", nullptr, PluginFieldType::kINT32, 1));
-    mPluginAttributes.emplace_back(PluginField("clip_boxes", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
-    mFC.fields = mPluginAttributes.data();
-}
-
-const char* EfficientNMSTFTRTPluginCreator::getPluginName() const noexcept
-{
-    return EFFICIENT_NMS_TFTRT_PLUGIN_NAME;
-}
-
-const char* EfficientNMSTFTRTPluginCreator::getPluginVersion() const noexcept
-{
-    return EFFICIENT_NMS_TFTRT_PLUGIN_VERSION;
-}
-
-const PluginFieldCollection* EfficientNMSTFTRTPluginCreator::getFieldNames() noexcept
-{
-    return &mFC;
-}
-
-IPluginV2DynamicExt* EfficientNMSTFTRTPluginCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
-{
-    try
-    {
-        const PluginField* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
-        {
-            const char* attrName = fields[i].name;
-            if (!strcmp(attrName, "max_output_size_per_class"))
-            {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "max_total_size"))
-            {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxes = *(static_cast<const int*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "iou_threshold"))
-            {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "score_threshold"))
-            {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "pad_per_class"))
-            {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.padOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "clip_boxes"))
-            {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.clipBoxes = *(static_cast<const int*>(fields[i].data));
-            }
-        }
-
-        auto* plugin = new EfficientNMSPlugin(mParam);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
-    }
-    catch (const std::exception& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-IPluginV2DynamicExt* EfficientNMSTFTRTPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength) noexcept
 {
     try
