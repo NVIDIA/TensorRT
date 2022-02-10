@@ -123,8 +123,6 @@ class Graph(object):
         G_LOGGER.ultra_verbose(lambda: "Created Graph: {:}".format(self))
         # For layer() function
         self.name_idx = 0
-        # For ONNXRuntumeSession
-        self.ort_providers = ['CUDAExecutionProvider']
 
     def __getattr__(self, name):
         try:
@@ -785,7 +783,7 @@ class Graph(object):
 
                 try:
                     # Determining types is not trivial, and ONNX-RT does its own type inference.
-                    sess = rt.InferenceSession(export_onnx(part, do_type_check=False).SerializeToString(), providers=self.ort_providers)
+                    sess = rt.InferenceSession(export_onnx(part, do_type_check=False).SerializeToString(), providers=['CPUExecutionProvider'])
                     values = sess.run(names, {})
                 except Exception as err:
                     G_LOGGER.warning("Inference failed for subgraph: {:}. Note: Error was:\n{:}".format(part.name, err))
@@ -832,7 +830,7 @@ class Graph(object):
             else:
                 names = [t.name for t in graph_clone.outputs]
                 try:
-                    sess = rt.InferenceSession(export_onnx(graph_clone, do_type_check=False).SerializeToString(), providers=self.ort_providers)
+                    sess = rt.InferenceSession(export_onnx(graph_clone, do_type_check=False).SerializeToString(), providers=['CPUExecutionProvider'])
                     values = sess.run(names, {})
                     constant_values.update({name: val for name, val in zip(names, values)})
                 except Exception as err:
