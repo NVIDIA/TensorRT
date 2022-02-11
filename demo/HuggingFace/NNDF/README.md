@@ -16,4 +16,3 @@ In other words:
 
 * Re-use high level measurement tools supplied by well known frameworks
 * Ensure fair platform for timing TRT performance alongside other frameworks by using the same post-processing code.
-* NNDT (Neural Network Driven Testing) can be used to interface with NNDF developed project to test networks directly.

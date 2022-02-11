@@ -13,7 +13,7 @@ Currently, this repository supports the following models:
     t5-small (60M), t5-base (220M), t5-large (770M)
 
 
-## Installation
+## Setup
 
 ```python
 pip3 install -r requirements.txt
@@ -31,6 +31,15 @@ The above script reports :
 |------------|----------|---------------|---------------|------------|
 | frameworks | 1        | 0.0292865     | 0.0174382     | 0.122532   |
 | trt        | 1        | 0.00494083    | 0.0068982     | 0.0239782  |
+
+
+## Testing
+
+```python
+pytest
+```
+
+It is recommended to use Pytest `4.6.x`. Your Python environment must have already had the setup completed.
 
 
 ## How to run functional and performance benchmark
