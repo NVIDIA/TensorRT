@@ -26,7 +26,6 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleINT8API
     sampleMNIST
     sampleMNISTAPI
-    sampleNMT
     sampleOnnxMNIST
     sampleIOFormats
     sampleSSD

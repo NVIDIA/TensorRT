@@ -13,7 +13,6 @@
 | [sampleINT8API](sampleINT8API) | C++ | Caffe | Performing Inference In INT8 Precision |
 | [sampleMNIST](sampleMNIST) | C++ | Caffe | “Hello World” For TensorRT |
 | [sampleMNISTAPI](sampleMNISTAPI) | C++ | INetwork | Building a Simple MNIST Network Layer by Layer |
-| [sampleNMT](sampleNMT) | C++ | INetwork | Neural Machine Translation Using A seq2seq Model |
 | [sampleOnnxMNIST](sampleOnnxMNIST) | C++ | ONNX | “Hello World” For TensorRT With ONNX |
 | [sampleOnnxMnistCoordConvAC](sampleOnnxMnistCoordConvAC) | C++ | ONNX | Implementing CoordConv with a custom plugin |
 | [sampleIOFormats](sampleIOFormats) | C++ | Caffe | Specifying TensorRT I/O Formats |
