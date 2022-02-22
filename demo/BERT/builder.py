@@ -41,9 +41,15 @@ TensorRT Initialization
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 trt_version = [int(n) for n in trt.__version__.split('.')]
 
-handle = ctypes.CDLL("libnvinfer_plugin.so", mode=ctypes.RTLD_GLOBAL)
+plugin_lib_name = "libnvinfer_plugin.so"
+env_name_to_add_path = "LD_LIBRARY_PATH"
+if sys.platform == "win32":
+    plugin_lib_name = "nvinfer_plugin.dll"
+    env_name_to_add_path = "PATH"
+
+handle = ctypes.CDLL(plugin_lib_name, mode=ctypes.RTLD_GLOBAL)
 if not handle:
-    raise RuntimeError("Could not load plugin library. Is `libnvinfer_plugin.so` on your LD_LIBRARY_PATH?")
+    raise RuntimeError("Could not load plugin library. Is `{}` on your {}?".format(plugin_lib_name, env_name_to_add_path))
 
 trt.init_libnvinfer_plugins(TRT_LOGGER, "")
 plg_registry = trt.get_plugin_registry()
@@ -409,12 +415,12 @@ def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_
                 builder_config.int8_calibrator = calibrator
         if config.use_strict:
             builder_config.set_flag(trt.BuilderFlag.STRICT_TYPES)
-    
+
         if config.use_sparsity:
             TRT_LOGGER.log(TRT_LOGGER.INFO, "Setting sparsity flag on builder_config.")
             builder_config.set_flag(trt.BuilderFlag.SPARSE_WEIGHTS)
 
-        # speed up the engine build for trt major version >= 8 
+        # speed up the engine build for trt major version >= 8
         # 1. disable cudnn tactic
         # 2. load global timing cache
         if trt_version[0] >= 8:
