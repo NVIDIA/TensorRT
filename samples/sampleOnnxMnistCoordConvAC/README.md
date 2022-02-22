@@ -122,24 +122,25 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleOnnxMnistCoordConvAC` directory. The binary named `sample_onnx_mnist_coord_conv_ac` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleOnnxMnistCoordConvAC
-	make
-	```
+1. The sample gets compiled when building the TensorRT OSS following the [instructions](https://github.com/NVIDIA/TensorRT). The binary named sample_onnx_mnist_coord_conv_ac will be created in the output directory.
 
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+2. (Optional) If the ONNX model on MNIST dataset is not available, you can generate an ONNX model for running this sample using the following commands:
+    ```
+    python3 mnist_coord_conv_train.py --save-onnx
+    python3 modify_onnx_ac.py
+    ``` 
+    The first line trains a model for the MNIST dataset and saves it as an ONNX model. The second line modifies the ONNX model structure to make it work with TensorRT for building the MNIST engine.
 
-2.  Run the sample to build and run the MNIST engine from the ONNX model.
-	```
-	./sample_onnx_mnist_coord_conv_ac [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
-	```
+3.  Run the sample to build and run the MNIST engine from the ONNX model.
+    ```
+    ./sample_onnx_mnist_coord_conv_ac [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+    ```
 
-3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
-	```
-	&&&& RUNNING TensorRT.sample_coord_conv_ac_onnx_mnist # ./sample_onnx_mnist_coord_conv_ac
-	----------------------------------------------------------------
-	Input filename:   data/mnist/mnist_with_coordconv.onnx
+4. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
+    ```
+    &&&& RUNNING TensorRT.sample_coord_conv_ac_onnx_mnist # ./sample_onnx_mnist_coord_conv_ac
+    ----------------------------------------------------------------
+    Input filename:   data/mnist/mnist_with_coordconv.onnx
     ONNX IR version:  0.0.6
     Opset version:    11
     Producer name:
