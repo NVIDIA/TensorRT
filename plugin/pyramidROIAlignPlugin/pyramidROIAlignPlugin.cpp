@@ -16,6 +16,7 @@
 #include "pyramidROIAlignPlugin.h"
 #include "plugin.h"
 #include <cuda_runtime_api.h>
+#include <math.h>
 
 using namespace nvinfer1;
 using namespace plugin;
@@ -34,7 +35,14 @@ std::vector<PluginField> PyramidROIAlignPluginCreator::mPluginAttributes;
 PyramidROIAlignPluginCreator::PyramidROIAlignPluginCreator()
 {
     mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(PluginField("fpn_scale", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("pooled_size", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 2));
+    mPluginAttributes.emplace_back(PluginField("roi_coords_absolute", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("roi_coords_swap", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("roi_coords_plusone", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("roi_coords_transform", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("sampling_ratio", nullptr, PluginFieldType::kINT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -57,17 +65,70 @@ const PluginFieldCollection* PyramidROIAlignPluginCreator::getFieldNames() noexc
 
 IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
+    int pooledSize = 7;
+    int transformCoords = 2;
+    bool absCoords = true;
+    bool swapCoords = false;
+    bool plusOneCoords = false;
+    int samplingRatio = 0;
+    xy_t imageSize = {MaskRCNNConfig::IMAGE_SHAPE.d[1], MaskRCNNConfig::IMAGE_SHAPE.d[2]};
+    int fpnScale = 224;
+
     const PluginField* fields = fc->fields;
     for (int i = 0; i < fc->nbFields; ++i)
     {
         const char* attrName = fields[i].name;
+        if (!strcmp(attrName, "fpn_scale"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            fpnScale = *(static_cast<const int*>(fields[i].data));
+            assert(fpnScale >= 1);
+        }
         if (!strcmp(attrName, "pooled_size"))
         {
             assert(fields[i].type == PluginFieldType::kINT32);
-            mPooledSize = *(static_cast<const int*>(fields[i].data));
+            pooledSize = *(static_cast<const int*>(fields[i].data));
+            assert(mPooledSize >= 1);
+        }
+        if (!strcmp(attrName, "image_size"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            assert(fields[i].size == 2);
+            const auto dims = static_cast<const int*>(fields[i].data);
+            imageSize.y = dims[0];
+            imageSize.x = dims[1];
+            assert(imageSize.y >= 1);
+            assert(imageSize.x >= 1);
+        }
+        if (!strcmp(attrName, "roi_coords_absolute"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            absCoords = *(static_cast<const int*>(fields[i].data));
+        }
+        if (!strcmp(attrName, "roi_coords_swap"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            swapCoords = *(static_cast<const int*>(fields[i].data));
+        }
+        if (!strcmp(attrName, "roi_coords_plusone"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            plusOneCoords = *(static_cast<const int*>(fields[i].data));
+        }
+        if (!strcmp(attrName, "roi_coords_transform"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            transformCoords = *(static_cast<const int*>(fields[i].data));
+        }
+        if (!strcmp(attrName, "sampling_ratio"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            samplingRatio = *(static_cast<const int*>(fields[i].data));
+            assert(mSamplingRatio >= 0);
         }
     }
-    return new PyramidROIAlign(mPooledSize);
+    return new PyramidROIAlign(
+        pooledSize, transformCoords, absCoords, swapCoords, plusOneCoords, samplingRatio, imageSize, fpnScale);
 }
 
 IPluginV2Ext* PyramidROIAlignPluginCreator::deserializePlugin(
@@ -76,14 +137,20 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::deserializePlugin(
     return new PyramidROIAlign(data, length);
 }
 
-PyramidROIAlign::PyramidROIAlign(int pooled_size)
-    : mPooledSize({pooled_size, pooled_size})
+PyramidROIAlign::PyramidROIAlign(int pooledSize, int transformCoords, bool absCoords, bool swapCoords,
+    bool plusOneCoords, int samplingRatio, xy_t imageSize, int fpnScale)
+    : mPooledSize({pooledSize, pooledSize})
+    , mTransformCoords(transformCoords)
+    , mAbsCoords(absCoords)
+    , mSwapCoords(swapCoords)
+    , mPlusOneCoords(plusOneCoords)
+    , mSamplingRatio(samplingRatio)
+    , mImageSize(imageSize)
+    , mFPNScale(fpnScale)
 {
-
-    assert(pooled_size > 0);
-    // shape
-    mInputSize = MaskRCNNConfig::IMAGE_SHAPE.d[1];
-    mThresh = (224 * 224 * 2.0f / (mInputSize * mInputSize)) / (4.0 * 4.0f);
+    assert(pooledSize >= 1);
+    assert(samplingRatio >= 0);
+    assert(fpnScale >= 1);
 }
 
 int PyramidROIAlign::getNbOutputs() const noexcept
@@ -184,21 +251,39 @@ Dims PyramidROIAlign::getOutputDimensions(int index, const Dims* inputs, int nbI
 int PyramidROIAlign::enqueue(
     int batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-
     void* pooled = outputs[0];
 
-    cudaError_t status = roiAlign(stream, batch_size, mFeatureLength, mROICount, mThresh,
+    // As per FPN paper equation 1 (https://arxiv.org/pdf/1612.03144.pdf)
+    // the default 224 FPN scale corresponds to the canonical ImageNet size
+    // used to define the ROI scale threshold that samples from P4. Because the
+    // plugin works with normalized ROI coordinates, the FPN scale must be normalized
+    // by the input image size.
+    float scale = (float) mFPNScale;
+    float normScale = sqrtf(scale * scale / (mImageSize.y * mImageSize.x));
+    // Furthermore, the roiAlign kernel expects a first threshold instead. This is
+    // the *area* of an ROI but for one level down, i.e. at the P2->P3 transition.
+    float firstTreshold = normScale * normScale / 4.f;
 
-        inputs[0], &inputs[1], mFeatureSpatialSize,
-
-        pooled, mPooledSize);
+    cudaError_t status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstTreshold,
+        mTransformCoords, mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1],
+        mFeatureSpatialSize, pooled, mPooledSize);
 
     return status;
 }
 
 size_t PyramidROIAlign::getSerializationSize() const noexcept
 {
-    return sizeof(int) * 2 + sizeof(int) * 3 + sizeof(float) + sizeof(int) * 2 * 4;
+    return sizeof(int) * 2 // mPooledSize
+        + sizeof(int) * 2  // mImageSize
+        + sizeof(int)      // mFeatureLength
+        + sizeof(int)      // mROICount
+        + sizeof(int)      // mFPNScale
+        + sizeof(int)      // mTransformCoords
+        + sizeof(bool)     // mAbsCoords
+        + sizeof(bool)     // mSwapCoords
+        + sizeof(bool)     // mPlusOneCoords
+        + sizeof(int)      // mSamplingRatio
+        + sizeof(int) * 8; // mFeatureSpatialSize
 }
 
 void PyramidROIAlign::serialize(void* buffer) const noexcept
@@ -206,10 +291,16 @@ void PyramidROIAlign::serialize(void* buffer) const noexcept
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mPooledSize.y);
     write(d, mPooledSize.x);
+    write(d, mImageSize.y);
+    write(d, mImageSize.x);
     write(d, mFeatureLength);
     write(d, mROICount);
-    write(d, mInputSize);
-    write(d, mThresh);
+    write(d, mFPNScale);
+    write(d, mTransformCoords);
+    write(d, mAbsCoords);
+    write(d, mSwapCoords);
+    write(d, mPlusOneCoords);
+    write(d, mSamplingRatio);
     write(d, mFeatureSpatialSize[0].y);
     write(d, mFeatureSpatialSize[0].x);
     write(d, mFeatureSpatialSize[1].y);
@@ -225,10 +316,15 @@ PyramidROIAlign::PyramidROIAlign(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mPooledSize = {read<int>(d), read<int>(d)};
+    mImageSize = {read<int>(d), read<int>(d)};
     mFeatureLength = read<int>(d);
     mROICount = read<int>(d);
-    mInputSize = read<int>(d);
-    mThresh = read<float>(d);
+    mFPNScale = read<int>(d);
+    mTransformCoords = read<int>(d);
+    mAbsCoords = read<bool>(d);
+    mSwapCoords = read<bool>(d);
+    mPlusOneCoords = read<bool>(d);
+    mSamplingRatio = read<int>(d);
     mFeatureSpatialSize[0].y = read<int>(d);
     mFeatureSpatialSize[0].x = read<int>(d);
     mFeatureSpatialSize[1].y = read<int>(d);
@@ -242,15 +338,16 @@ PyramidROIAlign::PyramidROIAlign(const void* data, size_t length)
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType PyramidROIAlign::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-    noexcept
+DataType PyramidROIAlign::getOutputDataType(
+    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool PyramidROIAlign::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool PyramidROIAlign::isOutputBroadcastAcrossBatch(
+    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }

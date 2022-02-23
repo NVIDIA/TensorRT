@@ -35,7 +35,8 @@ namespace plugin
 class PyramidROIAlign : public IPluginV2Ext
 {
 public:
-    PyramidROIAlign(int pooled_size);
+    PyramidROIAlign(int pooledSize, int transformCoords, bool absCoords, bool swapCoords, bool plusOneCoords,
+        int samplingRatio, xy_t roiRange, int fpnScale);
 
     PyramidROIAlign(const void* data, size_t length);
 
@@ -74,7 +75,8 @@ public:
 
     DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
+    bool isOutputBroadcastAcrossBatch(
+        int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
 
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
@@ -90,12 +92,17 @@ public:
 private:
     void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims);
 
-    xy_t mPooledSize;
     static const int mFeatureMapCount = 4;
     int mFeatureLength;
     int mROICount;
-    int mInputSize;
-    float mThresh;
+    xy_t mPooledSize;
+    xy_t mImageSize;
+    int mFPNScale;
+    int mTransformCoords;
+    bool mAbsCoords;
+    bool mSwapCoords;
+    bool mPlusOneCoords;
+    int mSamplingRatio;
     xy_t mFeatureSpatialSize[mFeatureMapCount];
     std::string mNameSpace;
 };
@@ -119,7 +126,6 @@ public:
 
 private:
     static PluginFieldCollection mFC;
-    int mPooledSize;
     static std::vector<PluginField> mPluginAttributes;
 };
 } // namespace plugin
