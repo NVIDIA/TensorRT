@@ -285,7 +285,7 @@ class TensorQuantizer(nn.Module):
                 inputs, amax.item() / bound, 0,
                 -bound - 1 if not self._unsigned else 0, bound)
         else:
-            amax_sequeeze = amax.squeeze().detach()
+            amax_sequeeze = amax.squeeze().detach().to(inputs.device)
             if len(amax_sequeeze.shape) != 1:
                 raise TypeError("Pytorch's native quantization doesn't support multiple axes")
             quant_dim = list(amax.shape).index(list(amax_sequeeze.shape)[0])
