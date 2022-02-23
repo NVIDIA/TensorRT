@@ -271,7 +271,8 @@ struct xy_t
     }
 };
 // PYRAMID ROIALIGN
-cudaError_t roiAlign(cudaStream_t stream, int batchSize, int featureCount, int roiCount, float firstThreshold,
+cudaError_t roiAlign(cudaStream_t stream, int batchSize, xy_t imageSize, int featureCount, int roiCount,
+    float firstThreshold, int transformCoords, bool absCoords, bool swapCoords, bool plusOneCoords, int samplingRatio,
 
     const void* rois, const void* const layers[], const xy_t* layerDims,
 
