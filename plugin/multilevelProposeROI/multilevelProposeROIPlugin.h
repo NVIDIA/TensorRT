@@ -36,61 +36,61 @@ class MultilevelProposeROI : public IPluginV2Ext
 {
 public:
     MultilevelProposeROI(
-        int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size);
+        int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size) noexcept;
 
-    MultilevelProposeROI(const void* data, size_t length);
+    MultilevelProposeROI(const void* data, size_t length) noexcept;
 
-    ~MultilevelProposeROI() override = default;
+    ~MultilevelProposeROI() noexcept override = default;
 
-    int getNbOutputs() const override;
+    int getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) override;
+    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override;
 
-    int initialize() override;
+    int initialize() noexcept override;
 
-    void terminate() override;
+    void terminate() noexcept override;
 
-    void destroy() override;
+    void destroy() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const override;
+    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
 
-    int enqueue(
-        int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream) override;
+    int32_t enqueue(
+        int32_t batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-    size_t getSerializationSize() const override;
+    size_t getSerializationSize() const noexcept override;
 
-    void serialize(void* buffer) const override;
+    void serialize(void* buffer) const noexcept override;
 
-    bool supportsFormat(DataType type, PluginFormat format) const override;
+    bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
-    const char* getPluginType() const override;
+    const char* getPluginType() const noexcept override;
 
-    const char* getPluginVersion() const override;
+    const char* getPluginVersion() const noexcept override;
 
-    IPluginV2Ext* clone() const override;
+    IPluginV2Ext* clone() const noexcept override;
 
-    void setPluginNamespace(const char* libNamespace) override;
+    void setPluginNamespace(const char* libNamespace) noexcept override;
 
-    const char* getPluginNamespace() const override;
+    const char* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
+    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const override;
+    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
     void attachToContext(
-        cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) override;
+        cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
     void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
         const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) override;
+        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
 
-    void detachFromContext() override;
+    void detachFromContext() noexcept override;
 
 private:
-    void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims);
-    void generate_pyramid_anchors(const nvinfer1::Dims& image_size);
+    void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims) noexcept;
+    void generate_pyramid_anchors(const nvinfer1::Dims& image_size) noexcept;
 
     int mBackgroundLabel;
     int mPreNMSTopK;
@@ -105,8 +105,10 @@ private:
     std::vector<std::shared_ptr<CudaBind<float>>>
         mAnchorBoxesDevice; // [N, anchors(261888 for resnet101 + 1024*1024), (y1, x1, y2, x2)]
     std::vector<std::vector<float>> mAnchorBoxesHost;
-    std::vector<std::shared_ptr<CudaBind<float>>> mTempScores;
-    std::vector<std::shared_ptr<CudaBind<float>>> mTempBboxes;
+    std::vector<std::shared_ptr<CudaBind<float>>> mTempScores_float;
+    std::vector<std::shared_ptr<CudaBind<float>>> mTempBboxes_float;
+    std::vector<std::shared_ptr<CudaBind<uint16_t>>> mTempScores_half;
+    std::vector<std::shared_ptr<CudaBind<uint16_t>>> mTempBboxes_half;
     float** mDeviceScores;
     float** mDeviceBboxes;
     std::shared_ptr<CudaBind<float>> mRegWeightDevice;
@@ -121,19 +123,19 @@ private:
 class MultilevelProposeROIPluginCreator : public BaseCreator
 {
 public:
-    MultilevelProposeROIPluginCreator();
+    MultilevelProposeROIPluginCreator() noexcept;
 
-    ~MultilevelProposeROIPluginCreator(){};
+    ~MultilevelProposeROIPluginCreator() noexcept {};
 
-    const char* getPluginName() const override;
+    const char* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const override;
+    const char* getPluginVersion() const noexcept override;
 
-    const PluginFieldCollection* getFieldNames() override;
+    const PluginFieldCollection* getFieldNames() noexcept override;
 
-    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) override;
+    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
 
-    IPluginV2Ext* deserializePlugin(const char* name, const void* data, size_t length) override;
+    IPluginV2Ext* deserializePlugin(const char* name, const void* data, size_t length) noexcept override;
 
 private:
     static PluginFieldCollection mFC;

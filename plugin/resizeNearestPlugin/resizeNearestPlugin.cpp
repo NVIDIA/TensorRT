@@ -13,11 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "resizeNearestPlugin.h"
 #include "plugin.h"
-#include <algorithm>
 #include <cuda_runtime_api.h>
+#include <algorithm>
 #include <iostream>
 
 #define DEBUG 0
@@ -38,28 +37,29 @@ std::vector<PluginField> ResizeNearestPluginCreator::mPluginAttributes;
 
 ResizeNearestPluginCreator::ResizeNearestPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("scale", nullptr, PluginFieldType::kFLOAT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* ResizeNearestPluginCreator::getPluginName() const
+const char* ResizeNearestPluginCreator::getPluginName() const noexcept
 {
     return RESIZE_PLUGIN_NAME;
 }
 
-const char* ResizeNearestPluginCreator::getPluginVersion() const
+const char* ResizeNearestPluginCreator::getPluginVersion() const noexcept
 {
     return RESIZE_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* ResizeNearestPluginCreator::getFieldNames()
+const PluginFieldCollection* ResizeNearestPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
     for (int i = 0; i < fc->nbFields; ++i)
@@ -74,7 +74,7 @@ IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const P
     return new ResizeNearest(mScale);
 }
 
-IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(const char* name, const void* data, size_t length)
+IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
     return new ResizeNearest(data, length);
 }
@@ -85,12 +85,12 @@ ResizeNearest::ResizeNearest(float scale)
     assert(mScale > 0);
 }
 
-int ResizeNearest::getNbOutputs() const
+int ResizeNearest::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims ResizeNearest::getOutputDimensions(int index, const Dims* inputDims, int nbInputs)
+Dims ResizeNearest::getOutputDimensions(int index, const Dims* inputDims, int nbInputs) noexcept
 {
     assert(nbInputs == 1);
     nvinfer1::Dims const& input = inputDims[0];
@@ -111,30 +111,32 @@ Dims ResizeNearest::getOutputDimensions(int index, const Dims* inputDims, int nb
     return output;
 }
 
-int ResizeNearest::initialize()
+int ResizeNearest::initialize() noexcept
 {
     return 0;
 }
 
-void ResizeNearest::terminate() {}
+void ResizeNearest::terminate() noexcept
+{
+}
 
-void ResizeNearest::destroy()
+void ResizeNearest::destroy() noexcept
 {
     delete this;
 }
 
-size_t ResizeNearest::getWorkspaceSize(int) const
+size_t ResizeNearest::getWorkspaceSize(int) const noexcept
 {
     return 0;
 }
 
-size_t ResizeNearest::getSerializationSize() const
+size_t ResizeNearest::getSerializationSize() const noexcept
 {
     // scale, dimensions: 3 * 2
     return sizeof(float) + sizeof(int) * 3 * 2;
 }
 
-void ResizeNearest::serialize(void* buffer) const
+void ResizeNearest::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mScale);
@@ -162,40 +164,40 @@ ResizeNearest::ResizeNearest(const void* data, size_t length)
     ASSERT(d == a + length);
 }
 
-const char* ResizeNearest::getPluginType() const
+const char* ResizeNearest::getPluginType() const noexcept
 {
     return "ResizeNearest_TRT";
 }
 
-const char* ResizeNearest::getPluginVersion() const
+const char* ResizeNearest::getPluginVersion() const noexcept
 {
     return "1";
 }
 
-IPluginV2Ext* ResizeNearest::clone() const
+IPluginV2Ext* ResizeNearest::clone() const noexcept
 {
     auto plugin = new ResizeNearest(*this);
     plugin->setPluginNamespace(mNameSpace.c_str());
     return plugin;
 }
 
-void ResizeNearest::setPluginNamespace(const char* libNamespace)
+void ResizeNearest::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNameSpace = libNamespace;
 }
 
-const char* ResizeNearest::getPluginNamespace() const
+const char* ResizeNearest::getPluginNamespace() const noexcept
 {
     return mNameSpace.c_str();
 }
 
-bool ResizeNearest::supportsFormat(DataType type, PluginFormat format) const
+bool ResizeNearest::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
-    return (type == DataType::kFLOAT && format == PluginFormat::kNCHW);
+    return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
 int ResizeNearest::enqueue(
-    int batch_size, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+    int batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     int nchan = mOutputDims.d[0];
@@ -215,7 +217,7 @@ int ResizeNearest::enqueue(
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType ResizeNearest::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+DataType ResizeNearest::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
     ASSERT(index == 0);
@@ -225,13 +227,13 @@ DataType ResizeNearest::getOutputDataType(int index, const nvinfer1::DataType* i
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool ResizeNearest::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool ResizeNearest::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool ResizeNearest::canBroadcastInputAcrossBatch(int inputIndex) const
+bool ResizeNearest::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 {
     return false;
 }
@@ -239,7 +241,7 @@ bool ResizeNearest::canBroadcastInputAcrossBatch(int inputIndex) const
 // Configure the layer with input and output data types.
 void ResizeNearest::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
+    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     assert(nbInputs == 1);
     mInputDims = inputDims[0];
@@ -250,9 +252,9 @@ void ResizeNearest::configurePlugin(const Dims* inputDims, int nbInputs, const D
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void ResizeNearest::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator)
+    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
 {
 }
 
 // Detach the plugin object from its execution context.
-void ResizeNearest::detachFromContext() {}
+void ResizeNearest::detachFromContext() noexcept {}

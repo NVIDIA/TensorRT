@@ -35,8 +35,11 @@ A custom TensorRT plugin implementation, which uses the CUDA kernel internally.
 `customClipPlugin.h`
 The ClipPlugin headers.
 
+`lenet5.py`
+This script trains an MNIST network.
+
 `model.py`
-This script trains an MNIST network that uses ReLU6 activation using the clip plugin.
+This script converts the MNIST tensorflow model to UFF that replaces ReLU6 activation with the clip plugin.
 
 `sample.py`
 This script transforms the trained model into UFF (delegating ReLU6 activations to ClipPlugin instances) and runs inference in TensorRT.
@@ -48,11 +51,15 @@ This file specifies all the Python packages required to run this Python sample.
 
 1. If running this sample in a test container, launch [NVIDIA tf1 (Tensorflow 1.x)](https://docs.nvidia.com/deeplearning/frameworks/tensorflow-release-notes/running.html#running) container in a separate terminal for generating the UFF model.
     ```bash
-    docker run --rm -it --gpus all -v `pwd`:/workspace nvcr.io/nvidia/tensorflow:20.12-tf1-py3 /bin/bash
+    docker run --rm -it --gpus all -v `pwd`:/workspace nvcr.io/nvidia/tensorflow:21.03-tf1-py3 /bin/bash
     ```
 
     Alternatively, install Tensorflow 1.15
-    `pip3 install tensorflow>=1.15.3,<2.0`
+    `pip3 install tensorflow>=1.15.5,<2.0`
+
+  NOTE
+  - On PowerPC systems, you will need to manually install TensorFlow using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
+  - On Jetson boards, you will need to manually install TensorFlow by following the documentation for [Xavier](https://docs.nvidia.com/deeplearning/dgx/install-tf-xavier/index.html) or [TX2](https://docs.nvidia.com/deeplearning/dgx/install-tf-jetsontx2/index.html).
 
 2. Install the UFF toolkit and graph surgeon depending on your [TensorRT installation method](https://docs.nvidia.com/deeplearning/sdk/tensorrt-install-guide/index.html#installing), or from PyPI:
     ```bash
@@ -60,55 +67,66 @@ This file specifies all the Python packages required to run this Python sample.
     pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com graphsurgeon
     ```
 
-3. Run these scripts to train the model, covert to UFF and save the model:
+3. Run the sample to train the model, covert to UFF and save the model. Also save the test data:
     ```bash
     mkdir -p models
-    python lenet5.py
-    python model.py
+    python3 lenet5.py
+    python3 model.py
     ```
 
 ## Prerequisites
 
-1. [Install CMake](https://cmake.org/download/).
+For specific software versions, see the [TensorRT Installation Guide](https://docs.nvidia.com/deeplearning/sdk/tensorrt-archived/index.html).
 
-2. Switch back to test container (if applicable) and install the dependencies for Python.
+1. Switch back to test container (if applicable) and install the dependencies for Python.
    ```bash
    python3 -m pip install -r requirements.txt
    ```
 
-  NOTE
-  - On PowerPC systems, you will need to manually install TensorFlow using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
-  - On Jetson boards, you will need to manually install TensorFlow by following the documentation for [Xavier](https://docs.nvidia.com/deeplearning/dgx/install-tf-xavier/index.html) or [TX2](https://docs.nvidia.com/deeplearning/dgx/install-tf-jetsontx2/index.html).
+2. [Install CMake](https://cmake.org/download/).
 
-3. Install the UFF toolkit and graph surgeon; depending on your TensorRT installation method, to install the toolkit and graph surgeon, choose the method you used to install TensorRT for instructions (see [TensorRT Installation Guide: Installing TensorRT](https://docs.nvidia.com/deeplearning/sdk/tensorrt-install-guide/index.html#installing)).
+3. (For Windows builds) [Visual Studio](https://visualstudio.microsoft.com/vs/older-downloads/) 2017 Community or Enterprise edition
 
 ## Running the sample
 
 1.  Build the plugin and its corresponding Python bindings.
-   ```bash
-   mkdir build && pushd build
-   cmake .. && make -j
-   popd
-   ```
 
-  **NOTE:** If any of the dependencies are not installed in their default locations, you can manually specify them. For example:
-   ```
-   cmake .. -DPYBIND11_DIR=/path/to/pybind11/
-            -DCMAKE_CUDA_COMPILER=/usr/local/cuda-x.x/bin/nvcc  (Or adding /path/to/nvcc into $PATH)
-            -DCUDA_INC_DIR=/usr/local/cuda-x.x/include/  (Or adding /path/to/cuda/include into $CPLUS_INCLUDE_PATH)
-            -DPYTHON3_INC_DIR=/usr/include/python3.6/
-            -DTRT_LIB=/path/to/tensorrt/lib/
-            -DTRT_INCLUDE=/path/to/tensorrt/include/
-   ```
+   - On Linux, run:
+      ```bash
+      mkdir build && pushd build
+      cmake .. && make -j
+      popd
+      ```
+
+      **NOTE:** If any of the dependencies are not installed in their default locations, you can manually specify them. For example:
+      ```bash
+      cmake .. -DCMAKE_CUDA_COMPILER=/usr/local/cuda-x.x/bin/nvcc # (Or adding /path/to/nvcc into $PATH)
+               -DCUDA_INC_DIR=/usr/local/cuda-x.x/include/  # (Or adding /path/to/cuda/include into $CPLUS_INCLUDE_PATH)
+               -DTRT_LIB=/path/to/tensorrt/lib/
+               -DTRT_INCLUDE=/path/to/tensorrt/include/
+      ```
+
+   - On Windows, run the following in Powershell, replacing paths appropriately:
+      ```ps1
+      mkdir build; pushd build
+      cmake .. -G "Visual Studio 15 Win64" /
+         -DTRT_LIB=C:\path\to\tensorrt\lib /
+         -DTRT_INCLUDE=C:\path\to\tensorrt\lib /
+         -DCUDA_INC_DIR="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v<CUDA_VERSION>\include"
+      # NOTE: msbuild is usually located under C:\Program Files (x86)\Microsoft Visual Studio\2017\<EDITION>\MSBuild\<VERSION>\Bin
+      #   You should add this path to your PATH environment variable.
+      msbuild ALL_BUILD.vcxproj
+      popd
+      ```
 
 	`cmake ..` displays a complete list of configurable variables. If a variable is set to `VARIABLE_NAME-NOTFOUND`, then you’ll need to specify it manually or set the variable it is derived from correctly.
 
-3.  Run inference using TensorRT with the custom clip plugin implementation:
+2.  Run inference using TensorRT with the custom clip plugin implementation:
    ```bash
    python3 sample.py
    ```
 
-5.  Verify that the sample ran successfully. If the sample runs successfully you should see a match between the test case and the prediction.
+3.  Verify that the sample ran successfully. If the sample runs successfully you should see a match between the test case and the prediction.
    ```
    === Testing ===
    Loading Test Case: 3
@@ -135,6 +153,9 @@ The following resources provide a deeper understanding about getting started wit
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+
+September 2021
+Updated with instructions for building the plugin on Windows.
 
 March 2019
 This `README.md` file was recreated, updated and reviewed.

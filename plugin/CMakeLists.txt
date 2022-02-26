@@ -35,6 +35,7 @@ set(PLUGIN_LISTS
     coordConvACPlugin
     cropAndResizePlugin
     detectionLayerPlugin
+    efficientNMSPlugin
     flattenConcat
     generateDetectionPlugin
     gridAnchorPlugin
@@ -53,6 +54,7 @@ set(PLUGIN_LISTS
     regionPlugin
     reorgPlugin
     resizeNearestPlugin
+    scatterPlugin
     specialSlicePlugin
     splitPlugin
     )
@@ -68,9 +70,10 @@ if(BERT_GENCODES)
         geluPlugin
         skipLayerNormPlugin
         )
+    include_directories(bertQKVToContextPlugin/fused_multihead_attention/include bertQKVToContextPlugin/fused_multihead_attention_v2/include)
 endif()
 
-include_directories(common common/kernels ../samples/common)
+include_directories(common common/kernels ${CMAKE_SOURCE_DIR}/third_party)
 
 foreach(PLUGIN_ITER ${PLUGIN_LISTS})
     include_directories(${PLUGIN_ITER})

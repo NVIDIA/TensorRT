@@ -21,8 +21,16 @@ from onnx_graphsurgeon.util import misc
 from collections import OrderedDict
 from typing import List, Dict
 
+
 class Node(object):
-    def __init__(self, op: str, name: str=None, attrs: Dict[str, object]=None, inputs: List["Tensor"]=None, outputs: List["Tensor"]=None):
+    def __init__(
+        self,
+        op: str,
+        name: str = None,
+        attrs: Dict[str, object] = None,
+        inputs: List["Tensor"] = None,
+        outputs: List["Tensor"] = None,
+    ):
         """
         A node represents an operation in a graph, and consumes zero or more Tensors, and produces zero or more Tensors.
 
@@ -39,7 +47,6 @@ class Node(object):
         self.attrs = misc.default_value(attrs, OrderedDict())
         self.inputs = misc.SynchronizedList(self, field_name="outputs", initial=misc.default_value(inputs, []))
         self.outputs = misc.SynchronizedList(self, field_name="inputs", initial=misc.default_value(outputs, []))
-
 
     def i(self, tensor_idx=0, producer_idx=0):
         """
@@ -61,7 +68,6 @@ class Node(object):
         """
         return self.inputs[tensor_idx].inputs[producer_idx]
 
-
     def o(self, consumer_idx=0, tensor_idx=0):
         """
         Convenience function to get a consumer node of one of this node's output tensors.
@@ -81,7 +87,6 @@ class Node(object):
         """
         return self.outputs[tensor_idx].outputs[consumer_idx]
 
-
     def __setattr__(self, name, value):
         if name in ["inputs", "outputs"]:
             try:
@@ -92,8 +97,7 @@ class Node(object):
         else:
             super().__setattr__(name, value)
 
-
-    def copy(self, inputs: List["Tensor"]=None, outputs: List["Tensor"]=None, tensor_map=None):
+    def copy(self, inputs: List["Tensor"] = None, outputs: List["Tensor"] = None, tensor_map=None):
         """
         Makes a shallow copy of this node, overriding input and output information.
 
@@ -110,17 +114,25 @@ class Node(object):
 
         return Node(self.op, self.name, new_attrs, inputs=inputs, outputs=outputs)
 
-
     def __str__(self):
-        ret = "{:} ({:})\n\tInputs: {:}\n\tOutputs: {:}".format(self.name, self.op, self.inputs, self.outputs)
+        ret = "{:} ({:})".format(self.name, self.op)
+
+        def add_io(name, io):
+            nonlocal ret
+            ret += "\n\t{:}: [".format(name)
+            for elem in io:
+                ret += "\n\t\t{:}".format(elem)
+            ret += "\n\t]"
+
+        add_io("Inputs", self.inputs)
+        add_io("Outputs", self.outputs)
+
         if self.attrs:
             ret += "\nAttributes: {:}".format(self.attrs)
         return ret
 
-
     def __repr__(self):
         return self.__str__()
-
 
     def __eq__(self, other):
         """
@@ -128,6 +140,10 @@ class Node(object):
         """
         G_LOGGER.verbose("Comparing node: {:} with {:}".format(self.name, other.name))
         attrs_match = self.name == other.name and self.op == other.op and self.attrs == other.attrs
-        inputs_match = len(self.inputs) == len(other.inputs) and all([inp == other_inp for inp, other_inp in zip(self.inputs, other.inputs)])
-        outputs_match = len(self.outputs) == len(other.outputs) and all([out == other_out for out, other_out in zip(self.outputs, other.outputs)])
+        inputs_match = len(self.inputs) == len(other.inputs) and all(
+            [inp == other_inp for inp, other_inp in zip(self.inputs, other.inputs)]
+        )
+        outputs_match = len(self.outputs) == len(other.outputs) and all(
+            [out == other_out for out, other_out in zip(self.outputs, other.outputs)]
+        )
         return attrs_match and inputs_match and outputs_match

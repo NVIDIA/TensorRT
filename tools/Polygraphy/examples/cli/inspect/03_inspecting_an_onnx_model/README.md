@@ -1,32 +1,38 @@
 # Inspecting An ONNX Model
 
+
+## Introduction
+
 The `inspect model` subtool can display ONNX models.
 
-For example:
 
-```bash
-polygraphy inspect model ../../../models/identity.onnx --mode=basic
-```
+## Running The Example
 
-This will display something like:
+1. Inspect the ONNX model:
 
-```
-[I] ==== ONNX Model ====
-    Name: test_identity | Opset: 8
+    ```bash
+    polygraphy inspect model identity.onnx --mode=basic
+    ```
 
-    ---- 1 Graph Inputs ----
-    {x [dtype=float32, shape=(1, 1, 2, 2)]}
+    This will display something like:
 
-    ---- 1 Graph Outputs ----
-    {y [dtype=float32, shape=(1, 1, 2, 2)]}
+    ```
+    [I] ==== ONNX Model ====
+        Name: test_identity | Opset: 8
 
-    ---- 0 Initializers ----
-    {}
-
-    ---- 1 Nodes ----
-    Node 0    |  [Op: Identity]
+        ---- 1 Graph Input(s) ----
         {x [dtype=float32, shape=(1, 1, 2, 2)]}
-        -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
-```
 
-It is also possible to show detailed layer information, including layer attributes, using `--mode=full`.
+        ---- 1 Graph Output(s) ----
+        {y [dtype=float32, shape=(1, 1, 2, 2)]}
+
+        ---- 0 Initializer(s) ----
+        {}
+
+        ---- 1 Node(s) ----
+        Node 0    |  [Op: Identity]
+            {x [dtype=float32, shape=(1, 1, 2, 2)]}
+             -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
+    ```
+
+    It is also possible to show detailed layer information, including layer attributes, using `--mode=full`.

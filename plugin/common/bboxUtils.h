@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef TRT_BBOX_UTILS_H
 #define TRT_BBOX_UTILS_H
 

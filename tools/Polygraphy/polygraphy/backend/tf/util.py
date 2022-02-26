@@ -15,9 +15,11 @@
 #
 from collections import defaultdict
 
+from polygraphy import mod, util
 from polygraphy.common import TensorMetadata
-from polygraphy.logger.logger import G_LOGGER
-from polygraphy.util import misc
+from polygraphy.logger import G_LOGGER
+
+tf = mod.lazy_import("tensorflow", version="<2.0")
 
 
 def load_graph(path):
@@ -31,15 +33,21 @@ def load_graph(path):
     Returns:
         tf.Graph: The TensorFlow graph
     """
-    import tensorflow as tf
-
     if isinstance(path, tf.Graph):
         return path
 
     if isinstance(path, str):
-        with open(path, "rb") as frozen_pb:
-            graphdef = tf.compat.v1.GraphDef()
-            graphdef.ParseFromString(frozen_pb.read())
+        graphdef = tf.compat.v1.GraphDef()
+
+        import google
+
+        try:
+            graphdef.ParseFromString(util.load_file(path, description="GraphDef"))
+        except google.protobuf.message.DecodeError:
+            G_LOGGER.backtrace()
+            G_LOGGER.critical(
+                "Could not import TensorFlow GraphDef from: {:}. Is this a valid TensorFlow model?".format(path)
+            )
     elif isinstance(path, tf.compat.v1.GraphDef):
         graphdef = path
 
@@ -59,7 +67,7 @@ def map_node_outputs(graphdef):
         split_input = input_name.split(":")
         if len(split_input) > 1:
             split_input.pop(-1)
-        return ":".join(split_input).replace('^', '')
+        return ":".join(split_input).replace("^", "")
 
     node_outputs = defaultdict(list)
     for node in graphdef.node:
@@ -115,15 +123,17 @@ def get_output_metadata(graph, layerwise=False):
             "NoOp",
             "ReadVariableOp",
             "VarIsInitializedOp",
-            "Const"
-            ]
+            "Const",
+        ]
 
         # Additionally, we sometimes need to exclude entire namespaces e.g. while loops.
         EXCLUDE_NAMESPACES = ["while", "Assert"]
 
         if any([ex_op in node.op for ex_op in EXCLUDE_OPS]) or any([ns in node.name for ns in EXCLUDE_NAMESPACES]):
-            G_LOGGER.extra_verbose("Excluding {:}, op {:} is not a valid output op or is part of an excluded namespace "
-                             "(Note: excluded namespaces: {:})".format(node.name, node.op, EXCLUDE_NAMESPACES))
+            G_LOGGER.extra_verbose(
+                "Excluding {:}, op {:} is not a valid output op or is part of an excluded namespace "
+                "(Note: excluded namespaces: {:})".format(node.name, node.op, EXCLUDE_NAMESPACES)
+            )
             return False
 
         return True
@@ -146,10 +156,14 @@ def get_output_metadata(graph, layerwise=False):
         except KeyError:
             G_LOGGER.warning("Could not import: {:}. Skipping.".format(tensor_name))
     if len(output_tensors) != len(output_nodes):
-        G_LOGGER.warning("Excluded {:} ops that don't seem like outputs. Use -vv/--super-verbose, or set "
-                        "logging verbosity to EXTRA_VERBOSE to view them.".format(len(output_nodes) - len(output_tensors)))
+        G_LOGGER.warning(
+            "Excluded {:} ops that don't seem like outputs. Use -vv/--super-verbose, or set "
+            "logging verbosity to EXTRA_VERBOSE to view them.".format(len(output_nodes) - len(output_tensors))
+        )
 
-    G_LOGGER.extra_verbose("Found output op types in graph: {:}".format(set([tensor.op.type for tensor in output_tensors])))
+    G_LOGGER.extra_verbose(
+        "Found output op types in graph: {:}".format({tensor.op.type for tensor in output_tensors})
+    )
     G_LOGGER.verbose("Retrieved TensorFlow output_tensors: {:}".format(output_tensors))
     return get_tensor_metadata(output_tensors)
 
@@ -167,10 +181,12 @@ def str_from_graph(graph, mode):
     graph_str += "---- {:} Graph Outputs ----\n{:}\n\n".format(len(output_metadata), output_metadata)
     graph_str += "---- {:} Nodes ----\n".format(len(graph.as_graph_def().node))
     if mode == "basic":
-        G_LOGGER.warning("Displaying layer information is unsupported for TensorFlow graphs. "
-                         "Please use --mode=full if you would like to see the raw nodes")
+        G_LOGGER.warning(
+            "Displaying layer information is unsupported for TensorFlow graphs. "
+            "Please use --mode=full if you would like to see the raw nodes"
+        )
         if mode == "full":
             for node in graph.as_graph_def().node:
                 graph_str += str(node) + "\n"
         graph_str += "\n"
-    return misc.indent_block(graph_str, level=0)
+    return util.indent_block(graph_str, level=0)

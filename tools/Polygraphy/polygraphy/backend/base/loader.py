@@ -14,8 +14,28 @@
 # limitations under the License.
 #
 
-class BaseLoadModel(object):
+from polygraphy import func, mod
+
+
+@mod.export()
+class BaseLoader(object):
     """
-    Loads a model for a runner.
+    Base class for Polygraphy Loaders.
     """
-    pass
+
+    def call_impl(self, *args, **kwargs):
+        """
+        Implementation for ``__call__``. Derived classes should implement this
+        method rather than ``__call__``.
+        """
+        raise NotImplementedError("BaseLoader is an abstract class")
+
+    @func.constantmethod
+    def __call__(self, *args, **kwargs):
+        """
+        Invokes the loader by forwarding arguments to ``call_impl``.
+
+        Note: ``call_impl`` should *not* be called directly - use this function instead.
+        """
+        __doc__ = self.call_impl.__doc__
+        return self.call_impl(*args, **kwargs)

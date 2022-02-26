@@ -1,26 +1,33 @@
-from polygraphy.backend.trt.loader import EngineFromBytes, NetworkFromOnnxBytes, NetworkFromOnnxPath, ModifyNetwork, Profile, CreateConfig, EngineFromNetwork, SaveEngine, LoadPlugins, CreateNetwork
-from polygraphy.backend.trt.runner import TrtRunner
-from polygraphy.backend.trt.calibrator import Calibrator
-from polygraphy.backend.trt.util import TRT_LOGGER
+from polygraphy.backend.trt.algorithm_selector import *
+from polygraphy.backend.trt.calibrator import *
+from polygraphy.backend.trt.loader import *
+from polygraphy.backend.trt.profile import *
+from polygraphy.backend.trt.runner import *
+from polygraphy.backend.trt.util import *
 
 
-def register_callback():
-    from polygraphy.logger.logger import G_LOGGER
+def register_logger_callback():
+    from polygraphy.logger import G_LOGGER
 
     def set_trt_logging_level(sev):
-        import tensorrt as trt
+        from polygraphy import mod
+
+        trt = mod.lazy_import("tensorrt")
+        if not mod.has_mod(trt):
+            return
 
         if sev >= G_LOGGER.CRITICAL:
-            TRT_LOGGER.min_severity = trt.Logger.INTERNAL_ERROR
+            get_trt_logger().min_severity = trt.Logger.INTERNAL_ERROR
         elif sev >= G_LOGGER.ERROR:
-            TRT_LOGGER.min_severity = trt.Logger.ERROR
+            get_trt_logger().min_severity = trt.Logger.ERROR
         elif sev >= G_LOGGER.INFO:
-            TRT_LOGGER.min_severity = trt.Logger.WARNING
+            get_trt_logger().min_severity = trt.Logger.WARNING
         elif sev >= G_LOGGER.VERBOSE:
-            TRT_LOGGER.min_severity = trt.Logger.INFO
+            get_trt_logger().min_severity = trt.Logger.INFO
         else:
-            TRT_LOGGER.min_severity = trt.Logger.VERBOSE
+            get_trt_logger().min_severity = trt.Logger.VERBOSE
 
-    G_LOGGER.register_callback(set_trt_logging_level) # Will be registered when this runner is imported.
+    G_LOGGER.register_callback(set_trt_logging_level)  # Will be registered when this backend is imported.
 
-register_callback()
+
+register_logger_callback()

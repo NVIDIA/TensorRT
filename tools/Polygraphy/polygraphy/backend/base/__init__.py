@@ -1,2 +1,2 @@
-from polygraphy.backend.base.loader import BaseLoadModel
-from polygraphy.backend.base.runner import BaseRunner
+from polygraphy.backend.base.runner import *
+from polygraphy.backend.base.loader import *

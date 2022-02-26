@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
-#include <cassert>
 #include <cstring>
-#include <type_traits>
 #include <vector>
+#include <cassert>
+#include <type_traits>
 
 #include <iostream>
 using std::cerr;
@@ -44,7 +43,7 @@ template <typename T>
 struct Serializer<T,
     typename std::enable_if<std::is_arithmetic<T>::value || std::is_enum<T>::value || std::is_pod<T>::value>::type>
 {
-    static size_t serialized_size(T const& value)
+    static size_t serialized_size(T const&)
     {
         return sizeof(T);
     }

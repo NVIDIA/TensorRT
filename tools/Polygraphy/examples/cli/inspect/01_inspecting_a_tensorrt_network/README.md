@@ -1,31 +1,37 @@
 # Inspecting A TensorRT Network
 
+
+## Introduction
+
 The `inspect model` subtool can automatically convert supported formats
 into TensorRT networks, and then display them.
 
-For example:
 
-```bash
-polygraphy inspect model ../../../models/identity.onnx \
-    --mode=basic --display-as=trt
-```
+## Running The Example
 
-This will display something like:
+1. Display the TensorRT network after parsing an ONNX model:
 
-```
-[I] ==== TensorRT Network ====
-    Name: Unnamed Network 0 | Explicit Batch Network
+    ```bash
+    polygraphy inspect model identity.onnx \
+        --mode=basic --display-as=trt
+    ```
 
-    ---- 1 Network Inputs ----
-    {x [dtype=float32, shape=(1, 1, 2, 2)]}
+    This will display something like:
 
-    ---- 1 Network Outputs ----
-    {y [dtype=float32, shape=(1, 1, 2, 2)]}
+    ```
+    [I] ==== TensorRT Network ====
+        Name: Unnamed Network 0 | Explicit Batch Network
 
-    ---- 1 Layers ----
-    Layer 0    | (Unnamed Layer* 0) [Identity] [Op: LayerType.IDENTITY]
+        ---- 1 Network Input(s) ----
         {x [dtype=float32, shape=(1, 1, 2, 2)]}
-        -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
-```
 
-It is also possible to show detailed layer information, including layer attributes, using `--mode=full`.
+        ---- 1 Network Output(s) ----
+        {y [dtype=float32, shape=(1, 1, 2, 2)]}
+
+        ---- 1 Layer(s) ----
+        Layer 0    | node_of_y [Op: LayerType.IDENTITY]
+            {x [dtype=float32, shape=(1, 1, 2, 2)]}
+             -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
+    ```
+
+    It is also possible to show detailed layer information, including layer attributes, using `--mode=full`.

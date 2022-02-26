@@ -13,17 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.inspect.subtool import Model, Data
 from polygraphy.tools.base import Tool
+from polygraphy.tools.inspect.subtool import Data, Model, Tactics, Capability
 
 
 class Inspect(Tool):
     """
-    Display information about supported files.
+    View information about various types of files.
     """
+
     def __init__(self):
         super().__init__("inspect")
-
 
     def add_parser_args(self, parser):
         subparsers = parser.add_subparsers(title="Inspection Subtools", dest="subtool")
@@ -32,6 +32,8 @@ class Inspect(Tool):
         SUBTOOLS = [
             Model(),
             Data(),
+            Tactics(),
+            Capability()
         ]
 
         for subtool in SUBTOOLS:

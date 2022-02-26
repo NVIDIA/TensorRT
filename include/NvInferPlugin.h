@@ -30,8 +30,9 @@ extern "C"
     //!
     //! \brief Initialize and register all the existing TensorRT plugins to the Plugin Registry with an optional
     //! namespace. The plugin library author should ensure that this function name is unique to the library. This
-    //! function should be called once before accessing the Plugin Registry. \param logger Logger object to print plugin
-    //! registration information \param libNamespace Namespace used to register all the plugins in this library
+    //! function should be called once before accessing the Plugin Registry.
+    //! \param logger Logger object to print plugin registration information
+    //! \param libNamespace Namespace used to register all the plugins in this library
     //!
     TENSORRTAPI bool initLibNvInferPlugins(void* logger, const char* libNamespace);
 

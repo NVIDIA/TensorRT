@@ -32,24 +32,25 @@ namespace sample
 {
 
 // Build default params
-constexpr int defaultMaxBatch{1};
-constexpr int defaultWorkspace{16};
-constexpr int defaultMinTiming{1};
-constexpr int defaultAvgTiming{8};
+constexpr int32_t maxBatchNotProvided{0};
+constexpr int32_t defaultWorkspace{16};
+constexpr int32_t defaultMinTiming{1};
+constexpr int32_t defaultAvgTiming{8};
 
 // System default params
-constexpr int defaultDevice{0};
+constexpr int32_t defaultDevice{0};
 
 // Inference default params
-constexpr int defaultBatch{1};
-constexpr int defaultStreams{1};
-constexpr int defaultIterations{10};
-constexpr int defaultWarmUp{200};
-constexpr int defaultDuration{3};
-constexpr int defaultSleep{0};
+constexpr int32_t defaultBatch{1};
+constexpr int32_t batchNotProvided{0};
+constexpr int32_t defaultStreams{1};
+constexpr int32_t defaultIterations{10};
+constexpr int32_t defaultWarmUp{200};
+constexpr int32_t defaultDuration{3};
+constexpr int32_t defaultSleep{0};
 
 // Reporting default params
-constexpr int defaultAvgRuns{10};
+constexpr int32_t defaultAvgRuns{10};
 constexpr float defaultPercentile{99};
 
 enum class ModelFormat
@@ -60,11 +61,25 @@ enum class ModelFormat
     kUFF
 };
 
+enum class SparsityFlag
+{
+    kDISABLE,
+    kENABLE,
+    kFORCE
+};
+
+enum class TimingCacheMode
+{
+    kDISABLE,
+    kLOCAL,
+    kGLOBAL
+};
+
 using Arguments = std::unordered_multimap<std::string, std::string>;
 
 using IOFormat = std::pair<nvinfer1::DataType, nvinfer1::TensorFormats>;
 
-using ShapeRange = std::array<std::vector<int>, nvinfer1::EnumMax<nvinfer1::OptProfileSelector>()>;
+using ShapeRange = std::array<std::vector<int32_t>, nvinfer1::EnumMax<nvinfer1::OptProfileSelector>()>;
 
 struct Options
 {
@@ -105,19 +120,22 @@ struct ModelOptions : public Options
 
 struct BuildOptions : public Options
 {
-    int maxBatch{defaultMaxBatch}; // Parsing sets maxBatch to 0 if explicitBatch is true
-    int workspace{defaultWorkspace};
-    int minTiming{defaultMinTiming};
-    int avgTiming{defaultAvgTiming};
+    int32_t maxBatch{maxBatchNotProvided};
+    int32_t workspace{defaultWorkspace};
+    int32_t minTiming{defaultMinTiming};
+    int32_t avgTiming{defaultAvgTiming};
     bool tf32{true};
-    bool refittable{false};
     bool fp16{false};
     bool int8{false};
+    bool strictTypes{false};
     bool safe{false};
+    bool consistency{false};
+    bool restricted{false};
     bool save{false};
     bool load{false};
-    bool builderCache{true};
-    nvinfer1::ProfilingVerbosity nvtxMode{nvinfer1::ProfilingVerbosity::kDEFAULT};
+    bool refittable{false};
+    SparsityFlag sparsity{SparsityFlag::kDISABLE};
+    nvinfer1::ProfilingVerbosity profilingVerbosity{nvinfer1::ProfilingVerbosity::kLAYER_NAMES_ONLY};
     std::string engine;
     std::string calibration;
     std::unordered_map<std::string, ShapeRange> shapes;
@@ -126,6 +144,8 @@ struct BuildOptions : public Options
     std::vector<IOFormat> outputFormats;
     nvinfer1::TacticSources enabledTactics{0};
     nvinfer1::TacticSources disabledTactics{0};
+    TimingCacheMode timingCacheMode{TimingCacheMode::kLOCAL};
+    std::string timingCacheFile{};
     void parse(Arguments& arguments) override;
 
     static void help(std::ostream& out);
@@ -133,8 +153,8 @@ struct BuildOptions : public Options
 
 struct SystemOptions : public Options
 {
-    int device{defaultDevice};
-    int DLACore{-1};
+    int32_t device{defaultDevice};
+    int32_t DLACore{-1};
     bool fallback{false};
     std::vector<std::string> plugins;
 
@@ -145,21 +165,24 @@ struct SystemOptions : public Options
 
 struct InferenceOptions : public Options
 {
-    int batch{defaultBatch}; // Parsing sets batch to 0 is shapes is not empty
-    int iterations{defaultIterations};
-    int warmup{defaultWarmUp};
-    int duration{defaultDuration};
-    int sleep{defaultSleep};
-    int streams{defaultStreams};
+    int32_t batch{batchNotProvided};
+    int32_t iterations{defaultIterations};
+    int32_t warmup{defaultWarmUp};
+    int32_t duration{defaultDuration};
+    int32_t sleep{defaultSleep};
+    int32_t streams{defaultStreams};
     bool overlap{true};
     bool skipTransfers{false};
+    bool useManaged{false};
     bool spin{false};
     bool threads{false};
     bool graph{false};
     bool skip{false};
     bool rerun{false};
+    bool timeDeserialize{false};
+    bool timeRefit{false};
     std::unordered_map<std::string, std::string> inputs;
-    std::unordered_map<std::string, std::vector<int>> shapes;
+    std::unordered_map<std::string, std::vector<int32_t>> shapes;
 
     void parse(Arguments& arguments) override;
 
@@ -169,18 +192,38 @@ struct InferenceOptions : public Options
 struct ReportingOptions : public Options
 {
     bool verbose{false};
-    int avgs{defaultAvgRuns};
+    int32_t avgs{defaultAvgRuns};
     float percentile{defaultPercentile};
     bool refit{false};
     bool output{false};
     bool profile{false};
+    bool layerInfo{false};
     std::string exportTimes;
     std::string exportOutput;
     std::string exportProfile;
+    std::string exportLayerInfo;
 
     void parse(Arguments& arguments) override;
 
     static void help(std::ostream& out);
+};
+
+struct SafeBuilderOptions : public Options
+{
+    std::string serialized{};
+    std::string onnxModelFile{};
+    bool help{false};
+    bool verbose{false};
+    std::vector<IOFormat> inputFormats;
+    std::vector<IOFormat> outputFormats;
+    bool int8{false};
+    std::string calibFile{};
+    std::vector<std::string> plugins;
+    bool consistency{false};
+
+    void parse(Arguments& arguments) override;
+
+    static void printHelp(std::ostream& out);
 };
 
 struct AllOptions : public Options
@@ -197,7 +240,7 @@ struct AllOptions : public Options
     static void help(std::ostream& out);
 };
 
-Arguments argsToArgumentsMap(int argc, char* argv[]);
+Arguments argsToArgumentsMap(int32_t argc, char* argv[]);
 
 bool parseHelp(Arguments& arguments);
 
@@ -224,6 +267,64 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options);
 std::ostream& operator<<(std::ostream& os, const ReportingOptions& options);
 
 std::ostream& operator<<(std::ostream& os, const AllOptions& options);
+
+std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options);
+
+inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
+{
+    for (int32_t i = 0; i < dims.nbDims; ++i)
+    {
+        os << (i ? "x" : "") << dims.d[i];
+    }
+    return os;
+}
+inline std::ostream& operator<<(std::ostream& os, const nvinfer1::WeightsRole role)
+{
+    switch (role)
+    {
+    case nvinfer1::WeightsRole::kKERNEL:
+    {
+        os << "Kernel";
+        break;
+    }
+    case nvinfer1::WeightsRole::kBIAS:
+    {
+        os << "Bias";
+        break;
+    }
+    case nvinfer1::WeightsRole::kSHIFT:
+    {
+        os << "Shift";
+        break;
+    }
+    case nvinfer1::WeightsRole::kSCALE:
+    {
+        os << "Scale";
+        break;
+    }
+    case nvinfer1::WeightsRole::kCONSTANT:
+    {
+        os << "Constant";
+        break;
+    }
+    case nvinfer1::WeightsRole::kANY:
+    {
+        os << "Any";
+        break;
+    }
+    }
+
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const std::vector<int32_t>& vec)
+{
+    for (int32_t i = 0, e = static_cast<int32_t>(vec.size()); i < e; ++i)
+    {
+        os << (i ? "x" : "") << vec[i];
+    }
+    return os;
+}
 
 } // namespace sample
 

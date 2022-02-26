@@ -74,5 +74,5 @@ setup(
     url="https://github.com/nvidia/tensorrt/tools/pytorch-quantization",
     author="NVIDIA",
     author_email="nvidia@nvidia.com",
-
+    license="Apache 2.0",
 )

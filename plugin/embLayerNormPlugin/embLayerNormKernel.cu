@@ -78,7 +78,7 @@ __global__ void fillSBSMaskKernel(
     inputMaskX[(bi * xmmas_m + mi) * threads_per_cta + tidx] = mask;
 }
 
-void convertMask(const uint32_t S, const uint32_t B, const uint32_t warps_m, const uint32_t warps_n,
+cudaError_t convertMask(const uint32_t S, const uint32_t B, const uint32_t warps_m, const uint32_t warps_n,
     const uint32_t warps_k, const int* inputMaskSB, uint32_t* inputMaskX, cudaStream_t stream)
 {
     const size_t xmmas_m = (S + 16 * warps_m - 1) / (16 * warps_m);
@@ -86,7 +86,7 @@ void convertMask(const uint32_t S, const uint32_t B, const uint32_t warps_m, con
     const size_t threads_per_cta = warps_m * warps_n * warps_k * 32;
     dim3 grid(xmmas_m, B);
     fillSBSMaskKernel<<<grid, threads_per_cta, S * sizeof(int), stream>>>(warps_m, warps_n, S, inputMaskSB, inputMaskX);
-    CHECK(cudaPeekAtLastError());
+    return cudaPeekAtLastError();
 }
 
 template <unsigned TPB>
@@ -172,9 +172,7 @@ int computeMaskIdx(cudaStream_t stream, const int S, const int B, const int* mas
         maskIdxKernel<256><<<B, 256, 0, stream>>>(S, mask, maskIdx);
     }
 
-    CHECK(cudaPeekAtLastError());
-
-    return 0;
+    return cudaPeekAtLastError();
 }
 
 template <typename T, unsigned TPB>

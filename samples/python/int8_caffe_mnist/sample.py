@@ -42,7 +42,7 @@ class ModelData(object):
 
 # This function builds an engine from a Caffe model.
 def build_int8_engine(deploy_file, model_file, calib, batch_size=32):
-    with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.CaffeParser() as parser:
+    with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.CaffeParser() as parser, trt.Runtime(TRT_LOGGER) as runtime:
         # We set the builder batch size to be the same as the calibrator's, as we use the same batches
         # during inference. Note that this is not required in general, and inference batch size is
         # independent of calibration batch size.
@@ -54,7 +54,8 @@ def build_int8_engine(deploy_file, model_file, calib, batch_size=32):
         model_tensors = parser.parse(deploy=deploy_file, model=model_file, network=network, dtype=ModelData.DTYPE)
         network.mark_output(model_tensors.find(ModelData.OUTPUT_NAME))
         # Build engine and do int8 calibration.
-        return builder.build_engine(network, config)
+        plan = builder.build_serialized_network(network, config)
+        return runtime.deserialize_cuda_engine(plan)
 
 
 def check_accuracy(context, batch_size, test_set, test_labels):

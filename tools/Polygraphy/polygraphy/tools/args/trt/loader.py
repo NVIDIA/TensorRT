@@ -13,208 +13,241 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.common import constants
+
+from polygraphy import mod, util
+from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
-from polygraphy.tools.util import misc as tools_util
-from polygraphy.tools.util.script import Inline, Script
-from polygraphy.util import misc
+from polygraphy.tools.script import make_invocable
 
 
-# FIXME: This should be split into separate network and config argument groups.
-class TrtLoaderArgs(BaseArgs):
-    def __init__(self, config=True, outputs=True, network_api=False):
-        self._config = config
+@mod.export()
+class TrtPluginLoaderArgs(BaseArgs):
+    def add_to_parser(self, parser):
+        trt_args = parser.add_argument_group("TensorRT Plugin Loader", "Options for TensorRT Plugin Loader")
+        trt_args.add_argument("--plugins", help="Path(s) of plugin libraries to load", nargs="+", default=None)
+
+    def parse(self, args):
+        self.plugins = args_util.get(args, "plugins")
+
+    # If plugins are present, wrap the provided loader/object with LoadPlugins
+    def wrap_if_plugins(self, script, loader_name):
+        if self.plugins:
+            script.add_import(imports=["LoadPlugins"], frm="polygraphy.backend.trt")
+            loader_str = make_invocable("LoadPlugins", plugins=self.plugins, obj=loader_name)
+            loader_name = script.add_loader(loader_str, "load_plugins")
+        return loader_name
+
+
+@mod.export()
+class TrtNetworkLoaderArgs(BaseArgs):
+    def __init__(self, outputs=True):
+        super().__init__()
+        self.onnx_loader_args = None
+
         self._outputs = outputs
-        self._network_api = network_api
-
 
     def add_to_parser(self, parser):
-        trt_args = parser.add_argument_group("TensorRT", "Options for TensorRT")
-        if self._config:
-            trt_args.add_argument("--trt-min-shapes", action='append', help="The minimum shapes the optimization profile(s) will support. "
-                                "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
-                                "Format: --trt-min-shapes <input0>,D0xD1x..xDN .. <inputN>,D0xD1x..xDN", nargs="+", default=[])
-            trt_args.add_argument("--trt-opt-shapes", action='append', help="The shapes for which the optimization profile(s) will be most performant. "
-                                "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
-                                "Format: --trt-opt-shapes <input0>,D0xD1x..xDN .. <inputN>,D0xD1x..xDN", nargs="+", default=[])
-            trt_args.add_argument("--trt-max-shapes", action='append', help="The maximum shapes the optimization profile(s) will support. "
-                                "Specify this option once for each profile. If not provided, inference-time input shapes are used. "
-                                "Format: --trt-max-shapes <input0>,D0xD1x..xDN .. <inputN>,D0xD1x..xDN", nargs="+", default=[])
-
-            trt_args.add_argument("--tf32", help="Enable tf32 precision in TensorRT", action="store_true", default=None)
-            trt_args.add_argument("--fp16", help="Enable fp16 precision in TensorRT", action="store_true", default=None)
-            trt_args.add_argument("--int8", help="Enable int8 precision in TensorRT", action="store_true", default=None)
-            trt_args.add_argument("--strict-types", help="Enable strict types in TensorRT, forcing it to choose tactics based on the "
-                                                        "layer precision set, even if another precision is faster.", action="store_true", default=None)
-            # Workspace uses float to enable scientific notation (e.g. 1e9)
-            trt_args.add_argument("--workspace", metavar="BYTES", help="Memory in bytes to allocate for the TensorRT builder's workspace", type=float, default=None)
-            trt_args.add_argument("--calibration-cache", help="Path to the calibration cache", default=None)
-            trt_args.add_argument("--plugins", help="Path(s) of additional plugin libraries to load", nargs="+", default=None)
-        trt_args.add_argument("--explicit-precision", help="Enable explicit precision mode", action="store_true", default=None)
-        trt_args.add_argument("--ext", help="Enable parsing ONNX models with externally stored weights", action="store_true", default=None)
+        trt_args = parser.add_argument_group("TensorRT Network Loader", "Options for TensorRT Network Loader")
+        trt_args.add_argument(
+            "--explicit-precision", help="Enable explicit precision mode", action="store_true", default=None
+        )
         if self._outputs:
-            trt_args.add_argument("--trt-outputs", help="Name(s) of TensorRT output(s). "
-                                "Using '--trt-outputs mark all' indicates that all tensors should be used as outputs", nargs="+", default=None)
-            trt_args.add_argument("--trt-exclude-outputs", help="[EXPERIMENTAL] Name(s) of TensorRT output(s) to unmark as outputs.",
-                                nargs="+", default=None)
-        if self._network_api:
-            trt_args.add_argument("--network-api", help="[EXPERIMENTAL] Generated script will include placeholder code for defining a TensorRT Network using "
-                                "the network API. Only valid if --gen/--gen-script is also enabled.", action="store_true", default=None)
-
+            trt_args.add_argument(
+                "--trt-outputs",
+                help="Name(s) of TensorRT output(s). "
+                "Using '--trt-outputs mark all' indicates that all tensors should be used as outputs",
+                nargs="+",
+                default=None,
+            )
+            trt_args.add_argument(
+                "--trt-exclude-outputs",
+                help="[EXPERIMENTAL] Name(s) of TensorRT output(s) to unmark as outputs.",
+                nargs="+",
+                default=None,
+            )
+        trt_args.add_argument(
+            "--trt-network-func-name",
+            help="When using a trt-network-script instead of other model types, this specifies the name "
+            "of the function that loads the network. Defaults to `load_network`.",
+            default="load_network",
+        )
 
     def register(self, maker):
-        from polygraphy.tools.args.data_loader import DataLoaderArgs
         from polygraphy.tools.args.model import ModelArgs
         from polygraphy.tools.args.onnx.loader import OnnxLoaderArgs
+        from polygraphy.tools.args.trt.config import TrtConfigArgs
 
         if isinstance(maker, ModelArgs):
             self.model_args = maker
         if isinstance(maker, OnnxLoaderArgs):
             self.onnx_loader_args = maker
-        if isinstance(maker, DataLoaderArgs):
-            self.data_loader_args = maker
-
+        if isinstance(maker, TrtConfigArgs):
+            self.trt_config_args = maker
+        if isinstance(maker, TrtPluginLoaderArgs):
+            self.trt_plugin_args = maker
 
     def check_registered(self):
         assert self.model_args is not None, "ModelArgs is required!"
-        if self._config:
-            assert self.data_loader_args is not None, "DataLoaderArgs is required if config is enabled!"
-
+        assert self.trt_plugin_args is not None, "TrtPluginLoaderArgs is required!"
 
     def parse(self, args):
-        self.plugins = tools_util.get(args, "plugins")
-        self.outputs = tools_util.get_outputs(args, "trt_outputs")
-        self.network_api = tools_util.get(args, "network_api")
-        self.ext = tools_util.get(args, "ext")
-        self.explicit_precision = tools_util.get(args, "explicit_precision")
-        self.exclude_outputs = tools_util.get(args, "trt_exclude_outputs")
-
-        self.trt_min_shapes = misc.default_value(tools_util.get(args, "trt_min_shapes"), [])
-        self.trt_max_shapes = misc.default_value(tools_util.get(args, "trt_max_shapes"), [])
-        self.trt_opt_shapes = misc.default_value(tools_util.get(args, "trt_opt_shapes"), [])
-
-        workspace = tools_util.get(args, "workspace")
-        self.workspace = int(workspace) if workspace is not None else workspace
-
-        self.tf32 = tools_util.get(args, "tf32")
-        self.fp16 = tools_util.get(args, "fp16")
-        self.int8 = tools_util.get(args, "int8")
-
-        self.calibration_cache = tools_util.get(args, "calibration_cache")
-        self.strict_types = tools_util.get(args, "strict_types")
-
-
-    # If plugins are present, wrap the provided loader/object with LoadPlugins
-    def _wrap_if_plugins(self, script, obj_name):
-        if self.plugins:
-            script.add_import(imports=["LoadPlugins"], frm="polygraphy.backend.trt")
-            loader_str = Script.invoke("LoadPlugins", obj_name, plugins=self.plugins)
-            obj_name = script.add_loader(loader_str, "load_plugins")
-        return obj_name
-
+        self.outputs = args_util.get_outputs(args, "trt_outputs")
+        self.explicit_precision = args_util.get(args, "explicit_precision")
+        self.exclude_outputs = args_util.get(args, "trt_exclude_outputs")
+        self.trt_network_func_name = args_util.get(args, "trt_network_func_name")
 
     def add_trt_network_loader(self, script):
         model_file = self.model_args.model_file
-        outputs = tools_util.get_outputs_for_script(script, self.outputs)
+        model_type = self.model_args.model_type
+        outputs = args_util.get_outputs_for_script(script, self.outputs)
 
-        if self.network_api:
-            CREATE_NETWORK_FUNC = Inline("create_network")
-
-            script.add_import(imports=["CreateNetwork"], frm="polygraphy.backend.trt")
-            script.add_import(imports=["func"], frm="polygraphy.common")
-
-            script.append_prefix("# Manual TensorRT network creation")
-            script.append_prefix("@func.extend(CreateNetwork())")
-            script.append_prefix("def {:}(builder, network):".format(CREATE_NETWORK_FUNC))
-            script.append_prefix("{tab}import tensorrt as trt\n".format(tab=constants.TAB))
-            script.append_prefix("{tab}# Define your network here. Make sure to mark outputs!".format(tab=constants.TAB))
-            net_inputs = self.model_args.input_shapes
-            if net_inputs:
-                for name, (dtype, shape) in net_inputs.items():
-                    script.append_prefix("{tab}{name} = network.add_input(name='{name}', shape={shape}, dtype=trt.float32) # TODO: Set dtype".format(
-                                            name=name, shape=shape, tab=constants.TAB))
-            script.append_prefix("{tab}# TODO: network.mark_output(...)\n".format(tab=constants.TAB))
-            return CREATE_NETWORK_FUNC
-
-        should_use_onnx_loader = not self.ext and self.onnx_loader_args is not None
-
-        if should_use_onnx_loader:
+        if model_type == "trt-network-script":
+            script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
+            loader_str = make_invocable("InvokeFromScript", model_file, name=self.trt_network_func_name)
+            loader_name = script.add_loader(loader_str, "load_network")
+        # When loading from ONNX, we need to disable custom outputs since TRT requires dtypes on outputs, which our marking function doesn't guarantee.
+        elif self.onnx_loader_args is not None and self.onnx_loader_args.should_use_onnx_loader(
+            disable_custom_outputs=True
+        ):
             script.add_import(imports=["NetworkFromOnnxBytes"], frm="polygraphy.backend.trt")
-            onnx_loader = self.onnx_loader_args.add_serialized_onnx_loader(script, disable_outputs=True)
-            loader_str = Script.invoke("NetworkFromOnnxBytes", self._wrap_if_plugins(script, onnx_loader), explicit_precision=self.explicit_precision)
+            onnx_loader = self.onnx_loader_args.add_serialized_onnx_loader(script, disable_custom_outputs=True)
+            loader_str = make_invocable(
+                "NetworkFromOnnxBytes",
+                self.trt_plugin_args.wrap_if_plugins(script, onnx_loader),
+                explicit_precision=self.explicit_precision,
+            )
             loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
         else:
             script.add_import(imports=["NetworkFromOnnxPath"], frm="polygraphy.backend.trt")
-            loader_str = Script.invoke("NetworkFromOnnxPath", self._wrap_if_plugins(script, model_file), explicit_precision=self.explicit_precision)
+            loader_str = make_invocable(
+                "NetworkFromOnnxPath",
+                self.trt_plugin_args.wrap_if_plugins(script, model_file),
+                explicit_precision=self.explicit_precision,
+            )
             loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
 
-        MODIFY_NETWORK = "ModifyNetwork"
-        modify_network_str = Script.invoke(MODIFY_NETWORK, loader_name, outputs=outputs, exclude_outputs=self.exclude_outputs)
-        if modify_network_str != Script.invoke(MODIFY_NETWORK, loader_name):
+        MODIFY_NETWORK = "ModifyNetworkOutputs"
+        modify_network_str = make_invocable(
+            MODIFY_NETWORK, loader_name, outputs=outputs, exclude_outputs=self.exclude_outputs
+        )
+        if str(modify_network_str) != str(make_invocable(MODIFY_NETWORK, loader_name)):
             script.add_import(imports=[MODIFY_NETWORK], frm="polygraphy.backend.trt")
             loader_name = script.add_loader(modify_network_str, "modify_network")
 
         return loader_name
 
+    def get_network_loader(self):
+        return args_util.run_script(self.add_trt_network_loader)
 
-    def add_trt_config_loader(self, script, data_loader_name):
-        profiles = []
-        profile_args = tools_util.parse_profile_shapes(self.model_args.input_shapes, self.trt_min_shapes, self.trt_opt_shapes, self.trt_max_shapes)
-        for (min_shape, opt_shape, max_shape) in profile_args:
-            profile_str = "Profile()"
-            for name in min_shape.keys():
-                profile_str += Script.format_str(".add({:}, min={:}, opt={:}, max={:})", name, min_shape[name], opt_shape[name], max_shape[name])
-            profiles.append(Inline(profile_str))
-        if profiles:
-            script.add_import(imports=["Profile"], frm="polygraphy.backend.trt")
-            sep = Inline("\n{:}".format(constants.TAB))
-            profiles = Script.format_str("[{:}{:}\n]", sep, Inline((",{:}".format(sep)).join(profiles)))
-            profile_name = script.add_loader(profiles, "profiles")
-        else:
-            profile_name = None
+    def load_network(self):
+        return self.get_network_loader()()
 
-        calibrator = None
-        if self.int8:
-            script.add_import(imports=["Calibrator"], frm="polygraphy.backend.trt")
-            script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")
-            calibrator = Script.invoke("Calibrator", data_loader=Inline(data_loader_name) if data_loader_name else Inline("DataLoader()"),
-                                    cache=self.calibration_cache)
 
-        config_loader_str = Script.invoke_if_nondefault("CreateTrtConfig", max_workspace_size=self.workspace, tf32=self.tf32,
-                                                        fp16=self.fp16, int8=self.int8, strict_types=self.strict_types,
-                                                        profiles=profile_name, calibrator=Inline(calibrator) if calibrator else None)
-        if config_loader_str is not None:
-            script.add_import(imports=["CreateConfig as CreateTrtConfig"], frm="polygraphy.backend.trt")
-            config_loader_name = script.add_loader(config_loader_str, "create_trt_config")
-        else:
-            config_loader_name = None
-        return config_loader_name
+@mod.export()
+class TrtEngineSaveArgs(BaseArgs):
+    def __init__(self, output="output", short_opt="-o"):
+        super().__init__()
+        self._output = output
+        self._short_opt = short_opt
 
+    def add_to_parser(self, parser):
+        if self._output:
+            self.group = parser.add_argument_group(
+                "TensorRT Engine Save Options", "Options for saving TensorRT engines"
+            )
+            flag = "--{:}".format(self._output)
+            short = self._short_opt or flag
+            self.group.add_argument(
+                short, flag, help="Path to save the TensorRT Engine", dest="save_engine", default=None
+            )
+
+    def parse(self, args):
+        self.path = args_util.get(args, "save_engine")
+
+    def add_save_engine(self, script, loader_name):
+        if self.path is None:
+            return loader_name
+
+        script.add_import(imports=["SaveEngine"], frm="polygraphy.backend.trt")
+        return script.add_loader(make_invocable("SaveEngine", loader_name, path=self.path), "save_engine")
+
+    def save_engine(self, engine, path=None):
+        with util.TempAttrChange(self, "path", path):
+            loader = args_util.run_script(self.add_save_engine, engine)
+            return loader()
+
+
+@mod.export()
+class TrtEngineLoaderArgs(BaseArgs):
+    def __init__(self, save=False):
+        super().__init__()
+        self.trt_engine_save_args = None
+        self._save = save
+
+    def register(self, maker):
+        from polygraphy.tools.args.model import ModelArgs
+        from polygraphy.tools.args.trt.config import TrtConfigArgs
+
+        if isinstance(maker, ModelArgs):
+            self.model_args = maker
+        if isinstance(maker, TrtConfigArgs):
+            self.trt_config_args = maker
+        if isinstance(maker, TrtNetworkLoaderArgs):
+            self.trt_network_loader_args = maker
+        if isinstance(maker, TrtPluginLoaderArgs):
+            self.trt_plugin_args = maker
+        if self._save and isinstance(maker, TrtEngineSaveArgs):
+            self.trt_engine_save_args = maker
+
+    def check_registered(self):
+        assert self.model_args is not None, "ModelArgs is required!"
+        assert self.trt_plugin_args is not None, "TrtPluginLoaderArgs is required!"
+        assert not self._save or self.trt_engine_save_args is not None, "TrtEngineSaveArgs is required to use save=True"
+
+    def parse(self, args):
+        self.plugins = args_util.get(args, "plugins")
 
     def add_trt_serialized_engine_loader(self, script):
+        assert self.model_args is not None, "ModelArgs is required for engine deserialization!"
+
         script.add_import(imports=["EngineFromBytes"], frm="polygraphy.backend.trt")
         script.add_import(imports=["BytesFromPath"], frm="polygraphy.backend.common")
 
-        load_engine = script.add_loader(Script.invoke("BytesFromPath", self.model_args.model_file), "load_engine")
-        return script.add_loader(Script.invoke("EngineFromBytes", self._wrap_if_plugins(script, load_engine)), "deserialize_engine")
+        load_engine = script.add_loader(
+            make_invocable("BytesFromPath", self.model_args.model_file), "load_engine_bytes"
+        )
+        return script.add_loader(
+            make_invocable("EngineFromBytes", self.trt_plugin_args.wrap_if_plugins(script, load_engine)),
+            "deserialize_engine",
+        )
 
+    def add_trt_build_engine_loader(self, script, network_name=None):
+        if network_name:
+            network_loader_name = network_name
+        else:
+            assert self.trt_network_loader_args is not None, "TrtNetworkLoaderArgs is required for engine building!"
+            network_loader_name = self.trt_network_loader_args.add_trt_network_loader(script)
 
-    def get_trt_network_loader(self):
-        script = Script()
-        loader_name = self.add_trt_network_loader(script)
-        exec(str(script), globals(), locals())
-        return locals()[loader_name]
+        assert self.trt_config_args is not None, "TrtConfigArgs is required for engine building!"
 
+        script.add_import(imports=["EngineFromNetwork"], frm="polygraphy.backend.trt")
+        config_loader_name = self.trt_config_args.add_trt_config_loader(script)
+        loader_str = make_invocable(
+            "EngineFromNetwork",
+            self.trt_plugin_args.wrap_if_plugins(script, network_loader_name),
+            config=config_loader_name,
+            save_timing_cache=self.trt_config_args.timing_cache,
+        )
+        loader_name = script.add_loader(loader_str, "build_engine")
 
-    def get_trt_config_loader(self, data_loader):
-        script = Script()
-        loader_name = self.add_trt_config_loader(script, data_loader_name="data_loader")
-        exec(str(script), globals(), locals())
-        return locals()[loader_name]
+        if self.trt_engine_save_args is not None:
+            loader_name = self.trt_engine_save_args.add_save_engine(script, loader_name)
+        return loader_name
 
+    def build_engine(self, network=None):
+        loader = args_util.run_script(self.add_trt_build_engine_loader, network)
+        return loader()
 
-    def get_trt_serialized_engine_loader(self):
-        script = Script()
-        loader_name = self.add_trt_serialized_engine_loader(script)
-        exec(str(script), globals(), locals())
-        return locals()[loader_name]
+    def load_serialized_engine(self):
+        loader = args_util.run_script(self.add_trt_serialized_engine_loader)
+        return loader()

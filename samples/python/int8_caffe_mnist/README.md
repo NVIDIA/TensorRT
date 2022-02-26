@@ -14,7 +14,7 @@
 
 ## Description
 
-This sample, `int8_caffe_mnist`, demonstrates how to create an INT8 calibrator, build and calibrate an engine for INT8 mode, and finally run inference in INT8 mode.
+This sample, int8_caffe_mnist, demonstrates how to create an INT8 calibrator, build and calibrate an engine for INT8 mode, and finally run inference in INT8 mode.
 
 ## How does this sample work?
 
@@ -25,24 +25,18 @@ During inference, the sample loads a random batch from the calibrator, then perf
 ## Prerequisites
 
 1. Install the dependencies for Python.
-	```bash
-    python3 -m pip install -r requirements.txt
-    ```
+	`python3 -m pip install -r requirements.txt`
 
-2. Download the [MNIST dataset](http://yann.lecun.com/exdb/mnist/)
-    - This sample requires the [training set](http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz), [test set](http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz) and [test labels](http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz).
+2. The MNIST dataset can be found under the data directory (usually `/usr/src/tensorrt/data/mnist`) if using the TensorRT containers. It is also bundled along with the [TensorRT tarball](https://developer.nvidia.com/nvidia-tensorrt-download).
+   - This sample requires the [training set](http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz), [test set](http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz) and [test labels](http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz).
 
-    - Download and unzip the MNIST data:
-    ```bash
-    sh ../scripts/download_mnist_data.sh
-    ```
 
 ## Running the sample
 
 1.  Run the sample to create a TensorRT inference engine, perform IN8 calibration and run inference:
-	```bash
-    python3 sample.py [-d DATA_DIR]
-    ```
+	`python3 sample.py [-d DATA_DIR]`
+
+	to run the sample with Python 3.
 
 	**Note:** If the TensorRT sample data is not installed in the default location, for example `/usr/src/tensorrt/data/`, the `data` directory must be specified. For example:
 	`python sample.py -d /path/to/my/data/`.

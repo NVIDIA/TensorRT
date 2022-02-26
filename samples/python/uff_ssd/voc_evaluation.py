@@ -15,30 +15,20 @@
 # limitations under the License.
 #
 
-import sys
-import os
-import ctypes
-import time
 import argparse
 import glob
+import os
+import tarfile
 
-if sys.version_info[0] == 2:
-    import xml.etree.cElementTree as ET
-else:
-    import xml.etree.ElementTree as ET
-
-import numpy as np
+import pycuda.autoinit
 import tensorrt as trt
-from PIL import Image
-
+import utils.coco as coco_utils  # COCO dataset descriptors
 # Utility functions
-import utils.inference as inference_utils # TRT/TF inference wrappers
-import utils.model as model_utils # UFF conversion
-import utils.mAP as voc_mAP_utils # mAP computation
-import utils.voc as voc_utils # VOC dataset descriptors
-import utils.coco as coco_utils # COCO dataset descriptors
-from utils.paths import PATHS # Path management
-
+import utils.mAP as voc_mAP_utils  # mAP computation
+from utils.modeldata import ModelData
+import utils.voc as voc_utils  # VOC dataset descriptors
+from PIL import Image
+from utils.paths import PATHS  # Path management
 
 # VOC and COCO label lists
 VOC_CLASSES = voc_utils.VOC_CLASSES_LIST
@@ -135,10 +125,10 @@ def analyze_tensorrt_prediction(detection_out, pred_start_idx):
     xmax = fetch_prediction_field("xmax", detection_out, pred_start_idx)
     ymax = fetch_prediction_field("ymax", detection_out, pred_start_idx)
 
-    xmin = float(xmin) * model_utils.ModelData.get_input_width()
-    ymin = float(ymin) * model_utils.ModelData.get_input_height()
-    xmax = float(xmax) * model_utils.ModelData.get_input_width()
-    ymax = float(ymax) * model_utils.ModelData.get_input_height()
+    xmin = float(xmin) * ModelData.get_input_width()
+    ymin = float(ymin) * ModelData.get_input_height()
+    xmax = float(xmax) * ModelData.get_input_width()
+    ymax = float(ymax) * ModelData.get_input_height()
 
     return image_id, label, confidence, xmin, ymin, xmax, ymax
 
@@ -169,7 +159,7 @@ def produce_tensorrt_detections(detection_files, trt_inference_wrapper, max_batc
     Args:
         detection_files (dict): dictionary that maps class labels to
             class result files
-        trt_inference_wrapper (inference_utils.TRTInference):
+        trt_inference_wrapper (TRTInference):
             internal Python class wrapping TensorRT inferece
             setup/run code
         batch_size (int): batch size used for inference
@@ -224,7 +214,7 @@ def produce_tensorflow_detections(detection_files, tf_inference_wrapper, batch_s
     Args:
         detection_files (dict): dictionary that maps class labels to
             class result files
-        tf_inference_wrapper (inference_utils.TensorflowInference):
+        tf_inference_wrapper (TensorflowInference):
             internal Python class wrapping Tensorflow inferece
             setup/run code
         batch_size (int): batch size used for inference
@@ -250,10 +240,10 @@ def produce_tensorflow_detections(detection_files, tf_inference_wrapper, batch_s
                 # Output bounding boxes are in [0, 1] format,
                 # here we rescale them to pixel [0, 255] format
                 ymin, xmin, ymax, xmax = bbox
-                xmin = float(xmin) * model_utils.ModelData.get_input_width()
-                ymin = float(ymin) * model_utils.ModelData.get_input_height()
-                xmax = float(xmax) * model_utils.ModelData.get_input_width()
-                ymax = float(ymax) * model_utils.ModelData.get_input_height()
+                xmin = float(xmin) * ModelData.get_input_width()
+                ymin = float(ymin) * ModelData.get_input_height()
+                xmax = float(xmax) * ModelData.get_input_width()
+                ymax = float(ymax) * ModelData.get_input_height()
 
                 # Detection is saved only if confidence is bigger than zero
                 if confidence > 0.0:
@@ -332,30 +322,41 @@ def preprocess_voc():
                 img_pil = Image.open(voc_jpeg_path)
                 img_pil = img_pil.resize(
                     size=(
-                        model_utils.ModelData.get_input_width(),
-                        model_utils.ModelData.get_input_height()),
+                        ModelData.get_input_width(),
+                        ModelData.get_input_height()),
                     resample=Image.BILINEAR
                 )
                 img_pil.save(voc_ppm_path)
 
-def adjust_paths(args):
+def adjust_paths(args, data_dir):
     """Adjust all file/directory paths, arguments passed by user.
 
     During script launch, user can pass several arguments to the script
-    (e.g. --workspace_dir, --voc_dir), that define where script will look
+    (e.g. --workspace_dir, --data), that define where script will look
     for the files needed for execution. This function adjusts internal
     Paths Python datastructure to accomodate for changes from defaults
     requested by user through appropriate command line arguments.
 
     Args:
         args (argparse.Namespace): parsed user arguments
+        data_dir (str): path to the data directory
     """
-    if args.voc_dir:
-        PATHS.set_voc_dir_path(args.voc_dir)
     if args.workspace_dir:
         PATHS.set_workspace_dir_path(args.workspace_dir)
     if not os.path.exists(PATHS.get_workspace_dir_path()):
         os.makedirs(PATHS.get_workspace_dir_path())
+    PATHS.set_data_dir_path(data_dir)
+
+
+def extract_voc_data_if_needed():
+    if os.path.exists(PATHS.get_voc_dir_path()):
+        return
+    voc_archive_path = PATHS.get_data_file_path('VOCtest_06-Nov-2007.tar')
+    print("Unpacking {}".format(voc_archive_path))
+    with tarfile.open(voc_archive_path, "r") as tar:
+        tar.extractall(path=PATHS.get_sample_root())
+    print("Unpacking done!")
+
 
 def parse_commandline_arguments():
     """Parses command line arguments and adjusts internal data structures."""
@@ -373,15 +374,18 @@ def parse_commandline_arguments():
         help='force model inference even if detections exist')
     parser.add_argument('-w', '--workspace_dir',
         help='sample workspace directory')
-    parser.add_argument('-voc', '--voc_dir',
-        help='VOC2007 root directory')
+    parser.add_argument('-d', '--data',
+        help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.")
 
-    # Parse arguments passed
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
 
-    # Adjust global Paths data structure
-    adjust_paths(args)
+    data_dir = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
+    if data_dir is None:
+        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
 
+    adjust_paths(args, data_dir)
+
+    extract_voc_data_if_needed()
     # Verify Paths after adjustments. This also exits script if verification fails
     PATHS.verify_all_paths(should_verify_voc=True)
 
@@ -413,8 +417,7 @@ def parse_commandline_arguments():
     }
     return parsed
 
-
-if __name__ == '__main__':
+def main():
     # Parse command line arguments
     parsed = parse_commandline_arguments()
 
@@ -438,8 +441,6 @@ if __name__ == '__main__':
     # ...and .uff path, if needed (converting .pb to .uff if not already done)
     if parsed['inference_backend'] == 'tensorrt':
         ssd_model_uff_path = PATHS.get_model_uff_path(MODEL_NAME)
-        if not os.path.exists(ssd_model_uff_path):
-            model_utils.prepare_ssd_model(MODEL_NAME)
 
     # This block of code sets up and performs inference, if needed
     if not skip_inference:
@@ -458,7 +459,8 @@ if __name__ == '__main__':
             # TRTInference initialization initializes
             # all TensorRT structures, creates engine if it doesn't
             # already exist and finally saves it to file for future uses
-            trt_inference_wrapper = inference_utils.TRTInference(
+            from utils.inference_trt import TRTInference
+            trt_inference_wrapper = TRTInference(
                 parsed['trt_engine_path'], ssd_model_uff_path,
                 parsed['trt_engine_datatype'], parsed['max_batch_size'])
             # Outputs from TensorRT are handled differently than
@@ -470,8 +472,8 @@ if __name__ == '__main__':
         elif parsed['inference_backend'] == 'tensorflow':
             # In case of Tensorflow all we need to
             # initialize inference is frozen model...
-            tf_inference_wrapper = \
-                inference_utils.TensorflowInference(ssd_model_pb_path)
+            from utils.inference_tf import TensorflowInference
+            tf_inference_wrapper = TensorflowInference(ssd_model_pb_path)
             # ...and after initializing it, we can
             # proceed to producing detections
             produce_tensorflow_detections(detection_files,
@@ -489,3 +491,7 @@ if __name__ == '__main__':
     # Close detection files, they are not needed anymore
     for key in detection_files:
         detection_files[key].close()
+
+
+if __name__ == '__main__':
+    main()

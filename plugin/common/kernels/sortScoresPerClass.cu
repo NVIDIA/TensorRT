@@ -27,6 +27,11 @@ inline __device__ __half add_fb(const __half & a, const __half & b) {
 #endif
 }
 
+// overload for float
+inline __device__ float add_fb(const float & a, const float & b) {
+    return a + b;
+}
+
 inline __device__ bool ge_fb(const __half & a, const __half & b) {
 #if __CUDA_ARCH__ >= 530
     return a >= b;
@@ -52,6 +57,7 @@ __launch_bounds__(nthds_per_cta)
     // Prepare scores data for sort
     const int cur_idx = blockIdx.x * nthds_per_cta + threadIdx.x;
     const int numPredsPerBatch = num_classes * num_preds_per_class;
+    T_SCORE clip_val = T_SCORE(float(score_shift) + 1.f - 1.f / 1024.f);
     if (cur_idx < numPredsPerBatch)
     {
         const int class_idx = cur_idx / num_preds_per_class;
@@ -88,8 +94,8 @@ __launch_bounds__(nthds_per_cta)
                     // we only need to sort the mantissa part of the floating-point
                     // numbers
                     temp_scores[targetIdx] = add_fb(score, score_shift);
-                    if (ge_fb(temp_scores[targetIdx], T_SCORE(2.f - 1.f / 1024.f)))
-                        temp_scores[targetIdx] = T_SCORE(2.f - 1.f / 1024.f);
+                    if (float(score_shift) > 0.f && (ge_fb(temp_scores[targetIdx], clip_val)))
+                        temp_scores[targetIdx] = clip_val;
                     temp_idx[targetIdx] = cur_idx + i * numPredsPerBatch;
                 }
                 else

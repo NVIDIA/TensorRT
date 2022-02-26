@@ -104,7 +104,7 @@ int ClipPlugin::initialize() noexcept
     return 0;
 }
 
-int ClipPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream) noexcept
+int ClipPlugin::enqueue(int batchSize, const void* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
 {
     int status = -1;
 

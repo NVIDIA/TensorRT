@@ -16,4 +16,28 @@
 
 add_custom_target(samples)
 
-add_subdirectory(opensource)
+set(OPENSOURCE_SAMPLES_LIST
+    sampleAlgorithmSelector
+    sampleCharRNN
+    sampleDynamicReshape
+    sampleFasterRCNN
+    sampleGoogleNet
+    sampleINT8
+    sampleINT8API
+    sampleMNIST
+    sampleMNISTAPI
+    sampleNMT
+    sampleOnnxMNIST
+    sampleReformatFreeIO
+    sampleSSD
+    sampleUffFasterRCNN
+    sampleUffMaskRCNN
+    sampleUffMNIST
+    sampleUffPluginV2Ext
+    sampleUffSSD
+    sampleOnnxMnistCoordConvAC
+    trtexec)
+
+foreach(SAMPLE_ITER ${OPENSOURCE_SAMPLES_LIST})
+    add_subdirectory(${SAMPLE_ITER})
+endforeach(SAMPLE_ITER)

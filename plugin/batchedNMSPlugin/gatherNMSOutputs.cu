@@ -28,6 +28,11 @@ inline __device__ __half minus_fb(const __half & a, const __half & b) {
 #endif
 }
 
+// overload for float
+inline __device__ float minus_fb(const float & a, const float & b) {
+    return a - b;
+}
+
 template <typename T_BBOX>
 __device__ T_BBOX saturate(T_BBOX v)
 {

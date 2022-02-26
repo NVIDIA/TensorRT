@@ -15,15 +15,23 @@
 #
 import threading
 
+import numpy as np
 import pytest
 import tensorrt as trt
-from polygraphy.backend.trt import (CreateConfig, EngineFromNetwork,
-                                    NetworkFromOnnxBytes, Profile, TrtRunner)
-from polygraphy.common import func
+from polygraphy import cuda, mod
+from polygraphy.backend.trt import (
+    CreateConfig,
+    EngineFromNetwork,
+    NetworkFromOnnxBytes,
+    Profile,
+    TrtRunner,
+    engine_from_network,
+    network_from_onnx_bytes,
+)
+from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
-from polygraphy.util import misc
-from tests.common import version
 from tests.models.meta import ONNX_MODELS
+from tests.helper import time_func
 
 
 class TestLoggerCallbacks(object):
@@ -38,64 +46,73 @@ class TestTrtRunner(object):
         runner = TrtRunner(None, name=NAME)
         assert runner.name == NAME
 
-
     def test_basic(self):
         model = ONNX_MODELS["identity"]
         network_loader = NetworkFromOnnxBytes(model.loader)
         with TrtRunner(EngineFromNetwork(network_loader)) as runner:
             assert runner.is_active
+            assert runner.owns_engine
+            assert runner.owns_context
             model.check_runner(runner)
+            assert runner.last_inference_time() is not None
         assert not runner.is_active
-
 
     def test_context(self):
         model = ONNX_MODELS["identity"]
-        engine = func.invoke(EngineFromNetwork(NetworkFromOnnxBytes(model.loader)))
+        engine = engine_from_network(NetworkFromOnnxBytes(model.loader))
         with engine, TrtRunner(engine.create_execution_context) as runner:
             model.check_runner(runner)
+            assert not runner.owns_engine
+            assert runner.owns_context
 
+    def test_device_buffer_order_matches_bindings(self):
+        model = ONNX_MODELS["reducable"]
+        engine = engine_from_network(NetworkFromOnnxBytes(model.loader))
+        with engine, TrtRunner(engine) as runner:
+            dev_buf_order = list(runner.device_buffers.keys())
+            for binding, dev_buf_name in zip(engine, dev_buf_order):
+                assert binding == dev_buf_name
 
-    @pytest.mark.skipif(version(trt.__version__) < version("7.0"), reason="Unsupported for TRT 6")
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_shape_output(self):
         model = ONNX_MODELS["reshape"]
-        engine = func.invoke(EngineFromNetwork(NetworkFromOnnxBytes(model.loader)))
+        engine = engine_from_network(NetworkFromOnnxBytes(model.loader))
         with engine, TrtRunner(engine.create_execution_context) as runner:
             model.check_runner(runner)
-
 
     def test_multithreaded_runners_from_engine(self):
         model = ONNX_MODELS["identity"]
-        engine = func.invoke(EngineFromNetwork(NetworkFromOnnxBytes(model.loader)))
+        engine = engine_from_network(NetworkFromOnnxBytes(model.loader))
 
         with engine, TrtRunner(engine) as runner0, TrtRunner(engine) as runner1:
-            t1 = threading.Thread(target=model.check_runner, args=(runner0, ))
-            t2 = threading.Thread(target=model.check_runner, args=(runner1, ))
+            t1 = threading.Thread(target=model.check_runner, args=(runner0,))
+            t2 = threading.Thread(target=model.check_runner, args=(runner1,))
             t1.start()
             t2.start()
-            t2.join()
+            t1.join()
             t2.join()
 
-
-    @pytest.mark.skipif(version(trt.__version__) < version("7.0"), reason="Unsupported for TRT 6")
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
+    @pytest.mark.skipif(mod.version(trt.__version__)[0:2] == mod.version("7.2"), reason="Bugged in TRT 7.2")
     def test_multiple_profiles(self):
         model = ONNX_MODELS["dynamic_identity"]
-        shapes = [(1, 2, 4, 4), (1, 2, 8, 8), (1, 2, 16, 16)]
+        profile0_shapes = [(1, 2, 1, 1), (1, 2, 1, 1), (1, 2, 1, 1)]  # Use min==opt==max to fix shapes in the engine.
+        profile1_shapes = [(1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4)]
+        profile2_shapes = [(1, 2, 4, 4), (1, 2, 8, 8), (1, 2, 16, 16)]
         network_loader = NetworkFromOnnxBytes(model.loader)
         profiles = [
-            Profile().add("X", (1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4)),
-            Profile().add("X", *shapes),
+            Profile().add("X", *profile0_shapes),
+            Profile().add("X", *profile1_shapes),
+            Profile().add("X", *profile2_shapes),
         ]
         config_loader = CreateConfig(profiles=profiles)
         with TrtRunner(EngineFromNetwork(network_loader, config_loader)) as runner:
-            if misc.version(trt.__version__) < misc.version("7.3"):
-                runner.context.active_optimization_profile = 1
-            else:
-                runner.context.set_optimization_profile_async(1, runner.stream.address())
-            for shape in shapes:
-                model.check_runner(runner, {"X": shape})
+            for index, shapes in enumerate([profile0_shapes, profile1_shapes, profile2_shapes]):
+                runner.set_profile(index)
+                for shape in shapes:
+                    model.check_runner(runner, {"X": shape})
 
-
-    @pytest.mark.skipif(version(trt.__version__) < version("7.0"), reason="Unsupported for TRT 6")
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_empty_tensor_with_dynamic_input_shape_tensor(self):
         model = ONNX_MODELS["empty_tensor_expand"]
         shapes = [(1, 2, 0, 3, 0), (2, 2, 0, 3, 0), (4, 2, 0, 3, 0)]
@@ -106,3 +123,140 @@ class TestTrtRunner(object):
         with TrtRunner(EngineFromNetwork(network_loader, config_loader)) as runner:
             for shape in shapes:
                 model.check_runner(runner, {"new_shape": shape})
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Test not compatible with TRT 6")
+    @pytest.mark.parametrize(
+        "names, err",
+        [
+            (["fake-input", "x"], "Extra keys in"),
+            (["fake-input"], "Some keys are missing"),
+            ([], "Some keys are missing"),
+        ],
+    )
+    def test_error_on_wrong_name_feed_dict(self, names, err):
+        model = ONNX_MODELS["identity"]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+            with pytest.raises(PolygraphyException, match=err):
+                runner.infer({name: np.ones(shape=(1, 1, 2, 2), dtype=np.float32) for name in names})
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Test not compatible with TRT 6")
+    def test_error_on_wrong_dtype_feed_dict(self):
+        model = ONNX_MODELS["identity"]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+            with pytest.raises(PolygraphyException, match="unexpected dtype."):
+                runner.infer({"x": np.ones(shape=(1, 1, 2, 2), dtype=np.int32)})
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Test not compatible with TRT 6")
+    def test_error_on_wrong_shape_feed_dict(self):
+        model = ONNX_MODELS["identity"]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+            with pytest.raises(PolygraphyException, match="incompatible shape."):
+                runner.infer({"x": np.ones(shape=(1, 1, 3, 2), dtype=np.float32)})
+
+    @pytest.mark.parametrize("use_view", [True, False])  # We should be able to use DeviceArray in place of DeviceView
+    def test_device_views(self, use_view):
+        model = ONNX_MODELS["reducable"]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        with TrtRunner(EngineFromNetwork(network_loader)) as runner, cuda.DeviceArray((1,), dtype=np.float32) as x:
+            x.copy_from(np.ones((1,), dtype=np.float32))
+            outputs = runner.infer(
+                {
+                    "X0": x.view() if use_view else x,
+                    "Y0": np.ones((1,), dtype=np.float32),
+                }
+            )
+            assert outputs["identity_out_6"][0] == 2
+            assert outputs["identity_out_8"][0] == 2
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
+    def test_no_output_copy(self):
+        model = ONNX_MODELS["identity"]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+            inp = np.ones(shape=(1, 1, 2, 2), dtype=np.float32)
+            outputs = runner.infer({"x": inp}, copy_outputs_to_host=False)
+            assert isinstance(outputs["y"], cuda.DeviceView)
+            assert np.array_equal(outputs["y"].numpy(), inp)
+
+    def test_subsequent_infers_with_different_input_types(self):
+        model = ONNX_MODELS["identity"]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+            inp = np.ones(shape=(1, 1, 2, 2), dtype=np.float32)
+
+            def check(outputs):
+                assert np.all(outputs["y"] == inp)
+
+            check(runner.infer({"x": inp}))
+            check(runner.infer({"x": cuda.DeviceArray().copy_from(inp)}))
+            check(runner.infer({"x": inp}))
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
+    @pytest.mark.parametrize("use_view", [True, False])  # We should be able to use DeviceArray in place of DeviceView
+    def test_device_view_dynamic_shapes(self, use_view):
+        model = ONNX_MODELS["dynamic_identity"]
+        profiles = [
+            Profile().add("X", (1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4)),
+        ]
+        runner = TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader), CreateConfig(profiles=profiles)))
+        with runner, cuda.DeviceArray(shape=(1, 2, 3, 3), dtype=np.float32) as arr:
+            inp = np.random.random_sample(size=(1, 2, 3, 3)).astype(np.float32)
+            arr.copy_from(inp)
+            outputs = runner.infer({"X": cuda.DeviceView(arr.ptr, arr.shape, arr.dtype) if use_view else arr})
+            assert np.all(outputs["Y"] == inp)
+            assert outputs["Y"].shape == (1, 2, 3, 3)
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported before TRT 8")
+    def test_cannot_use_device_view_shape_tensor(self):
+        model = ONNX_MODELS["empty_tensor_expand"]
+        with TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader))) as runner, cuda.DeviceArray(
+            shape=(5,), dtype=np.int32
+        ) as arr:
+            with pytest.raises(PolygraphyException, match="it must reside in host memory"):
+                runner.infer({"data": np.ones((2, 0, 3, 0), dtype=np.float32), "new_shape": arr})
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
+    @pytest.mark.serial
+    @pytest.mark.parametrize("copy_outputs", [True, False], ids=["output_dtoh", "no_output_copy"])
+    @pytest.mark.parametrize("copy_inputs", [True, False], ids=["input_htod", "no_input_copy"])
+    def test_infer_overhead(self, copy_inputs, copy_outputs):
+        inp = np.ones(shape=(1, 2, 1024, 1024), dtype=np.float32)
+        dev_inp = cuda.DeviceArray(shape=inp.shape, dtype=inp.dtype).copy_from(inp)
+
+        out = np.zeros(shape=(1, 2, 1024, 1024), dtype=np.float32)  # Using identity model!
+        dev_out = cuda.DeviceArray(shape=out.shape, dtype=out.dtype)
+
+        stream = cuda.Stream()
+
+        model = ONNX_MODELS["dynamic_identity"]
+        profiles = [
+            Profile().add("X", (1, 2, 1024, 1024), (1, 2, 1024, 1024), (1, 2, 1024, 1024)),
+        ]
+        inp_name = list(model.input_metadata.keys())[0]
+
+        with engine_from_network(
+            network_from_onnx_bytes(model.loader), CreateConfig(profiles=profiles)
+        ) as engine, engine.create_execution_context() as context, TrtRunner(context) as runner, dev_inp, dev_out:
+            # Inference outside the TrtRunner
+            def infer():
+                if copy_inputs:
+                    dev_inp.copy_from(inp, stream=stream)
+                context.execute_async_v2(bindings=[dev_inp.ptr, dev_out.ptr], stream_handle=stream.ptr)
+                if copy_outputs:
+                    dev_out.copy_to(out, stream=stream)
+                stream.synchronize()
+
+            native_time = time_func(infer)
+
+            feed_dict = {inp_name: (inp if copy_inputs else dev_inp)}
+            runner_time = time_func(
+                lambda: runner.infer(feed_dict, check_inputs=False, copy_outputs_to_host=copy_outputs)
+            )
+
+        # The overhead should be less than 0.5ms, or the runtime should be within 5%
+        print("Absolute difference: {:.5g}".format(runner_time - native_time))
+        print("Relative difference: {:.5g}".format(runner_time / native_time))
+        assert (runner_time - native_time) < 0.5e-3 or runner_time <= (native_time * 1.05)

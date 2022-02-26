@@ -76,6 +76,9 @@ def parse_args():
     parser.add_argument('--n-best-size',
             help='Total number of n-best predictions to generate in the nbest_predictions.json output file',
             default=20, type=int)
+    parser.add_argument('--doc-stride',
+            help='When splitting up a long document into chunks, what stride to take between chunks',
+            default=128, type=int)
     args, _ = parser.parse_known_args()
     return args
 
@@ -106,7 +109,7 @@ if __name__ == '__main__':
 
     tokenizer = tokenization.FullTokenizer(vocab_file=args.vocab_file, do_lower_case=True)
     # When splitting up a long document into chunks, how much stride to take between chunks.
-    doc_stride = 128
+    doc_stride = args.doc_stride
     # The maximum total input sequence length after WordPiece tokenization.
     # Sequences longer than this will be truncated, and sequences shorter
     max_seq_length = args.sequence_length

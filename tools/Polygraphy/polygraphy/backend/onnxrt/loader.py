@@ -13,29 +13,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import onnxruntime
-from polygraphy.backend.base import BaseLoadModel
-from polygraphy.util import misc
+from polygraphy import mod, util
+from polygraphy.backend.base import BaseLoader
 
-misc.log_module_info(onnxruntime)
+onnxruntime = mod.lazy_import("onnxruntime")
 
-class SessionFromOnnxBytes(BaseLoadModel):
+
+@mod.export(funcify=True)
+class SessionFromOnnx(BaseLoader):
+    """
+    Functor that builds an ONNX-Runtime inference session.
+    """
+
     def __init__(self, model_bytes):
-        """
-        Functor that builds an ONNX-Runtime inference session.
-
-        Args:
-            model_bytes (Callable() -> bytes): A loader that can supply a serialized ONNX model.
-        """
-        self._model_bytes = model_bytes
-
-
-    def __call__(self):
         """
         Builds an ONNX-Runtime inference session.
 
+        Args:
+            model_bytes (Union[Union[bytes, str], Callable() -> Union[bytes, str]]):
+                    A serialized ONNX model or a path to a model or a callable that returns one of those.
+        """
+        self._model_bytes_or_path = model_bytes
+
+    def call_impl(self):
+        """
         Returns:
             onnxruntime.InferenceSession: The inference session.
         """
-        model_bytes, _ = misc.try_call(self._model_bytes)
+        model_bytes, _ = util.invoke_if_callable(self._model_bytes_or_path)
         return onnxruntime.InferenceSession(model_bytes)

@@ -50,7 +50,7 @@ public:
         return 0;
     };
 
-    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace,
+    int enqueue(int batchSize, const void* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;

@@ -4,30 +4,28 @@
 
 | Sample | Language | Format | Description |
 |---|---|---|---|
-| [sampleAlgorithmSelector](opensource/sampleAlgorithmSelector) | C++ | Caffe | Algorithm Selection API usage |
-| [sampleCharRNN](opensource/sampleCharRNN) | C++ | INetwork | Building An RNN Network Layer By Layer |
-| [sampleDynamicReshape](opensource/sampleDynamicReshape) | C++ | ONNX | Digit Recognition With Dynamic Shapes In TensorRT |
-| [sampleFasterRCNN](opensource/sampleFasterRCNN) | C++ | Caffe | Object Detection With Faster R-CNN |
-| [sampleGoogleNet](opensource/sampleGoogleNet) | C++ | Caffe | Building And Running GoogleNet In TensorRT |
-| [sampleINT8](opensource/sampleINT8) | C++ | Caffe | Building And Running GoogleNet In TensorRT |
-| [sampleINT8API](opensource/sampleINT8API) | C++ | Caffe | Performing Inference In INT8 Precision |
-| [sampleMLP](opensource/sampleMLP) | C++ | INetwork | “Hello World” For Multilayer Perceptron (MLP) |
-| [sampleMNIST](opensource/sampleMNIST) | C++ | Caffe | “Hello World” For TensorRT |
-| [sampleMNISTAPI](opensource/sampleMNISTAPI) | C++ | INetwork | Building a Simple MNIST Network Layer by Layer |
-| [sampleMovieLens](opensource/sampleMovieLens) | C++ | UFF | Movie Recommendation Using Neural Collaborative Filter |
-| [sampleMovieLensMPS](opensource/sampleMovieLensMPS) | C++ | UFF | Movie Recommendation With MPS (Multi-Process Service) |
-| [sampleNMT](opensource/sampleNMT) | C++ | INetwork | Neural Machine Translation Using A seq2seq Model |
-| [sampleOnnxMNIST](opensource/sampleOnnxMNIST) | C++ | ONNX | “Hello World” For TensorRT With ONNX |
-| [sampleOnnxMnistCoordConvAC](opensource/sampleOnnxMnistCoordConvAC) | C++ | ONNX | Implementing CoordConv with a custom plugin |
-| [samplePlugin](opensource/samplePlugin) | C++ | Caffe | Adding A Custom Layer In TensorRT |
-| [sampleReformatFreeIO](opensource/sampleReformatFreeIO) | C++ | Caffe | Specifying I/O Formats Via Reformat-Free-I/O API |
-| [sampleSSD](opensource/sampleSSD) | C++ | Caffe | Object Detection With SSD |
-| [sampleUffFasterRCNN](opensource/sampleUffFasterRCNN) | C++ | UFF | Object Detection With A TensorFlow FasterRCNN Network |
-| [sampleUffMNIST](opensource/sampleUffMNIST) | C++ | UFF | Import A TensorFlow Model And Run Inference |
-| [sampleUffMaskRCNN](opensource/sampleUffMaskRCNN) | C++ | UFF | Object Detection And Instance Segmentation With MasK R-CNN Network |
-| [sampleUffPluginV2Ext](opensource/sampleUffPluginV2Ext) | C++ | UFF | Adding A Custom Layer That Supports INT8 I/O To Your Network |
-| [sampleUffSSD](opensource/sampleUffSSD) | C++ | UFF | Object Detection With A TensorFlow SSD Network |
-| [trtexec](opensource/trtexec) | C++ | All | TensorRT Command-Line Wrapper: trtexec |
+| [sampleAlgorithmSelector](sampleAlgorithmSelector) | C++ | Caffe | Algorithm Selection API usage |
+| [sampleCharRNN](sampleCharRNN) | C++ | INetwork | Building An RNN Network Layer By Layer |
+| [sampleDynamicReshape](sampleDynamicReshape) | C++ | ONNX | Digit Recognition With Dynamic Shapes In TensorRT |
+| [sampleFasterRCNN](sampleFasterRCNN) | C++ | Caffe | Object Detection With Faster R-CNN |
+| [sampleGoogleNet](sampleGoogleNet) | C++ | Caffe | Building And Running GoogleNet In TensorRT |
+| [sampleINT8](sampleINT8) | C++ | Caffe | Performing Inference In INT8 Using Custom Calibration |
+| [sampleINT8API](sampleINT8API) | C++ | Caffe | Performing Inference In INT8 Precision |
+| [sampleMNIST](sampleMNIST) | C++ | Caffe | “Hello World” For TensorRT |
+| [sampleMNISTAPI](sampleMNISTAPI) | C++ | INetwork | Building a Simple MNIST Network Layer by Layer |
+| [sampleNMT](sampleNMT) | C++ | INetwork | Neural Machine Translation Using A seq2seq Model |
+| [sampleOnnxMNIST](sampleOnnxMNIST) | C++ | ONNX | “Hello World” For TensorRT With ONNX |
+| [sampleOnnxMnistCoordConvAC](sampleOnnxMnistCoordConvAC) | C++ | ONNX | Implementing CoordConv with a custom plugin |
+| [sampleReformatFreeIO](sampleReformatFreeIO) | C++ | Caffe | Specifying I/O Formats Via Reformat-Free-I/O API |
+| [sampleSSD](sampleSSD) | C++ | Caffe | Object Detection With SSD |
+| [sampleUffFasterRCNN](sampleUffFasterRCNN) | C++ | UFF | Object Detection With A TensorFlow FasterRCNN Network |
+| [sampleUffMNIST](sampleUffMNIST) | C++ | UFF | Import A TensorFlow Model And Run Inference |
+| [sampleUffMaskRCNN](sampleUffMaskRCNN) | C++ | UFF | Object Detection And Instance Segmentation With MasK R-CNN Network |
+| [sampleUffPluginV2Ext](sampleUffPluginV2Ext) | C++ | UFF | Adding A Custom Layer That Supports INT8 I/O To Your Network |
+| [sampleUffSSD](sampleUffSSD) | C++ | UFF | Object Detection With A TensorFlow SSD Network |
+| [trtexec](trtexec) | C++ | All | TensorRT Command-Line Wrapper: trtexec |
+| [efficientdet](python/efficientdet) | Python | ONNX | EfficientDet Object Detection with TensorRT |
+| [efficientnet](python/efficientnet) | Python | ONNX | EfficientNet V1 and V2 Classification with TensorRT |
 | [end_to_end_tensorflow_mnist](python/end_to_end_tensorflow_mnist) | Python | UFF | “Hello World” For TensorRT Using TensorFlow |
 | [engine_refit_mnist](python/engine_refit_mnist) | Python | INetwork | Refitting A TensorRT Engine |
 | [int8_caffe_mnist](python/int8_caffe_mnist) | Python | Caffe | INT8 Calibration |

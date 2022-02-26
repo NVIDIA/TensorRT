@@ -14,11 +14,18 @@
 # limitations under the License.
 #
 
+from polygraphy import util
+
+
 class BaseArgs(object):
     """
     Adds a arguments to a command-line parser, and provides capabilities to create
     Polygraphy objects based on the arguments.
     """
+
+    def __init__(self, disable_abbrev=None):
+        self.disable_abbrev = util.default(disable_abbrev, False)
+
     def add_to_parser(self, parser):
         """
         Add arguments to a command-line parser.
@@ -27,7 +34,6 @@ class BaseArgs(object):
             parser (argparse.ArgumentParser): The argument parser.
         """
         pass
-
 
     def parse(self, args):
         """
@@ -38,7 +44,6 @@ class BaseArgs(object):
         """
         pass
 
-
     def register(self, maker):
         """
         Registers another argument group with this one.
@@ -48,7 +53,6 @@ class BaseArgs(object):
             maker (BaseArgs): Another argument group.
         """
         pass
-
 
     def check_registered(self):
         """

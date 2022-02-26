@@ -13,3 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+from polygraphy.backend.onnx import onnx_from_path
+from polygraphy.backend.onnx import util as onnx_util
+from tests.models.meta import ONNX_MODELS
+
+
+def test_get_num_nodes():
+    model = onnx_from_path(ONNX_MODELS["scan"].path)
+    assert onnx_util.get_num_nodes(model) == 3  # Should count subgraph nodes.

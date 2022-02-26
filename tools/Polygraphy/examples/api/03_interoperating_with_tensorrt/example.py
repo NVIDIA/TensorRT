@@ -20,38 +20,54 @@ This script demonstrates how to use Polygraphy in conjunction with APIs
 provided by a backend. Specifically, in this case, we use TensorRT APIs
 to print the network name and enable FP16 mode.
 """
-import os
-
 import numpy as np
 import tensorrt as trt
-from polygraphy.backend.trt import (CreateConfig, EngineFromNetwork,
-                                    NetworkFromOnnxPath, TrtRunner)
-from polygraphy.common import func
+from polygraphy import func
+from polygraphy.backend.trt import CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
 
-MODEL = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, "models", "identity.onnx")
 
-# We can use the `extend` decorator to easily extend loaders provided by Polygraphy
+# TIP: The immediately evaluated functional API makes it very easy to interoperate
+# with backends like TensorRT. For details, see example 06 (`examples/api/06_immediate_eval_api`).
+
+# We can use the `extend` decorator to easily extend lazy loaders provided by Polygraphy
 # The parameters our decorated function takes should match the return values of the loader we are extending.
 
 # For `NetworkFromOnnxPath`, we can see from the API documentation that it returns a TensorRT
 # builder, network and parser. That is what our function will receive.
-@func.extend(NetworkFromOnnxPath(MODEL))
+@func.extend(NetworkFromOnnxPath("identity.onnx"))
 def load_network(builder, network, parser):
     # Here we can modify the network. For this example, we'll just set the network name.
     network.name = "MyIdentity"
     print("Network name: {:}".format(network.name))
 
+    # Notice that we don't need to return anything - `extend()` takes care of that for us!
+
 
 # In case a builder configuration option is missing from Polygraphy, we can easily set it using TensorRT APIs.
-# Our function will receive a TensorRT builder config since that's what `CreateConfig` returns.
+# Our function will receive a TensorRT IBuilderConfig since that's what `CreateConfig` returns.
 @func.extend(CreateConfig())
 def load_config(config):
     # Polygraphy supports the fp16 flag, but in case it didn't, we could do this:
     config.set_flag(trt.BuilderFlag.FP16)
 
 
-# Since we have no further need of TensorRT APIs, we can come back to regular Polygraphy.
-build_engine = EngineFromNetwork(load_network, config=load_config)
+def main():
+    # Since we have no further need of TensorRT APIs, we can come back to regular Polygraphy.
+    #
+    # NOTE: Since we're using lazy loaders, we provide the functions as arguments - we do *not* call them ourselves.
+    build_engine = EngineFromNetwork(load_network, config=load_config)
 
-with TrtRunner(build_engine) as runner:
-    runner.infer({"x": np.ones(shape=(1, 1, 2, 2), dtype=np.float32)})
+    with TrtRunner(build_engine) as runner:
+        inp_data = np.ones(shape=(1, 1, 2, 2), dtype=np.float32)
+
+        # NOTE: The runner owns the output buffers and is free to reuse them between `infer()` calls.
+        # Thus, if you want to store results from multiple inferences, you should use `copy.deepcopy()`.
+        outputs = runner.infer({"x": inp_data})
+
+        assert np.array_equal(outputs["y"], inp_data)  # It's an identity model!
+
+        print("Inference succeeded!")
+
+
+if __name__ == "__main__":
+    main()

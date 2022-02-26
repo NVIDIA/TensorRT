@@ -318,7 +318,7 @@ struct BertInference
         gLogInfo << "\tAverage Time: " << avgTime << " ms\n";
         gLogInfo << "\t95th Percentile Time: " << percentile95 << " ms\n";
         gLogInfo << "\t99th Percentile Time: " << percentile99 << " ms\n";
-        gLogInfo << "\tThroughtput: " << throughput << " sentences/s\n";
+        gLogInfo << "\tThroughput: " << throughput << " sentences/s\n";
     }
 
     ~BertInference()

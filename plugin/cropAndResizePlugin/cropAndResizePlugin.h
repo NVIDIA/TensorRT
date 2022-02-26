@@ -36,15 +36,14 @@ namespace plugin
 class CropAndResizePlugin : public IPluginV2Ext
 {
 public:
-    CropAndResizePlugin(int crop_width, int crop_height) noexcept;
-    CropAndResizePlugin(
-        int crop_width, int crop_height, int depth, int input_width, int input_height, int max_box_num) noexcept;
-    CropAndResizePlugin(const void* serial_buf, size_t serial_size) noexcept;
+    CropAndResizePlugin(int crop_width, int crop_height);
+    CropAndResizePlugin(int crop_width, int crop_height, int depth, int input_width, int input_height, int max_box_num);
+    CropAndResizePlugin(const void* serial_buf, size_t serial_size);
 
     // It doesn't make sense to make CropAndResizePlugin without arguments, so we delete default constructor.
-    CropAndResizePlugin() noexcept = delete;
+    CropAndResizePlugin() = delete;
 
-    ~CropAndResizePlugin() noexcept override;
+    ~CropAndResizePlugin() override;
 
     int getNbOutputs() const noexcept override;
 
@@ -54,9 +53,9 @@ public:
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int) const noexcept override;
+    size_t getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept override;
 
-    int enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace,
+    int enqueue(int batchSize, const void* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
@@ -79,8 +78,7 @@ public:
 
     DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-        noexcept override;
+    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
 
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
@@ -101,10 +99,9 @@ private:
 class CropAndResizeDynamicPlugin : public IPluginV2DynamicExt
 {
 public:
-    CropAndResizeDynamicPlugin(int crop_width, int crop_height) noexcept;
-    CropAndResizeDynamicPlugin(
-        int crop_width, int crop_height, int depth, int input_width, int input_height, int max_box_num) noexcept;
-    CropAndResizeDynamicPlugin(const void* serial_buf, size_t serial_size) noexcept;
+    CropAndResizeDynamicPlugin(int crop_width, int crop_height);
+    CropAndResizeDynamicPlugin(int crop_width, int crop_height, int depth, int input_width, int input_height, int max_box_num);
+    CropAndResizeDynamicPlugin(const void* serial_buf, size_t serial_size);
 
     // It doesn't make sense to make CropAndResizeDynamicPlugin without arguments, so we delete default constructor.
     CropAndResizeDynamicPlugin() noexcept = delete;
@@ -147,8 +144,8 @@ private:
 class CropAndResizeBasePluginCreator : public BaseCreator
 {
 public:
-    CropAndResizeBasePluginCreator() noexcept;
-    ~CropAndResizeBasePluginCreator() noexcept override = default;
+    CropAndResizeBasePluginCreator();
+    ~CropAndResizeBasePluginCreator() override = default;
     const char* getPluginName() const noexcept override;
     const char* getPluginVersion() const noexcept override;
     const PluginFieldCollection* getFieldNames() noexcept override;
@@ -162,8 +159,8 @@ protected:
 class CropAndResizePluginCreator : public CropAndResizeBasePluginCreator
 {
 public:
-    CropAndResizePluginCreator() noexcept;
-    ~CropAndResizePluginCreator() noexcept override = default;
+    CropAndResizePluginCreator();
+    ~CropAndResizePluginCreator() override = default;
     IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
     IPluginV2Ext* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
 };
@@ -171,8 +168,8 @@ public:
 class CropAndResizeDynamicPluginCreator : public CropAndResizeBasePluginCreator
 {
 public:
-    CropAndResizeDynamicPluginCreator() noexcept;
-    ~CropAndResizeDynamicPluginCreator() noexcept override = default;
+    CropAndResizeDynamicPluginCreator();
+    ~CropAndResizeDynamicPluginCreator() override = default;
     IPluginV2DynamicExt* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
     IPluginV2DynamicExt* deserializePlugin(
         const char* name, const void* serialData, size_t serialLength) noexcept override;

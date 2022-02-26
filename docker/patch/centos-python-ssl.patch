@@ -1,4 +1,0 @@
-SSL=/usr/local/ssl
-_ssl _ssl.c \
-       -DUSE_SSL -I$(SSL)/include -I$(SSL)/include/openssl \
-       -L$(SSL)/lib -lssl -lcrypto

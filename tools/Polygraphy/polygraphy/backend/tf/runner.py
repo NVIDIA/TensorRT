@@ -18,25 +18,25 @@ import os
 import time
 from collections import OrderedDict
 
-import tensorflow as tf
+from polygraphy import mod, util
 from polygraphy.backend.base import BaseRunner
 from polygraphy.backend.tf import util as tf_util
-from polygraphy.logger.logger import G_LOGGER
-from polygraphy.util import misc
+from polygraphy.logger import G_LOGGER
 
-misc.log_module_info(tf)
+tf = mod.lazy_import("tensorflow", version="<2.0")
 
 
+@mod.export()
 class TfRunner(BaseRunner):
     """
     Runs inference using a TensorFlow session.
     """
+
     def __init__(self, sess, timeline_dir=None, name=None):
         """
         Args:
-            sess (Callable() -> Tuple[tf.Session, Sequence[str]]):
-                    A callable that can supply a tuple containing a
-                    TensorFlow session and output names.
+            sess (Union[Tuple[tf.Session, Sequence[str]], Callable() -> Tuple[tf.Session, Sequence[str]]]):
+                    A tuple containing a TensorFlow session and output names or a callable that returns one.
 
 
             timeline_dir (str):
@@ -60,26 +60,18 @@ class TfRunner(BaseRunner):
             self.run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             self.run_metadata = tf.RunMetadata()
 
-
     def activate_impl(self):
-        import tensorflow as tf
-        (self.sess, self.output_names), _ = misc.try_call(self._sess)
+        (self.sess, self.output_names), _ = util.invoke_if_callable(self._sess)
 
-
-    def get_input_metadata(self):
+    def get_input_metadata_impl(self):
         return tf_util.get_input_metadata(self.sess.graph)
-
-
-    def deactivate_impl(self):
-        self.sess.close()
-        self.sess = None
-
 
     def infer_impl(self, feed_dict):
         G_LOGGER.extra_verbose("Received feed_dict: {:}".format(feed_dict))
         start = time.time()
-        inference_outputs = self.sess.run(self.output_names, feed_dict=feed_dict, options=self.run_options,
-                                          run_metadata=self.run_metadata)
+        inference_outputs = self.sess.run(
+            self.output_names, feed_dict=feed_dict, options=self.run_options, run_metadata=self.run_metadata
+        )
         end = time.time()
 
         out_dict = OrderedDict()
@@ -87,15 +79,21 @@ class TfRunner(BaseRunner):
             out_dict[name] = out
         self.inference_time = end - start
 
-        def generate_timeline():
-            from tensorflow.python.client import timeline
-            t1 = timeline.Timeline(self.run_metadata.step_stats)
-            return t1.generate_chrome_trace_format()
-
         if self.timeline_dir is not None:
-            misc.lazy_write(contents=generate_timeline,
-                            path=os.path.join(self.timeline_dir, "run-{:}".format(self.num_inferences)),
-                            mode="w")
+            from tensorflow.python.client import timeline
+
+            t1 = timeline.Timeline(self.run_metadata.step_stats)
+
+            util.save_file(
+                contents=t1.generate_chrome_trace_format(),
+                dest=os.path.join(self.timeline_dir, "run-{:}".format(self.num_inferences)),
+                mode="w",
+            )
         self.num_inferences += 1
 
         return out_dict
+
+    def deactivate_impl(self):
+        self.sess.close()
+        del (self.sess, self.output_names)
+        self.num_inferences = 0

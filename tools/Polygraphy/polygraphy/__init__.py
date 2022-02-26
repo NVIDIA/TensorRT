@@ -1,1 +1,3 @@
-__version__ = "0.21.1"
+import polygraphy.config
+
+__version__ = "0.33.0"

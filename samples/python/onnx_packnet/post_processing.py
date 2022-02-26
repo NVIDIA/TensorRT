@@ -19,7 +19,7 @@ import onnx_graphsurgeon as gs
 import argparse
 import onnx
 import numpy as np
-
+import torch
 
 # Pad layer subgraph structure in ONNX (specific to opset 11):
 #               Constant
@@ -54,16 +54,18 @@ def process_pad_nodes(graph):
        |
       Conv
     """
-    upsample_nodes = [node for node in graph.nodes if node.op == "Pad"]
-    for node in upsample_nodes:
+    pad_nodes = [node for node in graph.nodes if node.op == "Pad"]
+    for node in pad_nodes:
         fold_pad_inputs(node, graph)
 
     return graph
 
-
 def fold_pad_inputs(node, graph):
     # Gather the amount of padding in each dimension from pytorch graph.
-    pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(0).attrs['value'].values
+    if torch.__version__ < '1.5.0':
+        pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(0).attrs['value'].values
+    else:
+        pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).inputs[0].values
 
     # Assumption a 4d input tensor
     onnx_pad_values = [0]*4*2 # 4d tensor and 2 sides padding for each dimension
@@ -105,7 +107,7 @@ def process_upsample_nodes(graph, opset=11):
        |
       ReLU
     """
-    if opset==11:
+    if opset>=11:
        upsample_layer_name = "Resize"
     else:
        upsample_layer_name = "Upsample"
@@ -224,6 +226,10 @@ def convert_to_groupnorm(instancenorm, graph):
     conv_output_tensor.outputs[0] = groupnorm
     relu_input_tensor.inputs[0] = groupnorm
 
-    # Add scale and bias constant tensors from unsqueeze op as input to group norm plugin
-    groupnorm.inputs.append(instancenorm.o().o().i(1).inputs[0])
-    groupnorm.inputs.append(instancenorm.o().o().o().i(1).inputs[0])
+    # Add scale and bias constant tensors to group norm plugin
+    if torch.__version__ < '1.5.0':
+        groupnorm.inputs.append(instancenorm.o().o().i(1).inputs[0])
+        groupnorm.inputs.append(instancenorm.o().o().o().i(1).inputs[0])
+    else:
+        groupnorm.inputs.append(instancenorm.o().o().inputs[1])
+        groupnorm.inputs.append(instancenorm.o().o().o().inputs[1])

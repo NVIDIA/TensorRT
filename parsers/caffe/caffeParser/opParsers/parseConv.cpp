@@ -32,7 +32,7 @@ ILayer* parseConvolution(INetworkDefinition& network, const trtcaffe::LayerParam
 
     int kernelH = p.has_kernel_h() ? p.kernel_h() : p.kernel_size(0);
     int kernelW = p.has_kernel_w() ? p.kernel_w() : p.kernel_size_size() > 1 ? p.kernel_size(1) : p.kernel_size(0);
-    int C = parserutils::getCHW(tensors[msg.bottom(0)]->getDimensions()).c();
+    int C = parserutils::getC(tensors[msg.bottom(0)]->getDimensions());
     int G = p.has_group() ? p.group() : 1;
 
     auto CbyG = float(C / G * nbOutputs);

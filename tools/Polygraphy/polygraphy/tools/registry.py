@@ -15,14 +15,8 @@
 #
 import importlib
 
-from polygraphy.common import func
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.base import Tool
-
-try:
-    ModuleNotFoundError
-except:
-    ModuleNotFoundError = ImportError
 
 TOOL_REGISTRY = []
 
@@ -30,9 +24,14 @@ TOOL_REGISTRY = []
 class MissingTool(Tool):
     def __init__(self, name, err):
         super().__init__(name)
-        self.__doc__ = "Error: Tool could not be loaded. Run 'polygraphy {:}' for details".format(self.name)
         self.err = err
-
+        # NOTE: When modifying this error message, make sure to update the checks in
+        # tests/test_public_imports.py so that we don't miss errors!
+        self.__doc__ = (
+            "[!] This tool could not be loaded due to an error:\n{:}\nRun 'polygraphy {:}' for details.".format(
+                self.err, self.name
+            )
+        )
 
     def __call__(self, args):
         G_LOGGER.critical("Encountered an error when loading this tool:\n{:}".format(self.err))
@@ -43,13 +42,25 @@ def try_register_tool(module, tool_class):
 
     try:
         toolmod = importlib.import_module(module)
-        tool = func.invoke(getattr(toolmod, tool_class))
-        TOOL_REGISTRY.append(tool)
+        ToolClass = getattr(toolmod, tool_class)
+        TOOL_REGISTRY.append(ToolClass())
     except Exception as err:
+        G_LOGGER.internal_error(
+            "Could not load command-line tool: {:}.\nNote: Error was: {:}".format(tool_class.lower(), err)
+        )
         TOOL_REGISTRY.append(MissingTool(tool_class.lower(), err=err))
 
 
 try_register_tool("polygraphy.tools.run", "Run")
+try_register_tool("polygraphy.tools.convert", "Convert")
 try_register_tool("polygraphy.tools.inspect", "Inspect")
 try_register_tool("polygraphy.tools.surgeon", "Surgeon")
-try_register_tool("polygraphy.tools.precision", "Precision")
+try_register_tool("polygraphy.tools.template", "Template")
+try_register_tool("polygraphy.tools.debug", "Debug")
+try_register_tool("polygraphy.tools.data", "Data")
+
+# Check that tool names are unique
+tool_names = [tool.name for tool in TOOL_REGISTRY]
+duplicates = {name for name in tool_names if tool_names.count(name) > 1}
+if duplicates:
+    G_LOGGER.internal_error("Multiple tools have the same name. Duplicate tool names found: {:}".format(duplicates))

@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef TRT_EMB_LAYER_NORM_PLUGIN_H
 #define TRT_EMB_LAYER_NORM_PLUGIN_H
 
@@ -29,59 +28,61 @@ namespace bert
 {
 
 template <typename T>
-int embSkipLayerNormVarSeqlen(cudaStream_t stream, int ld, int B, int S, const uint32_t* cuSeqlens, const int* inputIds,
-    const int* token_ids, const T* beta, const T* gamma, const T* wordEmb, const T* posEmb, const T* tokEmb, T* output);
+int32_t embSkipLayerNormVarSeqlenHFace(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, const uint32_t* cuSeqlens,
+    const int32_t* inputIds, const int32_t* token_ids, const T* beta, const T* gamma, const T* wordEmb, const T* posEmb,
+    const T* tokEmb, T* output);
 
 template <typename T>
-int embSkipLayerNorm2(cudaStream_t stream, int ld, int B, int S, const int* inputIds, const int* tokenIds,
-    const int* cuSeqlens, const float* beta, const float* gamma, const T* wordEmb, const T* posEmb, const T* tokEmb,
-    T* output);
+int32_t embSkipLayerNormHFace(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, const int32_t* inputIds,
+    const int32_t* tokenIds, const int32_t* cuSeqlens, const float* beta, const float* gamma, const T* wordEmb,
+    const T* posEmb, const T* tokEmb, T* output);
+
+template <typename T>
+int32_t embSkipLayerNormVarSeqlenMTron(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, const uint32_t* cuSeqlens,
+    const int32_t* inputIds, const int32_t* token_ids, const T* beta, const T* gamma, const T* wordEmb, const T* posEmb,
+    const T* tokEmb, T* output, T* skip);
+
+template <typename T>
+int32_t embSkipLayerNormMTron(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, const int32_t* inputIds,
+    const int32_t* tokenIds, const int32_t* cuSeqlens, const float* beta, const float* gamma, const T* wordEmb,
+    const T* posEmb, const T* tokEmb, T* output, T* skip);
 
 void cuSeqlensToPackedMask(const uint32_t S, const uint32_t B, const uint32_t warps_m, const uint32_t warps_n,
-    const uint32_t warps_k, const int* cuSeqlens, uint32_t* inputMaskX, cudaStream_t stream);
+    const uint32_t warps_k, const int32_t* cuSeqlens, uint32_t* inputMaskX, cudaStream_t stream);
 
-class EmbLayerNormVarSeqlenPlugin : public nvinfer1::IPluginV2DynamicExt
+class EmbLayerNormVarSeqlenPluginBase : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    EmbLayerNormVarSeqlenPlugin(const std::string& name, const nvinfer1::DataType type, const nvinfer1::Weights& beta,
-        const nvinfer1::Weights& gamma, const nvinfer1::Weights& word_emb, const nvinfer1::Weights& pos_emb,
-        const nvinfer1::Weights& tok_emb);
+    EmbLayerNormVarSeqlenPluginBase(const std::string& name, const nvinfer1::DataType type,
+        const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma, const nvinfer1::Weights& word_emb,
+        const nvinfer1::Weights& pos_emb, const nvinfer1::Weights& tok_emb);
 
-    EmbLayerNormVarSeqlenPlugin(const std::string& name, const void* data, size_t length);
+    EmbLayerNormVarSeqlenPluginBase(const std::string& name, const void* data, size_t length);
 
     // It doesn't make sense to make EmbLayerNormVarSeqlenPlugin without arguments, so we
     // delete default constructor.
-    EmbLayerNormVarSeqlenPlugin() = delete;
+    EmbLayerNormVarSeqlenPluginBase() = delete;
 
     // IPluginV2DynamicExt Methods
-    nvinfer1::IPluginV2DynamicExt* clone() const override;
-    nvinfer1::DimsExprs getOutputDimensions(
-        int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) override;
     bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const override;
-    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+        int32_t pos, const nvinfer1::PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int32_t nbInputs,
+        const nvinfer1::PluginTensorDesc* outputs, int32_t nbOutputs) const noexcept override;
 
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const override;
+    nvinfer1::DataType getOutputDataType(int32_t index, const nvinfer1::DataType* inputTypes, int32_t nbInputs) const
+        noexcept override;
 
     // IPluginV2 Methods
-    const char* getPluginType() const override;
-    const char* getPluginVersion() const override;
-    int getNbOutputs() const override;
-    int initialize() override;
-    void terminate() override;
-    size_t getSerializationSize() const override;
-    void serialize(void* buffer) const override;
-    void destroy() override;
-    void setPluginNamespace(const char* pluginNamespace) override;
-    const char* getPluginNamespace() const override;
+    const char* getPluginType() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    size_t getSerializationSize() const noexcept override;
+    void serialize(void* buffer) const noexcept override;
+    void destroy() noexcept override;
+    const char* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(const char* pluginNamespace) noexcept override;
 
-private:
+protected:
     const std::string mLayerName;
     std::string mNamespace;
 
@@ -100,41 +101,102 @@ private:
     bert::WeightsWithOwnership mTokEmb;
     bert::WeightsWithOwnership mPosEmb;
     nvinfer1::DataType mType;
-
-protected:
-    // To prevent compiler warnings.
-    using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
-    using nvinfer1::IPluginV2DynamicExt::enqueue;
-    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
-    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
-    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::supportsFormat;
 };
 
-class EmbLayerNormVarSeqlenPluginCreator : public nvinfer1::IPluginCreator
+class EmbLayerNormVarSeqlenPluginHFace : public EmbLayerNormVarSeqlenPluginBase
 {
 public:
-    EmbLayerNormVarSeqlenPluginCreator();
+    EmbLayerNormVarSeqlenPluginHFace(const std::string& name, const nvinfer1::DataType type, const nvinfer1::Weights& beta,
+        const nvinfer1::Weights& gamma, const nvinfer1::Weights& word_emb, const nvinfer1::Weights& pos_emb,
+        const nvinfer1::Weights& tok_emb);
 
-    const char* getPluginName() const override;
+    EmbLayerNormVarSeqlenPluginHFace(const std::string& name, const void* data, size_t length);
 
-    const char* getPluginVersion() const override;
+    // It doesn't make sense to make EmbLayerNormVarSeqlenPlugin without arguments, so we
+    // delete default constructor.
+    EmbLayerNormVarSeqlenPluginHFace() = delete;
 
-    const nvinfer1::PluginFieldCollection* getFieldNames() override;
+    // IPluginV2DynamicExt Methods
+    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, const nvinfer1::DimsExprs* inputs, int32_t nbInputs,
+        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int32_t nbInputs,
+        const nvinfer1::DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept override;
+    int32_t enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) override;
+    // IPluginV2 Methods
+    int32_t initialize() noexcept override;
+    void terminate() noexcept override;
+    void destroy() noexcept override;
+    const char* getPluginVersion() const noexcept override;
+};
 
-    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
+class EmbLayerNormVarSeqlenPluginMTron : public EmbLayerNormVarSeqlenPluginBase
+{
+public:
+    EmbLayerNormVarSeqlenPluginMTron(const std::string& name, const nvinfer1::DataType type, const nvinfer1::Weights& beta,
+        const nvinfer1::Weights& gamma, const nvinfer1::Weights& word_emb, const nvinfer1::Weights& pos_emb,
+        const nvinfer1::Weights& tok_emb);
 
-    void setPluginNamespace(const char* pluginNamespace) override;
+    EmbLayerNormVarSeqlenPluginMTron(const std::string& name, const void* data, size_t length);
 
-    const char* getPluginNamespace() const override;
+    // It doesn't make sense to make EmbLayerNormVarSeqlenPlugin without arguments, so we
+    // delete default constructor.
+    EmbLayerNormVarSeqlenPluginMTron() = delete;
 
-private:
+    // IPluginV2DynamicExt Methods
+    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, const nvinfer1::DimsExprs* inputs, int32_t nbInputs,
+        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int32_t nbInputs,
+        const nvinfer1::DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept override;
+    int32_t enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+
+    // IPluginV2 Methods
+    int32_t initialize() noexcept override;
+    void terminate() noexcept override;
+    void destroy() noexcept override;
+    const char* getPluginVersion() const noexcept override;
+};
+
+class EmbLayerNormVarSeqlenPluginBaseCreator : public nvinfer1::IPluginCreator
+{
+public:
+    EmbLayerNormVarSeqlenPluginBaseCreator();
+
+    const char* getPluginName() const noexcept override;
+
+    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
+
+    void setPluginNamespace(const char* pluginNamespace) noexcept override;
+
+    const char* getPluginNamespace() const noexcept override;
+
+protected:
     static nvinfer1::PluginFieldCollection mFC;
     static std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
 };
+
+class EmbLayerNormVarSeqlenPluginHFaceCreator : public EmbLayerNormVarSeqlenPluginBaseCreator
+{
+public:
+    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    const char* getPluginVersion() const noexcept override;
+    nvinfer1::IPluginV2* deserializePlugin(
+        const char* name, const void* serialData, size_t serialLength) noexcept override;
+};
+
+class EmbLayerNormVarSeqlenPluginMTronCreator : public EmbLayerNormVarSeqlenPluginBaseCreator
+{
+public:
+    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    const char* getPluginVersion() const noexcept override;
+    nvinfer1::IPluginV2* deserializePlugin(
+        const char* name, const void* serialData, size_t serialLength) noexcept override;
+};
+
 } // namespace bert
 #endif // TRT_EMB_LAYER_NORM_PLUGIN_H

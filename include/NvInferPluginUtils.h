@@ -16,6 +16,7 @@
 
 #ifndef NV_INFER_PLUGIN_UTILS_H
 #define NV_INFER_PLUGIN_UTILS_H
+
 #include "NvInferRuntimeCommon.h"
 
 //!
@@ -27,34 +28,6 @@
 
 namespace nvinfer1
 {
-//!
-//! \enum PluginType
-//!
-//! \brief The type values for the various plugins.
-//!
-//! \see INvPlugin::getPluginType()
-//!
-enum class PluginType : int32_t
-{
-    kFASTERRCNN = 0,         //!< FasterRCNN fused plugin (RPN + ROI pooling).
-    kNORMALIZE = 1,          //!< Normalize plugin.
-    kPERMUTE = 2,            //!< Permute plugin.
-    kPRIORBOX = 3,           //!< PriorBox plugin.
-    kSSDDETECTIONOUTPUT = 4, //!< SSD DetectionOutput plugin.
-    kCONCAT = 5,             //!< Concat plugin.
-    kPRELU = 6,              //!< YOLO PReLU Plugin.
-    kYOLOREORG = 7,          //!< YOLO Reorg Plugin.
-    kYOLOREGION = 8,         //!< YOLO Region Plugin.
-    kANCHORGENERATOR = 9,    //!< SSD Grid Anchor Generator.
-};
-
-//! Maximum number of elements in PluginType enum. \see PluginType
-template <>
-constexpr inline int32_t EnumMax<PluginType>()
-{
-    return 10;
-}
-
 namespace plugin
 {
 
@@ -75,7 +48,7 @@ typedef struct
 //! \param minSize Minimum box size in pixels. Can not be nullptr.
 //! \param maxSize Maximum box size in pixels. Can be nullptr.
 //! \param aspectRatios Aspect ratios of the boxes. Can be nullptr.
-//! \param numMinSize Number of element in minSize. Must be larger than 0.
+//! \param numMinSize Number of elements in minSize. Must be larger than 0.
 //! \param numMaxSize Number of elements in maxSize. Can be 0 or same as numMinSize.
 //! \param numAspectRatios Number of elements in aspectRatios. Can be 0.
 //! \param flip If true, will flip each aspect ratio. For example, if there is an aspect ratio "r", the aspect ratio
@@ -106,8 +79,10 @@ struct PriorBoxParameters
 //! \param poolingH Height of the output in pixels after ROI pooling on feature map.
 //! \param poolingW Width of the output in pixels after ROI pooling on feature map.
 //! \param featureStride Feature stride; ratio of input image size to feature map size. Assuming that max pooling layers
-//! in neural network use square filters. \param preNmsTop Number of proposals to keep before applying NMS. \param
-//! nmsMaxOut Number of remaining proposals after applying NMS. \param anchorsRatioCount Number of anchor box ratios.
+//! in the neural network use square filters.
+//! \param preNmsTop Number of proposals to keep before applying NMS.
+//! \param nmsMaxOut Number of remaining proposals after applying NMS.
+//! \param anchorsRatioCount Number of anchor box ratios.
 //! \param anchorsScaleCount Number of anchor box scales.
 //! \param iouThreshold IoU (Intersection over Union) threshold used for the NMS step.
 //! \param minBoxSize Minimum allowed bounding box size before scaling, used for anchor box calculation.
@@ -162,7 +137,7 @@ enum class CodeTypeSSD : int32_t
 
 //!
 //! \brief The DetectionOutput plugin layer generates the detection output based on location and confidence predictions by doing non maximum suppression.
-//! This plugin first decodes the bounding boxes based on the anchors generated. It then performs non_max_suppression on the decoded bouding boxes.
+//! This plugin first decodes the bounding boxes based on the anchors generated. It then performs non_max_suppression on the decoded bounding boxes.
 //! DetectionOutputParameters defines a set of parameters for creating the DetectionOutput plugin layer.
 //! It contains:
 //! \param shareLocation If true, bounding box are shared among different classes.
@@ -177,6 +152,7 @@ enum class CodeTypeSSD : int32_t
 //! \param inputOrder Specifies the order of inputs {loc_data, conf_data, priorbox_data}.
 //! \param confSigmoid Set to true to calculate sigmoid of confidence scores.
 //! \param isNormalized Set to true if bounding box data is normalized by the network.
+//! \param isBatchAgnostic Defaults to true. Set to false if prior boxes are unique per batch
 //!
 struct DetectionOutputParameters
 {
@@ -187,25 +163,13 @@ struct DetectionOutputParameters
     int32_t inputOrder[3];
     bool confSigmoid;
     bool isNormalized;
+    bool isBatchAgnostic{true};
 };
 
 //!
-//! \brief The Region plugin layer performs region proposal calculation: generate 5 bounding boxes per cell (for
-//! yolo9000, generate 3 bounding boxes per cell).
+//! \brief When performing yolo9000, softmaxTree is helping to do softmax on confidence scores, for element to get the precise classification through word-tree structured classification definition.
 //!
-//! For each box, calculating its probablities of objects detections from 80 pre-defined classifications (yolo9000
-//! has 9418 pre-defined classifications, and these 9418 items are organized as work-tree structure).
-//! RegionParameters defines a set of parameters for creating the Region plugin layer.
-//!
-//! \param num Number of predicted bounding box for each grid cell.
-//! \param coords Number of coordinates for a bounding box.
-//! \param classes Number of classfications to be predicted.
-//! \param softmaxTree When performing yolo9000, softmaxTree is helping to do softmax on confidence scores, for element
-//!        to get the precise classfication through word-tree structured classfication definition.
-//!
-//! \deprecated. This plugin is superseded by createRegionPlugin and will be removed in TensorRT 8.0.
-//!
-TRT_DEPRECATED typedef struct
+struct softmaxTree
 {
     int32_t* leaf;
     int32_t n;
@@ -217,9 +181,19 @@ TRT_DEPRECATED typedef struct
     int32_t groups;
     int32_t* groupSize;
     int32_t* groupOffset;
-} softmaxTree; // softmax tree
+};
 
-struct TRT_DEPRECATED RegionParameters
+//!
+//! \brief The Region plugin layer performs region proposal calculation: generate 5 bounding boxes per cell (for yolo9000, generate 3 bounding boxes per cell).
+//! For each box, calculating its probablities of objects detections from 80 pre-defined classifications (yolo9000 has 9418 pre-defined classifications,
+//! and these 9418 items are organized as work-tree structure).
+//! RegionParameters defines a set of parameters for creating the Region plugin layer.
+//! \param num Number of predicted bounding box for each grid cell.
+//! \param coords Number of coordinates for a bounding box.
+//! \param classes Number of classifications to be predicted.
+//! \param smTree Helping structure to do softmax on confidence scores.
+//!
+struct RegionParameters
 {
     int32_t num;
     int32_t coords;
@@ -252,6 +226,7 @@ struct NMSParameters
     bool isNormalized;
 };
 
-} // end plugin namespace
-} // end nvinfer1 namespace
-#endif
+} // namespace plugin
+} // namespace nvinfer1
+
+#endif // NV_INFER_PLUGIN_UTILS_H

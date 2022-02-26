@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnxBytes
-from polygraphy.logger import G_LOGGER
-
-from tests.models.meta import ONNX_MODELS
-
+import numpy as np
 import pytest
+from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
+from polygraphy.exception import PolygraphyException
+from polygraphy.logger import G_LOGGER
+from tests.models.meta import ONNX_MODELS
 
 
 class TestLoggerCallbacks(object):
@@ -33,26 +33,50 @@ class TestOnnxrtRunner(object):
         runner = OnnxrtRunner(None, name=NAME)
         assert runner.name == NAME
 
-
     def test_basic(self):
         model = ONNX_MODELS["identity"]
-        with OnnxrtRunner(SessionFromOnnxBytes(model.loader)) as runner:
+        with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
             assert runner.is_active
             model.check_runner(runner)
+            assert runner.last_inference_time() is not None
         assert not runner.is_active
-
 
     def test_shape_output(self):
         model = ONNX_MODELS["reshape"]
-        with OnnxrtRunner(SessionFromOnnxBytes(model.loader)) as runner:
+        with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
             model.check_runner(runner)
 
-
-    def test_dim_param_converted_to_int_shape(self):
+    def test_dim_param_preserved(self):
         model = ONNX_MODELS["dim_param"]
-        with OnnxrtRunner(SessionFromOnnxBytes(model.loader)) as runner:
+        with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
             input_meta = runner.get_input_metadata()
             # In Polygraphy, we only use None to indicate a dynamic input dimension - not strings.
-            for name, (dtype, shape) in input_meta.items():
-                for dim in shape:
-                    assert dim is None or isinstance(dim, int)
+            assert len(input_meta) == 1
+            for _, (_, shape) in input_meta.items():
+                assert shape == ["dim0", 16, 128]
+
+    @pytest.mark.parametrize(
+        "names, err",
+        [
+            (["fake-input", "x"], "Extra keys in"),
+            (["fake-input"], "Some keys are missing"),
+            ([], "Some keys are missing"),
+        ],
+    )
+    def test_error_on_wrong_name_feed_dict(self, names, err):
+        model = ONNX_MODELS["identity"]
+        with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
+            with pytest.raises(PolygraphyException, match=err):
+                runner.infer({name: np.ones(shape=(1, 1, 2, 2), dtype=np.float32) for name in names})
+
+    def test_error_on_wrong_dtype_feed_dict(self):
+        model = ONNX_MODELS["identity"]
+        with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
+            with pytest.raises(PolygraphyException, match="unexpected dtype."):
+                runner.infer({"x": np.ones(shape=(1, 1, 2, 2), dtype=np.int32)})
+
+    def test_error_on_wrong_shape_feed_dict(self):
+        model = ONNX_MODELS["identity"]
+        with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
+            with pytest.raises(PolygraphyException, match="incompatible shape."):
+                runner.infer({"x": np.ones(shape=(1, 1, 3, 2), dtype=np.float32)})

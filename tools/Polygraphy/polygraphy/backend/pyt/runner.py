@@ -13,17 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import torch
+import time
+from collections import OrderedDict
+
+from polygraphy import mod, util
 from polygraphy.backend.base import BaseRunner
-from polygraphy.util import misc
+
+torch = mod.lazy_import("torch")
 
 
+@mod.export()
 class PytRunner(BaseRunner):
+    """
+    Runs inference using PyTorch.
+    """
+
     def __init__(self, model, input_metadata, output_names, name=None):
         """
         Args:
-            model (Callable() -> torch.nn.Module):
-                    A model loader that returns a torch.nn.Module or subclass.
+            model (Union[torch.nn.Module, Callable() -> torch.nn.Module]):
+                    A torch.nn.Module or subclass or a callable that returns one.
             input_metadata (TensorMetadata): Mapping of input names to their data types and shapes.
             output_names (List[str]):
                     A list of output names of the model. This information is used by the
@@ -39,15 +48,19 @@ class PytRunner(BaseRunner):
         self.input_metadata = input_metadata
         self.output_names = output_names
 
-
     def activate_impl(self):
-        self.model, _ = misc.try_call(self._model)
+        self.model, _ = util.invoke_if_callable(self._model)
         self.model.eval()
 
+    def get_input_metadata_impl(self):
+        return self.input_metadata
 
     def infer_impl(self, feed_dict):
         with torch.no_grad():
-            inputs = [torch.from_numpy(val.astype(dtype)).cuda() for (val, (dtype, _)) in zip(feed_dict.values(), self.input_metadata.values())]
+            inputs = [
+                torch.from_numpy(val.astype(dtype)).cuda()
+                for (val, (dtype, _)) in zip(feed_dict.values(), self.input_metadata.values())
+            ]
             start = time.time()
             outputs = self.model(*inputs)
             end = time.time()
@@ -57,6 +70,5 @@ class PytRunner(BaseRunner):
             out_dict[name] = output.cpu().numpy()
         return out_dict, end - start
 
-
-    def get_input_metadata(self):
-        return self.input_metadata
+    def deactivate_impl(self):
+        del self.model

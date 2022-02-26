@@ -18,10 +18,10 @@ import tempfile
 
 import pytest
 import tensorflow as tf
-from polygraphy.backend.tf import GraphFromFrozen, ModifyGraph, SaveGraph
-from polygraphy.common import constants, func
+from polygraphy import constants, util
+from polygraphy.backend.tf import GraphFromFrozen, ModifyGraphOutputs, SaveGraph, graph_from_frozen
 from polygraphy.logger import G_LOGGER
-from tests.common import check_file_non_empty
+from tests.helper import is_file_non_empty
 from tests.models.meta import TF_MODELS
 
 
@@ -37,10 +37,9 @@ class TestFrozenGraphLoader(object):
             inp = tf.placeholder(shape=(1, 1, 1, 1), dtype=tf.float32)
             out = tf.identity(inp)
 
-        graph, outputs = func.invoke(GraphFromFrozen(graph))
+        graph, outputs = graph_from_frozen(graph)
         assert graph
         assert outputs
-
 
     def test_load_pb(self):
         tf_loader = GraphFromFrozen(TF_MODELS["identity"].path)
@@ -50,7 +49,7 @@ class TestFrozenGraphLoader(object):
 class TestModifyGraph(object):
     def test_layerwise(self):
         load_frozen = GraphFromFrozen(TF_MODELS["identity"].path)
-        modify_tf = ModifyGraph(load_frozen, outputs=constants.MARK_ALL)
+        modify_tf = ModifyGraphOutputs(load_frozen, outputs=constants.MARK_ALL)
 
         graph, outputs = modify_tf()
         assert graph
@@ -59,11 +58,10 @@ class TestModifyGraph(object):
 
 class TestSaveGraph(object):
     def test_save_pb(self):
-        with tempfile.NamedTemporaryFile() as outpath:
+        with util.NamedTemporaryFile() as outpath:
             tf_loader = SaveGraph(GraphFromFrozen(TF_MODELS["identity"].path), path=outpath.name)
             tf_loader()
-            check_file_non_empty(outpath.name)
-
+            assert is_file_non_empty(outpath.name)
 
     def test_save_tensorboard(self):
         with tempfile.TemporaryDirectory() as outdir:

@@ -13,81 +13,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from collections import OrderedDict
 
-import onnx
-import onnx_graphsurgeon as gs
-from polygraphy.common import func
+from polygraphy import mod
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs
+from polygraphy.tools.args import LoggerArgs, OnnxLoaderArgs, OnnxSaveArgs
 from polygraphy.tools.base import Tool
-from polygraphy.util import misc
+
+gs = mod.lazy_import("onnx_graphsurgeon")
+onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
 
 
 class BaseSurgeonSubtool(Tool):
-    def __init__(self, name, inputs=None, data=False, shape_inference_default=None):
+    def __init__(self, name):
         super().__init__(name)
-        self.subscribe_args(ModelArgs(model_required=True, inputs=inputs, model_type="onnx"))
-        self.subscribe_args(OnnxLoaderArgs(write=False, outputs=False, shape_inference_default=shape_inference_default))
-        if data:
-            self.subscribe_args(DataLoaderArgs())
 
+    def load_model(self, log_model=True):
+        model = self.arg_groups[OnnxLoaderArgs].load_onnx()
+        if log_model:
+            G_LOGGER.info("Original Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model, mode="none")))
+        return model
 
-    def add_parser_args(self, parser, gs=False, output=False):
-        if gs:
-            parser.add_argument("--no-cleanup", help="Skip cleanup and keep unused nodes in the graph", action="store_true")
-            parser.add_argument("--no-toposort", help="Skip topologically sorting the graph", action="store_true")
-        if output:
-            parser.add_argument("-o", "--output", required=True, help="Path at which to write the final ONNX model")
+    # Since new graph outputs may be added, and we don't know the types,
+    # we skip type checks in ONNX-GraphSurgeon.
+    def export_graph(self, graph, do_type_check=False):
+        return gs.export_onnx(graph, do_type_check=do_type_check)
 
+    def save_model(self, model, log_model=True):
+        model = self.arg_groups[OnnxSaveArgs].save_onnx(model)
+        if log_model:
+            G_LOGGER.info("New Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model, mode="none")))
 
-    def import_graph(self, args):
-        onnx_model = func.invoke(self.makers[OnnxLoaderArgs].get_onnx_loader())
-        return onnx_model, gs.import_onnx(onnx_model)
+    def run_impl(self, args):
+        raise NotImplementedError("Subclasses must implement run_impl!")
 
+    def run(self, args):
+        def set_onnx_gs_logging_level(sev):
+            ONNX_GS_LOGGER = gs.logger.G_LOGGER
 
-    def export_graph(self, graph, args, do_type_check=True):
-        if not args.no_cleanup:
-            graph.cleanup()
-        if not args.no_toposort:
-            graph.toposort()
+            if sev >= G_LOGGER.CRITICAL:
+                ONNX_GS_LOGGER.severity = ONNX_GS_LOGGER.CRITICAL
+            elif sev >= G_LOGGER.ERROR:
+                ONNX_GS_LOGGER.severity = ONNX_GS_LOGGER.ERROR
+            elif sev >= G_LOGGER.WARNING:
+                ONNX_GS_LOGGER.severity = ONNX_GS_LOGGER.WARNING
+            elif sev >= G_LOGGER.INFO:
+                ONNX_GS_LOGGER.severity = ONNX_GS_LOGGER.INFO
+            elif sev >= G_LOGGER.EXTRA_VERBOSE:
+                ONNX_GS_LOGGER.severity = ONNX_GS_LOGGER.DEBUG
+            elif sev >= G_LOGGER.SUPER_VERBOSE:
+                ONNX_GS_LOGGER.severity = ONNX_GS_LOGGER.VERBOSE
+            else:
+                ONNX_GS_LOGGER.severity = ONNX_GS_LOGGER.ULTRA_VERBOSE
 
-        G_LOGGER.info("Writing model to: {output}. To see more details about the model, use: polygraphy inspect model {output} --mode=basic".format(output=args.output))
-        onnx.save(gs.export_onnx(graph, do_type_check=do_type_check), args.output)
+            fmts = self.arg_groups[LoggerArgs].log_format
+            for fmt in fmts:
+                if fmt == "no-colors":
+                    ONNX_GS_LOGGER.colors = False
+                elif fmt == "timestamp":
+                    ONNX_GS_LOGGER.timestamp = True
+                elif fmt == "line-info":
+                    ONNX_GS_LOGGER.line_info = True
 
-
-# Weights should be stored separately, JSON can just have a reference to a key.
-class Config(OrderedDict):
-    @staticmethod
-    def from_graph(graph):
-        def names_from_tensors(tensors):
-            return [tensor.name for tensor in tensors]
-
-
-        def meta_from_tensors(tensors):
-            meta = []
-            for tensor in tensors:
-                tensor_meta = {"name": tensor.name}
-                if tensor.dtype:
-                    tensor_meta["dtype"] = misc.STR_FROM_NP_TYPE[tensor.dtype]
-                if tensor.shape:
-                    tensor_meta["shape"] = tensor.shape
-                meta.append(tensor_meta)
-            return meta
-
-
-        config = Config()
-        config["graph_inputs"] = meta_from_tensors(graph.inputs)
-        config["graph_outputs"] = meta_from_tensors(graph.outputs)
-
-        config["nodes"] = []
-        for node_id, node in enumerate(graph.nodes):
-            node_info = {
-                "id":  node_id,
-                "name": node.name,
-                "op": node.op,
-                "inputs": names_from_tensors(node.inputs),
-                "outputs": names_from_tensors(node.outputs),
-            }
-            config["nodes"].append(node_info)
-        return config
+        G_LOGGER.register_callback(set_onnx_gs_logging_level)
+        return self.run_impl(args)

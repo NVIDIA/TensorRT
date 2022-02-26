@@ -30,54 +30,44 @@ This sample converts the Pytorch graph into ONNX and uses ONNX-parser included i
 
 ## Prerequisites
 
-Dependencies required for this sample
+Install the dependencies using: `python3 -m pip install -r requirements.txt`
 
-1. Install the dependencies for Python:
-   ```bash
-   python3 -m pip install -r requirements.txt
-   ```
-
-    * NOTE: The included scripts do not currently work with Torch 1.5.0. Thus, it is recommended that you use 1.4.0, which is the default version in the requirements file.
-
-2. Install [ONNX-GraphSurgeon](https://github.com/NVIDIA/TensorRT/tree/master/tools/onnx-graphsurgeon)
-   ```bash
-   pip3 install --no-cache-dir --extra-index-url https://pypi.ngc.nvidia.com onnx-graphsurgeon
-   ```
 
 ## Running the sample
 
-### Cloning the packnet repository
+### Preparing packnet
 
-Clone the <a href="https://github.com/TRI-ML/packnet-sfm">packnet</a> repository and set `PYTHONPATH` variable accordingly.
+Clone the [packnet](https://github.com/TRI-ML/packnet-sfm) repository and update `PYTHONPATH`.
 
-   ```bash
-   git clone https://github.com/TRI-ML/packnet-sfm.git packnet-sfm --depth 1 --branch v0.1.2
-   export PYTHONPATH=$PYTHONPATH:$PWD/packnet-sfm
-   ```
+```
+git clone https://github.com/TRI-ML/packnet-sfm.git packnet-sfm
+pushd packnet-sfm && git checkout tags/v0.1.2 && popd
+export PYTHONPATH=$PWD/packnet-sfm
+```
 
 ### Conversion to ONNX
 Run the following command to convert the Packnet pytorch network to ONNX graph. This step also includes handling custom layers (Group Normalization) and using ONNX-GS to modify upsample and pad layers.
 
-   ```bash
-   python3 convert_to_onnx.py --output model.onnx
-   ```
+```
+python3 convert_to_onnx.py --output model.onnx
+```
 
 ### Inference with TensorRT
 
 Once the ONNX graph is generated, use `trtexec` tool (located in `bin` directory of TensorRT package) to perform inference on a random input image.
 
-   ```bash
-   trtexec --onnx=model.onnx --explicitBatch
-   ```
+```
+trtexec --onnx=model.onnx --explicitBatch
+```
 
-Please refer to [trtexec documentation](https://github.com/NVIDIA/TensorRT/tree/master/samples/opensource/trtexec) for detailed usage options.
+Please refer to `trtexec` tool for more commandline options.
 
 ### Sample --help options
 
 To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
-    ```bash
-    convert_to_onnx.py -h
-    ```
+```
+convert_to_onnx.py -h
+```
 
 # Additional resources
 
@@ -102,6 +92,7 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+August 2021: Update sample to work with latest torch version
 June 2020: Initial release of this sample
 
 # Known issues

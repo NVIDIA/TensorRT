@@ -14,14 +14,12 @@
 # limitations under the License.
 #
 
-from itertools import chain
 import argparse
 import os
 
-import pycuda.driver as cuda
-import pycuda.autoinit
 import numpy as np
-
+import pycuda.autoinit
+import pycuda.driver as cuda
 import tensorrt as trt
 
 try:
@@ -165,77 +163,3 @@ def do_inference_v2(context, bindings, inputs, outputs, stream):
     stream.synchronize()
     # Return only the host outputs.
     return [out.host for out in outputs]
-
-def generate_md5_checksum(local_path):
-    """Returns the MD5 checksum of a local file.
-
-    Keyword argument:
-    local_path -- path of the file whose checksum shall be generated
-    """
-    with open(local_path, 'rb') as local_file:
-        data = local_file.read()
-        import hashlib
-        return hashlib.md5(data).hexdigest()
-
-
-def download_file(local_path, link, checksum_reference=None):
-    """Checks if a local file is present and downloads it from the specified path otherwise.
-    If checksum_reference is specified, the file's md5 checksum is compared against the
-    expected value.
-
-    Keyword arguments:
-    local_path -- path of the file whose checksum shall be generated
-    link -- link where the file shall be downloaded from if it is not found locally
-    checksum_reference -- expected MD5 checksum of the file
-    """
-    if not os.path.exists(local_path):
-        print('Downloading from %s, this may take a while...' % link)
-        import wget
-        wget.download(link, local_path)
-        print()
-    if checksum_reference is not None:
-        checksum = generate_md5_checksum(local_path)
-        if checksum != checksum_reference:
-            raise ValueError(
-                'The MD5 checksum of local file %s differs from %s, please manually remove \
-                 the file and try again.' %
-                (local_path, checksum_reference))
-    return local_path
-
-
-# `retry_call` and `retry` are used to wrap the function we want to try multiple times
-def retry_call(func, args=[], kwargs={}, n_retries=3):
-    """Wrap a function to retry it several times.
-
-    Args:
-        func: function to call
-        args (List): args parsed to func
-        kwargs (Dict): kwargs parsed to func
-        n_retries (int): maximum times of tries
-    """
-    for i_try in range(n_retries):
-        try:
-            func(*args, **kwargs)
-            break
-        except:
-            if i_try == n_retries - 1:
-                raise
-            print("retry...")
-
-# Usage: @retry(n_retries)
-def retry(n_retries=3):
-    """Wrap a function to retry it several times. Decorator version of `retry_call`.
-
-    Args:
-        n_retries (int): maximum times of tries
-
-    Usage:
-        @retry(n_retries)
-        def func(...):
-            pass
-    """
-    def wrapper(func):
-        def _wrapper(*args, **kwargs):
-            retry_call(func, args, kwargs, n_retries)
-        return _wrapper
-    return wrapper

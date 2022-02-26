@@ -17,7 +17,6 @@
 from collections import OrderedDict
 from typing import List, Sequence
 
-
 # default_value exists to solve issues that might result from Python's normal default argument behavior.
 # Specifically, consider the following class:
 #
@@ -80,32 +79,26 @@ class SynchronizedList(list):
         self.field_name = field_name
         self.extend(initial)
 
-
     def _add_to_elem(self, elem):
         # Explicitly avoid SynchronizedList overrides to prevent infinite recursion
         list.append(getattr(elem, self.field_name), self.parent_obj)
-
 
     def _remove_from_elem(self, elem):
         # Explicitly avoid SynchronizedList overrides to prevent infinite recursion
         list.remove(getattr(elem, self.field_name), self.parent_obj)
 
-
     def __delitem__(self, index):
         self._remove_from_elem(self[index])
         super().__delitem__(index)
-
 
     def __setitem__(self, index, elem):
         self._remove_from_elem(self[index])
         super().__setitem__(index, elem)
         self._add_to_elem(elem)
 
-
     def append(self, x):
         super().append(x)
         self._add_to_elem(x)
-
 
     def extend(self, iterable: Sequence[object]):
         super().extend(iterable)
@@ -116,27 +109,22 @@ class SynchronizedList(list):
         super().insert(i, x)
         self._add_to_elem(x)
 
-
     def remove(self, x):
         super().remove(x)
         self._remove_from_elem(x)
-
 
     def pop(self, i=-1):
         elem = super().pop(i)
         self._remove_from_elem(elem)
         return elem
 
-
     def clear(self):
         for elem in self:
             self._remove_from_elem(elem)
         super().clear()
 
-
     def __add__(self, other_list: List[object]):
         return list(self) + list(other_list)
-
 
     def __iadd__(self, other_list: List[object]):
         self.extend(other_list)

@@ -1,11 +1,25 @@
-.PHONY: test test_noparallel clean build install_venv install docs
+.PHONY: test leak_check clean build install docs
+
+NPROC ?= 8
 
 # Tests also check that docs can build
 test: docs
-	python3 -m pytest tests/ -v -x -nauto --dist=loadscope
+    # Some tests need to be run serially - we annotate those with a `serial` marker.
+	export PYTHONPATH=$(CURDIR):$${PYTHONPATH} && \
+		export PATH=$(CURDIR)/bin:$${PATH} && \
+		export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1 && \
+		python3 -m pytest tests/ -v -x --durations=5 -m "serial" && \
+		\
+		export PYTHONPATH=$(CURDIR):$${PYTHONPATH} && \
+	    export PATH=$(CURDIR)/bin:$${PATH} && \
+	    export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1 && \
+	    python3 -m pytest tests/ -v -x -n $(NPROC) --dist=loadscope --durations=5 -m "not serial"
 
-test_noparallel: docs
-	python3 -m pytest tests/ -v -x
+leak_check:
+	export PYTHONPATH=$(CURDIR):$${PYTHONPATH} && \
+	    export PATH=$(CURDIR)/bin:$${PATH} && \
+	    export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1 && \
+		valgrind --leak-check=full python3 -m pytest tests/ -v --durations=5 2>&1 | tee leak-check.log
 
 clean:
 	rm -rf dist/ build/ polygraphy.egg-info/
@@ -13,17 +27,12 @@ clean:
 build: clean
 	python3 setup.py bdist_wheel
 
-install_common: build
-	-python3 -m pip install colored
+install_deps: build
+	-python3 -m pip install colored wheel
 
-install_venv: install_common
-	python3 -m pip install $(CURDIR)/dist/*.whl
-	python3 -m pip install --no-deps --force-reinstall $(CURDIR)/dist/*.whl
+install: install_deps
+	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl
 
-install: install_common
-	python3 -m pip install $(CURDIR)/dist/*.whl --user
-	python3 -m pip install --no-deps --force-reinstall $(CURDIR)/dist/*.whl --user
-
-docs:
+docs: clean
 	mkdir -p build/docs
-	sphinx-build docs build/docs/ -j auto -W
+	python3 `which sphinx-build` docs build/docs/ -j $(NPROC) -W

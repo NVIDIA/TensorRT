@@ -19,5 +19,5 @@
 
 namespace tensorrt
 {
-    
-} /* tensorrt */
+
+} // namespace tensorrt

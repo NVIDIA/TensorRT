@@ -98,7 +98,7 @@
  }
 
  int CoordConvACPlugin::enqueue(
-     int batchSize, const void* const* inputs, void** outputs, void* workspace, cudaStream_t stream)
+     int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
  {
      switch(iType){
          case DataType::kFLOAT:

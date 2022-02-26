@@ -2,4 +2,6 @@
 Comparator
 ==========
 
-.. autoclass:: polygraphy.comparator.comparator.Comparator
+Module: ``polygraphy.comparator``
+
+.. automodule:: polygraphy.comparator.comparator

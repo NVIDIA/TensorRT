@@ -29,29 +29,53 @@ def check_subprocess(status):
         G_LOGGER.critical(status.stdout + status.stderr)
 
 
-def run_subtool(subtool, additional_opts, disable_verbose=False):
-    cmd = [sys.executable, polygraphy, subtool] + additional_opts
-    if not disable_verbose:
-        cmd += ["-vvvvv"]
-    G_LOGGER.info("Running command: {:}".format(" ".join(cmd)))
-    status = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+def run_polygraphy(additional_opts=[], *args, **kwargs):
+    cmd = [sys.executable, polygraphy] + additional_opts
+    print("Running command: {:}".format(" ".join(cmd)))
+    status = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE, *args, **kwargs)
     status.stdout = status.stdout.decode()
     status.stderr = status.stderr.decode()
+    print(status.stdout)
+    print(status.stderr)
     check_subprocess(status)
     return status
 
 
-def run_polygraphy_run(additional_opts=[], disable_verbose=False):
-    return run_subtool("run", additional_opts, disable_verbose)
+def run_subtool(subtool, additional_opts, disable_verbose=False, *args, **kwargs):
+    opts = [subtool]
+    opts += additional_opts
+    if not disable_verbose:
+        opts += ["-vvvvv"]
+    return run_polygraphy(opts, *args, **kwargs)
 
 
-def run_polygraphy_inspect(additional_opts=[], disable_verbose=False):
-    return run_subtool("inspect", additional_opts, disable_verbose)
+def run_polygraphy_run(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("run", additional_opts, disable_verbose, *args, **kwargs)
 
 
-def run_polygraphy_precision(additional_opts=[], disable_verbose=False):
-    return run_subtool("precision", additional_opts, disable_verbose)
+def run_polygraphy_convert(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("convert", additional_opts, disable_verbose, *args, **kwargs)
 
 
-def run_polygraphy_surgeon(additional_opts=[], disable_verbose=False):
-    return run_subtool("surgeon", additional_opts, disable_verbose)
+def run_polygraphy_inspect(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("inspect", additional_opts, disable_verbose, *args, **kwargs)
+
+
+def run_polygraphy_precision(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("precision", additional_opts, disable_verbose, *args, **kwargs)
+
+
+def run_polygraphy_surgeon(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("surgeon", additional_opts, disable_verbose, *args, **kwargs)
+
+
+def run_polygraphy_template(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("template", additional_opts, disable_verbose, *args, **kwargs)
+
+
+def run_polygraphy_debug(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("debug", additional_opts, disable_verbose, *args, **kwargs)
+
+
+def run_polygraphy_data(additional_opts=[], disable_verbose=False, *args, **kwargs):
+    return run_subtool("data", additional_opts, disable_verbose, *args, **kwargs)

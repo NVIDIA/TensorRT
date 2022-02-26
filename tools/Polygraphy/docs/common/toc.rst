@@ -2,7 +2,7 @@
 Common
 ============
 
+Module: ``polygraphy.common``
+
 .. toctree::
     data_structures
-    exception
-    func

@@ -16,19 +16,19 @@
 #include "reducedMathPlugin.h"
 #include "kernel.h"
 
-using namespace nvinfer1::plugin; // for reduced_divisor
+using namespace nvinfer1::plugin; // for ReducedDivisor
 
 template <unsigned nthdsPerCTA>
 __launch_bounds__(nthdsPerCTA)
     __global__ void reorgKernel(
         const float* input, // input tensor of shape (batch, C, H, W)
         const int volume,   // note that volumes of input and output tensors are the same
-        reduced_divisor batch,
-        reduced_divisor C,
-        reduced_divisor H,
-        reduced_divisor W,
-        reduced_divisor C_out,
-        reduced_divisor stride,
+        ReducedDivisor batch,
+        ReducedDivisor C,
+        ReducedDivisor H,
+        ReducedDivisor W,
+        ReducedDivisor C_out,
+        ReducedDivisor stride,
         float* output) // output tensor of shape (batch, C * stride * stride, H / stride, W / stride)
 {
     /*
@@ -79,8 +79,8 @@ pluginStatus_t reorgGPU(
     const int volume = batch * C * H * W;  // size of input tensor
     const int GS = (volume + BS - 1) / BS; // number of blocks to launch, calculated so global number of threads is >= volume
 
-    reduced_divisor C_out(C / (stride * stride));
-    reorgKernel<BS><<<GS, BS, 0, stream>>>(input, volume, reduced_divisor(batch), reduced_divisor(C), reduced_divisor(H), reduced_divisor(W), C_out, reduced_divisor(stride), output);
+    ReducedDivisor C_out(C / (stride * stride));
+    reorgKernel<BS><<<GS, BS, 0, stream>>>(input, volume, ReducedDivisor(batch), ReducedDivisor(C), ReducedDivisor(H), ReducedDivisor(W), C_out, ReducedDivisor(stride), output);
     return STATUS_SUCCESS;
 }
 

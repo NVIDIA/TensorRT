@@ -13,17 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.tools.args.data_loader import DataLoaderArgs
-from polygraphy.tools.args.logger import LoggerArgs
-from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.args.onnx.loader import OnnxLoaderArgs
-from polygraphy.tools.args.onnx.runner import OnnxtfRunnerArgs
-from polygraphy.tools.args.onnxrt.runner import OnnxrtRunnerArgs
-from polygraphy.tools.args.tf2onnx.loader import Tf2OnnxLoaderArgs
-from polygraphy.tools.args.tf.config import TfConfigArgs
-from polygraphy.tools.args.tf.loader import TfLoaderArgs
-from polygraphy.tools.args.tf.runner import TfRunnerArgs
-from polygraphy.tools.args.trt.loader import TrtLoaderArgs
-from polygraphy.tools.args.trt.runner import TrtRunnerArgs
-from polygraphy.tools.args.trt_legacy import TrtLegacyArgs
-from polygraphy.tools.args.comparator import ComparatorRunArgs, ComparatorCompareArgs
+from polygraphy.tools.args.comparator import *
+from polygraphy.tools.args.data_loader import *
+from polygraphy.tools.args.logger import *
+from polygraphy.tools.args.model import *
+from polygraphy.tools.args.onnx import *
+from polygraphy.tools.args.onnxrt import *
+from polygraphy.tools.args.pluginref import *
+from polygraphy.tools.args.tf2onnx import *
+from polygraphy.tools.args.tf import *
+from polygraphy.tools.args.trt import *
+from polygraphy.tools.args.trt_legacy import *

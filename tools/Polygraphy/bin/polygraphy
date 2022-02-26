@@ -33,15 +33,14 @@ sys.path.insert(0, G_ROOT_DIR)
 import polygraphy
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools import TOOL_REGISTRY
-from polygraphy.util import misc
-
-# All CLI tools should exit on errors rather than re-raising
-G_LOGGER.exit_on_errors = True
+from polygraphy.exception import PolygraphyException
 
 
 def main():
     parser = argparse.ArgumentParser(description="Polygraphy: A Deep Learning Debugging Toolkit")
-    parser.add_argument("-v", "--version", action="version", version=misc.str_from_module_info(polygraphy, name="Polygraphy"))
+    parser.add_argument(
+        "-v", "--version", action="version", version=G_LOGGER._str_from_module_info(polygraphy, name="Polygraphy")
+    )
 
     subparsers = parser.add_subparsers(title="Tools", dest="tools")
     subparsers.required = True
@@ -52,11 +51,19 @@ def main():
     args, unknown = parser.parse_known_args()
 
     if unknown:
-        G_LOGGER.critical("Unrecognized Options: {:}".format(unknown))
+        G_LOGGER.error("Unrecognized Options: {:}".format(unknown))
+        return 1
 
     G_LOGGER.verbose("Running Command: {:}".format(" ".join(sys.argv)))
-    sys.exit(args.subcommand(args))
+
+    try:
+        status = args.subcommand(args)
+    except PolygraphyException:
+        # `PolygraphyException`s indicate user error, so we need not display the stack trace.
+        status = 1
+
+    return status
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -1,2 +1,2 @@
-from polygraphy.backend.onnxrt.loader import SessionFromOnnxBytes
-from polygraphy.backend.onnxrt.runner import OnnxrtRunner
+from polygraphy.backend.onnxrt.loader import *
+from polygraphy.backend.onnxrt.runner import *

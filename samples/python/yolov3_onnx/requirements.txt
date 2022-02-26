@@ -1,6 +1,6 @@
+numpy>=1.15.1
 protobuf>=3.11.3
-onnx==1.7.0
-Pillow>=8.1.2
-pycuda
-numpy
-wget
+onnx==1.9.0
+Pillow; python_version<"3.6"
+Pillow==8.3.2; python_version>="3.6"
+pycuda<2021.1

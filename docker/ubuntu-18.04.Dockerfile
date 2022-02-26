@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG CUDA_VERSION=11.1
+ARG CUDA_VERSION=11.4.2
 ARG OS_VERSION=18.04
 
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 7.2.3.4
+ENV TRT_VERSION 8.2.0.6
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -62,18 +62,21 @@ RUN apt-get install -y --no-install-recommends \
     ln -s /usr/bin/pip3 pip;
 
 # Install TensorRT
-RUN cd /tmp &&\
-    wget https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb &&\
-    dpkg -i nvidia-machine-learning-repo-*.deb && apt-get update
 RUN v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION%.*}" &&\
-    apt-get install -y libnvinfer7=${v} libnvinfer-plugin7=${v} libnvparsers7=${v} libnvonnxparsers7=${v} libnvinfer-dev=${v} libnvinfer-plugin-dev=${v} libnvparsers-dev=${v} python3-libnvinfer=${v} &&\
-    apt-mark hold libnvinfer7 libnvinfer-plugin7 libnvparsers7 libnvonnxparsers7 libnvinfer-dev libnvinfer-plugin-dev libnvparsers-dev python3-libnvinfer
+    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub &&\
+    apt-get update &&\
+    sudo apt-get install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
+        libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
+        python3-libnvinfer=${v}
 
 # Install PyPI packages
 RUN pip3 install --upgrade pip
 RUN pip3 install setuptools>=41.0.0
 COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
+RUN pip3 install jupyter jupyterlab
+# Workaround to remove numpy installed with tensorflow
+RUN pip3 install --upgrade numpy
 
 # Install Cmake
 RUN cd /tmp && \

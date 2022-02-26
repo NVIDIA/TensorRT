@@ -17,22 +17,24 @@
 #ifndef ERROR_RECORDER_H
 #define ERROR_RECORDER_H
 #include "NvInferRuntimeCommon.h"
+#include "logger.h"
 #include <atomic>
 #include <cstdint>
 #include <exception>
 #include <mutex>
 #include <vector>
-using namespace nvinfer1;
+
+using nvinfer1::IErrorRecorder;
+using nvinfer1::ErrorCode;
+
 //!
-//! A simple imeplementation of the IErrorRecorder interface for
+//! A simple implementation of the IErrorRecorder interface for
 //! use by samples. This interface also can be used as a reference
 //! implementation.
 //! The sample Error recorder is based on a vector that pairs the error
 //! code and the error string into a single element. It also uses
 //! standard mutex's and atomics in order to make sure that the code
 //! works in a multi-threaded environment.
-//! SampleErrorRecorder is not intended for use in automotive safety
-//! environments.
 //!
 class SampleErrorRecorder : public IErrorRecorder
 {
@@ -49,11 +51,11 @@ public:
     }
     ErrorCode getErrorCode(int32_t errorIdx) const noexcept final
     {
-        return indexCheck(errorIdx) ? ErrorCode::kINVALID_ARGUMENT : (*this)[errorIdx].first;
+        return invalidIndexCheck(errorIdx) ? ErrorCode::kINVALID_ARGUMENT : (*this)[errorIdx].first;
     };
     IErrorRecorder::ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept final
     {
-        return indexCheck(errorIdx) ? "errorIdx out of range." : (*this)[errorIdx].second.c_str();
+        return invalidIndexCheck(errorIdx) ? "errorIdx out of range." : (*this)[errorIdx].second.c_str();
     }
     // This class can never overflow since we have dynamic resize via std::vector usage.
     bool hasOverflowed() const noexcept final
@@ -72,7 +74,7 @@ public:
         }
         catch (const std::exception& e)
         {
-            getLogger()->log(ILogger::Severity::kINTERNAL_ERROR, e.what());
+            sample::gLogFatal << "Internal Error: " << e.what() << std::endl;
         }
     };
 
@@ -87,11 +89,12 @@ public:
         try
         {
             std::lock_guard<std::mutex> guard(mStackLock);
+            sample::gLogError << "Error[" << static_cast<int32_t>(val) << "]: " << desc << std::endl;
             mErrorStack.push_back(errorPair(val, desc));
         }
         catch (const std::exception& e)
         {
-            getLogger()->log(ILogger::Severity::kINTERNAL_ERROR, e.what());
+            sample::gLogFatal << "Internal Error: " << e.what() << std::endl;
         }
         // All errors are considered fatal.
         return true;
@@ -114,7 +117,7 @@ private:
         return mErrorStack[index];
     }
 
-    bool indexCheck(int32_t index) const noexcept
+    bool invalidIndexCheck(int32_t index) const noexcept
     {
         // By converting signed to unsigned, we only need a single check since
         // negative numbers turn into large positive greater than the size.

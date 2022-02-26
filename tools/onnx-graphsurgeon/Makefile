@@ -17,7 +17,7 @@
 .PHONY: test clean build install_venv install docs
 
 test: docs
-	python3 -m pytest tests/ -v -x --pdb
+	PYTHONPATH=$(CURDIR) python3 -m pytest tests/ -v -x --pdb
 
 clean:
 	rm -rf dist/ build/ onnx_graphsurgeon.egg-info/

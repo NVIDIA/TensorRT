@@ -34,12 +34,20 @@ inline __device__ __half add_fb(const __half & a, const __half & b) {
 #endif
 }
 
+inline __device__ float add_fb(const float & a, const float & b) {
+    return a + b;
+}
+
 inline __device__ __half minus_fb(const __half & a, const __half & b) {
 #if __CUDA_ARCH__ >= 530
     return a - b;
 #else
     return __float2half(__half2float(a) - __half2float(b));
 #endif
+}
+
+inline __device__ float minus_fb(const float & a, const float & b) {
+    return a - b;
 }
 
 inline __device__ __half mul_fb(const __half & a, const __half & b) {
@@ -50,12 +58,20 @@ inline __device__ __half mul_fb(const __half & a, const __half & b) {
 #endif
 }
 
+inline __device__ float mul_fb(const float & a, const float & b) {
+    return a * b;
+}
+
 inline __device__ __half div_fb(const __half & a, const __half & b) {
 #if __CUDA_ARCH__ >= 530
     return a / b;
 #else
     return __float2half(__half2float(a) / __half2float(b));
 #endif
+}
+
+inline __device__ float div_fb(const float & a, const float & b) {
+    return a / b;
 }
 
 template <typename T_BBOX, unsigned nthds_per_cta>
@@ -71,7 +87,8 @@ __launch_bounds__(nthds_per_cta)
         const bool clip_bbox,
         const T_BBOX* loc_data,
         const T_BBOX* prior_data,
-        T_BBOX* bbox_data)
+        T_BBOX* bbox_data,
+        const bool batch_agnostic)
 {
     for (int index = blockIdx.x * nthds_per_cta + threadIdx.x;
          index < nthreads;
@@ -97,7 +114,7 @@ __launch_bounds__(nthds_per_cta)
         // do not assume each images' anchor boxes are identical
         // e.g., in FasterRCNN, priors are ROIs from proposal layer and are different
         // for each image.
-        const int pi = (batch * 2 * num_priors + d) * 4;
+        const int pi = batch_agnostic ? d * 4 : (batch * 2 * num_priors + d) * 4;
         // Index to the right variances corresponding to the current bounding box
         const int vi = pi + num_priors * 4;
         // Encoding method: CodeTypeSSD::CORNER
@@ -280,7 +297,8 @@ pluginStatus_t decodeBBoxes_gpu(
     const bool clip_bbox,
     const void* loc_data,
     const void* prior_data,
-    void* bbox_data)
+    void* bbox_data,
+    const bool batch_agnostic)
 {
     const int BS = 512;
     const int GS = (nthreads + BS - 1) / BS;
@@ -288,7 +306,7 @@ pluginStatus_t decodeBBoxes_gpu(
                                                            num_priors, share_location, num_loc_classes,
                                                            background_label_id, clip_bbox,
                                                            (const T_BBOX*) loc_data, (const T_BBOX*) prior_data,
-                                                           (T_BBOX*) bbox_data);
+                                                           (T_BBOX*) bbox_data, batch_agnostic);
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
 }
@@ -305,7 +323,8 @@ typedef pluginStatus_t (*dbbFunc)(cudaStream_t,
                                const bool,
                                const void*,
                                const void*,
-                               void*);
+                               void*,
+                               const bool);
 
 struct dbbLaunchConfig
 {
@@ -345,7 +364,8 @@ pluginStatus_t decodeBBoxes(
     const DataType DT_BBOX,
     const void* loc_data,
     const void* prior_data,
-    void* bbox_data)
+    void* bbox_data,
+    const bool batch_agnostic)
 {
     dbbLaunchConfig lc = dbbLaunchConfig(DT_BBOX);
     for (unsigned i = 0; i < dbbLCOptions.size(); ++i)
@@ -364,7 +384,8 @@ pluginStatus_t decodeBBoxes(
                                           clip_bbox,
                                           loc_data,
                                           prior_data,
-                                          bbox_data);
+                                          bbox_data,
+                                          batch_agnostic);
         }
     }
     return STATUS_BAD_PARAM;

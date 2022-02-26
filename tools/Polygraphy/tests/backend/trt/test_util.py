@@ -13,3 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import pytest
+import tensorrt as trt
+from polygraphy.backend.trt import util as trt_util
+
+
+@pytest.fixture(scope="session")
+def layer_class_mapping():
+    return trt_util.get_layer_class_mapping()
+
+
+@pytest.mark.parametrize("layer_type", trt.LayerType.__members__.values())
+def test_all_layer_types_mapped(layer_class_mapping, layer_type):
+    if layer_type == trt.LayerType.PLUGIN:
+        pytest.skip("PLUGIN has no corresponding ILayer")
+    assert layer_type in layer_class_mapping

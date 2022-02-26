@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+add_subdirectory(fused_multihead_attention)
+add_subdirectory(fused_multihead_attention_v2)
 file(GLOB SRCS *.cpp)
 set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
 set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)

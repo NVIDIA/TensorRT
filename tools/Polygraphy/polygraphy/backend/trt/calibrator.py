@@ -14,26 +14,29 @@
 # limitations under the License.
 #
 import contextlib
-import os
 from collections import OrderedDict
 
-import tensorrt as trt
-from polygraphy.logger.logger import G_LOGGER, LogMode
-from polygraphy.util import misc
-from polygraphy.util.cuda import DeviceBuffer
+from polygraphy import cuda, mod, util
+from polygraphy.logger import G_LOGGER, LogMode
+
+trt = mod.lazy_import("tensorrt")
+np = mod.lazy_import("numpy")
 
 
-def Calibrator(data_loader, cache=None, BaseClass=trt.IInt8MinMaxCalibrator,
-               batch_size=None):
+@mod.export()
+def Calibrator(
+    data_loader, cache=None, BaseClass=None, batch_size=None, quantile=None, regression_cutoff=None, algo=None
+):
     """
     Supplies calibration data to TensorRT to calibrate the network for INT8 inference.
 
     Args:
-        data_loader (Generator -> OrderedDict[str, numpy.ndarray]):
-            A generator or iterable that yields a dictionary that maps input names to input NumPy buffers.
+        data_loader (Generator -> OrderedDict[str, Union[numpy.ndarray, DeviceView, int]]):
+            A generator or iterable that yields a dictionary that maps input names to NumPy
+            arrays, Polygraphy DeviceViews, or GPU pointers.
 
             In case you don't know details about the inputs ahead of time, you can access the
-            `input_metadata` property in your data loader, which will be set to an `TensorMetadata` instance.
+            `input_metadata` property in your data loader, which will be set to an ``TensorMetadata`` instance.
             Note that this does not work for generators or lists.
 
             The number of calibration batches is controlled by the number of items supplied
@@ -45,17 +48,34 @@ def Calibrator(data_loader, cache=None, BaseClass=trt.IInt8MinMaxCalibrator,
                 By default, the calibration cache is not saved.
         BaseClass (type):
                 The type of calibrator to inherit from.
-                Defaults to trt.IInt8MinMaxCalibrator.
+                Defaults to ``trt.IInt8MinMaxCalibrator``.
         batch_size (int):
                 [DEPRECATED] The size of each batch provided by the data loader.
+        quantile (float):
+                The quantile to use for ``trt.IInt8LegacyCalibrator``.
+                Has no effect for other calibrator types.
+                Defaults to 0.5.
+        regression_cutoff (float):
+                The regression cutoff to use for ``trt.IInt8LegacyCalibrator``.
+                Has no effect for other calibrator types.
+                Defaults to 0.5.
+        algo (trt.CalibrationAlgoType):
+                Calibration algorithm to use for ``trt.IInt8Calibrator``.
+                Has no effect for other calibrator types.
+                Defaults to ``trt.CalibrationAlgoType.MINMAX_CALIBRATION``.
     """
+    BaseClass = util.default(BaseClass, trt.IInt8MinMaxCalibrator)
+
     class CalibratorClass(BaseClass):
         """
         Calibrator that supplies calibration data to TensorRT to calibrate the network for INT8 inference.
         """
+
         def __init__(self):
             # Must explicitly initialize parent for any trampoline class! Will mysteriously segfault without this.
             BaseClass.__init__(self)
+
+            self.is_active = False
 
             self.data_loader = data_loader
             self._cache = cache
@@ -63,8 +83,10 @@ def Calibrator(data_loader, cache=None, BaseClass=trt.IInt8MinMaxCalibrator,
             self.reset()
             G_LOGGER.verbose("Created calibrator [cache={:}]".format(self._cache))
 
-            self.batch_size = misc.default_value(batch_size, 1)
+            self.batch_size = util.default(batch_size, 1)
 
+            # The function that constructed this instance
+            self.make_func = Calibrator
 
         def reset(self, input_metadata=None):
             """
@@ -90,70 +112,89 @@ def Calibrator(data_loader, cache=None, BaseClass=trt.IInt8MinMaxCalibrator,
             self.cache_contents = None
             self.has_cached_scales = False
 
-
         def get_batch_size(self):
             return self.batch_size
 
-
         def get_batch(self, names):
+            if not self.is_active:
+                G_LOGGER.error(
+                    "Calibrator must be activated prior to use. Please use a context manager. "
+                    "For example:\nwith calibrator:\n\t# Use calibrator here"
+                )
+                return None
+
             try:
-                host_buffers = next(self.data_loader_iter)
+                buffers = next(self.data_loader_iter)
             except StopIteration:
                 if not self.num_batches:
-                    G_LOGGER.warning("Calibrator data loader provided no data. Possibilities include: (1) data loader "
-                                     "has no data to provide, (2) data loader was a generator, and the calibrator is being "
-                                     "reused across multiple loaders (generators cannot be rewound)")
+                    G_LOGGER.error(
+                        "Calibrator data loader provided no data.\nPossible reasons for this include:\n(1) data loader "
+                        "has no data to provide\n(2) data loader was a generator, and the calibrator is being "
+                        "used multiple times (generators cannot be rewound)"
+                    )
                 return None
             else:
                 self.num_batches += 1
 
-            for name, host_buffer in host_buffers.items():
-                if name not in self.device_buffers:
-                    self.device_buffers[name] = DeviceBuffer(shape=host_buffer.shape, dtype=host_buffer.dtype)
-                    G_LOGGER.verbose("Allocated: {:}".format(self.device_buffers[name]))
-                    if self.num_batches > 1:
-                        G_LOGGER.warning("The calibrator data loader provided an extra input ({:}) compared to the last set of inputs.\n"
-                                         "Should this input be removed, or did you accidentally omit an input before?".format(name))
+            if not util.check_dict_contains(buffers, names, dict_name="calibration data", log_func=G_LOGGER.error):
+                return None
 
-                device_buffer = self.device_buffers[name]
-                device_buffer.copy_from(host_buffer)
-            return [device_buffer.address() for device_buffer in self.device_buffers.values()]
+            ptrs = []
+            for name in names:
+                buf = buffers[name]
 
+                if isinstance(buf, cuda.DeviceView):
+                    ptrs.append(buf.ptr)
+                elif isinstance(buf, np.ndarray):
+                    if name not in self.device_buffers:
+                        self.device_buffers[name] = cuda.DeviceArray(shape=buf.shape, dtype=buf.dtype)
+                        G_LOGGER.verbose("Allocated: {:}".format(self.device_buffers[name]))
+
+                    ptrs.append(self.device_buffers[name].copy_from(buf).ptr)
+                elif isinstance(buf, int):
+                    ptrs.append(buf)
+                else:
+                    G_LOGGER.error(
+                        "Calibration data loader provided an unrecognized type: {:} for input: {:}.\n"
+                        "Please provide either a NumPy array, Polygraphy DeviceView, or GPU pointer. ".format(
+                            type(buf).__name__, name
+                        )
+                    )
+                    return None
+
+            return ptrs
 
         def read_calibration_cache(self):
             def load_from_cache():
-                if self._cache is None:
+                if self._cache is None or not util.get_file_size(self._cache):
                     return None
 
                 try:
-                    if self._cache.seekable():
-                        self._cache.seek(0)
-                    return self._cache.read()
-                except AttributeError:
-                    if os.path.exists(self._cache):
-                        G_LOGGER.info("Reading calibration cache from: {:}".format(self._cache), mode=LogMode.ONCE)
-                        with open(self._cache, "rb") as f:
-                            return f.read()
-                except:
-                    # Cache is not readable
+                    return util.load_file(self._cache, description="calibration cache")
+                except Exception as err:
+                    G_LOGGER.error(
+                        "Could not read from calibration cache: {:}\nNote: Error was: {:}".format(self._cache, err)
+                    )
                     return None
 
-
             # Only attempt to read from the cache once.
-            if not self.has_cached_scales:
-                self.cache_contents = load_from_cache()
+            if self.has_cached_scales:
+                return self.cache_contents
 
-                if not self.cache_contents:
-                    if self.cache_contents is not None:
-                        G_LOGGER.warning("Calibration cache was provided, but is empty. "
-                                         "Will regenerate scales by running calibration.",
-                                         mode=LogMode.ONCE)
-                    self.cache_contents = None
-                else:
-                    self.has_cached_scales = True
+            self.cache_contents = load_from_cache()
+
+            if not self.cache_contents:
+                if self.cache_contents is not None:
+                    G_LOGGER.warning(
+                        "Calibration cache was provided, but is empty. "
+                        "Will regenerate scales by running calibration.",
+                        mode=LogMode.ONCE,
+                    )
+                self.cache_contents = None
+            else:
+                self.has_cached_scales = True
 
             return self.cache_contents
-
 
         def write_calibration_cache(self, cache):
             self.cache_contents = cache.tobytes()
@@ -163,29 +204,48 @@ def Calibrator(data_loader, cache=None, BaseClass=trt.IInt8MinMaxCalibrator,
                 return
 
             try:
-                if self._cache.seekable():
-                    self._cache.seek(0)
-                bytes_written = self._cache.write(self.cache_contents)
-                if bytes_written != len(self.cache_contents):
-                    G_LOGGER.warning("Could not write entire cache. Note: cache contains {:} bytes, but only "
-                                        "{:} bytes were written".format(len(self.cache_contents), bytes_written))
-            except AttributeError:
-                G_LOGGER.info("Writing calibration cache to: {:}".format(self._cache))
-                with open(self._cache, "wb") as f:
-                    f.write(self.cache_contents)
-            except:
-                # Cache is not writable
-                return
-            else:
-                self._cache.flush()
+                util.save_file(contents=self.cache_contents, dest=self._cache, description="calibration cache")
+            except Exception as err:
+                G_LOGGER.error(
+                    "Could not write to calibration cache: {:}.\nNote: Error was: {:}".format(self._cache, err)
+                )
 
+        def __enter__(self):
+            self.is_active = True
+            return self
 
-        def free(self):
-            """
-            Free the device buffers allocated for this calibrator.
-            """
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.is_active = False
             for device_buffer in self.device_buffers.values():
                 device_buffer.free()
 
+        # IInt8LegacyCalibrator methods
+        def get_quantile(self):
+            return util.default(quantile, 0.5)
+
+        def get_regression_cutoff(self):
+            return util.default(regression_cutoff, 0.5)
+
+        def read_histogram_cache(self, length):
+            pass
+
+        def write_histogram_cache(self, ptr, length):
+            pass
+
+        # IInt8Calibrator methods
+        def get_algorithm(self):
+            return util.default(algo, trt.CalibrationAlgoType.MINMAX_CALIBRATION)
+
+        def __repr__(self):
+            return util.make_repr(
+                "Calibrator",
+                data_loader,
+                cache=cache,
+                BaseClass=BaseClass,
+                batch_size=batch_size,
+                quantile=quantile,
+                regression_cutoff=regression_cutoff,
+                algo=algo,
+            )[0]
 
     return CalibratorClass()

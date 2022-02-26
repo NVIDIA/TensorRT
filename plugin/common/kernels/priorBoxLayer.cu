@@ -17,7 +17,7 @@
 #include "reducedMathPlugin.h"
 #include <iostream>
 
-using nvinfer1::plugin::reduced_divisor;
+using nvinfer1::plugin::ReducedDivisor;
 
 template <unsigned nthdsPerCTA>
 __launch_bounds__(nthdsPerCTA)

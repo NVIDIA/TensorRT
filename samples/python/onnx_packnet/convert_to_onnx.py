@@ -33,11 +33,12 @@ def post_process_packnet(model_file, opset=11):
     # Load the packnet graph
     graph = gs.import_onnx(onnx.load(model_file))
 
-    if opset==11:
+    if opset>=11:
         graph = process_pad_nodes(graph)
 
     # Replace the subgraph of upsample with a single node with input and scale factor.
-    graph = process_upsample_nodes(graph, opset)
+    if torch.__version__ < '1.5.0':
+        graph = process_upsample_nodes(graph, opset)
 
     # Convert the group normalization subgraph into a single plugin node.
     graph = process_groupnorm_nodes(graph)

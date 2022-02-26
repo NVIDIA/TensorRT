@@ -1,26 +1,31 @@
 # Inspecting Input Data
 
+
+## Introduction
+
 The `inspect data` subtool can display information about input data generated
 by a data loader.
 
-For example, first we'll generate some input data by running inference:
 
-```bash
-polygraphy run ../../../models/identity.onnx --onnxrt --save-inputs inputs.pkl
-```
+## Running The Example
+1. Generate some input data by running inference:
 
-Next, we can inspect them:
+    ```bash
+    polygraphy run identity.onnx --onnxrt --save-inputs inputs.json
+    ```
 
-```bash
-polygraphy inspect data inputs.pkl --show-values
-```
+2. Inspect the input data:
 
-This will display something like:
+    ```bash
+    polygraphy inspect data inputs.json --show-values
+    ```
 
-```
-[I] ==== Input Data (1 iterations) ====
+    This will display something like:
 
-    x [dtype=float32, shape=(1, 1, 2, 2)]
-        [[[[-0.16595599  0.44064897]
-           [-0.99977124 -0.39533487]]]]
-```
+    ```
+    [I] ==== Data (1 iterations) ====
+
+        x [dtype=float32, shape=(1, 1, 2, 2)] | Stats: mean=0.35995, std-dev=0.25784, var=0.066482, median=0.35968, min=0.00011437 at (0, 0, 1, 0), max=0.72032 at (0, 0, 0, 1), avg-magnitude=0.35995
+            [[[[4.17021990e-01 7.20324516e-01]
+               [1.14374816e-04 3.02332580e-01]]]]
+    ```

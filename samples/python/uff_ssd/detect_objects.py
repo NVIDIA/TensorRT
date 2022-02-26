@@ -15,22 +15,18 @@
 # limitations under the License.
 #
 
-import os
-import ctypes
-import time
-import sys
 import argparse
+import os
+import time
 
 import numpy as np
-from PIL import Image
+import pycuda.autoinit
 import tensorrt as trt
-
-import utils.inference as inference_utils # TRT/TF inference wrappers
-import utils.model as model_utils # UFF conversion
-import utils.boxes as boxes_utils # Drawing bounding boxes
-import utils.coco as coco_utils # COCO dataset descriptors
-from utils.paths import PATHS # Path management
-
+import utils.boxes as boxes_utils  # Drawing bounding boxes
+import utils.coco as coco_utils  # COCO dataset descriptors
+from utils.inference_trt import TRTInference  # TRT inference wrappers
+from PIL import Image
+from utils.paths import PATHS  # Path management
 
 # COCO label list
 COCO_LABELS = coco_utils.COCO_CLASSES_LIST
@@ -118,9 +114,15 @@ def parse_commandline_arguments():
     parser.add_argument("-o", "--output",
         help="path of the output file",
         default=os.path.join(PATHS.get_sample_root(), "image_inferred.jpg"))
+    parser.add_argument('-d', '--data',
+        help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.")
 
-    # Parse arguments passed
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
+
+    data_dir = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
+    if data_dir is None:
+        raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
+    PATHS.set_data_dir_path(data_dir)
 
     # Set workspace dir path if passed by user
     if args.workspace_dir:
@@ -149,14 +151,10 @@ def main():
     # Parse command line arguments
     args = parse_commandline_arguments()
 
-    # Fetch .uff model path, convert from .pb
-    # if needed, using prepare_ssd_model
+    # Fetch .uff model path
     ssd_model_uff_path = PATHS.get_model_uff_path(MODEL_NAME)
-    if not os.path.exists(ssd_model_uff_path):
-        model_utils.prepare_ssd_model(MODEL_NAME)
-
     # Set up all TensorRT data structures needed for inference
-    trt_inference_wrapper = inference_utils.TRTInference(
+    trt_inference_wrapper = TRTInference(
         args.trt_engine_path, ssd_model_uff_path,
         trt_engine_datatype=args.trt_engine_datatype,
         batch_size=args.max_batch_size)

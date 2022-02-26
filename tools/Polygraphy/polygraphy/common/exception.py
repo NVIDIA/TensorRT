@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-class PolygraphyException(Exception):
-    """
-    Represents an exception raised by Polygraphy.
-    """
-    pass
+from polygraphy import mod
+from polygraphy.exception import *
+
+mod.warn_deprecated("polygraphy.common.exception", "polygraphy.exception", remove_in="0.34.0")

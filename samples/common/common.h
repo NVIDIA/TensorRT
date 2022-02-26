@@ -59,7 +59,7 @@ using namespace plugin;
 #define FN_NAME __func__
 #endif
 
-#if (!defined(__ANDROID__) && defined(__aarch64__)) || defined(__QNX__)
+#if defined(__aarch64__) || defined(__QNX__)
 #define ENABLE_DLA_API 1
 #endif
 
@@ -79,21 +79,23 @@ using namespace plugin;
     {                                                                                                                  \
         if (!(status))                                                                                                 \
         {                                                                                                              \
-            sample::gLogError << errMsg << " Error in " << __FILE__ << ", function " << FN_NAME << "(), line "         \
-                              << __LINE__ << std::endl;                                                                \
+            sample::gLogError << errMsg << " Error in " << __FILE__ << ", function " << FN_NAME << "(), line " << __LINE__     \
+                      << std::endl;                                                                                    \
             return val;                                                                                                \
         }                                                                                                              \
     } while (0)
 
-#define ASSERT(condition)                                                                                              \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (!(condition))                                                                                              \
-        {                                                                                                              \
-            sample::gLogError << "Assertion failure: " << #condition << std::endl;                                     \
-            abort();                                                                                                   \
-        }                                                                                                              \
+#undef ASSERT
+#define ASSERT(condition)                                                   \
+    do                                                                      \
+    {                                                                       \
+        if (!(condition))                                                   \
+        {                                                                   \
+            sample::gLogError << "Assertion failure: " << #condition << std::endl;  \
+            abort();                                                        \
+        }                                                                   \
     } while (0)
+
 
 #define CHECK_RETURN(status, val) CHECK_RETURN_W_MSG(status, val, "")
 
@@ -123,15 +125,15 @@ constexpr long double operator"" _KiB(long double val)
 
 // These is necessary if we want to be able to write 1_GiB instead of 1.0_GiB.
 // Since the return type is signed, -1_GiB will work as expected.
-constexpr long long int operator"" _GiB(long long unsigned int val)
+constexpr long long int operator"" _GiB(unsigned long long val)
 {
     return val * (1 << 30);
 }
-constexpr long long int operator"" _MiB(long long unsigned int val)
+constexpr long long int operator"" _MiB(unsigned long long val)
 {
     return val * (1 << 20);
 }
-constexpr long long int operator"" _KiB(long long unsigned int val)
+constexpr long long int operator"" _KiB(unsigned long long val)
 {
     return val * (1 << 10);
 }
@@ -144,7 +146,7 @@ struct SimpleProfiler : public nvinfer1::IProfiler
         int count{0};
     };
 
-    virtual void reportLayerTime(const char* layerName, float ms)
+    virtual void reportLayerTime(const char* layerName, float ms) noexcept
     {
         mProfile[layerName].count++;
         mProfile[layerName].time += ms;
@@ -224,7 +226,8 @@ private:
 
 //! Locate path to file, given its filename or filepath suffix and possible dirs it might lie in.
 //! Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path.
-inline std::string locateFile(const std::string& filepathSuffix, const std::vector<std::string>& directories)
+inline std::string locateFile(
+    const std::string& filepathSuffix, const std::vector<std::string>& directories, bool reportError = true)
 {
     const int MAX_DEPTH{10};
     bool found{false};
@@ -271,8 +274,12 @@ inline std::string locateFile(const std::string& filepathSuffix, const std::vect
         const std::string dirList = std::accumulate(directories.begin() + 1, directories.end(), directories.front(),
             [](const std::string& a, const std::string& b) { return a + "\n\t" + b; });
         std::cout << "Could not find " << filepathSuffix << " in data directories:\n\t" << dirList << std::endl;
-        std::cout << "&&&& FAILED" << std::endl;
-        exit(EXIT_FAILURE);
+
+        if (reportError)
+        {
+            std::cout << "&&&& FAILED" << std::endl;
+            exit(EXIT_FAILURE);
+        }
     }
 
     return filepath;
@@ -303,26 +310,28 @@ inline T swapEndianness(const T& value)
     return *reinterpret_cast<T*>(bytes);
 }
 
-class HostMemory : public IHostMemory
+class HostMemory
 {
 public:
     HostMemory() = delete;
-    void* data() const noexcept override
+    virtual void* data() const noexcept
     {
         return mData;
     }
-    std::size_t size() const noexcept override
+    virtual std::size_t size() const noexcept
     {
         return mSize;
     }
-    DataType type() const noexcept override
+    virtual DataType type() const noexcept
     {
         return mType;
     }
+    virtual ~HostMemory() {}
 
 protected:
     HostMemory(std::size_t size, DataType type)
-        : mSize(size)
+        : mData{nullptr}
+        , mSize(size)
         , mType(type)
     {
     }
@@ -335,15 +344,14 @@ template <typename ElemType, DataType dataType>
 class TypedHostMemory : public HostMemory
 {
 public:
-    TypedHostMemory(std::size_t size)
+    explicit TypedHostMemory(std::size_t size)
         : HostMemory(size, dataType)
     {
         mData = new ElemType[size];
     };
-    void destroy() noexcept override
+    ~TypedHostMemory() noexcept
     {
         delete[](ElemType*) mData;
-        delete this;
     }
     ElemType* raw() noexcept
     {
@@ -377,21 +385,41 @@ struct InferDeleter
     template <typename T>
     void operator()(T* obj) const
     {
-        if (obj)
-        {
-            obj->destroy();
-        }
+        delete obj;
     }
 };
+
+template <typename T>
+using SampleUniquePtr = std::unique_ptr<T, InferDeleter>;
+
+static auto StreamDeleter = [](cudaStream_t* pStream)
+    {
+        if (pStream)
+        {
+            cudaStreamDestroy(*pStream);
+            delete pStream;
+        }
+    };
+
+inline std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> makeCudaStream()
+{
+    std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> pStream(new cudaStream_t, StreamDeleter);
+    if (cudaStreamCreateWithFlags(pStream.get(), cudaStreamNonBlocking) != cudaSuccess)
+    {
+        pStream.reset(nullptr);
+    }
+
+    return pStream;
+}
 
 template <typename T>
 std::shared_ptr<T> infer_object(T* obj)
 {
     if (!obj)
     {
-        throw std::runtime_error("Failed to create object");
+        throw std::runtime_error(std::string("Failed to create object"));
     }
-    return std::shared_ptr<T>(obj, InferDeleter());
+    return std::shared_ptr<T>(obj);
 }
 
 //! Return vector of indices that puts magnitudes of sequence in descending order.
@@ -400,8 +428,7 @@ std::vector<size_t> argMagnitudeSort(Iter begin, Iter end)
 {
     std::vector<size_t> indices(end - begin);
     std::iota(indices.begin(), indices.end(), 0);
-    std::sort(indices.begin(), indices.end(),
-        [&begin](size_t i, size_t j) { return std::abs(begin[j]) < std::abs(begin[i]); });
+    std::sort(indices.begin(), indices.end(), [&begin](size_t i, size_t j) { return std::abs(begin[j]) < std::abs(begin[i]); });
     return indices;
 }
 
@@ -505,19 +532,22 @@ inline float getMaxValue(const float* buffer, int64_t size)
     return *std::max_element(buffer, buffer + size);
 }
 
-// Ensures that every tensor used by a network has a scale.
+// Ensures that every tensor used by a network has a dynamic range set.
 //
-// All tensors in a network must have a range specified if a calibrator is not used.
-// This function is just a utility to globally fill in missing scales for the entire network.
+// All tensors in a network must have a dynamic range specified if a calibrator is not used.
+// This function is just a utility to globally fill in missing scales and zero-points for the entire network.
 //
-// If a tensor does not have a scale, it is assigned inScales or outScales as follows:
+// If a tensor does not have a dyanamic range set, it is assigned inRange or outRange as follows:
 //
-// * If the tensor is the input to a layer or output of a pooling node, its scale is assigned inScales.
-// * Otherwise its scale is assigned outScales.
+// * If the tensor is the input to a layer or output of a pooling node, its dynamic range is derived from inRange.
+// * Otherwise its dynamic range is derived from outRange.
 //
 // The default parameter values are intended to demonstrate, for final layers in the network,
-// cases where scaling factors are asymmetric.
-inline void setAllTensorScales(INetworkDefinition* network, float inScales = 2.0f, float outScales = 4.0f)
+// cases where dynamic ranges are asymmetric.
+//
+// The default parameter values choosen arbitrarily. Range values should be choosen such that
+// we avoid underflow or overflow. Also range value should be non zero to avoid uniform zero scale tensor.
+inline void setAllDynamicRanges(INetworkDefinition* network, float inRange = 2.0f, float outRange = 4.0f)
 {
     // Ensure that all layer inputs have a scale.
     for (int i = 0; i < network->getNbLayers(); i++)
@@ -529,7 +559,7 @@ inline void setAllTensorScales(INetworkDefinition* network, float inScales = 2.0
             // Optional inputs are nullptr here and are from RNN layers.
             if (input != nullptr && !input->dynamicRangeIsSet())
             {
-                ASSERT(input->setDynamicRange(-inScales, inScales));
+                ASSERT(input->setDynamicRange(-inRange, inRange));
             }
         }
     }
@@ -549,26 +579,26 @@ inline void setAllTensorScales(INetworkDefinition* network, float inScales = 2.0
                 // Pooling must have the same input and output scales.
                 if (layer->getType() == LayerType::kPOOLING)
                 {
-                    ASSERT(output->setDynamicRange(-inScales, inScales));
+                    ASSERT(output->setDynamicRange(-inRange, inRange));
                 }
                 else
                 {
-                    ASSERT(output->setDynamicRange(-outScales, outScales));
+                    ASSERT(output->setDynamicRange(-outRange, outRange));
                 }
             }
         }
     }
 }
 
-inline void setDummyInt8Scales(const IBuilderConfig* c, INetworkDefinition* n)
+inline void setDummyInt8DynamicRanges(const IBuilderConfig* c, INetworkDefinition* n)
 {
-    // Set dummy tensor scales if Int8 mode is requested.
+    // Set dummy per-tensor dynamic range if Int8 mode is requested.
     if (c->getFlag(BuilderFlag::kINT8))
     {
         sample::gLogWarning
-            << "Int8 calibrator not provided. Generating dummy per tensor scales. Int8 accuracy is not guaranteed."
+            << "Int8 calibrator not provided. Generating dummy per-tensor dynamic range. Int8 accuracy is not guaranteed."
             << std::endl;
-        setAllTensorScales(n);
+        setAllDynamicRanges(n);
     }
 }
 
@@ -586,31 +616,30 @@ inline void enableDLA(IBuilder* builder, IBuilderConfig* config, int useDLACore,
         {
             config->setFlag(BuilderFlag::kGPU_FALLBACK);
         }
-        if (!builder->getInt8Mode() && !config->getFlag(BuilderFlag::kINT8))
+        if (!config->getFlag(BuilderFlag::kINT8))
         {
             // User has not requested INT8 Mode.
             // By default run in FP16 mode. FP32 mode is not permitted.
-            builder->setFp16Mode(true);
             config->setFlag(BuilderFlag::kFP16);
         }
         config->setDefaultDeviceType(DeviceType::kDLA);
         config->setDLACore(useDLACore);
-        config->setFlag(BuilderFlag::kSTRICT_TYPES);
     }
 }
 
-inline int parseDLA(int argc, char** argv)
+inline int32_t parseDLA(int32_t argc, char** argv)
 {
-    for (int i = 1; i < argc; i++)
+    for (int32_t i = 1; i < argc; i++)
     {
-        std::string arg(argv[i]);
         if (strncmp(argv[i], "--useDLACore=", 13) == 0)
+        {
             return std::stoi(argv[i] + 13);
+        }
     }
     return -1;
 }
 
-inline unsigned int getElementSize(nvinfer1::DataType t)
+inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
 {
     switch (t)
     {
@@ -620,7 +649,6 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kINT8: return 1;
     }
-    throw std::runtime_error("Invalid DataType.");
     return 0;
 }
 
@@ -629,7 +657,7 @@ inline int64_t volume(const nvinfer1::Dims& d)
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
 }
 
-inline unsigned int elementSize(DataType t)
+inline uint32_t elementSize(DataType t) noexcept
 {
     switch (t)
     {
@@ -807,7 +835,7 @@ protected:
 class GpuTimer : public TimerBase
 {
 public:
-    GpuTimer(cudaStream_t stream)
+    explicit GpuTimer(cudaStream_t stream)
         : mStream(stream)
     {
         CHECK(cudaEventCreate(&mStart));
@@ -898,7 +926,16 @@ inline void loadLibrary(const std::string& path)
 #ifdef _MSC_VER
     void* handle = LoadLibrary(path.c_str());
 #else
-    void* handle = dlopen(path.c_str(), RTLD_LAZY);
+    int32_t flags{RTLD_LAZY};
+#if ENABLE_ASAN
+    // https://github.com/google/sanitizers/issues/89
+    // asan doesn't handle module unloading correctly and there are no plans on doing
+    // so. In order to get proper stack traces, don't delete the shared library on
+    // close so that asan can resolve the symbols correctly.
+    flags |= RTLD_NODELETE;
+#endif // ENABLE_ASAN
+
+    void* handle = dlopen(path.c_str(), flags);
 #endif
     if (handle == nullptr)
     {
@@ -908,6 +945,42 @@ inline void loadLibrary(const std::string& path)
         sample::gLogError << "Could not load plugin library: " << path << ", due to: " << dlerror() << std::endl;
 #endif
     }
+}
+
+inline int32_t getSMVersion()
+{
+    int32_t deviceIndex = 0;
+    CHECK(cudaGetDevice(&deviceIndex));
+
+    int32_t major, minor;
+    CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
+    CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
+
+    return ((major << 8) | minor);
+}
+
+inline bool isSMSafe()
+{
+    const int32_t smVersion = getSMVersion();
+    return smVersion == 0x0700 || smVersion == 0x0702 || smVersion == 0x0705 ||
+           smVersion == 0x0800 || smVersion == 0x0806;
+}
+
+inline bool isDataTypeSupported(DataType dataType)
+{
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    if (!builder)
+    {
+        return false;
+    }
+
+    if ((dataType == DataType::kINT8 && !builder->platformHasFastInt8())
+        || (dataType == DataType::kHALF && !builder->platformHasFastFp16()))
+    {
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace samplesCommon
