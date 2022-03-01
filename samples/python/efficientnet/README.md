@@ -93,8 +93,8 @@ cd /path/to/automl/efficientnetv2
 python3 infer.py \
     --mode tf2bm \
     --model_name efficientnetv2-s \
-    --model_dir ../../../models/effnetv2/effnetv2-s/checkpoint/ \
-    --export_dir ../../../models/effnetv2/effnetv2-s/checkpoint/saved_model
+    --model_dir ../../efficientnetv2-s/ \
+    --export_dir ../../efficientnetv2-s/saved_model
 ```
 
 Where you should adapt `--model_name` to the corresponding model for the checkpoint used. The `--model_dir` argument should point to the downloaded or trained checkpoint as described above. The exported saved model will then be available in the directory pointed by the `--export_dir` argument.
