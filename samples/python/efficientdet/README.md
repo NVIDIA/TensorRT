@@ -354,10 +354,13 @@ python3 compare_tf.py \
     --engine /path/to/engine.trt \
     --saved_model /path/to/saved_model \
     --input /path/to/images \
+    --nms_threshold 0.4 \
     --output /path/to/output
 ```
 
 This script will process the images found in the given input path through both TensorFlow and TensorRT using the corresponding saved model and engine. It will then write to the output path a set of visualization images showing the inference results of both frameworks for visual qualitative comparison.
+
+`--nms_threshold` overrides the score threshold for the NMS operation if it is higher than the threshold in the model/engine. For better visualization, `--nms_threshold 0.4` is used here for filtering out the noisy detections.
 
 If you run this on COCO val2017 images, you may also add the parameter `--annotations /path/to/coco/annotations/instances_val2017.json` to further compare against COCO ground truth annotations.
 
