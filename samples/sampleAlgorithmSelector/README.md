@@ -46,7 +46,6 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
     export TRT_DATADIR=/usr/src/tensorrt/data
     pushd $TRT_DATADIR/mnist
     pip3 install Pillow
-    python3 download_pgms.py
     popd
     ```
 

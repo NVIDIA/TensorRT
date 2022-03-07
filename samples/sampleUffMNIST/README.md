@@ -62,7 +62,6 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
     export TRT_DATADIR=/usr/src/tensorrt/data
     pushd $TRT_DATADIR/mnist
     pip3 install Pillow
-    python3 download_pgms.py
     popd
     ```
 
