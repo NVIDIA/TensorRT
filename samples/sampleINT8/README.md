@@ -34,8 +34,6 @@ INT8 engines are build from 32-bit network definitions, similarly to 32-bit and 
 
 This sample requires the [MNIST training set](https://github.com/BVLC/caffe/blob/master/data/mnist/get_mnist.sh). Download this script into the `TensorRT-x.x.x.x/data/mnist` directory, where `x.x.x.x` is your installed version of TensorRT, and execute the script to download the required data. The packaged MNIST model that is shipped with this sample is based on [lenet.prototxt](https://github.com/BVLC/caffe/edit/master/examples/mnist/lenet.prototxt). For more information, see the [MNIST BVLC Caffe example](https://github.com/BVLC/caffe/tree/master/examples/mnist).
 
-The data set used by this sample is based on the [MNIST data set](https://github.com/BVLC/caffe/tree/master/data/mnist). The batch file generation from the above data set is described in [Batch files for calibration](#batch-files-for-calibration).
-
 Specifically, this sample performs the following steps:
 
 - [Defines the network](#defining-the-network)
@@ -63,7 +61,7 @@ Calibration is an additional step required when building networks for INT8. The 
 
 #### Calibration data
 
-Calibration must be performed using images representative of those which will be used at runtime. Since the sample is based around Caffe, any image preprocessing that caffe would perform prior to running the network (such as scaling, cropping, or mean subtraction) will be done in Caffe and captured as a set of files. The sample uses a utility class (MNISTBatchStream) to read these files and create appropriate input for calibration. Generation of these files is discussed in [Batch files for calibration](#batch-files-for-calibration).
+Calibration must be performed using images representative of those which will be used at runtime. Since the sample is based around Caffe, any image preprocessing that caffe would perform prior to running the network (such as scaling, cropping, or mean subtraction) will be done in Caffe and captured as a set of files. The sample uses a utility class (MNISTBatchStream) to read these files and create appropriate input for calibration.
 
 You can create calibration data stream (calibrationStream), for example:
 ```cpp

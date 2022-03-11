@@ -96,13 +96,7 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 
 ## Running the sample
 
-1.  Compile this sample by running `make` in the `<TensorRT root directory>/samples/sampleOnnxMNIST` directory. The binary named `sample_onnx_mnist` will be created in the `<TensorRT root directory>/bin` directory.
-	```
-	cd <TensorRT root directory>/samples/sampleOnnxMNIST
-	make
-	```
-
-	Where `<TensorRT root directory>` is where you installed TensorRT.
+1. Compile the sample by following build instructions in [TensorRT README](https://github.com/NVIDIA/TensorRT/).
 
 2.  Run the sample to build and run the MNIST engine from the ONNX model.
 	```

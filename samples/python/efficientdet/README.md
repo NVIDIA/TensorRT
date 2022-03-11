@@ -70,7 +70,7 @@ The workflow to convert an EfficientDet model is basically TensorFlow â†’ ONNX â
 
 ### TensorFlow Saved Model
 
-The starting point of conversion is a TensorFlow saved model. This can be exported from your own trained models, or you can download a pre-trained model. This conversion script is compatible with two types of models:
+The starting point of conversion is a TensorFlow saved model. This can be exported from your own trained models, or you can download a pre-trained model. This conversion script is compatible with three types of models:
 
 1. EfficientDet models trained with the [AutoML](https://github.com/google/automl/tree/master/efficientdet) framework. Compatible with all "d0-7", "lite0-4" and "AdvProp" variations.
 2. EfficientDet models trained with the [TensorFlow Object Detection](https://github.com/tensorflow/models/tree/master/research/object_detection) API (TFOD).
