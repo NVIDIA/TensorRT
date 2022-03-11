@@ -13,8 +13,8 @@
 
 ## Description
 
-This sample, sampleAlgorithmSelector, shows an example of how to use the algorithm selection API based on sampleMNIST.
-[sampleMNIST documentation] (https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#mnist_sample)
+This sample, sampleAlgorithmSelector, shows an example of how to use the algorithm selection API based on sampleMNIST (
+[documentation](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#mnist_sample)).
 
 This sample demonstrates the usage of `IAlgorithmSelector` to deterministically build TRT engines.
 It also shows the usage of `IAlgorithmSelector::selectAlgorithms` to define heuristics for selection of algorithms.
