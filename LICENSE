@@ -276,7 +276,11 @@
      - Copyright (c) 2000 The NetBSD Foundation, Inc.
 
 
+   > parsers/common/ieee_half.h
    > samples/common/half.h
+   > third_party/ieee/half.h
+
+     The MIT License
 
      Copyright (c) 2012-2017 Christian Rau <rauy@users.sourceforge.net>
 
