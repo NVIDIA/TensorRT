@@ -88,12 +88,12 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(const char* name, const
         {
             assert(fields[i].type == PluginFieldType::kINT32);
             pooledSize = *(static_cast<const int*>(fields[i].data));
-            assert(mPooledSize >= 1);
+            assert(pooledSize >= 1);
         }
         if (!strcmp(attrName, "image_size"))
         {
             assert(fields[i].type == PluginFieldType::kINT32);
-            assert(fields[i].size == 2);
+            assert(fields[i].length == 2);
             const auto dims = static_cast<const int*>(fields[i].data);
             imageSize.y = dims[0];
             imageSize.x = dims[1];
@@ -124,7 +124,7 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(const char* name, const
         {
             assert(fields[i].type == PluginFieldType::kINT32);
             samplingRatio = *(static_cast<const int*>(fields[i].data));
-            assert(mSamplingRatio >= 0);
+            assert(samplingRatio >= 0);
         }
     }
     return new PyramidROIAlign(
