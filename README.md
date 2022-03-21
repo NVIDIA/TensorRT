@@ -15,7 +15,7 @@ This repository contains the Open Source Software (OSS) components of NVIDIA Ten
 To build the TensorRT-OSS components, you will first need the following software packages.
 
 **TensorRT GA build**
-* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.2.3.0
+* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.2.4.2
 
 **System Packages**
 * [CUDA](https://developer.nvidia.com/cuda-toolkit)
@@ -70,16 +70,16 @@ To build the TensorRT-OSS components, you will first need the following software
 
     ```bash
     cd ~/Downloads
-    tar -xvzf TensorRT-8.2.3.0.Linux.x86_64-gnu.cuda-11.4.cudnn8.2.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-8.2.3.0
+    tar -xvzf TensorRT-8.2.4.2.Linux.x86_64-gnu.cuda-11.4.cudnn8.2.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-8.2.4.2
     ```
 
     **Example: Windows on x86-64 with cuda-11.4**
 
     ```powershell
     cd ~\Downloads
-    Expand-Archive .\TensorRT-8.2.3.0.Windows10.x86_64.cuda-11.4.cudnn8.2.zip
-    $Env:TRT_LIBPATH = '$(Get-Location)\TensorRT-8.2.3.0'
+    Expand-Archive .\TensorRT-8.2.4.2.Windows10.x86_64.cuda-11.4.cudnn8.2.zip
+    $Env:TRT_LIBPATH = '$(Get-Location)\TensorRT-8.2.4.2'
     $Env:PATH += 'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\MSBuild\15.0\Bin\'
     ```
 
