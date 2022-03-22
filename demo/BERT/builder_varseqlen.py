@@ -388,7 +388,7 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, max_se
     set_output_name(emb_layer, "embeddings_", "output")
     return emb_layer, cu_seqlens, max_seqlen
 
-def build_engine(batch_size, workspace_size, sequence_length, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num):
+def build_engine(batch_size, workspace_size, sequence_length, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num, verbose):
     explicit_batch_flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network(explicit_batch_flag) as network, builder.create_builder_config() as builder_config:
@@ -399,6 +399,9 @@ def build_engine(batch_size, workspace_size, sequence_length, config, weights_di
             builder_config.set_flag(trt.BuilderFlag.INT8)
             if not config.use_qat:
                 raise RuntimeError("Post training calibration is not supported in variable-length BERT.")
+
+        if verbose:
+            builder_config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
 
         # speed up the engine build for trt major version >= 8 
         # 1. disable cudnn tactic
@@ -483,8 +486,12 @@ def main():
     parser.add_argument("-tcf", "--timing-cache-file", help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later", required=False)
     parser.add_argument("-sp", "--sparse", action="store_true", help="Indicates that model is sparse", required=False)
     parser.add_argument("--megatron", action="store_true", help="Indicates that model is the Megatron-style architecture", required=False)
+    parser.add_argument("--verbose", action="store_true", help="Turn on verbose logger and set profiling verbosity to verbose", required=False)
 
     args, _ = parser.parse_known_args()
+
+    if args.verbose:
+        TRT_LOGGER.min_severity = TRT_LOGGER.VERBOSE
 
     cc = pycuda.autoinit.device.compute_capability()
     if cc[0] * 10 + cc[1] < 72:
@@ -519,7 +526,7 @@ def main():
                            "PyTorch using option --pytorch, or Pickle weight dictionary using option --pickle "
                            "to build TRT BERT model.")
 
-    with build_engine(args.max_batch_size, args.workspace_size, args.max_sequence_length, config, weights_dict, args.squad_json, args.vocab_file, calib_cache, args.calib_num) as engine:
+    with build_engine(args.max_batch_size, args.workspace_size, args.max_sequence_length, config, weights_dict, args.squad_json, args.vocab_file, calib_cache, args.calib_num, args.verbose) as engine:
         TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Serializing Engine...")
         serialized_engine = engine.serialize()
         TRT_LOGGER.log(TRT_LOGGER.INFO, "Saving Engine to {:}".format(args.output))

@@ -400,7 +400,7 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     set_output_name(emb_layer, "embeddings_", "output")
     return emb_layer
 
-def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num):
+def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num, verbose):
     explicit_batch_flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network(explicit_batch_flag) as network, builder.create_builder_config() as builder_config:
@@ -415,6 +415,9 @@ def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_
                 builder_config.int8_calibrator = calibrator
         if config.use_strict:
             builder_config.set_flag(trt.BuilderFlag.STRICT_TYPES)
+
+        if verbose:
+            builder_config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
 
         if config.use_sparsity:
             TRT_LOGGER.log(TRT_LOGGER.INFO, "Setting sparsity flag on builder_config.")
@@ -486,7 +489,7 @@ def generate_calibration_cache(sequence_lengths, workspace_size, config, weights
     config.use_fp16 = False
     config.is_calib_mode = True
 
-    with build_engine([1], workspace_size, sequence_lengths, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num) as engine:
+    with build_engine([1], workspace_size, sequence_lengths, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num, False) as engine:
         TRT_LOGGER.log(TRT_LOGGER.INFO, "calibration cache generated in {:}".format(calibrationCacheFile))
 
     config.use_fp16 = saved_use_fp16
@@ -516,6 +519,7 @@ def main():
     parser.add_argument("-imh", "--force-int8-multihead", action="store_true", help="Run multi-head attention with INT8 (FP32 or FP16 by default) input and output", required=False)
     parser.add_argument("-sp", "--sparse", action="store_true", help="Indicates that model is sparse", required=False)
     parser.add_argument("-tcf", "--timing-cache-file", help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later", required=False)
+    parser.add_argument("--verbose", action="store_true", help="Turn on verbose logger and set profiling verbosity to DETAILED", required=False)
 
     args, _ = parser.parse_known_args()
     args.batch_size = args.batch_size or [1]
@@ -526,6 +530,9 @@ def main():
         raise RuntimeError("--force-int8-multihead option is only supported on Turing+ GPU.")
     if cc[0] * 10 + cc[1] < 72 and args.force_int8_skipln:
         raise RuntimeError("--force-int8-skipln option is only supported on Xavier+ GPU.")
+
+    if args.verbose:
+        TRT_LOGGER.min_severity = TRT_LOGGER.VERBOSE
 
     bert_config_path = os.path.join(args.config_dir, "bert_config.json")
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Using configuration file: {:}".format(bert_config_path))
@@ -547,7 +554,7 @@ def main():
     else:
         raise RuntimeError("You need either specify TF checkpoint using option --ckpt or ONNX using option --onnx to build TRT BERT model.")
 
-    with build_engine(args.batch_size, args.workspace_size, args.sequence_length, config, weights_dict, args.squad_json, args.vocab_file, calib_cache, args.calib_num) as engine:
+    with build_engine(args.batch_size, args.workspace_size, args.sequence_length, config, weights_dict, args.squad_json, args.vocab_file, calib_cache, args.calib_num, args.verbose) as engine:
         TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Serializing Engine...")
         serialized_engine = engine.serialize()
         TRT_LOGGER.log(TRT_LOGGER.INFO, "Saving Engine to {:}".format(args.output))
