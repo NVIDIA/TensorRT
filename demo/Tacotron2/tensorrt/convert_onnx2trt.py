@@ -58,6 +58,9 @@ def parse_args(parser):
                         help='Includes the outer decoder loop in the ONNX model. Enabled by default and only supported on TensorRT 8.0 or later.')
     parser.add_argument('--no-loop', dest='loop', action='store_false',
                         help='Excludes outer decoder loop from decoder ONNX model. Default behavior and necessary for TensorRT 7.2 or earlier.')
+    parser.add_argument("-tcf", "--timing-cache-file", default=None, type=str,
+                        help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later. The cache file is assumed to be used exclusively. It's the users' responsibility to create file lock to prevent accessing conflict.",
+                        required=False)
     parser.set_defaults(loop=int(trt.__version__[0]) >= 8)
 
     return parser
@@ -85,7 +88,7 @@ def main():
             {"name": "sequence_lengths", "min": (bs_min,),  "opt": (bs_opt,),    "max": (bs_max,)}]
     if args.encoder != "":
         print("Building Encoder ...")
-        encoder_engine = build_engine(args.encoder, shapes=shapes, fp16=args.fp16)
+        encoder_engine = build_engine(args.encoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file)
         if encoder_engine is not None:
             with open(encoder_path, 'wb') as f:
                 f.write(encoder_engine.serialize())
@@ -108,7 +111,7 @@ def main():
                 {"name": "mask",                    "min": (bs_min,4),     "opt": (bs_opt,128),     "max": (bs_max,256)}]
         if args.decoder != "":
             print("Building Decoder with loop...")
-            decoder_engine = build_engine(args.decoder, shapes=shapes, fp16=args.fp16)
+            decoder_engine = build_engine(args.decoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file)
             if decoder_engine is not None:
                 with open(decoder_path, 'wb') as f:
                     f.write(decoder_engine.serialize())
@@ -130,7 +133,7 @@ def main():
                 {"name": "mask",                  "min": (bs_min,4),     "opt": (bs_opt,128),     "max": (bs_max,256)}]
         if args.decoder != "":
             print("Building Decoder ...")
-            decoder_iter_engine = build_engine(args.decoder, shapes=shapes, fp16=args.fp16)
+            decoder_iter_engine = build_engine(args.decoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file)
             if decoder_iter_engine is not None:
                 with open(decoder_path, 'wb') as f:
                     f.write(decoder_iter_engine.serialize())
@@ -142,7 +145,7 @@ def main():
     shapes=[{"name": "mel_outputs", "min": (bs_min,80,32), "opt": (bs_opt,80,768), "max": (bs_max,80,1664)}]
     if args.postnet != "":
         print("Building Postnet ...")
-        postnet_engine = build_engine(args.postnet, shapes=shapes, fp16=args.fp16)
+        postnet_engine = build_engine(args.postnet, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file)
         if postnet_engine is not None:
             with open(postnet_path, 'wb') as f:
                 f.write(postnet_engine.serialize())
@@ -155,7 +158,7 @@ def main():
             {"name": "z",   "min": (bs_min,8,z_min,1),     "opt": (bs_opt,8,z_opt,1),     "max": (bs_max,8,z_max,1)}]
     if args.waveglow != "":
         print("Building WaveGlow ...")
-        waveglow_engine = build_engine(args.waveglow, shapes=shapes, fp16=args.fp16)
+        waveglow_engine = build_engine(args.waveglow, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file)
         if waveglow_engine is not None:
             with open(waveglow_path, 'wb') as f:
                 f.write(waveglow_engine.serialize())

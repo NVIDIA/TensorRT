@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import os
 import tensorrt as trt
 
 # For a single dimension this will return the min, opt, and max size when given
@@ -104,7 +105,7 @@ def engine_info(engine_filepath):
         print(final_binding_str)
 
 
-def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False):
+def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False, timing_cache=None):
     TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
     builder = trt.Builder(TRT_LOGGER)
 
@@ -116,6 +117,18 @@ def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False):
     for s in shapes:
         profile.set_shape(s['name'], min=s['min'], opt=s['opt'], max=s['max'])
     config.add_optimization_profile(profile)
+
+    timing_cache_available = int(trt.__version__[0]) >= 8 and timing_cache != None
+    # load global timing cache
+    if timing_cache_available:
+        if os.path.exists(timing_cache):
+            with open(timing_cache, "rb") as f:
+                cache = config.create_timing_cache(f.read())
+                config.set_timing_cache(cache, ignore_mismatch = False)
+        else:
+            cache = config.create_timing_cache(b"")
+            config.set_timing_cache(cache, ignore_mismatch = False)
+
     explicit_batch = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
     network = builder.create_network(explicit_batch)
 
@@ -125,5 +138,14 @@ def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False):
             for i in range(parser.num_errors):
                 print("TensorRT ONNX parser error:", parser.get_error(i))
             engine = builder.build_engine(network, config=config)
+
+            # save global timing cache
+            if timing_cache_available:
+                cache = config.get_timing_cache()
+                with cache.serialize() as buffer:
+                    with open(timing_cache, "wb") as f:
+                        f.write(buffer)
+                        f.flush()
+                        os.fsync(f)
 
             return engine
