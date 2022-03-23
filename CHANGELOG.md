@@ -1,5 +1,15 @@
 # TensorRT OSS Release Changelog
 
+## [22.03](https://github.com/NVIDIA/TensorRT/releases/tag/22.03) - 2022-03-23
+### Added
+- EfficientDet sample enhancements
+  - Added support for EfficientDet Lite and AdvProp models.
+  - Added dynamic batch support.
+  - Added mixed precision engine builder.
+
+### Changed
+- Better decoupling of HuggingFace demo tests
+
 ## [22.02](https://github.com/NVIDIA/TensorRT/releases/tag/22.02) - 2022-02-04
 ### Added
 - New plugins: [decodeBbox3DPlugin](plugin/decodeBbox3DPlugin), [pillarScatterPlugin](plugin/pillarScatterPlugin), and [voxelGeneratorPlugin](plugin/voxelGeneratorPlugin)
