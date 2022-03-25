@@ -82,14 +82,20 @@ namespace tensorrt
         static const auto permutation_getter = [] (const Permutation& self, int pyIndex) {
             size_t index = (pyIndex < 0) ? static_cast<const int>(Dims::MAX_DIMS) + pyIndex : pyIndex;
             // Static cast is REQUIRED here, or chaos ensues as MAX_DIMS is not pulled in at link time.
-            if (index >= static_cast<const size_t>(Dims::MAX_DIMS)) throw py::index_error();
+            if (index >= static_cast<const size_t>(Dims::MAX_DIMS))
+            {
+                utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
+            }
             return self.order[index];
         };
 
         static const auto permutation_setter = [] (Permutation& self, int pyIndex, int item) {
             size_t index = (pyIndex < 0) ? static_cast<const int>(Dims::MAX_DIMS) + pyIndex : pyIndex;
             // Static cast is REQUIRED here, or chaos ensues as MAX_DIMS is not pulled in at link time.
-            if (index >= static_cast<const size_t>(Dims::MAX_DIMS)) throw py::index_error();
+            if (index >= static_cast<const size_t>(Dims::MAX_DIMS))
+            {
+                utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
+            }
             self.order[index] = item;
         };
 
@@ -197,7 +203,10 @@ namespace tensorrt
         static const auto network_getitem = [](INetworkDefinition& self, int pyIndex) {
             // Support python's negative indexing
             size_t index = (pyIndex < 0) ? self.getNbLayers() + pyIndex : pyIndex;
-            if (index >= self.getNbLayers()) throw py::index_error();
+            if (index >= self.getNbLayers())
+            {
+                utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
+            }
             return self.getLayer(index);
         };
 

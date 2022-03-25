@@ -180,6 +180,8 @@ void doNothingDel(const T& self)
     issueDeprecationWarning("del obj");
 }
 
+void throwPyIndexError(std::string message = "out of bounds");
+
 } // namespace utils
 } // namespace tensorrt
 

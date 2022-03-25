@@ -172,7 +172,9 @@ static const auto engine_getitem = [](ICudaEngine& self, int pyIndex) {
     // Support python's negative indexing
     size_t index = (pyIndex < 0) ? static_cast<int>(self.getNbBindings()) + pyIndex : pyIndex;
     if (index >= self.getNbBindings())
-        throw py::index_error();
+    {
+        utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
+    }
     return self.getBindingName(index);
 };
 
