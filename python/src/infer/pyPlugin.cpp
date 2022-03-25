@@ -17,6 +17,7 @@
 // This file contains all bindings related to plugins.
 #include "ForwardDeclarations.h"
 #include "infer/pyPluginDoc.h"
+#include "utils.h"
 #include <cuda_runtime_api.h>
 #include <pybind11/stl.h>
 
@@ -217,7 +218,9 @@ void bindPlugin(py::module& m)
         .def("__len__", [](PluginFieldCollection& self) { return self.nbFields; })
         .def("__getitem__", [](PluginFieldCollection& self, int index) {
             if (index >= self.nbFields)
-                throw py::index_error();
+            {
+                utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
+            }
             return self.fields[index];
         });
 

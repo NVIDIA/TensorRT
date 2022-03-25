@@ -29,5 +29,15 @@ void issueDeprecationWarning(const char* useInstead)
     PyErr_WarnEx(PyExc_DeprecationWarning, msg.c_str(), 1);
 }
 
+// The following is a helper WAR to "throw py::index_error()", which results in an incompatibility
+// with Tensorflow 2.5 and above--on Windows only--when Tensorflow is imported after TensorRT.
+// The TF library fast_module_type.pyd hooks on to IndexErrors thrown through py::index_error()
+// resulting in hangs at unpacking operations and out-of-bounds index accesses.
+void throwPyIndexError(std::string message)
+{
+    PyErr_SetString(PyExc_IndexError, message.data());
+    throw py::error_already_set();
+}
+
 } // namespace utils
 } // namespace tensorrt
