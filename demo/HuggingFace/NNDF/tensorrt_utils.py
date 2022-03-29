@@ -119,11 +119,18 @@ class TRTNativeRunner:
     """TRTNativeRunner avoids the high overheads with Polygraphy runner providing performance comparable to C++ implementation."""
     def __init__(self, trt_engine_file: TRTEngineFile, network_metadata: NetworkMetadata):
         self.trt_engine_file = trt_engine_file
-        trt_logger = trt.Logger(trt.Logger.VERBOSE if G_LOGGER.root.level == G_LOGGER.DEBUG else trt.Logger.WARNING)
+        self.trt_logger = trt.Logger()
+
+        if G_LOGGER.level == G_LOGGER.DEBUG:
+            self.trt_logger.min_severity = trt.Logger.VERBOSE
+        elif G_LOGGER.level == G_LOGGER.INFO:
+            self.trt_logger.min_severity = trt.Logger.INFO
+        else:
+            self.trt_logger.min_severity = trt.Logger.WARNING
 
         G_LOGGER.info("Reading and loading engine file {} using trt native runner.".format(self.trt_engine_file.fpath))
         with open(self.trt_engine_file.fpath, "rb") as f:
-            self.trt_runtime = trt.Runtime(trt_logger)
+            self.trt_runtime = trt.Runtime(self.trt_logger)
             self.trt_engine = self.trt_runtime.deserialize_cuda_engine(f.read())
             self.trt_context = self.trt_engine.create_execution_context()
 

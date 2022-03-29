@@ -20,6 +20,11 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+# [vTBD]
+
+- Added `benchmark` action to T5 TRT for performance benchmarking. It uses random inputs with fixed lengths and disables
+  early stopping such that we can compare the performance with other frameworks.
+
 # [1.1.0] - 2022-02-09
 
 - Added `-o` or `--save-output-fpath` which saves a pickled version of the `NetworkResult` object. Useful for testing.

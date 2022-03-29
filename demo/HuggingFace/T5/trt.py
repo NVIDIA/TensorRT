@@ -28,6 +28,8 @@ if __name__ == "__main__":
     project_root = os.path.join(filepath, os.pardir)
     sys.path.append(project_root)
 
+# polygraphy
+from polygraphy.backend.trt import Profile
 
 # numpy
 import numpy as np
@@ -47,6 +49,7 @@ import tensorrt as trt
 # TRT-HuggingFace
 from NNDF.interface import TRTInferenceCommand
 from NNDF.networks import (
+    BenchmarkingResult,
     NetworkMetadata,
     NetworkModels,
     NetworkModel,
@@ -59,9 +62,9 @@ from NNDF.networks import (
 from NNDF.tensorrt_utils import TRTNativeRunner
 from NNDF.general_utils import NNFolderWorkspace
 from T5.frameworks import T5FHuggingFace
-from T5.T5ModelConfig import T5ModelTRTConfig
+from T5.T5ModelConfig import T5ModelTRTConfig, T5BenchmarkingArgs
 from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy
-from T5.export import T5DecoderONNXFile, T5EncoderONNXFile
+from T5.export import T5DecoderONNXFile, T5EncoderONNXFile, T5DecoderTRTEngine, T5EncoderTRTEngine
 from NNDF.models import TRTEngineFile
 
 class TRTHFRunner(TRTNativeRunner, GenerationMixin):
@@ -126,9 +129,6 @@ class T5TRTEncoder(TRTHFRunner):
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
         self.max_sequence_length = T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[network_metadata.variant]
-
-        # For T5, we only have one profile to optimize
-        assert len(trt_engine_file.get_dynamic_shape_profiles()) == 1, "T5 should only have one dynamic shapes profile."
 
         # We only have one profile to select so we can just grab the profile at the start of the class
         self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size, sequence_length=1)
@@ -195,9 +195,6 @@ class T5TRTDecoder(TRTHFRunner):
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
         self.max_sequence_length = T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[network_metadata.variant]
-
-        # For T5, we only have one profile to optimize
-        assert len(trt_engine_file.get_dynamic_shape_profiles()) == 1, "T5 should only have one dynamic shapes profile."
 
         # We only have one profile to select so we can just grab the profile at the start of the class
         self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size, sequence_length=1)
@@ -411,6 +408,174 @@ class T5TRT(TRTInferenceCommand):
             ),
         )
 
+    def execute_benchmarking(
+        self,
+        metadata: NetworkMetadata,
+        onnx_fpaths: Dict[str, NetworkModel],
+        timing_profile: TimingProfile,
+        batch_size: int,
+        benchmarking_args: T5BenchmarkingArgs,
+    ) -> BenchmarkingResult:
+
+        tokenizer = T5Tokenizer.from_pretrained(metadata.variant)
+
+        max_seq_len = T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+        input_seq_len = benchmarking_args.input_seq_len if benchmarking_args.input_seq_len > 0 else max_seq_len
+        output_seq_len = benchmarking_args.output_seq_len if benchmarking_args.output_seq_len > 0 else max_seq_len
+
+        input_ids = torch.randint(0, T5ModelTRTConfig.VOCAB_SIZE, (batch_size, input_seq_len))
+
+        encoder_last_hidden_state, encoder_e2e_median_time = encoder_inference(
+            self.t5_trt_encoder, input_ids, timing_profile
+        )
+        _, decoder_e2e_median_time = decoder_inference(
+            self.t5_trt_decoder,
+            input_ids,
+            encoder_last_hidden_state,
+            timing_profile,
+        )
+        _, full_e2e_median_runtime = full_inference_greedy(
+            self.t5_trt_encoder,
+            self.t5_trt_decoder,
+            input_ids,
+            tokenizer,
+            timing_profile,
+            max_length=output_seq_len,
+            batch_size=batch_size,
+            early_stopping=False,
+        )
+
+        return BenchmarkingResult(
+            median_runtime=[
+                NetworkRuntime(
+                    name=T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
+                    runtime=decoder_e2e_median_time,
+                ),
+                NetworkRuntime(
+                    name=T5ModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME,
+                    runtime=encoder_e2e_median_time,
+                ),
+                NetworkRuntime(
+                    name=T5ModelTRTConfig.NETWORK_FULL_NAME,
+                    runtime=full_e2e_median_runtime,
+                ),
+            ],
+            models=NetworkModels(
+                torch=None,
+                onnx=list(onnx_fpaths.values()),
+                trt=[
+                    NetworkModel(
+                        name=T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
+                        fpath=self.t5_trt_decoder_engine.fpath,
+                    ),
+                    NetworkModel(
+                        name=T5ModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME,
+                        fpath=self.t5_trt_encoder_engine.fpath,
+                    ),
+                ],
+            ),
+        )
+
+    def _setup_workspace(self, metadata: NetworkMetadata, working_directory: str) -> NNFolderWorkspace:
+        return NNFolderWorkspace(
+            self.frameworks_cmd.config.network_name, metadata, working_directory
+        )
+
+    def _download_models(
+        self,
+        workspace: NNFolderWorkspace,
+        metadata: NetworkMetadata,
+    ) -> Tuple[NetworkModel]:
+        # No fpath provided for onnx files, download them from HuggingFace repo.
+        return self.frameworks_cmd.generate_and_download_framework(
+            metadata, workspace
+        ).onnx
+
+    def _setup_engines(
+        self,
+        metadata: NetworkMetadata,
+        hash_onnx_fpath: Dict[str, NetworkModel],
+        batch_size: int,
+        benchmarking_args: T5BenchmarkingArgs = None,
+    ) -> None:
+
+        # Output networks shall not exceed number of network segments explicitly defined by configuration file.
+        assert len(hash_onnx_fpath) == len(
+            T5ModelTRTConfig.NETWORK_SEGMENTS
+        ), "There should only be {} exported ONNX segments in T5 model.".format(
+            len(T5ModelTRTConfig.NETWORK_SEGMENTS)
+        )
+
+        decoder_onnx_fpath = hash_onnx_fpath[
+            T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME
+        ].fpath
+        encoder_onnx_fpath = hash_onnx_fpath[
+            T5ModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME
+        ].fpath
+
+        # Generate optimization profiles.
+        max_sequence_length = T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+
+        if benchmarking_args is None or benchmarking_args.input_seq_len is None:
+            opt_input_seq_len = max_sequence_length // 2
+        else:
+            opt_input_seq_len = benchmarking_args.input_seq_len
+
+        if benchmarking_args is None or benchmarking_args.output_seq_len is None:
+            opt_output_seq_len = max_sequence_length // 2
+        else:
+            opt_output_seq_len = benchmarking_args.output_seq_len
+
+        encoder_profiles = [
+            Profile().add(
+                "input_ids",
+                min=(batch_size, 1),
+                opt=(batch_size, opt_input_seq_len),
+                max=(batch_size, max_sequence_length),
+            )
+        ]
+
+        decoder_profiles = [
+            Profile().add(
+                "input_ids",
+                min=(batch_size, 1),
+                opt=(batch_size, opt_output_seq_len),
+                max=(batch_size, max_sequence_length),
+            ).add(
+                "encoder_hidden_states",
+                min=(batch_size, 1, max_sequence_length),
+                opt=(batch_size, opt_input_seq_len, max_sequence_length),
+                max=(batch_size, max_sequence_length, max_sequence_length),
+            )
+        ]
+
+        # Convert ONNX models to TRT engines.
+        self.t5_trt_encoder_engine = T5EncoderONNXFile(
+            encoder_onnx_fpath, metadata
+        ).as_trt_engine(
+            encoder_onnx_fpath + "-bs{}.engine".format(batch_size),
+            profiles=encoder_profiles,
+        )
+        self.t5_trt_decoder_engine = T5DecoderONNXFile(
+            decoder_onnx_fpath, metadata
+        ).as_trt_engine(
+            decoder_onnx_fpath + "-bs{}.engine".format(batch_size),
+            profiles=decoder_profiles,
+        )
+
+        # Create T5TRTEncoder and T5TRTDecoder instances.
+        tfm_config = T5Config(
+            use_cache=metadata.other.kv_cache,
+            num_layers=T5ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
+        )
+        self.t5_trt_encoder = T5TRTEncoder(
+            self.t5_trt_encoder_engine, metadata, tfm_config, batch_size=batch_size
+        )
+        self.t5_trt_decoder = T5TRTDecoder(
+            self.t5_trt_decoder_engine, metadata, tfm_config, batch_size=batch_size
+        )
+
+
     def run_trt(
         self,
         metadata: NetworkMetadata,
@@ -423,58 +588,25 @@ class T5TRT(TRTInferenceCommand):
         timing_profile: TimingProfile,
         batch_size: int = 1,
     ) -> List[NetworkResult]:
-        workspace = NNFolderWorkspace(
-            self.frameworks_cmd.config.network_name, metadata, working_directory
-        )
+        workspace = self._setup_workspace(metadata, working_directory)
+
+        # Keep onnx and Torch models if they are provided by users.
+        if len(onnx_fpaths) == 0:
+            onnx_fpaths = self._download_models(workspace, metadata)
+        else:
+            keep_onnx_model = True
+            keep_torch_model = True
+
+        hash_onnx_fpath = {v.name: v for v in onnx_fpaths}
 
         results = []
         try:
-            # no fpath provided for onnx files, download them
-            if len(onnx_fpaths) == 0:
-                onnx_fpaths = self.frameworks_cmd.generate_and_download_framework(
-                    metadata, workspace
-                ).onnx
-            else:
-                keep_onnx_model = True
-                keep_torch_model = True
-
-            # Output networks shall not exceed number of network segments explicitly defined by configuraiton file.
-            assert len(onnx_fpaths) == len(
-                T5ModelTRTConfig.NETWORK_SEGMENTS
-            ), "There should only be {} exported ONNX segments in T5 model.".format(
-                len(T5ModelTRTConfig.NETWORK_SEGMENTS)
-            )
-
-            hash_onnx_fpath = {v.name: v for v in onnx_fpaths}
-
-            decoder_onnx_fpath = hash_onnx_fpath[
-                T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME
-            ].fpath
-            encoder_onnx_fpath = hash_onnx_fpath[
-                T5ModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME
-            ].fpath
-
-            self.t5_trt_encoder_engine = T5EncoderONNXFile(
-                encoder_onnx_fpath, metadata
-            ).as_trt_engine(encoder_onnx_fpath + "-bs{}.engine".format(batch_size), batch_size=batch_size)
-            self.t5_trt_decoder_engine = T5DecoderONNXFile(
-                decoder_onnx_fpath, metadata
-            ).as_trt_engine(decoder_onnx_fpath + "-bs{}.engine".format(batch_size), batch_size=batch_size)
-            tfm_config = T5Config(
-                use_cache=metadata.other.kv_cache,
-                num_layers=T5ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
-            )
-            self.t5_trt_encoder = T5TRTEncoder(
-                self.t5_trt_encoder_engine, metadata, tfm_config, batch_size=batch_size
-            )
-            self.t5_trt_decoder = T5TRTDecoder(
-                self.t5_trt_decoder_engine, metadata, tfm_config, batch_size=batch_size
-            )
+            self._setup_engines(metadata, hash_onnx_fpath, batch_size)
 
             for ninput in network_input:
                 results.append(
                     self.execute_inference(
-                        metadata, hash_onnx_fpath, ninput, timing_profile, batch_size=batch_size
+                        metadata, hash_onnx_fpath, ninput, timing_profile, batch_size
                     )
                 )
 
@@ -482,6 +614,44 @@ class T5TRT(TRTInferenceCommand):
             self.cleanup(workspace, keep_trt_engine, keep_onnx_model, keep_torch_model)
 
         return results
+
+    def benchmark_trt(
+        self,
+        metadata: NetworkMetadata,
+        onnx_fpaths: Tuple[NetworkModel],
+        working_directory: str,
+        keep_trt_engine: bool,
+        keep_onnx_model: bool,
+        keep_torch_model: bool,
+        timing_profile: TimingProfile,
+        batch_size: int,
+        args: object,
+    ) -> List[NetworkResult]:
+
+        workspace = self._setup_workspace(metadata, working_directory)
+
+        # Keep onnx and Torch models if they are provided by users.
+        if len(onnx_fpaths) == 0:
+            onnx_fpaths = self._download_models(workspace, metadata)
+        else:
+            keep_onnx_model = True
+            keep_torch_model = True
+
+        hash_onnx_fpath = {v.name: v for v in onnx_fpaths}
+
+        result = None
+        try:
+            benchmarking_args = T5BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
+            self._setup_engines(metadata, hash_onnx_fpath, batch_size, benchmarking_args)
+
+            result = self.execute_benchmarking(
+                        metadata, hash_onnx_fpath, timing_profile, batch_size, benchmarking_args
+                    )
+
+        finally:
+            self.cleanup(workspace, keep_trt_engine, keep_onnx_model, keep_torch_model)
+
+        return result
 
     def add_args(self, parser) -> None:
         super().add_args(parser)

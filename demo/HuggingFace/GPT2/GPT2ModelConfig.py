@@ -69,6 +69,9 @@ class GPT2Metadata(_GPT2Metadata, MetadataArgparseInteropMixin):
         base_metadata = GPT2Metadata.from_args(args)
         return base_metadata._replace(precision=Precision(fp16=args.fp16))
 
+    @staticmethod
+    def add_benchmarking_args(parser: argparse.ArgumentParser) -> None:
+        pass
 
 class GPT2ModelTRTConfig(NNConfig):
     VOCAB_SIZE = 50257  # Vocabulary size of the GPT-2 model

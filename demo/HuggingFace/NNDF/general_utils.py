@@ -21,6 +21,7 @@ import os
 import shutil
 import timeit
 
+from datetime import datetime
 from shutil import rmtree
 from typing import Callable, Union, List
 from collections import defaultdict
@@ -28,7 +29,7 @@ from statistics import mean, median
 from glob import glob
 
 # NNDF
-from NNDF.networks import NNConfig, NetworkResult, NetworkMetadata
+from NNDF.networks import NNConfig, NetworkResult, NetworkMetadata, TimingProfile
 from NNDF.logger import G_LOGGER
 
 # Used for HuggingFace setting random seed
@@ -143,29 +144,43 @@ def remove_if_empty(
 
 
 def measure_python_inference_code(
-    stmt: Union[Callable, str], warmup: int = 3, number: int = 10, iterations: int = 10
+    stmt: Union[Callable, str], timing_profile: TimingProfile
 ) -> None:
     """
     Measures the time it takes to run Pythonic inference code.
     Statement given should be the actual model inference like forward() in torch.
 
-    See timeit for more details on how stmt works.
-
     Args:
         stmt (Union[Callable, str]): Callable or string for generating numbers.
-        number (int): Number of times to call function per iteration.
-        iterations (int): Number of measurement cycles.
+        timing_profile (TimingProfile): The timing profile settings with the following fields.
+            iterations (int): Number of iterations to run as warm-up before actual measurement cycles.
+            number (int): Number of times to call function per iteration.
+            iterations (int): Number of measurement cycles.
+            duration (float): Minimal duration for measurement cycles.
     """
+    warmup = timing_profile.warmup
+    number = timing_profile.number
+    iterations = timing_profile.iterations
+    duration = timing_profile.duration
+
     G_LOGGER.debug(
-        "Measuring inference call with warmup: {} and number: {} and iterations {}".format(
-            warmup, number, iterations
+        "Measuring inference call with warmup: {} and number: {} and iterations {} and duration {} secs".format(
+            warmup, number, iterations, duration
         )
     )
     # Warmup
     warmup_mintime = timeit.repeat(stmt, number=number, repeat=warmup)
     G_LOGGER.debug("Warmup times: {}".format(warmup_mintime))
 
-    return median(timeit.repeat(stmt, number=number, repeat=iterations)) / number
+    # Actual measurement cycles
+    results = []
+    start_time = datetime.now()
+    iter_idx = 0
+    while iter_idx < iterations or (datetime.now() - start_time).total_seconds() < duration:
+        iter_idx += 1
+        results.append(timeit.timeit(stmt, number=number))
+
+    return median(results) / number
 
 class NNFolderWorkspace:
     """
