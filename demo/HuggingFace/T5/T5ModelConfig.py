@@ -70,6 +70,23 @@ class T5Metadata(_T5Metadata, MetadataArgparseInteropMixin):
         base_metadata = T5Metadata.from_args(args)
         return base_metadata._replace(precision=Precision(fp16=args.fp16))
 
+    @staticmethod
+    def add_benchmarking_args(parser: argparse.ArgumentParser) -> None:
+        benchmarking_group = parser.add_argument_group("benchmarking group")
+        benchmarking_group.add_argument(
+            "--input_seq_len",
+            type=int,
+            help="Specify fixed input sequence length for perf benchmarking. (default: max supported sequence length)",
+        )
+        benchmarking_group.add_argument(
+            "--output_seq_len",
+            type=int,
+            help="Specify fixed output sequence length for perf benchmarking. (default: max supported sequence length)",
+        )
+
+
+T5BenchmarkingArgs = namedtuple("T5BenchmarkingArgs", ["input_seq_len", "output_seq_len"])
+
 
 class T5ModelTRTConfig(NNConfig):
 

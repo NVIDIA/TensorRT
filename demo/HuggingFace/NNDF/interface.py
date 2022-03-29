@@ -26,6 +26,7 @@ from typing import List, Tuple
 
 # NNDF
 from NNDF.networks import (
+    BenchmarkingResult,
     NetworkResult,
     NetworkMetadata,
     NetworkCheckpointResult,
@@ -62,6 +63,14 @@ class MetadataArgparseInteropMixin:
     def from_inference_args(args):
         pass
 
+    @staticmethod
+    @abstractmethod
+    def add_benchmarking_args(parser):
+        """
+        Add args needed for perf benchmarking mode.
+        """
+        pass
+
 class NetworkCommand(metaclass=ABCMeta):
     """Base class that each network script's command module should inherit."""
 
@@ -70,6 +79,7 @@ class NetworkCommand(metaclass=ABCMeta):
     DEFAULT_ITERATIONS = 10
     DEFAULT_NUMBER = 1
     DEFAULT_WARMUP = 3
+    DEFAULT_DURATION = 0.0
 
     def __init__(self, network_config: NNConfig, description: str):
         self.config = network_config()
@@ -83,14 +93,35 @@ class NetworkCommand(metaclass=ABCMeta):
 
         if self._args.verbose:
             G_LOGGER.setLevel(level=G_LOGGER.DEBUG)
+        elif self._args.info:
+            G_LOGGER.setLevel(level=G_LOGGER.INFO)
 
         self.metadata = self.args_to_network_metadata(self._args)
         self.check_network_metadata_is_supported(self.metadata)
+
+    # TODO: Should be abstractmethod, but since some derived classes have not overrid this method yet, leave it as
+    # non-abstract for now.
+    # @abstractmethod
+    def run_benchmark(self):
+        """
+        Run inference in performance benchmarking mode for apples-to-apples perf comparisons across platforms.
+        Differences with normal run mode include (but are not limited to):
+
+        - Use random input data and disable accuracy checking.
+        - Use fixed input/output sequence lengths and disable early stopping.
+        - Provide better controls on the number of warm-ups and the number/duration of inference iterations.
+
+        The derived class should override this method for the benchmarking implementation for the specific framework.
+        """
+        raise NotImplementedError("The run_benchmark() method is not implemented in this network/framework yet!")
 
     def add_args(self, parser) -> None:
         general_group = parser.add_argument_group("general")
         general_group.add_argument(
             "--verbose", help="Display verbose logs.", action="store_true"
+        )
+        general_group.add_argument(
+            "--info", help="Display info logs.", action="store_true"
         )
         general_group.add_argument(
             "--cleanup",
@@ -112,17 +143,28 @@ class NetworkCommand(metaclass=ABCMeta):
 
         timing_group = parser.add_argument_group("inference measurement")
         timing_group.add_argument(
-            "--iterations", help="Number of iterations to measure.", default=self.DEFAULT_ITERATIONS
+            "--iterations",
+            type=int,
+            help="Number of iterations to measure.",
+            default=self.DEFAULT_ITERATIONS,
         )
         timing_group.add_argument(
             "--number",
+            type=int,
             help="Number of actual inference cycles per iterations.",
             default=self.DEFAULT_NUMBER,
         )
         timing_group.add_argument(
             "--warmup",
+            type=int,
             help="Number of warmup iterations before actual measurement occurs.",
             default=self.DEFAULT_WARMUP,
+        )
+        timing_group.add_argument(
+            "--duration",
+            type=float,
+            help="Minimal duration of inference iterations to measure.",
+            default=self.DEFAULT_DURATION,
         )
 
     def check_network_metadata_is_supported(self, metadata: NetworkMetadata) -> None:
@@ -147,6 +189,32 @@ class NetworkCommand(metaclass=ABCMeta):
     def args_to_network_metadata(self, args) -> NetworkMetadata:
         return self.config.MetadataClass.from_args(args)
 
+    def load_nn_semantic_checkpoint(self) -> object:
+        """
+        Loads the NNSemanticCheckpoint instance from checkpoint.toml file.
+        """
+        # Differ import so that interface file can use used without
+        # dependency install for our testing.
+        from NNDF.checkpoints import NNSemanticCheckpoint
+        checkpoint = NNSemanticCheckpoint(
+            "checkpoint.toml",
+            framework="native",
+            network_name=self.config.network_name,
+            metadata=self.metadata,
+        )
+        return checkpoint
+
+    def get_timing_profile(self) -> TimingProfile:
+        """
+        Get TimingProfile settings given current args.
+        """
+        return TimingProfile(
+                iterations=int(self._args.iterations),
+                number=int(self._args.number),
+                warmup=int(self._args.warmup),
+                duration=int(self._args.duration),
+            )
+
 
 class FrameworkCommand(NetworkCommand):
     """Base class that is associated with Frameworks related scripts."""
@@ -167,26 +235,15 @@ class FrameworkCommand(NetworkCommand):
     def __call__(self):
         super().__call__()
 
-        # Differ import so that interface file can use used without
-        # dependency install for our testing.
-        from NNDF.checkpoints import NNSemanticCheckpoint
-        checkpoint = NNSemanticCheckpoint(
-            "checkpoint.toml",
-            framework="native",
-            network_name=self.config.network_name,
-            metadata=self.metadata,
-        )
+        checkpoint = self.load_nn_semantic_checkpoint()
+
         network_results = self.run_framework(
             metadata=self.metadata,
             network_input=list(checkpoint.inputs()),
             working_directory=self._args.working_dir,
             keep_onnx_model=self._args.cleanup,
             keep_pytorch_model=self._args.cleanup,
-            timing_profile=TimingProfile(
-                iterations=int(self._args.iterations),
-                number=int(self._args.number),
-                warmup=int(self._args.warmup),
-            ),
+            timing_profile=self.get_timing_profile(),
             use_cpu=self._args.cpu,
             batch_size=self._args.batch_size,
         )
@@ -229,8 +286,25 @@ class TRTInferenceCommand(NetworkCommand):
         keep_onnx_model: bool,
         keep_torch_model: bool,
         timing_profile: TimingProfile,
-        batch_size: bool = 1,
+        batch_size: int = 1,
     ) -> List[NetworkResult]:
+        pass
+
+    # TODO: Should be abstractmethod, but since some derived classes have not overrid this method yet, leave it as
+    # non-abstract for now.
+    # @abstractmethod
+    def benchmark_trt(
+        self,
+        metadata: NetworkMetadata,
+        onnx_fpaths: Tuple[NetworkModel],
+        working_directory: str,
+        keep_trt_engine: bool,
+        keep_onnx_model: bool,
+        keep_torch_model: bool,
+        timing_profile: TimingProfile,
+        batch_size: int,
+        args: object,
+    ) -> BenchmarkingResult:
         pass
 
     def __call__(self):
@@ -238,15 +312,8 @@ class TRTInferenceCommand(NetworkCommand):
         super().__call__()
         onnx_fpaths = self.args_to_network_models(self._args)
 
-        # Differ import so that interface file can use used without
-        # dependency install for our testing.
-        from NNDF.checkpoints import NNSemanticCheckpoint
-        checkpoint = NNSemanticCheckpoint(
-            "checkpoint.toml",
-            framework="native",
-            network_name=self.config.network_name,
-            metadata=self.metadata,
-        )
+        checkpoint = self.load_nn_semantic_checkpoint()
+
         network_results = self.run_trt(
             metadata=self.metadata,
             onnx_fpaths=onnx_fpaths,
@@ -255,11 +322,7 @@ class TRTInferenceCommand(NetworkCommand):
             keep_trt_engine=self._args.cleanup,
             keep_onnx_model=self._args.cleanup,
             keep_torch_model=self._args.cleanup,
-            timing_profile=TimingProfile(
-                iterations=int(self._args.iterations),
-                number=int(self._args.number),
-                warmup=int(self._args.warmup),
-            ),
+            timing_profile=self.get_timing_profile(),
             batch_size=self._args.batch_size,
         )
 
@@ -267,6 +330,26 @@ class TRTInferenceCommand(NetworkCommand):
             network_results=network_results,
             accuracy=checkpoint.accuracy(network_results),
         )
+
+    def run_benchmark(self):
+        self.config.MetadataClass.add_inference_args(self._parser)
+        self.config.MetadataClass.add_benchmarking_args(self._parser)
+        super().__call__()
+        onnx_fpaths = self.args_to_network_models(self._args)
+
+        network_results = self.benchmark_trt(
+            metadata=self.metadata,
+            onnx_fpaths=onnx_fpaths,
+            working_directory=self._args.working_dir,
+            keep_trt_engine=self._args.cleanup,
+            keep_onnx_model=self._args.cleanup,
+            keep_torch_model=self._args.cleanup,
+            timing_profile=self.get_timing_profile(),
+            batch_size=self._args.batch_size,
+            args=self._args,
+        )
+
+        return network_results
 
     def args_to_network_metadata(self, args) -> NetworkMetadata:
         return self.config.MetadataClass.from_inference_args(args)
@@ -311,15 +394,8 @@ class OnnxRTCommand(NetworkCommand):
         super().__call__()
         onnx_fpaths = self.args_to_network_models(self._args)
 
-        # Differ import so that interface file can use used without
-        # dependency install for our testing.
-        from NNDF.checkpoints import NNSemanticCheckpoint
-        checkpoint = NNSemanticCheckpoint(
-            "checkpoint.toml",
-            framework="native",
-            network_name=self.config.network_name,
-            metadata=self.metadata,
-        )
+        checkpoint = self.load_nn_semantic_checkpoint()
+
         network_results = self.run_onnxrt(
             metadata=self.metadata,
             onnx_fpaths=onnx_fpaths,
@@ -327,11 +403,7 @@ class OnnxRTCommand(NetworkCommand):
             working_directory=self._args.working_dir,
             keep_onnx_model=self._args.cleanup,
             keep_torch_model=self._args.cleanup,
-            timing_profile=TimingProfile(
-                iterations=int(self._args.iterations),
-                number=int(self._args.number),
-                warmup=int(self._args.warmup),
-            ),
+            timing_profile=self.get_timing_profile(),
             batch_size=self._args.batch_size,
         )
 

@@ -36,6 +36,12 @@ NetworkResult = namedtuple(
     ["input", "output_tensor", "semantic_output", "median_runtime", "models"],
 )
 
+"""BenchmarkingResult(median_runtime: NetworkRuntime, models: [str])"""
+BenchmarkingResult = namedtuple(
+    "BenchmarkingResult",
+    ["median_runtime", "models"],
+)
+
 """CheckpointResult(network_results: List[NetworkResult], accuracy: float)"""
 NetworkCheckpointResult = namedtuple(
     "NetworkCheckpointResult", ["network_results", "accuracy"]
@@ -49,7 +55,7 @@ Precision = namedtuple("Precision", ["fp16"])
 NetworkMetadata = namedtuple("NetworkMetadata", ["variant", "precision", "other"])
 
 """TimingProfile(iterations: int, repeat: int)"""
-TimingProfile = namedtuple("TimingProfile", ["iterations", "number", "warmup"])
+TimingProfile = namedtuple("TimingProfile", ["iterations", "number", "warmup", "duration"])
 
 
 """NetworkModel(name: str, fpath: str)"""

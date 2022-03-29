@@ -39,7 +39,8 @@ sys.path.append(ROOT_DIR)
 WRAPPER_RUN_ACTION = "run"
 WRAPPER_LIST_ACTION = "list"
 WRAPPER_COMPARE_ACTION = "compare"
-WRAPPER_ACTIONS = [WRAPPER_RUN_ACTION, WRAPPER_LIST_ACTION, WRAPPER_COMPARE_ACTION]
+WRAPPER_BENCHMARK_ACTION = "benchmark"
+WRAPPER_ACTIONS = [WRAPPER_RUN_ACTION, WRAPPER_LIST_ACTION, WRAPPER_COMPARE_ACTION, WRAPPER_BENCHMARK_ACTION]
 
 # NNDF
 from NNDF.general_utils import process_per_result_entries, process_results, register_network_folders, RANDOM_SEED
@@ -119,6 +120,30 @@ class RunAction(NetworkScriptAction):
         run_group = parser.add_argument_group("run args")
         run_group.add_argument("script", choices=self.PER_NETWORK_SCRIPTS)
         run_group.add_argument("--save-output-fpath", "-o", default=None, help="Outputs a pickled NetworkResult object. See networks.py for definition.")
+
+
+class BenchmarkAction(NetworkScriptAction):
+    def execute(self, args: argparse.Namespace):
+        module = self.load_script(args.script, args)
+        module.RUN_CMD._parser = self.parser
+
+        old_path = os.getcwd()
+        # Execute script in each relevant folder
+        try:
+            os.chdir(args.network)
+            results = module.RUN_CMD.run_benchmark()
+        finally:
+            os.chdir(old_path)
+
+        # Output to terminal
+        print(results)
+
+        return 0
+
+    def add_args(self, parser: argparse.ArgumentParser):
+        super().add_args(parser)
+        run_group = parser.add_argument_group("benchmark args")
+        run_group.add_argument("script", choices=self.PER_NETWORK_SCRIPTS)
 
 
 class CompareAction(NetworkScriptAction):
@@ -213,6 +238,7 @@ def get_action(
         WRAPPER_COMPARE_ACTION: CompareAction,
         WRAPPER_LIST_ACTION: ListAction,
         WRAPPER_RUN_ACTION: RunAction,
+        WRAPPER_BENCHMARK_ACTION: BenchmarkAction,
     }[action_name](networks, parser)
 
 

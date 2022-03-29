@@ -22,7 +22,11 @@ Utils specific to T5 network.
 # torch
 import torch
 
-# numpy
+# from HuggingFace transformers
+from transformers.generation_logits_process import (
+    MinLengthLogitsProcessor,
+    LogitsProcessorList,
+)
 from transformers.generation_stopping_criteria import (
     MaxLengthCriteria,
     StoppingCriteriaList,
@@ -50,9 +54,7 @@ def decoder_inference(
             input_ids=input_ids, encoder_hidden_states=encoder_last_hidden_state
         )
 
-    decoder_e2e_median_time = measure_python_inference_code(
-        decoder_stmt, number=timing_profile.number, iterations=timing_profile.iterations
-    )
+    decoder_e2e_median_time = measure_python_inference_code(decoder_stmt, timing_profile)
 
     return (decoder_stmt(), decoder_e2e_median_time)
 
@@ -60,9 +62,7 @@ def decoder_inference(
 @use_cuda
 def encoder_inference(t5_encoder, input_ids, timing_profile, use_cuda=True):
     encoder_stmt = lambda: t5_encoder(input_ids=input_ids)
-    encoder_e2e_median_time = measure_python_inference_code(
-        encoder_stmt, number=timing_profile.number, iterations=timing_profile.iterations
-    )
+    encoder_e2e_median_time = measure_python_inference_code(encoder_stmt, timing_profile)
 
     return (encoder_stmt(), encoder_e2e_median_time)
 
@@ -78,8 +78,16 @@ def full_inference_greedy(
     max_length,
     batch_size=1,
     use_cuda=True,
+    early_stopping=True,
 ):
     stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length)])
+    if early_stopping:
+        logits_processor = LogitsProcessorList([])
+    else:
+        logits_processor = LogitsProcessorList([
+            MinLengthLogitsProcessor(max_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
+        ])
+
     decoder_input_ids = torch.full(
         (batch_size, 1), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
     )
@@ -95,6 +103,7 @@ def full_inference_greedy(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_last_hidden_state,
             stopping_criteria=stopping_criteria,
+            logits_processor=logits_processor,
         )
 
     # With e2e we can opt to bind inputs only once for hidden states for optimization
@@ -105,6 +114,7 @@ def full_inference_greedy(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_last_hidden_state,
             stopping_criteria=stopping_criteria,
+            logits_processor=logits_processor,
         )
 
     measurement_function = _e2e
@@ -112,10 +122,6 @@ def full_inference_greedy(
         t5_decoder.set_return_device("cuda" if use_cuda else "cpu")
         measurement_function = _e2e_trt
 
-    full_e2e_median_time = measure_python_inference_code(
-        measurement_function,
-        number=timing_profile.number,
-        iterations=timing_profile.iterations,
-    )
+    full_e2e_median_time = measure_python_inference_code(measurement_function, timing_profile)
 
     return (measurement_function(), full_e2e_median_time)

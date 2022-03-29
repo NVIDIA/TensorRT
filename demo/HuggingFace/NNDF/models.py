@@ -21,7 +21,7 @@ File for containing model file abstraction. Useful for generating models.
 
 import os
 from abc import ABCMeta, abstractmethod
-from typing import Union
+from typing import Union, List
 from shutil import copytree, rmtree
 
 # polygraphy
@@ -29,6 +29,7 @@ from polygraphy.backend.trt import (
     network_from_onnx_path,
     engine_from_network,
     save_engine,
+    Profile,
 )
 
 from polygraphy.backend.trt import CreateConfig
@@ -88,7 +89,11 @@ class ModelFileConverter:
         )
 
     def onnx_to_trt(
-        self, output_fpath: str, input_fpath: str, network_metadata: NetworkMetadata, batch_size: int = 1
+        self,
+        output_fpath: str,
+        input_fpath: str,
+        network_metadata: NetworkMetadata,
+        profiles: List[Profile],
     ):
         """
         Converts ONNX file to TRT engine.
@@ -99,23 +104,29 @@ class ModelFileConverter:
             output_fpath (str): File location of the generated ONNX file.
             input_fpath (str): Input file location of the generated ONNX file.
             network_metadata (NetworkMetadata): Network metadata of the network being converted.
+            profiles (List[polygraphy.backend.trt.Profile]): The optimization profiles used to build the engine.
 
         Returns:
             TRTEngineFile: Newly generated engine.
         """
-        result = self.trt_engine_class(output_fpath, network_metadata, batch_size=batch_size)
+        result = self.trt_engine_class(output_fpath, network_metadata)
+
+        G_LOGGER.info("Using optimization profiles: {:}".format(profiles))
+
         self.trt_inference_config = CreateConfig(
             fp16=network_metadata.precision.fp16,
             max_workspace_size=result.DEFAULT_TRT_WORKSPACE_MB * 1024 * 1024,
-            profiles=result.get_dynamic_shape_profiles(),
+            profiles=profiles,
             obey_precision_constraints=result.use_obey_precision_constraints()
         )
 
-        g_logger_verbosity = (
-            PG_LOGGER.EXTRA_VERBOSE
-            if G_LOGGER.level == G_LOGGER.DEBUG
-            else PG_LOGGER.WARNING
-        )
+        if G_LOGGER.level == G_LOGGER.DEBUG:
+            g_logger_verbosity = PG_LOGGER.EXTRA_VERBOSE
+        elif G_LOGGER.level == G_LOGGER.INFO:
+            g_logger_verbosity = PG_LOGGER.INFO
+        else:
+            g_logger_verbosity = PG_LOGGER.WARNING
+
         with PG_LOGGER.verbosity(g_logger_verbosity):
             network_definition = result.get_network_definition(network_from_onnx_path(input_fpath))
 
@@ -205,6 +216,7 @@ class NNModelFile(metaclass=ABCMeta):
         output_fpath: str,
         converter: ModelFileConverter = None,
         force_overwrite: bool = False,
+        profiles: List[Profile] = [],
     ):
         """
         Converts current model into an TRT engine.
@@ -215,6 +227,7 @@ class NNModelFile(metaclass=ABCMeta):
             converter (ModelFileConverter): Class to convert current model instance into another.
             force_overwrite (bool): If the file already exists, tell whether or not to overwrite.
                                     Since torch models folders, can potentially erase entire folders.
+            profiles (List[polygraphy.backend.trt.Profile]): The optimization profiles used to build the engine.
 
         Returns:
             TRTEngineFile: Newly generated ONNXModelFile
@@ -407,7 +420,7 @@ class ONNXModelFile(NNModelFile):
         output_fpath: str,
         converter: ModelFileConverter = None,
         force_overwrite: bool = False,
-        batch_size: int = 1,
+        profiles = [],
     ):
         """
         Converts the onnx model into an trt engine.
@@ -417,23 +430,26 @@ class ONNXModelFile(NNModelFile):
             converter (ModelFileConverter): Class to convert current model instance into another.
             force_overwrite (bool): If the file already exists, tell whether or not to overwrite.
                                     Since torch models folders, can potentially erase entire folders.
+            profiles (List[polygraphy.backend.trt.Profile]): The optimization profiles used to build the engine.
         Return:
             (converter.trt_engine_class): Returns a converted instance of TRTEngineFile.
         """
         converter = self.default_converter if converter is None else converter()
+
         # TODO: Need to check if the old engine file is compatible with current setting
         if not force_overwrite and os.path.exists(output_fpath):
-            return converter.trt_engine_class(output_fpath, self.network_metadata, batch_size)
+            return converter.trt_engine_class(output_fpath, self.network_metadata)
 
-        return converter.onnx_to_trt(output_fpath, self.fpath, self.network_metadata, batch_size=batch_size)
+        return converter.onnx_to_trt(
+            output_fpath,
+            self.fpath,
+            self.network_metadata,
+            profiles,
+        )
 
 
 class TRTEngineFile(NNModelFile):
     DEFAULT_TRT_WORKSPACE_MB = 3072
-
-    @abstractmethod
-    def get_dynamic_shape_profiles(self):
-        pass
 
     @abstractmethod
     def use_obey_precision_constraints(self):
@@ -450,15 +466,9 @@ class TRTEngineFile(NNModelFile):
         model: str,
         default_converter: ModelFileConverter = None,
         network_metadata: NetworkMetadata = None,
-        batch_size: int = 1
     ):
         super().__init__(default_converter, network_metadata)
         self.fpath = model
-        self.batch_size = batch_size
-
-        if os.path.exists(self.fpath):
-            # Engine already exists, do nothing
-            return
 
     def cleanup(self) -> None:
         G_LOGGER.debug("Removing saved engine model from location: {}".format(self.fpath))
