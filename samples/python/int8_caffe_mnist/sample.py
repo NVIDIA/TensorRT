@@ -80,7 +80,7 @@ def check_accuracy(context, batch_size, test_set, test_labels):
         [output] = common.do_inference(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream, batch_size=effective_batch_size)
 
         # Use argmax to get predictions and then check accuracy
-        preds = np.argmax(output.reshape(32, 10)[0:effective_batch_size], axis=1)
+        preds = np.argmax(output.reshape(batch_size, 10)[0:effective_batch_size], axis=1)
         labels = test_labels[start_idx:start_idx + effective_batch_size]
         num_total += effective_batch_size
         num_correct += np.count_nonzero(np.equal(preds, labels))
@@ -96,7 +96,7 @@ def main():
     # Now we create a calibrator and give it the location of our calibration data.
     # We also allow it to cache calibration data for faster engine building.
     calibration_cache = "mnist_calibration.cache"
-    calib = MNISTEntropyCalibrator(test_set, cache_file=calibration_cache)
+    calib = MNISTEntropyCalibrator(train_set, cache_file=calibration_cache)
 
     # Inference batch size can be different from calibration batch size.
     batch_size = 32
