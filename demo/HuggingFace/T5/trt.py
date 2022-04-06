@@ -456,10 +456,10 @@ class T5TRT(TRTInferenceCommand):
 
             self.t5_trt_encoder_engine = T5EncoderONNXFile(
                 encoder_onnx_fpath, metadata
-            ).as_trt_engine(encoder_onnx_fpath + ".engine", batch_size=batch_size)
+            ).as_trt_engine(encoder_onnx_fpath + "-bs{}.engine".format(batch_size), batch_size=batch_size)
             self.t5_trt_decoder_engine = T5DecoderONNXFile(
                 decoder_onnx_fpath, metadata
-            ).as_trt_engine(decoder_onnx_fpath + ".engine", batch_size=batch_size)
+            ).as_trt_engine(decoder_onnx_fpath + "-bs{}.engine".format(batch_size), batch_size=batch_size)
             tfm_config = T5Config(
                 use_cache=metadata.other.kv_cache,
                 num_layers=T5ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
