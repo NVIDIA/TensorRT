@@ -427,7 +427,7 @@ def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_
         # 1. disable cudnn tactic
         # 2. load global timing cache
         if trt_version[0] >= 8:
-            tactic_source = 1 << int(trt.TacticSource.CUBLAS) | 1 << int(trt.TacticSource.CUBLAS_LT)
+            tactic_source = builder_config.get_tactic_sources() & ~(1 << int(trt.TacticSource.CUDNN))
             builder_config.set_tactic_sources(tactic_source)
             if config.timing_cache != None:
                 if os.path.exists(config.timing_cache):
