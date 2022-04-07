@@ -17,14 +17,16 @@
 
 #include <iostream>
 #include <cuda_runtime_api.h>
+#include <cuda_fp16.h>
 
 const int PILLARS_PER_BLOCK = 64;
 const int PILLAR_FEATURE_SIZE = 64;
 
-__global__ void scatterBEV_kernel(const float *pillar_features_data,
+template <typename Element>
+__global__ void scatterBEV_kernel(const Element *pillar_features_data,
           const unsigned int *coords_data, const unsigned int *params_data,
           unsigned int featureX, unsigned int featureY,
-          float *spatial_feature_data)
+          Element *spatial_feature_data)
 {
     int pillar_idx = blockIdx.x * PILLARS_PER_BLOCK + threadIdx.x;
     int valid_pillars_inBlock = PILLARS_PER_BLOCK;
@@ -35,7 +37,7 @@ __global__ void scatterBEV_kernel(const float *pillar_features_data,
       valid_pillars_inBlock = num_pillars % PILLARS_PER_BLOCK;
     }
     valid_pillars_inBlock = (valid_pillars_inBlock==0) ? PILLARS_PER_BLOCK : valid_pillars_inBlock;
-    __shared__ float pillarSM[PILLARS_PER_BLOCK][PILLAR_FEATURE_SIZE]; //pillar*64
+    __shared__ Element pillarSM[PILLARS_PER_BLOCK][PILLAR_FEATURE_SIZE]; //pillar*64
     for (int i = 0; i < valid_pillars_inBlock; i++)
     {
       pillarSM[i][threadIdx.x] = pillar_features_data[ (blockIdx.x * PILLARS_PER_BLOCK +i)*PILLAR_FEATURE_SIZE + threadIdx.x];
@@ -51,21 +53,22 @@ __global__ void scatterBEV_kernel(const float *pillar_features_data,
     }
 }
 
-void pillarScatterKernelLaunch(
+template <typename Element>
+int pillarScatterKernelLaunch(
   int batch_size,
   int max_pillar_num,
   int num_features,
-  const float *pillar_features_data,
+  const Element *pillar_features_data,
   const unsigned int *coords_data,
   const unsigned int *params_data,
   unsigned int featureX, unsigned int featureY,
-  float *spatial_feature_data,
+  Element *spatial_feature_data,
   cudaStream_t stream)
 {
     dim3 blocks( (featureX*featureY+PILLARS_PER_BLOCK-1)/PILLARS_PER_BLOCK);
     dim3 threads(PILLARS_PER_BLOCK);
     for (int b = 0; b < batch_size; b++) {
-      scatterBEV_kernel<<<blocks, threads, 0, stream>>>
+      scatterBEV_kernel<Element><<<blocks, threads, 0, stream>>>
         (pillar_features_data + b*max_pillar_num*num_features,
          coords_data + b*max_pillar_num*4,
          params_data + b,
@@ -76,7 +79,30 @@ void pillarScatterKernelLaunch(
       auto err = cudaGetLastError();
       if (cudaSuccess != err) {
           fprintf(stderr, "CUDA kernel failed : %s\n", cudaGetErrorString(err));
-          exit(-1);
+          return -1;
       }
     }
+    return 0;
 }
+
+template int pillarScatterKernelLaunch<half>(
+  int batch_size,
+  int max_pillar_num,
+  int num_features,
+  const half *pillar_features_data,
+  const unsigned int *coords_data,
+  const unsigned int *params_data,
+  unsigned int featureX, unsigned int featureY,
+  half *spatial_feature_data,
+  cudaStream_t stream);
+
+template int pillarScatterKernelLaunch<float>(
+  int batch_size,
+  int max_pillar_num,
+  int num_features,
+  const float *pillar_features_data,
+  const unsigned int *coords_data,
+  const unsigned int *params_data,
+  unsigned int featureX, unsigned int featureY,
+  float *spatial_feature_data,
+  cudaStream_t stream);

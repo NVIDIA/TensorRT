@@ -52,24 +52,16 @@ PillarScatterPlugin::PillarScatterPlugin(size_t h, size_t w)
 {
 }
 
-PillarScatterPlugin::PillarScatterPlugin(size_t h, size_t w, size_t channels)
-  : feature_y_size_(h), feature_x_size_(w), featureNum_(channels)
-{
-}
-
 PillarScatterPlugin::PillarScatterPlugin(const void* data, size_t length)
 {
     const char* d = reinterpret_cast<const char*>(data);
     feature_y_size_ = readFromBuffer<size_t>(d);
     feature_x_size_ = readFromBuffer<size_t>(d);
-    featureNum_ = readFromBuffer<size_t>(d);
 }
 
 nvinfer1::IPluginV2DynamicExt* PillarScatterPlugin::clone() const noexcept
 {
-    auto* plugin = new PillarScatterPlugin(
-        feature_y_size_, feature_x_size_, featureNum_
-    );
+    auto* plugin = new PillarScatterPlugin(feature_y_size_, feature_x_size_);
     plugin->setPluginNamespace(mNamespace.c_str());
     return plugin;
 }
@@ -96,7 +88,7 @@ bool PillarScatterPlugin::supportsFormatCombination(
     const PluginTensorDesc& in = inOut[pos];
     if (pos == 0)
     {
-        return (in.type == nvinfer1::DataType::kFLOAT) && (in.format == TensorFormat::kLINEAR);
+        return (in.type == nvinfer1::DataType::kFLOAT || in.type == nvinfer1::DataType::kHALF) && (in.format == TensorFormat::kLINEAR);
     }
     if (pos == 1)
     {
@@ -108,7 +100,7 @@ bool PillarScatterPlugin::supportsFormatCombination(
     }
     if (pos == 3)
     {
-        return (in.type == nvinfer1::DataType::kFLOAT) && (in.format == TensorFormat::kLINEAR);
+        return (in.type == inOut[0].type) && (in.format == TensorFormat::kLINEAR || in.format == TensorFormat::kHWC8);
     }
     return false;
 }
@@ -116,7 +108,7 @@ bool PillarScatterPlugin::supportsFormatCombination(
 void PillarScatterPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
     const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept
 {
-    featureNum_ = in[0].desc.dims.d[2];
+    return;
 }
 
 size_t PillarScatterPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
@@ -128,30 +120,70 @@ int PillarScatterPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
     const nvinfer1::PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
-  int batchSize = inputDesc[0].dims.d[0];
-  int maxPillarNum = inputDesc[0].dims.d[1];
-  int numFeatures = inputDesc[0].dims.d[2];
-  const float *pillar_features_data = (const float *)(inputs[0]);
-  const unsigned int *coords_data = (const unsigned int *)(inputs[1]);
-  const unsigned int *params_data = (const unsigned int *)(inputs[2]);
-  unsigned int featureNum = featureNum_;
-  unsigned int featureY = feature_y_size_;
-  unsigned int featureX = feature_x_size_;
-  float *spatial_feature_data = (float *)(outputs[0]);
-  cudaMemsetAsync(spatial_feature_data, 0, batchSize*featureNum*featureY*featureX * sizeof(float), stream);
-  pillarScatterKernelLaunch(
-      batchSize,
-      maxPillarNum,
-      numFeatures,
-      pillar_features_data,
-      coords_data,
-      params_data,
-      featureX,
-      featureY,
-      spatial_feature_data,
-      stream
-    );
-  return 0;
+    try
+    {
+        int batchSize = inputDesc[0].dims.d[0];
+        int maxPillarNum = inputDesc[0].dims.d[1];
+        int numFeatures = inputDesc[0].dims.d[2];
+        
+        nvinfer1::DataType inputType = inputDesc[0].type;
+
+        auto coords_data = static_cast<const unsigned int *>(inputs[1]);
+        auto params_data = static_cast<const unsigned int *>(inputs[2]);
+
+        unsigned int featureY = feature_y_size_;
+        unsigned int featureX = feature_x_size_;
+
+        int status = -1;
+
+        if(inputType == nvinfer1::DataType::kHALF){
+            auto pillar_features_data = static_cast<const half *>(inputs[0]);
+            auto spatial_feature_data = static_cast<half *>(outputs[0]);
+            cudaMemsetAsync(spatial_feature_data, 0, batchSize*numFeatures*featureY*featureX * sizeof(half), stream);
+            status = pillarScatterKernelLaunch<half>(
+                batchSize,
+                maxPillarNum,
+                numFeatures,
+                pillar_features_data,
+                coords_data,
+                params_data,
+                featureX,
+                featureY,
+                spatial_feature_data,
+                stream
+                );
+            ASSERT(status == STATUS_SUCCESS);
+            return status;
+        }
+        else if(inputType == nvinfer1::DataType::kFLOAT){
+            auto pillar_features_data = static_cast<const float *>(inputs[0]);
+            auto spatial_feature_data = static_cast<float *>(outputs[0]);
+            cudaMemsetAsync(spatial_feature_data, 0, batchSize*numFeatures*featureY*featureX * sizeof(float), stream);
+            status = pillarScatterKernelLaunch<float>(
+                batchSize,
+                maxPillarNum,
+                numFeatures,
+                pillar_features_data,
+                coords_data,
+                params_data,
+                featureX,
+                featureY,
+                spatial_feature_data,
+                stream
+                );
+            ASSERT(status == STATUS_SUCCESS);
+            return status;
+        }
+        else{
+            ASSERT(status == STATUS_SUCCESS);
+            return status;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
+    return -1;
 }
 
 nvinfer1::DataType PillarScatterPlugin::getOutputDataType(
@@ -194,7 +226,6 @@ void PillarScatterPlugin::serialize(void* buffer) const noexcept
     char* d = reinterpret_cast<char*>(buffer);
     writeToBuffer<size_t>(d, feature_y_size_);
     writeToBuffer<size_t>(d, feature_x_size_);
-    writeToBuffer<size_t>(d, featureNum_);
 }
 
 void PillarScatterPlugin::destroy() noexcept

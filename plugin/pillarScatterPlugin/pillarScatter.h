@@ -35,7 +35,6 @@ public:
     PillarScatterPlugin() = delete;
     PillarScatterPlugin(const void* data, size_t length);
     PillarScatterPlugin(size_t h, size_t w);
-    PillarScatterPlugin(size_t h, size_t w, size_t channels);
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
     nvinfer1::DimsExprs getOutputDimensions(int outputIndex, 
@@ -69,8 +68,6 @@ public:
 
 private:
     std::string mNamespace;
-    // the num -- output channels size of the 2D backbone network
-    size_t featureNum_;
     // the y -- output size of the 2D backbone network
     size_t feature_y_size_;
     // the x -- output size of the 2D backbone network
