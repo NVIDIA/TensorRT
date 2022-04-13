@@ -99,6 +99,8 @@ class Graph(object):
         doc_string=None,
         opset=None,
         import_domains=None,
+        producer_name: str = None,
+        producer_version: str = None,
     ):
         """
         Args:
@@ -108,6 +110,8 @@ class Graph(object):
             name (str): The name of the graph. Defaults to "onnx_graphsurgeon_graph".
             doc_string (str): A doc_string for the graph. Defaults to "".
             opset (int): The ONNX opset to use when exporting this graph.
+            producer_name (str): The name of the tool used to generate the model. Defaults to "".
+            producer_version (str): The version of the generating tool. Defaults to "".
         """
         self.nodes = misc.default_value(nodes, [])
         self.inputs = list(misc.default_value(inputs, []))
@@ -118,6 +122,8 @@ class Graph(object):
 
         self.doc_string = misc.default_value(doc_string, "")
         self.opset = misc.default_value(opset, Graph.DEFAULT_OPSET)
+        self.producer_name = misc.default_value(producer_name, "")
+        self.producer_version = misc.default_value(producer_version, "")
         self.import_domains = import_domains
         # Printing graphs can be very expensive
         G_LOGGER.ultra_verbose(lambda: "Created Graph: {:}".format(self))
@@ -502,10 +508,10 @@ class Graph(object):
         import onnxruntime as rt
         from onnx_graphsurgeon.exporters.onnx_exporter import export_onnx
 
-        ORT_PROVIDERS=['CPUExecutionProvider']
         PARTITIONING_MODES = [None, "basic", "recursive"]
         if partitioning not in PARTITIONING_MODES:
             G_LOGGER.critical("Argument for parameter 'partitioning' must be one of: {:}".format(PARTITIONING_MODES))
+        ORT_PROVIDERS = ["CPUExecutionProvider"]
 
         # First perform shape tensor cast elision on the graph prior to other constant folding
         # Search for Cast(s) (from int -> float) -> intermediate operator (with float constants) -> Cast(s) (back to int)
@@ -796,7 +802,9 @@ class Graph(object):
 
                 try:
                     # Determining types is not trivial, and ONNX-RT does its own type inference.
-                    sess = rt.InferenceSession(export_onnx(part, do_type_check=False).SerializeToString(), providers=ORT_PROVIDERS)
+                    sess = rt.InferenceSession(
+                        export_onnx(part, do_type_check=False).SerializeToString(), providers=ORT_PROVIDERS
+                    )
                     values = sess.run(names, {})
                 except Exception as err:
                     G_LOGGER.warning("Inference failed for subgraph: {:}. Note: Error was:\n{:}".format(part.name, err))
@@ -843,7 +851,9 @@ class Graph(object):
             else:
                 names = [t.name for t in graph_clone.outputs]
                 try:
-                    sess = rt.InferenceSession(export_onnx(graph_clone, do_type_check=False).SerializeToString(), providers=ORT_PROVIDERS)
+                    sess = rt.InferenceSession(
+                        export_onnx(graph_clone, do_type_check=False).SerializeToString(), providers=ORT_PROVIDERS
+                    )
                     values = sess.run(names, {})
                     constant_values.update({name: val for name, val in zip(names, values)})
                 except Exception as err:
