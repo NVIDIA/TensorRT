@@ -1,5 +1,24 @@
 # TensorRT OSS Release Changelog
 
+## [22.04](https://github.com/NVIDIA/TensorRT/releases/tag/22.04) - 2022-04-13
+### Added
+- TensorRT Engine Explorer v0.1.0 [README](tools/experimental/trt-engine-explorer/README.md)
+- Detectron 2 Mask R-CNN R50-FPN python [sample](samples/python/detectron2/README.md)
+- Model export script for sampleOnnxMnistCoordConvAC
+
+### Changed
+- Update base TensorRT version to 8.2.4.2
+- Updated onnx-graphsurgeon v0.3.17 [CHANGELOG](tools/onnx-graphsurgeon/CHANGELOG.md)
+- `PyramidROIAlign` plugin refactor and bug fixes
+- Fixed `MultilevelCropAndResize` crashes on Windows
+- [#1583](https://github.com/NVIDIA/TensorRT/issues/1583) - sublicense ieee/half.h under Apache2
+- Updated demo/BERT performance tables for rel-8.2
+- Various bugfixes in demos - BERT, Tacotron2 and HuggingFace GPT/T5 notebooks
+- Cleaned up sample READMEs
+
+### Removed
+- sampleNMT removed from samples
+
 ## [22.03](https://github.com/NVIDIA/TensorRT/releases/tag/22.03) - 2022-03-23
 ### Added
 - EfficientDet sample enhancements
