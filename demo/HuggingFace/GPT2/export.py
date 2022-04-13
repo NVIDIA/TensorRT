@@ -166,7 +166,10 @@ class GPT2Converter(ModelFileConverter):
 
         # Exports to ONNX
         opt_args={}
-        if torch.__version__ < '1.11':
+
+        version_major = int((torch.__version__).split('.')[0])
+        version_minor = int((torch.__version__).split('.')[1])
+        if version_major < 1 or (version_major == 1 and version_minor < 11):
             opt_args['use_external_data_format'] = True
         torch.onnx._export(
             gpt2_model,
