@@ -14,7 +14,7 @@
 - Fixed `MultilevelCropAndResize` crashes on Windows
 - [#1583](https://github.com/NVIDIA/TensorRT/issues/1583) - sublicense ieee/half.h under Apache2
 - Updated demo/BERT performance tables for rel-8.2
-- Fix python hangs at IndexErrors when when TF is imported after TensorRT
+- [#1774](https://github.com/NVIDIA/TensorRT/issues/1774) Fix python hangs at IndexErrors when TF is imported after TensorRT
 - Various bugfixes in demos - BERT, Tacotron2 and HuggingFace GPT/T5 notebooks
 - Cleaned up sample READMEs
 
