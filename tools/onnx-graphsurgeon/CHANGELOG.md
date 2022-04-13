@@ -3,6 +3,16 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.17 (2021-03-18)
+### Added
+- Added `producer_name` and `producer_version` to `Graph` class so that they are preserved during model import/export.
+
+
+## v0.3.16 (2022-02-23)
+### Fixed
+- Fixed a bug where `Graph.fold_constants()` was not providing a value for the `providers` parameter in `onnxruntime.InferenceSession`.
+
+
 ## v0.3.15 (2022-01-18)
 ### Fixed
 - Fixed a bug where `Graph.toposort()` would not consider implicit inputs of nodes with subgraphs.

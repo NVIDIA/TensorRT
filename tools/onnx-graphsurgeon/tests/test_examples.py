@@ -79,7 +79,7 @@ def infer_model(path):
 
     output_names = [out.name for out in graph.outputs]
 
-    sess = onnxruntime.InferenceSession(model.SerializeToString())
+    sess = onnxruntime.InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
     outputs = sess.run(output_names, feed_dict)
     G_LOGGER.info("Inference outputs: {:}".format(outputs))
     return outputs
