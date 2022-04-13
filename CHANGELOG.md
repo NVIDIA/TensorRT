@@ -7,12 +7,14 @@
 - Model export script for sampleOnnxMnistCoordConvAC
 
 ### Changed
-- Update base TensorRT version to 8.2.4.2
+- Updated base TensorRT version to 8.2.4.2
+- Updated copyright headers with SPDX identifiers
 - Updated onnx-graphsurgeon v0.3.17 [CHANGELOG](tools/onnx-graphsurgeon/CHANGELOG.md)
 - `PyramidROIAlign` plugin refactor and bug fixes
 - Fixed `MultilevelCropAndResize` crashes on Windows
 - [#1583](https://github.com/NVIDIA/TensorRT/issues/1583) - sublicense ieee/half.h under Apache2
 - Updated demo/BERT performance tables for rel-8.2
+- Fix python hangs at IndexErrors when when TF is imported after TensorRT
 - Various bugfixes in demos - BERT, Tacotron2 and HuggingFace GPT/T5 notebooks
 - Cleaned up sample READMEs
 
