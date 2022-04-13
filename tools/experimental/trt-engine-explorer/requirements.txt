@@ -1,0 +1,17 @@
+setuptools # for qgrid
+wheel # for qgrid
+numpy
+pandas
+plotly
+qgrid
+graphviz
+jupyter
+netron
+openpyxl # for excel reporting
+ipywidgets
+ipyfilechooser
+jupyterlab
+jupyter-dash
+pytest
+dtale
+onnx
