@@ -15,15 +15,35 @@
 # limitations under the License.
 #
 
-import torch
 import onnx
+import onnx_graphsurgeon as gs
 import argparse
 
 COORD_CONV_AC_OP_TYPE = 'CoordConvAC'
-COORD_CONV_OP_TYPE = 'Conv'
+
+# Here we'll register a function to do all the subgraph-replacement heavy-lifting
+@gs.Graph.register()
+def replace_with_coordconvac(self, inputs, outputs):
+    # Disconnect output nodes of all input tensors
+    for inp in inputs:
+        inp.outputs.clear()
+
+    # Disconnet input nodes of all output tensors
+    for out in outputs:
+        out.inputs.clear()
+
+    # Insert the new node.
+    return self.layer(op=COORD_CONV_AC_OP_TYPE, inputs=inputs, outputs=outputs)
 
 
 def main():
+    '''
+    Replace each unfolded CoordConv graph with a single CoordConv node.  
+    From
+    ... -> (CoordConv subgraph) -> Conv -> Relu -> (CoordConv subgraph) -> ...
+    To
+    ... -> CoordConv -> Conv -> Relu -> CoordConv -> ...
+    '''
     # Configurable parameters from command line
     parser = argparse.ArgumentParser(description='ONNX Modifying Example')
     parser.add_argument('--onnx', default="mnist_cc.onnx",
@@ -33,64 +53,25 @@ def main():
     args = parser.parse_args()
     
     # Load ONNX file
-    model = onnx.load(args.onnx)
-    
-    # Retrieve graph_def
-    graph = model.graph
+    graph = gs.import_onnx(onnx.load(args.onnx))
 
-    node_input_new = 'conv1' 
+    tmap = graph.tensors()
+    # You can figure out the input and output tensors using Netron.
+    inputs = [tmap["conv1"]]
+    outputs = [tmap["90"]]
+    graph.replace_with_coordconvac(inputs, outputs)
 
-    counter_conv_nodes_updated = 0
-    nodes_to_delete = []
+    inputs = [tmap["92"]]
+    outputs = [tmap["170"]]
+    graph.replace_with_coordconvac(inputs, outputs)
 
-    # Iterate through all the nodes
-    for i, node in enumerate(graph.node):
-        
-        if counter_conv_nodes_updated == 2:
-            break
+    # Remove the now-dangling subgraph.
+    graph.cleanup().toposort()
 
-        if node.op_type == 'Conv':            
-            # Update inputs of any Conv node and converting Conv->CoordConv
-            graph.node[i].input.remove(graph.node[i].input[0])
-            graph.node[i].input.insert(0, node_input_new)
-            graph.node[i].op_type = COORD_CONV_OP_TYPE
-            counter_conv_nodes_updated += 1
-        elif node.op_type == 'Relu':
-            # Saving output of previous node 
-            node_input_new = graph.node[i].output[0]
-        else:
-            # Add node to list of removable nodes
-            nodes_to_delete.append(i)
-    
-    for i in nodes_to_delete[::-1]:
-        # Remove unnecessary nodes
-        n = graph.node[i]
-        graph.node.remove(n)
-    
-    # insert AC nodes 
-    i = 0
-    while i < len(graph.node):
-        if graph.node[i].op_type == COORD_CONV_OP_TYPE:
-            # Create an ac node
-            node_ac = onnx.NodeProto()
-            node_ac.op_type = COORD_CONV_AC_OP_TYPE
-            node_ac.output.insert(0, f"ac_output_{i}")
-            node_ac.input.insert(0, graph.node[i].input[0])
-            graph.node[i].input[0] = f"ac_output_{i}"
-            graph.node.insert(i, node_ac)
-            i += 1
-        i += 1
+    # Save the modified model.
+    onnx.save(gs.export_onnx(graph), "mnist_with_coordconv.onnx")
 
-    # Generate model_cropped from modified graph
-    model_cropped = onnx.helper.make_model(graph)
-
-    print(onnx.helper.printable_graph(model_cropped.graph))
-
-    print("Inputs:",  model_cropped.graph.node[0].input,
-          "Outputs:", model_cropped.graph.node[-1].output)
-
-    # Save the serialized model
-    onnx.save(model_cropped, args.output)
-        
 if __name__ == '__main__':
     main()
+
+    
