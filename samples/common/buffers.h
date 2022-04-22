@@ -319,48 +319,6 @@ public:
     }
 
     //!
-    //! \brief Dump host buffer with specified tensorName to ostream.
-    //!        Prints error message to std::ostream if no such tensor can be found.
-    //!
-    void dumpBuffer(std::ostream& os, const std::string& tensorName)
-    {
-        int index = mEngine->getBindingIndex(tensorName.c_str());
-        if (index == -1)
-        {
-            os << "Invalid tensor name" << std::endl;
-            return;
-        }
-        void* buf = mManagedBuffers[index]->hostBuffer.data();
-        size_t bufSize = mManagedBuffers[index]->hostBuffer.nbBytes();
-        nvinfer1::Dims bufDims = mEngine->getBindingDimensions(index);
-        size_t rowCount = static_cast<size_t>(bufDims.nbDims > 0 ? bufDims.d[bufDims.nbDims - 1] : mBatchSize);
-        int leadDim = mBatchSize;
-        int* trailDims = bufDims.d;
-        int nbDims = bufDims.nbDims;
-
-        // Fix explicit Dimension networks
-        if (!leadDim && nbDims > 0)
-        {
-            leadDim = bufDims.d[0];
-            ++trailDims;
-            --nbDims;
-        }
-
-        os << "[" << leadDim;
-        for (int i = 0; i < nbDims; i++)
-            os << ", " << trailDims[i];
-        os << "]" << std::endl;
-        switch (mEngine->getBindingDataType(index))
-        {
-        case nvinfer1::DataType::kINT32: print<int32_t>(os, buf, bufSize, rowCount); break;
-        case nvinfer1::DataType::kFLOAT: print<float>(os, buf, bufSize, rowCount); break;
-        case nvinfer1::DataType::kHALF: print<half_float::half>(os, buf, bufSize, rowCount); break;
-        case nvinfer1::DataType::kINT8: assert(0 && "Int8 network-level input and output is not supported"); break;
-        case nvinfer1::DataType::kBOOL: assert(0 && "Bool network-level input and output are not supported"); break;
-        }
-    }
-
-    //!
     //! \brief Templated print function that dumps buffers of arbitrary type to std::ostream.
     //!        rowCount parameter controls how many elements are on each line.
     //!        A rowCount of 1 means that there is only 1 element on each line.
