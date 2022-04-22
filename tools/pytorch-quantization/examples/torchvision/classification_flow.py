@@ -39,7 +39,7 @@ from pytorch_quantization import quant_modules
 
 import onnxruntime
 import numpy as np
-import models
+import models.classification as models
 
 from prettytable import PrettyTable
 
