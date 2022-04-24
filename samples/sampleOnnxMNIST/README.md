@@ -48,11 +48,6 @@ if (!parser->parseFromFile(model_file, static_cast<int>(sample::gLogger.getRepor
 }
 ```
 
-To view additional information about the network, including layer information and individual layer dimensions, issue the following call:
-```
-parser->reportParsingInfo();
-```
-
 After the TensorRT network is constructed by parsing the model, the TensorRT engine can be built to run inference.
 
 ### Building the engine
