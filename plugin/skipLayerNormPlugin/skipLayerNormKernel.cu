@@ -1,4 +1,4 @@
- /*
+/*
  * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -19,9 +19,9 @@
 #if CUDA_VERSION >= 10010
 
 #include "NvInfer.h"
-#include "bertCommon.h"
-#include "common.cuh"
-#include "serialize.hpp"
+#include "common/bertCommon.h"
+#include "common/common.cuh"
+#include "common/serialize.hpp"
 #include "skipLayerNormPlugin.h"
 
 #include <cassert>
@@ -29,6 +29,7 @@
 #include <vector>
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 
 namespace bert
 {
@@ -217,7 +218,7 @@ int computeSkipLayerNormDQQ(cudaStream_t stream, const int ld, const int n, cons
     const float dqScaleSkip, const float qScale)
 {
     // this must be true because n is the total size of the tensor
-    assert(n % ld == 0);
+    PLUGIN_ASSERT(n % ld == 0);
 
     const int gridSize = n / ld;
     // we're limited by the size of the parameters, i.e. 8-wide instead of 16
@@ -240,7 +241,7 @@ int computeSkipLayerNormDQQ(cudaStream_t stream, const int ld, const int n, cons
         gLogError << "SkipLayerNormDQQ - FATAL: unsupported hidden layer size: " << ld << std::endl;
         exit(0);
     }
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
 
     return 0;
 }
@@ -251,7 +252,7 @@ int computeSkipLayerNorm(cudaStream_t stream, const int ld, const int n, const T
 {
 
     // this must be true because n is the total size of the tensor
-    assert(n % ld == 0);
+    PLUGIN_ASSERT(n % ld == 0);
     const int gridSize = n / ld;
     constexpr int VPT = 16 / sizeof(T);
     if (ld <= 32)
@@ -276,7 +277,7 @@ int computeSkipLayerNorm(cudaStream_t stream, const int ld, const int n, const T
         skipLayerNormKernel<T, blockSize, hasBias>
             <<<gridSize, blockSize, 0, stream>>>(ld, input, skip, beta, gamma, output, bias);
     }
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
 
     return 0;
 }

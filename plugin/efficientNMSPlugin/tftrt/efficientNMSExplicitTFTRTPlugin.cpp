@@ -16,7 +16,7 @@
  */
 
 #include "efficientNMSExplicitTFTRTPlugin.h"
-#include "efficientNMSInference.h"
+#include "efficientNMSPlugin/efficientNMSInference.h"
 
 // This plugin provides CombinedNMS op compatibility for TF-TRT in Explicit Batch
 // and Dymamic Shape modes
@@ -107,32 +107,32 @@ IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::createPlugin(
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "max_output_size_per_class"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.numOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "max_total_size"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.numOutputBoxes = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "score_threshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "pad_per_class"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.padOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "clip_boxes"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.clipBoxes = *(static_cast<const int*>(fields[i].data));
             }
         }

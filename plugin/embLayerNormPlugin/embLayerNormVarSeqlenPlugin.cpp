@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-#include <cuda.h>
 #include <cstring>
+#include <cuda.h>
 #include <vector>
 
 #include "NvInfer.h"
+#include "common/serialize.hpp"
 #include "embLayerNormVarSeqlenPlugin.h"
-#include "serialize.hpp"
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 
 namespace bert
 {
@@ -64,10 +65,10 @@ EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(const std::stri
     , mType(type)
 {
     // Assuming Weights.count is the number of elements and not bytes
-    ASSERT(beta.count == gamma.count);
-    ASSERT(wordEmb.count % mLd == 0);
-    ASSERT(posEmb.count % mLd == 0);
-    ASSERT(tokEmb.count % mLd == 0);
+    PLUGIN_ASSERT(beta.count == gamma.count);
+    PLUGIN_ASSERT(wordEmb.count % mLd == 0);
+    PLUGIN_ASSERT(posEmb.count % mLd == 0);
+    PLUGIN_ASSERT(tokEmb.count % mLd == 0);
     mWordVocabSize = wordEmb.count / mLd;
     mPosVocabSize = posEmb.count / mLd;
     mTokVocabSize = tokEmb.count / mLd;
@@ -171,14 +172,14 @@ DimsExprs EmbLayerNormVarSeqlenPluginHFace::getOutputDimensions(
 {
     // Input should be input ids and token ids and cumulative seqlens
     // Output should be the embeddings tensor and mask indices
-    ASSERT(nbInputs == 4);
+    PLUGIN_ASSERT(nbInputs == 4);
 
-    ASSERT(inputs[0].nbDims == 1); // sum of all s
-    ASSERT(inputs[0].nbDims == inputs[1].nbDims);
+    PLUGIN_ASSERT(inputs[0].nbDims == 1); // sum of all s
+    PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
 
-    ASSERT(inputs[2].nbDims == 1); // B+1
+    PLUGIN_ASSERT(inputs[2].nbDims == 1); // B+1
 
-    ASSERT(outputIndex == 0 || outputIndex == 1);
+    PLUGIN_ASSERT(outputIndex == 0 || outputIndex == 1);
 
     if (outputIndex == 0)
     {
@@ -214,14 +215,14 @@ DimsExprs EmbLayerNormVarSeqlenPluginMTron::getOutputDimensions(
 {
     // Input should be input ids and token ids and cumulative seqlens
     // Output should be the embeddings tensor and mask indices
-    ASSERT(nbInputs == 4);
+    PLUGIN_ASSERT(nbInputs == 4);
 
-    ASSERT(inputs[0].nbDims == 1); // sum of all s
-    ASSERT(inputs[0].nbDims == inputs[1].nbDims);
+    PLUGIN_ASSERT(inputs[0].nbDims == 1); // sum of all s
+    PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
 
-    ASSERT(inputs[2].nbDims == 1); // B+1
+    PLUGIN_ASSERT(inputs[2].nbDims == 1); // B+1
 
-    ASSERT(outputIndex == 0 || outputIndex == 1);
+    PLUGIN_ASSERT(outputIndex == 0 || outputIndex == 1);
 
     DimsExprs ret;
     ret.nbDims = 4;
@@ -237,9 +238,9 @@ bool EmbLayerNormVarSeqlenPluginBase::supportsFormatCombination(
 {
     // The four inputs to this plugin input_ids, segment_ids, cu_seqlens and a dummy input with the
     // size of the max seq length in that order
-    ASSERT(nbInputs == 4);
+    PLUGIN_ASSERT(nbInputs == 4);
     // The two outputs of the plugin are embedding and the mask
-    ASSERT(nbOutputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 2);
 
     const PluginTensorDesc& desc = inOut[pos];
     if (desc.format != TensorFormat::kLINEAR)
@@ -276,24 +277,24 @@ void checkConfigurationInputs(const DynamicPluginTensorDesc* inputs, int32_t nbI
     const DynamicPluginTensorDesc* outputs, int32_t nbOutputs) noexcept
 {
     // Validate input arguments
-    ASSERT(nbInputs == 4);
-    ASSERT(nbOutputs == 2);
+    PLUGIN_ASSERT(nbInputs == 4);
+    PLUGIN_ASSERT(nbOutputs == 2);
 
-    ASSERT(inputs[0].desc.dims.nbDims == 1);
-    ASSERT(inputs[1].desc.dims.nbDims == 1);
+    PLUGIN_ASSERT(inputs[0].desc.dims.nbDims == 1);
+    PLUGIN_ASSERT(inputs[1].desc.dims.nbDims == 1);
 
-    ASSERT(inputs[1].desc.dims.d[0] == inputs[0].desc.dims.d[0]);
+    PLUGIN_ASSERT(inputs[1].desc.dims.d[0] == inputs[0].desc.dims.d[0]);
 
-    ASSERT(inputs[2].desc.dims.nbDims == 1);
+    PLUGIN_ASSERT(inputs[2].desc.dims.nbDims == 1);
 
-    ASSERT(outputs[0].desc.dims.nbDims == 4);
-    ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[0]) == static_cast<size_t>(inputs[0].desc.dims.d[0]));
-    ASSERT(outputs[0].desc.dims.d[2] == 1);
-    ASSERT(outputs[0].desc.dims.d[3] == 1);
+    PLUGIN_ASSERT(outputs[0].desc.dims.nbDims == 4);
+    PLUGIN_ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[0]) == static_cast<size_t>(inputs[0].desc.dims.d[0]));
+    PLUGIN_ASSERT(outputs[0].desc.dims.d[2] == 1);
+    PLUGIN_ASSERT(outputs[0].desc.dims.d[3] == 1);
 
-    ASSERT(inputs[0].desc.type == DataType::kINT32);
-    ASSERT(inputs[1].desc.type == DataType::kINT32);
-    ASSERT(inputs[2].desc.type == DataType::kINT32);
+    PLUGIN_ASSERT(inputs[0].desc.type == DataType::kINT32);
+    PLUGIN_ASSERT(inputs[1].desc.type == DataType::kINT32);
+    PLUGIN_ASSERT(inputs[2].desc.type == DataType::kINT32);
 }
 
 void EmbLayerNormVarSeqlenPluginHFace::configurePlugin(const DynamicPluginTensorDesc* inputs, int32_t nbInputs,
@@ -301,21 +302,22 @@ void EmbLayerNormVarSeqlenPluginHFace::configurePlugin(const DynamicPluginTensor
 {
     BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace configurePlugin");
     checkConfigurationInputs(inputs, nbInputs, outputs, nbOutputs);
-    ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[1]) == static_cast<size_t>(mLd));
+    PLUGIN_ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[1]) == static_cast<size_t>(mLd));
 
     const int32_t B = inputs[2].desc.dims.d[0] - 1;
 
     // check mask
-    ASSERT(outputs[1].desc.dims.nbDims == 2);
+    PLUGIN_ASSERT(outputs[1].desc.dims.nbDims == 2);
     if (B > 0)
     {
-        ASSERT(outputs[1].desc.dims.d[0] == B);
+        PLUGIN_ASSERT(outputs[1].desc.dims.d[0] == B);
     }
-    ASSERT((outputs[1].desc.dims.d[1] == 2 * packedMaskSize384) || (outputs[1].desc.dims.d[1] == 2 * packedMaskSize128)
+    PLUGIN_ASSERT((outputs[1].desc.dims.d[1] == 2 * packedMaskSize384)
+        || (outputs[1].desc.dims.d[1] == 2 * packedMaskSize128)
         || (outputs[1].desc.dims.d[1] == 2 * packedMaskSize256));
 
-    ASSERT(outputs[0].desc.type == mType);
-    ASSERT(outputs[1].desc.type == DataType::kHALF);
+    PLUGIN_ASSERT(outputs[0].desc.type == mType);
+    PLUGIN_ASSERT(outputs[1].desc.type == DataType::kHALF);
 }
 
 void EmbLayerNormVarSeqlenPluginMTron::configurePlugin(const DynamicPluginTensorDesc* inputs, int32_t nbInputs,
@@ -323,16 +325,16 @@ void EmbLayerNormVarSeqlenPluginMTron::configurePlugin(const DynamicPluginTensor
 {
     BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron configurePlugin");
     checkConfigurationInputs(inputs, nbInputs, outputs, nbOutputs);
-    ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[1]) == static_cast<size_t>(mLd));
+    PLUGIN_ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[1]) == static_cast<size_t>(mLd));
 
-    ASSERT(outputs[1].desc.dims.nbDims == 4);
-    ASSERT(static_cast<size_t>(outputs[1].desc.dims.d[0]) == static_cast<size_t>(inputs[0].desc.dims.d[0]));
-    ASSERT(static_cast<size_t>(outputs[1].desc.dims.d[1]) == static_cast<size_t>(mLd));
-    ASSERT(outputs[1].desc.dims.d[2] == 1);
-    ASSERT(outputs[1].desc.dims.d[3] == 1);
+    PLUGIN_ASSERT(outputs[1].desc.dims.nbDims == 4);
+    PLUGIN_ASSERT(static_cast<size_t>(outputs[1].desc.dims.d[0]) == static_cast<size_t>(inputs[0].desc.dims.d[0]));
+    PLUGIN_ASSERT(static_cast<size_t>(outputs[1].desc.dims.d[1]) == static_cast<size_t>(mLd));
+    PLUGIN_ASSERT(outputs[1].desc.dims.d[2] == 1);
+    PLUGIN_ASSERT(outputs[1].desc.dims.d[3] == 1);
 
-    ASSERT(outputs[0].desc.type == mType);
-    ASSERT(outputs[1].desc.type == mType);
+    PLUGIN_ASSERT(outputs[0].desc.type == mType);
+    PLUGIN_ASSERT(outputs[1].desc.type == mType);
 }
 
 size_t EmbLayerNormVarSeqlenPluginBase::getWorkspaceSize(
@@ -401,7 +403,7 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(const PluginTensorDesc* inputD
             return STATUS_NOT_SUPPORTED;
         }
 
-        return STATUS_SUCCESS;        
+        return STATUS_SUCCESS;
     }
     catch (const std::exception& e)
     {
@@ -486,10 +488,10 @@ DataType EmbLayerNormVarSeqlenPluginBase::getOutputDataType(
     int32_t index, const DataType* inputTypes, int32_t nbInputs) const noexcept
 {
 
-    ASSERT(index == 0 || index == 1);
+    PLUGIN_ASSERT(index == 0 || index == 1);
     if (index == 0)
     {
-        ASSERT(mType == DataType::kHALF || mType == DataType::kFLOAT);
+        PLUGIN_ASSERT(mType == DataType::kHALF || mType == DataType::kFLOAT);
         return mType;
     }
     return DataType::kHALF;
@@ -615,6 +617,13 @@ const char* EmbLayerNormVarSeqlenPluginBase::getPluginNamespace() const noexcept
 
 EmbLayerNormVarSeqlenPluginBaseCreator::EmbLayerNormVarSeqlenPluginBaseCreator()
 {
+    mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_layernorm_beta"));
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_layernorm_gamma"));
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_word_embeddings"));
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_token_type_embeddings"));
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_position_embeddings"));
+    mPluginAttributes.emplace_back(PluginField("output_fp16"));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
@@ -688,7 +697,7 @@ bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights
         if (field_name.compare("output_fp16") == 0)
         {
             BERT_DEBUG_MSG("Building output_fp16...");
-            ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
             output_fp16 = static_cast<const int32_t*>(fc->fields[i].data)[0] != 0;
         }
     }

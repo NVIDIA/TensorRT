@@ -35,7 +35,7 @@ The scores input are of shape `[batch_size, number_boxes, number_classes]`. Each
 The boxes input and scores input generates the following four outputs:
 
 - `num_detections`
-The `num_detections` input are of shape `[batch_size, 1]`. The last dimension of size 1 is an INT32 scalar indicating the number of valid detections per batch item. It can be less than `keepTopK`. Only the top `num_detections[i]` entries in `nmsed_boxes[i]`, `nmsed_scores[i]` and `nmsed_classes[i]` are valid.
+The `num_detections` output is of shape `[batch_size]`. It is an int32 tensor indicating the number of valid detections per batch item. It can be less than `keepTopK`. Only the top `num_detections[i]` entries in `nmsed_boxes[i]`, `nmsed_scores[i]` and `nmsed_classes[i]` are valid.
 
 - `nmsed_boxes`
 A `[batch_size, keepTopK, 4]` float32 tensor containing the coordinates of non-max suppressed boxes.

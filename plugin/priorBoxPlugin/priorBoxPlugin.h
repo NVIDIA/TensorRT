@@ -16,11 +16,11 @@
  */
 #ifndef TRT_PRIOR_BOX_PLUGIN_H
 #define TRT_PRIOR_BOX_PLUGIN_H
-#include "cudnn.h"
-#include "kernel.h"
-#include "plugin.h"
+#include "common/kernel.h"
+#include "common/plugin.h"
 #include <cstdlib>
 #include <cublas_v2.h>
+#include <cudnn.h>
 #include <string>
 #include <vector>
 

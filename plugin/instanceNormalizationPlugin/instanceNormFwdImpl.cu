@@ -15,18 +15,20 @@
  * limitations under the License.
  */
 
- #include <stdio.h>
- #include <assert.h>
- #include <type_traits>
+#include <stdio.h>
+#include <assert.h>
+#include <type_traits>
+#include <cuda.h>
 
- #include "instanceNormFwd.h"
- #include "instanceNormCommon.h"
+#include "instanceNormFwd.h"
+#include "instanceNormCommon.h"
 
- namespace instance_norm_impl
- {
+namespace instance_norm_impl
+{
 
- static inline int32_t divUp(int32_t m, int32_t n) {
-     return (m + n - 1) / n;
+static inline int32_t divUp(int32_t m, int32_t n)
+{
+    return (m + n - 1) / n;
  }
 
 
@@ -39,25 +41,14 @@
  using kernel_params_32_int8_sm_750 = Instance_norm_kernel_params<int8_t, int8_t, int8_t, 512, 8, 32, 750>;
  using kernel_params_32_int8_sm_800 = Instance_norm_kernel_params<int8_t, int8_t, int8_t, 512, 8, 32, 800>;
  using kernel_params_32_int8_sm_860 = Instance_norm_kernel_params<int8_t, int8_t, int8_t, 512, 8, 32, 860>;
- // debug :
- //using kernel_params_32_int8 = Instance_norm_kernel_params<int8_t, int8_t, 256, 8, 32>;
+ using kernel_params_32_int8_sm_870 = Instance_norm_kernel_params<int8_t, int8_t, int8_t, 512, 8, 32, 870>;
  using kernel_params_32_fp16_int8 = Instance_norm_kernel_params<uint16_t, int8_t, float, 512, 8, 32>;
 
- template<
-     typename Storage,
-     typename Input_Data_Type,
-     typename Output_Data_Type,
-     int32_t THREADS_PER_CTA,
-     int32_t THREADS_PER_PIXEL,
-     int32_t PIXELS_PER_THREAD_IN_REGISTERS,
-     int32_t PIXELS_PER_THREAD_IN_SMEM,
-     int32_t ELEMENTS_PER_LDG,
-     int32_t USE_ONLINE_APPROACH,
-     int32_t OUTER_LOOPS_,
-     int32_t DESIRED_OCCUPANCY
- >
- __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY)
-     void instanceNormFwd(InstanceNormFwdParams params) {
+ template <typename Storage, typename Input_Data_Type, typename Output_Data_Type, int32_t THREADS_PER_CTA,
+     int32_t THREADS_PER_PIXEL, int32_t PIXELS_PER_THREAD_IN_REGISTERS, int32_t PIXELS_PER_THREAD_IN_SMEM,
+     int32_t ELEMENTS_PER_LDG, int32_t USE_ONLINE_APPROACH, int32_t OUTER_LOOPS_, int32_t DESIRED_OCCUPANCY>
+ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY) void instanceNormFwd(InstanceNormFwdParams params)
+ {
 
      // Single pass numerically stable algorithm, see:
      // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
@@ -510,8 +501,15 @@
          // The value for nhw.
          int32_t out_nhw = cta_nhw_regs + loop_i*pixels_per_iteration;
 
-         // Normalize the elements and write to memory.
+         // On CUDA-11.5 or above, full unrolling caused compiler to panic about register pressure and the perf dropped
+         // significantly. Therefore, limit the extent of unrolling on CUDA-11.5 or above. The number "8" is chosen
+         // based on experiments.
+#if CUDA_VERSION >= 11050
+         #pragma unroll 8
+#else
          #pragma unroll
+#endif
+         // Normalize the elements and write to memory.
          for( int32_t i = 0; i < PIXELS_PER_THREAD_IN_REGISTERS; ++i ) {
              // Convert to float.
              float x_math[ELEMENTS_PER_LDG];
@@ -616,37 +614,24 @@
 
      size_t size_retired_ctas = grid_dim.z*grid_dim.y*sizeof(int32_t);
 
-     #define KERNEL_RUN(OUTER_LOOPS, DESIRED_OCCUPANCY)  \
-         {                            \
-             CHECK_CUDA(cudaMemsetAsync(params.gmem_retired_ctas, 0, size_retired_ctas, stream)); \
-             if( smem_size > 0 ) \
-                 CHECK_CUDA(cudaFuncSetAttribute( \
-                     instanceNormFwd< \
-                             typename Kernel_params::StorageType, \
-                             typename Kernel_params::Input_Data_Type, \
-                             typename Kernel_params::Output_Data_Type, \
-                             Kernel_params::THREADS_PER_CTA, \
-                             Kernel_params::THREADS_PER_PIXEL, \
-                             Kernel_params::PIXELS_PER_THREAD_IN_REGISTERS, \
-                             Kernel_params::PIXELS_PER_THREAD_IN_SMEM, \
-                             Kernel_params::ELEMENTS_PER_LDG, \
-                             Kernel_params::USE_ONLINE_APPROACH, \
-                             OUTER_LOOPS, \
-                             DESIRED_OCCUPANCY>, \
-                     cudaFuncAttributeMaxDynamicSharedMemorySize, \
-                     smem_size));                                 \
-             instanceNormFwd< \
-                 typename Kernel_params::StorageType, \
-                 typename Kernel_params::Input_Data_Type, \
-                 typename Kernel_params::Output_Data_Type, \
-                 Kernel_params::THREADS_PER_CTA, \
-                 Kernel_params::THREADS_PER_PIXEL, \
-                 Kernel_params::PIXELS_PER_THREAD_IN_REGISTERS, \
-                 Kernel_params::PIXELS_PER_THREAD_IN_SMEM, \
-                 Kernel_params::ELEMENTS_PER_LDG, \
-                 Kernel_params::USE_ONLINE_APPROACH, \
-                 OUTER_LOOPS, \
-                 DESIRED_OCCUPANCY><<<grid_dim,Kernel_params::THREADS_PER_CTA, smem_size, stream>>>(params); }
+#define KERNEL_RUN(OUTER_LOOPS, DESIRED_OCCUPANCY)                                                                     \
+    {                                                                                                                  \
+        PLUGIN_CHECK_CUDA(cudaMemsetAsync(params.gmem_retired_ctas, 0, size_retired_ctas, stream));                    \
+        if (smem_size > 0)                                                                                             \
+            PLUGIN_CHECK_CUDA(cudaFuncSetAttribute(                                                                    \
+                instanceNormFwd<typename Kernel_params::StorageType, typename Kernel_params::Input_Data_Type,          \
+                    typename Kernel_params::Output_Data_Type, Kernel_params::THREADS_PER_CTA,                          \
+                    Kernel_params::THREADS_PER_PIXEL, Kernel_params::PIXELS_PER_THREAD_IN_REGISTERS,                   \
+                    Kernel_params::PIXELS_PER_THREAD_IN_SMEM, Kernel_params::ELEMENTS_PER_LDG,                         \
+                    Kernel_params::USE_ONLINE_APPROACH, OUTER_LOOPS, DESIRED_OCCUPANCY>,                               \
+                cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));                                              \
+        instanceNormFwd<typename Kernel_params::StorageType, typename Kernel_params::Input_Data_Type,                  \
+            typename Kernel_params::Output_Data_Type, Kernel_params::THREADS_PER_CTA,                                  \
+            Kernel_params::THREADS_PER_PIXEL, Kernel_params::PIXELS_PER_THREAD_IN_REGISTERS,                           \
+            Kernel_params::PIXELS_PER_THREAD_IN_SMEM, Kernel_params::ELEMENTS_PER_LDG,                                 \
+            Kernel_params::USE_ONLINE_APPROACH, OUTER_LOOPS, DESIRED_OCCUPANCY>                                        \
+            <<<grid_dim, Kernel_params::THREADS_PER_CTA, smem_size, stream>>>(params);                                 \
+    }
 
      size_t total_smem_bytes = smem_size + Kernel_params::ELEMENTS_PER_LDG * Kernel_params::THREADS_PER_CTA * sizeof(float);
      int32_t smem_driven_fwd_occupancy = min(int32_t(context.sm_shared_size) / (int32_t)total_smem_bytes, (int32_t)2);
@@ -709,15 +694,37 @@
                                  size_t &size_sums, size_t &size_counts, size_t &size_retired_ctas,
                                  int32_t input_data_type, int32_t output_data_type)
  {
-     if (input_data_type == 2 && output_data_type == 2) {
+     if (input_data_type == 2 && output_data_type == 2)
+     {
          switch (context.sm_version)
          {
-             case 700: return instanceNormBufferSizes<kernel_params_32_int8_sm_700>(params, size_sums, size_counts, size_retired_ctas); break;
-             case 720: return instanceNormBufferSizes<kernel_params_32_int8_sm_720>(params, size_sums, size_counts, size_retired_ctas); break;
-             case 750: return instanceNormBufferSizes<kernel_params_32_int8_sm_750>(params, size_sums, size_counts, size_retired_ctas); break;
-             case 800: return instanceNormBufferSizes<kernel_params_32_int8_sm_800>(params, size_sums, size_counts, size_retired_ctas); break;
-             case 860: return instanceNormBufferSizes<kernel_params_32_int8_sm_860>(params, size_sums, size_counts, size_retired_ctas); break;
-             default: return instanceNormBufferSizes<kernel_params_32_int8>(params, size_sums, size_counts, size_retired_ctas); break;
+         case 700:
+             return instanceNormBufferSizes<kernel_params_32_int8_sm_700>(
+                 params, size_sums, size_counts, size_retired_ctas);
+             break;
+         case 720:
+             return instanceNormBufferSizes<kernel_params_32_int8_sm_720>(
+                 params, size_sums, size_counts, size_retired_ctas);
+             break;
+         case 750:
+             return instanceNormBufferSizes<kernel_params_32_int8_sm_750>(
+                 params, size_sums, size_counts, size_retired_ctas);
+             break;
+         case 800:
+             return instanceNormBufferSizes<kernel_params_32_int8_sm_800>(
+                 params, size_sums, size_counts, size_retired_ctas);
+             break;
+         case 860:
+             return instanceNormBufferSizes<kernel_params_32_int8_sm_860>(
+                 params, size_sums, size_counts, size_retired_ctas);
+             break;
+         case 870:
+             return instanceNormBufferSizes<kernel_params_32_int8_sm_870>(
+                 params, size_sums, size_counts, size_retired_ctas);
+             break;
+         default:
+             return instanceNormBufferSizes<kernel_params_32_int8>(params, size_sums, size_counts, size_retired_ctas);
+             break;
          }
          return instanceNormBufferSizes<kernel_params_32_int8>(params, size_sums, size_counts, size_retired_ctas);
      } else if (input_data_type == 1 && output_data_type == 2) {
@@ -748,9 +755,12 @@
              case 750: return instance_norm_fwd_launch<kernel_params_32_int8_sm_750>(context, params, stream); break;
              case 800: return instance_norm_fwd_launch<kernel_params_32_int8_sm_800>(context, params, stream); break;
              case 860: return instance_norm_fwd_launch<kernel_params_32_int8_sm_860>(context, params, stream); break;
+             case 870: return instance_norm_fwd_launch<kernel_params_32_int8_sm_870>(context, params, stream); break;
              default: return instance_norm_fwd_launch<kernel_params_32_int8>(context, params, stream); break;
-         }
-     } else if (input_data_type == 1 && output_data_type == 2) {
+             }
+     }
+     else if (input_data_type == 1 && output_data_type == 2)
+     {
          return instance_norm_fwd_launch<kernel_params_32_fp16_int8>(context, params, stream);
      } else if (input_data_type == 1 && output_data_type == 1) {
          if (params.c <= c_cond_g) {

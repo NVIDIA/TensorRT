@@ -14,41 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
-pluginStatus_t RPROIInferenceFused(cudaStream_t stream,
-                                  const int N,
-                                  const int A,
-                                  const int C,
-                                  const int H,
-                                  const int W,
-                                  const int poolingH,
-                                  const int poolingW,
-                                  const int featureStride,
-                                  const int preNmsTop,
-                                  const int nmsMaxOut,
-                                  const float iouThreshold,
-                                  const float minBoxSize,
-                                  const float spatialScale,
-                                  const float* imInfo,
-                                  const float* anchors,
-                                  const DataType t_scores,
-                                  const DLayout_t l_scores,
-                                  const void* scores,
-                                  const DataType t_deltas,
-                                  const DLayout_t l_deltas,
-                                  const void* deltas,
-                                  const DataType t_featureMap,
-                                  const DLayout_t l_featureMap,
-                                  const void* featureMap,
-                                  void* workspaces,
-                                  const DataType t_rois,
-                                  void* rois,
-                                  const DataType t_top,
-                                  const DLayout_t l_top,
-                                  void* top,
-                                  size_t deviceSmemSize)
+#include "common/kernel.h"
+pluginStatus_t RPROIInferenceFused(cudaStream_t stream, const int N, const int A, const int C, const int H, const int W,
+    const int poolingH, const int poolingW, const int featureStride, const int preNmsTop, const int nmsMaxOut,
+    const float iouThreshold, const float minBoxSize, const float spatialScale, const float* imInfo,
+    const float* anchors, const DataType t_scores, const DLayout_t l_scores, const void* scores,
+    const DataType t_deltas, const DLayout_t l_deltas, const void* deltas, const DataType t_featureMap,
+    const DLayout_t l_featureMap, const void* featureMap, void* workspaces, const DataType t_rois, void* rois,
+    const DataType t_top, const DLayout_t l_top, void* top, size_t deviceSmemSize)
 {
-    if (imInfo == NULL || anchors == NULL || scores == NULL || deltas == NULL || featureMap == NULL || workspaces == NULL || rois == NULL || top == NULL)
+    if (imInfo == NULL || anchors == NULL || scores == NULL || deltas == NULL || featureMap == NULL
+        || workspaces == NULL || rois == NULL || top == NULL)
     {
         return STATUS_BAD_PARAM;
     }

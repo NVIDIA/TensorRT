@@ -17,10 +17,10 @@
 
 #ifndef TRT_SKIP_LAYER_NORM_INTERLEAVED_PLUGIN_H
 #define TRT_SKIP_LAYER_NORM_INTERLEAVED_PLUGIN_H
-#include <cuda.h>
 #include "NvInferPlugin.h"
+#include <cuda.h>
 
-#include "bertCommon.h"
+#include "common/bertCommon.h"
 #include <memory>
 #include <string>
 #include <vector>

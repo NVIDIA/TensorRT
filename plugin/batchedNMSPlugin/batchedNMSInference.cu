@@ -14,18 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "bboxUtils.h"
+#include "common/bboxUtils.h"
+#include "common/kernel.h"
+#include "common/nmsUtils.h"
 #include "cuda_runtime_api.h"
 #include "gatherNMSOutputs.h"
-#include "kernel.h"
-#include "nmsUtils.h"
 
 pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatchBoxesSize, const int perBatchScoresSize,
     const bool shareLocation, const int backgroundLabelId, const int numPredsPerClass, const int numClasses,
     const int topK, const int keepTopK, const float scoreThreshold, const float iouThreshold, const DataType DT_BBOX,
     const void* locData, const DataType DT_SCORE, const void* confData, void* keepCount, void* nmsedBoxes,
-    void* nmsedScores, void* nmsedClasses, void* workspace, bool isNormalized, bool confSigmoid, bool clipBoxes, int scoreBits,
-    bool caffeSemantics)
+    void* nmsedScores, void* nmsedClasses, void* workspace, bool isNormalized, bool confSigmoid, bool clipBoxes,
+    int scoreBits, bool caffeSemantics)
 {
     // locCount = batch_size * number_boxes_per_sample * 4
     const int locCount = N * perBatchBoxesSize;
@@ -40,7 +40,7 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
 
     size_t bboxDataSize = detectionForwardBBoxDataSize(N, perBatchBoxesSize, DT_BBOX);
     void* bboxDataRaw = workspace;
-    cudaMemcpyAsync(bboxDataRaw, locData, bboxDataSize, cudaMemcpyDeviceToDevice, stream);
+    CSC(cudaMemcpyAsync(bboxDataRaw, locData, bboxDataSize, cudaMemcpyDeviceToDevice, stream), STATUS_FAILURE);
     pluginStatus_t status;
 
     /*
@@ -115,7 +115,8 @@ pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatch
     bool flipXY = true;
     // NMS
     status = allClassNMS(stream, N, numClasses, numPredsPerClass, topK, iouThreshold, shareLocation, isNormalized,
-        DT_SCORE, DT_BBOX, bboxData, scores, indices, postNMSScores, postNMSIndices, flipXY, scoreShift, caffeSemantics);
+        DT_SCORE, DT_BBOX, bboxData, scores, indices, postNMSScores, postNMSIndices, flipXY, scoreShift,
+        caffeSemantics);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Sort the bounding boxes after NMS using scores

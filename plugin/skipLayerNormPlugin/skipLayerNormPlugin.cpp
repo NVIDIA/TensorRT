@@ -19,14 +19,14 @@
 #if CUDA_VERSION >= 10010
 
 #include "NvInfer.h"
-#include "serialize.hpp"
+#include "common/serialize.hpp"
 #include "skipLayerNormPlugin.h"
 
-#include <cassert>
 #include <cstring>
 #include <vector>
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 
 namespace bert
 {
@@ -68,7 +68,7 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
     , mType(type)
     , mBiasDev(nullptr)
 {
-    assert(mType == nvinfer1::DataType::kFLOAT || mType == nvinfer1::DataType::kHALF || mType == nvinfer1::DataType::kINT8);
+    PLUGIN_ASSERT(mType == nvinfer1::DataType::kFLOAT || mType == nvinfer1::DataType::kHALF || mType == nvinfer1::DataType::kINT8);
     // mCfgType is the dataType for beta, gamma bias weights, always fp16 or fp32
     // mType is the plugin IO datatype, can be int8
     mCfgType = mType == DataType::kINT8 ? DataType::kHALF :  mType;
@@ -81,6 +81,13 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
     if (mHasBias)
     {
         mBias.convertAndCopy(bias, mCfgType);
+    }
+
+    copyToDevice(mGamma, getWeightsSize(mGamma, mCfgType), mGammaDev);
+    copyToDevice(mBeta, getWeightsSize(mBeta, mCfgType), mBetaDev);
+    if (mHasBias)
+    {
+        copyToDevice(mBias, getWeightsSize(mBias, mCfgType), mBiasDev);
     }
 }
 
@@ -98,7 +105,7 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
     deserialize_value(&data, &length, &mLd);
     deserialize_value(&data, &length, &mHasBias);
 
-    assert(mCfgType == nvinfer1::DataType::kFLOAT || mCfgType == nvinfer1::DataType::kHALF);
+    PLUGIN_ASSERT(mCfgType == nvinfer1::DataType::kFLOAT || mCfgType == nvinfer1::DataType::kHALF);
     mParamWordsize = getElementSize(mCfgType);
 
     const char* d = static_cast<const char*>(data);
@@ -107,6 +114,13 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
     if (mHasBias)
     {
         mBias.convertAndCopy(d, mLd, mCfgType);
+    }
+
+    copyToDevice(mGamma, getWeightsSize(mGamma, mCfgType), mGammaDev);
+    copyToDevice(mBeta, getWeightsSize(mBeta, mCfgType), mBetaDev);
+    if (mHasBias)
+    {
+        copyToDevice(mBias, getWeightsSize(mBias, mCfgType), mBiasDev);
     }
 }
 
@@ -124,17 +138,17 @@ IPluginV2DynamicExt* SkipLayerNormPluginDynamic::clone() const noexcept
 DimsExprs SkipLayerNormPluginDynamic::getOutputDimensions(
     int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
-    assert(nbInputs == 2);
-    assert(outputIndex == 0);
-    assert(inputs[0].nbDims == inputs[1].nbDims);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(outputIndex == 0);
+    PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
     return inputs[0];
 }
 
 bool SkipLayerNormPluginDynamic::supportsFormatCombination(
     int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-    assert(nbInputs == 2);
-    assert(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 1);
 
     const PluginTensorDesc& in = inOut[pos];
     if (pos == 0)
@@ -169,41 +183,34 @@ void SkipLayerNormPluginDynamic::configurePlugin(
     BERT_DEBUG_MSG("SkipLayerNormPluginDynamic configurePlugin");
 
     // Validate input arguments
-    assert(nbOutputs == 1);
-    assert(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 2);
     if (mType == DataType::kFLOAT || mType == DataType::kHALF)
     {
-        assert(mType == inputs[0].desc.type);
-        assert(mType == inputs[1].desc.type);
+        PLUGIN_ASSERT(mType == inputs[0].desc.type);
+        PLUGIN_ASSERT(mType == inputs[1].desc.type);
     }
     else
     {
-        assert(mType == inputs[0].desc.type || DataType::kFLOAT == inputs[0].desc.type);
-        assert(mType == inputs[1].desc.type || DataType::kFLOAT == inputs[1].desc.type);
+        PLUGIN_ASSERT(mType == inputs[0].desc.type || DataType::kFLOAT == inputs[0].desc.type);
+        PLUGIN_ASSERT(mType == inputs[1].desc.type || DataType::kFLOAT == inputs[1].desc.type);
     }
     const auto& inDims0 = inputs[0].desc.dims;
     const auto& inDims1 = inputs[1].desc.dims;
     TRT_UNUSED inDims1;
-    assert(inDims0.nbDims == inDims1.nbDims);
+    PLUGIN_ASSERT(inDims0.nbDims == inDims1.nbDims);
 
-    assert(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
+    PLUGIN_ASSERT(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
 
-    assert(inDims0.nbDims == 5);
+    PLUGIN_ASSERT(inDims0.nbDims == 5);
     mLd = inDims0.d[HDIM]; // hiddensize
-    assert(inDims0.d[3] == 1);
-    assert(inDims0.d[4] == 1);
+    PLUGIN_ASSERT(inDims0.d[3] == 1);
+    PLUGIN_ASSERT(inDims0.d[4] == 1);
 
     mCfgType = inputs[0].desc.type == DataType::kINT8 ? DataType::kHALF : inputs[0].desc.type;
 
     const auto paramType = getParamWordType(mCfgType);
     mParamWordsize = getElementSize(paramType);
-
-    copyToDevice(mGamma, getWeightsSize(mGamma, paramType), mGammaDev);
-    copyToDevice(mBeta, getWeightsSize(mBeta, paramType), mBetaDev);
-    if (mHasBias)
-    {
-        copyToDevice(mBias, getWeightsSize(mBias, paramType), mBiasDev);
-    }
 }
 
 size_t SkipLayerNormPluginDynamic::getWorkspaceSize(
@@ -284,7 +291,7 @@ int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const
     else
     {
         gLogError << "Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received " << static_cast<int>(iType) << "." << std::endl;
-        assert(false);
+        PLUGIN_ASSERT(false);
     }
     return status;
 }
@@ -292,8 +299,8 @@ int SkipLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const
 // IPluginV2Ext Methods
 DataType SkipLayerNormPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept
 {
-    assert(index == 0);
-    assert(nbInputs == 2);
+    PLUGIN_ASSERT(index == 0);
+    PLUGIN_ASSERT(nbInputs == 2);
     return inputTypes[0];
 }
 
@@ -369,6 +376,12 @@ const char* SkipLayerNormPluginDynamic::getPluginNamespace() const noexcept
 
 SkipLayerNormPluginDynamicCreator::SkipLayerNormPluginDynamicCreator()
 {
+    mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(PluginField("ld"));
+    mPluginAttributes.emplace_back(PluginField("type_id"));
+    mPluginAttributes.emplace_back(PluginField("beta"));
+    mPluginAttributes.emplace_back(PluginField("gamma"));
+    mPluginAttributes.emplace_back(PluginField("bias"));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
@@ -499,11 +512,10 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(
     , mLd(beta.count)
     , mType(type)
     , mBiasDev(nullptr)
-    , mParamsOnDevice(false)
 {
-    assert(mLd > 0);
-    assert(beta.count == gamma.count);
-    assert(mType == nvinfer1::DataType::kFLOAT || mType == nvinfer1::DataType::kHALF || mType == nvinfer1::DataType::kINT8);
+    PLUGIN_ASSERT(mLd > 0);
+    PLUGIN_ASSERT(beta.count == gamma.count);
+    PLUGIN_ASSERT(mType == nvinfer1::DataType::kFLOAT || mType == nvinfer1::DataType::kHALF || mType == nvinfer1::DataType::kINT8);
     // mCfgType is the dataType for beta, gamma bias weights, always fp16 or fp32
     // mType is the plugin IO datatype, can be int8
     mCfgType = mType == DataType::kINT8 ? DataType::kHALF :  mType;
@@ -518,6 +530,12 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(
         mBias.convertAndCopy(bias, mCfgType);
     }
 
+    copyToDevice(mGamma, getWeightsSize(mGamma, mCfgType), mGammaDev);
+    copyToDevice(mBeta, getWeightsSize(mBeta, mCfgType), mBetaDev);
+    if (mHasBias)
+    {
+        copyToDevice(mBias, getWeightsSize(mBias, mCfgType), mBiasDev);
+    }
 }
 
 SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string name, const void* data, size_t length)
@@ -525,7 +543,6 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string nam
     , mGammaDev(nullptr)
     , mBetaDev(nullptr)
     , mBiasDev(nullptr)
-    , mParamsOnDevice(false)
 {
     BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPlugin deserialize");
 
@@ -535,7 +552,7 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string nam
     deserialize_value(&data, &length, &mLd);
     deserialize_value(&data, &length, &mHasBias);
 
-    assert(mCfgType == nvinfer1::DataType::kFLOAT || mCfgType == nvinfer1::DataType::kHALF);
+    PLUGIN_ASSERT(mCfgType == nvinfer1::DataType::kFLOAT || mCfgType == nvinfer1::DataType::kHALF);
     mParamWordsize = getElementSize(mCfgType);
 
     const char* d = static_cast<const char*>(data);
@@ -544,6 +561,13 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string nam
     if (mHasBias)
     {
         mBias.convertAndCopy(d, mLd, mCfgType);
+    }
+
+    copyToDevice(mGamma, getWeightsSize(mGamma, mCfgType), mGammaDev);
+    copyToDevice(mBeta, getWeightsSize(mBeta, mCfgType), mBetaDev);
+    if (mHasBias)
+    {
+        copyToDevice(mBias, getWeightsSize(mBias, mCfgType), mBiasDev);
     }
 }
 
@@ -561,17 +585,17 @@ IPluginV2DynamicExt* SkipLayerNormVarSeqlenPlugin::clone() const noexcept
 DimsExprs SkipLayerNormVarSeqlenPlugin::getOutputDimensions(
     int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
-    assert(nbInputs == 2);
-    assert(outputIndex == 0);
-    assert(inputs[0].nbDims == inputs[1].nbDims);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(outputIndex == 0);
+    PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
     return inputs[0];
 }
 
 bool SkipLayerNormVarSeqlenPlugin::supportsFormatCombination(
     int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-    assert(nbInputs == 2);
-    assert(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 1);
 
     const PluginTensorDesc& in = inOut[pos];
 
@@ -606,40 +630,29 @@ void SkipLayerNormVarSeqlenPlugin::configurePlugin(
     const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs) noexcept
 {
     // Validate input arguments
-    assert(nbOutputs == 1);
-    assert(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 2);
     if (mType == DataType::kFLOAT || mType == DataType::kHALF)
     {
-        assert(mType == inputs[0].desc.type);
-        assert(mType == inputs[1].desc.type);
+        PLUGIN_ASSERT(mType == inputs[0].desc.type);
+        PLUGIN_ASSERT(mType == inputs[1].desc.type);
     }
     else
     {
-        assert(mType == inputs[0].desc.type || DataType::kFLOAT == inputs[0].desc.type);
-        assert(mType == inputs[1].desc.type || DataType::kFLOAT == inputs[1].desc.type);
+        PLUGIN_ASSERT(mType == inputs[0].desc.type || DataType::kFLOAT == inputs[0].desc.type);
+        PLUGIN_ASSERT(mType == inputs[1].desc.type || DataType::kFLOAT == inputs[1].desc.type);
     }
     const auto& inDims0 = inputs[0].desc.dims;
     const auto& inDims1 = inputs[1].desc.dims;
     TRT_UNUSED inDims1;
-    assert(inDims0.nbDims == inDims1.nbDims);
+    PLUGIN_ASSERT(inDims0.nbDims == inDims1.nbDims);
 
-    assert(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
+    PLUGIN_ASSERT(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
 
     mCfgType = inputs[0].desc.type == DataType::kINT8 ? DataType::kHALF : inputs[0].desc.type;
 
     const auto paramType = getParamWordType(mCfgType);
     mParamWordsize = getElementSize(paramType);
-
-    if (!mParamsOnDevice)
-    {
-        copyToDevice(mGamma, getWeightsSize(mGamma, paramType), mGammaDev);
-        copyToDevice(mBeta, getWeightsSize(mBeta, paramType), mBetaDev);
-        if (mHasBias)
-        {
-            copyToDevice(mBias, getWeightsSize(mBias, paramType), mBiasDev);
-        }
-        mParamsOnDevice = true;
-    }
 }
 
 size_t SkipLayerNormVarSeqlenPlugin::getWorkspaceSize(
@@ -652,7 +665,7 @@ int SkipLayerNormVarSeqlenPlugin::enqueue(const PluginTensorDesc* inputDesc, con
     const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     const int inputVolume = volume(inputDesc[0].dims);
-    assert(inputVolume % mLd == 0 && "inconsistent dimensions");
+    PLUGIN_ASSERT(inputVolume % mLd == 0 && "inconsistent dimensions");
     int status = -1;
     DataType iType = inputDesc->type;
 
@@ -721,7 +734,7 @@ int SkipLayerNormVarSeqlenPlugin::enqueue(const PluginTensorDesc* inputDesc, con
     else
     {
         gLogError << "Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received " << static_cast<int>(iType) << "." << std::endl;
-        assert(false);
+        PLUGIN_ASSERT(false);
     }
     return status;
 }
@@ -729,8 +742,8 @@ int SkipLayerNormVarSeqlenPlugin::enqueue(const PluginTensorDesc* inputDesc, con
 // IPluginV2Ext Methods
 DataType SkipLayerNormVarSeqlenPlugin::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept
 {
-    assert(index == 0);
-    assert(nbInputs == 2);
+    PLUGIN_ASSERT(index == 0);
+    PLUGIN_ASSERT(nbInputs == 2);
     return inputTypes[0];
 }
 
@@ -806,6 +819,11 @@ const char* SkipLayerNormVarSeqlenPlugin::getPluginNamespace() const noexcept
 
 SkipLayerNormVarSeqlenPluginCreator::SkipLayerNormVarSeqlenPluginCreator()
 {
+    mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(PluginField("type_id"));
+    mPluginAttributes.emplace_back(PluginField("beta"));
+    mPluginAttributes.emplace_back(PluginField("gamma"));
+    mPluginAttributes.emplace_back(PluginField("bias"));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }

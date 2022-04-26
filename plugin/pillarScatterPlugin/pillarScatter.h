@@ -18,11 +18,11 @@
 #ifndef _PILLAR_SCATTER_H_
 #define _PILLAR_SCATTER_H_
 
-#include <vector>
-#include <string>
-#include <cuda_runtime_api.h>
 #include "NvInferPlugin.h"
 #include "kernel.h"
+#include <cuda_runtime_api.h>
+#include <string>
+#include <vector>
 
 namespace nvinfer1
 {

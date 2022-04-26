@@ -16,8 +16,8 @@
  */
 #ifndef TRT_REORG_PLUGIN_H
 #define TRT_REORG_PLUGIN_H
-#include "kernel.h"
-#include "plugin.h"
+#include "common/kernel.h"
+#include "common/plugin.h"
 #include <iostream>
 #include <vector>
 

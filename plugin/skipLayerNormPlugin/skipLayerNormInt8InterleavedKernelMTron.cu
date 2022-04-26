@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 #include "NvInfer.h"
-#include "bertCommon.h"
-#include "common.cuh"
+#include "common/bertCommon.h"
+#include "common/common.cuh"
 #include <cassert>
 #include <cstring>
 #include <cuda.h>

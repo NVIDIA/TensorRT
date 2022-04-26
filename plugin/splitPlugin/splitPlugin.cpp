@@ -26,14 +26,15 @@ using nvinfer1::plugin::SplitPlugin;
 bool SplitPlugin::supportsFormatCombination(
     int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-    ASSERT(inOut && pos < (nbInputs + nbOutputs));
+    PLUGIN_ASSERT(inOut && pos < (nbInputs + nbOutputs));
     return (inOut[pos].format == nvinfer1::PluginFormat::kLINEAR);
 }
 
-nvinfer1::DataType SplitPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+nvinfer1::DataType SplitPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
 {
-  ASSERT(inputTypes && nbInputs > 0);
-  return inputTypes[0];
+    PLUGIN_ASSERT(inputTypes && nbInputs > 0);
+    return inputTypes[0];
 }
 
 int SplitPlugin::initialize() noexcept 
@@ -58,11 +59,11 @@ void SplitPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, i
 
   for (int i = 0; i < nbInputs; i++)
   {
-    for (int j = 0; j < in[0].desc.dims.nbDims; j++)
-    {
-      // Do not support dynamic dimensions
-      ASSERT(in[0].desc.dims.d[j] != -1);
-    }
+      for (int j = 0; j < in[0].desc.dims.nbDims; j++)
+      {
+          // Do not support dynamic dimensions
+          PLUGIN_ASSERT(in[0].desc.dims.d[j] != -1);
+      }
   }
 
   nvinfer1::Dims dims = in[0].desc.dims;

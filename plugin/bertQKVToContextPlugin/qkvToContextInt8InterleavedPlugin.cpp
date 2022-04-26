@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-#include "NvInfer.h"
-#include "bertCommon.h"
 #include "qkvToContextInt8InterleavedPlugin.h"
-#include "serialize.hpp"
+#include "NvInfer.h"
+#include "common/bertCommon.h"
+#include "common/serialize.hpp"
 
-#include <cassert>
 #include <cstring>
 #include <cuda.h>
 #include <iostream>
 #include <tuple>
 #include <vector>
 
-#include <fused_multihead_attention_v2.h>
+#include "bertQKVToContextPlugin/fused_multihead_attention_v2/include/fused_multihead_attention_v2.h"
 
 using namespace nvinfer1;
-// using namespace fused_multihead_attention;
+using namespace nvinfer1::plugin;
 
 namespace bert
 {
@@ -63,7 +62,8 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(
     mSM = getSMVersion();
     // variable sequence length is only supported with the fused MHA kernels
     // we should not override mS!
-    assert((mSM == kSM_AMPERE_100 || mSM == kSM_AMPERE_10X || mSM == kSM_TURING || mSM == kSM_XAVIER)
+    PLUGIN_ASSERT((mSM == kSM_AMPERE_100 || mSM == kSM_AMPERE_10X || mSM == kSM_AMPERE_10B || mSM == kSM_TURING
+               || mSM == kSM_XAVIER)
         && "requesting maxSeqlen not compatible with GPU arch");
     // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
     mXmmaKernel = getXMMAKernelsV2(DATA_TYPE_INT8, mSM);
@@ -84,9 +84,9 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(const std::string n
 int QKVToContextInterleavedPlugin::getSMVersion() const noexcept
 {
     int device{-1};
-    CHECK(cudaGetDevice(&device));
+    PLUGIN_CHECK(cudaGetDevice(&device));
     cudaDeviceProp props;
-    CHECK(cudaGetDeviceProperties(&props, device));
+    PLUGIN_CHECK(cudaGetDeviceProperties(&props, device));
     return props.major * 10 + props.minor;
 }
 
@@ -107,7 +107,7 @@ DimsExprs QKVToContextInterleavedPlugin::getOutputDimensions(
     // Output SHAPE is 1x(N*H)xTotalx1
     // In SupportsFormatCombination, we force the layout to be CHW, i.e.
     // Input: 3xNx(H/32)xsumSx32, Output: 1xNx(H/32)xsumSx32
-    assert(outputIndex == 0);
+    PLUGIN_ASSERT(outputIndex == 0);
     // Copy over everything
     DimsExprs output(inputs[IIDX]);
     // output.d[0] = exprBuilder.constant(1);
@@ -119,8 +119,8 @@ DimsExprs QKVToContextInterleavedPlugin::getOutputDimensions(
 bool QKVToContextInterleavedPlugin::supportsFormatCombination(
     int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-    assert(nbInputs == 3);
-    assert(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 3);
+    PLUGIN_ASSERT(nbOutputs == 1);
     // 3 inputs:
     // 0: qkv
     // 1: cu_seqlens
@@ -160,7 +160,7 @@ size_t QKVToContextInterleavedPlugin::getWorkspaceSize(
 DataType QKVToContextInterleavedPlugin::getOutputDataType(
     int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
-    assert(index == 0);
+    PLUGIN_ASSERT(index == 0);
     return DataType::kINT8;
 }
 

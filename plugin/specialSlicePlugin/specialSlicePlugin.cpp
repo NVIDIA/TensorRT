@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 #include "specialSlicePlugin.h"
-#include "maskRCNNKernels.h"
+#include "common/kernels/maskRCNNKernels.h"
 #include <cuda_runtime_api.h>
 
 using namespace nvinfer1;
@@ -109,14 +109,14 @@ void SpecialSlice::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mBboxesCnt);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 SpecialSlice::SpecialSlice(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mBboxesCnt = read<int>(d);
-    assert(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 SpecialSlice::SpecialSlice() {}
@@ -134,16 +134,16 @@ int SpecialSlice::getNbOutputs() const noexcept
 void SpecialSlice::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims)
 {
 
-    assert(nbInputDims == 1);
+    PLUGIN_ASSERT(nbInputDims == 1);
     // detections: [N, anchors, (y1, x1, y2, x2, class_id, score)]
-    assert(inputs[0].nbDims == 2 && inputs[0].d[1] == 6);
+    PLUGIN_ASSERT(inputs[0].nbDims == 2 && inputs[0].d[1] == 6);
 }
 
 Dims SpecialSlice::getOutputDimensions(int index, const Dims* inputDims, int nbInputs) noexcept
 {
 
-    assert(index == 0);
-    assert(nbInputs == 1);
+    PLUGIN_ASSERT(index == 0);
+    PLUGIN_ASSERT(nbInputs == 1);
     check_valid_inputs(inputDims, nbInputs);
 
     nvinfer1::Dims output;
@@ -169,7 +169,7 @@ int SpecialSlice::enqueue(
 DataType SpecialSlice::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(index == 0);
 
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
@@ -192,9 +192,9 @@ void SpecialSlice::configurePlugin(const Dims* inputDims, int nbInputs, const Di
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    assert(nbInputs == 1);
+    PLUGIN_ASSERT(nbInputs == 1);
 
-    assert(nbOutputs == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
 
     mBboxesCnt = inputDims[0].d[0];
 }

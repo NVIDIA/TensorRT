@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 #include <cuda.h>
 #include <cuda_runtime.h>
 

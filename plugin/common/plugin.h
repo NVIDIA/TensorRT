@@ -16,9 +16,8 @@
  */
 #ifndef TRT_PLUGIN_H
 #define TRT_PLUGIN_H
-#include "checkMacrosPlugin.h"
-
 #include "NvInferPlugin.h"
+#include "common/checkMacrosPlugin.h"
 #include <cstring>
 #include <cuda_runtime.h>
 #include <iostream>
@@ -26,8 +25,6 @@
 #include <sstream>
 #include <string>
 
-#ifndef TRT_LEGACY_PLUGIN_H
-// Enumerator for status
 typedef enum
 {
     STATUS_SUCCESS = 0,
@@ -91,10 +88,8 @@ T read(const char*& buffer)
 } // namespace nvinfer1
 
 #ifndef DEBUG
-#ifndef TRT_CHECK_MACROS_H
-#ifndef TRT_TUT_HELPERS_H
 
-#define CHECK(status)                                                                                                  \
+#define PLUGIN_CHECK(status)                                                                                           \
     do                                                                                                                 \
     {                                                                                                                  \
         if (status != 0)                                                                                               \
@@ -163,7 +158,7 @@ T read(const char*& buffer)
         }                                                                                                              \
     } while (0)
 
-#define CHECK(status)                                                                                                  \
+#define PLUGIN_CHECK(status)                                                                                           \
     {                                                                                                                  \
         if (status != 0)                                                                                               \
         {                                                                                                              \
@@ -178,9 +173,6 @@ T read(const char*& buffer)
         printf(__VA_ARGS__);                                                                                           \
     } while (0)
 
-#endif // TRT_TUT_HELPERS_H
-#endif // TRT_CHECK_MACROS_H
-#endif // TRT_LEGACY_PLUGIN_H
-#endif
+#endif // DEBUG
 
 #endif // TRT_PLUGIN_H

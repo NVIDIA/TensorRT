@@ -18,12 +18,12 @@
 #ifndef TRT_GROUP_NORM_PLUGIN_H
 #define TRT_GROUP_NORM_PLUGIN_H
 
-#include "serialize.hpp"
-#include "plugin.h"
+#include "common/plugin.h"
+#include "common/serialize.hpp"
 #include <cudnn.h>
-#include <vector>
 #include <iostream>
 #include <string>
+#include <vector>
 
 // One of the preferred ways of making TensorRT to be able to see
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.
@@ -103,8 +103,8 @@ private:
     cudnnHandle_t _cudnn_handle;
     cudnnTensorDescriptor_t desc, bnDesc; // describes input and output
     // These are buffers initialized to 1 and 0 respectively
-    void* bnScale;
-    void* bnBias;
+    void* bnScale{};
+    void* bnBias{};
 };
 
 class GroupNormalizationPluginCreator : public IPluginCreator

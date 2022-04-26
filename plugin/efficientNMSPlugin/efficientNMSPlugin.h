@@ -19,9 +19,8 @@
 
 #include <vector>
 
-#include "plugin.h"
+#include "common/plugin.h"
 #include "efficientNMSParameters.h"
-
 
 using namespace nvinfer1::plugin;
 namespace nvinfer1

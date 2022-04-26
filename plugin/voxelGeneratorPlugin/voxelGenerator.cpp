@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-#include <cassert>
 #include <iostream>
 #include <cstring>
 #include "voxelGenerator.h"
@@ -135,7 +134,7 @@ nvinfer1::IPluginV2DynamicExt* VoxelGeneratorPlugin::clone() const noexcept
 nvinfer1::DimsExprs VoxelGeneratorPlugin::getOutputDimensions(
     int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
-    assert(outputIndex >= 0 && outputIndex < this->getNbOutputs());
+    PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
     auto batch_size = inputs[0].d[0];
     if (outputIndex == 0)
     {
@@ -164,8 +163,8 @@ nvinfer1::DimsExprs VoxelGeneratorPlugin::getOutputDimensions(
 bool VoxelGeneratorPlugin::supportsFormatCombination(
     int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-    assert(nbInputs == 2);
-    assert(nbOutputs == 3);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 3);
     const PluginTensorDesc& in = inOut[pos];
     if (pos == 0)       // PointCloud Array --- x, y, z, w
     {

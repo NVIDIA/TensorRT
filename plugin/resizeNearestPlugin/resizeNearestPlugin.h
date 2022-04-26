@@ -17,7 +17,6 @@
 #ifndef TRT_RESIZENEAREST_PLUGIN_H
 #define TRT_RESIZENEAREST_PLUGIN_H
 
-#include <cassert>
 #include <cuda_runtime_api.h>
 #include <string.h>
 #include <string>
@@ -25,7 +24,7 @@
 
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
-#include "maskRCNNKernels.h"
+#include "common/kernels/maskRCNNKernels.h"
 
 namespace nvinfer1
 {

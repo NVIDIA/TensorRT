@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
+#include "common/kernel.h"
 #include <algorithm>
 #include <array>
 #include <assert.h>
@@ -190,26 +190,27 @@ pluginStatus_t ROIPoolingForwardKernelAlignedLauncher(cudaStream_t stream,
     }
 
     // in the aligned version of ROI Pooling R should always be a multiple of N
-    ASSERT(R % N == 0);
+    PLUGIN_ASSERT(R % N == 0);
 
     // NC/xHW
     int32_t fmapStep = 1;
     switch(DATA_L)
     {
-        case NCHW: fmapStep = 1; 
-            break;
-        case NC4HW: fmapStep = 4;
-            ASSERT((N * C) % 4 == 0);
-            break;
-        case NC32HW: fmapStep = 32;
-            ASSERT((N * C) % 32 == 0);
-            break;
-        default: ASSERT(false);
+    case NCHW: fmapStep = 1; break;
+    case NC4HW:
+        fmapStep = 4;
+        PLUGIN_ASSERT((N * C) % 4 == 0);
+        break;
+    case NC32HW:
+        fmapStep = 32;
+        PLUGIN_ASSERT((N * C) % 32 == 0);
+        break;
+    default: PLUGIN_ASSERT(false);
     }
 
-    if(shmemSize > 48 * 1024)
+    if (shmemSize > 48 * 1024)
     {
-        CHECK(cudaFuncSetAttribute(&ROIPoolingForwardKernelAligned<DATA_T, ROI_T, INFER_ONLY, true>, 
+        PLUGIN_CHECK(cudaFuncSetAttribute(&ROIPoolingForwardKernelAligned<DATA_T, ROI_T, INFER_ONLY, true>,
             cudaFuncAttributeMaxDynamicSharedMemorySize, shmemSize));
     }
     ROIPoolingForwardKernelAligned<DATA_T, ROI_T, INFER_ONLY, fmap_in_shmem><<<N * C, 256, shmemSize, stream>>>(R / N,

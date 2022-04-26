@@ -14,12 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <array>
-#include "kernel.h"
+#include "common/kernel.h"
 #include "cuda_fp16.h"
+#include <array>
 
 // overloading exp for half type
-inline __device__ __half exp(__half a) {
+inline __device__ __half exp(__half a)
+{
 #if __CUDA_ARCH__ >= 530
     return hexp(a);
 #else

@@ -14,19 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
+#include "common/kernel.h"
 
 template <unsigned nthdsPerCTA>
-__launch_bounds__(nthdsPerCTA)
-    __global__ void softmaxKernel(const float* input,
-                                  const int n,
-                                  const int batch,
-                                  const int batchOffset,
-                                  const int groups,
-                                  const int groupOffset,
-                                  const int stride,
-                                  const float temp,
-                                  float* output)
+__launch_bounds__(nthdsPerCTA) __global__ void softmaxKernel(const float* input, const int n, const int batch,
+    const int batchOffset, const int groups, const int groupOffset, const int stride, const float temp, float* output)
 {
     int id = blockIdx.x * nthdsPerCTA + threadIdx.x;
     if (id < batch * groups)
@@ -133,20 +125,11 @@ pluginStatus_t regionGPU(
     return STATUS_SUCCESS;
 }
 
-pluginStatus_t regionInference(
-    cudaStream_t stream,
-    const int batch,
-    const int C,
-    const int H,
-    const int W,
-    const int num,
-    const int coords,
-    const int classes,
-    const bool hasSoftmaxTree,
-    const nvinfer1::plugin::softmaxTree* smTree,
-    const void* input,
-    void* output)
+pluginStatus_t regionInference(cudaStream_t stream, const int batch, const int C, const int H, const int W,
+    const int num, const int coords, const int classes, const bool hasSoftmaxTree,
+    const nvinfer1::plugin::softmaxTree* smTree, const void* input, void* output)
 {
-    CHECK(cudaMemcpyAsync(output, input, batch * C * H * W * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-    return regionGPU(stream, batch, C, H, W, num, coords, classes, hasSoftmaxTree, smTree, (const float*) input, (float*) output);
+    PLUGIN_CHECK(cudaMemcpyAsync(output, input, batch * C * H * W * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+    return regionGPU(
+        stream, batch, C, H, W, num, coords, classes, hasSoftmaxTree, smTree, (const float*) input, (float*) output);
 }

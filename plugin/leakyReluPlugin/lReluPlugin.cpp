@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 #include "lReluPlugin.h"
-#include "checkMacrosPlugin.h"
-#include "kernel.h"
+#include "common/checkMacrosPlugin.h"
+#include "common/kernel.h"
 
 using namespace nvinfer1;
 using nvinfer1::plugin::LReluPluginCreator;
@@ -36,10 +36,10 @@ LReLU::LReLU(float negSlope)
 
 LReLU::LReLU(const void* buffer, size_t length)
 {
-    const char *d = reinterpret_cast<const char *>(buffer), *a = d;
+    const char *d = reinterpret_cast<const char*>(buffer), *a = d;
     mNegSlope = read<float>(d);
     mBatchDim = read<int>(d);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 int LReLU::getNbOutputs() const noexcept
@@ -49,8 +49,8 @@ int LReLU::getNbOutputs() const noexcept
 
 Dims LReLU::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
-    ASSERT(nbInputDims == 1);
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(nbInputDims == 1);
+    PLUGIN_ASSERT(index == 0);
     return inputs[0];
 }
 
@@ -71,18 +71,18 @@ size_t LReLU::getSerializationSize() const noexcept
 
 void LReLU::serialize(void* buffer) const noexcept
 {
-    char *d = reinterpret_cast<char *>(buffer), *a = d;
+    char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mNegSlope);
     write(d, mBatchDim);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-void LReLU::configureWithFormat(
-    const Dims* inputDims, int /* nbInputs */, const Dims* /* outputDims */, int nbOutputs, DataType type, PluginFormat format, int) noexcept
+void LReLU::configureWithFormat(const Dims* inputDims, int /* nbInputs */, const Dims* /* outputDims */, int nbOutputs,
+    DataType type, PluginFormat format, int) noexcept
 {
-    ASSERT(type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
-    ASSERT(mBatchDim == 1);
-    ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
+    PLUGIN_ASSERT(mBatchDim == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
     for (int i = 0; i < inputDims[0].nbDims; ++i)
     {
         mBatchDim *= inputDims[0].d[i];
@@ -155,8 +155,8 @@ const PluginFieldCollection* LReluPluginCreator::getFieldNames() noexcept
 IPluginV2* LReluPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     const PluginField* fields = fc->fields;
-    ASSERT(fc->nbFields == 1);
-    ASSERT(fields[0].type == PluginFieldType::kFLOAT32);
+    PLUGIN_ASSERT(fc->nbFields == 1);
+    PLUGIN_ASSERT(fields[0].type == PluginFieldType::kFLOAT32);
     float negSlope = *(static_cast<const float*>(fields[0].data));
 
     return new LReLU(negSlope);

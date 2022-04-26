@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
+#include "common/kernel.h"
 #include "reducedMathPlugin.h"
 #include <iostream>
 
@@ -176,22 +176,13 @@ pluginStatus_t priorBoxGpu(
     }
 }
 
-pluginStatus_t priorBoxInference(
-    cudaStream_t stream,
-    const PriorBoxParameters param,
-    const int H,
-    const int W,
-    const int numPriors,
-    const int numAspectRatios,
-    const void* minSize,
-    const void* maxSize,
-    const void* aspectRatios,
+pluginStatus_t priorBoxInference(cudaStream_t stream, const PriorBoxParameters param, const int H, const int W,
+    const int numPriors, const int numAspectRatios, const void* minSize, const void* maxSize, const void* aspectRatios,
     void* outputData)
 {
-    ASSERT(param.numMaxSize >= 0);
+    PLUGIN_ASSERT(param.numMaxSize >= 0);
     if (param.numMaxSize)
-        return priorBoxGpu(stream, param, H, W, numPriors, numAspectRatios,
-                           minSize, maxSize, aspectRatios, outputData);
+        return priorBoxGpu(stream, param, H, W, numPriors, numAspectRatios, minSize, maxSize, aspectRatios, outputData);
     else
         return priorBoxGpu(stream, param, H, W, numPriors, numAspectRatios,
                            minSize, nullptr, aspectRatios, outputData);
@@ -201,22 +192,13 @@ namespace nvinfer1
 {
 namespace plugin
 {
-pluginStatus_t priorBoxInference(
-    cudaStream_t stream,
-    const PriorBoxParameters param,
-    const int H,
-    const int W,
-    const int numPriors,
-    const int numAspectRatios,
-    const void* minSize,
-    const void* maxSize,
-    const void* aspectRatios,
+pluginStatus_t priorBoxInference(cudaStream_t stream, const PriorBoxParameters param, const int H, const int W,
+    const int numPriors, const int numAspectRatios, const void* minSize, const void* maxSize, const void* aspectRatios,
     void* outputData)
 {
-    ASSERT(param.numMaxSize >= 0);
+    PLUGIN_ASSERT(param.numMaxSize >= 0);
     if (param.numMaxSize)
-        return priorBoxGpu(stream, param, H, W, numPriors, numAspectRatios,
-                           minSize, maxSize, aspectRatios, outputData);
+        return priorBoxGpu(stream, param, H, W, numPriors, numAspectRatios, minSize, maxSize, aspectRatios, outputData);
     else
         return priorBoxGpu(stream, param, H, W, numPriors, numAspectRatios,
                            minSize, nullptr, aspectRatios, outputData);

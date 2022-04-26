@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 #include "scatterPlugin.h"
-#include "half.h"
+#include "common/half.h"
 #include <cstring>
 #include <cublas_v2.h>
 #include <cudnn.h>
@@ -63,11 +63,12 @@ void ScatterND::terminate() noexcept
 {
 }
 
-bool ScatterND::supportsFormatCombination(int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+bool ScatterND::supportsFormatCombination(
+    int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    ASSERT(pos < 4);
-    ASSERT(nbInputs == 3);
-    ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(pos < 4);
+    PLUGIN_ASSERT(nbInputs == 3);
+    PLUGIN_ASSERT(nbOutputs == 1);
     const PluginTensorDesc& desc = inOut[pos];
     bool ret = false;
     switch (pos)
@@ -136,16 +137,16 @@ int32_t ScatterND::calculateCopySize(const Dims& dataDims) const noexcept
 }
 
 int32_t ScatterND::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
-{  
-    int32_t transformCoeff[outputDesc[0].dims.MAX_DIMS];
-    std::memset(transformCoeff, 0, sizeof(int32_t)*outputDesc[0].dims.MAX_DIMS);
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+{
+    int32_t transformCoeff[nvinfer1::Dims::MAX_DIMS];
+    std::memset(transformCoeff, 0, sizeof(int32_t) * outputDesc[0].dims.MAX_DIMS);
     Dims IndexDims = inputDesc[indexTensorIdx].dims;
-    
+
     Dims dataDims = inputDesc[dataTensorIdx].dims;
 
-    int32_t indexRank = IndexDims.d[IndexDims.nbDims-1];
-    ASSERT(indexRank <= dataDims.nbDims);
+    int32_t indexRank = IndexDims.d[IndexDims.nbDims - 1];
+    PLUGIN_ASSERT(indexRank <= dataDims.nbDims);
 
     int32_t nSlices = calculateNumSlices(IndexDims);
     int32_t rowSize = 1;
@@ -216,7 +217,7 @@ const char* ScatterND::getPluginNamespace() const noexcept
 // Return the DataType of the plugin output at the requested index
 DataType ScatterND::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(index == 0);
     return inputTypes[dataTensorIdx];
 }
 

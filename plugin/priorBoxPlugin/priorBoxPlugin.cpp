@@ -51,7 +51,7 @@ PriorBox::PriorBox(PriorBoxParameters param, int32_t H, int32_t W)
         }
         else
         {
-            ASSERT(dest == nullptr);
+            PLUGIN_ASSERT(dest == nullptr);
         }
     };
     copyParamData(mParam.minSize, param.minSize, param.numMinSize);
@@ -65,20 +65,20 @@ void PriorBox::setupDeviceMemory() noexcept
 {
     auto copyToDevice = [](const void* hostData, size_t count) -> Weights {
         void* deviceData = nullptr;
-        CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
-        CUASSERT(cudaMemcpy(deviceData, hostData, count * sizeof(float), cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
+        PLUGIN_CUASSERT(cudaMemcpy(deviceData, hostData, count * sizeof(float), cudaMemcpyHostToDevice));
         return Weights{DataType::kFLOAT, deviceData, int64_t(count)};
     };
 
     // minSize is required and needs to be non-negative
-    ASSERT(mParam.numMinSize > 0 && mParam.minSize != nullptr);
+    PLUGIN_ASSERT(mParam.numMinSize > 0 && mParam.minSize != nullptr);
     for (auto i = 0; i < mParam.numMinSize; ++i)
     {
-        ASSERT(mParam.minSize[i] > 0 && "minSize must be positive");
+        PLUGIN_ASSERT(mParam.minSize[i] > 0 && "minSize must be positive");
     }
     minSize = copyToDevice(mParam.minSize, mParam.numMinSize);
 
-    ASSERT(mParam.numAspectRatios >= 0 && mParam.aspectRatios != nullptr);
+    PLUGIN_ASSERT(mParam.numAspectRatios >= 0 && mParam.aspectRatios != nullptr);
     // Aspect ratio of 1.0 is built in.
     std::vector<float> tmpAR(1, 1);
     for (auto i = 0; i < mParam.numAspectRatios; ++i)
@@ -122,11 +122,11 @@ void PriorBox::setupDeviceMemory() noexcept
      */
     if (mParam.numMaxSize > 0)
     {
-        ASSERT(mParam.numMinSize == mParam.numMaxSize && mParam.maxSize != nullptr);
+        PLUGIN_ASSERT(mParam.numMinSize == mParam.numMaxSize && mParam.maxSize != nullptr);
         for (auto i = 0; i < mParam.numMaxSize; ++i)
         {
             // maxSize should be greater than minSize
-            ASSERT(mParam.maxSize[i] > mParam.minSize[i] && "maxSize must be greater than minSize");
+            PLUGIN_ASSERT(mParam.maxSize[i] > mParam.minSize[i] && "maxSize must be greater than minSize");
             mNumPriors++;
         }
         maxSize = copyToDevice(mParam.maxSize, mParam.numMaxSize);
@@ -159,7 +159,7 @@ PriorBox::PriorBox(const void* data, size_t length)
     mH = read<int>(d);
     mW = read<int>(d);
 
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 
     setupDeviceMemory();
 }
@@ -174,9 +174,9 @@ int32_t PriorBox::getNbOutputs() const noexcept
 // Computes and returns the output dimensions
 Dims PriorBox::getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims) noexcept
 {
-    ASSERT(nbInputDims == 2);
+    PLUGIN_ASSERT(nbInputDims == 2);
     // Only one output from the plugin layer
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(index == 0);
     // Particularity of the PriorBox layer: no batchSize dimension needed
     mH = inputs[0].d[1], mW = inputs[0].d[2];
     // workaround for TRT
@@ -231,7 +231,7 @@ void PriorBox::serialize(void* buffer) const noexcept
     write(d, mH);
     write(d, mW);
 
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 bool PriorBox::supportsFormat(DataType type, PluginFormat format) const noexcept
@@ -251,14 +251,14 @@ const char* PriorBox::getPluginVersion() const noexcept
 
 void PriorBox::destroy() noexcept
 {
-    CUASSERT(cudaFree(const_cast<void*>(minSize.values)));
+    PLUGIN_CUASSERT(cudaFree(const_cast<void*>(minSize.values)));
     if (mParam.numMaxSize > 0)
     {
-        CUASSERT(cudaFree(const_cast<void*>(maxSize.values)));
+        PLUGIN_CUASSERT(cudaFree(const_cast<void*>(maxSize.values)));
     }
     if (mParam.numAspectRatios > 0)
     {
-        CUASSERT(cudaFree(const_cast<void*>(aspectRatios.values)));
+        PLUGIN_CUASSERT(cudaFree(const_cast<void*>(aspectRatios.values)));
     }
     delete[] mParam.minSize;
     delete[] mParam.maxSize;
@@ -286,10 +286,11 @@ const char* PriorBox::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index.
-DataType PriorBox::getOutputDataType(int32_t index, const nvinfer1::DataType* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
+DataType PriorBox::getOutputDataType(
+    int32_t index, const nvinfer1::DataType* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Two outputs
-    ASSERT(index == 0 || index == 1);
+    PLUGIN_ASSERT(index == 0 || index == 1);
     return DataType::kFLOAT;
 }
 
@@ -310,12 +311,12 @@ void PriorBox::configurePlugin(const Dims* inputDims, int32_t nbInputs, const Di
     const DataType* inputTypes, const DataType* /*outputTypes*/, const bool* /*inputIsBroadcast*/,
     const bool* /*outputIsBroadcast*/, PluginFormat floatFormat, int32_t /*maxBatchSize*/) noexcept
 {
-    ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
-    ASSERT(nbInputs == 2);
-    ASSERT(nbOutputs == 1);
-    ASSERT(inputDims[0].nbDims == 3);
-    ASSERT(inputDims[1].nbDims == 3);
-    ASSERT(outputDims[0].nbDims == 3);
+    PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(inputDims[0].nbDims == 3);
+    PLUGIN_ASSERT(inputDims[1].nbDims == 3);
+    PLUGIN_ASSERT(outputDims[0].nbDims == 3);
     mH = inputDims[0].d[1];
     mW = inputDims[0].d[2];
     // prepare for the inference function
@@ -389,7 +390,7 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(const char* /*name*/, const Pl
         const char* attrName = fields[i].name;
         if (!strcmp(attrName, "minSize"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             const int32_t size = fields[i].length;
             params.numMinSize = size;
             if (size > 0)
@@ -410,7 +411,7 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(const char* /*name*/, const Pl
         }
         else if (!strcmp(attrName, "maxSize"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             const int32_t size = fields[i].length;
             params.numMaxSize = size;
             if (size > 0)
@@ -431,7 +432,7 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(const char* /*name*/, const Pl
         }
         else if (!strcmp(attrName, "aspectRatios"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             const int32_t size = fields[i].length;
             params.numAspectRatios = size;
             if (size > 0)
@@ -452,7 +453,7 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(const char* /*name*/, const Pl
         }
         else if (!strcmp(attrName, "variance"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             const int32_t size = fields[i].length;
             const auto* lVar = static_cast<const float*>(fields[i].data);
             for (auto j = 0; j < size; j++)
@@ -463,37 +464,37 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(const char* /*name*/, const Pl
         }
         else if (!strcmp(attrName, "flip"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             params.flip = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "clip"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             params.clip = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "imgH"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             params.imgH = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "imgW"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             params.imgW = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "stepH"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             params.stepH = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "stepW"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             params.stepW = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "offset"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             params.offset = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
         }
     }

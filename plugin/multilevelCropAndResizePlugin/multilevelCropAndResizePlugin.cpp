@@ -38,6 +38,7 @@ std::vector<PluginField> MultilevelCropAndResizePluginCreator::mPluginAttributes
 
 MultilevelCropAndResizePluginCreator::MultilevelCropAndResizePluginCreator() noexcept
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("pooled_size", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 3));
 
@@ -69,12 +70,12 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(const char* nam
         const char* attrName = fields[i].name;
         if (!strcmp(attrName, "pooled_size"))
         {
-            assert(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             mPooledSize = *(static_cast<const int*>(fields[i].data));
         }
         if (!strcmp(attrName, "image_size"))
         {
-            assert(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             const auto dims = static_cast<const int32_t*>(fields[i].data);
             std::copy_n(dims, 3, image_size.d);
         }
@@ -91,7 +92,7 @@ MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1
     : mPooledSize({pooled_size, pooled_size})
 {
 
-    assert(pooled_size > 0);
+    PLUGIN_ASSERT(pooled_size > 0);
     // shape
     mInputHeight = image_size.d[1];
     mInputWidth = image_size.d[2];
@@ -158,18 +159,18 @@ void MultilevelCropAndResize::check_valid_inputs(const nvinfer1::Dims* inputs, i
     // to be compatible with tensorflow node's input:
     // roi: [N, anchors, 4],
     // feature_map list(5 maps): p2, p3, p4, p5, p6
-    assert(nbInputDims == 1 + mFeatureMapCount);
+    PLUGIN_ASSERT(nbInputDims == 1 + mFeatureMapCount);
 
     nvinfer1::Dims rois = inputs[0];
-    assert(rois.nbDims == 2);
-    assert(rois.d[1] == 4);
+    PLUGIN_ASSERT(rois.nbDims == 2);
+    PLUGIN_ASSERT(rois.d[1] == 4);
 
     for (int i = 1; i < nbInputDims; ++i)
     {
         nvinfer1::Dims dims = inputs[i];
 
         // CHW with the same #C
-        assert(dims.nbDims == 3 && dims.d[0] == inputs[1].d[0]);
+        PLUGIN_ASSERT(dims.nbDims == 3 && dims.d[0] == inputs[1].d[0]);
     }
 }
 
@@ -177,7 +178,7 @@ Dims MultilevelCropAndResize::getOutputDimensions(int index, const Dims* inputs,
 {
 
     check_valid_inputs(inputs, nbInputDims);
-    assert(index == 0);
+    PLUGIN_ASSERT(index == 0);
 
     nvinfer1::Dims result;
     result.nbDims = 4;
@@ -206,7 +207,7 @@ int32_t MultilevelCropAndResize::enqueue(
 
         pooled, mPooledSize, mPrecision);
 
-    assert(status == cudaSuccess);
+    PLUGIN_ASSERT(status == cudaSuccess);
     return 0;
 }
 
@@ -231,7 +232,7 @@ void MultilevelCropAndResize::serialize(void* buffer) const noexcept
         write(d, mFeatureSpatialSize[i].x);
     }
     write(d, mPrecision);
-    assert(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length) noexcept
@@ -250,7 +251,7 @@ MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length
     }
     mPrecision = read<DataType>(d);
 
-    assert(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 // Return the DataType of the plugin output at the requested index
@@ -283,11 +284,11 @@ void MultilevelCropAndResize::configurePlugin(const Dims* inputDims, int nbInput
     int nbOutputs, const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    assert(supportsFormat(inputTypes[0], floatFormat));
+    PLUGIN_ASSERT(supportsFormat(inputTypes[0], floatFormat));
     check_valid_inputs(inputDims, nbInputs);
 
-    assert(nbOutputs == 1);
-    assert(nbInputs == 1 + mFeatureMapCount);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 1 + mFeatureMapCount);
 
     mROICount = inputDims[0].d[0];
     mFeatureLength = inputDims[1].d[0];

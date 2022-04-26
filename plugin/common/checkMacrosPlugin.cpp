@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include "checkMacrosPlugin.h"
+#include "common/checkMacrosPlugin.h"
 #include <cstdlib>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -106,7 +106,7 @@ void reportAssertion(const char* msg, const char* file, int line)
            << file << ':' << line << std::endl
            << "Aborting..." << std::endl;
     getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
-    cudaDeviceReset();
+    PLUGIN_CUASSERT(cudaDeviceReset());
     abort();
 }
 

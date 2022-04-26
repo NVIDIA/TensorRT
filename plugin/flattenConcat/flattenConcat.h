@@ -18,7 +18,7 @@
 #define TRT_FLATTENCONCAT_PLUGIN_H
 
 #include "NvInferPlugin.h"
-#include "plugin.h"
+#include "common/plugin.h"
 #include <cstdlib>
 #include <cublas_v2.h>
 #include <cudnn.h>

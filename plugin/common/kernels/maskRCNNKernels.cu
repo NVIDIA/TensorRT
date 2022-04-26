@@ -20,8 +20,8 @@
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
+#include "common/plugin.h"
 #include "maskRCNNKernels.h"
-#include "plugin.h"
 #include <NvInfer.h>
 #include <assert.h>
 #include <cub/cub.cuh>
@@ -1330,7 +1330,7 @@ cudaError_t argMaxGroup(cudaStream_t stream, int N, nvinfer1::DataType dtype, in
             samples, 0, NClass, inScore, inBbox, validSamples, outScore, outLabel, outBbox);
         break;
     case nvinfer1::DataType::kHALF: break;
-    default: assert(false);
+    default: PLUGIN_ASSERT(false);
     }
 
     return cudaGetLastError();
@@ -1352,7 +1352,7 @@ cudaError_t argMaxWOBackground(cudaStream_t stream, int N, nvinfer1::DataType dt
             samples, 1, NClass, inScore, inBbox, validSamples, outScore, outLabel, outBbox);
         break;
     case nvinfer1::DataType::kHALF: break;
-    default: assert(false);
+    default: PLUGIN_ASSERT(false);
     }
 
     return cudaGetLastError();
@@ -1379,7 +1379,7 @@ cudaError_t sortPerClass(cudaStream_t stream, int N, nvinfer1::DataType dtype, i
             background, scoreThreshold, inSampleValidCount, inScorePtr, inLabelPtr, inBboxPtr, outclassStartPosPtr,
             outScorePtr, outLabelPtr, outSampleIdxPtr, outValidSampleCountPtr);
         break;
-    default: assert(false);
+    default: PLUGIN_ASSERT(false);
     }
 
     return cudaGetLastError();
@@ -1404,7 +1404,7 @@ cudaError_t PerClassNMS(cudaStream_t stream, int N, nvinfer1::DataType dtype, in
         PerClassNMS_half_kernel<Threads><<<blocks, threads, 0, stream>>>(samples, NClass, nmsThreshold,
             validSampleCount, inLabel, inBbox, inBboxRefIdx, classStarts, outFlagSamples);
         break;
-    default: assert(false);
+    default: PLUGIN_ASSERT(false);
     }
 
     return cudaGetLastError();
@@ -1435,7 +1435,7 @@ cudaError_t KeepTopKGather(cudaStream_t stream, int N, nvinfer1::DataType dtype,
         }
         break;
     case nvinfer1::DataType::kHALF: break;
-    default: assert(false);
+    default: PLUGIN_ASSERT(false);
     }
 
     return cudaGetLastError();
@@ -1594,7 +1594,7 @@ cudaError_t KeepTopKGatherBoxScore(cudaStream_t stream, int N, nvinfer1::DataTyp
                 outDetections);
         }
         break;
-    default: assert(false);
+    default: PLUGIN_ASSERT(false);
     }
 
     return cudaGetLastError();
@@ -1618,14 +1618,14 @@ cudaError_t RefineBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer
     void* sortNMSMarkPtr = wsPtr + refineOffset.sortNMSMarkOffset;
 
     cudaError_t status = cudaSuccess;
-    CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
 
     if (NClass > 1)
     { // multiple classes
         status = argMaxGroup<32>(stream, N, dtype, samples, NClass, inScores, inDelta, inCountValid, argMaxScorePtr,
             argMaxLabelPtr, argMaxBBoxPtr); // argMaxBBoxPtr means delta of bboxes
-        assert(status == cudaSuccess);
-        CUASSERT(status);
+        PLUGIN_ASSERT(status == cudaSuccess);
+        PLUGIN_CUASSERT(status);
     }
     else
     { // Only one class
@@ -1643,12 +1643,12 @@ cudaError_t RefineBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer
         }
         case nvinfer1::DataType::kHALF: { break;
         }
-        default: assert(false);
+        default: PLUGIN_ASSERT(false);
         }
     }
 
     status = ApplyDelta2Bboxes(stream, N, samples, inROI, argMaxBBoxPtr, argMaxBBoxPtr);
-    assert(status == cudaSuccess);
+    PLUGIN_ASSERT(status == cudaSuccess);
 
     if (samples <= 1024)
     {
@@ -1670,22 +1670,22 @@ cudaError_t RefineBatchClassNMS(cudaStream_t stream, int N, int samples, nvinfer
     }
     else
     {
-        assert(false && "unsupported sortPerClass");
+        PLUGIN_ASSERT(false && "unsupported sortPerClass");
         return cudaErrorLaunchFailure;
     }
-    assert(status == cudaSuccess);
-    CUASSERT(status);
+    PLUGIN_ASSERT(status == cudaSuccess);
+    PLUGIN_CUASSERT(status);
 
     status = PerClassNMS<256>(stream, N, dtype, samples, NClass, param.iouThreshold, sortClassValidCountPtr,
         // sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortClassPosPtr, sortNMSMarkPtr);
-    assert(status == cudaSuccess);
-    CUASSERT(status);
+    PLUGIN_ASSERT(status == cudaSuccess);
+    PLUGIN_CUASSERT(status);
 
     status = KeepTopKGather<256>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr, sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outDetections, 0);
-    assert(status == cudaSuccess);
-    CUASSERT(status);
+    PLUGIN_ASSERT(status == cudaSuccess);
+    PLUGIN_CUASSERT(status);
     return status;
 }
 
@@ -1708,18 +1708,18 @@ cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const 
     void* sortNMSMarkPtr = wsPtr + refineOffset.sortNMSMarkOffset;
 
     cudaError_t status = cudaSuccess;
-    CUASSERT(cudaMemsetAsync(argMaxScorePtr, 0, N * samples * sizeof(float), stream));
-    CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4 * sizeof(float), stream));
-    CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
-    CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass + 1) * sizeof(int), stream));
-    CUASSERT(cudaMemsetAsync(sortClassSampleIdxPtr, 0, N * (samples + 1) * sizeof(int), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(argMaxScorePtr, 0, N * samples * sizeof(float), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4 * sizeof(float), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass + 1) * sizeof(int), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(sortClassSampleIdxPtr, 0, N * (samples + 1) * sizeof(int), stream));
 
     if (NClass > 1)
     { // multiple classes
         status = argMaxWOBackground<32>(stream, N, dtype, samples, NClass, inScores, inDelta, inCountValid,
             argMaxScorePtr, argMaxLabelPtr, argMaxBBoxPtr); // argMaxBBoxPtr means delta of bboxes
-        assert(status == cudaSuccess);
-        CUASSERT(status);
+        PLUGIN_ASSERT(status == cudaSuccess);
+        PLUGIN_CUASSERT(status);
     }
     else
     { // Only one class
@@ -1737,12 +1737,12 @@ cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const 
         }
         case nvinfer1::DataType::kHALF: { break;
         }
-        default: assert(false);
+        default: PLUGIN_ASSERT(false);
         }
     }
 
     status = DecodeBBoxes(stream, N, samples, regWeight, inputHeight, inputWidth, inROI, argMaxBBoxPtr, argMaxBBoxPtr, dtype);
-    assert(status == cudaSuccess);
+    PLUGIN_ASSERT(status == cudaSuccess);
 
     if (samples <= 1024)
     {
@@ -1764,20 +1764,20 @@ cudaError_t DetectionPostProcess(cudaStream_t stream, int N, int samples, const 
     }
     else
     {
-        assert(false && "unsupported sortPerClass");
+        PLUGIN_ASSERT(false && "unsupported sortPerClass");
         return cudaErrorLaunchFailure;
     }
-    assert(status == cudaSuccess);
-    CUASSERT(status);
+    PLUGIN_ASSERT(status == cudaSuccess);
+    PLUGIN_CUASSERT(status);
 
     status = PerClassNMS<256>(stream, N, dtype, samples, NClass, param.iouThreshold, sortClassValidCountPtr,
         // sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortClassPosPtr, sortNMSMarkPtr);
-    CUASSERT(status);
+    PLUGIN_CUASSERT(status);
 
     status = KeepTopKGather<256>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr, sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outDetections, 0);
-    CUASSERT(status);
+    PLUGIN_CUASSERT(status);
 
     return status;
 }
@@ -1867,15 +1867,15 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
     void* sortNMSMarkPtr = wsPtr + proposalOffset.sortNMSMarkOffset;
 
     cudaError_t status = cudaSuccess;
-    CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
 
     // extract foreground score
     extract_fg_kernel<<<N, dMIN(inputCnt, 1024), 0, stream>>>(inputCnt, inScores, preRefineScorePtr);
-    CUASSERT(cudaGetLastError());
+    PLUGIN_CUASSERT(cudaGetLastError());
 
     // Here, inDelta are converted to normalize coordinates based on anchors
     status = ApplyDelta2Bboxes(stream, N, inputCnt, inAnchors, inDelta, const_cast<void*>(inDelta));
-    CUASSERT(status);
+    PLUGIN_CUASSERT(status);
 
     // sort the score
     // d_key_in: preRefineScorePtr [N, inputCnt, 1]
@@ -1887,7 +1887,7 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
     // offsets: [0, inputCnt, inputCnt*2, ..., ]
     int* offsets = static_cast<int*>(tempStoragePtr);
     set_offset_kernel<<<1, 1024, 0, stream>>>(inputCnt, N + 1, offsets);
-    assert(cudaGetLastError() == cudaSuccess);
+    PLUGIN_ASSERT(cudaGetLastError() == cudaSuccess);
     tempStoragePtr = static_cast<void*>(static_cast<int*>(tempStoragePtr) + (N + 1));
 
     size_t temp_storage_bytes = 0;
@@ -1895,14 +1895,14 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
         (float*) preRefineSortedScorePtr, (BBoxT<float>*) inDelta, (BBoxT<float>*) preRefineBboxPtr, N * inputCnt, N,
         offsets, offsets + 1, 0, 8 * sizeof(float), stream);
 
-    assert((1 << 23) * (size_t) N > temp_storage_bytes);
+    PLUGIN_ASSERT((1 << 23) * (size_t) N > temp_storage_bytes);
 
     cub::DeviceSegmentedRadixSort::SortPairsDescending(tempStoragePtr, temp_storage_bytes, (float*) preRefineScorePtr,
         (float*) preRefineSortedScorePtr, (BBoxT<float>*) inDelta, (BBoxT<float>*) preRefineBboxPtr, N * inputCnt, N,
         offsets, offsets + 1, 0, 8 * sizeof(float), stream);
 
     int NClass = param.numClasses;
-    assert(NClass == 1);
+    PLUGIN_ASSERT(NClass == 1);
     if (NClass == 1)
     { // Only one class
         resample_kernel<float><<<N, dMIN(samples, 1024), 0, stream>>>(
@@ -1920,7 +1920,7 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
         }
         case nvinfer1::DataType::kHALF: { break;
         }
-        default: assert(false);
+        default: PLUGIN_ASSERT(false);
         }
     }
 
@@ -1944,19 +1944,19 @@ cudaError_t proposalRefineBatchClassNMS(cudaStream_t stream, int N, int inputCnt
     }
     else
     {
-        assert(false && "unsupported sortPerClass");
+        PLUGIN_ASSERT(false && "unsupported sortPerClass");
         return cudaErrorLaunchFailure;
     }
-    CUASSERT(status);
+    PLUGIN_CUASSERT(status);
 
     status = PerClassNMS<256>(stream, N, dtype, samples, NClass, param.iouThreshold, sortClassValidCountPtr,
         // sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortClassPosPtr, sortNMSMarkPtr);
-    CUASSERT(status);
+    PLUGIN_CUASSERT(status);
 
     status = KeepTopKGather<256>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr, sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outProposals, 1);
-    CUASSERT(status);
+    PLUGIN_CUASSERT(status);
 
     return status;
 }
@@ -1974,15 +1974,15 @@ void score_bbox_cub_sort(void* tempStorage,
                          )
 {
     size_t temp_storage_bytes = 0;
-    cub::DeviceSegmentedRadixSort::SortPairsDescending(NULL, temp_storage_bytes, (Dtype*) inScore,
-        (Dtype*) sortedScore, (BBoxT<Dtype>*) inBBox, (BBoxT<Dtype>*) sortedBBox, totalCnt, segCnt,
-        offsets, offsets + 1, 0, 8 * sizeof(Dtype), stream);
-    CUASSERT(cudaGetLastError());
+    cub::DeviceSegmentedRadixSort::SortPairsDescending(NULL, temp_storage_bytes, (Dtype*) inScore, (Dtype*) sortedScore,
+        (BBoxT<Dtype>*) inBBox, (BBoxT<Dtype>*) sortedBBox, totalCnt, segCnt, offsets, offsets + 1, 0,
+        8 * sizeof(Dtype), stream);
+    PLUGIN_CUASSERT(cudaGetLastError());
 
     cub::DeviceSegmentedRadixSort::SortPairsDescending(tempStorage, temp_storage_bytes, (Dtype*) inScore,
-        (Dtype*) sortedScore, (BBoxT<Dtype>*) inBBox, (BBoxT<Dtype>*) sortedBBox, totalCnt, segCnt,
-        offsets, offsets + 1, 0, 8 * sizeof(Dtype), stream);
-    CUASSERT(cudaGetLastError());
+        (Dtype*) sortedScore, (BBoxT<Dtype>*) inBBox, (BBoxT<Dtype>*) sortedBBox, totalCnt, segCnt, offsets,
+        offsets + 1, 0, 8 * sizeof(Dtype), stream);
+    PLUGIN_CUASSERT(cudaGetLastError());
 }
 
 cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samples, const float* regWeight,
@@ -2012,19 +2012,19 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
 
     cudaError_t status = cudaSuccess;
     int NClass = param.numClasses;
-    assert(NClass == 1);
-    CUASSERT(cudaMemsetAsync(argMaxScorePtr, 0, N * samples * sizeof(dtype), stream));
-    CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4 * sizeof(dtype), stream));
-    CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
-    CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass + 1) * sizeof(int), stream));
-    CUASSERT(cudaMemsetAsync(sortClassSampleIdxPtr, 0, N * (samples + 1) * sizeof(int), stream));
+    PLUGIN_ASSERT(NClass == 1);
+    PLUGIN_CUASSERT(cudaMemsetAsync(argMaxScorePtr, 0, N * samples * sizeof(dtype), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(argMaxBBoxPtr, 0, N * samples * 4 * sizeof(dtype), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(sortClassValidCountPtr, 0, N * sizeof(int), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(sortClassPosPtr, 0, N * (NClass + 1) * sizeof(int), stream));
+    PLUGIN_CUASSERT(cudaMemsetAsync(sortClassSampleIdxPtr, 0, N * (samples + 1) * sizeof(int), stream));
 
-    CUASSERT(cudaGetLastError());
+    PLUGIN_CUASSERT(cudaGetLastError());
 
     // Here, inDelta are converted to normalize coordinates based on anchors
     status = DecodeBBoxes(
         stream, N, inputCnt, regWeight, inputHeight, inputWidth, inAnchors, inDelta, const_cast<void*>(inDelta), dtype);
-    CUASSERT(cudaGetLastError());
+    PLUGIN_CUASSERT(cudaGetLastError());
 
     // sort the score
     // d_key_in: preRefineScorePtr [N, inputCnt, 1]
@@ -2037,7 +2037,7 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
 
     int* offsets = static_cast<int*>(tempStoragePtr);
     set_offset_kernel<<<1, 1024, 0, stream>>>(inputCnt, N + 1, offsets);
-    CUASSERT(cudaGetLastError());
+    PLUGIN_CUASSERT(cudaGetLastError());
     tempStoragePtr = static_cast<void*>(static_cast<int*>(tempStoragePtr) + (N + 1));
 
     switch (dtype)
@@ -2056,7 +2056,7 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
                                         offsets, stream);
             break;
         }
-        default: assert(false);
+        default: PLUGIN_ASSERT(false);
     }
 
     if (NClass == 1)
@@ -2067,17 +2067,17 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
             {
                 resample_kernel<float><<<N, dMIN(samples, 1024), 0, stream>>>(
                     inputCnt, samples, preRefineSortedScorePtr, preRefineBboxPtr, argMaxScorePtr, argMaxBBoxPtr);
-                CUASSERT(cudaGetLastError());
+                PLUGIN_CUASSERT(cudaGetLastError());
                 break;
             }
-            case nvinfer1::DataType::kHALF: 
-            { 
+            case nvinfer1::DataType::kHALF:
+            {
                 resample_kernel<__half><<<N, dMIN(samples, 1024), 0, stream>>>(
                     inputCnt, samples, preRefineSortedScorePtr, preRefineBboxPtr, argMaxScorePtr, argMaxBBoxPtr);
-                CUASSERT(cudaGetLastError());
+                PLUGIN_CUASSERT(cudaGetLastError());
                 break;
             }
-        default: assert(false);
+            default: PLUGIN_ASSERT(false);
         }
 
         int threads = 512;
@@ -2086,18 +2086,19 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
 
         switch (dtype)
         {
-            case nvinfer1::DataType::kFLOAT:
-            {
-                resetMemValue_kernel<float><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
-                CUASSERT(cudaGetLastError());
-                break;
-            }
-            case nvinfer1::DataType::kHALF: {
-                resetMemValue_kernel<__half><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
-                CUASSERT(cudaGetLastError());
-                break;
-            }
-            default: assert(false);
+        case nvinfer1::DataType::kFLOAT:
+        {
+            resetMemValue_kernel<float><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
+            PLUGIN_CUASSERT(cudaGetLastError());
+            break;
+        }
+        case nvinfer1::DataType::kHALF:
+        {
+            resetMemValue_kernel<__half><<<blocks, threads, 0, stream>>>(argMaxLabelPtr, N * samples, 0);
+            PLUGIN_CUASSERT(cudaGetLastError());
+            break;
+        }
+        default: PLUGIN_ASSERT(false);
         }
     }
 
@@ -2121,22 +2122,22 @@ cudaError_t MultilevelPropose(cudaStream_t stream, int N, int inputCnt, int samp
     }
     else
     {
-        assert(false && "unsupported sortPerClass");
+        PLUGIN_FAIL("Unsupported sortPerClass");
         return cudaErrorLaunchFailure;
     }
-    CUASSERT(cudaGetLastError());
+    PLUGIN_CUASSERT(cudaGetLastError());
 
     status = PerClassNMS<1024>(stream, N, dtype, samples, NClass, param.iouThreshold, sortClassValidCountPtr,
         // sortClassScorePtr,
         sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortClassPosPtr, sortNMSMarkPtr);
 
-    CUASSERT(cudaGetLastError());
+    PLUGIN_CUASSERT(cudaGetLastError());
 
     status = KeepTopKGatherBoxScore<512>(stream, N, dtype, samples, param.keepTopK, sortClassValidCountPtr,
         sortClassScorePtr, sortClassLabelPtr, argMaxBBoxPtr, sortClassSampleIdxPtr, sortNMSMarkPtr, outScore, outBbox,
         1);
 
-    CUASSERT(cudaGetLastError());
+    PLUGIN_CUASSERT(cudaGetLastError());
 
     return status;
 }
@@ -2324,7 +2325,7 @@ cudaError_t DecodeBBoxes(cudaStream_t stream, int N,
                 samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
             break;
         }
-        default: assert(false);   
+        default: PLUGIN_ASSERT(false);   
     }
 
     return cudaGetLastError();
@@ -2470,16 +2471,17 @@ __device__ inline __half interpolateBilinear(const __half* src, xy_t srcDims, fl
 }
 
 template <typename Trois, typename Tfeat>
-__global__ void roiAlign_kernel(xy_t imageSize, int featureCount, int roiCount, float threshold, int transformCoords,
-    bool absCoords, bool swapCoords, bool plusOneCoords, int samplingRatio, const Trois* rois, const Tfeat* P2,
-    const xy_t P2dims, const Tfeat* P3, const xy_t P3dims, const Tfeat* P4, const xy_t P4dims, const Tfeat* P5,
-    const xy_t P5dims, Tfeat* pooled, const xy_t poolDims)
+__global__ void roiAlign_kernel(xy_t const imageSize, int32_t const featureCount, int32_t const roiCount,
+    float const firstThreshold, int32_t const transformCoords, bool const absCoords, bool const swapCoords,
+    bool const plusOneCoords, int32_t const samplingRatio, Trois const* rois, Tfeat const* P2, xy_t const P2dims,
+    Tfeat const* P3, xy_t const P3dims, Tfeat const* P4, xy_t const P4dims, Tfeat const* P5, xy_t const P5dims,
+    Tfeat* pooled, xy_t const poolDims)
 {
-    const int batch = blockIdx.x;
-    const int feature = blockIdx.y;
-    const int roiIdx = blockIdx.z;
+    int32_t const batch = blockIdx.x;
+    int32_t const feature = blockIdx.y;
+    int32_t const roiIdx = blockIdx.z;
 
-    const Trois* roi = rois + 4 * (batch * roiCount + roiIdx);
+    Trois const* roi = rois + 4 * (batch * roiCount + roiIdx);
     float y1, x1, y2, x2, hw;
     if (swapCoords)
     {
@@ -2497,30 +2499,31 @@ __global__ void roiAlign_kernel(xy_t imageSize, int featureCount, int roiCount, 
     }
     if (absCoords)
     {
-        y1 = max(0.f, min((float) imageSize.y, y1)) / imageSize.y;
-        x1 = max(0.f, min((float) imageSize.x, x1)) / imageSize.x;
-        y2 = max(0.f, min((float) imageSize.y, y2)) / imageSize.y;
-        x2 = max(0.f, min((float) imageSize.x, x2)) / imageSize.x;
+        y1 = max(0.F, min(static_cast<float>(imageSize.y), y1)) / imageSize.y;
+        x1 = max(0.F, min(static_cast<float>(imageSize.x), x1)) / imageSize.x;
+        y2 = max(0.F, min(static_cast<float>(imageSize.y), y2)) / imageSize.y;
+        x2 = max(0.F, min(static_cast<float>(imageSize.x), x2)) / imageSize.x;
     }
     else
     {
-        y1 = max(0.f, min(1.f, y1));
-        x1 = max(0.f, min(1.f, x1));
-        y2 = max(0.f, min(1.f, y2));
-        x2 = max(0.f, min(1.f, x2));
+        y1 = max(0.F, min(1.F, y1));
+        x1 = max(0.F, min(1.F, x1));
+        y2 = max(0.F, min(1.F, y2));
+        x2 = max(0.F, min(1.F, x2));
     }
     if (plusOneCoords)
     {
-        hw = (y2 - y1 + 1.f / imageSize.y) * (x2 - x1 + 1.f / imageSize.x);
+        hw = (y2 - y1 + 1.F / imageSize.y) * (x2 - x1 + 1.F / imageSize.x);
     }
     else
     {
         hw = (y2 - y1) * (x2 - x1);
     }
 
-    const Tfeat* src = P2;
+    Tfeat const* src = P2;
     xy_t srcDims = P2dims;
-    int iP = 2;
+    int32_t iP = 2;
+    float threshold = firstThreshold;
 
     if (hw > threshold)
     {
@@ -2554,7 +2557,7 @@ __global__ void roiAlign_kernel(xy_t imageSize, int featureCount, int roiCount, 
     if (transformCoords == -1)
     {
         // Back-Compatibility with old PyramidROIAlign implementation.
-        samplingOffset = 0.f;
+        samplingOffset = 0.F;
 
         yStart = y1 * (srcDims.y - 1);
         xStart = x1 * (srcDims.x - 1);
@@ -2570,18 +2573,18 @@ __global__ void roiAlign_kernel(xy_t imageSize, int featureCount, int roiCount, 
         float inputOffset;
         if (transformCoords == 0) // No Half Pixel
         {
-            inputOffset = 0.f;
-            samplingOffset = 0.f;
+            inputOffset = 0.F;
+            samplingOffset = 0.F;
         }
         if (transformCoords == 1) // Output Half Pixel
         {
-            inputOffset = 0.f;
-            samplingOffset = 0.5f;
+            inputOffset = 0.F;
+            samplingOffset = 0.5F;
         }
         if (transformCoords == 2) // Half Pixel
         {
-            inputOffset = 0.5f;
-            samplingOffset = 0.5f;
+            inputOffset = 0.5F;
+            samplingOffset = 0.5F;
         }
 
         yStart = y1 * srcDims.y - inputOffset;
@@ -2594,27 +2597,29 @@ __global__ void roiAlign_kernel(xy_t imageSize, int featureCount, int roiCount, 
         xDelta = (xEnd - xStart) / poolDims.x;
     }
 
-    const int samplingRatioX = samplingRatio > 0 ? samplingRatio : max(1, (int) ceilf((xEnd - xStart) / poolDims.x));
-    const int samplingRatioY = samplingRatio > 0 ? samplingRatio : max(1, (int) ceilf((yEnd - yStart) / poolDims.y));
-    const int samplingCount = samplingRatioX * samplingRatioY;
+    int32_t const samplingRatioX
+        = samplingRatio > 0 ? samplingRatio : max(1, static_cast<int32_t>(ceilf((xEnd - xStart) / poolDims.x)));
+    int32_t const samplingRatioY
+        = samplingRatio > 0 ? samplingRatio : max(1, static_cast<int32_t>(ceilf((yEnd - yStart) / poolDims.y)));
+    int32_t const samplingCount = samplingRatioX * samplingRatioY;
 
-    for (int outIdx = threadIdx.x; outIdx < poolDims.x * poolDims.y; outIdx += blockDim.x)
+    for (int32_t outIdx = threadIdx.x; outIdx < poolDims.x * poolDims.y; outIdx += blockDim.x)
     {
-        int xx = outIdx % poolDims.x;
-        int yy = outIdx / poolDims.x;
+        int32_t xx = outIdx % poolDims.x;
+        int32_t yy = outIdx / poolDims.x;
         Tfeat* out = dst + poolDims.x * yy + xx;
         Tfeat result = 0;
-        for (int iy = 0; iy < samplingRatioY; iy++)
+        for (int32_t iy = 0; iy < samplingRatioY; iy++)
         {
             float ySample = yStart + yDelta * yy;
             ySample += yDelta * (iy + samplingOffset) / samplingRatioY;
-            ySample = min(max(ySample, 0.f), srcDims.y - 1.0f);
+            ySample = min(max(ySample, 0.F), srcDims.y - 1.F);
 
-            for (int ix = 0; ix < samplingRatioX; ix++)
+            for (int32_t ix = 0; ix < samplingRatioX; ix++)
             {
                 float xSample = xStart + xDelta * xx;
                 xSample += xDelta * (ix + samplingOffset) / samplingRatioX;
-                xSample = min(max(xSample, 0.f), srcDims.x - 1.0f);
+                xSample = min(max(xSample, 0.F), srcDims.x - 1.F);
 
                 result += interpolateBilinear(src, srcDims, ySample, xSample);
             }
@@ -2623,17 +2628,18 @@ __global__ void roiAlign_kernel(xy_t imageSize, int featureCount, int roiCount, 
     }
 }
 
-cudaError_t roiAlign(cudaStream_t stream, int batchSize, xy_t imageSize, int featureCount, int roiCount,
-    float firstThreshold, int transformCoords, bool absCoords, bool swapCoords, bool plusOneCoords, int samplingRatio,
-    const void* rois, const void* const layers[], const xy_t* layerDims, void* pooled, const xy_t poolDims)
+cudaError_t roiAlign(cudaStream_t const stream, int32_t const batchSize, xy_t const imageSize,
+    int32_t const featureCount, int32_t const roiCount, float const firstThreshold, int32_t const transformCoords,
+    bool const absCoords, bool const swapCoords, bool const plusOneCoords, int32_t const samplingRatio,
+    void const* rois, void const* const layers[], xy_t const* layerDims, void* const pooled, xy_t const poolDims)
 {
-    const dim3 blocks(batchSize, featureCount, roiCount);
-    const int threads(min(256, poolDims.x * poolDims.y));
+    dim3 const blocks(batchSize, featureCount, roiCount);
+    int32_t const threads(min(256, poolDims.x * poolDims.y));
 
     roiAlign_kernel<<<blocks, threads, 0, stream>>>(imageSize, featureCount, roiCount, firstThreshold, transformCoords,
-        absCoords, swapCoords, plusOneCoords, samplingRatio, static_cast<const float*>(rois),
-        static_cast<const float*>(layers[0]), layerDims[0], static_cast<const float*>(layers[1]), layerDims[1],
-        static_cast<const float*>(layers[2]), layerDims[2], static_cast<const float*>(layers[3]), layerDims[3],
+        absCoords, swapCoords, plusOneCoords, samplingRatio, static_cast<float const*>(rois),
+        static_cast<float const*>(layers[0]), layerDims[0], static_cast<float const*>(layers[1]), layerDims[1],
+        static_cast<float const*>(layers[2]), layerDims[2], static_cast<float const*>(layers[3]), layerDims[3],
         static_cast<float*>(pooled), poolDims);
     return cudaGetLastError();
 }
@@ -2869,7 +2875,7 @@ cudaError_t roiAlignHalfCenter(cudaStream_t stream, int batchSize, int featureCo
 
     int inputHeight, int inputWidth, const void* rois, const void* const layers[], const xy_t* layerDims,
 
-    void* pooled, const xy_t poolDims, const DataType dtype)
+    void* pooled, const xy_t poolDims, const nvinfer1::DataType dtype)
 {
     const dim3 blocks(batchSize, featureCount, roiCount);
     const int threads(64);
@@ -2892,7 +2898,7 @@ cudaError_t roiAlignHalfCenter(cudaStream_t stream, int batchSize, int featureCo
             pooled, poolDims);
             break;
         }
-        default: assert(false);
+        default: PLUGIN_ASSERT(false);
     }
 
 
@@ -3038,21 +3044,21 @@ cudaError_t ConcatTopK(cudaStream_t stream, int N, int featureCnt, int topK, nvi
         concatenate<float>
             <<<blocks, threads, 0, stream>>>(featureCnt, topK, inScores, inBBox, concatedScorePtr, concatedBBoxPtr);
 
-        CUASSERT(cudaGetLastError());
+        PLUGIN_CUASSERT(cudaGetLastError());
         break;
     case nvinfer1::DataType::kHALF:
         concatenate<__half>
             <<<blocks, threads, 0, stream>>>(featureCnt, topK, inScores, inBBox, concatedScorePtr, concatedBBoxPtr);
-        CUASSERT(cudaGetLastError());
+        PLUGIN_CUASSERT(cudaGetLastError());
         break;
-    default: assert(false);
+    default: PLUGIN_ASSERT(false);
     }
 
     // Sort and sample topK
     int itemCnt = topK * featureCnt;
     int* offsets = static_cast<int*>(tempStoragePtr);
     set_offset_kernel<<<1, 1024, 0, stream>>>(itemCnt, N + 1, offsets);
-    assert(cudaGetLastError() == cudaSuccess);
+    PLUGIN_ASSERT(cudaGetLastError() == cudaSuccess);
     tempStoragePtr = static_cast<void*>(static_cast<int*>(tempStoragePtr) + (N + 1));
 
     switch (dtype)
@@ -3071,7 +3077,7 @@ cudaError_t ConcatTopK(cudaStream_t stream, int N, int featureCnt, int topK, nvi
                                        offsets, stream);
             break;
         }
-        default: assert(false);
+        default: PLUGIN_ASSERT(false);
     }
 
     // Sample
@@ -3079,15 +3085,15 @@ cudaError_t ConcatTopK(cudaStream_t stream, int N, int featureCnt, int topK, nvi
     {
     case nvinfer1::DataType::kFLOAT:
         resampleBBox_kernel<float><<<N, dMIN(topK, 1024), 0, stream>>>(itemCnt, topK, sortedBBoxPtr, outProposals);
-        CUASSERT(cudaGetLastError());
+        PLUGIN_CUASSERT(cudaGetLastError());
         break;
     case nvinfer1::DataType::kHALF:
         resampleBBox_kernel<__half><<<N, dMIN(topK, 1024), 0, stream>>>(itemCnt, topK, sortedBBoxPtr, outProposals);
-        CUASSERT(cudaGetLastError());
+        PLUGIN_CUASSERT(cudaGetLastError());
         break;
-    default: assert(false);
+    default: PLUGIN_ASSERT(false);
     }
-    
-    assert(cudaGetLastError() == cudaSuccess);
+
+    PLUGIN_ASSERT(cudaGetLastError() == cudaSuccess);
     return cudaGetLastError();
 }

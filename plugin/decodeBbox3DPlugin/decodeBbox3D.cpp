@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-#include <cassert>
-#include <iostream>
-#include <cstring>
 #include "decodeBbox3D.h"
+#include <cstring>
+#include <iostream>
 
-#define checkCudaErrors(status)                                   \
-{                                                                 \
-  if (status != 0)                                                \
-  {                                                               \
-    std::cout << "Cuda failure: " << cudaGetErrorString(status)   \
-              << " at line " << __LINE__                          \
-              << " in file " << __FILE__                          \
-              << " error status: " << status                      \
-              << std::endl;                                       \
-              abort();                                            \
-    }                                                             \
-}
+#define checkCudaErrors(status)                                                                                        \
+    {                                                                                                                  \
+        if (status != 0)                                                                                               \
+        {                                                                                                              \
+            std::cout << "Cuda failure: " << cudaGetErrorString(status) << " at line " << __LINE__ << " in file "      \
+                      << __FILE__ << " error status: " << status << std::endl;                                         \
+            abort();                                                                                                   \
+        }                                                                                                              \
+    }
 
 using namespace nvinfer1;
 using nvinfer1::plugin::DecodeBbox3DPlugin;
@@ -73,14 +69,14 @@ DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, fl
     dir_limit_offset_(dir_limit_offset), score_thresh_(score_thresh)
 {
     anchor_bottom_height_.clear();
-    for(int i = 0; i < anchor_bottom_height.size(); i++)
+    for(size_t i = 0; i < anchor_bottom_height.size(); i++)
         anchor_bottom_height_.push_back(anchor_bottom_height[i]);
     anchors_.clear();
-    for(int i = 0; i < anchors.size(); i++)
+    for(size_t i = 0; i < anchors.size(); i++)
         anchors_.push_back(anchors[i]);
     num_classes_ = int(anchor_bottom_height_.size());
-    assert(num_classes_ > 0);
-    assert(num_classes_ * 2 * 4 == anchors_.size());
+    PLUGIN_ASSERT(num_classes_ > 0);
+    PLUGIN_ASSERT(static_cast<size_t>(num_classes_) * 2 * 4 == anchors_.size());
 }
 
 DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max,
@@ -98,14 +94,14 @@ DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, fl
     feature_w_(feature_w)
 {
     anchor_bottom_height_.clear();
-    for(int i = 0; i < anchor_bottom_height.size(); i++)
+    for(size_t i = 0; i < anchor_bottom_height.size(); i++)
         anchor_bottom_height_.push_back(anchor_bottom_height[i]);
     anchors_.clear();
-    for(int i = 0; i < anchors.size(); i++)
+    for(size_t i = 0; i < anchors.size(); i++)
         anchors_.push_back(anchors[i]);
     num_classes_ = int(anchor_bottom_height_.size());
-    assert(num_classes_ > 0);
-    assert(num_classes_ * 2 * 4 == anchors_.size());
+    PLUGIN_ASSERT(num_classes_ > 0);
+    PLUGIN_ASSERT(static_cast<size_t>(num_classes_) * 2 * 4 == anchors_.size());
 }
 
 DecodeBbox3DPlugin::DecodeBbox3DPlugin(const void* data, size_t length)
@@ -150,8 +146,8 @@ nvinfer1::IPluginV2DynamicExt* DecodeBbox3DPlugin::clone() const noexcept
 nvinfer1::DimsExprs DecodeBbox3DPlugin::getOutputDimensions(
     int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
-    assert(this->getNbOutputs() == 2);
-    assert(outputIndex >= 0 && outputIndex < this->getNbOutputs());
+    PLUGIN_ASSERT(this->getNbOutputs() == 2);
+    PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
     auto feature_h = inputs[0].d[1];
     auto feature_w = inputs[0].d[2];
     auto batch_size = inputs[0].d[0];
@@ -181,8 +177,8 @@ nvinfer1::DimsExprs DecodeBbox3DPlugin::getOutputDimensions(
 bool DecodeBbox3DPlugin::supportsFormatCombination(
     int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-    assert(nbInputs == 3);
-    assert(nbOutputs == 2);
+    PLUGIN_ASSERT(nbInputs == 3);
+    PLUGIN_ASSERT(nbOutputs == 2);
     const PluginTensorDesc& in = inOut[pos];
     if (pos == 0)       // cls_preds
     {

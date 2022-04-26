@@ -16,10 +16,10 @@
  */
 
 #include "NvInfer.h"
-#include "bertCommon.h"
-#include "common.cuh"
+#include "common/bertCommon.h"
+#include "common/common.cuh"
+#include "common/serialize.hpp"
 #include "qkvToContextPlugin.h"
-#include "serialize.hpp"
 
 #include <cassert>
 #include <cstring>
@@ -27,7 +27,7 @@
 #include <tuple>
 #include <vector>
 
-#include "fused_multihead_attention_v2.h"
+#include "bertQKVToContextPlugin/fused_multihead_attention_v2/include/fused_multihead_attention_v2.h"
 using namespace nvinfer1;
 
 namespace bert
@@ -234,7 +234,7 @@ int computeScaledSoftmax(
         scaledSoftmaxKernel<T, blockSize><<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, input, output);
     }
 
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
     return 0;
 }
 
@@ -330,7 +330,7 @@ int computeMaskedScaledSoftmax(cudaStream_t stream, const int ld, const int B, c
             <<<grid, blockSize, 0, stream>>>(ld, rsqrtHeadSize, maskIdx, input, output);
     }
 
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
     return 0;
 }
 
@@ -339,14 +339,14 @@ std::pair<int, int> tuneBatchedGemm(
 {
     const int nruns = 500;
     cublasHandle_t cublas;
-    cublasCreate(&cublas);
+    PLUGIN_CUBLASASSERT(cublasCreate(&cublas));
     cudaStream_t stream;
-    cudaStreamCreate(&stream);
+    PLUGIN_CUASSERT(cudaStreamCreate(&stream));
     cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cublasSetStream(cublas, stream);
-    cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH);
+    PLUGIN_CUASSERT(cudaEventCreate(&start));
+    PLUGIN_CUASSERT(cudaEventCreate(&stop));
+    PLUGIN_CUBLASASSERT(cublasSetStream(cublas, stream));
+    PLUGIN_CUBLASASSERT(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
 
     using T = half;
     const int omatSize = S * S;
@@ -363,11 +363,11 @@ std::pair<int, int> tuneBatchedGemm(
     T* input = nullptr;
     T* qkptr = nullptr;
     T* output = nullptr;
-    cudaMalloc(&input, inBytes);
-    cudaMalloc(&qkptr, qkBytes);
-    cudaMalloc(&output, outBytes);
-    cudaMemset(input, 1, inBytes);
-    cudaMemset(qkptr, 1, qkBytes);
+    PLUGIN_CUASSERT(cudaMalloc(&input, inBytes));
+    PLUGIN_CUASSERT(cudaMalloc(&qkptr, qkBytes));
+    PLUGIN_CUASSERT(cudaMalloc(&output, outBytes));
+    PLUGIN_CUASSERT(cudaMemset(input, 1, inBytes));
+    PLUGIN_CUASSERT(cudaMemset(qkptr, 1, qkBytes));
 
     // input: SxBx3xNxH
     const T* qptr = input;
@@ -381,22 +381,22 @@ std::pair<int, int> tuneBatchedGemm(
     float ms1 = 1000000;
     float ms2 = 1000000;
 
-    ASSERT(smVersion >= kSM_53);
+    PLUGIN_ASSERT(smVersion >= kSM_53);
     for (int a = startAlgo; a <= endAlgo; a++)
     {
         cublasGemmAlgo_t algo = static_cast<cublasGemmAlgo_t>(a);
         float ms1_, ms2_;
         // qkptr: BxNxSxS
-        cudaEventRecord(start, stream);
+        PLUGIN_CUASSERT(cudaEventRecord(start, stream));
         for (int r = 0; r < nruns; r++)
         {
-            CUBLASASSERT(cublasGemmStridedBatchedEx<T>(cublas, CUBLAS_OP_T, CUBLAS_OP_N, S, S, headSize, T(1.f), kptr,
-                ldQKV, strideQKV, qptr, ldQKV, strideQKV, T(0.f), qkptr, S, omatSize, numMats, algo));
+            PLUGIN_CUBLASASSERT(cublasGemmStridedBatchedEx<T>(cublas, CUBLAS_OP_T, CUBLAS_OP_N, S, S, headSize, T(1.f),
+                kptr, ldQKV, strideQKV, qptr, ldQKV, strideQKV, T(0.f), qkptr, S, omatSize, numMats, algo));
         }
 
-        cudaEventRecord(stop, stream);
-        cudaStreamSynchronize(stream);
-        cudaEventElapsedTime(&ms1_, start, stop);
+        PLUGIN_CUASSERT(cudaEventRecord(stop, stream));
+        PLUGIN_CUASSERT(cudaStreamSynchronize(stream));
+        PLUGIN_CUASSERT(cudaEventElapsedTime(&ms1_, start, stop));
         if (ms1_ < ms1)
         {
             best1 = algo;
@@ -405,16 +405,16 @@ std::pair<int, int> tuneBatchedGemm(
 
         // pptr: BxNxSxS
         // output: SxBxNxH
-        cudaEventRecord(start, stream);
+        PLUGIN_CUASSERT(cudaEventRecord(start, stream));
         for (int r = 0; r < nruns; r++)
         {
-            CUBLASASSERT(cublasGemmStridedBatchedEx<T>(cublas, CUBLAS_OP_N, CUBLAS_OP_N, headSize, S, S, 1.f, vptr,
-                ldQKV, strideQKV, qkptr, S, omatSize, 0.f, output, ldOut, strideOut, numMats, algo));
+            PLUGIN_CUBLASASSERT(cublasGemmStridedBatchedEx<T>(cublas, CUBLAS_OP_N, CUBLAS_OP_N, headSize, S, S, 1.f,
+                vptr, ldQKV, strideQKV, qkptr, S, omatSize, 0.f, output, ldOut, strideOut, numMats, algo));
         }
 
-        cudaEventRecord(stop, stream);
-        cudaStreamSynchronize(stream);
-        cudaEventElapsedTime(&ms2_, start, stop);
+        PLUGIN_CUASSERT(cudaEventRecord(stop, stream));
+        PLUGIN_CUASSERT(cudaStreamSynchronize(stream));
+        PLUGIN_CUASSERT(cudaEventElapsedTime(&ms2_, start, stop));
 
         if (ms2_ < ms2)
         {
@@ -423,13 +423,13 @@ std::pair<int, int> tuneBatchedGemm(
         }
     }
 
-    cudaFree(input);
-    cudaFree(qkptr);
-    cudaFree(output);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-    cudaStreamDestroy(stream);
-    cublasDestroy(cublas);
+    PLUGIN_CUASSERT(cudaFree(input));
+    PLUGIN_CUASSERT(cudaFree(qkptr));
+    PLUGIN_CUASSERT(cudaFree(output));
+    PLUGIN_CUASSERT(cudaEventDestroy(start));
+    PLUGIN_CUASSERT(cudaEventDestroy(stop));
+    PLUGIN_CUASSERT(cudaStreamDestroy(stream));
+    PLUGIN_CUBLASASSERT(cublasDestroy(cublas));
     return std::make_pair(best1, best2);
 }
 
@@ -468,12 +468,12 @@ UnfusedMHARunner::UnfusedMHARunner(const nvinfer1::DataType type, const int numH
     , mAlgoBatchedEx2(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
     , mSm(sm)
 {
-    CUBLASASSERT(cublasCreate(&mCublas));
+    PLUGIN_CUBLASASSERT(cublasCreate(&mCublas));
 }
 
 UnfusedMHARunner::~UnfusedMHARunner()
 {
-    CUBLASASSERT(cublasDestroy(mCublas));
+    PLUGIN_CUBLASASSERT(cublasDestroy(mCublas));
 }
 
 size_t UnfusedMHARunner::getSerializationSize() const noexcept
@@ -525,7 +525,7 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
 {
     const int* maskIdx = static_cast<const int*>(maskPtr);
 
-    cublasSetStream(mCublas, stream);
+    PLUGIN_CUBLASASSERT(cublasSetStream(mCublas, stream));
 
     // Q, K, V: BxNxSxH (inputs)
     // Q * K': BxNxSxS (-> scratch1)
@@ -542,8 +542,8 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
         half* pptr = qkptr + mOmatSize * mNumMats;
         half alpha = 1.f;
         half beta = 0.f;
-        CUBLASASSERT(::cublasGemmStridedBatchedEx(mCublas, CUBLAS_OP_T, CUBLAS_OP_N, mS, mS, mHeadSize, &alpha, kptr,
-            CUDA_R_16F, mLdQKV, mStrideQKV, qptr, CUDA_R_16F, mLdQKV, mStrideQKV, &beta, qkptr, CUDA_R_16F, mS,
+        PLUGIN_CUBLASASSERT(::cublasGemmStridedBatchedEx(mCublas, CUBLAS_OP_T, CUBLAS_OP_N, mS, mS, mHeadSize, &alpha,
+            kptr, CUDA_R_16F, mLdQKV, mStrideQKV, qptr, CUDA_R_16F, mLdQKV, mStrideQKV, &beta, qkptr, CUDA_R_16F, mS,
             mOmatSize, mNumMats, CUDA_R_16F, static_cast<cublasGemmAlgo_t>(mAlgoBatchedEx1)));
 
         // apply softmax
@@ -557,8 +557,8 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
         }
 
         // compute P*V (as V*P)
-        CUBLASASSERT(cublasGemmStridedBatchedEx(mCublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, &alpha, vptr,
-            CUDA_R_16F, mLdQKV, mStrideQKV, pptr, CUDA_R_16F, mS, mOmatSize, &beta, output, CUDA_R_16F, mLdOut,
+        PLUGIN_CUBLASASSERT(cublasGemmStridedBatchedEx(mCublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, &alpha,
+            vptr, CUDA_R_16F, mLdQKV, mStrideQKV, pptr, CUDA_R_16F, mS, mOmatSize, &beta, output, CUDA_R_16F, mLdOut,
             mStrideOut, mNumMats, CUDA_R_16F, static_cast<cublasGemmAlgo_t>(mAlgoBatchedEx2)));
     }
     else
@@ -570,8 +570,8 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
         float* qkptr = static_cast<float*>(workspace);
         float* pptr = qkptr + mOmatSize * mNumMats;
         float* outptr = static_cast<float*>(output);
-        CUBLASASSERT(cublasGemmStridedBatched<float>(mCublas, CUBLAS_OP_T, CUBLAS_OP_N, mS, mS, mHeadSize, 1.f, kptr,
-            mLdQKV, mStrideQKV, qptr, mLdQKV, mStrideQKV, 0.f, qkptr, mS, mOmatSize, mNumMats));
+        PLUGIN_CUBLASASSERT(cublasGemmStridedBatched<float>(mCublas, CUBLAS_OP_T, CUBLAS_OP_N, mS, mS, mHeadSize, 1.f,
+            kptr, mLdQKV, mStrideQKV, qptr, mLdQKV, mStrideQKV, 0.f, qkptr, mS, mOmatSize, mNumMats));
 
         // apply softmax
         if (maskIdx)
@@ -583,8 +583,8 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
             computeScaledSoftmax<float>(stream, mS, mB, mNumHeads, mRsqrtHeadSize, qkptr, pptr);
         }
 
-        CUBLASASSERT(cublasGemmStridedBatched<float>(mCublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, 1.f, vptr,
-            mLdQKV, mStrideQKV, pptr, mS, mOmatSize, 0.f, outptr, mLdOut, mStrideOut, mNumMats));
+        PLUGIN_CUBLASASSERT(cublasGemmStridedBatched<float>(mCublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, 1.f,
+            vptr, mLdQKV, mStrideQKV, pptr, mS, mOmatSize, 0.f, outptr, mLdOut, mStrideOut, mNumMats));
     }
 }
 
@@ -640,7 +640,9 @@ public:
     {
         // TODO these implementation details might be better centralized into the XMMA code, since they are needed in
         // several places (also outside of this plugin)
-        size_t warps_m, warps_n, warps_k = 1;
+        size_t warps_m{};
+        size_t warps_n{};
+        size_t warps_k = 1;
         if (S == 64 || S == 96 || S == 128)
         {
             warps_m = 2;
@@ -692,7 +694,7 @@ public:
 
         xmmaKernel->run(params, stream);
 
-        CHECK(cudaPeekAtLastError());
+        PLUGIN_CHECK(cudaPeekAtLastError());
     }
 
     bool isValid(int s) const
@@ -777,7 +779,9 @@ public:
 
     void setup(const int S, const int B)
     {
-        size_t warps_m, warps_n, warps_k = 1;
+        size_t warps_m{};
+        size_t warps_n{};
+        size_t warps_k = 1;
         if (S == 128)
         {
             warps_m = 2;
@@ -834,7 +838,7 @@ public:
         params.o_ptr = output;
 
         xmmaKernel->run(params, stream);
-        CHECK(cudaPeekAtLastError());
+        PLUGIN_CHECK(cudaPeekAtLastError());
     }
 
     bool isValid(int s) const
@@ -903,7 +907,8 @@ public:
         , sm(interface->mSm)
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_FP16, sm))
     {
-        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86) && "Unsupported architecture");
+        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87)
+            && "Unsupported architecture");
         params.clear();
     }
 
@@ -922,7 +927,9 @@ public:
     {
         // TODO these implementation details might be better centralized into the XMMA code, since they are needed in
         // several places (also outside of this plugin)
-        size_t warps_m, warps_n, warps_k = 1;
+        size_t warps_m{};
+        size_t warps_n{};
+        size_t warps_k = 1;
         if (S == 64 || S == 96 || S == 128)
         {
             warps_m = 2;
@@ -985,7 +992,7 @@ public:
 
         params.cu_seqlens = static_cast<int*>(const_cast<void*>(cuSeqlenPtr));
         xmmaKernel->run(params, stream);
-        CHECK(cudaPeekAtLastError());
+        PLUGIN_CHECK(cudaPeekAtLastError());
     }
 
     bool isValid(int s) const
@@ -1058,7 +1065,8 @@ public:
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_INT8, sm))
         , mDqProbs(interface->mDqProbs)
     {
-        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86) && "Unsupported architecture");
+        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87)
+            && "Unsupported architecture");
         params.clear();
     }
 
@@ -1074,7 +1082,9 @@ public:
 
     void setup(const int S, const int B)
     {
-        size_t warps_m, warps_n, warps_k = 1;
+        size_t warps_m{};
+        size_t warps_n{};
+        size_t warps_k = 1;
         if (S == 128)
         {
             warps_m = 2;
@@ -1141,7 +1151,7 @@ public:
         params.cu_seqlens = static_cast<int*>(const_cast<void*>(cuSeqlenPtr));
 
         xmmaKernel->run(params, stream);
-        CHECK(cudaPeekAtLastError());
+        PLUGIN_CHECK(cudaPeekAtLastError());
     }
 
     bool isValid(int s) const

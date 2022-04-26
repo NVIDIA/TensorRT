@@ -17,7 +17,6 @@
 
 #ifndef TRT_MULTILEVEL_PROPOSE_ROI_PLUGIN_H
 #define TRT_MULTILEVEL_PROPOSE_ROI_PLUGIN_H
-#include <cassert>
 #include <cuda_runtime_api.h>
 #include <memory>
 #include <string.h>
@@ -26,7 +25,7 @@
 
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
-#include "maskRCNNKernels.h"
+#include "common/kernels/maskRCNNKernels.h"
 
 namespace nvinfer1
 {

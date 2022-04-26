@@ -16,7 +16,7 @@
  */
 
 #include "efficientNMSImplicitTFTRTPlugin.h"
-#include "efficientNMSInference.h"
+#include "efficientNMSPlugin/efficientNMSInference.h"
 
 // This plugin provides CombinedNMS op compatibility for TF-TRT in Implicit Batch
 // mode for legacy back-compatibilty
@@ -41,7 +41,7 @@ EfficientNMSImplicitTFTRTPlugin::EfficientNMSImplicitTFTRTPlugin(const void* dat
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mParam = read<EfficientNMSParameters>(d);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 const char* EfficientNMSImplicitTFTRTPlugin::getPluginType() const noexcept
@@ -75,7 +75,7 @@ void EfficientNMSImplicitTFTRTPlugin::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mParam);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 void EfficientNMSImplicitTFTRTPlugin::destroy() noexcept
@@ -108,7 +108,7 @@ Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(int outputIndex, const
 
         // When pad per class is set, the output size may need to be reduced:
         // i.e.: outputBoxes = min(outputBoxes, outputBoxesPerClass * numClasses)
-        ASSERT(inputs[1].nbDims == 2);
+        PLUGIN_ASSERT(inputs[1].nbDims == 2);
         if (mParam.padOutputBoxesPerClass && mParam.numOutputBoxesPerClass > 0)
         {
             const int numClasses = inputs[1].d[1];
@@ -119,7 +119,7 @@ Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(int outputIndex, const
         }
 
         // Standard NMS
-        ASSERT(outputIndex >= 0 && outputIndex <= 3);
+        PLUGIN_ASSERT(outputIndex >= 0 && outputIndex <= 3);
 
         // num_detections
         if (outputIndex == 0)
@@ -233,11 +233,11 @@ bool EfficientNMSImplicitTFTRTPlugin::supportsFormatCombination(
         return false;
     }
 
-    ASSERT(nbInputs == 2);
-    ASSERT(nbOutputs == 4);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 4);
     if (nbInputs == 2)
     {
-        ASSERT(0 <= pos && pos <= 5);
+        PLUGIN_ASSERT(0 <= pos && pos <= 5);
     }
 
     // num_detections and detection_classes output: int
@@ -258,32 +258,32 @@ void EfficientNMSImplicitTFTRTPlugin::configurePlugin(
     try
     {
         // Inputs: [0] boxes, [1] scores
-        ASSERT(nbInputs == 2);
-        ASSERT(nbOutputs == 4);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 4);
         mParam.datatype = in[0].type;
 
         // Shape of scores input should be
         // [batch_size, num_boxes, num_classes] or [batch_size, num_boxes,
         // num_classes, 1]
-        ASSERT(in[1].dims.nbDims == 2 || (in[1].dims.nbDims == 3 && in[1].dims.d[2] == 1));
+        PLUGIN_ASSERT(in[1].dims.nbDims == 2 || (in[1].dims.nbDims == 3 && in[1].dims.d[2] == 1));
         mParam.numScoreElements = in[1].dims.d[0] * in[1].dims.d[1];
         mParam.numClasses = in[1].dims.d[1];
 
         // Shape of boxes input should be
         // [batch_size, num_boxes, 4] or [batch_size, num_boxes, 1, 4] or [batch_size,
         // num_boxes, num_classes, 4]
-        ASSERT(in[0].dims.nbDims == 2 || in[0].dims.nbDims == 3);
+        PLUGIN_ASSERT(in[0].dims.nbDims == 2 || in[0].dims.nbDims == 3);
         if (in[0].dims.nbDims == 2)
         {
-            ASSERT(in[0].dims.d[1] == 4);
+            PLUGIN_ASSERT(in[0].dims.d[1] == 4);
             mParam.shareLocation = true;
             mParam.numBoxElements = in[0].dims.d[0] * in[0].dims.d[1];
         }
         else
         {
             mParam.shareLocation = (in[0].dims.d[1] == 1);
-            ASSERT(in[0].dims.d[1] == mParam.numClasses || mParam.shareLocation);
-            ASSERT(in[0].dims.d[2] == 4);
+            PLUGIN_ASSERT(in[0].dims.d[1] == mParam.numClasses || mParam.shareLocation);
+            PLUGIN_ASSERT(in[0].dims.d[2] == 4);
             mParam.numBoxElements = in[0].dims.d[0] * in[0].dims.d[1] * in[0].dims.d[2];
         }
         mParam.numAnchors = in[0].dims.d[0];
@@ -339,32 +339,32 @@ IPluginV2IOExt* EfficientNMSImplicitTFTRTPluginCreator::createPlugin(
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "max_output_size_per_class"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.numOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "max_total_size"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.numOutputBoxes = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "score_threshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "pad_per_class"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.padOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "clip_boxes"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.clipBoxes = *(static_cast<const int*>(fields[i].data));
             }
         }

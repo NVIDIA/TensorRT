@@ -14,15 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "common/bboxUtils.h"
+#include "common/kernel.h"
+#include "cuda_runtime_api.h"
 #include <algorithm>
 #include <array>
-#include "cuda_runtime_api.h"
 #include <cub/cub.cuh>
 #include <functional>
 #include <stdint.h>
 #include <stdio.h>
-#include "kernel.h"
-#include "bboxUtils.h"
 
 // CUB's bug workaround:
 // To work properly for large batch size CUB segmented sort needs ridiculous

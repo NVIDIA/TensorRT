@@ -38,15 +38,15 @@ GridAnchorGenerator::GridAnchorGenerator(const GridAnchorParameters* paramIn, in
     : mPluginName(name)
     , mNumLayers(numLayers)
 {
-    CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
-    CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
-    CUASSERT(cudaMallocHost((void**) &mDeviceHeights, mNumLayers * sizeof(Weights)));
+    PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
+    PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
+    PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceHeights, mNumLayers * sizeof(Weights)));
 
     mParam.resize(mNumLayers);
     for (int id = 0; id < mNumLayers; id++)
     {
         mParam[id] = paramIn[id];
-        ASSERT(mParam[id].numAspectRatios >= 0 && mParam[id].aspectRatios != nullptr);
+        PLUGIN_ASSERT(mParam[id].numAspectRatios >= 0 && mParam[id].aspectRatios != nullptr);
 
         mParam[id].aspectRatios = (float*) malloc(sizeof(float) * mParam[id].numAspectRatios);
 
@@ -128,9 +128,9 @@ GridAnchorGenerator::GridAnchorGenerator(const void* data, size_t length, const 
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mNumLayers = read<int>(d);
-    CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
-    CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
-    CUASSERT(cudaMallocHost((void**) &mDeviceHeights, mNumLayers * sizeof(Weights)));
+    PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
+    PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
+    PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceHeights, mNumLayers * sizeof(Weights)));
     mParam.resize(mNumLayers);
     for (int id = 0; id < mNumLayers; id++)
     {
@@ -155,20 +155,20 @@ GridAnchorGenerator::GridAnchorGenerator(const void* data, size_t length, const 
         mDeviceHeights[id] = deserializeToDevice(d, mNumPriors[id]);
     }
 
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 GridAnchorGenerator::~GridAnchorGenerator()
 {
     for (int id = 0; id < mNumLayers; id++)
     {
-        CUERRORMSG(cudaFree(const_cast<void*>(mDeviceWidths[id].values)));
-        CUERRORMSG(cudaFree(const_cast<void*>(mDeviceHeights[id].values)));
+        PLUGIN_CUERROR(cudaFree(const_cast<void*>(mDeviceWidths[id].values)));
+        PLUGIN_CUERROR(cudaFree(const_cast<void*>(mDeviceHeights[id].values)));
         free(mParam[id].aspectRatios);
     }
-    CUERRORMSG(cudaFreeHost(mNumPriors));
-    CUERRORMSG(cudaFreeHost(mDeviceWidths));
-    CUERRORMSG(cudaFreeHost(mDeviceHeights));
+    PLUGIN_CUERROR(cudaFreeHost(mNumPriors));
+    PLUGIN_CUERROR(cudaFreeHost(mDeviceWidths));
+    PLUGIN_CUERROR(cudaFreeHost(mDeviceHeights));
 }
 
 int GridAnchorGenerator::getNbOutputs() const noexcept
@@ -252,20 +252,21 @@ void GridAnchorGenerator::serialize(void* buffer) const noexcept
         serializeFromDevice(d, mDeviceWidths[id]);
         serializeFromDevice(d, mDeviceHeights[id]);
     }
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 Weights GridAnchorGenerator::copyToDevice(const void* hostData, size_t count) noexcept
 {
     void* deviceData;
-    CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
-    CUASSERT(cudaMemcpy(deviceData, hostData, count * sizeof(float), cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
+    PLUGIN_CUASSERT(cudaMemcpy(deviceData, hostData, count * sizeof(float), cudaMemcpyHostToDevice));
     return Weights{DataType::kFLOAT, deviceData, int64_t(count)};
 }
 
 void GridAnchorGenerator::serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const noexcept
 {
-    cudaMemcpy(hostBuffer, deviceWeights.values, deviceWeights.count * sizeof(float), cudaMemcpyDeviceToHost);
+    PLUGIN_CUASSERT(
+        cudaMemcpy(hostBuffer, deviceWeights.values, deviceWeights.count * sizeof(float), cudaMemcpyDeviceToHost));
     hostBuffer += deviceWeights.count * sizeof(float);
 }
 
@@ -303,9 +304,10 @@ const char* GridAnchorGenerator::getPluginNamespace() const noexcept
 
 #include <iostream>
 // Return the DataType of the plugin output at the requested index
-DataType GridAnchorGenerator::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType GridAnchorGenerator::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
 {
-    ASSERT(index < mNumLayers);
+    PLUGIN_ASSERT(index < mNumLayers);
     return DataType::kFLOAT;
 }
 
@@ -327,8 +329,8 @@ void GridAnchorGenerator::configurePlugin(const Dims* inputDims, int nbInputs, c
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    ASSERT(nbOutputs == mNumLayers);
-    ASSERT(outputDims[0].nbDims == 3);
+    PLUGIN_ASSERT(nbOutputs == mNumLayers);
+    PLUGIN_ASSERT(outputDims[0].nbDims == 3);
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
@@ -396,22 +398,22 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
         const char* attrName = fields[i].name;
         if (!strcmp(attrName, "numLayers"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             numLayers = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "minSize"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             minScale = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "maxSize"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             maxScale = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
         }
         else if (!strcmp(attrName, "variance"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             int size = fields[i].length;
             layerVariances.reserve(size);
             const auto* lVar = static_cast<const float*>(fields[i].data);
@@ -423,7 +425,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
         }
         else if (!strcmp(attrName, "aspectRatios"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             int size = fields[i].length;
             aspectRatios.reserve(size);
             const auto* aR = static_cast<const float*>(fields[i].data);
@@ -435,9 +437,9 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
         }
         else if (!strcmp(attrName, "featureMapShapes"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             int size = fields[i].length;
-            ASSERT(!isFMapRect || (size % 2 == 0));
+            PLUGIN_ASSERT(!isFMapRect || (size % 2 == 0));
             fMapShapes.reserve(size);
             const int* fMap = static_cast<const int*>(fields[i].data);
             for (int j = 0; j < size; j++)
@@ -451,9 +453,9 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
     // This is in accordance with the standard implementation.
     std::vector<float> firstLayerAspectRatios;
 
-    ASSERT(numLayers > 0);
+    PLUGIN_ASSERT(numLayers > 0);
     const int numExpectedLayers = static_cast<int>(fMapShapes.size()) >> (isFMapRect ? 1 : 0);
-    ASSERT(numExpectedLayers == numLayers);
+    PLUGIN_ASSERT(numExpectedLayers == numLayers);
 
     int numFirstLayerARs = 3;
     // First layer only has the first 3 aspect ratios from aspectRatios

@@ -18,7 +18,7 @@
 #ifndef TRT_EFFICIENT_NMS_INFERENCE_H
 #define TRT_EFFICIENT_NMS_INFERENCE_H
 
-#include "plugin.h"
+#include "common/plugin.h"
 
 #include "efficientNMSParameters.h"
 

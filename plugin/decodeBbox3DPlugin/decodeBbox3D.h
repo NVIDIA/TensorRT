@@ -18,12 +18,12 @@
 #ifndef _DECODE_BBOX_3D_H_
 #define _DECODE_BBOX_3D_H_
 
-#include <vector>
-#include <string>
-#include <cuda_runtime_api.h>
 #include "NvInferPlugin.h"
 #include "bboxUtils.h"
 #include "kernel.h"
+#include <cuda_runtime_api.h>
+#include <string>
+#include <vector>
 
 namespace nvinfer1
 {

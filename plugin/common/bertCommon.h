@@ -23,10 +23,10 @@
 
 #include "NvInfer.h"
 #include "NvInferRuntimeCommon.h"
-#include "checkMacrosPlugin.h"
+#include "common/checkMacrosPlugin.h"
+#include "common/plugin.h"
 #include "cublas_v2.h"
 #include "cuda_fp16.h"
-#include "plugin.h"
 
 #include <algorithm>
 #include <cassert>
@@ -49,7 +49,6 @@
 #endif
 
 using half = __half;
-using namespace nvinfer1::plugin;
 
 constexpr uint32_t BDIM = 1; // batch dimension
 constexpr uint32_t SDIM = 0; // seq len dimension
@@ -61,6 +60,7 @@ constexpr int32_t kSM_72 = 72;
 constexpr int32_t kSM_75 = 75;
 constexpr int32_t kSM_80 = 80;
 constexpr int32_t kSM_86 = 86;
+constexpr int32_t kSM_87 = 87;
 
 // For full mask mode, we must produce the compressed mask format expected by the fused attention path. Currently, only
 // two sequence lengths are supported. We hard code the sizes here.
@@ -86,9 +86,9 @@ namespace bert
 inline int getSMVersion()
 {
     int device{-1};
-    CHECK(cudaGetDevice(&device));
+    PLUGIN_CHECK(cudaGetDevice(&device));
     cudaDeviceProp props;
-    CHECK(cudaGetDeviceProperties(&props, device));
+    PLUGIN_CHECK(cudaGetDeviceProperties(&props, device));
     return props.major * 10 + props.minor;
 }
 
@@ -96,7 +96,7 @@ inline int getMHAMaskPackedSize(int smVersion, nvinfer1::DataType dataType, int 
 {
     // this code must match EmbLayerNormPluginDynamic::getOutputDimensions in embLayerNormPlugin.cpp
     int packedSize = unfusedMaskSize;
-    bool isSmOK = (smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86);
+    bool isSmOK = (smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86 || smVersion == kSM_87);
     bool isPrecisionOK = (dataType == nvinfer1::DataType::kINT8 || dataType == nvinfer1::DataType::kHALF);
     if (isSmOK && isPrecisionOK)
     {
@@ -159,8 +159,8 @@ inline T* deserToDev(const char*& buffer, size_t nbElem)
 {
     void* dev{nullptr};
     const size_t len = sizeof(T) * nbElem;
-    CUASSERT(cudaMalloc(&dev, len));
-    CUASSERT(cudaMemcpy(dev, buffer, len, cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMalloc(&dev, len));
+    PLUGIN_CUASSERT(cudaMemcpy(dev, buffer, len, cudaMemcpyHostToDevice));
 
     buffer += len;
     return static_cast<T*>(dev);
@@ -170,7 +170,7 @@ template <typename T>
 inline void serFromDev(char*& buffer, const T* data, size_t nbElem)
 {
     const size_t len = sizeof(T) * nbElem;
-    CUASSERT(cudaMemcpy(buffer, static_cast<const void*>(data), len, cudaMemcpyDeviceToHost));
+    PLUGIN_CUASSERT(cudaMemcpy(buffer, static_cast<const void*>(data), len, cudaMemcpyDeviceToHost));
     buffer += len;
 }
 
@@ -179,8 +179,8 @@ inline T* devToDev(const T* data, size_t nbElem)
 {
     void* dev{nullptr};
     const size_t len = sizeof(T) * nbElem;
-    CUASSERT(cudaMalloc(&dev, len));
-    CUASSERT(cudaMemcpy(dev, static_cast<const void*>(data), len, cudaMemcpyDeviceToDevice));
+    PLUGIN_CUASSERT(cudaMalloc(&dev, len));
+    PLUGIN_CUASSERT(cudaMemcpy(dev, static_cast<const void*>(data), len, cudaMemcpyDeviceToDevice));
     return static_cast<T*>(dev);
 }
 
@@ -265,10 +265,10 @@ struct CublasConfigHelper
     CublasConfigHelper(cublasHandle_t cublas_)
         : cublas(cublas_)
     {
-        cublasGetPointerMode(cublas, &pm);
-        cublasGetMathMode(cublas, &mm);
-        cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_HOST);
-        cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH);
+        PLUGIN_CUBLASASSERT(cublasGetPointerMode(cublas, &pm));
+        PLUGIN_CUBLASASSERT(cublasGetMathMode(cublas, &mm));
+        PLUGIN_CUBLASASSERT(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_HOST));
+        PLUGIN_CUBLASASSERT(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
     }
     ~CublasConfigHelper()
     {
@@ -282,7 +282,7 @@ struct CudaDeleter
 {
     void operator()(T* buf)
     {
-        CUASSERT(cudaFree(buf));
+        PLUGIN_CUASSERT(cudaFree(buf));
     }
 };
 
@@ -332,7 +332,7 @@ struct WeightsWithOwnership : public nvinfer1::Weights
             }
             else
             {
-                assert(src.type == nvinfer1::DataType::kHALF);
+                PLUGIN_ASSERT(src.type == nvinfer1::DataType::kHALF);
 
                 BERT_DEBUG_MSG("Half Weights(Host) => Float Array(Host)");
                 const auto s = static_cast<const half*>(src.values);
@@ -356,7 +356,7 @@ struct WeightsWithOwnership : public nvinfer1::Weights
             }
             else
             {
-                assert(src.type == nvinfer1::DataType::kFLOAT);
+                PLUGIN_ASSERT(src.type == nvinfer1::DataType::kFLOAT);
 
                 BERT_DEBUG_MSG("Float Weights(Host) => Half Array(Host)");
                 const auto s = static_cast<const float*>(src.values);
@@ -393,8 +393,8 @@ inline void copyToDevice(WeightsWithOwnership& hostWeights, size_t nbBytes, cuda
     if (hostWeights.values)
     {
         void* cudaMem{nullptr};
-        CUASSERT(cudaMalloc(&cudaMem, nbBytes));
-        CUASSERT(cudaMemcpy(cudaMem, hostWeights.values, nbBytes, cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMalloc(&cudaMem, nbBytes));
+        PLUGIN_CUASSERT(cudaMemcpy(cudaMem, hostWeights.values, nbBytes, cudaMemcpyHostToDevice));
         cudaWeights.reset(static_cast<T*>(cudaMem));
     }
 }
@@ -407,7 +407,7 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, float* destDev)
     if (src.type == nvinfer1::DataType::kFLOAT)
     {
         BERT_DEBUG_MSG("Float Weights(Host) => Float Array(Device)");
-        CUASSERT(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
     }
     else
     {
@@ -420,7 +420,7 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, float* destDev)
             tmp[it] = __half2float(values[it]);
         }
 
-        CUASSERT(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
     }
 }
 
@@ -431,7 +431,7 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, half* destDev)
     if (src.type == nvinfer1::DataType::kHALF)
     {
         BERT_DEBUG_MSG("Half Weights(Host) => Half Array(Device)");
-        CUASSERT(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
     }
     else
     {
@@ -443,7 +443,7 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, half* destDev)
         {
             tmp[it] = __float2half(values[it]);
         }
-        CUASSERT(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
     }
 }
 

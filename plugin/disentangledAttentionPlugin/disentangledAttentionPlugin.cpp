@@ -99,16 +99,16 @@ nvinfer1::DimsExprs DisentangledAttentionPlugin::getOutputDimensions(
     nvinfer1::DimsExprs output;
     if (kDISENTANGLED_VERSION == 1)
     {
-        ASSERT(nbInputs == 4); // 4 inputs
+        PLUGIN_ASSERT(nbInputs == 4); // 4 inputs
         output = inputs[1]; // same as input[1] or input[3], i.e. index1 or index2
     }
     else if (kDISENTANGLED_VERSION == 2)
     {
-        ASSERT(nbInputs == 3); // 3 inputs
+        PLUGIN_ASSERT(nbInputs == 3); // 3 inputs
         output = inputs[0];           // same as input[0], i.e. data0
     }
 
-    ASSERT(index < 1); // only one output
+    PLUGIN_ASSERT(index < 1); // only one output
 
     return output;
 }
@@ -224,7 +224,7 @@ bool DisentangledAttentionPlugin::supportsFormatCombination(
     int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
 
-    ASSERT(inOut && pos < (nbInputs + nbOutputs));
+    PLUGIN_ASSERT(inOut && pos < (nbInputs + nbOutputs));
 
     bool const consistentFloatPrecision
         = (inOut[pos].type == inOut[0].type); // all inputs & outputs should have the same precision type
@@ -276,73 +276,73 @@ void DisentangledAttentionPlugin::configurePlugin(nvinfer1::DynamicPluginTensorD
     if (kDISENTANGLED_VERSION == 1)
     {
         // inputs
-        ASSERT(nbInputs == 4); // 4 inputs
+        PLUGIN_ASSERT(nbInputs == 4); // 4 inputs
 
         // check for valid input dimensions
-        ASSERT(in[0].desc.dims.nbDims == 3);
-        ASSERT(in[1].desc.dims.nbDims == 3);
-        ASSERT(in[2].desc.dims.nbDims == 3);
-        ASSERT(in[3].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[0].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[2].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[3].desc.dims.nbDims == 3);
 
         // check BN (batch_size * num_heads) dimension consistency
-        ASSERT(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
-        ASSERT(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
-        ASSERT(in[0].desc.dims.d[0] == in[3].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[3].desc.dims.d[0]);
 
         // check S (sequence_length) dimension consistency
-        ASSERT(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
-        ASSERT(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
-        ASSERT(in[0].desc.dims.d[1] == in[3].desc.dims.d[1]);
-        ASSERT(in[1].desc.dims.d[1] == in[1].desc.dims.d[2]);
-        ASSERT(in[3].desc.dims.d[1] == in[3].desc.dims.d[2]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[3].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[1].desc.dims.d[1] == in[1].desc.dims.d[2]);
+        PLUGIN_ASSERT(in[3].desc.dims.d[1] == in[3].desc.dims.d[2]);
 
         // check K (2 * span) dimension consistency for in[0] and in[2]
-        ASSERT(in[0].desc.dims.d[2] == 2 * mSpan);
-        ASSERT(in[2].desc.dims.d[2] == 2 * mSpan);
+        PLUGIN_ASSERT(in[0].desc.dims.d[2] == 2 * mSpan);
+        PLUGIN_ASSERT(in[2].desc.dims.d[2] == 2 * mSpan);
 
         // Outputs (same dimension as in[1])
-        ASSERT(nbOutputs == 1);
-        ASSERT(out[0].desc.dims.nbDims == 3);
-        ASSERT(in[1].desc.dims.d[0] == out[0].desc.dims.d[0]);
-        ASSERT(in[1].desc.dims.d[1] == out[0].desc.dims.d[1]);
-        ASSERT(in[1].desc.dims.d[2] == out[0].desc.dims.d[2]);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(out[0].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[1].desc.dims.d[0] == out[0].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[1].desc.dims.d[1] == out[0].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[1].desc.dims.d[2] == out[0].desc.dims.d[2]);
     }
     else if (kDISENTANGLED_VERSION == 2)
     {
         // inputs
-        ASSERT(nbInputs == 3); // 3 inputs
+        PLUGIN_ASSERT(nbInputs == 3); // 3 inputs
 
         // check for valid input dimensions
-        ASSERT(in[0].desc.dims.nbDims == 3);
-        ASSERT(in[1].desc.dims.nbDims == 3);
-        ASSERT(in[2].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[0].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[2].desc.dims.nbDims == 3);
 
         // check BN (batch_size * num_heads) dimension consistency
-        ASSERT(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
-        ASSERT(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
 
         // check S (sequence_length) dimension consistency
-        ASSERT(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
-        ASSERT(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
-        ASSERT(in[0].desc.dims.d[1] == in[0].desc.dims.d[2]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[0].desc.dims.d[2]);
 
         // check K (2 * span) dimension consistency for in[1] and in[2]
-        ASSERT(in[1].desc.dims.d[2] == 2 * mSpan);
-        ASSERT(in[2].desc.dims.d[2] == 2 * mSpan);
+        PLUGIN_ASSERT(in[1].desc.dims.d[2] == 2 * mSpan);
+        PLUGIN_ASSERT(in[2].desc.dims.d[2] == 2 * mSpan);
 
         // Outputs (same dimension as in[0])
-        ASSERT(nbOutputs == 1);
-        ASSERT(out[0].desc.dims.nbDims == 3);
-        ASSERT(in[0].desc.dims.d[0] == out[0].desc.dims.d[0]);
-        ASSERT(in[0].desc.dims.d[1] == out[0].desc.dims.d[1]);
-        ASSERT(in[0].desc.dims.d[2] == out[0].desc.dims.d[2]);
+        PLUGIN_ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(out[0].desc.dims.nbDims == 3);
+        PLUGIN_ASSERT(in[0].desc.dims.d[0] == out[0].desc.dims.d[0]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[1] == out[0].desc.dims.d[1]);
+        PLUGIN_ASSERT(in[0].desc.dims.d[2] == out[0].desc.dims.d[2]);
     }
 }
 
 nvinfer1::DataType DisentangledAttentionPlugin::getOutputDataType(
     int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    ASSERT(inputTypes && nbInputs > 0 && index < 1);
+    PLUGIN_ASSERT(inputTypes && nbInputs > 0 && index < 1);
     return inputTypes[0]; // version 1, same as data1; version 2, same as data0
 }
 
@@ -420,8 +420,8 @@ IPluginV2DynamicExt* DisentangledAttentionPluginCreator::createPlugin(
             }
         }
 
-        ASSERT(span >= 0);
-        ASSERT(factor > 0.0F && factor < 1.0F); // factor is 1/sqrt(3d), therefore must less than 1
+        PLUGIN_ASSERT(span >= 0);
+        PLUGIN_ASSERT(factor > 0.0F && factor < 1.0F); // factor is 1/sqrt(3d), therefore must less than 1
 
         DisentangledAttentionPlugin* plugin = new DisentangledAttentionPlugin(span, factor);
         plugin->setPluginNamespace(mNamespace.c_str());

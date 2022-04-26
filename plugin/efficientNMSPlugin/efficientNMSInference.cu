@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include "bboxUtils.h"
+#include "common/bboxUtils.h"
 #include "cub/cub.cuh"
 #include "cuda_runtime_api.h"
 
@@ -544,8 +544,8 @@ cudaError_t EfficientNMSFilterLauncher(EfficientNMSParameters& param, const T* s
     if (param.scoreThreshold < kernelSelectThreshold)
     {
         // A full copy of the buffer is necessary because sorting will scramble the input data otherwise.
-        cudaMemcpyAsync(topScoresData, scoresInput, param.batchSize * param.numScoreElements * sizeof(T),
-            cudaMemcpyDeviceToDevice, stream);
+        PLUGIN_CHECK_CUDA(cudaMemcpyAsync(topScoresData, scoresInput,
+            param.batchSize * param.numScoreElements * sizeof(T), cudaMemcpyDeviceToDevice, stream));
 
         EfficientNMSDenseIndex<T><<<gridSize, blockSize, 0, stream>>>(param, topNumData, topIndexData, topAnchorsData,
             topOffsetsStartData, topOffsetsEndData, topScoresData, topClassData);
@@ -629,14 +629,14 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
     // Clear Outputs (not all elements will get overwritten by the kernels, so safer to clear everything out)
     if (param.outputONNXIndices)
     {
-        cudaMemsetAsync(nmsIndicesOutput, 0xFF, param.batchSize * param.numOutputBoxes * 3 * sizeof(int), stream);
+        CSC(cudaMemsetAsync(nmsIndicesOutput, 0xFF, param.batchSize * param.numOutputBoxes * 3 * sizeof(int), stream), STATUS_FAILURE);
     }
     else
     {
-        cudaMemsetAsync(numDetectionsOutput, 0x00, param.batchSize * sizeof(int), stream);
-        cudaMemsetAsync(nmsScoresOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(T), stream);
-        cudaMemsetAsync(nmsBoxesOutput, 0x00, param.batchSize * param.numOutputBoxes * 4 * sizeof(T), stream);
-        cudaMemsetAsync(nmsClassesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream);
+        CSC(cudaMemsetAsync(numDetectionsOutput, 0x00, param.batchSize * sizeof(int), stream), STATUS_FAILURE);
+        CSC(cudaMemsetAsync(nmsScoresOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(T), stream), STATUS_FAILURE);
+        CSC(cudaMemsetAsync(nmsBoxesOutput, 0x00, param.batchSize * param.numOutputBoxes * 4 * sizeof(T), stream), STATUS_FAILURE);
+        CSC(cudaMemsetAsync(nmsClassesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream), STATUS_FAILURE);
     }
 
     // Empty Inputs
@@ -653,7 +653,7 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
     int* topOffsetsEndData = topNumData + 2 * param.batchSize;
     int* outputIndexData = topNumData + 3 * param.batchSize;
     int* outputClassData = topNumData + 4 * param.batchSize;
-    cudaMemsetAsync(topNumData, 0x00, countersTotalSize * sizeof(int), stream);
+    CSC(cudaMemsetAsync(topNumData, 0x00, countersTotalSize * sizeof(int), stream), STATUS_FAILURE);
     cudaError_t status = cudaGetLastError();
     CSC(status, STATUS_FAILURE);
 
@@ -676,9 +676,9 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
 
     // Device Specific Properties
     int device;
-    cudaGetDevice(&device);
+    CSC(cudaGetDevice(&device), STATUS_FAILURE);
     struct cudaDeviceProp properties;
-    cudaGetDeviceProperties(&properties, device);
+    CSC(cudaGetDeviceProperties(&properties, device), STATUS_FAILURE);
     if (properties.regsPerBlock >= 65536)
     {
         // Most Devices

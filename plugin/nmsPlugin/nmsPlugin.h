@@ -16,9 +16,9 @@
  */
 #ifndef TRT_NMS_PLUGIN_H
 #define TRT_NMS_PLUGIN_H
-#include "kernel.h"
-#include "nmsUtils.h"
-#include "plugin.h"
+#include "common/kernel.h"
+#include "common/nmsUtils.h"
+#include "common/plugin.h"
 #include <string>
 #include <vector>
 

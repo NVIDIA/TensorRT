@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
+#include "common/plugin.h"
 #include "cuda_fp16.h"
-#include "plugin.h"
 #include <algorithm>
 
 using namespace nvinfer1;
@@ -54,12 +54,12 @@ size_t detectionForwardBBoxPermuteSize(bool shareLocation, int N, int C1, DataTy
 
 size_t detectionForwardPreNMSSize(int N, int C2)
 {
-    ASSERT(sizeof(float) == sizeof(int));
+    PLUGIN_ASSERT(sizeof(float) == sizeof(int));
     return N * C2 * sizeof(float);
 }
 
 size_t detectionForwardPostNMSSize(int N, int numClasses, int topK)
 {
-    ASSERT(sizeof(float) == sizeof(int));
+    PLUGIN_ASSERT(sizeof(float) == sizeof(int));
     return N * numClasses * topK * sizeof(float);
 }

@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "common/kernel.h"
 #include <algorithm>
 #include <array>
 #include <math.h>
 #include <stdio.h>
-#include "kernel.h"
 
 using std::max;
 using std::min;

@@ -17,7 +17,7 @@
 #ifndef BATCHTILEPLUGIN_H
 #define BATCHTILEPLUGIN_H
 #include "NvInferPlugin.h"
-#include "plugin.h"
+#include "common/plugin.h"
 #include <string>
 
 namespace nvinfer1

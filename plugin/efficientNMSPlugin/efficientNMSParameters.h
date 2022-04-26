@@ -18,7 +18,7 @@
 #ifndef TRT_EFFICIENT_NMS_PARAMETERS_H
 #define TRT_EFFICIENT_NMS_PARAMETERS_H
 
-#include "plugin.h"
+#include "common/plugin.h"
 
 using namespace nvinfer1::plugin;
 namespace nvinfer1
