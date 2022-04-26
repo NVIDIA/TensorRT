@@ -19,6 +19,7 @@ import sys
 sys.path.append('./')
 from tacotron2.text import text_to_sequence
 import models
+import tensorrt as trt
 import torch
 import argparse
 import numpy as np
@@ -28,7 +29,6 @@ from inference import checkpoint_from_distributed, unwrap_distributed, MeasureTi
 from inference_trt import infer_tacotron2_trt, infer_waveglow_trt
 
 from trt_utils import load_engine
-import tensorrt as trt
 
 import time
 import dllogger as DLLogger

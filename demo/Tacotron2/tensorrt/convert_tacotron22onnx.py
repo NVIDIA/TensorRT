@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
+import tensorrt
 import torch
 from torch import nn
 from torch.nn import functional as F
 import argparse
-import tensorrt
 
 import sys
 import os
