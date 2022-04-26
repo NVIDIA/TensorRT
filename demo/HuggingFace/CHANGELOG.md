@@ -20,7 +20,7 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
-# [vTBD]
+# [1.2.0]
 
 - Added `benchmark` action to T5 TRT for performance benchmarking. It uses random inputs with fixed lengths and disables
   early stopping such that we can compare the performance with other frameworks.
