@@ -4,11 +4,9 @@ Support for Detectron 2 Mask R-CNN R50-FPN 3x model in TensorRT. This script hel
 
 ## Setup
 
-In order for scripts to work we suggest an environment with TensorRT >= 8.0.1.
+In order for scripts to work we suggest an environment with TensorRT >= 8.4.1.
 
-Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download.
-
-If you would like to use Docker, we have tested and suggesting `docker pull nvcr.io/nvidia/pytorch:21.12-py3` as a base image. 
+Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download. 
 
 Install all dependencies listed in `requirements.txt`:
 
