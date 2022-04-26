@@ -14,15 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef TRT_EMB_LAYER_NORM_PLUGIN_H
-#define TRT_EMB_LAYER_NORM_PLUGIN_H
+#ifndef TRT_EMB_LAYER_NORM_VARSEQ_PLUGIN_H
+#define TRT_EMB_LAYER_NORM_VARSEQ_PLUGIN_H
 
 #include <cuda.h>
 
 #include "NvInferPlugin.h"
 #include "NvInferRuntime.h"
 
-#include "bertCommon.h"
+#include "common/bertCommon.h"
 #include <string>
 #include <vector>
 namespace bert
@@ -200,4 +200,4 @@ public:
 };
 
 } // namespace bert
-#endif // TRT_EMB_LAYER_NORM_PLUGIN_H
+#endif // TRT_EMB_LAYER_NORM_VARSEQ_PLUGIN_H

@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-#include "cuda.h"
+#include "common/bboxUtils.h"
+#include "common/kernel.h"
 #include "cublas_v2.h"
+#include "cuda.h"
 #include <cub/cub.cuh>
 #include <stdint.h>
-#include "kernel.h"
-#include "bboxUtils.h"
 
 #define CUDA_MEM_ALIGN 256
 
@@ -32,8 +32,8 @@ unsigned int hash(const void* array_, size_t size)
     {
         const char* array_const;
         char* array;
-        cudaMallocHost((void**) &array, size);
-        cudaMemcpy(array, array_, size, cudaMemcpyDeviceToHost);
+        PLUGIN_CHECK_CUDA(cudaMallocHost((void**) &array, size));
+        PLUGIN_CHECK_CUDA(cudaMemcpy(array, array_, size, cudaMemcpyDeviceToHost));
         array_const = array;
         unsigned int hash = 45599;
         for (size_t i = 0; i < size; i++)

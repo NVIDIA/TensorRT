@@ -87,7 +87,6 @@ private:
     int iC, iH, iW;
     int oC, oH, oW;
     const char* mPluginNamespace;
-    std::string mNamespace;
 };
 
 class CoordConvACPluginCreator : public BaseCreator

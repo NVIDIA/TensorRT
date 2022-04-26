@@ -14,15 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <cuda.h>
 #include "NvInfer.h"
-#include "bertCommon.h"
-#include <type_traits>
-#include "common.cuh"
+#include "common/bertCommon.h"
+#include "common/common.cuh"
 #include <cassert>
 #include <cstring>
+#include <cuda.h>
+#include <type_traits>
 #include <vector>
-
 
 using namespace nvinfer1;
 

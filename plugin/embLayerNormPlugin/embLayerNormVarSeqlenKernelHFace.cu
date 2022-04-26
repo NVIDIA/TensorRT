@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-#include <cuda.h>
+#include "NvInfer.h"
+#include "common/bertCommon.h"
+#include "common/common.cuh"
+#include "common/plugin.h"
+#include "common/serialize.hpp"
+
 #include <cassert>
 #include <cstring>
+#include <cuda.h>
 #include <vector>
-
-#include "NvInfer.h"
-#include "bertCommon.h"
-#include "common.cuh"
-#include "plugin.h"
-#include "serialize.hpp"
 
 using namespace nvinfer1;
 
@@ -88,7 +88,7 @@ void cuSeqlensToPackedMask(const uint32_t S, const uint32_t B, const uint32_t wa
     dim3 grid(xmmas_m, B);
     cuSeqlensToPackedMaskKernel<<<grid, threads_per_cta, S * sizeof(int32_t), stream>>>(
         warps_m, warps_n, S, cuSeqlens, inputMaskX);
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
 }
 
 template <typename T, unsigned TPB, unsigned VPT>
@@ -215,7 +215,7 @@ int32_t embSkipLayerNormVarSeqlenHFace(cudaStream_t stream, int32_t ld, int32_t 
         assert(false && "Unsupported hidden dimension");
     }
 
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
 
     return 0;
 }

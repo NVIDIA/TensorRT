@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-#include "checkMacrosPlugin.h"
+#include "common/checkMacrosPlugin.h"
 #include "zeroPadding2d.h"
 #include <array>
-#include <cassert>
 #include <cstring>
 
 using namespace nvinfer1;
@@ -130,14 +129,14 @@ cudaError_t zeroPadding2d(
     dpitch >>= kernelId;
 
     int32_t devId;
-    CHECK_CUDA(cudaGetDevice(&devId));
+    PLUGIN_CHECK_CUDA(cudaGetDevice(&devId));
     int32_t numSms;
-    CHECK_CUDA(cudaDeviceGetAttribute(&numSms, cudaDevAttrMultiProcessorCount, devId));
+    PLUGIN_CHECK_CUDA(cudaDeviceGetAttribute(&numSms, cudaDevAttrMultiProcessorCount, devId));
     auto kernel = kernels[kernelId];
     int32_t block = kMAX_THREADS_PER_BLOCK;
     int32_t grid = (dpitch * height + kMAX_THREADS_PER_BLOCK - 1) / kMAX_THREADS_PER_BLOCK;
     int32_t blocksPerSm;
-    CHECK_CUDA(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocksPerSm, kernel, block, 0));
+    PLUGIN_CHECK_CUDA(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocksPerSm, kernel, block, 0));
     grid = std::min(numSms * blocksPerSm, grid);
 
     kernel<<<grid, block, 0, stream>>>(src, spitch, dst, dpitch, height);
@@ -146,10 +145,10 @@ cudaError_t zeroPadding2d(
 
 QkvPaddingRunner::QkvPaddingRunner(int32_t headSize, DataType dtype)
 {
-    ASSERT(headSize > 0 && headSize <= 64);
+    PLUGIN_ASSERT(headSize > 0 && headSize <= 64);
     mPaddingHeadSize = (headSize <= 32) ? 32 : 64;
 
-    ASSERT(dtype == DataType::kHALF || dtype == DataType::kINT8);
+    PLUGIN_ASSERT(dtype == DataType::kHALF || dtype == DataType::kINT8);
     mDtypeSize = (dtype == DataType::kHALF) ? 2 : 1;
 }
 

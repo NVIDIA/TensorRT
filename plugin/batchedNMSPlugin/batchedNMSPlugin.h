@@ -16,14 +16,13 @@
  */
 #ifndef TRT_BATCHED_NMS_PLUGIN_H
 #define TRT_BATCHED_NMS_PLUGIN_H
+#include "common/kernel.h"
+#include "common/nmsUtils.h"
+#include "common/plugin.h"
 #include "gatherNMSOutputs.h"
-#include "kernel.h"
-#include "nmsUtils.h"
-#include "plugin.h"
 #include <string>
 #include <vector>
 
-using namespace nvinfer1::plugin;
 namespace nvinfer1
 {
 namespace plugin
@@ -103,7 +102,8 @@ public:
     void setCaffeSemantics(bool caffeSemantics) noexcept;
 
     // IPluginV2Ext methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const noexcept override;
+    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const
+        noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;

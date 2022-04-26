@@ -14,9 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#ifndef _BERT_FMHA_FMHA_COMMON
+#define _BERT_FMHA_FMHA_COMMON
 
-#pragma once
-
+#include "common/checkMacrosPlugin.h"
+#include "common/plugin.h"
 #include <cstdint>
 namespace bert
 {
@@ -32,3 +34,4 @@ enum Data_type
     DATA_TYPE_INT32
 };
 } // namespace bert
+#endif // _BERT_FMHA_FMHA_COMMON

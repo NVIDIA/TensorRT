@@ -14,31 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
-#include "bboxUtils.h"
+#include "common/bboxUtils.h"
+#include "common/kernel.h"
 
 // PROPOSALS INFERENCE
-pluginStatus_t proposalsInference(cudaStream_t stream,
-                                 const int N,
-                                 const int A,
-                                 const int H,
-                                 const int W,
-                                 const int featureStride,
-                                 const int preNmsTop,
-                                 const int nmsMaxOut,
-                                 const float iouThreshold,
-                                 const float minBoxSize,
-                                 const float* imInfo,
-                                 const float* anchors,
-                                 const DataType t_scores,
-                                 const DLayout_t l_scores,
-                                 const void* scores,
-                                 const DataType t_deltas,
-                                 const DLayout_t l_deltas,
-                                 const void* deltas,
-                                 void* workspace,
-                                 const DataType t_rois,
-                                 void* rois)
+pluginStatus_t proposalsInference(cudaStream_t stream, const int N, const int A, const int H, const int W,
+    const int featureStride, const int preNmsTop, const int nmsMaxOut, const float iouThreshold, const float minBoxSize,
+    const float* imInfo, const float* anchors, const DataType t_scores, const DLayout_t l_scores, const void* scores,
+    const DataType t_deltas, const DLayout_t l_deltas, const void* deltas, void* workspace, const DataType t_rois,
+    void* rois)
 {
     /*
      * N: batch size

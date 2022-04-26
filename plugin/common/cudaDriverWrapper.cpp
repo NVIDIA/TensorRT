@@ -31,8 +31,8 @@
 #define dllGetSym(handle, name) dlsym(handle, name)
 #endif
 
+#include "common/plugin.h"
 #include "cudaDriverWrapper.h"
-#include "plugin.h"
 #include <cstdint>
 #include <cstdio>
 #include <cuda.h>
@@ -42,11 +42,11 @@ using namespace nvinfer1;
 CUDADriverWrapper::CUDADriverWrapper()
 {
     handle = dllOpen(CUDA_LIB_NAME);
-    ASSERT(handle != nullptr);
+    PLUGIN_ASSERT(handle != nullptr);
 
-    auto load_sym = [](void* handle, const char *name) {
+    auto load_sym = [](void* handle, const char* name) {
         void* ret = dllGetSym(handle, name);
-        ASSERT(ret != nullptr);
+        PLUGIN_ASSERT(ret != nullptr);
         return ret;
     };
 

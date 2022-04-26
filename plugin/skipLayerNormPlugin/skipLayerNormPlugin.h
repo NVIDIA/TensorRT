@@ -23,7 +23,7 @@
 
 #include "NvInferPlugin.h"
 
-#include "bertCommon.h"
+#include "common/bertCommon.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -183,7 +183,6 @@ private:
     bert::WeightsWithOwnership mBias;
 
     size_t mParamWordsize;
-    bool mParamsOnDevice;
 };
 
 class SkipLayerNormVarSeqlenPluginCreator : public nvinfer1::IPluginCreator

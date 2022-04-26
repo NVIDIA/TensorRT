@@ -25,7 +25,7 @@
 
 namespace instance_norm_impl
 {
-#define CHECK_CUDA(call)                                                                                               \
+#define PLUGIN_CHECK_CUDA(call)                                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
         cudaError_t status = call;                                                                                     \
@@ -35,7 +35,7 @@ namespace instance_norm_impl
         }                                                                                                              \
     } while (0)
 
-#define CHECK_CUDNN(call)                                                                                              \
+#define PLUGIN_CHECK_CUDNN(call)                                                                                       \
     do                                                                                                                 \
     {                                                                                                                  \
         cudnnStatus_t status = call;                                                                                   \

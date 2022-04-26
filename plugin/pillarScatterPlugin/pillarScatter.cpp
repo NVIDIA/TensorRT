@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-#include <cassert>
 #include <cstring>
 #include "pillarScatter.h"
 
@@ -69,7 +68,7 @@ nvinfer1::IPluginV2DynamicExt* PillarScatterPlugin::clone() const noexcept
 nvinfer1::DimsExprs PillarScatterPlugin::getOutputDimensions(
     int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
-    assert(outputIndex == 0);
+    PLUGIN_ASSERT(outputIndex == 0);
     nvinfer1::DimsExprs output;
     auto batch_size = inputs[0].d[0];
     output.nbDims = 4;
@@ -83,8 +82,8 @@ nvinfer1::DimsExprs PillarScatterPlugin::getOutputDimensions(
 bool PillarScatterPlugin::supportsFormatCombination(
     int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-    assert(nbInputs == 3);
-    assert(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 3);
+    PLUGIN_ASSERT(nbOutputs == 1);
     const PluginTensorDesc& in = inOut[pos];
     if (pos == 0)
     {
@@ -125,7 +124,7 @@ int PillarScatterPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
         int batchSize = inputDesc[0].dims.d[0];
         int maxPillarNum = inputDesc[0].dims.d[1];
         int numFeatures = inputDesc[0].dims.d[2];
-        
+
         nvinfer1::DataType inputType = inputDesc[0].type;
 
         auto coords_data = static_cast<const unsigned int *>(inputs[1]);
@@ -152,7 +151,7 @@ int PillarScatterPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
                 spatial_feature_data,
                 stream
                 );
-            ASSERT(status == STATUS_SUCCESS);
+            PLUGIN_ASSERT(status == STATUS_SUCCESS);
             return status;
         }
         else if(inputType == nvinfer1::DataType::kFLOAT){
@@ -171,11 +170,11 @@ int PillarScatterPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
                 spatial_feature_data,
                 stream
                 );
-            ASSERT(status == STATUS_SUCCESS);
+            PLUGIN_ASSERT(status == STATUS_SUCCESS);
             return status;
         }
         else{
-            ASSERT(status == STATUS_SUCCESS);
+            PLUGIN_ASSERT(status == STATUS_SUCCESS);
             return status;
         }
     }

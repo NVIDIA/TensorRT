@@ -19,21 +19,19 @@
 #define TRT_MASKRCNN_UTILS_H
 
 #include "NvInfer.h"
-#include "plugin.h"
-
-using namespace nvinfer1;
+#include "common/plugin.h"
 
 inline size_t nAlignUp(size_t x, size_t align)
 {
     size_t mask = align - 1;
-    assert((align & mask) == 0); // power of 2
+    PLUGIN_ASSERT((align & mask) == 0); // power of 2
     return (x + mask) & (~mask);
 }
 
 inline size_t nAlignDown(size_t x, size_t align)
 {
     size_t mask = align - 1;
-    assert((align & mask) == 0); // power of 2
+    PLUGIN_ASSERT((align & mask) == 0); // power of 2
     return (x) & (~mask);
 }
 
@@ -69,14 +67,14 @@ struct CudaBind
     CudaBind(size_t size)
     {
         mSize = size;
-        CUASSERT(cudaMalloc(&mPtr, sizeof(Dtype) * mSize));
+        PLUGIN_CUASSERT(cudaMalloc(&mPtr, sizeof(Dtype) * mSize));
     }
 
     ~CudaBind()
     {
         if (mPtr != nullptr)
         {
-            CUASSERT(cudaFree(mPtr));
+            PLUGIN_CUASSERT(cudaFree(mPtr));
             mPtr = nullptr;
         }
     }
@@ -272,18 +270,16 @@ struct xy_t
     }
 };
 // PYRAMID ROIALIGN
-cudaError_t roiAlign(cudaStream_t stream, int batchSize, xy_t imageSize, int featureCount, int roiCount,
-    float firstThreshold, int transformCoords, bool absCoords, bool swapCoords, bool plusOneCoords, int samplingRatio,
-
-    const void* rois, const void* const layers[], const xy_t* layerDims,
-
-    void* pooled, const xy_t poolDims);
+cudaError_t roiAlign(cudaStream_t const stream, int32_t const batchSize, xy_t const imageSize,
+    int32_t const featureCount, int32_t const roiCount, float const firstThreshold, int32_t const transformCoords,
+    bool const absCoords, bool const swapCoords, bool const plusOneCoords, int32_t const samplingRatio,
+    void const* rois, void const* const layers[], xy_t const* layerDims, void* pooled, xy_t const poolDims);
 
 cudaError_t roiAlignHalfCenter(cudaStream_t stream, int batchSize, int featureCount, int roiCount, float firstThreshold,
 
     int inputHeight, int inputWidth, const void* rois, const void* const layers[], const xy_t* layerDims,
 
-    void* pooled, const xy_t poolDims, const DataType dtype);
+    void* pooled, const xy_t poolDims, const nvinfer1::DataType dtype);
 
 // RESIZE NEAREST
 void resizeNearest(dim3 grid, dim3 block, cudaStream_t stream, int nbatch, float scale, int2 osize, float const* idata,

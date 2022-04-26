@@ -16,11 +16,11 @@
  */
 #ifndef TRT_REGION_PLUGIN_H
 #define TRT_REGION_PLUGIN_H
-#include "kernel.h"
-#include "plugin.h"
+#include "common/kernel.h"
+#include "common/plugin.h"
 #include <iostream>
-#include <vector>
 #include <memory>
+#include <vector>
 
 namespace nvinfer1
 {

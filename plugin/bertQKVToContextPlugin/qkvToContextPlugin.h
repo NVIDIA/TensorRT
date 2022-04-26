@@ -56,8 +56,8 @@ public:
 
     virtual void setup(const int32_t S, const int32_t B)
     {
-        assert(S);
-        assert(B);
+        PLUGIN_ASSERT(S);
+        PLUGIN_ASSERT(B);
         mB = B;
         mS = S;
 

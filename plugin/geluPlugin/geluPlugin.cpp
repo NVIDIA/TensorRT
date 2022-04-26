@@ -18,16 +18,16 @@
 #include <cuda.h>
 #if CUDA_VERSION >= 10010
 
-#include <cassert>
 #include <cstring>
 #include <vector>
 
 #include "NvInfer.h"
-#include "bertCommon.h"
+#include "common/bertCommon.h"
+#include "common/serialize.hpp"
 #include "geluPlugin.h"
-#include "serialize.hpp"
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 
 namespace bert
 {
@@ -53,8 +53,8 @@ GeluPluginDynamic::GeluPluginDynamic(const std::string name, const DataType type
     if (mHasBias)
     {
         void* cudaMem{nullptr};
-        CHECK(cudaMalloc(&cudaMem, getWeightsSize(bias, mType)));
-        CHECK(cudaMemcpy(cudaMem, bias.values, getWeightsSize(bias, mType), cudaMemcpyHostToDevice));
+        PLUGIN_CHECK(cudaMalloc(&cudaMem, getWeightsSize(bias, mType)));
+        PLUGIN_CHECK(cudaMemcpy(cudaMem, bias.values, getWeightsSize(bias, mType), cudaMemcpyHostToDevice));
         make_cuda_shared(mBiasDev, cudaMem);
     }
 }
@@ -69,7 +69,7 @@ GeluPluginDynamic::GeluPluginDynamic(const std::string name, const void* data, s
 
     if (mHasBias)
     {
-        ASSERT(mLd > 0);
+        PLUGIN_ASSERT(mLd > 0);
         const char* d = static_cast<const char*>(data);
         make_cuda_shared(mBiasDev, deserToDev<char>(d, mLd * getElementSize(mType)));
     }
@@ -110,7 +110,7 @@ void GeluPluginDynamic::configurePlugin(const nvinfer1::DynamicPluginTensorDesc*
     const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept
 {
     gLogVerbose << "GeluPluginDynamic configurePlugin\n";
-    assert(mType == in[0].desc.type);
+    PLUGIN_ASSERT(mType == in[0].desc.type);
 }
 
 size_t GeluPluginDynamic::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
@@ -174,8 +174,8 @@ int GeluPluginDynamic::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
 nvinfer1::DataType GeluPluginDynamic::getOutputDataType(
     int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
-    assert(index == 0);
-    assert(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
+    PLUGIN_ASSERT(index == 0);
+    PLUGIN_ASSERT(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
     return inputTypes[0];
 }
 
@@ -221,7 +221,7 @@ void GeluPluginDynamic::serialize(void* buffer) const noexcept
     serialize_value(&buffer, mHasBias);
     if (mHasBias)
     {
-        assert(mLd > 0);
+        PLUGIN_ASSERT(mLd > 0);
         char* d = static_cast<char*>(buffer);
         serFromDev(d, static_cast<char*>(mBiasDev.get()), mLd * getElementSize(mType));
     }

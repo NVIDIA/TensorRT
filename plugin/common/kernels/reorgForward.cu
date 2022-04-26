@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "common/kernel.h"
 #include "reducedMathPlugin.h"
-#include "kernel.h"
 
 using namespace nvinfer1::plugin; // for ReducedDivisor
 

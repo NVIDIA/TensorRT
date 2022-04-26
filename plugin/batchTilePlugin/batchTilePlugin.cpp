@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 #include "batchTilePlugin.h"
-#include <cassert>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <numeric>
@@ -62,7 +61,7 @@ BatchTilePlugin::BatchTilePlugin(const std::string name, const void* data, size_
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mCopySize = readFromBuffer<size_t>(d);
-    assert(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 int BatchTilePlugin::getNbOutputs() const noexcept
@@ -74,9 +73,9 @@ Dims BatchTilePlugin::getOutputDimensions(int index, const Dims* inputs, int nbI
 {
     try
     {
-        assert(nbInputDims == 2);
-        assert(index == 0);
-        assert(inputs[1].nbDims == 4);
+        PLUGIN_ASSERT(nbInputDims == 2);
+        PLUGIN_ASSERT(index == 0);
+        PLUGIN_ASSERT(inputs[1].nbDims == 4);
         return Dims3(inputs[1].d[1], inputs[1].d[2], inputs[1].d[3]);
     }
     catch (const std::exception& e)
@@ -98,7 +97,7 @@ size_t BatchTilePlugin::getWorkspaceSize(int) const noexcept
 
 DataType BatchTilePlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
-    assert(index == 0);
+    PLUGIN_ASSERT(index == 0);
     return DataType::kFLOAT;
 }
 
@@ -111,11 +110,8 @@ int BatchTilePlugin::enqueue(
         // expand to batch size
         for (int i = 0; i < batchSize; i++)
         {
-            auto ret = cudaMemcpyAsync(output + i * mCopySize, inputs[1], mCopySize, cudaMemcpyDeviceToDevice, stream);
-            if (ret != cudaSuccess)
-            {
-                return ret;
-            }
+            PLUGIN_CHECK_CUDA(
+                cudaMemcpyAsync(output + i * mCopySize, inputs[1], mCopySize, cudaMemcpyDeviceToDevice, stream));
         }
         return STATUS_SUCCESS;
     }
@@ -130,7 +126,7 @@ void BatchTilePlugin::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     writeToBuffer<size_t>(d, mCopySize);
-    assert(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 void BatchTilePlugin::terminate() noexcept {}
@@ -154,9 +150,9 @@ void BatchTilePlugin::configurePlugin(const Dims* inputDims, int nbInputs, const
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    assert(nbOutputs == 1);
-    assert(inputDims[1].nbDims == 4);
-    assert(inputDims[1].d[0] == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(inputDims[1].nbDims == 4);
+    PLUGIN_ASSERT(inputDims[1].d[0] == 1);
     mCopySize = std::accumulate(inputDims[1].d, inputDims[1].d + 4, 1, std::multiplies<int>()) * sizeof(float);
 }
 

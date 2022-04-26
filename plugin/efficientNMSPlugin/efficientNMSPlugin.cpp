@@ -41,7 +41,7 @@ EfficientNMSPlugin::EfficientNMSPlugin(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mParam = read<EfficientNMSParameters>(d);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 const char* EfficientNMSPlugin::getPluginType() const noexcept
@@ -84,7 +84,7 @@ void EfficientNMSPlugin::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mParam);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 void EfficientNMSPlugin::destroy() noexcept
@@ -168,7 +168,7 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
         if (mParam.outputONNXIndices)
         {
             // ONNX NMS
-            ASSERT(outputIndex == 0);
+            PLUGIN_ASSERT(outputIndex == 0);
 
             // detection_indices
             out_dim.nbDims = 2;
@@ -179,7 +179,7 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
         else
         {
             // Standard NMS
-            ASSERT(outputIndex >= 0 && outputIndex <= 3);
+            PLUGIN_ASSERT(outputIndex >= 0 && outputIndex <= 3);
 
             // num_detections
             if (outputIndex == 0)
@@ -231,8 +231,8 @@ bool EfficientNMSPlugin::supportsFormatCombination(
 
     if (mParam.outputONNXIndices)
     {
-        ASSERT(nbInputs == 2);
-        ASSERT(nbOutputs == 1);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 1);
 
         // detection_indices output: int
         if (pos == 2)
@@ -246,15 +246,15 @@ bool EfficientNMSPlugin::supportsFormatCombination(
     }
     else
     {
-        ASSERT(nbInputs == 2 || nbInputs == 3);
-        ASSERT(nbOutputs == 4);
+        PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
+        PLUGIN_ASSERT(nbOutputs == 4);
         if (nbInputs == 2)
         {
-            ASSERT(0 <= pos && pos <= 5);
+            PLUGIN_ASSERT(0 <= pos && pos <= 5);
         }
         if (nbInputs == 3)
         {
-            ASSERT(0 <= pos && pos <= 6);
+            PLUGIN_ASSERT(0 <= pos && pos <= 6);
         }
 
         // num_detections and detection_classes output: int
@@ -279,22 +279,22 @@ void EfficientNMSPlugin::configurePlugin(
         {
             // Accepts two inputs
             // [0] boxes, [1] scores
-            ASSERT(nbInputs == 2);
-            ASSERT(nbOutputs == 1);
+            PLUGIN_ASSERT(nbInputs == 2);
+            PLUGIN_ASSERT(nbOutputs == 1);
         }
         else
         {
             // Accepts two or three inputs
             // If two inputs: [0] boxes, [1] scores
             // If three inputs: [0] boxes, [1] scores, [2] anchors
-            ASSERT(nbInputs == 2 || nbInputs == 3);
-            ASSERT(nbOutputs == 4);
+            PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
+            PLUGIN_ASSERT(nbOutputs == 4);
         }
         mParam.datatype = in[0].desc.type;
 
         // Shape of scores input should be
         // [batch_size, num_boxes, num_classes] or [batch_size, num_boxes, num_classes, 1]
-        ASSERT(in[1].desc.dims.nbDims == 3 || (in[1].desc.dims.nbDims == 4 && in[1].desc.dims.d[3] == 1));
+        PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3 || (in[1].desc.dims.nbDims == 4 && in[1].desc.dims.d[3] == 1));
         mParam.numScoreElements = in[1].desc.dims.d[1] * in[1].desc.dims.d[2];
         mParam.numClasses = in[1].desc.dims.d[2];
 
@@ -311,18 +311,18 @@ void EfficientNMSPlugin::configurePlugin(
 
         // Shape of boxes input should be
         // [batch_size, num_boxes, 4] or [batch_size, num_boxes, 1, 4] or [batch_size, num_boxes, num_classes, 4]
-        ASSERT(in[0].desc.dims.nbDims == 3 || in[0].desc.dims.nbDims == 4);
+        PLUGIN_ASSERT(in[0].desc.dims.nbDims == 3 || in[0].desc.dims.nbDims == 4);
         if (in[0].desc.dims.nbDims == 3)
         {
-            ASSERT(in[0].desc.dims.d[2] == 4);
+            PLUGIN_ASSERT(in[0].desc.dims.d[2] == 4);
             mParam.shareLocation = true;
             mParam.numBoxElements = in[0].desc.dims.d[1] * in[0].desc.dims.d[2];
         }
         else
         {
             mParam.shareLocation = (in[0].desc.dims.d[2] == 1);
-            ASSERT(in[0].desc.dims.d[2] == mParam.numClasses || mParam.shareLocation);
-            ASSERT(in[0].desc.dims.d[3] == 4);
+            PLUGIN_ASSERT(in[0].desc.dims.d[2] == mParam.numClasses || mParam.shareLocation);
+            PLUGIN_ASSERT(in[0].desc.dims.d[3] == 4);
             mParam.numBoxElements = in[0].desc.dims.d[1] * in[0].desc.dims.d[2] * in[0].desc.dims.d[3];
         }
         mParam.numAnchors = in[0].desc.dims.d[1];
@@ -337,7 +337,7 @@ void EfficientNMSPlugin::configurePlugin(
             // All three inputs are used, enable the box decoder
             // Shape of anchors input should be
             // Constant shape: [1, numAnchors, 4] or [batch_size, numAnchors, 4]
-            ASSERT(in[2].desc.dims.nbDims == 3);
+            PLUGIN_ASSERT(in[2].desc.dims.nbDims == 3);
             mParam.boxDecoder = true;
             mParam.shareAnchors = (in[2].desc.dims.d[0] == 1);
         }
@@ -440,22 +440,22 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(const char* name, c
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "score_threshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "max_output_boxes"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.numOutputBoxes = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "background_class"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.backgroundClass = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "score_activation"))
@@ -464,7 +464,7 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(const char* name, c
             }
             if (!strcmp(attrName, "box_coding"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.boxCoding = *(static_cast<const int*>(fields[i].data));
             }
         }
@@ -539,22 +539,22 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "score_threshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "max_output_boxes_per_class"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.numOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "center_point_box"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 mParam.boxCoding = *(static_cast<const int*>(fields[i].data));
             }
         }

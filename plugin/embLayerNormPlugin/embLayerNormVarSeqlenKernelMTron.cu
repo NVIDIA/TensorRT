@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
+#include "NvInfer.h"
+#include "common/bertCommon.h"
+#include "common/common.cuh"
+#include "common/plugin.h"
+#include "common/serialize.hpp"
+
 #include <cassert>
 #include <cstring>
 #include <cuda.h>
 #include <vector>
-
-#include "NvInfer.h"
-#include "bertCommon.h"
-#include "common.cuh"
-#include "plugin.h"
-#include "serialize.hpp"
 
 using namespace nvinfer1;
 
@@ -183,7 +183,7 @@ int32_t embSkipLayerNormVarSeqlenMTron(cudaStream_t stream, int32_t ld, int32_t 
         assert(false && "Unsupported hidden dimension");
     }
 
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
 
     return 0;
 }

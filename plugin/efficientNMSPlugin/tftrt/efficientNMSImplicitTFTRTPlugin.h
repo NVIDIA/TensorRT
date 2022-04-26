@@ -19,8 +19,8 @@
 
 #include <vector>
 
-#include "efficientNMSParameters.h"
-#include "plugin.h"
+#include "common/plugin.h"
+#include "efficientNMSPlugin/efficientNMSParameters.h"
 
 // This plugin provides CombinedNMS op compatibility for TF-TRT in Implicit Batch
 // mode for legacy back-compatibilty

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 #include "resizeNearestPlugin.h"
-#include "plugin.h"
-#include <cuda_runtime_api.h>
+#include "common/plugin.h"
 #include <algorithm>
+#include <cuda_runtime_api.h>
 #include <iostream>
 
 #define DEBUG 0
@@ -68,7 +68,7 @@ IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const P
         const char* attrName = fields[i].name;
         if (!strcmp(attrName, "scale"))
         {
-            assert(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             mScale = *(static_cast<const float*>(fields[i].data));
         }
     }
@@ -83,7 +83,7 @@ IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(const char* name, co
 ResizeNearest::ResizeNearest(float scale)
     : mScale(scale)
 {
-    assert(mScale > 0);
+    PLUGIN_ASSERT(mScale > 0);
 }
 
 int ResizeNearest::getNbOutputs() const noexcept
@@ -93,9 +93,9 @@ int ResizeNearest::getNbOutputs() const noexcept
 
 Dims ResizeNearest::getOutputDimensions(int index, const Dims* inputDims, int nbInputs) noexcept
 {
-    assert(nbInputs == 1);
+    PLUGIN_ASSERT(nbInputs == 1);
     nvinfer1::Dims const& input = inputDims[0];
-    assert(index == 0);
+    PLUGIN_ASSERT(index == 0);
     nvinfer1::Dims output;
     output.nbDims = input.nbDims;
     for (int d = 0; d < input.nbDims; ++d)
@@ -147,7 +147,7 @@ void ResizeNearest::serialize(void* buffer) const noexcept
     write(d, mOutputDims.d[0]);
     write(d, mOutputDims.d[1]);
     write(d, mOutputDims.d[2]);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 ResizeNearest::ResizeNearest(const void* data, size_t length)
@@ -162,7 +162,7 @@ ResizeNearest::ResizeNearest(const void* data, size_t length)
     mOutputDims.d[0] = read<int>(d);
     mOutputDims.d[1] = read<int>(d);
     mOutputDims.d[2] = read<int>(d);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 const char* ResizeNearest::getPluginType() const noexcept
@@ -221,7 +221,7 @@ int ResizeNearest::enqueue(
 DataType ResizeNearest::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(index == 0);
 
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
@@ -244,10 +244,10 @@ void ResizeNearest::configurePlugin(const Dims* inputDims, int nbInputs, const D
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    assert(nbInputs == 1);
+    PLUGIN_ASSERT(nbInputs == 1);
     mInputDims = inputDims[0];
 
-    assert(nbOutputs == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
     mOutputDims = outputDims[0];
 }
 

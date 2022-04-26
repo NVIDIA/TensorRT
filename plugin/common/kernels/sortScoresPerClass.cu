@@ -14,13 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "common/bboxUtils.h"
+#include "common/cub_helper.h"
+#include "common/kernel.h"
 #include "cub/cub.cuh"
 #include <array>
-#include "kernel.h"
-#include "bboxUtils.h"
-#include "cub_helper.h"
 
-inline __device__ __half add_fb(const __half & a, const __half & b) {
+inline __device__ __half add_fb(const __half& a, const __half& b)
+{
 #if __CUDA_ARCH__ >= 530
     return a + b;
 #else

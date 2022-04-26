@@ -78,7 +78,7 @@ static const int MAX_PRE_NMS_RESULTS = 1000; // 3840;
 
 // Non-max suppression threshold to filter RPN proposals.
 // You can increase this during training to generate more propsals.
-static const float RPN_NMS_THRESHOLD = 0.7;
+static const float RPN_NMS_THRESHOLD = 0.7F;
 
 // ROIs kept after non-maximum suppression (training and inference)
 static const int POST_NMS_ROIS_INFERENCE = 1000;

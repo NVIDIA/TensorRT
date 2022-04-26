@@ -19,8 +19,8 @@
 #define TRT_SPLIT_PLUGIN_H
 #include <NvInfer.h>
 
-#include "serialize.hpp"
-#include "checkMacrosPlugin.h"
+#include "common/checkMacrosPlugin.h"
+#include "common/serialize.hpp"
 
 #include <iostream>
 #include <string>
@@ -75,13 +75,13 @@ public:
         : _axis(axis)
         , _output_lengths(std::vector<int>(output_lengths, output_lengths + noutput))
     {
-        assert(axis <= nvinfer1::Dims::MAX_DIMS);
+        PLUGIN_ASSERT(axis <= nvinfer1::Dims::MAX_DIMS);
     }
     SplitPlugin(int axis, std::vector<int> output_lengths)
         : _axis(axis)
         , _output_lengths(output_lengths)
     {
-        assert(axis <= nvinfer1::Dims::MAX_DIMS);
+        PLUGIN_ASSERT(axis <= nvinfer1::Dims::MAX_DIMS);
     }
     SplitPlugin(void const* serialData, size_t serialLength)
     {

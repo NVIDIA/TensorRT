@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 #include "proposalLayerPlugin.h"
-#include "mrcnn_config.h"
-#include "plugin.h"
-#include <cuda_runtime_api.h>
+#include "common/mrcnn_config.h"
+#include "common/plugin.h"
 #include <algorithm>
+#include <cuda_runtime_api.h>
 #include <iostream>
 #include <math.h>
 
@@ -72,22 +72,22 @@ IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const P
         const char* attrName = fields[i].name;
         if (!strcmp(attrName, "prenms_topk"))
         {
-            assert(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             mPreNMSTopK = *(static_cast<const int*>(fields[i].data));
         }
         if (!strcmp(attrName, "keep_topk"))
         {
-            assert(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             mKeepTopK = *(static_cast<const int*>(fields[i].data));
         }
         if (!strcmp(attrName, "iou_threshold"))
         {
-            assert(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             mIOUThreshold = *(static_cast<const float*>(fields[i].data));
         }
         if (!strcmp(attrName, "image_size"))
         {
-            assert(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             const auto* const dims = static_cast<const int32_t*>(fields[i].data);
             std::copy_n(dims, 3, image_size.d);
         }
@@ -107,9 +107,9 @@ ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold
     , mImageSize(image_size)
 {
     mBackgroundLabel = -1;
-    assert(mPreNMSTopK > 0);
-    assert(mKeepTopK > 0);
-    assert(iou_threshold > 0.0F);
+    PLUGIN_ASSERT(mPreNMSTopK > 0);
+    PLUGIN_ASSERT(mKeepTopK > 0);
+    PLUGIN_ASSERT(iou_threshold > 0.0F);
 
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
@@ -134,7 +134,7 @@ int ProposalLayer::initialize() noexcept
 
     mValidCnt = std::make_shared<CudaBind<int>>(mMaxBatchSize);
 
-    CUASSERT(cudaMemcpy(
+    PLUGIN_CUASSERT(cudaMemcpy(
         mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()), sizeof(int) * mMaxBatchSize, cudaMemcpyHostToDevice));
 
     // Init the anchors for batch size:
@@ -143,7 +143,7 @@ int ProposalLayer::initialize() noexcept
     uint8_t* device_ptr = static_cast<uint8_t*>(mAnchorBoxesDevice->mPtr);
     for (int i = 0; i < mMaxBatchSize; i++)
     {
-        CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset),
+        PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset),
             static_cast<void*>(mAnchorBoxesHost.data()), batch_offset, cudaMemcpyHostToDevice));
     }
 
@@ -203,7 +203,7 @@ void ProposalLayer::serialize(void* buffer) const noexcept
     write(d, mMaxBatchSize);
     write(d, mAnchorsCnt);
     write(d, mImageSize);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 ProposalLayer::ProposalLayer(const void* data, size_t length)
@@ -215,7 +215,7 @@ ProposalLayer::ProposalLayer(const void* data, size_t length)
     mMaxBatchSize = read<int>(d);
     mAnchorsCnt = read<int>(d);
     mImageSize = read<nvinfer1::Dims3>(d);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 
     mBackgroundLabel = -1;
     mPreNMSTopK = prenms_topk;
@@ -238,11 +238,11 @@ void ProposalLayer::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInput
     // object_score[N, anchors, 2, 1],
     // foreground_delta[N, anchors, 4, 1],
     // anchors should be generated inside
-    assert(nbInputDims == 2);
+    PLUGIN_ASSERT(nbInputDims == 2);
     // foreground_score
-    assert(inputs[0].nbDims == 3 && inputs[0].d[1] == 2);
+    PLUGIN_ASSERT(inputs[0].nbDims == 3 && inputs[0].d[1] == 2);
     // foreground_delta
-    assert(inputs[1].nbDims == 3 && inputs[1].d[1] == 4);
+    PLUGIN_ASSERT(inputs[1].nbDims == 3 && inputs[1].d[1] == 4);
 }
 
 size_t ProposalLayer::getWorkspaceSize(int batch_size) const noexcept
@@ -256,7 +256,7 @@ Dims ProposalLayer::getOutputDimensions(int index, const Dims* inputs, int nbInp
 {
 
     check_valid_inputs(inputs, nbInputDims);
-    assert(index == 0);
+    PLUGIN_ASSERT(index == 0);
 
     // [N, anchors, (y1, x1, y2, x2)]
     nvinfer1::Dims proposals;
@@ -271,7 +271,7 @@ Dims ProposalLayer::getOutputDimensions(int index, const Dims* inputs, int nbInp
 
 void ProposalLayer::generate_pyramid_anchors(const nvinfer1::Dims& image_dims) noexcept
 {
-    assert(image_dims.nbDims == 3 && image_dims.d[0] == 3);
+    PLUGIN_ASSERT(image_dims.nbDims == 3 && image_dims.d[0] == 3);
 
     const auto& scales = MaskRCNNConfig::RPN_ANCHOR_SCALES;
     const auto& ratios = MaskRCNNConfig::RPN_ANCHOR_RATIOS;
@@ -282,9 +282,9 @@ void ProposalLayer::generate_pyramid_anchors(const nvinfer1::Dims& image_dims) n
     const float cx = image_dims.d[2] - 1;
 
     auto& anchors = mAnchorBoxesHost;
-    assert(anchors.empty());
+    PLUGIN_ASSERT(anchors.empty());
 
-    assert(scales.size() == strides.size());
+    PLUGIN_ASSERT(scales.size() == strides.size());
     for (size_t s = 0; s < scales.size(); ++s)
     {
         float scale = scales[s];
@@ -303,7 +303,7 @@ void ProposalLayer::generate_pyramid_anchors(const nvinfer1::Dims& image_dims) n
                 }
     }
 
-    assert(anchors.size() % 4 == 0);
+    PLUGIN_ASSERT(anchors.size() % 4 == 0);
 }
 
 int ProposalLayer::enqueue(
@@ -323,7 +323,7 @@ int ProposalLayer::enqueue(
         mAnchorBoxesDevice->mPtr, // inputs[anchors]
         proposals);
 
-    assert(status == cudaSuccess);
+    PLUGIN_ASSERT(status == cudaSuccess);
     return status;
 }
 
@@ -352,10 +352,10 @@ void ProposalLayer::configurePlugin(const Dims* inputDims, int nbInputs, const D
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
-    assert(inputDims[0].d[0] == inputDims[1].d[0]);
+    PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0]);
 
     mAnchorsCnt = inputDims[0].d[0];
-    assert(mAnchorsCnt == (int) (mAnchorBoxesHost.size() / 4));
+    PLUGIN_ASSERT(mAnchorsCnt == (int) (mAnchorBoxesHost.size() / 4));
     mMaxBatchSize = maxBatchSize;
 }
 

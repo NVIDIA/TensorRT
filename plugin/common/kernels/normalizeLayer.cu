@@ -14,17 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
-#include "bboxUtils.h"
+#include "common/bboxUtils.h"
+#include "common/kernel.h"
 
-#define CUBLAS_CHECK(condition)                                                                 \
-    do                                                                                          \
-    {                                                                                           \
-        cublasStatus_t status = condition;                                                      \
-        if (status != CUBLAS_STATUS_SUCCESS)                                                    \
-        {                                                                                       \
-            printf("%s %d CUBLAS FAIL %s\n", __FILE__, __LINE__, cublasGetErrorString(status)); \
-        }                                                                                       \
+#define CUBLAS_CHECK(condition)                                                                                        \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        cublasStatus_t status = condition;                                                                             \
+        if (status != CUBLAS_STATUS_SUCCESS)                                                                           \
+        {                                                                                                              \
+            printf("%s %d CUBLAS FAIL %s\n", __FILE__, __LINE__, cublasGetErrorString(status));                        \
+        }                                                                                                              \
     } while (0)
 namespace nvinfer1
 {
@@ -135,11 +135,9 @@ pluginStatus_t normalizeNotAcrossSpatialGpu(
     const int BS = 128;
     const int GS = 256;
     // assumes warp size == 32
-    ASSERT(BS % 32 == 0);
-    normalizeNotAcrossSpatialKernel<BS><<<GS, BS, 0, stream>>>(channelShared, N, C, H, W, eps,
-                                                               (const float*) scale,
-                                                               (float*) inputData,
-                                                               (float*) outputData);
+    PLUGIN_ASSERT(BS % 32 == 0);
+    normalizeNotAcrossSpatialKernel<BS><<<GS, BS, 0, stream>>>(
+        channelShared, N, C, H, W, eps, (const float*) scale, (float*) inputData, (float*) outputData);
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
 }

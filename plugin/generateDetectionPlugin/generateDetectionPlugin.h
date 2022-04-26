@@ -17,7 +17,6 @@
 
 #ifndef TRT_GENERATE_DETECTION_PLUGIN_H
 #define TRT_GENERATE_DETECTION_PLUGIN_H
-#include <cassert>
 #include <cuda_runtime_api.h>
 #include <memory>
 #include <string.h>
@@ -26,8 +25,8 @@
 
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
-#include "maskRCNNKernels.h"
-#include "tlt_mrcnn_config.h"
+#include "common/kernels/maskRCNNKernels.h"
+#include "multilevelProposeROI/tlt_mrcnn_config.h"
 
 namespace nvinfer1
 {

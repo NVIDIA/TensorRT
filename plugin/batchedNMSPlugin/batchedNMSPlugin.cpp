@@ -93,7 +93,7 @@ BatchedNMSPlugin::BatchedNMSPlugin(const void* data, size_t length)
     mPrecision = read<DataType>(d);
     mScoreBits = read<int32_t>(d);
     mCaffeSemantics = read<bool>(d);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 
     mPluginStatus = checkParams(param);
 }
@@ -115,7 +115,7 @@ BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(const void* data, size_t length
     mPrecision = read<DataType>(d);
     mScoreBits = read<int32_t>(d);
     mCaffeSemantics = read<bool>(d);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 
     mPluginStatus = checkParams(param);
 }
@@ -148,10 +148,10 @@ Dims BatchedNMSPlugin::getOutputDimensions(int index, const Dims* inputs, int nb
 {
     try
     {
-        ASSERT(nbInputDims == 2);
-        ASSERT(index >= 0 && index < this->getNbOutputs());
-        ASSERT(inputs[0].nbDims == 3);
-        ASSERT(inputs[1].nbDims == 2 || (inputs[1].nbDims == 3 && inputs[1].d[2] == 1));
+        PLUGIN_ASSERT(nbInputDims == 2);
+        PLUGIN_ASSERT(index >= 0 && index < this->getNbOutputs());
+        PLUGIN_ASSERT(inputs[0].nbDims == 3);
+        PLUGIN_ASSERT(inputs[1].nbDims == 2 || (inputs[1].nbDims == 3 && inputs[1].d[2] == 1));
         // boxesSize: number of box coordinates for one sample
         boxesSize = inputs[0].d[0] * inputs[0].d[1] * inputs[0].d[2];
         // scoresSize: number of scores for one sample
@@ -186,21 +186,21 @@ DimsExprs BatchedNMSDynamicPlugin::getOutputDimensions(
 {
     try
     {
-        ASSERT(nbInputs == 2);
-        ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
 
         // Shape of boxes input should be
         // Constant shape: [batch_size, num_boxes, num_classes, 4] or [batch_size, num_boxes, 1, 4]
         //           shareLocation ==              0               or          1
         // or
         // Dynamic shape: some dimension values may be -1
-        ASSERT(inputs[0].nbDims == 4);
+        PLUGIN_ASSERT(inputs[0].nbDims == 4);
 
         // Shape of scores input should be
         // Constant shape: [batch_size, num_boxes, num_classes] or [batch_size, num_boxes, num_classes, 1]
         // or
         // Dynamic shape: some dimension values may be -1
-        ASSERT(inputs[1].nbDims == 3 || inputs[1].nbDims == 4);
+        PLUGIN_ASSERT(inputs[1].nbDims == 3 || inputs[1].nbDims == 4);
 
         if (inputs[0].d[0]->isConstant() && inputs[0].d[1]->isConstant() && inputs[0].d[2]->isConstant()
             && inputs[0].d[3]->isConstant())
@@ -292,8 +292,8 @@ int BatchedNMSPlugin::enqueue(
 
         pluginStatus_t status = nmsInference(stream, batchSize, boxesSize, scoresSize, param.shareLocation,
             param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
-            param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses,
-            workspace, param.isNormalized, false, mClipBoxes, mScoreBits, mCaffeSemantics);
+            param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores,
+            nmsedClasses, workspace, param.isNormalized, false, mClipBoxes, mScoreBits, mCaffeSemantics);
         return status == STATUS_SUCCESS ? 0 : -1;
     }
     catch (const std::exception& e)
@@ -323,8 +323,8 @@ int BatchedNMSDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const Pl
 
         pluginStatus_t status = nmsInference(stream, inputDesc[0].dims.d[0], boxesSize, scoresSize, param.shareLocation,
             param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK, param.scoreThreshold,
-            param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores, nmsedClasses,
-            workspace, param.isNormalized, false, mClipBoxes, mScoreBits, mCaffeSemantics);
+            param.iouThreshold, mPrecision, locData, mPrecision, confData, keepCount, nmsedBoxes, nmsedScores,
+            nmsedClasses, workspace, param.isNormalized, false, mClipBoxes, mScoreBits, mCaffeSemantics);
         return status;
     }
     catch (const std::exception& e)
@@ -351,7 +351,7 @@ void BatchedNMSPlugin::serialize(void* buffer) const noexcept
     write(d, mPrecision);
     write(d, mScoreBits);
     write(d, mCaffeSemantics);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 size_t BatchedNMSDynamicPlugin::getSerializationSize() const noexcept
@@ -371,7 +371,7 @@ void BatchedNMSDynamicPlugin::serialize(void* buffer) const noexcept
     write(d, mPrecision);
     write(d, mScoreBits);
     write(d, mCaffeSemantics);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 void BatchedNMSPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
@@ -380,12 +380,12 @@ void BatchedNMSPlugin::configurePlugin(const Dims* inputDims, int nbInputs, cons
 {
     try
     {
-        ASSERT(nbInputs == 2);
-        ASSERT(nbOutputs == 4);
-        ASSERT(inputDims[0].nbDims == 3);
-        ASSERT(inputDims[1].nbDims == 2 || (inputDims[1].nbDims == 3 && inputDims[1].d[2] == 1));
-        ASSERT(std::none_of(inputIsBroadcast, inputIsBroadcast + nbInputs, [](bool b) { return b; }));
-        ASSERT(std::none_of(outputIsBroadcast, outputIsBroadcast + nbInputs, [](bool b) { return b; }));
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 4);
+        PLUGIN_ASSERT(inputDims[0].nbDims == 3);
+        PLUGIN_ASSERT(inputDims[1].nbDims == 2 || (inputDims[1].nbDims == 3 && inputDims[1].d[2] == 1));
+        PLUGIN_ASSERT(std::none_of(inputIsBroadcast, inputIsBroadcast + nbInputs, [](bool b) { return b; }));
+        PLUGIN_ASSERT(std::none_of(outputIsBroadcast, outputIsBroadcast + nbInputs, [](bool b) { return b; }));
 
         boxesSize = inputDims[0].d[0] * inputDims[0].d[1] * inputDims[0].d[2];
         scoresSize = inputDims[1].d[0] * inputDims[1].d[1];
@@ -393,8 +393,8 @@ void BatchedNMSPlugin::configurePlugin(const Dims* inputDims, int nbInputs, cons
         numPriors = inputDims[0].d[0];
         const int numLocClasses = param.shareLocation ? 1 : param.numClasses;
         // Third dimension of boxes must be either 1 or num_classes
-        ASSERT(inputDims[0].d[1] == numLocClasses);
-        ASSERT(inputDims[0].d[2] == 4);
+        PLUGIN_ASSERT(inputDims[0].d[1] == numLocClasses);
+        PLUGIN_ASSERT(inputDims[0].d[2] == 4);
         mPrecision = inputTypes[0];
     }
     catch (const std::exception& e)
@@ -408,20 +408,20 @@ void BatchedNMSDynamicPlugin::configurePlugin(
 {
     try
     {
-        ASSERT(nbInputs == 2);
-        ASSERT(nbOutputs == 4);
+        PLUGIN_ASSERT(nbInputs == 2);
+        PLUGIN_ASSERT(nbOutputs == 4);
 
         // Shape of boxes input should be
         // Constant shape: [batch_size, num_boxes, num_classes, 4] or [batch_size, num_boxes, 1, 4]
         //           shareLocation ==              0               or          1
         const int numLocClasses = param.shareLocation ? 1 : param.numClasses;
-        ASSERT(in[0].desc.dims.nbDims == 4);
-        ASSERT(in[0].desc.dims.d[2] == numLocClasses);
-        ASSERT(in[0].desc.dims.d[3] == 4);
+        PLUGIN_ASSERT(in[0].desc.dims.nbDims == 4);
+        PLUGIN_ASSERT(in[0].desc.dims.d[2] == numLocClasses);
+        PLUGIN_ASSERT(in[0].desc.dims.d[3] == 4);
 
         // Shape of scores input should be
         // Constant shape: [batch_size, num_boxes, num_classes] or [batch_size, num_boxes, num_classes, 1]
-        ASSERT(in[1].desc.dims.nbDims == 3 || (in[1].desc.dims.nbDims == 4 && in[1].desc.dims.d[3] == 1));
+        PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3 || (in[1].desc.dims.nbDims == 4 && in[1].desc.dims.d[3] == 1));
 
         boxesSize = in[0].desc.dims.d[1] * in[0].desc.dims.d[2] * in[0].desc.dims.d[3];
         scoresSize = in[1].desc.dims.d[1] * in[1].desc.dims.d[2];
@@ -449,9 +449,9 @@ bool BatchedNMSPlugin::supportsFormat(DataType type, PluginFormat format) const 
 bool BatchedNMSDynamicPlugin::supportsFormatCombination(
     int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
-    ASSERT(nbInputs <= 2 && nbInputs >= 0);
-    ASSERT(nbOutputs <= 4 && nbOutputs >= 0);
-    ASSERT(pos < 6 && pos >= 0);
+    PLUGIN_ASSERT(nbInputs <= 2 && nbInputs >= 0);
+    PLUGIN_ASSERT(nbOutputs <= 4 && nbOutputs >= 0);
+    PLUGIN_ASSERT(pos < 6 && pos >= 0);
     const auto* in = inOut;
     const auto* out = inOut + nbInputs;
     const bool consistentFloatPrecision = in[0].type == in[pos].type;
@@ -635,7 +635,8 @@ void BatchedNMSDynamicPlugin::setCaffeSemantics(bool caffeSemantics) noexcept
     mCaffeSemantics = caffeSemantics;
 }
 
-bool BatchedNMSPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool BatchedNMSPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+    noexcept
 {
     return false;
 }
@@ -702,32 +703,32 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const Plug
             }
             else if (!strcmp(attrName, "backgroundLabelId"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 params.backgroundLabelId = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "numClasses"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 params.numClasses = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "topK"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 params.topK = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "keepTopK"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 params.keepTopK = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "scoreThreshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 params.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             else if (!strcmp(attrName, "iouThreshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 params.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             else if (!strcmp(attrName, "isNormalized"))
@@ -744,7 +745,7 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const Plug
             }
             else if (!strcmp(attrName, "caffeSemantics"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 caffeSemantics = *(static_cast<const bool*>(fields[i].data));
             }
         }
@@ -783,32 +784,32 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
             }
             else if (!strcmp(attrName, "backgroundLabelId"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 params.backgroundLabelId = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "numClasses"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 params.numClasses = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "topK"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 params.topK = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "keepTopK"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 params.keepTopK = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "scoreThreshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 params.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             else if (!strcmp(attrName, "iouThreshold"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
                 params.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             else if (!strcmp(attrName, "isNormalized"))
@@ -825,7 +826,7 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
             }
             else if (!strcmp(attrName, "caffeSemantics"))
             {
-                ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 caffeSemantics = *(static_cast<const bool*>(fields[i].data));
             }
         }

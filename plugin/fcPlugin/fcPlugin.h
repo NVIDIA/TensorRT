@@ -24,7 +24,7 @@
 
 #include "NvInferPlugin.h"
 
-#include "bertCommon.h"
+#include "common/bertCommon.h"
 #include <cublasLt.h>
 #include <string>
 #include <vector>
@@ -140,11 +140,11 @@ auto constexpr kernelRepeats = 10;
 auto constexpr threadsPerBlock = 1024;
 
 /* Structure to store information about different run trials */
-typedef struct
+typedef struct customMatMultPerfType_t
 {
     cublasLtMatmulAlgo_t algo;
     cublasStatus_t status;
-    float time{1000000};
+    float time{1000000.F};
     size_t workspaceSize; // actual memory workspace needed
     cublasMath_t mathMode;
     cublasLtReductionScheme_t reductionScheme;
@@ -226,34 +226,34 @@ struct LtContext
 
     void attach()
     {
-        cublasLtCreate(&cublas);
+        PLUGIN_CUBLASASSERT(cublasLtCreate(&cublas));
     }
 
     void detach()
     {
-        cublasLtDestroy(cublas);
+        PLUGIN_CUBLASASSERT(cublasLtDestroy(cublas));
     }
 
     void destroy()
     {
         if (operationDesc)
         {
-            cublasLtMatmulDescDestroy(operationDesc);
+            PLUGIN_CUBLASASSERT(cublasLtMatmulDescDestroy(operationDesc));
             operationDesc = nullptr;
         }
         if (Adesc)
         {
-            cublasLtMatrixLayoutDestroy(Adesc);
+            PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Adesc));
             Adesc = nullptr;
         }
         if (Bdesc)
         {
-            cublasLtMatrixLayoutDestroy(Bdesc);
+            PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Bdesc));
             Bdesc = nullptr;
         }
         if (Cdesc)
         {
-            cublasLtMatrixLayoutDestroy(Cdesc);
+            PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Cdesc));
             Cdesc = nullptr;
         }
     }
@@ -269,24 +269,25 @@ struct LtContext
 
         // OPERATION
 #if CUBLAS_VER_MAJOR < 11
-        cublasLtMatmulDescCreate(&operationDesc, typeComp);
+        PLUGIN_CUBLASASSERT(cublasLtMatmulDescCreate(&operationDesc, typeComp));
 #else
-        cublasLtMatmulDescCreate(&operationDesc, typeComp, typeS);
+        PLUGIN_CUBLASASSERT(cublasLtMatmulDescCreate(&operationDesc, typeComp, typeS));
 #endif
-        cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &g.opA, sizeof(g.opA));
-        cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &g.opB, sizeof(g.opB));
+        PLUGIN_CUBLASASSERT(
+            cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &g.opA, sizeof(g.opA)));
+        PLUGIN_CUBLASASSERT(
+            cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &g.opB, sizeof(g.opB)));
 
         // MAT DESC
-        cublasLtMatrixLayoutCreate(&Adesc, typeA, g.rA, g.cA, g.ldA);
-        cublasLtMatrixLayoutCreate(&Bdesc, typeB, g.rB, g.cB, g.ldB);
-        cublasLtMatrixLayoutCreate(&Cdesc, typeC, g.rC, g.cC, g.ldC);
+        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutCreate(&Adesc, typeA, g.rA, g.cA, g.ldA));
+        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutCreate(&Bdesc, typeB, g.rB, g.cB, g.ldB));
+        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutCreate(&Cdesc, typeC, g.rC, g.cC, g.ldC));
     }
 
-    void setN(int n)
+    void setN(uint64_t n)
     {
-
-        cublasLtMatrixLayoutSetAttribute(Bdesc, CUBLASLT_MATRIX_LAYOUT_COLS, &n, sizeof(n));
-        cublasLtMatrixLayoutSetAttribute(Cdesc, CUBLASLT_MATRIX_LAYOUT_COLS, &n, sizeof(n));
+        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutSetAttribute(Bdesc, CUBLASLT_MATRIX_LAYOUT_COLS, &n, sizeof(n)));
+        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutSetAttribute(Cdesc, CUBLASLT_MATRIX_LAYOUT_COLS, &n, sizeof(n)));
     }
 };
 
@@ -358,18 +359,20 @@ struct AlgoProps
     void populate(const cublasLtMatmulAlgo_t& algo)
     {
         const cublasLtMatmulAlgo_t* matmulAlgo = &algo;
-        cublasLtMatmulAlgoConfigGetAttribute(matmulAlgo, CUBLASLT_ALGO_CONFIG_ID, &algoId, sizeof(algoId), nullptr);
-        cublasLtMatmulAlgoConfigGetAttribute(matmulAlgo, CUBLASLT_ALGO_CONFIG_TILE_ID, &tile, sizeof(tile), nullptr);
-        cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &numSplitsK, sizeof(numSplitsK), nullptr);
-        cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &reductionScheme, sizeof(reductionScheme), nullptr);
-        cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &swizzle, sizeof(swizzle), nullptr);
-        cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION, &customOption, sizeof(customOption), nullptr);
-        cublasLtMatmulAlgoCapGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CAP_MATHMODE_IMPL, &mathMode, sizeof(mathMode), nullptr);
+        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
+            matmulAlgo, CUBLASLT_ALGO_CONFIG_ID, &algoId, sizeof(algoId), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
+            matmulAlgo, CUBLASLT_ALGO_CONFIG_TILE_ID, &tile, sizeof(tile), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
+            matmulAlgo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &numSplitsK, sizeof(numSplitsK), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
+            matmulAlgo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &reductionScheme, sizeof(reductionScheme), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
+            matmulAlgo, CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &swizzle, sizeof(swizzle), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
+            matmulAlgo, CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION, &customOption, sizeof(customOption), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
+            matmulAlgo, CUBLASLT_ALGO_CAP_MATHMODE_IMPL, &mathMode, sizeof(mathMode), nullptr));
     }
 };
 
@@ -381,22 +384,22 @@ inline cublasLtMatmulAlgo_t gemmSearch(
     Gemm<T> g(m, n, k, false, false);
     std::vector<customMatmulPerf_t> perfResults(algoCombinations);
 
-    cudaMalloc(reinterpret_cast<void**>(&g.A), g.bytesA);
-    cudaMalloc(reinterpret_cast<void**>(&g.B), g.bytesB);
-    cudaMalloc(reinterpret_cast<void**>(&g.C), g.bytesC);
+    PLUGIN_CUASSERT(cudaMalloc(reinterpret_cast<void**>(&g.A), g.bytesA));
+    PLUGIN_CUASSERT(cudaMalloc(reinterpret_cast<void**>(&g.B), g.bytesB));
+    PLUGIN_CUASSERT(cudaMalloc(reinterpret_cast<void**>(&g.C), g.bytesC));
 
     void* workspace;
-    CHECK(cudaMalloc(&workspace, workspaceSize));
+    PLUGIN_CUASSERT(cudaMalloc(&workspace, workspaceSize));
     cublasLtHandle_t lt;
-    CUBLASASSERT(cublasLtCreate(&lt));
+    PLUGIN_CUBLASASSERT(cublasLtCreate(&lt));
     LtGemmSearch(lt, g, workspace, workspaceSize, perfResults);
-    cudaDeviceSynchronize();
-    cublasLtDestroy(lt);
-    cudaFree(workspace);
+    PLUGIN_CUASSERT(cudaDeviceSynchronize());
+    PLUGIN_CUBLASASSERT(cublasLtDestroy(lt));
+    PLUGIN_CUASSERT(cudaFree(workspace));
 
-    cudaFree(g.A);
-    cudaFree(g.B);
-    cudaFree(g.C);
+    PLUGIN_CUASSERT(cudaFree(g.A));
+    PLUGIN_CUASSERT(cudaFree(g.B));
+    PLUGIN_CUASSERT(cudaFree(g.C));
 
     actualWorkspace = perfResults[0].workspaceSize;
     return perfResults[0].algo;
@@ -408,22 +411,22 @@ inline cublasLtMatmulAlgo_t gemmSearch(Gemm<T>& g, const size_t workspaceSize, s
 
     std::vector<customMatmulPerf_t> perfResults(algoCombinations);
 
-    cudaMalloc(&g.A, g.bytesA);
-    cudaMalloc(&g.B, g.bytesB);
-    cudaMalloc(&g.C, g.bytesC);
+    PLUGIN_CUASSERT(cudaMalloc(&g.A, g.bytesA));
+    PLUGIN_CUASSERT(cudaMalloc(&g.B, g.bytesB));
+    PLUGIN_CUASSERT(cudaMalloc(&g.C, g.bytesC));
 
     void* workspace;
-    CHECK(cudaMalloc(&workspace, workspaceSize));
+    PLUGIN_CUASSERT(cudaMalloc(&workspace, workspaceSize));
     cublasLtHandle_t lt;
-    CUBLASASSERT(cublasLtCreate(&lt));
+    PLUGIN_CUBLASASSERT(cublasLtCreate(&lt));
     LtGemmSearch(lt, g, workspace, workspaceSize, perfResults);
-    cudaDeviceSynchronize();
-    cublasLtDestroy(lt);
-    cudaFree(workspace);
+    PLUGIN_CUASSERT(cudaDeviceSynchronize());
+    PLUGIN_CUBLASASSERT(cublasLtDestroy(lt));
+    PLUGIN_CUASSERT(cudaFree(workspace));
 
-    cudaFree(g.A);
-    cudaFree(g.B);
-    cudaFree(g.C);
+    PLUGIN_CUASSERT(cudaFree(g.A));
+    PLUGIN_CUASSERT(cudaFree(g.B));
+    PLUGIN_CUASSERT(cudaFree(g.C));
 
     actualWorkspace = perfResults[0].workspaceSize;
     return perfResults[0].algo;

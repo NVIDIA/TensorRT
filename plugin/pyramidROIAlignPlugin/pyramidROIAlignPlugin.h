@@ -17,7 +17,6 @@
 #ifndef TRT_PYRAMID_ROIALIGN_PLUGIN_H
 #define TRT_PYRAMID_ROIALIGN_PLUGIN_H
 
-#include <cassert>
 #include <cuda_runtime_api.h>
 #include <string.h>
 #include <string>
@@ -25,8 +24,8 @@
 
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
-#include "maskRCNNKernels.h"
-#include "mrcnn_config.h"
+#include "common/kernels/maskRCNNKernels.h"
+#include "common/mrcnn_config.h"
 
 namespace nvinfer1
 {
@@ -36,18 +35,18 @@ namespace plugin
 class PyramidROIAlign : public IPluginV2Ext
 {
 public:
-    PyramidROIAlign(int pooledSize, int transformCoords, bool absCoords, bool swapCoords, bool plusOneCoords,
-        int samplingRatio, xy_t roiRange, int fpnScale);
+    PyramidROIAlign(int32_t pooledSize, int32_t transformCoords, bool absCoords, bool swapCoords, bool plusOneCoords,
+        int32_t samplingRatio, xy_t roiRange, int32_t fpnScale);
 
-    PyramidROIAlign(const void* data, size_t length);
+    PyramidROIAlign(void const* data, size_t length);
 
     ~PyramidROIAlign() override = default;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
@@ -55,7 +54,7 @@ public:
 
     size_t getWorkspaceSize(int) const noexcept override;
 
-    int enqueue(int batch_size, const void* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
@@ -64,46 +63,48 @@ public:
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
-    const char* getPluginType() const noexcept override;
+    char const* getPluginType() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
     IPluginV2Ext* clone() const noexcept override;
 
-    void setPluginNamespace(const char* libNamespace) noexcept override;
+    void setPluginNamespace(char const* libNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     bool isOutputBroadcastAcrossBatch(
-        int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
-    void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
+        DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     void detachFromContext() noexcept override;
 
 private:
-    void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims);
+    void check_valid_inputs(nvinfer1::Dims const* inputs, int32_t nbInputDims);
 
-    static const int mFeatureMapCount = 4;
-    int mFeatureLength;
-    int mROICount;
+    static int32_t const mFeatureMapCount = 4;
+
     xy_t mPooledSize;
     xy_t mImageSize;
-    int mFPNScale;
-    int mTransformCoords;
+    int32_t mFeatureLength;
+    int32_t mROICount;
+    int32_t mFPNScale;
+    int32_t mTransformCoords;
     bool mAbsCoords;
     bool mSwapCoords;
     bool mPlusOneCoords;
-    int mSamplingRatio;
+    int32_t mSamplingRatio;
     xy_t mFeatureSpatialSize[mFeatureMapCount];
     std::string mNameSpace;
 };
@@ -115,15 +116,15 @@ public:
 
     ~PyramidROIAlignPluginCreator(){};
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    const PluginFieldCollection* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
+    IPluginV2Ext* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
 
-    IPluginV2Ext* deserializePlugin(const char* name, const void* data, size_t length) noexcept override;
+    IPluginV2Ext* deserializePlugin(char const* name, void const* data, size_t length) noexcept override;
 
 private:
     static PluginFieldCollection mFC;

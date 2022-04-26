@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
-#include "plugin.h"
+#include "common/kernel.h"
+#include "common/plugin.h"
 #include "cuda_fp16.h"
 #include "gatherNMSOutputs.h"
 #include <array>
@@ -137,7 +137,7 @@ pluginStatus_t gatherNMSOutputs_gpu(
     const float scoreShift
     )
 {
-    cudaMemsetAsync(numDetections, 0, numImages * sizeof(int), stream);
+    CSC(cudaMemsetAsync(numDetections, 0, numImages * sizeof(int), stream), STATUS_FAILURE);
     const int BS = 32;
     const int GS = 32;
     gatherNMSOutputs_kernel<T_BBOX, T_SCORE, BS><<<GS, BS, 0, stream>>>(shareLocation, numImages, numPredsPerClass,

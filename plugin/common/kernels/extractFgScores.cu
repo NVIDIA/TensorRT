@@ -14,16 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
+#include "common/kernel.h"
 
 template <typename T>
-pluginStatus_t extractFgScores_gpu(cudaStream_t stream,
-                                  int N,
-                                  int A,
-                                  int H,
-                                  int W,
-                                  const void* scores,
-                                  void* fgScores)
+pluginStatus_t extractFgScores_gpu(cudaStream_t stream, int N, int A, int H, int W, const void* scores, void* fgScores)
 {
     // Copy all the objectness scores for one batch
     size_t size = A * H * W * sizeof(T);

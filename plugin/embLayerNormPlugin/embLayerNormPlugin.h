@@ -24,7 +24,7 @@
 #include "NvInferPlugin.h"
 #include "NvInferRuntime.h"
 
-#include "bertCommon.h"
+#include "common/bertCommon.h"
 #include <string>
 #include <vector>
 namespace bert

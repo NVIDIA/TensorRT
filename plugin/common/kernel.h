@@ -18,8 +18,8 @@
 #ifndef TRT_KERNEL_H
 #define TRT_KERNEL_H
 
+#include "common/plugin.h"
 #include "cublas_v2.h"
-#include "plugin.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
@@ -28,13 +28,13 @@ using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 #define DEBUG_ENABLE 0
 
-#ifndef TRT_RPNLAYER_H
 typedef enum
 {
     NCHW = 0,
     NC4HW = 1,
     NC32HW = 2
 } DLayout_t;
+#ifndef TRT_RPNLAYER_H
 
 pluginStatus_t allClassNMS(cudaStream_t stream, int num, int num_classes, int num_preds_per_class, int top_k,
     float nms_threshold, bool share_location, bool isNormalized, DataType DT_SCORE, DataType DT_BBOX, void* bbox_data,
@@ -45,7 +45,8 @@ pluginStatus_t detectionInference(cudaStream_t stream, int N, int C1, int C2, bo
     bool varianceEncodedInTarget, int backgroundLabelId, int numPredsPerClass, int numClasses, int topK, int keepTopK,
     float confidenceThreshold, float nmsThreshold, CodeTypeSSD codeType, DataType DT_BBOX, const void* locData,
     const void* priorData, DataType DT_SCORE, const void* confData, void* keepCount, void* topDetections,
-    void* workspace, bool isNormalized = true, bool confSigmoid = false, int scoreBits = 16, const bool isBatchAgnostic = true);
+    void* workspace, bool isNormalized = true, bool confSigmoid = false, int scoreBits = 16,
+    const bool isBatchAgnostic = true);
 
 pluginStatus_t nmsInference(cudaStream_t stream, int N, int boxesSize, int scoresSize, bool shareLocation,
     int backgroundLabelId, int numPredsPerClass, int numClasses, int topK, int keepTopK, float scoreThreshold,
@@ -314,6 +315,7 @@ int generateFeatures_launch(
     unsigned int max_voxels, unsigned int num_point_values,
     float* features,
     cudaStream_t stream);
+
 
 #endif // TRT_RPNLAYER_H
 #endif

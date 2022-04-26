@@ -18,15 +18,14 @@
 #include <cuda.h>
 #if CUDA_VERSION >= 10010
 
-#include <cassert>
 #include <cstring>
 #include <vector>
 
 #include "NvInfer.h"
+#include "common/bertCommon.h"
+#include "common/common.cuh"
+#include "common/serialize.hpp"
 #include "geluPlugin.h"
-#include "bertCommon.h"
-#include "common.cuh"
-#include "serialize.hpp"
 
 using namespace nvinfer1;
 
@@ -57,7 +56,7 @@ int computeGelu(cudaStream_t stream, int n, const float* input, float* output)
     const int gridSize = (n + blockSize - 1) / blockSize;
     geluKernel<float, blockSize><<<gridSize, blockSize, 0, stream>>>(A, B, C, n, input, output);
 
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
     return 0;
 }
 
@@ -83,7 +82,7 @@ int computeGelu(cudaStream_t stream, int n, const half* input, half* output)
         geluKernel<half, blockSize><<<gridSize, blockSize, 0, stream>>>(A, B, C, n, input, output);
     }
 
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
     return 0;
 }
 

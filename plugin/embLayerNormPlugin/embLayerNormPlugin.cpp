@@ -18,15 +18,15 @@
 #include <cuda.h>
 #if CUDA_VERSION >= 10010
 
-#include <cassert>
 #include <cstring>
 #include <vector>
 
 #include "NvInfer.h"
+#include "common/serialize.hpp"
 #include "embLayerNormPlugin.h"
-#include "serialize.hpp"
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 
 namespace bert
 {
@@ -52,10 +52,10 @@ EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(const std::string& name, co
     , mMhaType(mhaType)
 {
     // Assuming Weights.count is the number of elements and not bytes
-    assert(beta.count == gamma.count);
-    assert(wordEmb.count % mLd == 0);
-    assert(posEmb.count % mLd == 0);
-    assert(tokEmb.count % mLd == 0);
+    PLUGIN_ASSERT(beta.count == gamma.count);
+    PLUGIN_ASSERT(wordEmb.count % mLd == 0);
+    PLUGIN_ASSERT(posEmb.count % mLd == 0);
+    PLUGIN_ASSERT(tokEmb.count % mLd == 0);
     mWordVocabSize = wordEmb.count / mLd;
     mPosVocabSize = posEmb.count / mLd;
     mTokVocabSize = tokEmb.count / mLd;
@@ -138,13 +138,13 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
     {
         // Input should be input ids and token ids and the input mask
         // Output should be the embeddings tensor and mask indices
-        assert(nbInputs == 3);
+        PLUGIN_ASSERT(nbInputs == 3);
 
-        assert(inputs[0].nbDims == 2); // BxS
-        assert(inputs[0].nbDims == inputs[1].nbDims);
-        assert(inputs[0].nbDims == inputs[2].nbDims);
+        PLUGIN_ASSERT(inputs[0].nbDims == 2); // BxS
+        PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
+        PLUGIN_ASSERT(inputs[0].nbDims == inputs[2].nbDims);
 
-        assert(outputIndex == 0 || outputIndex == 1);
+        PLUGIN_ASSERT(outputIndex == 0 || outputIndex == 1);
 
         if (outputIndex == 0)
         {
@@ -164,7 +164,7 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
         auto cms0 = exprBuilder.constant(unfusedMaskSize);
 
         // this code must match getMHAMaskPackedSize in bertCommon.h
-        bool isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86);
+        bool isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87);
         bool isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
         if (mUseFullMask || (isSmOK && isPrecisionOK))
         {
@@ -218,8 +218,8 @@ bool EmbLayerNormPluginDynamic::supportsFormatCombination(
     int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
     // 3 inputs of size BxS
-    assert(nbInputs == 3);
-    assert(nbOutputs == 2);
+    PLUGIN_ASSERT(nbInputs == 3);
+    PLUGIN_ASSERT(nbOutputs == 2);
 
     const PluginTensorDesc& desc = inOut[pos];
     if (desc.format != TensorFormat::kLINEAR)
@@ -254,32 +254,32 @@ void EmbLayerNormPluginDynamic::configurePlugin(
     BERT_DEBUG_MSG("EmbLayerNormPluginDynamic configurePlugin.");
 
     // Validate input arguments
-    assert(nbOutputs == 2);
-    assert(nbInputs == 3);
+    PLUGIN_ASSERT(nbOutputs == 2);
+    PLUGIN_ASSERT(nbInputs == 3);
 
-    assert(inputs[0].desc.dims.nbDims == 2);
+    PLUGIN_ASSERT(inputs[0].desc.dims.nbDims == 2);
     const int S = inputs[0].desc.dims.d[SDIM];
     mS = S;
     const int B = inputs[0].desc.dims.d[BDIM];
     TRT_UNUSED B;
-    assert(mS == static_cast<size_t>(inputs[1].desc.dims.d[SDIM]));
-    assert(B == inputs[1].desc.dims.d[BDIM]);
-    assert(mS == static_cast<size_t>(inputs[2].desc.dims.d[SDIM]));
-    assert(B == inputs[2].desc.dims.d[BDIM]);
+    PLUGIN_ASSERT(mS == static_cast<size_t>(inputs[1].desc.dims.d[SDIM]));
+    PLUGIN_ASSERT(B == inputs[1].desc.dims.d[BDIM]);
+    PLUGIN_ASSERT(mS == static_cast<size_t>(inputs[2].desc.dims.d[SDIM]));
+    PLUGIN_ASSERT(B == inputs[2].desc.dims.d[BDIM]);
 
-    assert(outputs[0].desc.dims.nbDims == 5);
-    assert(static_cast<size_t>(outputs[0].desc.dims.d[SDIM]) == mS);
-    assert(outputs[0].desc.dims.d[BDIM] == B);
-    assert(static_cast<size_t>(outputs[0].desc.dims.d[2]) == mLd);
-    assert(outputs[0].desc.dims.d[3] == 1);
-    assert(outputs[0].desc.dims.d[4] == 1);
+    PLUGIN_ASSERT(outputs[0].desc.dims.nbDims == 5);
+    PLUGIN_ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[SDIM]) == mS);
+    PLUGIN_ASSERT(outputs[0].desc.dims.d[BDIM] == B);
+    PLUGIN_ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[2]) == mLd);
+    PLUGIN_ASSERT(outputs[0].desc.dims.d[3] == 1);
+    PLUGIN_ASSERT(outputs[0].desc.dims.d[4] == 1);
 
     if (mUseFullMask)
     {
         // user force full_mask
-        assert(outputs[1].desc.dims.nbDims == 2);
-        assert(outputs[1].desc.dims.d[0] == B);
-        assert((outputs[1].desc.dims.d[1] == -1) || (outputs[1].desc.dims.d[1] == packedMaskSize384)
+        PLUGIN_ASSERT(outputs[1].desc.dims.nbDims == 2);
+        PLUGIN_ASSERT(outputs[1].desc.dims.d[0] == B);
+        PLUGIN_ASSERT((outputs[1].desc.dims.d[1] == -1) || (outputs[1].desc.dims.d[1] == packedMaskSize384)
             || (outputs[1].desc.dims.d[1] == packedMaskSize128));
     }
     else
@@ -287,19 +287,19 @@ void EmbLayerNormPluginDynamic::configurePlugin(
         // auto detect using mhatype
         if (S != -1 && B != -1)
         {
-            assert(outputs[1].desc.dims.nbDims == 2);
-            assert(outputs[1].desc.dims.d[0] == B);
+            PLUGIN_ASSERT(outputs[1].desc.dims.nbDims == 2);
+            PLUGIN_ASSERT(outputs[1].desc.dims.d[0] == B);
             int packedSize = getMHAMaskPackedSize(mSM, mMhaType, S);
             TRT_UNUSED packedSize;
-            assert(outputs[1].desc.dims.d[1] == -1 || outputs[1].desc.dims.d[1] == packedSize);
+            PLUGIN_ASSERT(outputs[1].desc.dims.d[1] == -1 || outputs[1].desc.dims.d[1] == packedSize);
         }
     }
 
-    assert(inputs[0].desc.type == DataType::kINT32);
-    assert(inputs[1].desc.type == DataType::kINT32);
-    assert(inputs[2].desc.type == DataType::kINT32);
-    assert(outputs[0].desc.type == mType);
-    assert(outputs[1].desc.type == DataType::kFLOAT);
+    PLUGIN_ASSERT(inputs[0].desc.type == DataType::kINT32);
+    PLUGIN_ASSERT(inputs[1].desc.type == DataType::kINT32);
+    PLUGIN_ASSERT(inputs[2].desc.type == DataType::kINT32);
+    PLUGIN_ASSERT(outputs[0].desc.type == mType);
+    PLUGIN_ASSERT(outputs[1].desc.type == DataType::kFLOAT);
 }
 
 size_t EmbLayerNormPluginDynamic::getWorkspaceSize(
@@ -397,10 +397,10 @@ int EmbLayerNormPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const 
 DataType EmbLayerNormPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept
 {
 
-    assert(index == 0 || index == 1);
+    PLUGIN_ASSERT(index == 0 || index == 1);
     if (index == 0)
     {
-        assert(mType == DataType::kHALF || mType == DataType::kFLOAT);
+        PLUGIN_ASSERT(mType == DataType::kHALF || mType == DataType::kFLOAT);
         return mType;
     }
     return DataType::kFLOAT;
@@ -501,6 +501,15 @@ const char* EmbLayerNormPluginDynamic::getPluginNamespace() const noexcept
 
 EmbLayerNormPluginDynamicCreator::EmbLayerNormPluginDynamicCreator()
 {
+    mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_layernorm_beta"));
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_layernorm_gamma"));
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_word_embeddings"));
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_token_type_embeddings"));
+    mPluginAttributes.emplace_back(PluginField("bert_embeddings_position_embeddings"));
+    mPluginAttributes.emplace_back(PluginField("output_fp16"));
+    mPluginAttributes.emplace_back(PluginField("full_mask"));
+    mPluginAttributes.emplace_back(PluginField("mha_type_id"));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
@@ -579,19 +588,19 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
             if (field_name.compare("output_fp16") == 0)
             {
                 BERT_DEBUG_MSG("Building output_fp16...");
-                assert(fc->fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
                 output_fp16 = static_cast<const int*>(fc->fields[i].data)[0] != 0;
             }
             if (field_name.compare("full_mask") == 0)
             {
                 BERT_DEBUG_MSG("Building full_mask...");
-                assert(fc->fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
                 useFullMask = static_cast<const int*>(fc->fields[i].data)[0] != 0;
             }
             if (field_name.compare("mha_type_id") == 0)
             {
                 mhaTypeId = *static_cast<const int*>(fc->fields[i].data);
-                ASSERT(mhaTypeId >= 0 && mhaTypeId <= 3);
+                PLUGIN_ASSERT(mhaTypeId >= 0 && mhaTypeId <= 3);
                 BERT_DEBUG_VALUE("Building mha typeId: ", mhaTypeId);
             }
         }

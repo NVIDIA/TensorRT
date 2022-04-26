@@ -14,12 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <array>
-#include "plugin.h"
-#include "kernel.h"
+#include "common/kernel.h"
+#include "common/plugin.h"
 #include "cuda_fp16.h"
+#include <array>
 
-inline __device__ __half minus_fb(const __half & a, const __half & b) {
+inline __device__ __half minus_fb(const __half& a, const __half& b)
+{
 #if __CUDA_ARCH__ >= 530
     return a - b;
 #else
@@ -122,7 +123,7 @@ pluginStatus_t gatherTopDetections_gpu(
     const float score_shift
 )
 {
-    cudaMemsetAsync(keepCount, 0, numImages * sizeof(int), stream);
+    CSC(cudaMemsetAsync(keepCount, 0, numImages * sizeof(int), stream), STATUS_FAILURE);
     const int BS = 32;
     const int GS = 32;
     gatherTopDetections_kernel<T_BBOX, T_SCORE, BS><<<GS, BS, 0, stream>>>(shareLocation, numImages, numPredsPerClass,

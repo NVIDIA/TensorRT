@@ -18,7 +18,6 @@
 #include "NvInfer.h"
 
 #include "cropAndResizePlugin.h"
-#include <cassert>
 #include <cstring>
 #include <vector>
 
@@ -79,7 +78,7 @@ CropAndResizePlugin::CropAndResizePlugin(const void* serial_buf, size_t serial_s
     mInputHeight = readFromBuffer<size_t>(d);
     mDepth = readFromBuffer<size_t>(d);
     mNumboxes = readFromBuffer<size_t>(d);
-    ASSERT(d == a + sizeof(size_t) * 6);
+    PLUGIN_ASSERT(d == a + sizeof(size_t) * 6);
 }
 
 CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(const void* serial_buf, size_t serial_size)
@@ -92,7 +91,7 @@ CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(const void* serial_buf, s
     mInputHeight = readFromBuffer<size_t>(d);
     mDepth = readFromBuffer<size_t>(d);
     mNumboxes = readFromBuffer<size_t>(d);
-    ASSERT(d == a + sizeof(size_t) * 6);
+    PLUGIN_ASSERT(d == a + sizeof(size_t) * 6);
 }
 
 CropAndResizePlugin::CropAndResizePlugin(
@@ -119,7 +118,7 @@ CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(
 
 CropAndResizePlugin::~CropAndResizePlugin() {}
 
-CropAndResizeDynamicPlugin::~CropAndResizeDynamicPlugin() {}
+CropAndResizeDynamicPlugin::~CropAndResizeDynamicPlugin() noexcept {}
 
 const char* CropAndResizePlugin::getPluginType() const noexcept
 {
@@ -154,9 +153,9 @@ int CropAndResizeDynamicPlugin::getNbOutputs() const noexcept
 Dims CropAndResizePlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
     // Validate input arguments
-    ASSERT(index == 0);
-    ASSERT(nbInputDims == 2);
-    ASSERT(inputs->nbDims == 3);
+    PLUGIN_ASSERT(index == 0);
+    PLUGIN_ASSERT(nbInputDims == 2);
+    PLUGIN_ASSERT(inputs->nbDims == 3);
     int channels = inputs->d[0];
     int height = mCropHeight;
     int width = mCropWidth;
@@ -167,9 +166,9 @@ Dims CropAndResizePlugin::getOutputDimensions(int index, const Dims* inputs, int
 DimsExprs CropAndResizeDynamicPlugin::getOutputDimensions(
     int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
-    ASSERT(outputIndex == 0);
-    ASSERT(nbInputs == 2);
-    ASSERT(inputs[0].nbDims == 4);
+    PLUGIN_ASSERT(outputIndex == 0);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(inputs[0].nbDims == 4);
     DimsExprs out_dim;
     // 5D output (N, R, C, H, W)
     out_dim.nbDims = 5;
@@ -223,7 +222,7 @@ int CropAndResizeDynamicPlugin::enqueue(const PluginTensorDesc* inputDesc, const
         int batchSize = inputDesc[0].dims.d[0];
         status = cropAndResizeInference(stream, mDepth * mInputHeight * mInputWidth * batchSize, inputs[0], inputs[1],
             batchSize, mInputHeight, mInputWidth, mNumboxes, mCropHeight, mCropWidth, mDepth, output);
-        ASSERT(status == STATUS_SUCCESS);
+        PLUGIN_ASSERT(status == STATUS_SUCCESS);
         return status;
     }
     catch (const std::exception& e)
@@ -253,7 +252,7 @@ void CropAndResizePlugin::serialize(void* buffer) const noexcept
     writeToBuffer<size_t>(d, mInputHeight);
     writeToBuffer<size_t>(d, mDepth);
     writeToBuffer<size_t>(d, mNumboxes);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 void CropAndResizeDynamicPlugin::serialize(void* buffer) const noexcept
@@ -266,7 +265,7 @@ void CropAndResizeDynamicPlugin::serialize(void* buffer) const noexcept
     writeToBuffer<size_t>(d, mInputHeight);
     writeToBuffer<size_t>(d, mDepth);
     writeToBuffer<size_t>(d, mNumboxes);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 bool CropAndResizePlugin::supportsFormat(DataType type, PluginFormat format) const noexcept
@@ -286,7 +285,7 @@ bool CropAndResizeDynamicPlugin::supportsFormatCombination(
     int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
 {
     // 2 inputs, 1 outputs, so 3 input/output in total
-    ASSERT(0 <= pos && pos < 3);
+    PLUGIN_ASSERT(0 <= pos && pos < 3);
     const auto* in = inOut;
     const auto* out = inOut + nbInputs;
     const bool consistentFloatPrecision = (in[0].type == in[pos].type);
@@ -394,10 +393,11 @@ const char* CropAndResizeDynamicPlugin::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index.
-DataType CropAndResizePlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType CropAndResizePlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+    noexcept
 {
     // one outputs
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(index == 0);
     return DataType::kFLOAT;
 }
 
@@ -405,7 +405,7 @@ DataType CropAndResizeDynamicPlugin::getOutputDataType(
     int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     // one outputs
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(index == 0);
     return DataType::kFLOAT;
 }
 
@@ -426,11 +426,11 @@ void CropAndResizePlugin::configurePlugin(const Dims* inputDims, int nbInputs, c
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    ASSERT(inputTypes[0] == DataType::kFLOAT && inputTypes[1] == DataType::kFLOAT &&
-        floatFormat == PluginFormat::kLINEAR);
+    PLUGIN_ASSERT(
+        inputTypes[0] == DataType::kFLOAT && inputTypes[1] == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
 
-    ASSERT(nbInputs == 2);
-    ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 1);
     mDepth = inputDims[0].d[0];
     mInputHeight = inputDims[0].d[1];
     mInputWidth = inputDims[0].d[2];
@@ -440,8 +440,8 @@ void CropAndResizePlugin::configurePlugin(const Dims* inputDims, int nbInputs, c
 void CropAndResizeDynamicPlugin::configurePlugin(
     const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) noexcept
 {
-    ASSERT(nbInputs == 2);
-    ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == 1);
     mDepth = in[0].desc.dims.d[1];
     mInputHeight = in[0].desc.dims.d[2];
     mInputWidth = in[0].desc.dims.d[3];
@@ -500,7 +500,7 @@ IPluginV2Ext* CropAndResizePluginCreator::createPlugin(const char* name, const P
 
         for (int i = 0; i < nbFields; ++i)
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
 
             if (!strcmp(fields[i].name, "crop_width"))
             {
@@ -513,7 +513,7 @@ IPluginV2Ext* CropAndResizePluginCreator::createPlugin(const char* name, const P
             }
         }
 
-        ASSERT(crop_width > 0 && crop_height > 0);
+        PLUGIN_ASSERT(crop_width > 0 && crop_height > 0);
         IPluginV2Ext* plugin = new CropAndResizePlugin(crop_width, crop_height);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
@@ -537,7 +537,7 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::createPlugin(
 
         for (int i = 0; i < nbFields; ++i)
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
 
             if (!strcmp(fields[i].name, "crop_width"))
             {
@@ -550,7 +550,7 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::createPlugin(
             }
         }
 
-        ASSERT(crop_width > 0 && crop_height > 0);
+        PLUGIN_ASSERT(crop_width > 0 && crop_height > 0);
         IPluginV2DynamicExt* plugin = new CropAndResizeDynamicPlugin(crop_width, crop_height);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;

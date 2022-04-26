@@ -14,35 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "kernel.h"
-#include "bboxUtils.h"
+#include "common/bboxUtils.h"
+#include "common/kernel.h"
 
-pluginStatus_t detectionInference(
-    cudaStream_t stream,
-    const int N,
-    const int C1,
-    const int C2,
-    const bool shareLocation,
-    const bool varianceEncodedInTarget,
-    const int backgroundLabelId,
-    const int numPredsPerClass,
-    const int numClasses,
-    const int topK,
-    const int keepTopK,
-    const float confidenceThreshold,
-    const float nmsThreshold,
-    const CodeTypeSSD codeType,
-    const DataType DT_BBOX,
-    const void* locData,
-    const void* priorData,
-    const DataType DT_SCORE,
-    const void* confData,
-    void* keepCount,
-    void* topDetections,
-    void* workspace,
-    bool isNormalized,
-    bool confSigmoid,
-    int scoreBits,
+pluginStatus_t detectionInference(cudaStream_t stream, const int N, const int C1, const int C2,
+    const bool shareLocation, const bool varianceEncodedInTarget, const int backgroundLabelId,
+    const int numPredsPerClass, const int numClasses, const int topK, const int keepTopK,
+    const float confidenceThreshold, const float nmsThreshold, const CodeTypeSSD codeType, const DataType DT_BBOX,
+    const void* locData, const void* priorData, const DataType DT_SCORE, const void* confData, void* keepCount,
+    void* topDetections, void* workspace, bool isNormalized, bool confSigmoid, int scoreBits,
     const bool isBatchAgnostic)
 {
     // Batch size * number bbox per sample * 4 = total number of bounding boxes * 4
@@ -167,24 +147,8 @@ pluginStatus_t detectionInference(
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // NMS
-    status = allClassNMS(stream,
-                         N,
-                         numClasses,
-                         numPredsPerClass,
-                         topK,
-                         nmsThreshold,
-                         shareLocation,
-                         isNormalized,
-                         DT_SCORE,
-                         DT_BBOX,
-                         bboxData,
-                         scores,
-                         indices,
-                         postNMSScores,
-                         postNMSIndices,
-                         false,
-                         scoreShift,
-                         true);
+    status = allClassNMS(stream, N, numClasses, numPredsPerClass, topK, nmsThreshold, shareLocation, isNormalized,
+        DT_SCORE, DT_BBOX, bboxData, scores, indices, postNMSScores, postNMSIndices, false, scoreShift, true);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Sort the bounding boxes after NMS using scores
@@ -375,24 +339,8 @@ namespace plugin
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // NMS
-    status = allClassNMS(stream,
-                         N,
-                         numClasses,
-                         numPredsPerClass,
-                         topK,
-                         nmsThreshold,
-                         shareLocation,
-                         isNormalized,
-                         DT_SCORE,
-                         DT_BBOX,
-                         bboxData,
-                         scores,
-                         indices,
-                         postNMSScores,
-                         postNMSIndices,
-                         false,
-                         scoreShift,
-                         true);
+    status = allClassNMS(stream, N, numClasses, numPredsPerClass, topK, nmsThreshold, shareLocation, isNormalized,
+        DT_SCORE, DT_BBOX, bboxData, scores, indices, postNMSScores, postNMSIndices, false, scoreShift, true);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     // Sort the bounding boxes after NMS using scores

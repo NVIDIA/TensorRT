@@ -19,9 +19,9 @@
 
 #include <vector>
 
-#include "efficientNMSParameters.h"
-#include "efficientNMSPlugin.h"
-#include "plugin.h"
+#include "common/plugin.h"
+#include "efficientNMSPlugin/efficientNMSParameters.h"
+#include "efficientNMSPlugin/efficientNMSPlugin.h"
 
 // This plugin provides CombinedNMS op compatibility for TF-TRT in Explicit Batch
 // and Dymamic Shape modes

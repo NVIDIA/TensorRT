@@ -41,7 +41,7 @@ std::vector<PluginField> MultilevelProposeROIPluginCreator::mPluginAttributes;
 
 MultilevelProposeROIPluginCreator::MultilevelProposeROIPluginCreator() noexcept
 {
-
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("prenms_topk", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("keep_topk", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("fg_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
@@ -76,27 +76,27 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(const char* name, 
         const char* attrName = fields[i].name;
         if (!strcmp(attrName, "prenms_topk"))
         {
-            assert(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             mPreNMSTopK = *(static_cast<const int*>(fields[i].data));
         }
         if (!strcmp(attrName, "keep_topk"))
         {
-            assert(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             mKeepTopK = *(static_cast<const int*>(fields[i].data));
         }
         if (!strcmp(attrName, "fg_threshold"))
         {
-            assert(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             mFGThreshold = *(static_cast<const float*>(fields[i].data));
         }
         if (!strcmp(attrName, "iou_threshold"))
         {
-            assert(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             mIOUThreshold = *(static_cast<const float*>(fields[i].data));
         }
         if (!strcmp(attrName, "image_size"))
         {
-            assert(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             const auto dims = static_cast<const int32_t*>(fields[i].data);
             std::copy_n(dims, 3, image_size.d);
         }
@@ -118,10 +118,10 @@ MultilevelProposeROI::MultilevelProposeROI(
     , mImageSize(image_size)
 {
     mBackgroundLabel = -1;
-    assert(mPreNMSTopK > 0);
-    assert(mKeepTopK > 0);
-    assert(mIOUThreshold >= 0.0f);
-    assert(mFGThreshold >= 0.0f);
+    PLUGIN_ASSERT(mPreNMSTopK > 0);
+    PLUGIN_ASSERT(mKeepTopK > 0);
+    PLUGIN_ASSERT(mIOUThreshold >= 0.0f);
+    PLUGIN_ASSERT(mFGThreshold >= 0.0f);
 
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
@@ -146,7 +146,7 @@ int MultilevelProposeROI::initialize() noexcept
     // Init the regWeight [1, 1, 1, 1]
     mRegWeightDevice = std::make_shared<CudaBind<float>>(4);
     std::vector<float> reg_weight(4, 1);
-    CUASSERT(cudaMemcpy(static_cast<void*>(mRegWeightDevice->mPtr), static_cast<void*>(reg_weight.data()),
+    PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(mRegWeightDevice->mPtr), static_cast<void*>(reg_weight.data()),
         sizeof(float) * 4, cudaMemcpyHostToDevice));
 
     // Init the mValidCnt of max batch size
@@ -154,7 +154,7 @@ int MultilevelProposeROI::initialize() noexcept
 
     mValidCnt = std::make_shared<CudaBind<int>>(mMaxBatchSize);
 
-    CUASSERT(cudaMemcpy(
+    PLUGIN_CUASSERT(cudaMemcpy(
         mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()), sizeof(int) * mMaxBatchSize, cudaMemcpyHostToDevice));
 
     // Init the anchors for batch size:
@@ -167,7 +167,7 @@ int MultilevelProposeROI::initialize() noexcept
         uint8_t* device_ptr = static_cast<uint8_t*>(i_anchors_device->mPtr);
         for (int i = 0; i < mMaxBatchSize; i++)
         {
-            CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset), static_cast<void*>(i_anchors_host),
+            PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset), static_cast<void*>(i_anchors_host),
                 batch_offset, cudaMemcpyHostToDevice));
         }
         mAnchorBoxesDevice.push_back(i_anchors_device);
@@ -199,11 +199,11 @@ int MultilevelProposeROI::initialize() noexcept
     }
 
     // Init the temp storage for pointer arrays of score and box:
-    CUASSERT(cudaMalloc(&mDeviceScores, sizeof(void*) * mFeatureCnt));
-    CUASSERT(cudaMalloc(&mDeviceBboxes, sizeof(void*) * mFeatureCnt));
+    PLUGIN_CUASSERT(cudaMalloc(&mDeviceScores, sizeof(void*) * mFeatureCnt));
+    PLUGIN_CUASSERT(cudaMalloc(&mDeviceBboxes, sizeof(void*) * mFeatureCnt));
 
-    CUASSERT(cudaMemcpy(mDeviceScores, score_tp.data(), sizeof(void*) * mFeatureCnt, cudaMemcpyHostToDevice));
-    CUASSERT(cudaMemcpy(mDeviceBboxes, box_tp.data(), sizeof(void*) * mFeatureCnt, cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMemcpy(mDeviceScores, score_tp.data(), sizeof(void*) * mFeatureCnt, cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMemcpy(mDeviceBboxes, box_tp.data(), sizeof(void*) * mFeatureCnt, cudaMemcpyHostToDevice));
 
     return 0;
 }
@@ -266,7 +266,7 @@ void MultilevelProposeROI::serialize(void* buffer) const noexcept
     }
     write(d, mImageSize);
     write(d, mType);
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 MultilevelProposeROI::MultilevelProposeROI(const void* data, size_t length) noexcept
@@ -279,14 +279,14 @@ MultilevelProposeROI::MultilevelProposeROI(const void* data, size_t length) noex
     float fg_threshold = read<float>(d);
     float iou_threshold = read<float>(d);
     mMaxBatchSize = read<int>(d);
-    assert(mAnchorsCnt.size() == 0);
+    PLUGIN_ASSERT(mAnchorsCnt.size() == 0);
     for (int i = 0; i < mFeatureCnt; i++)
     {
         mAnchorsCnt.push_back(read<int>(d));
     }
     mImageSize = read<nvinfer1::Dims3>(d);
     mType = read<DataType>(d);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 
     mBackgroundLabel = -1;
     mPreNMSTopK = prenms_topk;
@@ -309,20 +309,20 @@ void MultilevelProposeROI::check_valid_inputs(const nvinfer1::Dims* inputs, int 
     // foreground_delta_px [N, h_x * w_x * anchors_per_location, 4, 1],
     // foreground_score_px [N, h_x * w_x * anchors_per_location, 1, 1],
     // anchors should be generated inside
-    assert(nbInputDims == 2 * mFeatureCnt);
+    PLUGIN_ASSERT(nbInputDims == 2 * mFeatureCnt);
     for (int i = 0; i < 2 * mFeatureCnt; i += 2)
     {
         // foreground_delta
-        assert(inputs[i].nbDims == 3 && inputs[i].d[1] == 4);
+        PLUGIN_ASSERT(inputs[i].nbDims == 3 && inputs[i].d[1] == 4);
         // foreground_score
-        assert(inputs[i + 1].nbDims == 3 && inputs[i + 1].d[1] == 1);
+        PLUGIN_ASSERT(inputs[i + 1].nbDims == 3 && inputs[i + 1].d[1] == 1);
     }
 }
 
 size_t MultilevelProposeROI::getWorkspaceSize(int batch_size) const noexcept
 {
     size_t total_size = 0;
-    assert(mAnchorsCnt.size() == mFeatureCnt);
+    PLUGIN_ASSERT(mAnchorsCnt.size() == static_cast<size_t>(mFeatureCnt));
 
     // workspace for propose on each feature map
     for (int i = 0; i < mFeatureCnt; i++)
@@ -343,7 +343,7 @@ Dims MultilevelProposeROI::getOutputDimensions(int index, const Dims* inputs, in
 {
 
     check_valid_inputs(inputs, nbInputDims);
-    assert(index == 0);
+    PLUGIN_ASSERT(index == 0);
 
     // [N, anchors, (y1, x1, y2, x2)]
     nvinfer1::Dims proposals;
@@ -376,9 +376,9 @@ void MultilevelProposeROI::generate_pyramid_anchors(const nvinfer1::Dims& image_
     }
 
     auto& anchors = mAnchorBoxesHost;
-    assert(anchors.size() == 0);
+    PLUGIN_ASSERT(anchors.size() == 0);
 
-    assert(anchor_scales.size() == anchor_strides.size());
+    PLUGIN_ASSERT(anchor_scales.size() == anchor_strides.size());
     for (size_t s = 0; s < anchor_scales.size(); ++s)
     {
         float scale = anchor_scales[s];
@@ -399,7 +399,7 @@ void MultilevelProposeROI::generate_pyramid_anchors(const nvinfer1::Dims& image_
         anchors.push_back(s_anchors);
     }
 
-    assert(anchors.size() == (max_level - min_level + 1));
+    PLUGIN_ASSERT(anchors.size() == static_cast<size_t>(max_level - min_level + 1));
 }
 
 int32_t MultilevelProposeROI::enqueue(
@@ -442,7 +442,7 @@ int32_t MultilevelProposeROI::enqueue(
             mAnchorBoxesDevice[i]->mPtr, // inputs[anchors]
             mTempScores[i],        // temp scores [batch_size, topk, 1]
             mTempBboxes[i]);       // temp
-        assert(status == cudaSuccess);
+        PLUGIN_ASSERT(status == cudaSuccess);
         kernel_workspace_offset += proposal_ws.totalSize;
     }
 
@@ -451,7 +451,7 @@ int32_t MultilevelProposeROI::enqueue(
         static_cast<uint8_t*>(workspace) + kernel_workspace_offset, ctopk_ws, reinterpret_cast<void**>(mDeviceScores),
         reinterpret_cast<void**>(mDeviceBboxes), final_proposals);
 
-    assert(status == cudaSuccess);
+    PLUGIN_ASSERT(status == cudaSuccess);
     return status;
 }
 
@@ -488,7 +488,7 @@ void MultilevelProposeROI::configurePlugin(const Dims* inputDims, int nbInputs, 
     for (int i = 0; i < mFeatureCnt; i++)
     {
         mAnchorsCnt.push_back(inputDims[2 * i].d[0]);
-        assert(mAnchorsCnt[i] == (int) (mAnchorBoxesHost[i].size() / 4));
+        PLUGIN_ASSERT(mAnchorsCnt[i] == (int) (mAnchorBoxesHost[i].size() / 4));
     }
 
     mMaxBatchSize = maxBatchSize;

@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-#include <cuda.h>
-#include "NvInfer.h"
-#include "serialize.hpp"
 #include "skipLayerNormInt8InterleavedPlugin.h"
+#include "NvInfer.h"
+#include "common/serialize.hpp"
+#include <cuda.h>
 
 #include <cstring>
 #include <vector>
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 
 namespace bert
 {
@@ -79,8 +80,8 @@ SkipLayerNormInterleavedPluginBase::SkipLayerNormInterleavedPluginBase(
     , mLd(beta.count)
     , mParamsOnDevice(false)
 {
-    ASSERT(mLd > 0);
-    ASSERT(beta.count == gamma.count);
+    PLUGIN_ASSERT(mLd > 0);
+    PLUGIN_ASSERT(beta.count == gamma.count);
     // dataType for beta, gamma weights is always fp16
 
     mParamWordsize = getElementSize(param_type);
@@ -156,17 +157,17 @@ IPluginV2DynamicExt* SkipLayerNormInterleavedPluginMTron::clone() const noexcept
 DimsExprs SkipLayerNormInterleavedPluginBase::getOutputDimensions(
     int32_t outputIndex, const DimsExprs* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
-    ASSERT(nbInputs == 2);
-    ASSERT(outputIndex >= 0 && outputIndex < getNbOutputs());
-    ASSERT(inputs[0].nbDims == inputs[1].nbDims);
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < getNbOutputs());
+    PLUGIN_ASSERT(inputs[0].nbDims == inputs[1].nbDims);
     return inputs[0];
 }
 
 bool SkipLayerNormInterleavedPluginBase::supportsFormatCombination(
     int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    ASSERT(nbInputs == 2);
-    ASSERT(nbOutputs == getNbOutputs());
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(nbOutputs == getNbOutputs());
 
     const PluginTensorDesc& desc = inOut[pos];
     return desc.type == DataType::kINT8 && desc.format == TensorFormat::kCHW32;
@@ -176,17 +177,17 @@ void SkipLayerNormInterleavedPluginBase::configurePlugin(const DynamicPluginTens
     const DynamicPluginTensorDesc* outputs, int32_t nbOutputs) noexcept
 {
     // Validate input arguments
-    ASSERT(nbOutputs == getNbOutputs());
-    ASSERT(nbInputs == 2);
-    ASSERT(DataType::kINT8 == inputs[0].desc.type);
-    ASSERT(DataType::kINT8 == inputs[1].desc.type);
+    PLUGIN_ASSERT(nbOutputs == getNbOutputs());
+    PLUGIN_ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(DataType::kINT8 == inputs[0].desc.type);
+    PLUGIN_ASSERT(DataType::kINT8 == inputs[1].desc.type);
 
     const auto& inDims0 = inputs[0].desc.dims;
     const auto& inDims1 = inputs[1].desc.dims;
     TRT_UNUSED inDims1;
 
-    ASSERT(inDims0.nbDims == inDims1.nbDims);
-    ASSERT(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
+    PLUGIN_ASSERT(inDims0.nbDims == inDims1.nbDims);
+    PLUGIN_ASSERT(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
 
     mParamWordsize = getElementSize(param_type);
 
@@ -206,22 +207,23 @@ size_t SkipLayerNormInterleavedPluginBase::getWorkspaceSize(
 
 void checkDescs(const PluginTensorDesc& iDesc, const PluginTensorDesc& sDesc, const PluginTensorDesc& oDesc)
 {
-    ASSERT(iDesc.dims.nbDims == 4);
-    ASSERT(iDesc.dims.nbDims == sDesc.dims.nbDims);
-    ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, sDesc.dims.d));
-    ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, oDesc.dims.d));
-    ASSERT(iDesc.dims.d[0] == 1);
-    ASSERT(iDesc.dims.d[3] == 1);
-    ASSERT(iDesc.format == TensorFormat::kCHW32);
-    ASSERT(iDesc.type == DataType::kINT8);
-    ASSERT(iDesc.format == sDesc.format);
-    ASSERT(iDesc.format == oDesc.format);
-    ASSERT(iDesc.type == sDesc.type);
-    ASSERT(iDesc.type == oDesc.type);
+    PLUGIN_ASSERT(iDesc.dims.nbDims == 4);
+    PLUGIN_ASSERT(iDesc.dims.nbDims == sDesc.dims.nbDims);
+    PLUGIN_ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, sDesc.dims.d));
+    PLUGIN_ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, oDesc.dims.d));
+    PLUGIN_ASSERT(iDesc.dims.d[0] == 1);
+    PLUGIN_ASSERT(iDesc.dims.d[3] == 1);
+    PLUGIN_ASSERT(iDesc.format == TensorFormat::kCHW32);
+    PLUGIN_ASSERT(iDesc.type == DataType::kINT8);
+    PLUGIN_ASSERT(iDesc.format == sDesc.format);
+    PLUGIN_ASSERT(iDesc.format == oDesc.format);
+    PLUGIN_ASSERT(iDesc.type == sDesc.type);
+    PLUGIN_ASSERT(iDesc.type == oDesc.type);
 }
 
-int32_t SkipLayerNormInterleavedPluginHFace::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t SkipLayerNormInterleavedPluginHFace::enqueue(const PluginTensorDesc* inputDesc,
+    const PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace,
+    cudaStream_t stream) noexcept
 {
     // Input shape: 1x(hxd)xtotalx1
     const auto iDesc = inputDesc[0];
@@ -259,7 +261,7 @@ int32_t SkipLayerNormInterleavedPluginMTron::enqueue(const PluginTensorDesc* inp
     const auto oDesc = outputDesc[0];
     const auto pDesc = outputDesc[1];
     checkDescs(iDesc, sDesc, oDesc);
-    ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, pDesc.dims.d));
+    PLUGIN_ASSERT(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, pDesc.dims.d));
 
     const int32_t ld = iDesc.dims.d[1];
     const int32_t total = iDesc.dims.d[2];
@@ -292,8 +294,8 @@ int32_t SkipLayerNormInterleavedPluginMTron::enqueue(const PluginTensorDesc* inp
 DataType SkipLayerNormInterleavedPluginBase::getOutputDataType(
     int32_t index, const DataType* inputTypes, int32_t nbInputs) const noexcept
 {
-    ASSERT(index >= 0 && index < getNbOutputs());
-    ASSERT(nbInputs == 2);
+    PLUGIN_ASSERT(index >= 0 && index < getNbOutputs());
+    PLUGIN_ASSERT(nbInputs == 2);
     return inputTypes[0];
 }
 
@@ -393,6 +395,9 @@ const char* SkipLayerNormInterleavedPluginBase::getPluginNamespace() const noexc
 
 SkipLayerNormInterleavedPluginBaseCreator::SkipLayerNormInterleavedPluginBaseCreator()
 {
+    mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(PluginField("beta"));
+    mPluginAttributes.emplace_back(PluginField("gamma"));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }

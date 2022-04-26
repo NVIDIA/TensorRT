@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 #include "normalizePlugin.h"
-#include "half.h"
+#include "common/half.h"
 #include <cstring>
 #include <cublas_v2.h>
 #include <cudnn.h>
@@ -41,8 +41,8 @@ Normalize::Normalize(const Weights* weights, int nbWeights, bool acrossSpatial, 
     , eps(eps)
 {
     mNbWeights = nbWeights;
-    ASSERT(nbWeights == 1);
-    ASSERT(weights[0].count >= 1);
+    PLUGIN_ASSERT(nbWeights == 1);
+    PLUGIN_ASSERT(weights[0].count >= 1);
     mWeights = copyToDevice(weights[0].values, weights[0].count);
 }
 
@@ -56,8 +56,8 @@ Normalize::Normalize(
     , W(W)
 {
     mNbWeights = nbWeights;
-    ASSERT(nbWeights == 1);
-    ASSERT(weights[0].count >= 1);
+    PLUGIN_ASSERT(nbWeights == 1);
+    PLUGIN_ASSERT(weights[0].count >= 1);
     mWeights = copyToDevice(weights[0].values, weights[0].count);
 }
 
@@ -75,7 +75,7 @@ Normalize::Normalize(const void* buffer, size_t length)
     mNbWeights = read<int>(d);
     int count = read<int>(d);
     mWeights = deserializeToDevice(d, count);
-    ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 int Normalize::getNbOutputs() const noexcept
@@ -86,9 +86,9 @@ int Normalize::getNbOutputs() const noexcept
 
 Dims Normalize::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
-    ASSERT(nbInputDims == 1);
-    ASSERT(index == 0);
-    ASSERT(inputs[0].nbDims == 3);
+    PLUGIN_ASSERT(nbInputDims == 1);
+    PLUGIN_ASSERT(index == 0);
+    PLUGIN_ASSERT(inputs[0].nbDims == 3);
     return Dims3(inputs[0].d[0], inputs[0].d[1], inputs[0].d[2]);
 }
 
@@ -136,7 +136,7 @@ void Normalize::serialize(void* buffer) const noexcept
     write(d, (int) mWeights.count);
     serializeFromDevice(d, mWeights);
 
-    ASSERT(d == a + getSerializationSize());
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 bool Normalize::supportsFormat(DataType type, PluginFormat format) const noexcept
@@ -147,14 +147,15 @@ bool Normalize::supportsFormat(DataType type, PluginFormat format) const noexcep
 Weights Normalize::copyToDevice(const void* hostData, size_t count)
 {
     void* deviceData;
-    CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
-    CUASSERT(cudaMemcpy(deviceData, hostData, count * sizeof(float), cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
+    PLUGIN_CUASSERT(cudaMemcpy(deviceData, hostData, count * sizeof(float), cudaMemcpyHostToDevice));
     return Weights{DataType::kFLOAT, deviceData, int64_t(count)};
 }
 
 void Normalize::serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const
 {
-    CUASSERT(cudaMemcpy(hostBuffer, deviceWeights.values, deviceWeights.count * sizeof(float), cudaMemcpyDeviceToHost));
+    PLUGIN_CUASSERT(
+        cudaMemcpy(hostBuffer, deviceWeights.values, deviceWeights.count * sizeof(float), cudaMemcpyDeviceToHost));
     hostBuffer += deviceWeights.count * sizeof(float);
 }
 
@@ -179,7 +180,7 @@ const char* Normalize::getPluginNamespace() const noexcept
 // Return the DataType of the plugin output at the requested index
 DataType Normalize::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
-    ASSERT(index == 0);
+    PLUGIN_ASSERT(index == 0);
     return DataType::kFLOAT;
 }
 
@@ -200,23 +201,23 @@ void Normalize::configurePlugin(const Dims* inputDims, int nbInputs, const Dims*
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
     const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
-    ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
+    PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     C = inputDims[0].d[0];
     H = inputDims[0].d[1];
     W = inputDims[0].d[2];
     if (channelShared)
     {
-        ASSERT(mWeights.count == 1);
+        PLUGIN_ASSERT(mWeights.count == 1);
     }
     else
     {
-        ASSERT(mWeights.count == C);
+        PLUGIN_ASSERT(mWeights.count == C);
     }
 
-    ASSERT(nbInputs == 1);
-    ASSERT(nbOutputs == 1);
-    ASSERT(inputDims[0].nbDims >= 1); // number of dimensions of the input tensor must be >=2
-    ASSERT(inputDims[0].d[0] == outputDims[0].d[0] && inputDims[0].d[1] == outputDims[0].d[1]
+    PLUGIN_ASSERT(nbInputs == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(inputDims[0].nbDims >= 1); // number of dimensions of the input tensor must be >=2
+    PLUGIN_ASSERT(inputDims[0].d[0] == outputDims[0].d[0] && inputDims[0].d[1] == outputDims[0].d[1]
         && inputDims[0].d[2] == outputDims[0].d[2]);
 }
 
@@ -243,7 +244,7 @@ const char* Normalize::getPluginVersion() const noexcept
 
 void Normalize::destroy() noexcept
 {
-    CUASSERT(cudaFree(const_cast<void*>(mWeights.values)));
+    PLUGIN_CUASSERT(cudaFree(const_cast<void*>(mWeights.values)));
     delete this;
 }
 
@@ -295,27 +296,27 @@ IPluginV2Ext* NormalizePluginCreator::createPlugin(const char* name, const Plugi
         const char* attrName = fields[i].name;
         if (!strcmp(attrName, "nbWeights"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             mNbWeights = *(static_cast<const int*>(fields[i].data));
         }
         else if (!strcmp(attrName, "acrossSpatial"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             mAcrossSpatial = *(static_cast<const bool*>(fields[i].data));
         }
         else if (!strcmp(attrName, "channelShared"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
             mChannelShared = *(static_cast<const bool*>(fields[i].data));
         }
         else if (!strcmp(attrName, "eps"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             mEps = *(static_cast<const float*>(fields[i].data));
         }
         else if (!strcmp(attrName, "weights"))
         {
-            ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
             int size = fields[i].length;
             weightValues.reserve(size);
             const auto* w = static_cast<const float*>(fields[i].data);

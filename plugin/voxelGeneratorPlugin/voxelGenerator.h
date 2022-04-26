@@ -18,13 +18,13 @@
 #ifndef _VOXEL_GENERATOR_H_
 #define _VOXEL_GENERATOR_H_
 
-#include <memory>
-#include <vector>
-#include <string>
-#include <cuda_runtime_api.h>
 #include "NvInferPlugin.h"
-#include "kernel.h"
 #include "bboxUtils.h"
+#include "kernel.h"
+#include <cuda_runtime_api.h>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace nvinfer1
 {

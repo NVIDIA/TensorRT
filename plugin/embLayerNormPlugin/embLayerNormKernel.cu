@@ -23,10 +23,10 @@
 #include <vector>
 
 #include "NvInfer.h"
+#include "common/bertCommon.h"
+#include "common/common.cuh"
+#include "common/serialize.hpp"
 #include "embLayerNormPlugin.h"
-#include "bertCommon.h"
-#include "common.cuh"
-#include "serialize.hpp"
 
 using namespace nvinfer1;
 
@@ -236,7 +236,7 @@ int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* input
 
     embLayerNormKernel<T, tpb>
         <<<grid, block, 0, stream>>>(ld, inputIds, token_ids, beta, gamma, wordEmb, posEmb, tokEmb, output);
-    CHECK(cudaPeekAtLastError());
+    PLUGIN_CHECK(cudaPeekAtLastError());
 
     return 0;
 }

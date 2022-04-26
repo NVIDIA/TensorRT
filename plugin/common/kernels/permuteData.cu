@@ -14,24 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "common/kernel.h"
 #include <array>
-#include "kernel.h"
 
 template <typename Dtype, unsigned nthds_per_cta>
-__launch_bounds__(nthds_per_cta)
-    __global__ void permuteData_kernel(
-        const int nthreads,
-        const int num_classes,
-        const int num_data,
-        const int num_dim,
-        bool confSigmoid,
-        const Dtype* data,
-        Dtype* new_data)
+__launch_bounds__(nthds_per_cta) __global__ void permuteData_kernel(const int nthreads, const int num_classes,
+    const int num_data, const int num_dim, bool confSigmoid, const Dtype* data, Dtype* new_data)
 {
     // data format: [batch_size, num_data, num_classes, num_dim]
-    for (int index = blockIdx.x * nthds_per_cta + threadIdx.x;
-         index < nthreads;
-         index += nthds_per_cta * gridDim.x)
+    for (int index = blockIdx.x * nthds_per_cta + threadIdx.x; index < nthreads; index += nthds_per_cta * gridDim.x)
     {
         const int i = index % num_dim;
         const int c = (index / num_dim) % num_classes;
