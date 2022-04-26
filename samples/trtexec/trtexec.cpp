@@ -294,14 +294,18 @@ int main(int argc, char** argv)
 
     if (profilerEnabled && !options.inference.rerun)
     {
-        sample::gLogWarning << "The network timing report will not be accurate due to extra synchronizations "
-                               "when profiler is enabled." << std::endl;
-        sample::gLogWarning << "Add --separateProfileRun to profile layer timing in a separate run."
-                            << std::endl;
+        sample::gLogInfo << "The e2e network timing is not reported since it is inaccurate due to the extra "
+                         << "synchronizations when the profiler is enabled." << std::endl;
+        sample::gLogInfo << "To show e2e network timing report, add --separateProfileRun to profile layer timing in a "
+                         << "separate run or remove --dumpProfile to disable the profiler."
+                         << std::endl;
+    }
+    else
+    {
+        printPerformanceReport(trace, options.reporting, static_cast<float>(options.inference.warmup),
+            options.inference.batch, sample::gLogInfo, sample::gLogWarning, sample::gLogVerbose);
     }
 
-    printPerformanceReport(trace, options.reporting, static_cast<float>(options.inference.warmup),
-        options.inference.batch, sample::gLogInfo, sample::gLogWarning, sample::gLogVerbose);
     printOutput(options.reporting, *iEnv, options.inference.batch);
 
     if (profilerEnabled && options.inference.rerun)
