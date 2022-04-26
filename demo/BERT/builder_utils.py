@@ -20,8 +20,8 @@ import pickle
 
 import numpy as np
 import onnx
-import torch
 import tensorrt as trt
+import torch
 
 try:
     import tensorflow.compat.v1 as tf
