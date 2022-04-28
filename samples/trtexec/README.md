@@ -130,8 +130,6 @@ trtexec --loadEngine=g2.trt --batch=2 --streams=2
 
 To see the full list of available options and their descriptions, issue the `./trtexec --help` command.
 
-**Note:** Specifying the `--safe` parameter turns the safety mode switch `ON`. By default, the `--safe` parameter is not specified; the safety mode switch is `OFF`. The layers and parameters that are contained within the `--safe` subset are restricted if the switch is set to `ON`. The switch is used for prototyping the safety restricted flows until the TensorRT safety runtime is made available. For more information, see the [Working With Automotive Safety section in the TensorRT Developer Guide](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#working_auto_safety).
-
 ## Additional resources
 
 The following resources provide more details about `trtexec`:
