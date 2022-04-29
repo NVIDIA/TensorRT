@@ -40,7 +40,6 @@ using namespace nvinfer1::plugin;
 #include "flattenConcat.h"
 #include "generateDetectionPlugin.h"
 #include "gridAnchorPlugin.h"
-#include "groupNormalizationPlugin.h"
 #include "instanceNormalizationPlugin.h"
 #include "lReluPlugin.h"
 #include "multilevelCropAndResizePlugin.h"
