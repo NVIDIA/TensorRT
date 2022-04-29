@@ -37,6 +37,7 @@ set(PLUGIN_LISTS
     cropAndResizePlugin
     decodeBbox3DPlugin
     detectionLayerPlugin
+    disentangledAttentionPlugin
     efficientNMSPlugin
     efficientNMSPlugin/tftrt
     flattenConcat
