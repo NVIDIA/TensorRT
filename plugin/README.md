@@ -12,6 +12,7 @@
 | [cropAndResizePlugin](cropAndResizePlugin) | CropAndResize | 1 |
 | [decodeBbox3DPlugin](decodeBbox3DPlugin) | DecodeBbox3DPlugin | 1 |
 | [detectionLayerPlugin](detectionLayerPlugin) | DetectionLayer_TRT | 1 |
+| [disentangledAttentionPlugin](disentangledAttentionPlugin) | DisentangledAttention_TRT | 1 |
 | [efficientNMSPlugin](efficientNMSPlugin) | EfficientNMS_TRT | 1 |
 | [efficientNMSONNXPlugin](efficientNMSPlugin) | EfficientNMS_ONNX_TRT | 1 |
 | [embLayerNormPlugin](embLayerNormPlugin) | CustomEmbLayerNormPluginDynamic | 1, 2 |
