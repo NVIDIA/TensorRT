@@ -27,12 +27,12 @@ The shape of each feature map. The shape of this tensor is `[L, 2]` where `L` is
 This tensor is used to find the sampling locations for different feature levels as the input feature tensors are flattened. The shape of this tensor is `[L,]`.
 
 `sampling_locations`
-This tensor acts as a pre-filter for prominent key elements out of all the feature map pixels. The shape of this tensor is `[N, S, M, L, P, 2]` where `P` is the number of points.
+This tensor acts as a pre-filter for prominent key elements out of all the feature map pixels. The shape of this tensor is `[N, Lq, M, L, P, 2]` where `P` is the number of points, `Lq` is the length of feature maps(encoder)/length of queries(decoder).
 
 `attention_weights`
-This tensor consists of the attention weights whose shape is `[N, S, M, L, P]`.
+This tensor consists of the attention weights whose shape is `[N, Lq, M, L, P]`.
 
-The `multiscaleDeformableAttnPlugin` generates the attention output of shape `[N, S, M, D]`.
+The `multiscaleDeformableAttnPlugin` generates the attention output of shape `[N, Lq, M, D]`.
 
 ## Parameters
 
