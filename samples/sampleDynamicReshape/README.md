@@ -103,7 +103,21 @@ if (mParams.int8)
 
 Run engine build with config: 
 ```
-mPreprocessorEngine = makeUnique(builder->buildEngineWithConfig(*preprocessorNetwork, *preprocessorConfig));
+SampleUniquePtr<nvinfer1::IHostMemory> preprocessorPlan = makeUnique(
+        builder->buildSerializedNetwork(*preprocessorNetwork, *preprocessorConfig));
+if (!preprocessorPlan)
+{
+    sample::gLogError << "Preprocessor serialized engine build failed." << std::endl;
+    return false;
+}
+
+mPreprocessorEngine = makeUnique(
+    runtime->deserializeCudaEngine(preprocessorPlan->data(), preprocessorPlan->size()));
+if (!mPreprocessorEngine)
+{
+    sample::gLogError << "Preprocessor engine deserialization failed." << std::endl;
+    return false;
+}
 ```
 
 For the MNIST model, attach a Softmax layer to the end of the network, set softmax axis to 1 since network output has shape [1, 10] in full dims mode and replace the existing network output with the Softmax:
@@ -117,7 +131,22 @@ network->markOutput(*softmax->getOutput(0));
 A calibrator and a calibration profile are set the same way as above for the preprocessor engine config. `calibBatchSize` is set to 1 for the prediction engine as ONNX model has an explicit batch.
 
 Finally, build as normal:
-`mPredictionEngine = makeUnique(builder->buildEngineWithConfig(*network, *config));`
+```
+SampleUniquePtr<nvinfer1::IHostMemory> predictionPlan = makeUnique(builder->buildSerializedNetwork(*network, *config));
+if (!predictionPlan)
+{
+    sample::gLogError << "Prediction serialized engine build failed." << std::endl;
+    return false;
+}
+
+mPredictionEngine = makeUnique(
+    runtime->deserializeCudaEngine(predictionPlan->data(), predictionPlan->size()));
+if (!mPredictionEngine)
+{
+    sample::gLogError << "Prediction engine deserialization failed." << std::endl;
+    return false;
+}
+```
 
 ### Running inference
 
