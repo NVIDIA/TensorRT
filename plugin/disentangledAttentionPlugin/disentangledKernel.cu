@@ -107,10 +107,59 @@ __global__ void GatherAddGatherTranspose_fused(TDataType const* data1, int32_t c
         {
             res1 = data1[IND(i, j + ty, index1[IND(i, j + ty, k, dimIndex1)], dimData1)];
         }
+#if __CUDA_ARCH__ >= 530
+        // half precision arithmetics only supported >= sm_53
         result[IND(i, j + ty, k, dimResult)]
             = __hadd(T[threadIdx.x][ty + threadIdx.y], res1); // fused add (for non-transposed matrix 1, just fetch
                                                               // element at the transposed location & add to the result)
+#else
+        // for < sm_53, workaround/fallback is convert to float and downconvert
+        result[IND(i, j + ty, k, dimResult)]
+            = __float2half(__half2float(T[threadIdx.x][ty + threadIdx.y]) + __half2float(res1));
+#endif
     }
+}
+
+// template specialization for double/float
+template <typename TDataType,
+    typename std::enable_if<std::is_same<std::decay_t<TDataType>, double>::value
+            || std::is_same<std::decay_t<TDataType>, float>::value,
+        TDataType>::type* dummy
+    = nullptr>
+__forceinline__ __device__ void compute_attention(
+    TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
+{
+    res = (res0 + res1 + res2) * factor;
+}
+
+// template specialization for half
+template <typename TDataType,
+    typename std::enable_if<std::is_same<std::decay_t<TDataType>, __half>::value
+            || std::is_same<std::decay_t<TDataType>, half>::value,
+        TDataType>::type* dummy
+    = nullptr>
+__forceinline__ __device__ void compute_attention(
+    TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
+{
+#if __CUDA_ARCH__ >= 530
+    // __hmul only supported >= sm_53
+    res = __hmul(__hadd(res0, __hadd(res1, res2)), factor);
+#else
+    // for < sm_53, workaround/fallback is convert to float and downconvert
+    res = __float2half((__half2float(res0) + __half2float(res1) + __half2float(res2)) * __half2float(factor));
+#endif
+}
+
+// template specialization for int8
+template <typename TDataType,
+    typename std::enable_if<std::is_same<std::decay_t<TDataType>, int8_t>::value
+            || std::is_same<std::decay_t<TDataType>, uint8_t>::value,
+        TDataType>::type* dummy
+    = nullptr>
+__forceinline__ __device__ void compute_attention(
+    TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
+{
+    res = (res0 + res1 + res2) * factor;
 }
 
 /**
@@ -203,6 +252,9 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
         res0 = data0[IND(i, j + ty, k, dimData0)];
 
         // (res0 + res1 + res2) / sqrt(3d), d is the hidden states size per head
+#if __cplusplus >= 201703L
+        // C++ 17 has more convenient `if constexpr` for conditional implementation at compile time; before C++ 17,
+        // switch to template specialization
         if constexpr (std::is_same<TDataType, double>::value || std::is_same<TDataType, float>::value)
         {
             // double, float32
@@ -211,14 +263,25 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
         else if constexpr (std::is_same<TDataType, __half>::value || std::is_same<TDataType, half>::value)
         {
             // fp16
-            res = __hmul(__hadd(res0, __hadd(res1, T[threadIdx.x][ty + threadIdx.y])),
-                factor); // note: __hmul only supported >= sm_53
+#if __CUDA_ARCH__ >= 530
+            // __hmul only supported >= sm_53
+            res = __hmul(__hadd(res0, __hadd(res1, T[threadIdx.x][ty + threadIdx.y])), factor);
+#else
+            // for < sm_53, workaround/fallback is convert to float and downconvert
+            res = __float2half(
+                (__half2float(res0) + __half2float(res1) + __half2float(T[threadIdx.x][ty + threadIdx.y]))
+                * __half2float(factor));
+#endif
         }
         else if constexpr (std::is_same<TDataType, int8_t>::value || std::is_same<TDataType, uint8_t>::value)
         {
             // int8_t
             res = (res0 + res1 + T[threadIdx.x][ty + threadIdx.y]) * factor;
         }
+#else
+        // before C++ 17, use template specialization
+        compute_attention<TDataType>(res, res0, res1, T[threadIdx.x][ty + threadIdx.y], factor);
+#endif
         // write
         result[IND(i, j + ty, k, dimResult)] = res;
     }
