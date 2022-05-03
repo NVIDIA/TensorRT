@@ -2437,7 +2437,7 @@ public:
     //! and update the profiler after one iteration of inference launch.
     //!
     //! If IExecutionContext::getEnqueueEmitsProfile() returns true, the enqueue function will calculate layer timing
-    //! implicitly if a profiler is provided. There is no need to call this function.
+    //! implicitly if a profiler is provided. This function returns true and does nothing.
     //!
     //! If IExecutionContext::getEnqueueEmitsProfile() returns false, the enqueue function will record the CUDA event
     //! timers if a profiler is provided. But it will not perform the layer timing calculation.
@@ -2449,6 +2449,8 @@ public:
     //! This function needs to be called after graph launch to report the layer timing info to the profiler.
     //!
     //! \warning profiling CUDA graphs is only available from CUDA 11.1 onwards.
+    //! \warning reportToProfiler uses the stream of the previous enqueue call, so the stream must be live otherwise
+    //! behavior is undefined.
     //!
     //! \return true if the call succeeded, else false (e.g. profiler not provided, in CUDA graph capture mode, etc.)
     //!

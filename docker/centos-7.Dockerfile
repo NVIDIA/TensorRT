@@ -18,7 +18,7 @@ ARG OS_VERSION=7
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-centos${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 8.2.5.1
+ENV TRT_VERSION 8.4.1.2
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
