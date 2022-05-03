@@ -1,17 +1,13 @@
 /*
- * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+ * property and proprietary rights in and to this material, related
+ * documentation and any modifications thereto. Any use, reproduction,
+ * disclosure or distribution of this material and related documentation
+ * without an express license agreement from NVIDIA CORPORATION or
+ * its affiliates is strictly prohibited.
  */
 
 #ifndef NV_UFF_PARSER_H
@@ -76,18 +72,18 @@ enum class FieldType : int32_t
 class TENSORRTAPI FieldMap
 {
 public:
-    const char* name;
-    const void* data;
+    char const* name;
+    void const* data;
     FieldType type = FieldType::kUNKNOWN;
     int32_t length = 1;
 
-    FieldMap(const char* name, const void* data, const FieldType type, int32_t length = 1);
+    FieldMap(char const* name, void const* data, const FieldType type, int32_t length = 1);
 };
 
 struct FieldCollection
 {
     int32_t nbFields;
-    const FieldMap* fields;
+    FieldMap const* fields;
 };
 
 //!
@@ -107,14 +103,14 @@ public:
     //! \param inputDims Input dimensions.
     //! \param inputOrder Input order on which the framework input was originally.
     //!
-    virtual bool registerInput(const char* inputName, nvinfer1::Dims inputDims, UffInputOrder inputOrder) noexcept = 0;
+    virtual bool registerInput(char const* inputName, nvinfer1::Dims inputDims, UffInputOrder inputOrder) noexcept = 0;
 
     //!
     //! \brief Register an output name of a UFF network.
     //!
     //! \param outputName Output name.
     //!
-    virtual bool registerOutput(const char* outputName) noexcept = 0;
+    virtual bool registerOutput(char const* outputName) noexcept = 0;
 
     //!
     //! \brief Parse a UFF file.
@@ -123,9 +119,8 @@ public:
     //! \param network Network in which the UFFParser will fill the layers.
     //! \param weightsType The type on which the weights will transformed in.
     //!
-    virtual bool parse(const char* file, nvinfer1::INetworkDefinition& network,
-        nvinfer1::DataType weightsType = nvinfer1::DataType::kFLOAT) noexcept
-        = 0;
+    virtual bool parse(char const* file, nvinfer1::INetworkDefinition& network,
+        nvinfer1::DataType weightsType = nvinfer1::DataType::kFLOAT) noexcept = 0;
 
     //!
     //! \brief Parse a UFF buffer, useful if the file already live in memory.
@@ -135,12 +130,11 @@ public:
     //! \param network Network in which the UFFParser will fill the layers.
     //! \param weightsType The type on which the weights will transformed in.
     //!
-    virtual bool parseBuffer(const char* buffer, std::size_t size, nvinfer1::INetworkDefinition& network,
-        nvinfer1::DataType weightsType = nvinfer1::DataType::kFLOAT) noexcept
-        = 0;
+    virtual bool parseBuffer(char const* buffer, std::size_t size, nvinfer1::INetworkDefinition& network,
+        nvinfer1::DataType weightsType = nvinfer1::DataType::kFLOAT) noexcept = 0;
 
     //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //! \deprecated Use `delete` instead. Deprecated in TRT 8.0.
     //!
     TRT_DEPRECATED virtual void destroy() noexcept = 0;
 
@@ -162,7 +156,7 @@ public:
     //!
     //! \brief Set the namespace used to lookup and create plugins in the network.
     //!
-    virtual void setPluginNamespace(const char* libNamespace) noexcept = 0;
+    virtual void setPluginNamespace(char const* libNamespace) noexcept = 0;
 
     virtual ~IUffParser() noexcept = default;
 

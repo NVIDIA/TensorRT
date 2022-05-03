@@ -1,17 +1,13 @@
 /*
- * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+ * property and proprietary rights in and to this material, related
+ * documentation and any modifications thereto. Any use, reproduction,
+ * disclosure or distribution of this material and related documentation
+ * without an express license agreement from NVIDIA CORPORATION or
+ * its affiliates is strictly prohibited.
  */
 
 #ifndef NV_INFER_CONSISTENCY_H
@@ -59,8 +55,8 @@ public:
 protected:
     apiv::VConsistencyChecker* mImpl;
     IConsistencyChecker() = default;
-    IConsistencyChecker(const IConsistencyChecker& other) = delete;
-    IConsistencyChecker& operator=(const IConsistencyChecker& other) = delete;
+    IConsistencyChecker(IConsistencyChecker const& other) = delete;
+    IConsistencyChecker& operator=(IConsistencyChecker const& other) = delete;
     IConsistencyChecker(IConsistencyChecker&& other) = delete;
     IConsistencyChecker& operator=(IConsistencyChecker&& other) = delete;
 };
@@ -93,9 +89,8 @@ public:
     //! \param nbOutputs The number of output tensors.
     //! \param workspaceSize The size of workspace provided during enqueue.
     //!
-    virtual bool validate(const char* name, const void* serialData, size_t serialLength, const PluginTensorDesc* in,
-        size_t nbInputs, const PluginTensorDesc* out, size_t nbOutputs, int64_t workspaceSize) const noexcept
-        = 0;
+    virtual bool validate(char const* name, void const* serialData, size_t serialLength, PluginTensorDesc const* in,
+        size_t nbInputs, PluginTensorDesc const* out, size_t nbOutputs, int64_t workspaceSize) const noexcept = 0;
 
     IPluginChecker() = default;
     virtual ~IPluginChecker() override = default;
@@ -111,7 +106,7 @@ protected:
 
 } // namespace nvinfer1
 
-extern "C" TENSORRTAPI void* createConsistencyChecker_INTERNAL(void* logger, const void* blob, size_t size,
+extern "C" TENSORRTAPI void* createConsistencyChecker_INTERNAL(void* logger, void const* blob, size_t size,
     int32_t version); //!< Internal C entry point for creating IConsistencyChecker.
 
 namespace nvinfer1
@@ -129,7 +124,7 @@ namespace consistency
 namespace // anonymous
 {
 
-inline IConsistencyChecker* createConsistencyChecker(ILogger& logger, const void* blob, size_t size)
+inline IConsistencyChecker* createConsistencyChecker(ILogger& logger, void const* blob, size_t size)
 {
     return static_cast<IConsistencyChecker*>(
         createConsistencyChecker_INTERNAL(&logger, blob, size, NV_TENSORRT_VERSION));

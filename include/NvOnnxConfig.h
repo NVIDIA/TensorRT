@@ -1,17 +1,13 @@
 /*
- * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+ * property and proprietary rights in and to this material, related
+ * documentation and any modifications thereto. Any use, reproduction,
+ * disclosure or distribution of this material and related documentation
+ * without an express license agreement from NVIDIA CORPORATION or
+ * its affiliates is strictly prohibited.
  */
 
 #ifndef NV_OnnxConfig_H
@@ -78,7 +74,7 @@ public:
     //!
     //! \see setModelFileName()
     //!
-    virtual const char* getModelFileName() const noexcept = 0;
+    virtual char const* getModelFileName() const noexcept = 0;
 
     //!
     //! \brief Set the Model File Name.
@@ -91,7 +87,7 @@ public:
     //!
     //! \see getModelFileName()
     //!
-    virtual void setModelFileName(const char* onnxFilename) noexcept = 0;
+    virtual void setModelFileName(char const* onnxFilename) noexcept = 0;
 
     //!
     //! \brief Get the Verbosity Level.
@@ -133,7 +129,7 @@ public:
     //!
     //! \see setTextFilename()
     //!
-    virtual const char* getTextFileName() const noexcept = 0;
+    virtual char const* getTextFileName() const noexcept = 0;
 
     //!
     //! \brief Set the File Name of the Network Description as a Text File.
@@ -146,7 +142,7 @@ public:
     //!
     //! \see getTextFilename()
     //!
-    virtual void setTextFileName(const char* textFileName) noexcept = 0;
+    virtual void setTextFileName(char const* textFileName) noexcept = 0;
 
     //!
     //! \brief Get the File Name of the Network Description as a Text File, including the weights.
@@ -156,7 +152,7 @@ public:
     //!
     //! \see setFullTextFilename()
     //!
-    virtual const char* getFullTextFileName() const noexcept = 0;
+    virtual char const* getFullTextFileName() const noexcept = 0;
 
     //!
     //! \brief Set the File Name of the Network Description as a Text File, including the weights.
@@ -169,7 +165,7 @@ public:
     //!
     //! \see getFullTextFilename()
     //!
-    virtual void setFullTextFileName(const char* fullTextFileName) noexcept = 0;
+    virtual void setFullTextFileName(char const* fullTextFileName) noexcept = 0;
 
     //!
     //! \brief Get whether the layer information will be printed.
@@ -190,7 +186,7 @@ public:
     //!
     //! \brief Destroy IOnnxConfig object.
     //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //! \deprecated Use `delete` instead. Deprecated in TRT 8.0.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
