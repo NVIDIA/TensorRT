@@ -1,17 +1,13 @@
 /*
- * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+ * property and proprietary rights in and to this material, related
+ * documentation and any modifications thereto. Any use, reproduction,
+ * disclosure or distribution of this material and related documentation
+ * without an express license agreement from NVIDIA CORPORATION or
+ * its affiliates is strictly prohibited.
  */
 
 #ifndef NV_CAFFE_PARSER_H
@@ -53,7 +49,7 @@ public:
     //!
     //! \return ITensor* corresponding to the queried name. If no such ITensor exists, then nullptr is returned.
     //!
-    virtual nvinfer1::ITensor* find(const char* name) const noexcept = 0;
+    virtual nvinfer1::ITensor* find(char const* name) const noexcept = 0;
 
 protected:
     virtual ~IBlobNameToTensor() {}
@@ -71,11 +67,11 @@ protected:
 class IBinaryProtoBlob
 {
 public:
-    virtual const void* getData() noexcept = 0;
+    virtual void const* getData() noexcept = 0;
     virtual nvinfer1::Dims4 getDimensions() noexcept = 0;
     virtual nvinfer1::DataType getDataType() noexcept = 0;
     //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //! \deprecated Use `delete` instead. Deprecated in TensorRT 8.0.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
@@ -96,7 +92,7 @@ public:
     //!
     //! \param layerName Name of the layer which the user wishes to validate.
     //!
-    virtual bool isPluginV2(const char* layerName) noexcept = 0;
+    virtual bool isPluginV2(char const* layerName) noexcept = 0;
 
     //!
     //! \brief Creates a plugin.
@@ -106,9 +102,8 @@ public:
     //! \param nbWeights Number of weights.
     //! \param libNamespace Library Namespace associated with the plugin object
     //!
-    virtual nvinfer1::IPluginV2* createPlugin(const char* layerName, const nvinfer1::Weights* weights,
-        int32_t nbWeights, const char* libNamespace = "") noexcept
-        = 0;
+    virtual nvinfer1::IPluginV2* createPlugin(char const* layerName, nvinfer1::Weights const* weights,
+        int32_t nbWeights, char const* libNamespace = "") noexcept = 0;
 
     virtual ~IPluginFactoryV2() noexcept = default;
 };
@@ -137,9 +132,8 @@ public:
     //!
     //! \see nvcaffeparser1::IBlobNameToTensor
     //!
-    virtual const IBlobNameToTensor* parse(const char* deploy, const char* model, nvinfer1::INetworkDefinition& network,
-        nvinfer1::DataType weightType) noexcept
-        = 0;
+    virtual IBlobNameToTensor const* parse(char const* deploy, char const* model, nvinfer1::INetworkDefinition& network,
+        nvinfer1::DataType weightType) noexcept = 0;
 
     //!
     //! \brief Parse a deploy prototxt and a binaryproto Caffe model from memory buffers to extract
@@ -156,10 +150,9 @@ public:
     //!
     //! \see nvcaffeparser1::IBlobNameToTensor
     //!
-    virtual const IBlobNameToTensor* parseBuffers(const uint8_t* deployBuffer, std::size_t deployLength,
-        const uint8_t* modelBuffer, std::size_t modelLength, nvinfer1::INetworkDefinition& network,
-        nvinfer1::DataType weightType) noexcept
-        = 0;
+    virtual IBlobNameToTensor const* parseBuffers(uint8_t const* deployBuffer, std::size_t deployLength,
+        uint8_t const* modelBuffer, std::size_t modelLength, nvinfer1::INetworkDefinition& network,
+        nvinfer1::DataType weightType) noexcept = 0;
 
     //!
     //! \brief Parse and extract data stored in binaryproto file.
@@ -173,7 +166,7 @@ public:
     //!
     //! \see nvcaffeparser1::IBinaryProtoBlob
     //!
-    virtual IBinaryProtoBlob* parseBinaryProto(const char* fileName) noexcept = 0;
+    virtual IBinaryProtoBlob* parseBinaryProto(char const* fileName) noexcept = 0;
 
     //!
     //! \brief Set buffer size for the parsing and storage of the learned model.
@@ -187,7 +180,7 @@ public:
     //!
     //! \brief Destroy this ICaffeParser object.
     //!
-    //! \deprecated Deprecated interface will be removed in TensorRT 10.0.
+    //! \deprecated Use `delete` instead. Deprecated in TensorRT 8.0.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
@@ -203,7 +196,7 @@ public:
     //!
     //! \brief Set the namespace used to lookup and create plugins in the network.
     //!
-    virtual void setPluginNamespace(const char* libNamespace) noexcept = 0;
+    virtual void setPluginNamespace(char const* libNamespace) noexcept = 0;
 
     virtual ~ICaffeParser() noexcept = default;
 

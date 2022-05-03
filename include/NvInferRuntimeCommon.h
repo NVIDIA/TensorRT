@@ -1,17 +1,13 @@
 /*
- * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+ * property and proprietary rights in and to this material, related
+ * documentation and any modifications thereto. Any use, reproduction,
+ * disclosure or distribution of this material and related documentation
+ * without an express license agreement from NVIDIA CORPORATION or
+ * its affiliates is strictly prohibited.
  */
 
 #ifndef NV_INFER_RUNTIME_COMMON_H
@@ -22,7 +18,7 @@
 #include <cstdint>
 #include <cuda_runtime_api.h>
 
-//!< Items that are marked as deprecated will be removed in a future release.
+// Items that are marked as deprecated will be removed in a future release.
 #if __cplusplus >= 201402L
 #define TRT_DEPRECATED [[deprecated]]
 #if __GNUC__ < 6
@@ -47,7 +43,7 @@
 #endif
 #endif
 
-//!< Defines which symbols are exported
+// Defines which symbols are exported
 #ifdef TENSORRT_BUILD_LIB
 #ifdef _MSC_VER
 #define TENSORRTAPI __declspec(dllexport)
@@ -176,8 +172,7 @@ using Dims = Dims32;
 //!
 //! \brief Format of the input/output tensors.
 //!
-//! This enum is extended to be used by both plugins and reformat-free network
-//! I/O tensors.
+//! This enum is used by both plugins and network I/O tensors.
 //!
 //! \see IPluginV2::supportsFormat(), safe::ICudaEngine::getBindingFormat()
 //!
@@ -225,7 +220,7 @@ enum class TensorFormat : int32_t
     //! with the caveat that C must be equal or lesser than 4.
     //! If used as DLA input and the build option kGPU_FALLBACK is not specified,
     //! it needs to meet line stride requirement of DLA format. Column stride in bytes should
-    //! be multiple of 32.
+    //! be a multiple of 32 on Xavier and 64 on Orin.
     kCHW4 = 3,
 
     //! Sixteen wide channel vectorized row major format. This format is bound
@@ -283,14 +278,15 @@ enum class TensorFormat : int32_t
 
     //! DLA image format. For a tensor with dimension {N, C, H, W} the C axis
     //! always has unit stride. The stride for stepping along the H axis is rounded up
-    //! to 32 bytes. C can only be 1, 3 or 4.
+    //! to 32 bytes on Xavier and 64 bytes on Orin. C can only be 1, 3 or 4.
     //! If C == 1, it will map to grayscale format.
     //! If C == 3 or C == 4, it will map to color image format. And if C == 3,
     //! the stride for stepping along the W axis needs to be padded to 4 in elements.
     //!
     //! When C is {1, 3, 4}, then C' is {1, 4, 4} respectively,
     //! the memory layout is equivalent to a C array with dimensions
-    //! [N][H][roundUp(W, 32/C'/elementSize)][C'] where elementSize is 2 for FP16
+    //! [N][H][roundUp(W, 32/C'/elementSize)][C'] on Xavier and [N][H][roundUp(W, 64/C'/elementSize)][C'] on Orin
+    //! where elementSize is 2 for FP16
     //! and 1 for Int8. The tensor coordinates (n, c, h, w) mapping to array
     //! subscript [n][h][w][c].
     kDLA_HWC4 = 10,
@@ -318,7 +314,6 @@ template <>
 struct EnumMaxImpl<TensorFormat>
 {
     //! Declaration of kVALUE that represents maximum number of elements in TensorFormat enum
-    // coverity[autosar_cpp14_m0_1_4_violation] Approved RFD: https://jirasw.nvidia.com/browse/TID-489
     static constexpr int32_t kVALUE = 12;
 };
 } // namespace impl
@@ -449,6 +444,10 @@ public:
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
     //!                  when building networks on multiple devices sharing the same plugin.
+    //!
+    //! \note In any non-IPluginV2DynamicExt plugin, batch size should not be included in the returned dimensions,
+    //! even if the plugin is expected to be run in a network with explicit batch mode enabled.
+    //! Please see the TensorRT Developer Guide for more details on how plugin inputs and outputs behave.
     //!
     virtual Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept = 0;
 
@@ -927,7 +926,7 @@ public:
     //!   and FP32 NCHW for its single output:
     //!
     //!         return inOut.format[pos] == TensorFormat::kLINEAR &&
-    //!                (inOut.type[pos] == pos < 2 ?  DataType::kHALF : DataType::kFLOAT);
+    //!                (inOut.type[pos] == (pos < 2 ?  DataType::kHALF : DataType::kFLOAT));
     //!
     //! * A definition for a "polymorphic" plugin with two inputs and one output that supports
     //!   any format or type, but the inputs and output must have the same format and type:
@@ -1373,7 +1372,7 @@ public:
     //!
     //! \see deallocate()
     //!
-    //! \deprecated Superseded by deallocate and will be removed in TensorRT 10.0.
+    //! \deprecated Superseded by deallocate. Deprecated in TensorRT 8.0.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -1466,8 +1465,12 @@ protected:
 //!
 //! \brief Application-implemented logging interface for the builder, refitter and runtime.
 //!
-//! The logger used to create an instance of IBuilder, IRuntime or IRefitter is used for all objects created through that interface.
-//! The logger should be valid until all objects created are released.
+//! The logger used to create an instance of IBuilder, IRuntime or IRefitter is used for all objects created through
+//! that interface. The logger should be valid until all objects created are released.
+//!
+//! The Logger object implementation must be thread safe. All locking and synchronization is pushed to the
+//! interface implementation and TensorRT does not hold any synchronization primitives when calling the interface
+//! functions.
 //!
 class ILogger
 {
@@ -1499,7 +1502,9 @@ public:
     //!
     //! \usage
     //! - Allowed context for the API call
-    //!   - Thread-safe: No, this method is not required to be thread-safe and will not be called from multiple threads.
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime, or if the same logger is used
+    //!                  for multiple runtimes, builders, or refitters.
     //!
     virtual void log(Severity severity, AsciiChar const* msg) noexcept = 0;
 
@@ -1651,7 +1656,7 @@ struct EnumMaxImpl<ErrorCode>
 //! object.
 //!
 //! The ErrorRecorder object implementation must be thread safe. All locking and synchronization is pushed to the
-//! interface implementation and TensorRT does not hold any synchronization primitives when accessing the interface
+//! interface implementation and TensorRT does not hold any synchronization primitives when calling the interface
 //! functions.
 //!
 //! The lifetime of the ErrorRecorder object must exceed the lifetime of all TensorRT objects that use it.
@@ -1667,7 +1672,6 @@ public:
     //!
     //! The length limit for an error description, excluding the '\0' string terminator.
     //!
-    // coverity[autosar_cpp14_m0_1_4_violation] Approved RFD: https://jirasw.nvidia.com/browse/TID-489
     static constexpr size_t kMAX_DESC_LENGTH{127U};
 
     //!

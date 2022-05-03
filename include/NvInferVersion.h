@@ -1,35 +1,35 @@
 /*
- * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+ * property and proprietary rights in and to this material, related
+ * documentation and any modifications thereto. Any use, reproduction,
+ * disclosure or distribution of this material and related documentation
+ * without an express license agreement from NVIDIA CORPORATION or
+ * its affiliates is strictly prohibited.
  */
 
- //!
- //! \file NvInferVersion.h
- //!
- //! Defines the TensorRT version
- //!
+//!
+//! \file NvInferVersion.h
+//!
+//! Defines the TensorRT version
+//!
 
 #ifndef NV_INFER_VERSION_H
 #define NV_INFER_VERSION_H
 
 #define NV_TENSORRT_MAJOR 8 //!< TensorRT major version.
-#define NV_TENSORRT_MINOR 2 //!< TensorRT minor version.
-#define NV_TENSORRT_PATCH 5 //!< TensorRT patch version.
-#define NV_TENSORRT_BUILD 1 //!< TensorRT build number.
+#define NV_TENSORRT_MINOR 4 //!< TensorRT minor version.
+#define NV_TENSORRT_PATCH 11 //!< TensorRT patch version.
+#define NV_TENSORRT_BUILD 0 //!< TensorRT build number.
+
+#define NV_TENSORRT_LWS_MAJOR 0 //!< TensorRT LWS major version.
+#define NV_TENSORRT_LWS_MINOR 0 //!< TensorRT LWS minor version.
+#define NV_TENSORRT_LWS_PATCH 0 //!< TensorRT LWS patch version.
 
 #define NV_TENSORRT_SONAME_MAJOR 8 //!< Shared object library major version number.
-#define NV_TENSORRT_SONAME_MINOR 2 //!< Shared object library minor version number.
-#define NV_TENSORRT_SONAME_PATCH 5 //!< Shared object library patch version number.
+#define NV_TENSORRT_SONAME_MINOR 4 //!< Shared object library minor version number.
+#define NV_TENSORRT_SONAME_PATCH 11 //!< Shared object library patch version number.
 
 #endif // NV_INFER_VERSION_H
