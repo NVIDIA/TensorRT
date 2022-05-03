@@ -52,70 +52,76 @@ public:
     virtual int32_t selectAlgorithms(const IAlgorithmContext& context, const IAlgorithm* const* choices,
         int32_t nbChoices, int32_t* selection) noexcept override
     {
-        py::gil_scoped_acquire gil{};
-
-        std::vector<const IAlgorithm*> choicesVector;
-        std::copy(choices, choices + nbChoices, std::back_inserter(choicesVector));
-
-        py::function pySelectAlgorithms
-            = utils::getOverride(static_cast<IAlgorithmSelector*>(this), "select_algorithms");
-        if (!pySelectAlgorithms)
-        {
-            return -1;
-        }
-
-        py::object pyResult;
         try
         {
-            pyResult = pySelectAlgorithms(&context, choicesVector);
+            py::gil_scoped_acquire gil{};
+
+            std::vector<const IAlgorithm*> choicesVector;
+            std::copy(choices, choices + nbChoices, std::back_inserter(choicesVector));
+
+            py::function pySelectAlgorithms
+                = utils::getOverride(static_cast<IAlgorithmSelector*>(this), "select_algorithms");
+            if (!pySelectAlgorithms)
+            {
+                return -1;
+            }
+
+            py::object pyResult = pySelectAlgorithms(&context, choicesVector);
+
+            std::vector<int32_t> result;
+            try
+            {
+                result = pyResult.cast<decltype(result)>();
+            }
+            catch (const py::cast_error& e)
+            {
+                std::cerr << "[ERROR] Return value of select_algorithms() could not be interpreted as a List[int]"
+                        << std::endl;
+                return -1;
+            }
+
+            std::copy(result.data(), result.data() + result.size(), selection);
+            return static_cast<int32_t>(result.size());
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in select_algorithms(): " << e.what() << std::endl;
         }
         catch (...)
         {
             std::cerr << "[ERROR] Exception caught in select_algorithms()" << std::endl;
-            return -1;
         }
-
-        std::vector<int32_t> result;
-        try
-        {
-            result = pyResult.cast<decltype(result)>();
-        }
-        catch (const py::cast_error& e)
-        {
-            std::cerr << "[ERROR] Return value of select_algorithms() could not be interpreted as a List[int]"
-                      << std::endl;
-            return -1;
-        }
-
-        std::copy(result.data(), result.data() + result.size(), selection);
-        return static_cast<int32_t>(result.size());
+        return -1;
     }
 
     virtual void reportAlgorithms(const IAlgorithmContext* const* algoContexts, const IAlgorithm* const* algoChoices,
         int32_t size) noexcept override
     {
-        py::gil_scoped_acquire gil{};
-
-        std::vector<const IAlgorithmContext*> contexts;
-        std::copy(algoContexts, algoContexts + size, std::back_inserter(contexts));
-        std::vector<const IAlgorithm*> choices;
-        std::copy(algoChoices, algoChoices + size, std::back_inserter(choices));
-
-        py::function pyReportAlgorithms
-            = utils::getOverride(static_cast<IAlgorithmSelector*>(this), "report_algorithms");
-        if (!pyReportAlgorithms)
-        {
-            return;
-        }
-
         try
         {
+            py::gil_scoped_acquire gil{};
+
+            std::vector<const IAlgorithmContext*> contexts;
+            std::copy(algoContexts, algoContexts + size, std::back_inserter(contexts));
+            std::vector<const IAlgorithm*> choices;
+            std::copy(algoChoices, algoChoices + size, std::back_inserter(choices));
+
+            py::function pyReportAlgorithms
+                = utils::getOverride(static_cast<IAlgorithmSelector*>(this), "report_algorithms");
+            if (!pyReportAlgorithms)
+            {
+                return;
+            }
+
             pyReportAlgorithms(contexts, choices);
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in report_algorithms(): " << e.what() << std::endl;
         }
         catch (...)
         {
             std::cerr << "[ERROR] Exception caught in report_algorithms()" << std::endl;
-            return;
         }
     }
 }; // IAlgorithmSelectorTrampoline

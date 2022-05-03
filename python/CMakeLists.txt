@@ -108,7 +108,7 @@ endif()
 
 if (MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd /FS")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd /FS /bigobj")
     if (${NV_GEN_PDB})
         # PDB is only useful in release mode.
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
@@ -126,21 +126,11 @@ if(${NV_TARGET_OS} MATCHES "wddm2")
 endif()
 
 # -------- START BUILD PROCESS --------
-
-if (${CMAKE_BUILD_TYPE} STREQUAL Release)
-    message(STATUS "Building in Release mode")
-    if (ENABLE_INETWORK_SERIALIZE)
-        set(TRT_LIBS nvinfer nvonnxparser nvparsers nvinfer_plugin nvserialize)
-    else()
-        set(TRT_LIBS nvinfer nvonnxparser nvparsers nvinfer_plugin)
-    endif()
+message(STATUS "Building in ${CMAKE_BUILD_TYPE} mode")
+if (ENABLE_INETWORK_SERIALIZE)
+    set(TRT_LIBS nvinfer nvonnxparser nvparsers nvinfer_plugin nvserialize)
 else()
-    message(STATUS "Building in Debug mode")
-    if (ENABLE_INETWORK_SERIALIZE)
-        set(TRT_LIBS nvinfer_debug nvonnxparser_debug nvparsers_debug nvinfer_plugin_debug nvserialize_debug)
-    else()
-        set(TRT_LIBS nvinfer_debug nvonnxparser_debug nvparsers_debug nvinfer_plugin_debug)
-    endif()
+    set(TRT_LIBS nvinfer nvonnxparser nvparsers nvinfer_plugin)
 endif()
 
 # -------- BUILDING --------

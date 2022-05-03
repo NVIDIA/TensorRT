@@ -42,7 +42,7 @@ namespace tensorrt
             return Weights{DataType::kFLOAT, nullptr, 0};
         }
 
-        static const auto get_dynamic_range = [] (const ITensor& self) -> py::object {
+        static const auto get_dynamic_range = [] (ITensor const& self) -> py::object {
             if (self.dynamicRangeIsSet()) {
                 return py::make_tuple(self.getDynamicRangeMin(), self.getDynamicRangeMax());
             } else {
@@ -50,82 +50,76 @@ namespace tensorrt
             }
         };
 
-        static const auto set_dynamic_range = [] (ITensor& self, const std::vector<float>& range) {
-            if (range.size() == 2) {
-                if (!self.setDynamicRange(range[0], range[1])) throw py::value_error{"Error in set dynamic range"};
-            } else {
-                throw py::value_error{"Dynamic range must contain exactly 2 elements"};
-            }
+        static const auto set_dynamic_range = [] (ITensor& self, std::vector<float> const& range) {
+            PY_ASSERT_VALUE_ERROR(range.size() == 2, "Dynamic range must contain exactly 2 elements");
+            PY_ASSERT_VALUE_ERROR(self.setDynamicRange(range[0], range[1]),
+                "Error in set dynamic range");
         };
 
         // For permutation
-        static const auto permutation_vector_constructor = [] (const std::vector<int>& in) {
+        static const auto permutation_vector_constructor = [] (std::vector<int32_t> const& in) {
             // Static casts are required here, so that MAX_DIMS is resolved at compile/link time.
-            const int maxDims = static_cast<const int>(Dims::MAX_DIMS);
-            if (in.size() > maxDims || in.size() < 0)
-                throw std::length_error("Invalid input length. Max expected length is " + std::to_string(maxDims));
+            int32_t const maxDims{static_cast<int32_t const>(Dims::MAX_DIMS)};
+            PY_ASSERT_VALUE_ERROR(in.size() <= maxDims,
+                "Invalid input length. Max expected length is " + std::to_string(maxDims));
             Permutation* self = new Permutation{};
-            for (int i = 0; i < in.size(); ++i)
+            for (int32_t i = 0; i < in.size(); ++i)
                 self->order[i] = in[i];
             return self;
         };
 
-        static const auto permutation_to_str = [] (const Permutation& self) {
-            const int maxDims = static_cast<const int>(Dims::MAX_DIMS);
+        static const auto permutation_to_str = [] (Permutation const& self) {
+            int32_t const maxDims = static_cast<int32_t const>(Dims::MAX_DIMS);
             std::string temp = "(";
-            for (int i = 0; i < maxDims - 1; ++i)
+            for (int32_t i = 0; i < maxDims - 1; ++i)
                 temp += std::to_string(self.order[i]) + ", ";
             temp += std::to_string(self.order[maxDims - 1]) + ")";
             return temp;
         };
 
         // TODO: Add slicing support?
-        static const auto permutation_getter = [] (const Permutation& self, int pyIndex) {
-            size_t index = (pyIndex < 0) ? static_cast<const int>(Dims::MAX_DIMS) + pyIndex : pyIndex;
+        static const auto permutation_getter = [] (Permutation const& self, int32_t const pyIndex) {
+            PY_ASSERT_INDEX_ERROR(pyIndex < static_cast<int32_t const>(Dims::MAX_DIMS));
+            int32_t const index{(pyIndex < 0) ? static_cast<int32_t const>(Dims::MAX_DIMS) + pyIndex : pyIndex};
             // Static cast is REQUIRED here, or chaos ensues as MAX_DIMS is not pulled in at link time.
-            if (index >= static_cast<const size_t>(Dims::MAX_DIMS))
-            {
-                utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-            }
+            PY_ASSERT_INDEX_ERROR(index >= 0 && index < static_cast<int32_t const>(Dims::MAX_DIMS));
             return self.order[index];
         };
 
-        static const auto permutation_setter = [] (Permutation& self, int pyIndex, int item) {
-            size_t index = (pyIndex < 0) ? static_cast<const int>(Dims::MAX_DIMS) + pyIndex : pyIndex;
+        static const auto permutation_setter = [] (Permutation& self, int32_t const pyIndex, int32_t const item) {
+            PY_ASSERT_INDEX_ERROR(pyIndex < static_cast<int32_t const>(Dims::MAX_DIMS));
+            int32_t const index = (pyIndex < 0) ? static_cast<int32_t const>(Dims::MAX_DIMS) + pyIndex : pyIndex;
             // Static cast is REQUIRED here, or chaos ensues as MAX_DIMS is not pulled in at link time.
-            if (index >= static_cast<const size_t>(Dims::MAX_DIMS))
-            {
-                utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-            }
+            PY_ASSERT_INDEX_ERROR(index >= 0 && index < static_cast<int32_t const>(Dims::MAX_DIMS));
             self.order[index] = item;
         };
 
-        static const auto permutation_len = [] (const Permutation& self) {
-            return static_cast<const int>(Dims::MAX_DIMS);
+        static const auto permutation_len = [] (Permutation const& self) {
+            return static_cast<int32_t const>(Dims::MAX_DIMS);
         };
 
         // For INetworkDefinition
         // Need a ptr to const-ptr to ITensor.
-        static const auto add_concatenation = [] (INetworkDefinition& self, const std::vector<ITensor*>& inputs) {
+        static const auto add_concatenation = [] (INetworkDefinition& self, std::vector<ITensor*> const& inputs) {
             return self.addConcatenation(inputs.data(), inputs.size());
         };
 
         // Need a ptr to const-ptr to ITensor.
-        static const auto add_plugin_v2 = [] (INetworkDefinition& self, const std::vector<ITensor*>& inputs, IPluginV2& plugin) {
+        static const auto add_plugin_v2 = [] (INetworkDefinition& self, std::vector<ITensor*> const& inputs, IPluginV2& plugin) {
             return self.addPluginV2(inputs.data(), inputs.size(), plugin);
         };
 
-        IConvolutionLayer* add_convolution(INetworkDefinition& self, ITensor& input, int numOutputMaps, DimsHW kernelSize, Weights kernel, Weights* bias)
+        IConvolutionLayer* add_convolution(INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, DimsHW kernelSize, Weights kernel, Weights* bias)
         {
             return self.addConvolution(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
 
-        static const auto add_convolution_nd = [](INetworkDefinition& self, ITensor& input, int numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
+        static const auto add_convolution_nd = [](INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
         {
             return self.addConvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
 
-        static const auto add_fully_connected = [](INetworkDefinition& self, ITensor& input, int numOutputs, Weights kernel, Weights* bias)
+        IFullyConnectedLayer* add_fully_connected(INetworkDefinition& self, ITensor& input, int32_t numOutputs, Weights kernel, Weights* bias)
         {
             return self.addFullyConnected(input, numOutputs, kernel, optionalWeights(bias));
         };
@@ -135,7 +129,7 @@ namespace tensorrt
             return self.addScale(input, mode, optionalWeights(shift), optionalWeights(scale), optionalWeights(power));
         };
 
-        static const auto add_scale_nd = [](INetworkDefinition& self, ITensor& input, ScaleMode mode, Weights* shift, Weights* scale, Weights* power, int channelAxis)
+        static const auto add_scale_nd = [](INetworkDefinition& self, ITensor& input, ScaleMode mode, Weights* shift, Weights* scale, Weights* power, int32_t channelAxis)
         {
             return self.addScaleNd(input, mode, optionalWeights(shift), optionalWeights(scale), optionalWeights(power), channelAxis);
         };
@@ -150,7 +144,7 @@ namespace tensorrt
             return self.addDequantize(input, scale);
         };
 
-        IDeconvolutionLayer* add_deconvolution(INetworkDefinition& self, ITensor& input, int numOutputMaps, DimsHW kernelSize, Weights kernel, Weights* bias)
+        IDeconvolutionLayer* add_deconvolution(INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, DimsHW kernelSize, Weights kernel, Weights* bias)
         {
             return self.addDeconvolution(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
@@ -160,7 +154,7 @@ namespace tensorrt
             return self.addScatter(data, indices, updates, mode);
         };
 
-        static const auto add_deconvolution_nd = [](INetworkDefinition& self, ITensor& input, int numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
+        static const auto add_deconvolution_nd = [](INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
         {
             return self.addDeconvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
         };
@@ -191,23 +185,20 @@ namespace tensorrt
         static const auto deconv_get_kernel = [](IDeconvolutionLayer& self) { auto w = self.getKernelWeights(); return utils::weights_to_numpy(w); };
         static const auto deconv_get_bias = [](IDeconvolutionLayer& self) { auto w = self.getBiasWeights(); return utils::weights_to_numpy(w); };
 
-        static const auto rnnv2_get_weights = [](IRNNv2Layer& self, int index, RNNGateType gate, bool isW) {
+        static const auto rnnv2_get_weights = [](IRNNv2Layer& self, int32_t index, RNNGateType gate, bool isW) {
             auto w = self.getWeightsForGate(index, gate, isW); return utils::weights_to_numpy(w);
         };
-        static const auto rnnv2_get_bias = [](IRNNv2Layer& self, int index, RNNGateType gate, bool isW) {
+        static const auto rnnv2_get_bias = [](IRNNv2Layer& self, int32_t index, RNNGateType gate, bool isW) {
             auto w = self.getBiasForGate(index, gate, isW); return utils::weights_to_numpy(w);
         };
 
         static const auto constant_get_weights = [](IConstantLayer& self) { auto w = self.getWeights(); return utils::weights_to_numpy(w); };
 
         // TODO: Add slicing support?
-        static const auto network_getitem = [](INetworkDefinition& self, int pyIndex) {
+        static const auto network_getitem = [](INetworkDefinition& self, int32_t pyIndex) {
             // Support python's negative indexing
             size_t index = (pyIndex < 0) ? self.getNbLayers() + pyIndex : pyIndex;
-            if (index >= self.getNbLayers())
-            {
-                utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-            }
+            PY_ASSERT_INDEX_ERROR(index < self.getNbLayers());
             return self.getLayer(index);
         };
 
@@ -618,7 +609,7 @@ namespace tensorrt
         ;
 
         // Make it possible to use tuples/lists in Python in place of Permutation.
-        py::implicitly_convertible<std::vector<int>, Permutation>();
+        py::implicitly_convertible<std::vector<int32_t>, Permutation>();
 
         py::class_<IShuffleLayer, ILayer, std::unique_ptr<IShuffleLayer, py::nodelete>>(m, "IShuffleLayer", IShuffleLayerDoc::descr)
             .def_property("first_transpose", &IShuffleLayer::getFirstTranspose, &IShuffleLayer::setFirstTranspose)
@@ -822,7 +813,7 @@ namespace tensorrt
                 "kernel_shape"_a, "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{},
                 INetworkDefinitionDoc::add_convolution_nd,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
-            .def("add_fully_connected", lambdas::add_fully_connected, "input"_a, "num_outputs"_a,
+            .def("add_fully_connected", utils::deprecate(lambdas::add_fully_connected, "add_matrix_multiply"), "input"_a, "num_outputs"_a,
                 "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 4>{}, py::keep_alive<1, 5>{}, INetworkDefinitionDoc::add_fully_connected,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_activation", &INetworkDefinition::addActivation, "input"_a, "type"_a,

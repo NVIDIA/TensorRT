@@ -286,7 +286,11 @@ constexpr const char* get_plugin_creator = R"trtdoc(
 namespace FreeFunctionsDoc
 {
 constexpr const char* get_plugin_registry = R"trtdoc(
-    Return the plugin registry
+    Return the plugin registry for standard runtime
+)trtdoc";
+
+constexpr const char* get_builder_plugin_registry = R"trtdoc(
+    Return the plugin registry used for building engines for the specified runtime
 )trtdoc";
 
 constexpr const char* init_libnvinfer_plugins = R"trtdoc(

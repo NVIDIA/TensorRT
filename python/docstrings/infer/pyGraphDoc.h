@@ -82,7 +82,7 @@ namespace TensorFormatDoc
 constexpr const char* descr = R"trtdoc(
     Format of the input/output tensors.
 
-    This enum is extended to be used by both plugins and reformat-free network I/O tensors.
+    This enum is used by both plugins and network I/O tensors.
 
     For more information about data formats, see the topic "Data Format Description" located in the
     TensorRT Developer Guide (https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html).
@@ -196,7 +196,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar is_network_output: :class:`bool` Whether the tensor is a network output.
     :ivar dynamic_range: :class:`Tuple[float, float]` A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
-    :ivar allowed_formats: :class:`int` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormats.CHW4) | 1 << int(TensorFormat.CHW32)``.
+    :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormats.CHW4) | 1 << int(TensorFormat.CHW32)``.
 )trtdoc";
 
 constexpr const char* set_dynamic_range = R"trtdoc(
@@ -264,7 +264,7 @@ constexpr const char* set_output_type = R"trtdoc(
     Constraint layer to generate output data with given type.
     Note that this method cannot be used to set the data type
     of the second output tensor of the topK layer. The data
-    type of the second output tensor of the topK layer is always Int32.
+    type of the second output tensor of the topK layer is always :class:`int32` .
 
     :arg index: The index of the output tensor to set the type.
     :arg dtype: DataType of the output.
@@ -515,6 +515,15 @@ constexpr const char* descr = R"trtdoc(
     |
     |  For example, to perform softmax on axis R of a NPQRCHW input, set bit 2 with implicit batch mode,
     |  set bit 3 with explicit batch mode.
+
+    On Xavier, this layer is not supported on DLA.
+    Otherwise, the following constraints must be satisfied to execute this layer on DLA:
+
+    - Axis must be one of the channel or spatial dimensions.
+    - There are two classes of supported input sizes:
+
+       * Non-axis, non-batch dimensions are all 1 and the axis dimension is at most 8192. This is the recommended case for using softmax since it is the most accurate.
+       * At least one non-axis, non-batch dimension greater than 1 and the axis dimension is at most 1024. Note that in this case, there may be some approximation error as the axis dimension size approaches the upper bound. See the TensorRT Developer Guide for more details on the approximation error.
 )trtdoc";
 } // namespace ISoftMaxLayerDoc
 
@@ -593,7 +602,7 @@ constexpr const char* descr = R"trtdoc(
     A gather layer in an :class:`INetworkDefinition` .
 
     :ivar axis: :class:`int` The non-batch dimension axis to gather on. The axis must be less than the number of non-batch dimensions in the data input.
-    :ivar num_elementwise_dims: :class:`int` The number of leading dimensions of indices tensor to be handled elementwise. For `GatherMode::kDEFAULT`, it must be 0 if there is an implicit batch dimension. It can be 0 or 1 if there is not an implicit batch dimension. For `GatherMode::kND`, it can be between 0 and one less than rank(data). For `GatherMode::kELEMENT`, it must be 0.
+    :ivar num_elementwise_dims: :class:`int` The number of leading dimensions of indices tensor to be handled elementwise. For `GatherMode.DEFAULT`, it must be 0 if there is an implicit batch dimension. It can be 0 or 1 if there is not an implicit batch dimension. For `GatherMode::kND`, it can be between 0 and one less than rank(data). For `GatherMode::kELEMENT`, it must be 0.
     :ivar mode: :class:`GatherMode` The gather mode.
 )trtdoc";
 } // namespace IGatherLayerDoc
@@ -764,7 +773,7 @@ constexpr const char* descr = R"trtdoc(
         of the input tensor to the RNN.
         If :attr:`seq_lengths` is not specified, then the RNN layer assumes all sequences are size :attr:`max_seq_length` .
         All sequence lengths in :attr:`seq_lengths` should be in the range [1, :attr:`max_seq_length` ]. Zero-length sequences are not supported.
-        This tensor must be of type int32.
+        This tensor must be of type :class:`int32` .
     :ivar op: :class:`RNNOperation` The operation of the RNN layer.
     :ivar input_mode: :class:`int` The input mode of the RNN layer.
     :ivar direction: :class:`int` The direction of the RNN layer.
@@ -862,7 +871,7 @@ namespace IUnaryLayerDoc
 constexpr const char* descr = R"trtdoc(
     A unary layer in an :class:`INetworkDefinition` .
 
-    :ivar op: :class:`UnaryOperation` The unary operation for the layer.
+    :ivar op: :class:`UnaryOperation` The unary operation for the layer. When running this layer on DLA, only ``UnaryOperation.ABS`` is supported.
 )trtdoc";
 } // namespace IUnaryLayerDoc
 
@@ -941,7 +950,7 @@ constexpr const char* set_input = R"trtdoc(
      Index   Description
     ======= ========================================================================
         0     Data or Shape tensor to be shuffled.
-        1     The dimensions for the reshape operation, as a 1D Int32 shape tensor.
+        1     The dimensions for the reshape operation, as a 1D :class:`int32` shape tensor.
     ======= ========================================================================
 
     If this function is called with a value 1, then :attr:`num_inputs` changes
@@ -958,10 +967,43 @@ namespace ISliceLayerDoc
 constexpr const char* descr = R"trtdoc(
     A slice layer in an :class:`INetworkDefinition` .
 
+    The slice layer has two variants, static and dynamic.
+    Static slice specifies the start, size, and stride dimensions at layer creation time via :class:`Dims` and can use the get/set accessor functions of the :class:`ISliceLayer` .
+    Dynamic slice specifies one or more of start, size or stride as :class:`ITensor`s, by using :func:`ILayer.set_input` to add a second, third, or fourth input respectively.
+    The corresponding :class:`Dims` are used if an input is missing or null.
+
+    An application can determine if the :class:`ISliceLayer` has a dynamic output shape based on whether the size input (third input) is present and non-null.
+
+    The slice layer selects for each dimension a start location from within the input tensor, and copies elements to the output tensor using the specified stride across the input tensor.
+    Start, size, and stride tensors must be 1-D :class:`int32` shape tensors if not specified via :class:`Dims` .
+
+    An example of using slice on a tensor:
+    input = {{0, 2, 4}, {1, 3, 5}}
+    start = {1, 0}
+    size = {1, 2}
+    stride = {1, 2}
+    output = {{1, 5}}
+
+    When the sliceMode is :const:`SliceMode.CLAMP` or :const:`SliceMode.REFLECT` , for each input dimension, if its size is 0 then the corresponding output dimension must be 0 too.
+
+    A slice layer can produce a shape tensor if the following conditions are met:
+
+    * ``start``, ``size``, and ``stride`` are build time constants, either as static :class:`Dims` or as constant input tensors.
+    * The number of elements in the output tensor does not exceed 2 * :const:`Dims.MAX_DIMS` .
+
+    The input tensor is a shape tensor if the output is a shape tensor.
+
+    The following constraints must be satisfied to execute this layer on DLA:
+    * ``start``, ``size``, and ``stride`` are build time constants, either as static :class:`Dims` or as constant input tensors.
+    * sliceMode is :const:`SliceMode.DEFAULT` .
+    * Strides are 1 for all dimensions.
+    * Slicing is not performed on the first dimension
+    * The input tensor has four dimensions
+
     :ivar start: :class:`Dims` The start offset.
     :ivar shape: :class:`Dims` The output dimensions.
     :ivar stride: :class:`Dims` The slicing stride.
-    :ivar mode: :class:`SliceMode` Controls how ISliceLayer handles out of bounds coordinates.
+    :ivar mode: :class:`SliceMode` Controls how :class:`ISliceLayer` handles out of bounds coordinates.
 )trtdoc";
 
 constexpr const char* set_input = R"trtdoc(
@@ -978,7 +1020,7 @@ constexpr const char* set_input = R"trtdoc(
         1     The start tensor to begin slicing, N-dimensional for Data, and 1-D for Shape.
         2     The size tensor of the resulting slice, N-dimensional for Data, and 1-D for Shape.
         3     The stride of the slicing operation, N-dimensional for Data, and 1-D for Shape.
-        4     Value for the kFILL slice mode. Disallowed for other modes.
+        4     Value for the :const:`SliceMode.FILL` slice mode. Disallowed for other modes.
     =====   ==================================================================================
 
     If this function is called with a value greater than 0, then :attr:`num_inputs` changes
@@ -1009,7 +1051,7 @@ constexpr const char* descr = R"trtdoc(
     This class sets the output to a one-dimensional tensor with the dimensions of the input tensor.
 
     For example, if the input is a four-dimensional tensor (of any type) with
-    dimensions [2,3,5,7], the output tensor is a one-dimensional Int32 tensor
+    dimensions [2,3,5,7], the output tensor is a one-dimensional :class:`int32` tensor
     of length 4 containing the sequence 2, 3, 5, 7.
 )trtdoc";
 
@@ -1029,7 +1071,7 @@ constexpr const char* descr = R"trtdoc(
     A TopK layer in an :class:`INetworkDefinition` .
 
     :ivar op: :class:`TopKOperation` The operation for the layer.
-    :ivar k: :class:`TopKOperation` the k value for the layer. Currently only values up to 25 are supported.
+    :ivar k: :class:`TopKOperation` the k value for the layer. Currently only values up to 3840 are supported.
     :ivar axes: :class:`TopKOperation` The axes along which to reduce.
 )trtdoc";
 } // namespace ITopKLayerDoc
@@ -1183,8 +1225,28 @@ constexpr const char* descr = R"trtdoc(
     * Set scales for resize. Each output dimension is calculated as floor(input dimension * scale).
         Only static resize layer allows setting scales where the scales are known at build-time.
 
+    If executing this layer on DLA, the following combinations of parameters are supported:
+    
+    - In NEAREST mode:
+    
+       * (ResizeCoordinateTransformation.ASYMMETRIC, ResizeSelector.FORMULA, ResizeRoundMode.FLOOR)
+       * (ResizeCoordinateTransformation.HALF_PIXEL, ResizeSelector.FORMULA, ResizeRoundMode.HALF_DOWN)
+       * (ResizeCoordinateTransformation.HALF_PIXEL, ResizeSelector.FORMULA, ResizeRoundMode.HALF_UP)
+
+    - In LINEAR mode: 
+    
+       * (ResizeCoordinateTransformation.HALF_PIXEL, ResizeSelector.FORMULA)
+       * (ResizeCoordinateTransformation.HALF_PIXEL, ResizeSelector.UPPER)
+
+
     :ivar shape: :class:`Dims` The output dimensions. Must to equal to input dimensions size.
-    :ivar scales: :class:`List[float]` List of resize scales.
+    :ivar scales: :class:`List[float]` List of resize scales.     
+        If executing this layer on DLA, there are three restrictions:
+        1. ``len(scales)`` has to be exactly 4.
+        2. The first two elements in scales need to be exactly 1 (for unchanged batch and channel dimensions).
+        3. The last two elements in scales, representing the scale values along height and width dimensions,
+        respectively, need to be integer values in the range of [1, 32] for NEAREST mode and [1, 4] for LINEAR.
+        Example of DLA-supported scales: [1, 1, 2, 2].
     :ivar resize_mode: :class:`ResizeMode` Resize mode can be Linear or Nearest.
     :ivar coordinate_transformation: :class:`ResizeCoordinateTransformationDoc` Supported resize coordinate transformation modes are ALIGN_CORNERS, ASYMMETRIC and HALF_PIXEL.
     :ivar selector_for_single_pixel: :class:`ResizeSelector` Supported resize selector modes are FORMULA and UPPER.
@@ -1220,8 +1282,9 @@ namespace TripLimitDoc
 {
 constexpr const char* descr = R"trtdoc(Describes kinds of trip limits.)trtdoc";
 
-constexpr const char* COUNT = R"trtdoc(Tensor is scalar of type kINT32 that contains the trip count.)trtdoc";
-constexpr const char* WHILE = R"trtdoc(Tensor is a scalar of type BOOL. Loop terminates when value is false.)trtdoc";
+constexpr const char* COUNT = R"trtdoc(Tensor is a scalar of type :class:`int32` that contains the trip count.)trtdoc";
+constexpr const char* WHILE
+    = R"trtdoc(Tensor is a scalar of type :class:`bool`. Loop terminates when its value is false.)trtdoc";
 
 } // namespace TripLimitDoc
 
@@ -1609,7 +1672,7 @@ constexpr const char* descr = R"trtdoc(
 constexpr const char* set_condition = R"trtdoc(
     Set the condition tensor for this If-Conditional construct.
 
-    The ``condition`` tensor must be a 0D data tensor (scalar) with type DataType::kBOOL.
+    The ``condition`` tensor must be a 0D data tensor (scalar) with type :class:`bool`.
 
     :param condition: The condition tensor that will determine which subgraph to execute.
 
@@ -1642,7 +1705,7 @@ constexpr const char* descr = R"trtdoc(
     An Einsum layer in an :class:`INetworkDefinition` .
 
     This layer implements a summation over the elements of the inputs along dimensions specified by the equation parameter, based on the Einstein summation convention.
-    The layer can have one or more inputs of rank >= 0. All the inputs must be of same data type. This layer supports all TensorRT data types except trt.bool.
+    The layer can have one or more inputs of rank >= 0. All the inputs must be of same data type. This layer supports all TensorRT data types except :class:`bool`.
     There is one output tensor of the same type as the input tensors. The shape of output tensor is determined by the equation.
 
     The equation specifies ASCII lower-case letters for each dimension in the inputs in the same order as the dimensions, separated by comma for each input.
@@ -1961,7 +2024,7 @@ constexpr const char* add_topk = R"trtdoc(
 
     The TopK layer has two outputs of the same dimensions. The first contains data values, the second contains index positions for the values. Output values are sorted, largest first for operation :const:`TopKOperation.MAX` and smallest first for operation :const:`TopKOperation.MIN` .
 
-    Currently only values of K up to 1024 are supported.
+    Currently only values of K up to 3840 are supported.
 
     :arg input: The input tensor to the layer.
     :arg op: Operation to perform.
@@ -2212,7 +2275,7 @@ constexpr const char* unmark_output = R"trtdoc(
 constexpr const char* mark_output_for_shapes = R"trtdoc(
     Enable tensor's value to be computed by :func:`IExecutionContext.get_shape_binding`.
 
-    :arg tensor: The tensor to unmark as an output tensor. The tensor must be of type :class:`tensorrt.int32` and have no more than one dimension.
+    :arg tensor: The tensor to unmark as an output tensor. The tensor must be of type :class:`int32` and have no more than one dimension.
 
     :returns: :class:`True` if successful, :class:`False` if tensor is already marked as an output.
 )trtdoc";
