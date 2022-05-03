@@ -91,7 +91,7 @@ public:
 
 private:
     void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims);
-    void generate_pyramid_anchors(const nvinfer1::Dims& image_size) noexcept;
+    void generate_pyramid_anchors(nvinfer1::Dims const& imageDims);
 
     int mBackgroundLabel;
     int mPreNMSTopK;

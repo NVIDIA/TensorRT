@@ -32,6 +32,7 @@ LReLU::LReLU(float negSlope)
     : mNegSlope(negSlope)
     , mBatchDim(1)
 {
+    PLUGIN_VALIDATE(negSlope >= 0.0F);
 }
 
 LReLU::LReLU(const void* buffer, size_t length)

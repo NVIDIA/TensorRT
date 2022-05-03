@@ -72,7 +72,7 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
 {
     try
     {
-        auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
+        auto imageSize = TLTMaskRCNNConfig::IMAGE_SHAPE;
         const PluginField* fields = fc->fields;
         for (int i = 0; i < fc->nbFields; ++i)
         {
@@ -101,10 +101,10 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 const auto dims = static_cast<const int32_t*>(fields[i].data);
-                std::copy_n(dims, 3, image_size.d);
+                std::copy_n(dims, 3, imageSize.d);
             }
         }
-        return new MultilevelProposeROI(mPreNMSTopK, mKeepTopK, mFGThreshold, mIOUThreshold, image_size);
+        return new MultilevelProposeROI(mPreNMSTopK, mKeepTopK, mFGThreshold, mIOUThreshold, imageSize);
     }
     catch (std::exception const& e)
     {
@@ -128,18 +128,20 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::deserializePlugin(
 }
 
 MultilevelProposeROI::MultilevelProposeROI(
-    int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size)
+    int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims imageSize)
     : mPreNMSTopK(prenms_topk)
     , mKeepTopK(keep_topk)
     , mFGThreshold(fg_threshold)
     , mIOUThreshold(iou_threshold)
-    , mImageSize(image_size)
+    , mImageSize(imageSize)
 {
     mBackgroundLabel = -1;
     PLUGIN_VALIDATE(mPreNMSTopK > 0);
     PLUGIN_VALIDATE(mKeepTopK > 0);
     PLUGIN_VALIDATE(mIOUThreshold >= 0.0f);
     PLUGIN_VALIDATE(mFGThreshold >= 0.0f);
+    PLUGIN_VALIDATE(mImageSize.nbDims == 3);
+    PLUGIN_VALIDATE(mImageSize.d[0] > 0 && mImageSize.d[1] > 0 && mImageSize.d[2] > 0);
 
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
@@ -382,9 +384,9 @@ Dims MultilevelProposeROI::getOutputDimensions(int index, const Dims* inputs, in
     return proposals;
 }
 
-void MultilevelProposeROI::generate_pyramid_anchors(const nvinfer1::Dims& image_size) noexcept
+void MultilevelProposeROI::generate_pyramid_anchors(nvinfer1::Dims const& imageSize)
 {
-    const auto image_dims = image_size;
+    const auto image_dims = imageSize;
 
     const auto& anchor_scale = TLTMaskRCNNConfig::RPN_ANCHOR_SCALE;
     const auto& min_level = TLTMaskRCNNConfig::MIN_LEVEL;
@@ -402,9 +404,9 @@ void MultilevelProposeROI::generate_pyramid_anchors(const nvinfer1::Dims& image_
     }
 
     auto& anchors = mAnchorBoxesHost;
-    PLUGIN_ASSERT(anchors.size() == 0);
+    PLUGIN_VALIDATE(anchors.size() == 0);
 
-    PLUGIN_ASSERT(anchor_scales.size() == anchor_strides.size());
+    PLUGIN_VALIDATE(anchor_scales.size() == anchor_strides.size());
     for (size_t s = 0; s < anchor_scales.size(); ++s)
     {
         float scale = anchor_scales[s];
@@ -425,7 +427,7 @@ void MultilevelProposeROI::generate_pyramid_anchors(const nvinfer1::Dims& image_
         anchors.push_back(s_anchors);
     }
 
-    PLUGIN_ASSERT(anchors.size() == static_cast<size_t>(max_level - min_level + 1));
+    PLUGIN_VALIDATE(anchors.size() == static_cast<size_t>(max_level - min_level + 1));
 }
 
 int32_t MultilevelProposeROI::enqueue(

@@ -280,19 +280,20 @@ IPluginV2* PillarScatterPluginCreator::createPlugin(const char* name, const Plug
     {
         const PluginField* fields = fc->fields;
         int nbFields = fc->nbFields;
-        int target_h = 0;
-        int target_w = 0;
+        int targetH = 0;
+        int targetW = 0;
         for (int i = 0; i < nbFields; ++i)
         {
             const char* attr_name = fields[i].name;
             if (!strcmp(attr_name, "dense_shape"))
             {
                 const int* ts = static_cast<const int*>(fields[i].data);
-                target_h = ts[0];
-                target_w = ts[1];
+                targetH = ts[0];
+                targetW = ts[1];
+                PLUGIN_VALIDATE(targetH > 0 && targetW > 0);
             }
         }
-        IPluginV2* plugin = new PillarScatterPlugin(target_h, target_w);
+        IPluginV2* plugin = new PillarScatterPlugin(targetH, targetW);
         return plugin;
     }
     catch (std::exception const& e)

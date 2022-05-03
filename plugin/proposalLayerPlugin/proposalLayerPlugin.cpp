@@ -67,7 +67,7 @@ IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const P
 {
     try
     {
-        auto image_size = MaskRCNNConfig::IMAGE_SHAPE;
+        auto imageSize = MaskRCNNConfig::IMAGE_SHAPE;
         const PluginField* fields = fc->fields;
         for (int i = 0; i < fc->nbFields; ++i)
         {
@@ -91,10 +91,10 @@ IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const P
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 const auto* const dims = static_cast<const int32_t*>(fields[i].data);
-                std::copy_n(dims, 3, image_size.d);
+                std::copy_n(dims, 3, imageSize.d);
             }
         }
-        return new ProposalLayer(mPreNMSTopK, mKeepTopK, mIOUThreshold, image_size);
+        return new ProposalLayer(mPreNMSTopK, mKeepTopK, mIOUThreshold, imageSize);
     }
     catch (std::exception const& e)
     {
@@ -116,16 +116,18 @@ IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(const char* name, co
     return nullptr;
 }
 
-ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold, const nvinfer1::Dims& image_size)
+ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold, const nvinfer1::Dims& imageSize)
     : mPreNMSTopK(prenms_topk)
     , mKeepTopK(keep_topk)
     , mIOUThreshold(iou_threshold)
-    , mImageSize(image_size)
+    , mImageSize(imageSize)
 {
     mBackgroundLabel = -1;
     PLUGIN_VALIDATE(mPreNMSTopK > 0);
     PLUGIN_VALIDATE(mKeepTopK > 0);
     PLUGIN_VALIDATE(iou_threshold > 0.0F);
+    PLUGIN_VALIDATE(mImageSize.nbDims == 3);
+    PLUGIN_VALIDATE(mImageSize.d[0] == 3 && mImageSize.d[1] > 0 && mImageSize.d[2] > 0);
 
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
@@ -135,7 +137,7 @@ ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold
 
     mType = DataType::kFLOAT;
 
-    generate_pyramid_anchors(image_size);
+    generate_pyramid_anchors(imageSize);
 }
 
 int ProposalLayer::getNbOutputs() const noexcept
@@ -293,29 +295,29 @@ Dims ProposalLayer::getOutputDimensions(int index, const Dims* inputs, int nbInp
     return proposals;
 }
 
-void ProposalLayer::generate_pyramid_anchors(const nvinfer1::Dims& image_dims) noexcept
+void ProposalLayer::generate_pyramid_anchors(nvinfer1::Dims const& imageDims)
 {
-    PLUGIN_ASSERT(image_dims.nbDims == 3 && image_dims.d[0] == 3);
+    PLUGIN_VALIDATE(imageDims.nbDims == 3 && imageDims.d[0] == 3);
 
     const auto& scales = MaskRCNNConfig::RPN_ANCHOR_SCALES;
     const auto& ratios = MaskRCNNConfig::RPN_ANCHOR_RATIOS;
     const auto& strides = MaskRCNNConfig::BACKBONE_STRIDES;
     auto anchor_stride = MaskRCNNConfig::RPN_ANCHOR_STRIDE;
 
-    const float cy = image_dims.d[1] - 1;
-    const float cx = image_dims.d[2] - 1;
+    const float cy = imageDims.d[1] - 1;
+    const float cx = imageDims.d[2] - 1;
 
     auto& anchors = mAnchorBoxesHost;
-    PLUGIN_ASSERT(anchors.empty());
+    PLUGIN_VALIDATE(anchors.empty());
 
-    PLUGIN_ASSERT(scales.size() == strides.size());
+    PLUGIN_VALIDATE(scales.size() == strides.size());
     for (size_t s = 0; s < scales.size(); ++s)
     {
         float scale = scales[s];
         int stride = strides[s];
 
-        for (int y = 0; y < image_dims.d[1]; y += anchor_stride * stride)
-            for (int x = 0; x < image_dims.d[2]; x += anchor_stride * stride)
+        for (int y = 0; y < imageDims.d[1]; y += anchor_stride * stride)
+            for (int x = 0; x < imageDims.d[2]; x += anchor_stride * stride)
                 for (float r : ratios)
                 {
                     float sqrt_r = sqrt(r);
@@ -327,7 +329,7 @@ void ProposalLayer::generate_pyramid_anchors(const nvinfer1::Dims& image_dims) n
                 }
     }
 
-    PLUGIN_ASSERT(anchors.size() % 4 == 0);
+    PLUGIN_VALIDATE(anchors.size() % 4 == 0);
 }
 
 int ProposalLayer::enqueue(

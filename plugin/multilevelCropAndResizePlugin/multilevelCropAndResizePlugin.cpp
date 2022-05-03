@@ -66,7 +66,7 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
 {
     try
     {
-        auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
+        auto imageSize = TLTMaskRCNNConfig::IMAGE_SHAPE;
         const PluginField* fields = fc->fields;
         for (int i = 0; i < fc->nbFields; ++i)
         {
@@ -80,10 +80,10 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 const auto dims = static_cast<const int32_t*>(fields[i].data);
-                std::copy_n(dims, 3, image_size.d);
+                std::copy_n(dims, 3, imageSize.d);
             }
         }
-        return new MultilevelCropAndResize(mPooledSize, image_size);
+        return new MultilevelCropAndResize(mPooledSize, imageSize);
     }
     catch (std::exception const& e)
     {
@@ -106,14 +106,16 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(
     return nullptr;
 }
 
-MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1::Dims& image_size)
+MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1::Dims& imageSize)
     : mPooledSize({pooled_size, pooled_size})
 {
 
     PLUGIN_VALIDATE(pooled_size > 0);
+    PLUGIN_VALIDATE(imageSize.nbDims == 3);
+    PLUGIN_VALIDATE(imageSize.d[0] > 0 && imageSize.d[1] > 0 && imageSize.d[2] > 0);
     // shape
-    mInputHeight = image_size.d[1];
-    mInputWidth = image_size.d[2];
+    mInputHeight = imageSize.d[1];
+    mInputWidth = imageSize.d[2];
     // Threshold to P3: Smaller -> P2
     mThresh = (224 * 224) / (4.0f);
 }
