@@ -39,78 +39,31 @@ namespace utils
 namespace py = pybind11;
 
 // Returns the size in bytes of the specified data type.
-inline size_t size(nvinfer1::DataType type)
-{
-    switch (type)
-    {
-    case nvinfer1::DataType::kFLOAT: return 4;
-    case nvinfer1::DataType::kHALF: return 2;
-    case nvinfer1::DataType::kINT8: return 1;
-    case nvinfer1::DataType::kINT32: return 4;
-    case nvinfer1::DataType::kBOOL: return 1;
-    }
-    return -1;
-}
+size_t size(nvinfer1::DataType type);
 
 // Converts a TRT datatype to its corresponding numpy dtype.
-inline py::dtype nptype(nvinfer1::DataType type)
-{
-    switch (type)
-    {
-    case nvinfer1::DataType::kFLOAT: return py::dtype("f4");
-    case nvinfer1::DataType::kHALF: return py::dtype("f2");
-    case nvinfer1::DataType::kINT8: return py::dtype("i1");
-    case nvinfer1::DataType::kINT32: return py::dtype("i4");
-    case nvinfer1::DataType::kBOOL: return py::dtype("b1");
-    }
-    return py::dtype("unknown");
-}
+py::dtype nptype(nvinfer1::DataType type);
 
 // Returns the TRT type corresponding to the specified numpy type.
-inline nvinfer1::DataType type(const py::dtype& type)
-{
-    if (type.is(py::dtype("f4")))
-    {
-        return nvinfer1::DataType::kFLOAT;
-    }
-    else if (type.is(py::dtype("f2")))
-    {
-        return nvinfer1::DataType::kHALF;
-    }
-    else if (type.is(py::dtype("i4")))
-    {
-        return nvinfer1::DataType::kINT32;
-    }
-    else if (type.is(py::dtype("i1")))
-    {
-        return nvinfer1::DataType::kINT8;
-    }
-    else if (type.is(py::dtype("b1")))
-    {
-        return nvinfer1::DataType::kBOOL;
-    }
-    std::cout << "[ERROR] Unsupported numpy data type: " << type.kind() << type.itemsize() * 8
-              << ". Cannot implicitly convert to tensorrt.Weights." << std::endl;
-    throw std::invalid_argument{"Unsupported data type"};
-}
+nvinfer1::DataType type(py::dtype const& type);
 
 // Return a numpy array (that doesn't own the data, but rather refers to it)
-static const auto weights_to_numpy = [](const nvinfer1::Weights& self) {
+static const auto weights_to_numpy = [](nvinfer1::Weights const& self) {
     // The py::cast(self) allows us to return the buffer by reference rather than by copy.
     // See https://stackoverflow.com/questions/49181258/pybind11-create-numpy-view-of-data
     return py::array{nptype(self.type), self.count, self.values, py::cast(self)};
 };
 
-inline size_t volume(const nvinfer1::Dims& dims)
+inline size_t volume(nvinfer1::Dims const& dims)
 {
-    return std::accumulate(dims.d, dims.d + dims.nbDims, 1, std::multiplies<int>());
+    return std::accumulate(dims.d, dims.d + dims.nbDims, 1, std::multiplies<int32_t>());
 }
 
 // Method for calling the python function and returning the value (returned from python) used in cpp trampoline
 // classes. Prints an error if no such method is overriden in python.
 // T* must NOT be a trampoline class!
 template <typename T>
-py::function getOverride(const T* self, const std::string& overloadName, bool showWarning = true)
+py::function getOverride(const T* self, std::string const& overloadName, bool showWarning = true)
 {
     py::function overload = py::get_override(self, overloadName.c_str());
     if (!overload && showWarning)
@@ -181,9 +134,38 @@ void doNothingDel(const T& self)
     issueDeprecationWarning("del obj");
 }
 
-void throwPyIndexError(std::string message = "out of bounds");
+// https://nvbugs/3479811 Create a wrapper for C++ to python throw
+void throwPyError(PyObject* type, std::string const& message = "python error");
 
 } // namespace utils
+
+#define PY_ASSERT_RUNTIME_ERROR(assertion, msg)                                                                        \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(assertion))                                                                                              \
+        {                                                                                                              \
+            utils::throwPyError(PyExc_RuntimeError, msg);                                                              \
+        }                                                                                                              \
+    } while (false)
+
+#define PY_ASSERT_INDEX_ERROR(assertion)                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(assertion))                                                                                              \
+        {                                                                                                              \
+            utils::throwPyError(PyExc_IndexError, "Out of bounds");                                                    \
+        }                                                                                                              \
+    }while(false)
+
+#define PY_ASSERT_VALUE_ERROR(assertion, msg)                                                                          \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(assertion))                                                                                              \
+        {                                                                                                              \
+            utils::throwPyError(PyExc_ValueError, msg);                                                                \
+        }                                                                                                              \
+    } while (false)
+
 } // namespace tensorrt
 
 #endif // TRT_PYTHON_UTILS_H

@@ -33,13 +33,13 @@ constexpr PluginFieldCollection EMPTY_PLUGIN_FIELD_COLLECTION{0, nullptr};
 namespace lambdas
 {
 // For IPluginV2
-static const auto IPluginV2_get_output_shape = [](IPluginV2& self, int index, const std::vector<Dims> inputShapes) {
+static const auto IPluginV2_get_output_shape = [](IPluginV2& self, int32_t const index, std::vector<Dims> const& inputShapes) {
     return self.getOutputDimensions(index, inputShapes.data(), inputShapes.size());
 };
 
 static const auto IPluginV2_configure_with_format
-    = [](IPluginV2& self, const std::vector<Dims> inputShapes, const std::vector<Dims> outputShapes, DataType dtype,
-          TensorFormat format, int maxBatchSize) {
+    = [](IPluginV2& self, std::vector<Dims> const& inputShapes, std::vector<Dims> const& outputShapes, DataType dtype,
+          TensorFormat format, int32_t maxBatchSize) {
           return self.configureWithFormat(inputShapes.data(), inputShapes.size(), outputShapes.data(),
               outputShapes.size(), dtype, format, maxBatchSize);
       };
@@ -67,30 +67,30 @@ static const auto IPluginV2_serialize = [](IPluginV2& self) {
 };
 
 // `const vector<const void*>::data()` corresponds to `const void* const*` (pointer to const-pointer to const void)
-static const auto IPluginV2_execute_async = [](IPluginV2& self, int batchSize, const std::vector<const void*>& inputs,
+static const auto IPluginV2_execute_async = [](IPluginV2& self, int32_t batchSize, const std::vector<const void*>& inputs,
                                                 std::vector<void*>& outputs, void* workspace, long stream) {
     return self.enqueue(batchSize, inputs.data(), outputs.data(), workspace, reinterpret_cast<cudaStream_t>(stream));
 };
 
 // For IPluginV2Ext
-static const auto get_output_data_type = [](IPluginV2Ext& self, int index, const std::vector<DataType> inputTypes) {
+static const auto get_output_data_type = [](IPluginV2Ext& self, int32_t index, const std::vector<DataType> inputTypes) {
     return self.getOutputDataType(index, inputTypes.data(), inputTypes.size());
 };
 
 // For IPluginV2Ext - makes copy of a vector<bool> as a bool[].
-static std::unique_ptr<bool[]> makeBoolArray(const std::vector<bool>& v)
+static std::unique_ptr<bool[]> makeBoolArray(std::vector<bool> const& v)
 {
-    int n = v.size();
+    int32_t const n{static_cast<int32_t>(v.size())};
     std::unique_ptr<bool[]> result(n > 0 ? new bool[n] : nullptr);
     std::copy_n(v.begin(), n, result.get());
     return std::move(result);
 }
 
 static const auto configure_plugin
-    = [](IPluginV2Ext& self, const std::vector<Dims> inputShapes, const std::vector<Dims> outputShapes,
-          const std::vector<DataType> inputTypes, const std::vector<DataType> outputTypes,
-          const std::vector<bool> inputIsBroadcasted, const std::vector<bool> outputIsBroadcasted, TensorFormat format,
-          int maxBatchSize) {
+    = [](IPluginV2Ext& self, std::vector<Dims> const& inputShapes, std::vector<Dims> const& outputShapes,
+          std::vector<DataType> const& inputTypes, std::vector<DataType> const& outputTypes,
+          std::vector<bool> const& inputIsBroadcasted, std::vector<bool> const& outputIsBroadcasted, TensorFormat format,
+          int32_t maxBatchSize) {
           auto inputBroadcast = makeBoolArray(inputIsBroadcasted);
           auto outputBroadcast = makeBoolArray(outputIsBroadcasted);
           return self.configurePlugin(inputShapes.data(), inputShapes.size(), outputShapes.data(), outputShapes.size(),
@@ -110,17 +110,17 @@ static const auto plugin_field_constructor
     = [](const FallbackString& name, py::buffer& data, nvinfer1::PluginFieldType type) {
           py::buffer_info info = data.request();
           // PluginField length is number of entries. type gives information about the size of each entry.
-          return new PluginField{name.c_str(), info.ptr, type, static_cast<int>(info.size)};
+          return new PluginField{name.c_str(), info.ptr, type, static_cast<int32_t>(info.size)};
       };
 
 // For PluginFieldCollection
-static const auto plugin_field_collection_constructor = [](const std::vector<PluginField>& fields) {
-    return new PluginFieldCollection{static_cast<int>(fields.size()), fields.data()};
+static const auto plugin_field_collection_constructor = [](std::vector<PluginField> const& fields) {
+    return new PluginFieldCollection{static_cast<int32_t>(fields.size()), fields.data()};
 };
 
 // For IPluginRegistry. We do an allocation here, but python takes ownership.
 static const auto get_plugin_creator_list = [](IPluginRegistry& self) {
-    int numCreators{0};
+    int32_t numCreators{0};
     IPluginCreator* const* ptr = self.getPluginCreatorList(&numCreators);
     // This is NOT a memory leak - python will free when done.
     return new std::vector<IPluginCreator*>(ptr, ptr + numCreators);
@@ -128,7 +128,7 @@ static const auto get_plugin_creator_list = [](IPluginRegistry& self) {
 
 // For IPluginCreator
 static const auto creator_create_plugin
-    = [](IPluginCreator& self, const std::string& name, const PluginFieldCollection* fc) {
+    = [](IPluginCreator& self, std::string const& name, PluginFieldCollection const* fc) {
           return self.createPlugin(name.c_str(), fc);
       };
 
@@ -141,7 +141,7 @@ static const auto get_field_names = [](IPluginCreator& self) -> const PluginFiel
     return fieldCollection;
 };
 
-static const auto deserialize_plugin = [](IPluginCreator& self, const std::string& name, py::buffer& serializedPlugin) {
+static const auto deserialize_plugin = [](IPluginCreator& self, std::string const& name, py::buffer& serializedPlugin) {
     py::buffer_info info = serializedPlugin.request();
     return self.deserializePlugin(name.c_str(), info.ptr, info.size * info.itemsize);
 };
@@ -217,11 +217,8 @@ void bindPlugin(py::module& m)
     py::class_<PluginFieldCollection>(m, "PluginFieldCollection_", PluginFieldCollectionDoc::descr)
         .def(py::init<>(lambdas::plugin_field_collection_constructor), py::keep_alive<1, 2>{})
         .def("__len__", [](PluginFieldCollection& self) { return self.nbFields; })
-        .def("__getitem__", [](PluginFieldCollection& self, int index) {
-            if (index >= self.nbFields)
-            {
-                utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-            }
+        .def("__getitem__", [](PluginFieldCollection& self, int32_t const index) {
+            PY_ASSERT_INDEX_ERROR(index < self.nbFields);
             return self.fields[index];
         });
 
@@ -255,6 +252,8 @@ void bindPlugin(py::module& m)
 
     m.def("get_plugin_registry", &getPluginRegistry, py::return_value_policy::reference,
         FreeFunctionsDoc::get_plugin_registry);
+    m.def("get_builder_plugin_registry", &getBuilderPluginRegistry, py::return_value_policy::reference,
+        FreeFunctionsDoc::get_builder_plugin_registry);
     m.def("init_libnvinfer_plugins", &initLibNvInferPlugins, "logger"_a, "namespace"_a,
         FreeFunctionsDoc::init_libnvinfer_plugins);
 

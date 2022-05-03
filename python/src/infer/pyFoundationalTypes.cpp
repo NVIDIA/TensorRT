@@ -31,33 +31,29 @@ using namespace nvinfer1;
 namespace lambdas
 {
 // For Weights
-static const auto weights_datatype_constructor = [](const DataType& type) { return new Weights{type, nullptr, 0}; };
+static const auto weights_datatype_constructor = [](DataType const& type) { return new Weights{type, nullptr, 0}; };
 
 static const auto weights_numpy_constructor = [](py::array& arr) {
+    arr = py::array::ensure(arr);
     // In order to construct a weights object, we must have a contiguous C-style array.
-    arr = py::array::ensure(arr, py::array::c_style);
-    if (!arr)
-    {
-        constexpr const char* err
-            = "Cannot construct Weights object from non-contiguous array. Please use numpy.ascontiguousarray() "
-              "to fix this.";
-        std::cout << "[ERROR] " << err << std::endl;
-        throw std::invalid_argument{err};
-    }
+    PY_ASSERT_VALUE_ERROR(arr,
+        "Could not convert NumPy array to Weights. Is it using a data type supported by TensorRT?");
+    PY_ASSERT_VALUE_ERROR((arr.flags() & py::array::c_style),
+        "Could not convert non-contiguous NumPy array to Weights. Please use numpy.ascontiguousarray() to fix this.");
     return new Weights{utils::type(arr.dtype()), arr.data(), arr.size()};
 };
 
 // Helper to compare dims with any kind of Python Iterable.
 template <typename DimsType, typename PyIterable>
-bool dimsEqual(const DimsType& self, PyIterable& other)
+bool dimsEqual(DimsType const& self, PyIterable& other)
 {
     if (other.size() != self.nbDims)
     {
         return false;
     }
     bool eq = true;
-    std::vector<int> o = other.template cast<std::vector<int>>();
-    for (int i = 0; i < self.nbDims; ++i)
+    std::vector<int32_t> o = other.template cast<std::vector<int32_t>>();
+    for (int32_t i = 0; i < self.nbDims; ++i)
     {
         eq = eq && (self.d[i] == o[i]);
     }
@@ -65,22 +61,21 @@ bool dimsEqual(const DimsType& self, PyIterable& other)
 }
 
 // For base Dims class
-static const auto dims_vector_constructor = [](const std::vector<int>& in) {
+static const auto dims_vector_constructor = [](std::vector<int32_t> const& in) {
     // This is required, because otherwise MAX_DIMS will not be resolved at compile time.
-    const int maxDims = static_cast<const int>(Dims::MAX_DIMS);
-    if (in.size() > maxDims || in.size() < 0)
-        throw std::length_error(
+    int32_t const maxDims{static_cast<int32_t>(Dims::MAX_DIMS)};
+    PY_ASSERT_VALUE_ERROR(in.size() <= maxDims,
             "Input length " + std::to_string(in.size()) + ". Max expected length is " + std::to_string(maxDims));
 
     // Create the Dims object.
     Dims* self = new Dims{};
     self->nbDims = in.size();
-    for (int i = 0; i < in.size(); ++i)
+    for (int32_t i = 0; i < in.size(); ++i)
         self->d[i] = in[i];
     return self;
 };
 
-static const auto dims_to_str = [](const Dims& self) {
+static const auto dims_to_str = [](Dims const& self) {
     if (self.nbDims == 0)
         return std::string("()");
     // Length 1 should followed by trailing comma, for tuple-like behavior.
@@ -88,93 +83,77 @@ static const auto dims_to_str = [](const Dims& self) {
         return "(" + std::to_string(self.d[0]) + ",)";
     // Non-zero lengths
     std::string temp = "(";
-    for (int i = 0; i < self.nbDims - 1; ++i)
+    for (int32_t i = 0; i < self.nbDims - 1; ++i)
         temp += std::to_string(self.d[i]) + ", ";
     temp += std::to_string(self.d[self.nbDims - 1]) + ")";
     return temp;
 };
 
-static const auto dims_len = [](const Dims& self) { return self.nbDims; };
+static const auto dims_len = [](Dims const& self) { return self.nbDims; };
 
 // TODO: Add slicing support?
-static const auto dims_getter = [](const Dims& self, int pyIndex) -> const int& {
+static const auto dims_getter = [](Dims const& self, int32_t const pyIndex) -> int32_t const& {
     // Without these bounds checks, horrible infinite looping will occur.
-    size_t index = (pyIndex < 0) ? static_cast<int>(self.nbDims) + pyIndex : pyIndex;
-    if (index >= self.nbDims)
-    {
-        utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-    }
+    int32_t const index{(pyIndex < 0) ? static_cast<int32_t>(self.nbDims) + pyIndex : pyIndex};
+    PY_ASSERT_INDEX_ERROR(index >= 0 && index < self.nbDims);
     return self.d[index];
 };
 
-static const auto dims_getter_slice = [](const Dims& self, py::slice slice) {
+static const auto dims_getter_slice = [](Dims const& self, py::slice slice) {
     size_t start, stop, step, slicelength;
-    if (!slice.compute(self.nbDims, &start, &stop, &step, &slicelength))
-        throw py::error_already_set();
+    PY_ASSERT_VALUE_ERROR(slice.compute(self.nbDims, &start, &stop, &step, &slicelength),
+        "Incorrect getter slice dims");
     // Disallow out-of-bounds things.
-    if (stop > self.nbDims)
-    {
-        utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-    }
+    PY_ASSERT_INDEX_ERROR(stop <= self.nbDims);
 
     py::tuple ret{slicelength};
-    for (int i = start, index = 0; i < stop; i += step, ++index)
+    for (int32_t i = start, index = 0; i < stop; i += step, ++index)
         ret[index] = self.d[i];
     return ret;
 };
 
-static const auto dims_setter = [](Dims& self, int pyIndex, int item) {
-    size_t index = (pyIndex < 0) ? static_cast<int>(self.nbDims) + pyIndex : pyIndex;
-    if (index >= self.nbDims)
-    {
-        utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-    }
+static const auto dims_setter = [](Dims& self, int32_t const pyIndex, int32_t const item) {
+    int32_t const index{(pyIndex < 0) ? static_cast<int32_t>(self.nbDims) + pyIndex : pyIndex};
+    PY_ASSERT_INDEX_ERROR(index >= 0 && index < self.nbDims);
     self.d[index] = item;
 };
 
-static const auto dims_setter_slice = [](Dims& self, py::slice slice, const Dims& other) {
+static const auto dims_setter_slice = [](Dims& self, py::slice slice, Dims const& other) {
     size_t start, stop, step, slicelength;
-    if (!slice.compute(self.nbDims, &start, &stop, &step, &slicelength))
-        throw py::error_already_set();
+    PY_ASSERT_VALUE_ERROR(slice.compute(self.nbDims, &start, &stop, &step, &slicelength),
+        "Incorrect setter slice dims");
     // Disallow out-of-bounds things.
-    if (stop >= self.nbDims)
-    {
-        utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-    }
+    PY_ASSERT_INDEX_ERROR(stop < self.nbDims);
 
-    for (int i = start, index = 0; i < stop; i += step, ++index)
+    for (int32_t i = start, index = 0; i < stop; i += step, ++index)
         self.d[i] = other.d[index];
 };
 
 // For Dims2
-static const auto dims2_vector_constructor = [](const std::vector<int>& in) {
-    if (in.size() != 2)
-        throw std::length_error(
-            "Input length " + std::to_string(in.size()) + " not equal to expected Dims2 length, which is 2");
+static const auto dims2_vector_constructor = [](std::vector<int32_t> const& in) {
+    PY_ASSERT_VALUE_ERROR(in.size() == 2,
+        "Input length " + std::to_string(in.size()) + " not equal to expected Dims2 length, which is 2");
     return new Dims2{in[0], in[1]};
 };
 
 // For DimsHW
-static const auto dimshw_vector_constructor = [](const std::vector<int>& in) {
-    if (in.size() != 2)
-        throw std::length_error(
-            "Input length " + std::to_string(in.size()) + " not equal to expected DimsHW length, which is 2");
+static const auto dimshw_vector_constructor = [](std::vector<int32_t> const& in) {
+    PY_ASSERT_VALUE_ERROR(in.size() == 2,
+        "Input length " + std::to_string(in.size()) + " not equal to expected DimsHW length, which is 2");
     return new DimsHW{in[0], in[1]};
 };
 
 // For Dims3
-static const auto dims3_vector_constructor = [](const std::vector<int>& in) {
-    if (in.size() != 3)
-        throw std::length_error(
-            "Input length " + std::to_string(in.size()) + " not equal to expected Dims3 length, which is 3");
+static const auto dims3_vector_constructor = [](std::vector<int32_t> const& in) {
+    PY_ASSERT_VALUE_ERROR(in.size() == 3,
+        "Input length " + std::to_string(in.size()) + " not equal to expected Dims3 length, which is 3");
     return new Dims3{in[0], in[1], in[2]};
 };
 
 // For Dims4
-static const auto dims4_vector_constructor = [](const std::vector<int>& in) {
-    if (in.size() != 4)
-        throw std::length_error(
-            "Input length " + std::to_string(in.size()) + " not equal to expected Dims4 length, which is 4");
+static const auto dims4_vector_constructor = [](std::vector<int32_t> const& in) {
+    PY_ASSERT_VALUE_ERROR(in.size() == 4,
+        "Input length " + std::to_string(in.size()) + " not equal to expected Dims4 length, which is 4");
     return new Dims4{in[0], in[1], in[2], in[3]};
 };
 
@@ -223,11 +202,11 @@ void bindFoundationalTypes(py::module& m)
         // (zero-copy).
         .def(py::init(lambdas::weights_numpy_constructor), "a"_a, py::keep_alive<1, 2>(), WeightsDoc::init_numpy)
         // Expose numpy-like attributes.
-        .def_property_readonly("dtype", [](const Weights& self) -> DataType { return self.type; })
-        .def_property_readonly("size", [](const Weights& self) { return self.count; })
-        .def_property_readonly("nbytes", [](const Weights& self) { return utils::size(self.type) * self.count; })
+        .def_property_readonly("dtype", [](Weights const& self) -> DataType { return self.type; })
+        .def_property_readonly("size", [](Weights const& self) { return self.count; })
+        .def_property_readonly("nbytes", [](Weights const& self) { return utils::size(self.type) * self.count; })
         .def("numpy", utils::weights_to_numpy, py::return_value_policy::reference_internal, WeightsDoc::numpy)
-        .def("__len__", [](const Weights& self) { return static_cast<size_t>(self.count); }); // Weights
+        .def("__len__", [](Weights const& self) { return static_cast<size_t>(self.count); }); // Weights
 
     // Also allow implicit construction, so we can pass in numpy arrays instead of Weights.
     py::implicitly_convertible<py::array, Weights>();
@@ -239,7 +218,7 @@ void bindFoundationalTypes(py::module& m)
         .def(py::init(lambdas::dims_vector_constructor), "shape"_a)
         // static_cast is required here, or MAX_DIMS does not get pulled in until LOAD time.
         .def_property_readonly(
-            "MAX_DIMS", [](const Dims& self) { return static_cast<const int>(self.MAX_DIMS); }, DimsDoc::MAX_DIMS)
+            "MAX_DIMS", [](Dims const& self) { return static_cast<int32_t const>(self.MAX_DIMS); }, DimsDoc::MAX_DIMS)
         // Allow for string representations (displays like a python tuple).
         .def("__str__", lambdas::dims_to_str)
         .def("__repr__", lambdas::dims_to_str)
@@ -248,59 +227,56 @@ void bindFoundationalTypes(py::module& m)
         .def("__eq__", lambdas::dimsEqual<Dims, py::tuple>)
         // These functions allow us to use Dims like an iterable.
         .def("__len__", lambdas::dims_len)
-        .def("__iter__", [](const Dims &s) {
-              return py::make_iterator(&s.d[0], &s.d[s.nbDims]); },
-              py::keep_alive<0, 1>())
         .def("__getitem__", lambdas::dims_getter)
         .def("__getitem__", lambdas::dims_getter_slice)
         .def("__setitem__", lambdas::dims_setter)
         .def("__setitem__", lambdas::dims_setter_slice); // Dims
 
     // Make it possible to use tuples/lists in Python in place of Dims.
-    py::implicitly_convertible<std::vector<int>, Dims>();
+    py::implicitly_convertible<std::vector<int32_t>, Dims>();
 
     // 2D
     py::class_<Dims2, Dims>(m, "Dims2", Dims2Doc::descr)
         .def(py::init<>())
-        .def(py::init<int, int>(), "dim0"_a, "dim1"_a)
+        .def(py::init<int32_t, int32_t>(), "dim0"_a, "dim1"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dims2_vector_constructor), "shape"_a); // Dims2
 
-    py::implicitly_convertible<std::vector<int>, Dims2>();
+    py::implicitly_convertible<std::vector<int32_t>, Dims2>();
 
     py::class_<DimsHW, Dims2>(m, "DimsHW", DimsHWDoc::descr)
         .def(py::init<>())
-        .def(py::init<int, int>(), "h"_a, "w"_a)
+        .def(py::init<int32_t, int32_t>(), "h"_a, "w"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dimshw_vector_constructor), "shape"_a)
         // Expose these functions as attributes in Python.
-        .def_property("h", [](const DimsHW& dims) { return dims.h(); }, [](DimsHW& dims, int i) { dims.h() = i; })
+        .def_property("h", [](DimsHW const& dims) { return dims.h(); }, [](DimsHW& dims, int32_t i) { dims.h() = i; })
         .def_property(
-            "w", [](const DimsHW& dims) { return dims.w(); }, [](DimsHW& dims, int i) { dims.w() = i; }); // DimsHW
+            "w", [](DimsHW const& dims) { return dims.w(); }, [](DimsHW& dims, int32_t i) { dims.w() = i; }); // DimsHW
 
-    py::implicitly_convertible<std::vector<int>, DimsHW>();
+    py::implicitly_convertible<std::vector<int32_t>, DimsHW>();
 
     // 3D
     py::class_<Dims3, Dims>(m, "Dims3", Dims3Doc::descr)
         .def(py::init<>())
-        .def(py::init<int, int, int>(), "dim0"_a, "dim1"_a, "dim2"_a)
+        .def(py::init<int32_t, int32_t, int32_t>(), "dim0"_a, "dim1"_a, "dim2"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dims3_vector_constructor), "shape"_a); // Dims3
 
-    py::implicitly_convertible<std::vector<int>, Dims3>();
+    py::implicitly_convertible<std::vector<int32_t>, Dims3>();
 
     // 4D
     py::class_<Dims4, Dims>(m, "Dims4", Dims4Doc::descr)
         .def(py::init<>())
-        .def(py::init<int, int, int, int>(), "dim0"_a, "dim1"_a, "dim2"_a, "dim3"_a)
+        .def(py::init<int32_t, int32_t, int32_t, int32_t>(), "dim0"_a, "dim1"_a, "dim2"_a, "dim3"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dims4_vector_constructor), "shape"_a); // Dims4
 
-    py::implicitly_convertible<std::vector<int>, Dims4>();
+    py::implicitly_convertible<std::vector<int32_t>, Dims4>();
 
     py::class_<IHostMemory>(m, "IHostMemory", py::buffer_protocol(), IHostMemoryDoc::descr)
-        .def_property_readonly("dtype", [](const IHostMemory& mem) { return mem.type(); })
-        .def_property_readonly("nbytes", [](const IHostMemory& mem) { return mem.size(); })
+        .def_property_readonly("dtype", [](IHostMemory const& mem) { return mem.type(); })
+        .def_property_readonly("nbytes", [](IHostMemory const& mem) { return mem.size(); })
         // Expose buffer interface.
         .def_buffer(lambdas::host_memory_buffer_interface)
         .def("__del__", &utils::doNothingDel<IHostMemory>); // IHostMemory

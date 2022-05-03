@@ -33,23 +33,17 @@ namespace lambdas
 {
 // For IOptimizationProfile
 static const auto opt_profile_set_shape
-    = [](IOptimizationProfile& self, const std::string& inputName, const Dims& min, const Dims& opt, const Dims& max) {
-          if (!self.setDimensions(inputName.c_str(), OptProfileSelector::kMIN, min))
-          {
-              throw std::runtime_error{"Shape provided for min is inconsistent with other shapes."};
-          }
-          if (!self.setDimensions(inputName.c_str(), OptProfileSelector::kOPT, opt))
-          {
-              throw std::runtime_error{"Shape provided for opt is inconsistent with other shapes."};
-          }
-          if (!self.setDimensions(inputName.c_str(), OptProfileSelector::kMAX, max))
-          {
-              throw std::runtime_error{"Shape provided for max is inconsistent with other shapes."};
-          }
+    = [](IOptimizationProfile& self, std::string const& inputName, Dims const& min, Dims const& opt, Dims const& max) {
+          PY_ASSERT_RUNTIME_ERROR(self.setDimensions(inputName.c_str(), OptProfileSelector::kMIN, min),
+              "Shape provided for min is inconsistent with other shapes.");
+          PY_ASSERT_RUNTIME_ERROR(self.setDimensions(inputName.c_str(), OptProfileSelector::kOPT, opt),
+              "Shape provided for opt is inconsistent with other shapes.");
+          PY_ASSERT_RUNTIME_ERROR(self.setDimensions(inputName.c_str(), OptProfileSelector::kMAX, max),
+              "Shape provided for max is inconsistent with other shapes.");
       };
 
 static const auto opt_profile_get_shape
-    = [](IOptimizationProfile& self, const std::string& inputName) -> std::vector<Dims> {
+    = [](IOptimizationProfile& self, std::string const& inputName) -> std::vector<Dims> {
     std::vector<Dims> shapes{};
     Dims minShape = self.getDimensions(inputName.c_str(), OptProfileSelector::kMIN);
     if (minShape.nbDims != -1)
@@ -62,51 +56,41 @@ static const auto opt_profile_get_shape
 };
 
 static const auto opt_profile_set_shape_input
-    = [](IOptimizationProfile& self, const std::string& inputName, const std::vector<int32_t>& min,
-          const std::vector<int32_t>& opt, const std::vector<int32_t>& max) {
-          if (!self.setShapeValues(inputName.c_str(), OptProfileSelector::kMIN, min.data(), min.size()))
-          {
-              throw std::runtime_error{"min input provided for shape tensor is inconsistent with other inputs."};
-          }
-          if (!self.setShapeValues(inputName.c_str(), OptProfileSelector::kOPT, opt.data(), opt.size()))
-          {
-              throw std::runtime_error{"opt input provided for shape tensor is inconsistent with other inputs."};
-          }
-          if (!self.setShapeValues(inputName.c_str(), OptProfileSelector::kMAX, max.data(), max.size()))
-          {
-              throw std::runtime_error{"max input provided for shape tensor is inconsistent with other inputs."};
-          }
+    = [](IOptimizationProfile& self, std::string const& inputName, std::vector<int32_t> const& min,
+          std::vector<int32_t> const& opt, std::vector<int32_t> const& max) {
+          PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kMIN, min.data(), min.size()),
+              "min input provided for shape tensor is inconsistent with other inputs.");
+          PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kOPT, opt.data(), opt.size()),
+              "opt input provided for shape tensor is inconsistent with other inputs.");
+          PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kMAX, max.data(), max.size()),
+              "max input provided for shape tensor is inconsistent with other inputs.");
       };
 
 static const auto opt_profile_get_shape_input
-    = [](IOptimizationProfile& self, const std::string& inputName) -> std::vector<std::vector<int32_t>> {
+    = [](IOptimizationProfile& self, std::string const& inputName) -> std::vector<std::vector<int32_t>> {
     std::vector<std::vector<int32_t>> shapes{};
-    int shapeSize = self.getNbShapeValues(inputName.c_str());
-    const int32_t* shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kMIN);
+    int32_t const shapeSize = self.getNbShapeValues(inputName.c_str());
+    int32_t const* shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kMIN);
     // In the Python bindings, it is impossible to set only one shape in an optimization profile.
     if (shapePtr && shapeSize >= 0)
     {
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
-        if (!(shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kOPT)))
-        {
-            throw std::runtime_error{"Invalid shape for OPT."};
-        }
+        shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kOPT);
+        PY_ASSERT_RUNTIME_ERROR(shapePtr != nullptr, "Invalid shape for OPT.");
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
-        if (!(shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kMAX)))
-        {
-            throw std::runtime_error{"Invalid shape for MAX."};
-        }
+        shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kMAX);
+        PY_ASSERT_RUNTIME_ERROR(shapePtr != nullptr, "Invalid shape for MAX.");
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
     }
     return shapes;
 };
 
 // For IExecutionContext
-static const auto execute = [](IExecutionContext& self, int batchSize, std::vector<size_t>& bindings) {
+bool execute(IExecutionContext& self, int32_t batchSize, std::vector<size_t>& bindings) {
     return self.execute(batchSize, reinterpret_cast<void**>(bindings.data()));
 };
 
-static const auto execute_async = [](IExecutionContext& self, int batchSize, std::vector<size_t>& bindings,
+bool execute_async(IExecutionContext& self, int32_t batchSize, std::vector<size_t>& bindings,
                                       size_t streamHandle, void* inputConsumed) {
     return self.enqueue(batchSize, reinterpret_cast<void**>(bindings.data()),
         reinterpret_cast<cudaStream_t>(streamHandle), reinterpret_cast<cudaEvent_t*>(inputConsumed));
@@ -124,25 +108,21 @@ static const auto execute_async_v2
 
 void context_set_optimization_profile(IExecutionContext& self, int32_t profileIndex)
 {
-    if (!self.setOptimizationProfile(profileIndex))
-    {
-        throw std::runtime_error{"Error in set optimization profile."};
-    }
+    PY_ASSERT_RUNTIME_ERROR(self.setOptimizationProfile(profileIndex),
+        "Error in set optimization profile.");
 };
 
 static const auto context_set_shape_input
-    = [](IExecutionContext& self, int binding, const std::vector<int32_t>& shape) {
+    = [](IExecutionContext& self, int32_t binding, std::vector<int32_t> const& shape) {
           return self.setInputShapeBinding(binding, shape.data());
       };
 
-static const auto context_get_shape = [](IExecutionContext& self, int binding) {
-    Dims shapeOfShape = self.getBindingDimensions(binding);
-    int numVals = std::accumulate(shapeOfShape.d, shapeOfShape.d + shapeOfShape.nbDims, 1, std::multiplies<int>{});
+static const auto context_get_shape = [](IExecutionContext& self, int32_t binding) {
+    Dims const shapeOfShape = self.getBindingDimensions(binding);
+    int32_t const numVals = std::accumulate(shapeOfShape.d, shapeOfShape.d + shapeOfShape.nbDims, 1, std::multiplies<int32_t>{});
     std::vector<int32_t> shape(numVals);
-    if (!self.getShapeBinding(binding, shape.data()))
-    {
-        throw std::runtime_error{"Error in get shape bindings."};
-    }
+    PY_ASSERT_RUNTIME_ERROR(self.getShapeBinding(binding, shape.data()),
+        "Error in get shape bindings.");
     return shape;
 };
 
@@ -153,34 +133,31 @@ static const auto runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffe
 };
 
 // For ICudaEngine
-static const auto engine_binding_is_input = [](ICudaEngine& self, const std::string& name) {
+static const auto engine_binding_is_input = [](ICudaEngine& self, std::string const& name) {
     return self.bindingIsInput(self.getBindingIndex(name.c_str()));
 };
 
-static const auto engine_get_binding_shape = [](ICudaEngine& self, const std::string& name) {
+static const auto engine_get_binding_shape = [](ICudaEngine& self, std::string const& name) {
     return self.getBindingDimensions(self.getBindingIndex(name.c_str()));
 };
 
-static const auto engine_get_binding_dtype = [](ICudaEngine& self, const std::string& name) {
+static const auto engine_get_binding_dtype = [](ICudaEngine& self, std::string const& name) {
     return self.getBindingDataType(self.getBindingIndex(name.c_str()));
 };
 
 static const auto engine_get_location
-    = [](ICudaEngine& self, const std::string& name) { return self.getLocation(self.getBindingIndex(name.c_str())); };
+    = [](ICudaEngine& self, std::string const& name) { return self.getLocation(self.getBindingIndex(name.c_str())); };
 
 // TODO: Add slicing support?
-static const auto engine_getitem = [](ICudaEngine& self, int pyIndex) {
+static const auto engine_getitem = [](ICudaEngine& self, int32_t pyIndex) {
     // Support python's negative indexing
-    size_t index = (pyIndex < 0) ? static_cast<int>(self.getNbBindings()) + pyIndex : pyIndex;
-    if (index >= self.getNbBindings())
-    {
-        utils::throwPyIndexError(); // See definition of throwPyIndexError() for details
-    }
+    int32_t const index = (pyIndex < 0) ? static_cast<int32_t>(self.getNbBindings()) + pyIndex : pyIndex;
+    PY_ASSERT_INDEX_ERROR(index < self.getNbBindings());
     return self.getBindingName(index);
 };
 
 static const auto engine_get_profile_shape
-    = [](ICudaEngine& self, int profileIndex, int bindingIndex) -> std::vector<Dims> {
+    = [](ICudaEngine& self, int32_t profileIndex, int32_t bindingIndex) -> std::vector<Dims> {
     std::vector<Dims> shapes{};
     shapes.emplace_back(self.getProfileDimensions(bindingIndex, profileIndex, OptProfileSelector::kMIN));
     shapes.emplace_back(self.getProfileDimensions(bindingIndex, profileIndex, OptProfileSelector::kOPT));
@@ -189,21 +166,19 @@ static const auto engine_get_profile_shape
 };
 // Overload to allow using binding names instead of indices.
 static const auto engine_get_profile_shape_str
-    = [](ICudaEngine& self, int profileIndex, const std::string& bindingName) -> std::vector<Dims> {
+    = [](ICudaEngine& self, int32_t profileIndex, std::string const& bindingName) -> std::vector<Dims> {
     return engine_get_profile_shape(self, profileIndex, self.getBindingIndex(bindingName.c_str()));
 };
 
 static const auto engine_get_profile_shape_input
-    = [](ICudaEngine& self, int profileIndex, int bindingIndex) -> std::vector<std::vector<int32_t>> {
-    if (!self.isShapeBinding(bindingIndex) || !self.bindingIsInput(bindingIndex))
-    {
-        throw std::runtime_error{
-            "Binding index " + std::to_string(bindingIndex) + " does not correspond to an input shape tensor."};
-    }
+    = [](ICudaEngine& self, int32_t profileIndex, int32_t bindingIndex) -> std::vector<std::vector<int32_t>> {
+    bool const isShapeInput{self.isShapeBinding(bindingIndex) && self.bindingIsInput(bindingIndex)};
+    PY_ASSERT_RUNTIME_ERROR(isShapeInput, "Binding index does not correspond to an input shape tensor.");
+
     std::vector<std::vector<int32_t>> shapes{};
-    int shapeSize = self.getBindingDimensions(bindingIndex).nbDims;
+    int32_t const shapeSize{self.getBindingDimensions(bindingIndex).nbDims};
     // In the Python bindings, it is impossible to set only one shape in an optimization profile.
-    const int32_t* shapePtr = self.getProfileShapeValues(bindingIndex, profileIndex, OptProfileSelector::kMIN);
+    int32_t const* shapePtr{self.getProfileShapeValues(bindingIndex, profileIndex, OptProfileSelector::kMIN)};
     if (shapePtr)
     {
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
@@ -217,7 +192,7 @@ static const auto engine_get_profile_shape_input
 
 // Overload to allow using binding names instead of indices.
 static const auto engine_get_profile_shape_input_str
-    = [](ICudaEngine& self, int profileIndex, const std::string& bindingName) -> std::vector<std::vector<int32_t>> {
+    = [](ICudaEngine& self, int32_t profileIndex, std::string const& bindingName) -> std::vector<std::vector<int32_t>> {
     return engine_get_profile_shape_input(self, profileIndex, self.getBindingIndex(bindingName.c_str()));
 };
 
@@ -237,7 +212,7 @@ static const auto netconfig_create_timing_cache = [](IBuilderConfig& self, py::b
 // For IRefitter
 static const auto refitter_get_missing = [](IRefitter& self) {
     // First get the number of missing weights.
-    int size = self.getMissing(0, nullptr, nullptr);
+    int32_t const size{self.getMissing(0, nullptr, nullptr)};
     // Now that we know how many weights are missing, we can create the buffers appropriately.
     std::vector<const char*> layerNames(size);
     std::vector<WeightsRole> roles(size);
@@ -247,57 +222,49 @@ static const auto refitter_get_missing = [](IRefitter& self) {
 
 static const auto refitter_get_missing_weights = [](IRefitter& self) {
     // First get the number of missing weights.
-    int size = self.getMissingWeights(0, nullptr);
+    int32_t const size{self.getMissingWeights(0, nullptr)};
     // Now that we know how many weights are missing, we can create the buffers appropriately.
-    std::vector<const char*> names(size);
+    std::vector<char const*> names(size);
     self.getMissingWeights(size, names.data());
     return names;
 };
 
 static const auto refitter_get_all = [](IRefitter& self) {
-    int size = self.getAll(0, nullptr, nullptr);
-    std::vector<const char*> layerNames(size);
+    int32_t const size{self.getAll(0, nullptr, nullptr)};
+    std::vector<char const*> layerNames(size);
     std::vector<WeightsRole> roles(size);
     self.getAll(size, layerNames.data(), roles.data());
     return std::pair<std::vector<const char*>, std::vector<WeightsRole>>{layerNames, roles};
 };
 
 static const auto refitter_get_all_weights = [](IRefitter& self) {
-    int size = self.getAllWeights(0, nullptr);
-    std::vector<const char*> names(size);
+    int32_t const size{self.getAllWeights(0, nullptr)};
+    std::vector<char const*> names(size);
     self.getAllWeights(size, names.data());
     return names;
 };
 
-static const auto refitter_get_dynamic_range = [](IRefitter& self, const std::string& tensorName) {
+static const auto refitter_get_dynamic_range = [](IRefitter& self, std::string const& tensorName) {
     return py::make_tuple(self.getDynamicRangeMin(tensorName.c_str()), self.getDynamicRangeMax(tensorName.c_str()));
 };
 
 static const auto refitter_set_dynamic_range
-    = [](IRefitter& self, const std::string& tensorName, const std::vector<float>& range) -> bool {
-    if (range.size() == 2)
-    {
-        return self.setDynamicRange(tensorName.c_str(), range[0], range[1]);
-    }
-    else
-    {
-        throw py::value_error{"Dynamic range must contain exactly 2 elements"};
-    }
+    = [](IRefitter& self, std::string const& tensorName, std::vector<float> const& range) -> bool {
+    PY_ASSERT_VALUE_ERROR(range.size() == 2, "Dynamic range must contain exactly 2 elements");
+    return self.setDynamicRange(tensorName.c_str(), range[0], range[1]);
 };
 
 static const auto refitter_get_tensors_with_dynamic_range = [](IRefitter& self) {
-    int size = self.getTensorsWithDynamicRange(0, nullptr);
-    std::vector<const char*> tensorNames(size);
+    int32_t const size = self.getTensorsWithDynamicRange(0, nullptr);
+    std::vector<char const*> tensorNames(size);
     self.getTensorsWithDynamicRange(size, tensorNames.data());
     return tensorNames;
 };
 
 static const auto context_set_optimization_profile_async
-    = [](IExecutionContext& self, int profileIndex, size_t streamHandle) {
-          if (!self.setOptimizationProfileAsync(profileIndex, reinterpret_cast<cudaStream_t>(streamHandle)))
-          {
-              throw std::runtime_error{"Error in set optimization profile async."};
-          };
+    = [](IExecutionContext& self, int32_t const profileIndex, size_t streamHandle) {
+          PY_ASSERT_RUNTIME_ERROR(self.setOptimizationProfileAsync(profileIndex, reinterpret_cast<cudaStream_t>(streamHandle)),
+              "Error in set optimization profile async.");
           return true;
       };
 
@@ -311,32 +278,34 @@ public:
     template <typename... Args>
     void* allocHelper(const char* pyFuncName, bool showWarning, Args&&... args) noexcept
     {
-        py::gil_scoped_acquire gil{};
-        py::function pyAllocFunc = utils::getOverride(static_cast<IGpuAllocator*>(this), pyFuncName, showWarning);
-
-        if (!pyAllocFunc)
-        {
-            return nullptr;
-        }
-
-        py::object ptr{};
         try
         {
-            ptr = pyAllocFunc(std::forward<Args>(args)...);
+            py::gil_scoped_acquire gil{};
+            py::function pyAllocFunc = utils::getOverride(static_cast<IGpuAllocator*>(this), pyFuncName, showWarning);
+
+            if (!pyAllocFunc)
+            {
+                return nullptr;
+            }
+
+            py::object ptr = pyAllocFunc(std::forward<Args>(args)...);
+            try
+            {
+                return reinterpret_cast<void*>(ptr.cast<size_t>());
+            }
+            catch (const py::cast_error& e)
+            {
+                std::cerr << "[ERROR] Return value of allocate() could not be interpreted as an int" << std::endl;
+            }
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in allocate(): " << e.what() << std::endl;
         }
         catch (...)
         {
             std::cerr << "[ERROR] Exception caught in allocate()" << std::endl;
             return nullptr;
-        }
-
-        try
-        {
-            return reinterpret_cast<void*>(ptr.cast<size_t>());
-        }
-        catch (const py::cast_error& e)
-        {
-            std::cerr << "[ERROR] Return value of allocate() could not be interpreted as an int" << std::endl;
         }
 
         return nullptr;
@@ -354,16 +323,20 @@ public:
 
     void free(void* memory) noexcept override
     {
-        py::gil_scoped_acquire gil{};
-        py::function pyFree = utils::getOverride(static_cast<IGpuAllocator*>(this), "free");
-        if (!pyFree)
-        {
-            return;
-        }
-
         try
         {
+            py::gil_scoped_acquire gil{};
+            py::function pyFree = utils::getOverride(static_cast<IGpuAllocator*>(this), "free");
+            if (!pyFree)
+            {
+                return;
+            }
+
             pyFree(reinterpret_cast<size_t>(memory));
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in free(): " << e.what() << std::endl;
         }
         catch (...)
         {
@@ -373,24 +346,28 @@ public:
 
     bool deallocate(void* memory) noexcept override
     {
-        py::gil_scoped_acquire gil{};
-        py::function pyDeallocate = utils::getOverride(static_cast<IGpuAllocator*>(this), "deallocate");
-        if (!pyDeallocate)
-        {
-            return false;
-        }
-
-        py::object status{};
         try
         {
+            py::gil_scoped_acquire gil{};
+            py::function pyDeallocate = utils::getOverride(static_cast<IGpuAllocator*>(this), "deallocate");
+            if (!pyDeallocate)
+            {
+                return false;
+            }
+
+            py::object status{};
             status = pyDeallocate(reinterpret_cast<size_t>(memory));
+            return status.cast<bool>();
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in deallocate(): " << e.what() << std::endl;
         }
         catch (...)
         {
             std::cerr << "[ERROR] Exception caught in deallocate()" << std::endl;
-            return false;
         }
-        return status.cast<bool>();
+        return false;
     }
 };
 
@@ -401,7 +378,18 @@ void bindCore(py::module& m)
     public:
         virtual void log(Severity severity, const char* msg) noexcept override
         {
-            PYBIND11_OVERLOAD_PURE_NAME(void, ILogger, "log", log, severity, msg);
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(void, ILogger, "log", log, severity, msg);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in log(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in log()" << std::endl;
+            }
         }
     };
 
@@ -486,7 +474,18 @@ void bindCore(py::module& m)
     public:
         void reportLayerTime(const char* layerName, float ms) noexcept override
         {
-            PYBIND11_OVERLOAD_PURE_NAME(void, IProfiler, "report_layer_time", reportLayerTime, layerName, ms);
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(void, IProfiler, "report_layer_time", reportLayerTime, layerName, ms);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in report_layer_time(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in report_layer_time()" << std::endl;
+            }
         }
     };
 
@@ -541,32 +540,103 @@ void bindCore(py::module& m)
     public:
         virtual ErrorCode getErrorCode(int32_t errorIdx) const noexcept override
         {
-            PYBIND11_OVERLOAD_PURE_NAME(ErrorCode, IErrorRecorder, "get_error_code", getErrorCode, errorIdx);
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(ErrorCode, IErrorRecorder, "get_error_code", getErrorCode, errorIdx);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in get_error_code(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in get_error_code()" << std::endl;
+            }
+            return {};
         }
 
         virtual ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept override
         {
-            PYBIND11_OVERLOAD_PURE_NAME(ErrorDesc, IErrorRecorder, "get_error_desc", getErrorDesc, errorIdx);
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(ErrorDesc, IErrorRecorder, "get_error_desc", getErrorDesc, errorIdx);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in get_error_desc(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in get_error_desc()" << std::endl;
+            }
+            return {};
         }
 
         virtual void clear() noexcept override
         {
-            PYBIND11_OVERLOAD_PURE_NAME(void, IErrorRecorder, "clear", clear);
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(void, IErrorRecorder, "clear", clear);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in clear(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in clear()" << std::endl;
+            }
         }
 
         virtual bool reportError(ErrorCode val, ErrorDesc desc) noexcept override
         {
-            PYBIND11_OVERLOAD_PURE_NAME(bool, IErrorRecorder, "report_error", reportError, val, desc);
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(bool, IErrorRecorder, "report_error", reportError, val, desc);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in report_error(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in report_error()" << std::endl;
+            }
+            return false;
         }
 
         virtual int32_t getNbErrors() const noexcept override
         {
-            PYBIND11_OVERLOAD_PURE_NAME(int32_t, IErrorRecorder, "get_num_errors", getNbErrors);
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(int32_t, IErrorRecorder, "get_num_errors", getNbErrors);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in get_num_errors(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in get_num_errors()" << std::endl;
+            }
+            return -1;
         }
 
         virtual bool hasOverflowed() const noexcept override
         {
-            PYBIND11_OVERLOAD_PURE_NAME(bool, IErrorRecorder, "has_overflowed", hasOverflowed);
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(bool, IErrorRecorder, "has_overflowed", hasOverflowed);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in has_overflowed(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in has_overflowed()" << std::endl;
+            }
+            return false;
         }
 
         virtual RefCount incRefCount() noexcept override
@@ -594,9 +664,9 @@ void bindCore(py::module& m)
         .def("report_error", &IErrorRecorder::reportError, IErrorRecorderDoc::report_error);
 
     py::class_<IExecutionContext>(m, "IExecutionContext", IExecutionContextDoc::descr)
-        .def("execute", lambdas::execute, "batch_size"_a = 1, "bindings"_a, IExecutionContextDoc::execute,
-            py::call_guard<py::gil_scoped_release>{})
-        .def("execute_async", lambdas::execute_async, "batch_size"_a = 1, "bindings"_a, "stream_handle"_a,
+        .def("execute", utils::deprecate(lambdas::execute, "execute_v2"), "batch_size"_a = 1, "bindings"_a,
+            IExecutionContextDoc::execute, py::call_guard<py::gil_scoped_release>{})
+        .def("execute_async", utils::deprecate(lambdas::execute_async, "execute_async_v2"), "batch_size"_a = 1, "bindings"_a, "stream_handle"_a,
             "input_consumed"_a = nullptr, IExecutionContextDoc::execute_async, py::call_guard<py::gil_scoped_release>{})
         .def("execute_v2", lambdas::execute_v2, "bindings"_a, IExecutionContextDoc::execute_v2,
             py::call_guard<py::gil_scoped_release>{})
@@ -651,7 +721,8 @@ void bindCore(py::module& m)
         // Overload so that we can get type based on tensor names.
         .def("get_binding_dtype", lambdas::engine_get_binding_dtype, "name"_a, ICudaEngineDoc::get_binding_dtype_str)
         .def_property_readonly("has_implicit_batch_dimension", &ICudaEngine::hasImplicitBatchDimension)
-        .def_property_readonly("max_batch_size", &ICudaEngine::getMaxBatchSize)
+        .def_property_readonly("max_batch_size", utils::deprecateMember(&ICudaEngine::getMaxBatchSize,
+            "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"))
         .def_property_readonly("num_layers", &ICudaEngine::getNbLayers)
         .def("serialize", &ICudaEngine::serialize, ICudaEngineDoc::serialize)
         .def("create_execution_context", &ICudaEngine::createExecutionContext, ICudaEngineDoc::create_execution_context,
@@ -719,6 +790,12 @@ void bindCore(py::module& m)
         .value("DIRECT_IO", BuilderFlag::kDIRECT_IO, BuilderFlagDoc::DIRECT_IO)
         .value("REJECT_EMPTY_ALGORITHMS", BuilderFlag::kREJECT_EMPTY_ALGORITHMS, BuilderFlagDoc::REJECT_EMPTY_ALGORITHMS);
 
+    py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr)
+        .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
+        .value("DLA_MANAGED_SRAM", MemoryPoolType::kDLA_MANAGED_SRAM, MemoryPoolTypeDoc::DLA_MANAGED_SRAM)
+        .value("DLA_LOCAL_DRAM", MemoryPoolType::kDLA_LOCAL_DRAM, MemoryPoolTypeDoc::DLA_LOCAL_DRAM)
+        .value("DLA_GLOBAL_DRAM", MemoryPoolType::kDLA_GLOBAL_DRAM, MemoryPoolTypeDoc::DLA_GLOBAL_DRAM);
+
     py::enum_<QuantizationFlag>(m, "QuantizationFlag", py::arithmetic{}, QuantizationFlagDoc::descr)
         .value("CALIBRATE_BEFORE_FUSION", QuantizationFlag::kCALIBRATE_BEFORE_FUSION,
             QuantizationFlagDoc::CALIBRATE_BEFORE_FUSION);
@@ -738,7 +815,8 @@ void bindCore(py::module& m)
     py::enum_<TacticSource>(m, "TacticSource", py::arithmetic{}, TacticSourceDoc::descr)
         .value("CUBLAS", TacticSource::kCUBLAS, TacticSourceDoc::CUBLAS)
         .value("CUBLAS_LT", TacticSource::kCUBLAS_LT, TacticSourceDoc::CUBLAS_LT)
-        .value("CUDNN", TacticSource::kCUDNN, TacticSourceDoc::CUDNN);
+        .value("CUDNN", TacticSource::kCUDNN, TacticSourceDoc::CUDNN)
+        .value("EDGE_MASK_CONVOLUTIONS", TacticSource::kEDGE_MASK_CONVOLUTIONS, TacticSourceDoc::EDGE_MASK_CONVOLUTIONS);
 
     py::enum_<EngineCapability>(m, "EngineCapability", py::arithmetic{}, EngineCapabilityDoc::descr)
         .value("DEFAULT", EngineCapability::kDEFAULT, EngineCapabilityDoc::DEFAULT)
@@ -758,14 +836,21 @@ void bindCore(py::module& m)
         .def("reset", &ITimingCache::reset, ITimingCacheDoc::reset);
 
     py::class_<IBuilderConfig>(m, "IBuilderConfig", IBuilderConfigDoc::descr)
-        .def_property(
-            "min_timing_iterations", &IBuilderConfig::getMinTimingIterations, &IBuilderConfig::setMinTimingIterations)
+        .def_property("min_timing_iterations",
+            utils::deprecateMember(&IBuilderConfig::getMinTimingIterations, "get_avg_timing_iterations"),
+            utils::deprecateMember(&IBuilderConfig::setMinTimingIterations, "set_avg_timing_iterations"))
         .def_property(
             "avg_timing_iterations", &IBuilderConfig::getAvgTimingIterations, &IBuilderConfig::setAvgTimingIterations)
         .def_property("int8_calibrator", &IBuilderConfig::getInt8Calibrator,
             py::cpp_function(&IBuilderConfig::setInt8Calibrator, py::keep_alive<1, 2>{}))
         .def_property("engine_capability", &IBuilderConfig::getEngineCapability, &IBuilderConfig::setEngineCapability)
-        .def_property("max_workspace_size", &IBuilderConfig::getMaxWorkspaceSize, &IBuilderConfig::setMaxWorkspaceSize)
+        .def_property("max_workspace_size",
+            utils::deprecateMember(&IBuilderConfig::getMaxWorkspaceSize, "get_memory_pool_limit"),
+            utils::deprecateMember(&IBuilderConfig::setMaxWorkspaceSize, "set_memory_pool_limit"))
+        .def("set_memory_pool_limit", &IBuilderConfig::setMemoryPoolLimit, "pool"_a, "pool_size"_a,
+            IBuilderConfigDoc::set_memory_pool_limit)
+        .def("get_memory_pool_limit", &IBuilderConfig::getMemoryPoolLimit, "pool"_a,
+            IBuilderConfigDoc::get_memory_pool_limit)
         .def_property("flags", &IBuilderConfig::getFlags, &IBuilderConfig::setFlags)
         .def_property(
             "default_device_type", &IBuilderConfig::getDefaultDeviceType, &IBuilderConfig::setDefaultDeviceType)
@@ -822,7 +907,11 @@ void bindCore(py::module& m)
         .def(py::init(&nvinfer1::createInferBuilder), "logger"_a, BuilderDoc::init, py::keep_alive<1, 2>{})
         .def("create_network", &IBuilder::createNetworkV2, "flags"_a = 0U, BuilderDoc::create_network,
             py::keep_alive<0, 1>{})
-        .def_property("max_batch_size", &IBuilder::getMaxBatchSize, &IBuilder::setMaxBatchSize)
+        .def_property("max_batch_size",
+            utils::deprecateMember(&IBuilder::getMaxBatchSize,
+                "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"),
+            utils::deprecateMember(&IBuilder::setMaxBatchSize,
+                "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"))
         .def_property_readonly("platform_has_tf32", &IBuilder::platformHasTf32)
         .def_property_readonly("platform_has_fast_fp16", &IBuilder::platformHasFastFp16)
         .def_property_readonly("platform_has_fast_int8", &IBuilder::platformHasFastInt8)
@@ -843,6 +932,7 @@ void bindCore(py::module& m)
         .def("is_network_supported", &IBuilder::isNetworkSupported, "network"_a, "config"_a,
             BuilderDoc::is_network_supported, py::call_guard<py::gil_scoped_release>{})
         .def_property_readonly("logger", &IBuilder::getLogger)
+        .def_property("max_threads", &IBuilder::getMaxThreads, &IBuilder::setMaxThreads)
         .def("reset", &IBuilder::reset, BuilderDoc::reset)
         .def("__del__", &utils::doNothingDel<IBuilder>);
 
@@ -857,6 +947,7 @@ void bindCore(py::module& m)
         .def_property("error_recorder", &IRuntime::getErrorRecorder,
             py::cpp_function(&IRuntime::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property_readonly("logger", &IRuntime::getLogger)
+        .def_property("max_threads", &IRuntime::getMaxThreads, &IRuntime::setMaxThreads)
         .def("__del__", &utils::doNothingDel<IRuntime>);
 
     // EngineInspector
@@ -891,6 +982,7 @@ void bindCore(py::module& m)
         .def_property("error_recorder", &IRefitter::getErrorRecorder,
             py::cpp_function(&IRefitter::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property_readonly("logger", &IRefitter::getLogger)
+        .def_property("max_threads", &IRefitter::getMaxThreads, &IRefitter::setMaxThreads)
         .def("__del__", &utils::doNothingDel<IRefitter>);
 }
 

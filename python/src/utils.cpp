@@ -22,7 +22,7 @@ namespace tensorrt
 namespace utils
 {
 
-void issueDeprecationWarning(const char* useInstead)
+void issueDeprecationWarning(char const* useInstead)
 {
     std::string msg{"Use " + std::string{useInstead} + " instead."};
 
@@ -30,13 +30,68 @@ void issueDeprecationWarning(const char* useInstead)
     PyErr_WarnEx(PyExc_DeprecationWarning, msg.c_str(), 1);
 }
 
-// The following is a helper WAR to "throw py::index_error()", which results in an incompatibility
-// with Tensorflow 2.5 and above--on Windows only--when Tensorflow is imported after TensorRT.
-// The TF library fast_module_type.pyd hooks on to IndexErrors thrown through py::index_error()
-// resulting in hangs at unpacking operations and out-of-bounds index accesses.
-void throwPyIndexError(std::string message)
+// Returns the size in bytes of the specified data type.
+size_t size(nvinfer1::DataType type)
 {
-    PyErr_SetString(PyExc_IndexError, message.data());
+    switch (type)
+    {
+    case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kHALF: return 2;
+    case nvinfer1::DataType::kINT8: return 1;
+    case nvinfer1::DataType::kINT32: return 4;
+    case nvinfer1::DataType::kBOOL: return 1;
+    }
+    return -1;
+}
+
+// Converts a TRT datatype to its corresponding numpy dtype.
+py::dtype nptype(nvinfer1::DataType type)
+{
+    switch (type)
+    {
+    case nvinfer1::DataType::kFLOAT: return py::dtype("f4");
+    case nvinfer1::DataType::kHALF: return py::dtype("f2");
+    case nvinfer1::DataType::kINT8: return py::dtype("i1");
+    case nvinfer1::DataType::kINT32: return py::dtype("i4");
+    case nvinfer1::DataType::kBOOL: return py::dtype("b1");
+    }
+    return py::dtype("unknown");
+}
+
+nvinfer1::DataType type(py::dtype const& type)
+{
+    if (type.is(py::dtype("f4")))
+    {
+        return nvinfer1::DataType::kFLOAT;
+    }
+    else if (type.is(py::dtype("f2")))
+    {
+        return nvinfer1::DataType::kHALF;
+    }
+    else if (type.is(py::dtype("i4")))
+    {
+        return nvinfer1::DataType::kINT32;
+    }
+    else if (type.is(py::dtype("i1")))
+    {
+        return nvinfer1::DataType::kINT8;
+    }
+    else if (type.is(py::dtype("b1")))
+    {
+        return nvinfer1::DataType::kBOOL;
+    }
+    int32_t constexpr kBITS_PER_BYTE{8};
+    std::stringstream ss{};
+    ss << "[TRT] [E] Could not implicitly convert NumPy data type: " << type.kind() << (type.itemsize() * kBITS_PER_BYTE)
+       << " to TensorRT.";
+    std::cerr << ss.str() << std::endl;
+    PY_ASSERT_VALUE_ERROR(false, ss.str());
+    return nvinfer1::DataType::kFLOAT;
+}
+
+void throwPyError(PyObject* type, std::string const& message)
+{
+    PyErr_SetString(type, message.data());
     throw py::error_already_set();
 }
 
