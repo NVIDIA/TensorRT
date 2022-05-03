@@ -2,7 +2,7 @@
 # Native aarch64 builds only support CUDA 11.4
 FROM nvidia/cuda:11.4.2-devel-ubuntu20.04
 
-ENV TRT_VERSION 8.2.5.1
+ENV TRT_VERSION 8.4.1.2
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
