@@ -460,7 +460,9 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(const char* name, c
             }
             if (!strcmp(attrName, "score_activation"))
             {
-                mParam.scoreSigmoid = *(static_cast<const bool*>(fields[i].data));
+                auto scoreSigmoid = *(static_cast<const int32_t*>(fields[i].data));
+                PLUGIN_VALIDATE(scoreSigmoid == 0 || scoreSigmoid == 1);
+                mParam.scoreSigmoid = static_cast<bool>(scoreSigmoid);
             }
             if (!strcmp(attrName, "box_coding"))
             {

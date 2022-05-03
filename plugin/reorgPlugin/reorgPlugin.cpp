@@ -220,6 +220,8 @@ IPluginV2Ext* ReorgPluginCreator::createPlugin(const char* name, const PluginFie
         PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kINT32);
         stride = static_cast<int>(*(static_cast<const int*>(fields[0].data)));
 
+        PLUGIN_VALIDATE(stride > 0);
+
         Reorg* obj = new Reorg(stride);
         obj->setPluginNamespace(mNamespace.c_str());
         return obj;

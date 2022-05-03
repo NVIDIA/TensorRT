@@ -373,7 +373,9 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(const char* name, const P
             if (!strcmp(attrName, "ignoreBatch"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mIgnoreBatch = *(static_cast<const bool*>(fields[i].data));
+                auto ignoreBatch = *(static_cast<const int32_t*>(fields[i].data));
+                PLUGIN_VALIDATE(ignoreBatch == 0 || ignoreBatch == 1);
+                mIgnoreBatch = static_cast<bool>(ignoreBatch);
             }
         }
 

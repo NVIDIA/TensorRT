@@ -49,8 +49,9 @@ GroupNormalizationPlugin::GroupNormalizationPlugin(float epsilon, int nbGroups)
     : mEpsilon(epsilon)
     , mNbGroups(nbGroups)
 {
+    PLUGIN_VALIDATE(mEpsilon > 0.0F);
     // Number of groups should be positive
-    PLUGIN_VALIDATE(nbGroups > 0);
+    PLUGIN_VALIDATE(mNbGroups > 0);
 }
 
 int GroupNormalizationPlugin::initialize() noexcept
