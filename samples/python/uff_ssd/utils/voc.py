@@ -20,37 +20,34 @@ import numpy as np
 
 
 VOC_CLASSES_LIST = [
-    'aeroplane',
-    'bicycle',
-    'bird',
-    'boat',
-    'bottle',
-    'bus',
-    'car',
-    'cat',
-    'chair',
-    'cow',
-    'diningtable',
-    'dog',
-    'horse',
-    'motorbike',
-    'person',
-    'pottedplant',
-    'sheep',
-    'sofa',
-    'train',
-    'tvmonitor'
+    "aeroplane",
+    "bicycle",
+    "bird",
+    "boat",
+    "bottle",
+    "bus",
+    "car",
+    "cat",
+    "chair",
+    "cow",
+    "diningtable",
+    "dog",
+    "horse",
+    "motorbike",
+    "person",
+    "pottedplant",
+    "sheep",
+    "sofa",
+    "train",
+    "tvmonitor",
 ]
 
 VOC_CLASSES_SET = set(VOC_CLASSES_LIST)
 
-VOC_CLASS_ID = {
-    cls_name: idx for idx, cls_name in enumerate(VOC_CLASSES_LIST)
-}
+VOC_CLASS_ID = {cls_name: idx for idx, cls_name in enumerate(VOC_CLASSES_LIST)}
 
 # Random RGB colors for each class (useful for drawing bounding boxes)
-VOC_COLORS = \
-    np.random.uniform(0, 255, size=(len(VOC_CLASSES_LIST), 3)).astype(np.uint8)
+VOC_COLORS = np.random.uniform(0, 255, size=(len(VOC_CLASSES_LIST), 3)).astype(np.uint8)
 
 
 def convert_coco_to_voc(label):
@@ -69,17 +66,18 @@ def convert_coco_to_voc(label):
             otherwise returns original label
     """
     COCO_VOC_DICT = {
-        'airplane': 'aeroplane',
-        'motorcycle': 'motorbike',
-        'dining table': 'diningtable',
-        'potted plant': 'pottedplant',
-        'couch': 'sofa',
-        'tv': 'tvmonitor'
+        "airplane": "aeroplane",
+        "motorcycle": "motorbike",
+        "dining table": "diningtable",
+        "potted plant": "pottedplant",
+        "couch": "sofa",
+        "tv": "tvmonitor",
     }
     if label in COCO_VOC_DICT:
         return COCO_VOC_DICT[label]
     else:
         return label
+
 
 def coco_label_to_voc_label(label):
     """Returns VOC label corresponding to given COCO label.
@@ -99,6 +97,7 @@ def coco_label_to_voc_label(label):
     else:
         return None
 
+
 def is_voc_label(label):
     """Returns boolean which tells if given label is VOC label.
 
@@ -108,6 +107,7 @@ def is_voc_label(label):
         bool: is given label a VOC class label
     """
     return label in VOC_CLASSES_SET
+
 
 def get_voc_label_color(label):
     """Returns color corresponding to given VOC label, or None.

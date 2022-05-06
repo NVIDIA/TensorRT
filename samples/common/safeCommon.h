@@ -36,6 +36,17 @@
         }                                                                                                              \
     } while (0)
 
+#undef ASSERT
+#define ASSERT(condition)                                                   \
+    do                                                                      \
+    {                                                                       \
+        if (!(condition))                                                   \
+        {                                                                   \
+            std::cerr << "Assertion failure: " << #condition << std::endl;  \
+            abort();                                                        \
+        }                                                                   \
+    } while (0)
+
 namespace samplesCommon
 {
 template <typename T>
@@ -66,6 +77,78 @@ inline A divUp(A x, B n)
 {
     return (x + n - 1) / n;
 }
+
+//!
+//! \class TrtCudaGraphSafe
+//! \brief Managed CUDA graph
+//!
+class TrtCudaGraphSafe
+{
+public:
+    explicit TrtCudaGraphSafe() = default;
+
+    TrtCudaGraphSafe(const TrtCudaGraphSafe&) = delete;
+
+    TrtCudaGraphSafe& operator=(const TrtCudaGraphSafe&) = delete;
+
+    TrtCudaGraphSafe(TrtCudaGraphSafe&&) = delete;
+
+    TrtCudaGraphSafe& operator=(TrtCudaGraphSafe&&) = delete;
+
+    ~TrtCudaGraphSafe()
+    {
+        if (mGraphExec)
+        {
+            cudaGraphExecDestroy(mGraphExec);
+        }
+    }
+
+    void beginCapture(cudaStream_t& stream)
+    {
+        // cudaStreamCaptureModeGlobal is the only allowed mode in SAFE CUDA
+        CHECK(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
+    }
+
+    bool launch(cudaStream_t& stream)
+    {
+        return cudaGraphLaunch(mGraphExec, stream) == cudaSuccess;
+    }
+
+    void endCapture(cudaStream_t& stream)
+    {
+        CHECK(cudaStreamEndCapture(stream, &mGraph));
+        CHECK(cudaGraphInstantiate(&mGraphExec, mGraph, nullptr, nullptr, 0));
+        CHECK(cudaGraphDestroy(mGraph));
+    }
+
+    void endCaptureOnError(cudaStream_t& stream)
+    {
+        // There are two possibilities why stream capture would fail:
+        // (1) stream is in cudaErrorStreamCaptureInvalidated state.
+        // (2) TRT reports a failure.
+        // In case (1), the returning mGraph should be nullptr.
+        // In case (2), the returning mGraph is not nullptr, but it should not be used.
+        const auto ret = cudaStreamEndCapture(stream, &mGraph);
+        if (ret == cudaErrorStreamCaptureInvalidated)
+        {
+            ASSERT(mGraph == nullptr);
+        }
+        else
+        {
+            ASSERT(ret == cudaSuccess);
+            ASSERT(mGraph != nullptr);
+            CHECK(cudaGraphDestroy(mGraph));
+            mGraph = nullptr;
+        }
+        // Clean up any CUDA error.
+        cudaGetLastError();
+        sample::gLogError << "The CUDA graph capture on the stream has failed." << std::endl;
+    }
+
+private:
+    cudaGraph_t mGraph{};
+    cudaGraphExec_t mGraphExec{};
+};
 
 } // namespace samplesCommon
 

@@ -122,7 +122,7 @@ private:
 //! \details This function creates the MNIST network by using the API to create a model and builds
 //!          the engine that will be used to run MNIST (mEngine)
 //!
-//! \return Returns true if the engine was created successfully and false otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 bool SampleMNISTAPI::build()
 {
@@ -209,9 +209,43 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     ASSERT(pool2);
     pool2->setStride(DimsHW{2, 2});
 
+    // Utility for use MatMul as FC
+    auto addMatMulasFCLayer
+        = [&network](ITensor* input, int32_t const outputs, Weights& filterWeights, Weights& biasWeights) -> ILayer* {
+        Dims inputDims = input->getDimensions();
+        int32_t const m = inputDims.d[0];
+        int32_t const k
+            = std::accumulate(inputDims.d + 1, inputDims.d + inputDims.nbDims, 1, std::multiplies<int32_t>());
+        int32_t const n = static_cast<int32_t>(filterWeights.count / static_cast<int64_t>(k));
+        ASSERT(static_cast<int64_t>(n) * static_cast<int64_t>(k) == filterWeights.count);
+        ASSERT(static_cast<int64_t>(n) == biasWeights.count);
+        ASSERT(n == outputs);
+
+        IShuffleLayer* inputReshape = network->addShuffle(*input);
+        ASSERT(inputReshape);
+        inputReshape->setReshapeDimensions(Dims{2, {m, k}});
+
+        IConstantLayer* filterConst = network->addConstant(Dims{2, {n, k}}, filterWeights);
+        ASSERT(filterConst);
+        IMatrixMultiplyLayer* mm = network->addMatrixMultiply(*inputReshape->getOutput(0), MatrixOperation::kNONE,
+            *filterConst->getOutput(0), MatrixOperation::kTRANSPOSE);
+        ASSERT(mm);
+
+        IConstantLayer* biasConst = network->addConstant(Dims{2, {1, n}}, biasWeights);
+        ASSERT(biasConst);
+        IElementWiseLayer* biasAdd
+            = network->addElementWise(*mm->getOutput(0), *biasConst->getOutput(0), ElementWiseOperation::kSUM);
+        ASSERT(biasAdd);
+
+        IShuffleLayer* outputReshape = network->addShuffle(*biasAdd->getOutput(0));
+        ASSERT(outputReshape);
+        outputReshape->setReshapeDimensions(Dims{4, {m, n, 1, 1}});
+
+        return outputReshape;
+    };
+
     // Add fully connected layer with 500 outputs.
-    IFullyConnectedLayer* ip1
-        = network->addFullyConnected(*pool2->getOutput(0), 500, mWeightMap["ip1filter"], mWeightMap["ip1bias"]);
+    ILayer* ip1 = addMatMulasFCLayer(pool2->getOutput(0), 500, mWeightMap["ip1filter"], mWeightMap["ip1bias"]);
     ASSERT(ip1);
 
     // Add activation layer using the ReLU algorithm.
@@ -219,8 +253,8 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     ASSERT(relu1);
 
     // Add second fully connected layer with 20 outputs.
-    IFullyConnectedLayer* ip2 = network->addFullyConnected(
-        *relu1->getOutput(0), mParams.outputSize, mWeightMap["ip2filter"], mWeightMap["ip2bias"]);
+    ILayer* ip2
+        = addMatMulasFCLayer(relu1->getOutput(0), mParams.outputSize, mWeightMap["ip2filter"], mWeightMap["ip2bias"]);
     ASSERT(ip2);
 
     // Add softmax layer to determine the probability.
@@ -230,7 +264,6 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     network->markOutput(*prob->getOutput(0));
 
     // Build engine
-    config->setMaxWorkspaceSize(16_MiB);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
@@ -470,12 +503,12 @@ std::map<std::string, nvinfer1::Weights> SampleMNISTAPI::loadWeights(const std::
 SampleMNISTAPIParams initializeSampleParams(const samplesCommon::Args& args)
 {
     SampleMNISTAPIParams params;
-    if (args.dataDirs.empty()) //!< Use default directories if user hasn't provided directory paths
+    if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths
     {
         params.dataDirs.push_back("data/mnist/");
         params.dataDirs.push_back("data/samples/mnist/");
     }
-    else //!< Use the data directory provided by the user
+    else // Use the data directory provided by the user
     {
         params.dataDirs = args.dataDirs;
     }

@@ -43,7 +43,7 @@ namespace
 
 void cudaSleep(void* sleep)
 {
-    std::this_thread::sleep_for(std::chrono::duration<int, std::milli>(*static_cast<int*>(sleep)));
+    std::this_thread::sleep_for(std::chrono::duration<float, std::milli>(*static_cast<float*>(sleep)));
 }
 
 } // namespace
@@ -85,7 +85,7 @@ public:
 
     void wait(TrtCudaEvent& event);
 
-    void sleep(int* ms)
+    void sleep(float* ms)
     {
         cudaCheck(cudaLaunchHostFunc(mStream, cudaSleep, ms));
     }
@@ -196,10 +196,24 @@ public:
 
     void endCaptureOnError(TrtCudaStream& stream)
     {
+        // There are two possibilities why stream capture would fail:
+        // (1) stream is in cudaErrorStreamCaptureInvalidated state.
+        // (2) TRT reports a failure.
+        // In case (1), the returning mGraph should be nullptr.
+        // In case (2), the returning mGraph is not nullptr, but it should not be used.
         const auto ret = cudaStreamEndCapture(stream.get(), &mGraph);
-        assert(ret == cudaErrorStreamCaptureInvalidated);
-        assert(mGraph == nullptr);
-        // Clean up the above CUDA error.
+        if (ret == cudaErrorStreamCaptureInvalidated)
+        {
+            assert(mGraph == nullptr);
+        }
+        else
+        {
+            assert(ret == cudaSuccess);
+            assert(mGraph != nullptr);
+            cudaCheck(cudaGraphDestroy(mGraph));
+            mGraph = nullptr;
+        }
+        // Clean up any CUDA error.
         cudaGetLastError();
         sample::gLogWarning << "The CUDA graph capture on the stream has failed." << std::endl;
     }
@@ -362,10 +376,15 @@ public:
     //!
     virtual size_t getSize() const = 0;
 
+    //!
+    //! Virtual destructor declaraion
+    //!
+    virtual ~IMirroredBuffer() = default;
+
 }; // class IMirroredBuffer
 
 //!
-//! Class to have a seperate memory buffer for discrete device and host allocations.
+//! Class to have a separate memory buffer for discrete device and host allocations.
 //!
 class DiscreteMirroredBuffer : public IMirroredBuffer
 {
@@ -457,7 +476,7 @@ inline void setCudaDevice(int device, std::ostream& os)
     cudaDeviceProp properties;
     cudaCheck(cudaGetDeviceProperties(&properties, device));
 
-// clang-format off
+    // clang-format off
     os << "=== Device Information ===" << std::endl;
     os << "Selected Device: "      << properties.name                                               << std::endl;
     os << "Compute Capability: "   << properties.major << "." << properties.minor                   << std::endl;
@@ -469,6 +488,20 @@ inline void setCudaDevice(int device, std::ostream& os)
                         << " (ECC " << (properties.ECCEnabled != 0 ? "enabled" : "disabled") << ")" << std::endl;
     os << "Memory Clock Rate: "    << properties.memoryClockRate / 1000000.0F << " GHz"             << std::endl;
     // clang-format on
+}
+
+inline int32_t getCudaDriverVersion()
+{
+    int32_t version{-1};
+    cudaCheck(cudaDriverGetVersion(&version));
+    return version;
+}
+
+inline int32_t getCudaRuntimeVersion()
+{
+    int32_t version{-1};
+    cudaCheck(cudaRuntimeGetVersion(&version));
+    return version;
 }
 
 } // namespace sample

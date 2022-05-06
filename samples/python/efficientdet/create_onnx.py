@@ -45,8 +45,9 @@ class EfficientDetGraphSurgeon:
         assert os.path.exists(saved_model_path)
 
         # Use tf2onnx to convert saved model to an initial ONNX graph.
-        graph_def, inputs, outputs = tf_loader.from_saved_model(saved_model_path, None, None, "serve",
-                                                                ["serving_default"])
+        graph_def, inputs, outputs = tf_loader.from_saved_model(
+            saved_model_path, None, None, "serve", ["serving_default"]
+        )
         log.info("Loaded saved model from {}".format(saved_model_path))
         with tf.Graph().as_default() as tf_graph:
             tf.import_graph_def(graph_def, name="")
@@ -90,8 +91,10 @@ class EfficientDetGraphSurgeon:
             try:
                 self.graph.fold_constants(fold_shapes=True)
             except TypeError as e:
-                log.error("This version of ONNX GraphSurgeon does not support folding shapes, please upgrade your "
-                          "onnx_graphsurgeon module. Error:\n{}".format(e))
+                log.error(
+                    "This version of ONNX GraphSurgeon does not support folding shapes, please upgrade your "
+                    "onnx_graphsurgeon module. Error:\n{}".format(e)
+                )
                 raise
 
             count_after = len(self.graph.nodes)
@@ -269,8 +272,8 @@ class EfficientDetGraphSurgeon:
                 reduce.inputs[0] = input_tensor  # Forward the Transpose input to the ReduceMean node
                 output_tensor = reduce.outputs[0]  # Output tensor of the ReduceMean
                 conv.inputs[0] = output_tensor  # Forward the ReduceMean output to the Conv node
-                reduce.attrs['axes'] = [2, 3]  # Update the axes that ReduceMean operates on
-                reduce.attrs['keepdims'] = 1  # Keep the reduced dimensions
+                reduce.attrs["axes"] = [2, 3]  # Update the axes that ReduceMean operates on
+                reduce.attrs["keepdims"] = 1  # Keep the reduced dimensions
                 log.info("Optimized subgraph around ReduceMean node '{}'".format(reduce.name))
 
     def update_nms(self, threshold=None, detections=None):

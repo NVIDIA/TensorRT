@@ -35,9 +35,9 @@ namespace sample
 
 struct Parser
 {
-    TrtUniquePtr<nvcaffeparser1::ICaffeParser> caffeParser;
-    TrtUniquePtr<nvuffparser::IUffParser> uffParser;
-    TrtUniquePtr<nvonnxparser::IParser> onnxParser;
+    std::unique_ptr<nvcaffeparser1::ICaffeParser> caffeParser;
+    std::unique_ptr<nvuffparser::IUffParser> uffParser;
+    std::unique_ptr<nvonnxparser::IParser> onnxParser;
 
     operator bool() const
     {
@@ -45,15 +45,113 @@ struct Parser
     }
 };
 
+//!
+//! \brief A helper class to hold a serialized engine (std or safe) and only deserialize it when being accessed.
+//!
+class LazilyDeserializedEngine
+{
+public:
+    //!
+    //! \brief Delete default constructor to make sure isSafe and DLACore are always set.
+    //!
+    LazilyDeserializedEngine() = delete;
+
+    //!
+    //! \brief Constructor of LazilyDeserializedEngine.
+    //!
+    LazilyDeserializedEngine(bool isSafe, int32_t DLACore) : mIsSafe(isSafe), mDLACore(DLACore)
+    {
+    }
+
+    //!
+    //! \brief Move from another LazilyDeserializedEngine.
+    //!
+    LazilyDeserializedEngine(LazilyDeserializedEngine&& other)
+    {
+        mIsSafe = other.mIsSafe;
+        mDLACore = other.mDLACore;
+        mEngineBlob = std::move(other.mEngineBlob);
+        mEngine = std::move(other.mEngine);
+        mSafeEngine = std::move(other.mSafeEngine);
+    }
+
+    //!
+    //! \brief Delete copy constructor.
+    //!
+    LazilyDeserializedEngine(LazilyDeserializedEngine const& other) = delete;
+
+    //!
+    //! \brief Get the pointer to the ICudaEngine. Triggers deserialization if not already done so.
+    //!
+    nvinfer1::ICudaEngine* get();
+
+    //!
+    //! \brief Get the pointer to the ICudaEngine and release the ownership.
+    //!
+    nvinfer1::ICudaEngine* release();
+
+    //!
+    //! \brief Get the pointer to the safe::ICudaEngine. Triggers deserialization if not already done so.
+    //!
+    nvinfer1::safe::ICudaEngine* getSafe();
+
+    //!
+    //! \brief Get the underlying blob storing serialized engine.
+    //!
+    std::vector<uint8_t> const& getBlob() const
+    {
+        return mEngineBlob;
+    }
+
+    //!
+    //! \brief Set the underlying blob storing serialized engine.
+    //!
+    void setBlob(void* data, size_t size)
+    {
+        mEngineBlob.resize(size);
+        std::memcpy(mEngineBlob.data(), data, size);
+        mEngine.reset();
+        mSafeEngine.reset();
+    }
+
+    //!
+    //! \brief Release the underlying blob without deleting the deserialized engine.
+    //!
+    void releaseBlob()
+    {
+        mEngineBlob.clear();
+    }
+
+    //!
+    //! \brief Get if safe mode is enabled.
+    //!
+    bool isSafe()
+    {
+        return mIsSafe;
+    }
+
+private:
+    bool mIsSafe{false};
+    int32_t mDLACore{-1};
+    std::vector<uint8_t> mEngineBlob;
+    std::unique_ptr<nvinfer1::ICudaEngine> mEngine;
+    std::unique_ptr<nvinfer1::safe::ICudaEngine> mSafeEngine;
+};
+
 struct BuildEnvironment
 {
-    TrtUniquePtr<INetworkDefinition> network;
+    BuildEnvironment() = delete;
+    BuildEnvironment(BuildEnvironment const& other) = delete;
+    BuildEnvironment(BuildEnvironment&& other) = delete;
+    BuildEnvironment(bool isSafe, int32_t DLACore) : engine(isSafe, DLACore)
+    {
+    }
+
+    std::unique_ptr<INetworkDefinition> network;
     //! Parser that creates the network. Must be declared *after* network, so that when
     //! ~BuildEnvironment() executes, the parser is destroyed before the network is destroyed.
     Parser parser;
-    TrtUniquePtr<nvinfer1::ICudaEngine> engine;
-    std::unique_ptr<nvinfer1::safe::ICudaEngine> safeEngine;
-    std::unique_ptr<IHostMemory> serializedEngine;
+    LazilyDeserializedEngine engine;
 };
 
 //!
@@ -67,16 +165,16 @@ struct BuildEnvironment
 //!
 //! \see Parser::operator bool()
 //!
-Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& network, std::ostream& err);
+Parser modelToNetwork(ModelOptions const& model, nvinfer1::INetworkDefinition& network, std::ostream& err);
 
 //!
 //! \brief Set up network and config
 //!
 //! \return boolean Return true if network and config were successfully set
 //!
-bool setupNetworkAndConfig(const BuildOptions& build, const SystemOptions& sys, IBuilder& builder,
+bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
     INetworkDefinition& network, IBuilderConfig& config, std::ostream& err,
-    std::vector<std::vector<char>>& sparseWeights);
+    std::vector<std::vector<int8_t>>& sparseWeights);
 
 //!
 //! \brief Log refittable layers and weights of a refittable engine
@@ -88,70 +186,33 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine);
 //!
 //! \return Pointer to the engine loaded or nullptr if the operation failed
 //!
-nvinfer1::ICudaEngine* loadEngine(const std::string& engine, int DLACore, std::ostream& err);
+nvinfer1::ICudaEngine* loadEngine(std::string const& engine, int32_t DLACore, std::ostream& err);
 
 //!
 //! \brief Save an engine into a file
 //!
 //! \return boolean Return true if the engine was successfully saved
 //!
-bool saveEngine(const nvinfer1::ICudaEngine& engine, const std::string& fileName, std::ostream& err);
+bool saveEngine(nvinfer1::ICudaEngine const& engine, std::string const& fileName, std::ostream& err);
 
 //!
 //! \brief Create an engine from model or serialized file, and optionally save engine
 //!
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
-bool getEngineBuildEnv(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, 
+bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, SystemOptions const& sys, 
     BuildEnvironment& env, std::ostream& err);
 
 //!
-//! \brief Create an engine from model or serialized file, and optionally save engine
+//! \brief Measure and report refit runtime.
 //!
-//! \return Pointer to the engine created or nullptr if the creation failed
-//!
-inline TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(
-    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err)
-{
-    BuildEnvironment env;
-    TrtUniquePtr<nvinfer1::ICudaEngine> engine;
-    if (getEngineBuildEnv(model, build, sys, env, err))
-    {
-        engine.swap(env.engine);
-    }
-    return engine;
-}
-
-//!
-//! \brief Create a serialized network
-//!
-//! \return Pointer to a host memory for a serialized network
-//!
-IHostMemory* networkToSerialized(const BuildOptions& build, const SystemOptions& sys, IBuilder& builder,
-    INetworkDefinition& network, std::ostream& err);
-
-//!
-//! \brief Tranfer model to a serialized network
-//!
-//! \return Pointer to a host memory for a serialized network
-//!
-IHostMemory* modelToSerialized(
-    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
-
-//!
-//! \brief Serialize network and save it into a file
-//!
-//! \return boolean Return true if the network was successfully serialized and saved
-//!
-bool serializeAndSave(const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
-
-bool timeRefit(const INetworkDefinition& network, nvinfer1::ICudaEngine& engine);
+bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine, bool multiThreading);
 
 //!
 //! \brief Set tensor scales from a calibration table
 //!
-void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, const std::vector<IOFormat>& inputFormats,
-        const std::vector<IOFormat>& outputFormats, const std::string& calibrationFile);
+void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::vector<IOFormat> const& inputFormats,
+    std::vector<IOFormat> const& outputFormats, std::string const& calibrationFile);
 
 //!
 //! \brief Check if safe runtime is loaded.

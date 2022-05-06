@@ -27,6 +27,7 @@ from calibrator import load_mnist_data, load_mnist_labels, MNISTEntropyCalibrato
 
 # For ../common.py
 import sys, os
+
 sys.path.insert(1, os.path.join(sys.path[0], os.path.pardir))
 import common
 
@@ -43,7 +44,11 @@ class ModelData(object):
 
 # This function builds an engine from a Caffe model.
 def build_int8_engine(deploy_file, model_file, calib, batch_size=32):
-    with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.CaffeParser() as parser, trt.Runtime(TRT_LOGGER) as runtime:
+    with trt.Builder(
+        TRT_LOGGER
+    ) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.CaffeParser() as parser, trt.Runtime(
+        TRT_LOGGER
+    ) as runtime:
         # We set the builder batch size to be the same as the calibrator's, as we use the same batches
         # during inference. Note that this is not required in general, and inference batch size is
         # independent of calibration batch size.
@@ -76,12 +81,14 @@ def check_accuracy(context, batch_size, test_set, test_labels):
         effective_batch_size = end_idx - start_idx
 
         # Do inference for every batch.
-        inputs[0].host = test_set[start_idx:start_idx + effective_batch_size]
-        [output] = common.do_inference(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream, batch_size=effective_batch_size)
+        inputs[0].host = test_set[start_idx : start_idx + effective_batch_size]
+        [output] = common.do_inference(
+            context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream, batch_size=effective_batch_size
+        )
 
         # Use argmax to get predictions and then check accuracy
         preds = np.argmax(output.reshape(batch_size, 10)[0:effective_batch_size], axis=1)
-        labels = test_labels[start_idx:start_idx + effective_batch_size]
+        labels = test_labels[start_idx : start_idx + effective_batch_size]
         num_total += effective_batch_size
         num_correct += np.count_nonzero(np.equal(preds, labels))
 
@@ -90,7 +97,18 @@ def check_accuracy(context, batch_size, test_set, test_labels):
 
 
 def main():
-    _, data_files = common.find_sample_data(description="Runs a Caffe MNIST network in Int8 mode", subfolder="mnist", find_files=["t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", "train-images-idx3-ubyte", ModelData.DEPLOY_PATH, ModelData.MODEL_PATH], err_msg="Please follow the README to download the MNIST dataset")
+    _, data_files = common.find_sample_data(
+        description="Runs a Caffe MNIST network in Int8 mode",
+        subfolder="mnist",
+        find_files=[
+            "t10k-images-idx3-ubyte",
+            "t10k-labels-idx1-ubyte",
+            "train-images-idx3-ubyte",
+            ModelData.DEPLOY_PATH,
+            ModelData.MODEL_PATH,
+        ],
+        err_msg="Please follow the README to download the MNIST dataset",
+    )
     [test_set, test_labels, train_set, deploy_file, model_file] = data_files
 
     # Now we create a calibrator and give it the location of our calibration data.
@@ -100,9 +118,14 @@ def main():
 
     # Inference batch size can be different from calibration batch size.
     batch_size = 32
-    with build_int8_engine(deploy_file, model_file, calib, batch_size) as engine, engine.create_execution_context() as context:
+    with build_int8_engine(
+        deploy_file, model_file, calib, batch_size
+    ) as engine, engine.create_execution_context() as context:
         # Batch size for inference can be different than batch size used for calibration.
-        check_accuracy(context, batch_size, test_set=load_mnist_data(test_set), test_labels=load_mnist_labels(test_labels))
+        check_accuracy(
+            context, batch_size, test_set=load_mnist_data(test_set), test_labels=load_mnist_labels(test_labels)
+        )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

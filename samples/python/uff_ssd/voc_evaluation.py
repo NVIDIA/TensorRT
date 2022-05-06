@@ -19,13 +19,16 @@
 import argparse
 import glob
 import os
+import sys
 import tarfile
 
 import pycuda.autoinit
 import tensorrt as trt
 import utils.coco as coco_utils  # COCO dataset descriptors
+
 # Utility functions
 import utils.mAP as voc_mAP_utils  # mAP computation
+from utils.model import prepare_ssd_model
 from utils.modeldata import ModelData
 import utils.voc as voc_utils  # VOC dataset descriptors
 from PIL import Image
@@ -36,24 +39,13 @@ VOC_CLASSES = voc_utils.VOC_CLASSES_LIST
 COCO_LABELS = coco_utils.COCO_CLASSES_LIST
 
 # Model used for inference
-MODEL_NAME = 'ssd_inception_v2_coco_2017_11_17'
+MODEL_NAME = "ssd_inception_v2_coco_2017_11_17"
 
 # Precision command line argument -> TRT Engine datatype
-TRT_PRECISION_TO_DATATYPE = {
-    16: trt.DataType.HALF,
-    32: trt.DataType.FLOAT
-}
+TRT_PRECISION_TO_DATATYPE = {16: trt.DataType.HALF, 32: trt.DataType.FLOAT}
 
 # Layout of TensorRT network output metadata
-TRT_PREDICTION_LAYOUT = {
-    "image_id": 0,
-    "label": 1,
-    "confidence": 2,
-    "xmin": 3,
-    "ymin": 4,
-    "xmax": 5,
-    "ymax": 6
-}
+TRT_PREDICTION_LAYOUT = {"image_id": 0, "label": 1, "confidence": 2, "xmin": 3, "ymin": 4, "xmax": 5, "ymax": 6}
 
 
 class Detection(object):
@@ -83,8 +75,7 @@ class Detection(object):
 
     def __repr__(self):
         return "{} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n".format(
-            self.image_number, self.confidence,
-            self.xmin, self.ymin, self.xmax, self.ymax
+            self.image_number, self.confidence, self.xmin, self.ymin, self.xmax, self.ymax
         )
 
     def write_to_file(self, f):
@@ -117,6 +108,7 @@ def fetch_prediction_field(field_name, detection_out, pred_start_idx):
     """
     return detection_out[pred_start_idx + TRT_PREDICTION_LAYOUT[field_name]]
 
+
 def analyze_tensorrt_prediction(detection_out, pred_start_idx):
     image_id = int(fetch_prediction_field("image_id", detection_out, pred_start_idx))
     label = int(fetch_prediction_field("label", detection_out, pred_start_idx))
@@ -133,8 +125,8 @@ def analyze_tensorrt_prediction(detection_out, pred_start_idx):
 
     return image_id, label, confidence, xmin, ymin, xmax, ymax
 
-def produce_tensorrt_detections(detection_files, trt_inference_wrapper, max_batch_size,
-    image_numbers, image_path):
+
+def produce_tensorrt_detections(detection_files, trt_inference_wrapper, max_batch_size, image_numbers, image_path):
     """Fetches output from TensorRT model, and saves it to results file.
 
     The output of TensorRT model is a pair of:
@@ -170,17 +162,18 @@ def produce_tensorrt_detections(detection_files, trt_inference_wrapper, max_batc
     """
     total_imgs = len(image_numbers)
     for idx in range(0, len(image_numbers), max_batch_size):
-        imgs = image_numbers[idx:idx+max_batch_size]
+        imgs = image_numbers[idx : idx + max_batch_size]
         batch_size = len(imgs)
-        print("Infering image {}/{}".format(idx+1, total_imgs))
+        print("Infering image {}/{}".format(idx + 1, total_imgs))
         image_paths = [image_path.format(img) for img in imgs]
         detections, keep_count = trt_inference_wrapper.infer_batch(image_paths)
         prediction_fields = len(TRT_PREDICTION_LAYOUT)
         for img_idx, img_number in enumerate(imgs):
             img_predictions_start_idx = prediction_fields * keep_count[img_idx] * img_idx
             for det in range(int(keep_count[img_idx])):
-                _, label, confidence, xmin, ymin, xmax, ymax = \
-                    analyze_tensorrt_prediction(detections, img_predictions_start_idx + det * prediction_fields)
+                _, label, confidence, xmin, ymin, xmax, ymax = analyze_tensorrt_prediction(
+                    detections, img_predictions_start_idx + det * prediction_fields
+                )
                 if confidence > 0.0:
                     label_name = voc_utils.coco_label_to_voc_label(COCO_LABELS[label])
                     if label_name:
@@ -195,8 +188,8 @@ def produce_tensorrt_detections(detection_files, trt_inference_wrapper, max_batc
                         )
                         detection.write_to_file(det_file)
 
-def produce_tensorflow_detections(detection_files, tf_inference_wrapper, batch_size,
-    image_numbers, image_path):
+
+def produce_tensorflow_detections(detection_files, tf_inference_wrapper, batch_size, image_numbers, image_path):
     """Fetches output from Tensorflow model, and saves it to results file.
 
     The format of output from Tensorflow is output_dict Python
@@ -225,18 +218,18 @@ def produce_tensorflow_detections(detection_files, tf_inference_wrapper, batch_s
     """
     total_imgs = len(image_numbers)
     for idx in range(0, len(image_numbers), batch_size):
-        print("Infering image {}/{}".format(idx+1, total_imgs))
+        print("Infering image {}/{}".format(idx + 1, total_imgs))
 
-        imgs = image_numbers[idx:idx+batch_size]
+        imgs = image_numbers[idx : idx + batch_size]
         image_paths = [image_path.format(img) for img in imgs]
         output_dict = tf_inference_wrapper.infer_batch(image_paths)
 
-        keep_count = output_dict['num_detections']
+        keep_count = output_dict["num_detections"]
         for img_idx, img_number in enumerate(imgs):
             for det in range(int(keep_count[img_idx])):
-                label = output_dict['detection_classes'][img_idx][det]
-                confidence = output_dict['detection_scores'][img_idx][det]
-                bbox = output_dict['detection_boxes'][img_idx][det]
+                label = output_dict["detection_classes"][img_idx][det]
+                confidence = output_dict["detection_scores"][img_idx][det]
+                bbox = output_dict["detection_boxes"][img_idx][det]
 
                 # Output bounding boxes are in [0, 1] format,
                 # here we rescale them to pixel [0, 255] format
@@ -250,7 +243,7 @@ def produce_tensorflow_detections(detection_files, tf_inference_wrapper, batch_s
                 if confidence > 0.0:
                     # Model was trained on COCO, so we need to convert label to VOC one
                     label_name = voc_utils.coco_label_to_voc_label(COCO_LABELS[label])
-                    if label_name: # Checks for label_name correctness
+                    if label_name:  # Checks for label_name correctness
                         det_file = detection_files[label_name]
                         detection = Detection(
                             img_number,
@@ -261,6 +254,7 @@ def produce_tensorflow_detections(detection_files, tf_inference_wrapper, batch_s
                             ymax,
                         )
                         detection.write_to_file(det_file)
+
 
 def should_skip_inference(parsed_args):
     """Checks if inference should be skipped.
@@ -278,15 +272,15 @@ def should_skip_inference(parsed_args):
     """
     skip_inference = True
     for voc_class in VOC_CLASSES:
-        voc_class_detection_file = \
-            os.path.join(parsed_args['results_dir'], 'det_test_{}.txt'.format(voc_class))
-        if os.path.exists(voc_class_detection_file) and not parsed_args['force_inference']:
+        voc_class_detection_file = os.path.join(parsed_args["results_dir"], "det_test_{}.txt".format(voc_class))
+        if os.path.exists(voc_class_detection_file) and not parsed_args["force_inference"]:
             continue
         else:
             skip_inference = False
     if skip_inference:
         print("Model detections present - skipping inference. To avoid this, use -f flag.")
     return skip_inference
+
 
 def preprocess_voc():
     """Resizes all VOC images to 300x300 and saves them into .ppm files.
@@ -295,17 +289,13 @@ def preprocess_voc():
     so in this function we preproceess all VOC images to fit that format.
     """
     voc_root = PATHS.get_voc_dir_path()
-    voc_jpegs = glob.glob(
-        os.path.join(voc_root, 'JPEGImages', '*.jpg'))
-    voc_ppms = glob.glob(
-        os.path.join(voc_root, 'PPMImages', '*.ppm'))
+    voc_jpegs = glob.glob(os.path.join(voc_root, "JPEGImages", "*.jpg"))
+    voc_ppms = glob.glob(os.path.join(voc_root, "PPMImages", "*.ppm"))
 
     # Check if preprocessing is needed by comparing
     # image names between JPEGImages and PPMImages
-    voc_jpegs_basenames = \
-        [os.path.splitext(os.path.basename(p))[0] for p in voc_jpegs]
-    voc_ppms_basenames = \
-        [os.path.splitext(os.path.basename(p))[0] for p in voc_ppms]
+    voc_jpegs_basenames = [os.path.splitext(os.path.basename(p))[0] for p in voc_jpegs]
+    voc_ppms_basenames = [os.path.splitext(os.path.basename(p))[0] for p in voc_ppms]
     # If lists are not the same, preprocessing is needed
     if sorted(voc_jpegs_basenames) != sorted(voc_ppms_basenames):
         print("Preprocessing VOC dataset. It may take few minutes.")
@@ -317,17 +307,14 @@ def preprocess_voc():
         # .ppm copy to fit model input expectations
         for voc_jpeg_path in voc_jpegs:
             voc_jpeg_basename = os.path.basename(voc_jpeg_path)
-            voc_ppm_path = voc_ppms_path.format(
-                os.path.splitext(voc_jpeg_basename)[0])
+            voc_ppm_path = voc_ppms_path.format(os.path.splitext(voc_jpeg_basename)[0])
             if not os.path.exists(voc_ppm_path):
                 img_pil = Image.open(voc_jpeg_path)
                 img_pil = img_pil.resize(
-                    size=(
-                        ModelData.get_input_width(),
-                        ModelData.get_input_height()),
-                    resample=Image.BILINEAR
+                    size=(ModelData.get_input_width(), ModelData.get_input_height()), resample=Image.BILINEAR
                 )
                 img_pil.save(voc_ppm_path)
+
 
 def adjust_paths(args, data_dir):
     """Adjust all file/directory paths, arguments passed by user.
@@ -342,8 +329,8 @@ def adjust_paths(args, data_dir):
         args (argparse.Namespace): parsed user arguments
         data_dir (str): path to the data directory
     """
-    if args.workspace_dir:
-        PATHS.set_workspace_dir_path(args.workspace_dir)
+    workspace_dir = os.getcwd() if args.workspace_dir is None else args.workspace_dir
+    PATHS.set_workspace_dir_path(workspace_dir)
     if not os.path.exists(PATHS.get_workspace_dir_path()):
         os.makedirs(PATHS.get_workspace_dir_path())
     PATHS.set_data_dir_path(data_dir)
@@ -352,10 +339,10 @@ def adjust_paths(args, data_dir):
 def extract_voc_data_if_needed():
     if os.path.exists(PATHS.get_voc_dir_path()):
         return
-    voc_archive_path = PATHS.get_data_file_path('VOCtest_06-Nov-2007.tar')
+    voc_archive_path = PATHS.get_data_file_path("samples/python/uff_ssd/VOCtest_06-Nov-2007.tar")
     print("Unpacking {}".format(voc_archive_path))
     with tarfile.open(voc_archive_path, "r") as tar:
-        tar.extractall(path=PATHS.get_sample_root())
+        tar.extractall(path=PATHS.get_workspace_dir_path())
     print("Unpacking done!")
 
 
@@ -363,24 +350,38 @@ def parse_commandline_arguments():
     """Parses command line arguments and adjusts internal data structures."""
 
     # Define script command line arguments
-    parser = argparse.ArgumentParser(description='Run object detection evaluation on VOC2007 dataset.')
-    parser.add_argument('inference_backend', metavar='INFERENCE_BACKEND',
-        type=str, choices=['tensorrt', 'tensorflow'], default='tensorrt', nargs='?',
-        help='inference backend to run evaluation with')
-    parser.add_argument('-p', '--precision', type=int, choices=[32, 16], default=32,
-        help='desired TensorRT float precision to build an engine with')
-    parser.add_argument('-b', '--max_batch_size', type=int, default=64,
-        help='max TensorRT engine batch size')
-    parser.add_argument('-f', '--force_inference', action='store_true',
-        help='force model inference even if detections exist')
-    parser.add_argument('-w', '--workspace_dir',
-        help='sample workspace directory')
-    parser.add_argument('-d', '--data',
-        help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.")
+    parser = argparse.ArgumentParser(description="Run object detection evaluation on VOC2007 dataset.")
+    parser.add_argument(
+        "inference_backend",
+        metavar="INFERENCE_BACKEND",
+        type=str,
+        choices=["tensorrt", "tensorflow"],
+        default="tensorrt",
+        nargs="?",
+        help="inference backend to run evaluation with",
+    )
+    parser.add_argument(
+        "-p",
+        "--precision",
+        type=int,
+        choices=[32, 16],
+        default=32,
+        help="desired TensorRT float precision to build an engine with",
+    )
+    parser.add_argument("-b", "--max_batch_size", type=int, default=64, help="max TensorRT engine batch size")
+    parser.add_argument(
+        "-f", "--force_inference", action="store_true", help="force model inference even if detections exist"
+    )
+    parser.add_argument("-w", "--workspace_dir", help="sample workspace directory")
+    parser.add_argument(
+        "-d",
+        "--data",
+        help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.",
+    )
 
     args, _ = parser.parse_known_args()
 
-    data_dir = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
+    data_dir = os.environ.get("TRT_DATA_DIR", None) if args.data is None else args.data
     if data_dir is None:
         raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
 
@@ -393,30 +394,29 @@ def parse_commandline_arguments():
     # Fetch directory to save inference results to, create it if it doesn't exist
     trt_engine_datatype = None
     trt_engine_path = None
-    if args.inference_backend == 'tensorrt':
+    if args.inference_backend == "tensorrt":
         # In case of TensorRT we also fetch engine data type and engine path
         trt_engine_datatype = TRT_PRECISION_TO_DATATYPE[args.precision]
-        trt_engine_path = PATHS.get_engine_path(trt_engine_datatype,
-            args.max_batch_size)
+        trt_engine_path = PATHS.get_engine_path(trt_engine_datatype, args.max_batch_size)
         if not os.path.exists(os.path.dirname(trt_engine_path)):
             os.makedirs(os.path.dirname(trt_engine_path))
-        results_dir = PATHS.get_voc_model_detections_path('tensorrt',
-            trt_engine_datatype)
-    elif args.inference_backend == 'tensorflow':
-        results_dir = PATHS.get_voc_model_detections_path('tensorflow')
+        results_dir = PATHS.get_voc_model_detections_path("tensorrt", trt_engine_datatype)
+    elif args.inference_backend == "tensorflow":
+        results_dir = PATHS.get_voc_model_detections_path("tensorflow")
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
     # Return parsed arguments for further functions to use
     parsed = {
-        'inference_backend': args.inference_backend,
-        'max_batch_size': args.max_batch_size,
-        'force_inference': args.force_inference,
-        'results_dir': results_dir,
-        'trt_engine_path': trt_engine_path,
-        'trt_engine_datatype': trt_engine_datatype
+        "inference_backend": args.inference_backend,
+        "max_batch_size": args.max_batch_size,
+        "force_inference": args.force_inference,
+        "results_dir": results_dir,
+        "trt_engine_path": trt_engine_path,
+        "trt_engine_datatype": trt_engine_datatype,
     }
     return parsed
+
 
 def main():
     # Parse command line arguments
@@ -432,16 +432,18 @@ def main():
     if not skip_inference:
         for voc_class in VOC_CLASSES:
             detection_files[voc_class] = open(
-                os.path.join(
-                    parsed['results_dir'], 'det_test_{}.txt'.format(voc_class)
-                ), 'w'
+                os.path.join(parsed["results_dir"], "det_test_{}.txt".format(voc_class)), "w"
             )
 
     # Fetch frozen model .pb path...
     ssd_model_pb_path = PATHS.get_model_pb_path(MODEL_NAME)
+    if not os.path.exists(ssd_model_pb_path):
+        prepare_ssd_model(MODEL_NAME)
     # ...and .uff path, if needed (converting .pb to .uff if not already done)
-    if parsed['inference_backend'] == 'tensorrt':
+    if parsed["inference_backend"] == "tensorrt":
         ssd_model_uff_path = PATHS.get_model_uff_path(MODEL_NAME)
+        if not os.path.exists(ssd_model_uff_path):
+            prepare_ssd_model(MODEL_NAME)
 
     # This block of code sets up and performs inference, if needed
     if not skip_inference:
@@ -449,50 +451,55 @@ def main():
         preprocess_voc()
 
         # Fetch image list and input .ppm files path
-        with open(PATHS.get_voc_image_set_path(), 'r') as f:
+        with open(PATHS.get_voc_image_set_path(), "r") as f:
             voc_image_numbers = f.readlines()
             voc_image_numbers = [line.strip() for line in voc_image_numbers]
         voc_image_path = PATHS.get_voc_ppm_img_path()
 
         # Tensorflow and TensorRT paths are a little bit different,
         # so we must treat each one individually
-        if parsed['inference_backend'] == 'tensorrt':
+        if parsed["inference_backend"] == "tensorrt":
             # TRTInference initialization initializes
             # all TensorRT structures, creates engine if it doesn't
             # already exist and finally saves it to file for future uses
             from utils.inference_trt import TRTInference
+
             trt_inference_wrapper = TRTInference(
-                parsed['trt_engine_path'], ssd_model_uff_path,
-                parsed['trt_engine_datatype'], parsed['max_batch_size'])
+                parsed["trt_engine_path"], ssd_model_uff_path, parsed["trt_engine_datatype"], parsed["max_batch_size"]
+            )
             # Outputs from TensorRT are handled differently than
             # outputs from Tensorflow, that's why we use another
             # function to produce the detections from them
-            produce_tensorrt_detections(detection_files,
-                trt_inference_wrapper, parsed['max_batch_size'],
-                voc_image_numbers, voc_image_path)
-        elif parsed['inference_backend'] == 'tensorflow':
+            produce_tensorrt_detections(
+                detection_files, trt_inference_wrapper, parsed["max_batch_size"], voc_image_numbers, voc_image_path
+            )
+        elif parsed["inference_backend"] == "tensorflow":
             # In case of Tensorflow all we need to
             # initialize inference is frozen model...
             from utils.inference_tf import TensorflowInference
+
             tf_inference_wrapper = TensorflowInference(ssd_model_pb_path)
             # ...and after initializing it, we can
             # proceed to producing detections
-            produce_tensorflow_detections(detection_files,
-                tf_inference_wrapper, parsed['max_batch_size'],
-                voc_image_numbers, voc_image_path)
-
+            produce_tensorflow_detections(
+                detection_files, tf_inference_wrapper, parsed["max_batch_size"], voc_image_numbers, voc_image_path
+            )
 
     # Flush detection to files to make sure evaluation is correct
     for key in detection_files:
         detection_files[key].flush()
 
     # Do mAP computation based on saved detections
-    voc_mAP_utils.do_python_eval(parsed['results_dir'])
+    mAP = voc_mAP_utils.do_python_eval(parsed["results_dir"])
 
     # Close detection files, they are not needed anymore
     for key in detection_files:
         detection_files[key].close()
 
+    if mAP < 0.721:
+        print("Accuracy check failed. SSD300 expected to achieve atleast 72.1% mAP, reported {}".format(mAP))
+        sys.exit(1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

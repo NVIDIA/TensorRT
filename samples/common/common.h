@@ -51,6 +51,14 @@
 #include <utility>
 #include <vector>
 
+#ifdef _MSC_VER
+#else
+#include <stdio.h>  // fileno
+#include <unistd.h> // lockf
+#endif
+
+#include "safeCommon.h"
+
 using namespace nvinfer1;
 using namespace plugin;
 
@@ -63,17 +71,6 @@ using namespace plugin;
 #if defined(__aarch64__) || defined(__QNX__)
 #define ENABLE_DLA_API 1
 #endif
-
-#define CHECK(status)                                                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        auto ret = (status);                                                                                           \
-        if (ret != 0)                                                                                                  \
-        {                                                                                                              \
-            sample::gLogError << "Cuda failure: " << ret << std::endl;                                                 \
-            abort();                                                                                                   \
-        }                                                                                                              \
-    } while (0)
 
 #define CHECK_RETURN_W_MSG(status, val, errMsg)                                                                        \
     do                                                                                                                 \
@@ -194,7 +191,7 @@ struct SimpleProfiler : public nvinfer1::IProfiler
         auto old_precision = out.precision();
         // Output header
         {
-            out << std::setfill(' ') << std::setw(maxLayerNameLength) << layerNameStr << " ";
+            out << std::setw(maxLayerNameLength) << layerNameStr << " ";
             out << std::setw(12) << "Runtime, "
                 << "%"
                 << " ";
@@ -411,16 +408,6 @@ inline std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> makeCudaStream()
     }
 
     return pStream;
-}
-
-template <typename T>
-std::shared_ptr<T> infer_object(T* obj)
-{
-    if (!obj)
-    {
-        throw std::runtime_error(std::string("Failed to create object"));
-    }
-    return std::shared_ptr<T>(obj);
 }
 
 //! Return vector of indices that puts magnitudes of sequence in descending order.
@@ -656,25 +643,6 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
 inline int64_t volume(const nvinfer1::Dims& d)
 {
     return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
-}
-
-inline uint32_t elementSize(DataType t) noexcept
-{
-    switch (t)
-    {
-    case DataType::kINT32:
-    case DataType::kFLOAT: return 4;
-    case DataType::kHALF: return 2;
-    case DataType::kBOOL:
-    case DataType::kINT8: return 1;
-    }
-    return 0;
-}
-
-template <typename A, typename B>
-inline A divUp(A x, B n)
-{
-    return (x + n - 1) / n;
 }
 
 template <int C, int H, int W>
@@ -964,7 +932,7 @@ inline bool isSMSafe()
 {
     const int32_t smVersion = getSMVersion();
     return smVersion == 0x0700 || smVersion == 0x0702 || smVersion == 0x0705 ||
-           smVersion == 0x0800 || smVersion == 0x0806;
+           smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807;
 }
 
 inline bool isDataTypeSupported(DataType dataType)
@@ -982,6 +950,181 @@ inline bool isDataTypeSupported(DataType dataType)
     }
 
     return true;
+}
+
+class FileLock
+{
+public:
+    FileLock(std::string const& fileName)
+        : fileName(fileName)
+    {
+        std::string lockFileName = fileName + ".lock";
+#ifdef _MSC_VER
+        sample::gLogVerbose << "Trying to set exclusive file lock " << lockFileName << std::endl;
+        auto startTime = std::chrono::high_resolution_clock::now();
+        // MS docs said this is a blocking IO if "FILE_FLAG_OVERLAPPED" is not provided
+        lock = CreateFileA(lockFileName.c_str(), GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, 0, NULL);
+        if (lock != INVALID_HANDLE_VALUE)
+        {
+            float const time
+                = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTime).count();
+            sample::gLogVerbose << "File locked in " << time << " seconds." << std::endl;
+        }
+        else
+        {
+            throw std::runtime_error("Failed to lock " + lockFileName + "!");
+        }
+#elif defined(__QNX__)
+        // We once enabled the file lock on QNX, lockf(F_TLOCK) return -1 and the reported error is
+        // The error generated was 89
+        // That means : Function not implemented
+#else
+        fp = fopen(lockFileName.c_str(), "wb+");
+        if (!fp)
+        {
+            throw std::runtime_error("Cannot open " + lockFileName + "!");
+        }
+        fd = fileno(fp);
+        sample::gLogVerbose << "Trying to set exclusive file lock " << lockFileName << std::endl;
+        auto startTime = std::chrono::high_resolution_clock::now();
+        auto ret = lockf(fd, F_LOCK, 0);
+        if (ret != 0)
+        {
+            fd = -1;
+            fclose(fp);
+            throw std::runtime_error("Failed to lock " + lockFileName + "!");
+        }
+        float const time = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTime).count();
+        sample::gLogVerbose << "File locked in " << time << " seconds." << std::endl;
+#endif
+    }
+
+    ~FileLock()
+    {
+        std::string lockFileName = fileName + ".lock";
+#ifdef _MSC_VER
+        if (lock != INVALID_HANDLE_VALUE)
+        {
+            sample::gLogVerbose << "Trying to remove exclusive file lock " << lockFileName << std::endl;
+            auto startTime = std::chrono::high_resolution_clock::now();
+            CloseHandle(lock);
+            float const time
+                = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTime).count();
+            sample::gLogVerbose << "File unlocked in " << time << " seconds." << std::endl;
+        }
+#elif defined(__QNX__)
+        // We once enabled the file lock on QNX, lockf(F_TLOCK) return -1 and the reported error is
+        // The error generated was 89
+        // That means : Function not implemented
+#else
+        if (fd != -1)
+        {
+            sample::gLogVerbose << "Trying to remove exclusive file lock " << lockFileName << std::endl;
+            auto startTime = std::chrono::high_resolution_clock::now();
+            auto ret = lockf(fd, F_ULOCK, 0);
+            if (ret != 0)
+            {
+                sample::gLogVerbose << "Failed to unlock " << lockFileName << "!" << std::endl;
+            }
+            else
+            {
+                fd = -1;
+                fclose(fp);
+                float const time
+                    = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTime).count();
+                sample::gLogVerbose << "File unlocked in " << time << " seconds." << std::endl;
+            }
+        }
+#endif
+    }
+
+private:
+    FileLock() = delete;                           // no default ctor
+    FileLock(FileLock const&) = delete;            // no copy ctor
+    FileLock& operator=(FileLock const&) = delete; // no copy assignment
+
+    const std::string fileName; // the file being protected
+#ifdef _MSC_VER
+    HANDLE lock;
+#else
+    FILE* fp;
+    int32_t fd;
+#endif
+};
+
+inline std::vector<char> loadTimingCacheFile(const std::string inFileName)
+{
+    std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(inFileName)};
+    std::ifstream iFile(inFileName, std::ios::in | std::ios::binary);
+    if (!iFile)
+    {
+        sample::gLogWarning << "Could not read timing cache from: " << inFileName
+                            << ". A new timing cache will be generated and written." << std::endl;
+        return std::vector<char>();
+    }
+    iFile.seekg(0, std::ifstream::end);
+    size_t fsize = iFile.tellg();
+    iFile.seekg(0, std::ifstream::beg);
+    std::vector<char> content(fsize);
+    iFile.read(content.data(), fsize);
+    iFile.close();
+    sample::gLogInfo << "Loaded " << fsize << " bytes of timing cache from " << inFileName << std::endl;
+    return content;
+}
+
+inline void saveTimingCacheFile(const std::string outFileName, const IHostMemory* blob)
+{
+    std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(outFileName)};
+    std::ofstream oFile(outFileName, std::ios::out | std::ios::binary);
+    if (!oFile)
+    {
+        sample::gLogWarning << "Could not write timing cache to: " << outFileName << std::endl;
+        return;
+    }
+    oFile.write((char*) blob->data(), blob->size());
+    oFile.close();
+    sample::gLogInfo << "Saved " << blob->size() << " bytes of timing cache to " << outFileName << std::endl;
+}
+
+inline void updateTimingCacheFile(std::string const fileName, ITimingCache const* timingCache)
+{
+    // Prepare empty timingCache in case that there is no existing file to read
+    std::unique_ptr<IBuilder> builder{createInferBuilder(sample::gLogger.getTRTLogger())};
+    std::unique_ptr<IBuilderConfig> config{builder->createBuilderConfig()};
+    std::unique_ptr<ITimingCache> fileTimingCache{config->createTimingCache(static_cast<const void*>(nullptr), 0)};
+
+    std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(fileName)};
+    std::ifstream iFile(fileName, std::ios::in | std::ios::binary);
+    if (iFile)
+    {
+        iFile.seekg(0, std::ifstream::end);
+        size_t fsize = iFile.tellg();
+        iFile.seekg(0, std::ifstream::beg);
+        std::vector<char> content(fsize);
+        iFile.read(content.data(), fsize);
+        iFile.close();
+        sample::gLogInfo << "Loaded " << fsize << " bytes of timing cache from " << fileName << std::endl;
+        fileTimingCache.reset(config->createTimingCache(static_cast<const void*>(content.data()), content.size()));
+        if (!fileTimingCache)
+        {
+            throw std::runtime_error("Failed to create timingCache from " + fileName + "!");
+        }
+    }
+    fileTimingCache->combine(*timingCache, false);
+    std::unique_ptr<IHostMemory> blob{fileTimingCache->serialize()};
+    if (!blob)
+    {
+        throw std::runtime_error("Failed to serialize ITimingCache!");
+    }
+    std::ofstream oFile(fileName, std::ios::out | std::ios::binary);
+    if (!oFile)
+    {
+        sample::gLogWarning << "Could not write timing cache to: " << fileName << std::endl;
+        return;
+    }
+    oFile.write((char*) blob->data(), blob->size());
+    oFile.close();
+    sample::gLogInfo << "Saved " << blob->size() << " bytes of timing cache to " << fileName << std::endl;
 }
 
 } // namespace samplesCommon

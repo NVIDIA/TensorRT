@@ -104,7 +104,7 @@ private:
 //! \details This function creates the Onnx MNIST network by parsing the Onnx model and builds
 //!          the engine that will be used to run MNIST (mEngine)
 //!
-//! \return Returns true if the engine was created successfully and false otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 bool SampleOnnxMnistCoordConvAC::build()
 {
@@ -199,7 +199,6 @@ bool SampleOnnxMnistCoordConvAC::constructNetwork(SampleUniquePtr<nvinfer1::IBui
         return false;
     }
 
-    config->setMaxWorkspaceSize(16_MiB);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
@@ -337,12 +336,12 @@ bool SampleOnnxMnistCoordConvAC::verifyOutput(const samplesCommon::BufferManager
 samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args& args)
 {
     samplesCommon::OnnxSampleParams params;
-    if (args.dataDirs.empty()) //!< Use default directories if user hasn't provided directory paths
+    if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths
     {
         params.dataDirs.push_back("data/mnist/");
         params.dataDirs.push_back("data/samples/mnist/");
     }
-    else //!< Use the data directory provided by the user
+    else // Use the data directory provided by the user
     {
         params.dataDirs = args.dataDirs;
     }

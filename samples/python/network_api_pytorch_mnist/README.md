@@ -33,8 +33,11 @@ The Activation layer implements element-wise activation functions. Specifically,
 [Convolution layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#convolution-layer)
 The Convolution layer computes a 2D (channel, height, and width) convolution, with or without bias.
 
-[FullyConnected layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#fullyconnected-layer)
-The FullyConnected layer implements a matrix-vector product, with or without bias.
+[MatrixMultiplyLayer](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#matrixmultiply-layer)
+The MatrixMultiply layer implements a matrix multiplication.
+(The [FullyConnected layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#fullyconnected-layer) is deprecated since 8.4.
+The bias of FullyConnected semantic can be added with an
+[ElementwiseLayer](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#elementwise-layer) of `SUM` operation.)
 
 [Pooling layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#pooling-layer)
 The Pooling layer implements pooling within a channel. Supported pooling types are `maximum`, `average` and `maximum-average blend`.
@@ -51,16 +54,9 @@ To run this sample you must be using Python 3.6 or newer.
 
 On PowerPC systems, you will need to manually install PyTorch using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
 
-On Jetson Nano,
-a. you will need nvcc in the `PATH` for installing pycuda:
+On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
 ```bash
 export PATH=${PATH}:/usr/local/cuda/bin/
-```
-b. you will need to manually install PyTorch using the following steps:
-```bash
-wget -O torch-1.9.0-cp36-cp36m-linux_aarch64.whl https://nvidia.box.com/shared/static/h1z9sw4bb1ybi0rm3tu8qdj8hs05ljbm.whl
-sudo apt-get install libopenblas-base libopenmpi-dev
-pip3 install torch-1.9.0-cp36-cp36m-linux_aarch64.whl --force-reinstall
 ```
 
 2. The MNIST dataset can be found under the data directory (usually `/usr/src/tensorrt/data/mnist`) if using the TensorRT containers. It is also bundled along with the [TensorRT tarball](https://developer.nvidia.com/nvidia-tensorrt-download).

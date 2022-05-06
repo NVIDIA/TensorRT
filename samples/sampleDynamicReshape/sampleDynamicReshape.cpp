@@ -106,7 +106,7 @@ private:
 //!          then creates a TensorRT network by parsing the ONNX model and builds
 //!          an engine that will be used to run inference (mPredictionEngine).
 //!
-//! \return Ruturns false if error in build preprocessor or predict engine.
+//! \return false if error in build preprocessor or predict engine.
 //!
 bool SampleDynamicReshape::build()
 {
@@ -149,7 +149,7 @@ bool SampleDynamicReshape::build()
 //!
 //! \brief Builds an engine for preprocessing (mPreprocessorEngine).
 //!
-//! \return Ruturns false if error in build preprocessor engine.
+//! \return false if error in build preprocessor engine.
 //!
 bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
     const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream)
@@ -244,7 +244,7 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
 //! mPredictionOutputDims according to the dimensions specified by the model. The preprocessor reshapes inputs to
 //! mPredictionInputDims.
 //!
-//! \return Ruturns false if error in build prediction engine.
+//! \return false if error in build prediction engine.
 //!
 bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
     const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream)
@@ -285,7 +285,6 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
         sample::gLogError << "Create builder config failed." << std::endl;
         return false;
     }
-    config->setMaxWorkspaceSize(16_MiB);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
@@ -338,7 +337,7 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
 //! outputs, as well as creating TensorRT execution contexts for both engines. This only needs to be called a single
 //! time.
 //!
-//! \return Ruturns false if error in build preprocessor or predict context.
+//! \return false if error in build preprocessor or predict context.
 //!
 bool SampleDynamicReshape::prepare()
 {
@@ -480,12 +479,12 @@ bool SampleDynamicReshape::validateOutput(int digit)
 samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args& args)
 {
     samplesCommon::OnnxSampleParams params;
-    if (args.dataDirs.empty()) //!< Use default directories if user hasn't provided directory paths
+    if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths
     {
         params.dataDirs.push_back("data/mnist/");
         params.dataDirs.push_back("data/samples/mnist/");
     }
-    else //!< Use the data directory provided by the user
+    else // Use the data directory provided by the user
     {
         params.dataDirs = args.dataDirs;
     }

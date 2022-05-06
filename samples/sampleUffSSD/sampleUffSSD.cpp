@@ -120,7 +120,7 @@ private:
 //! \details This function creates the SSD network by parsing the UFF model and builds
 //!          the engine that will be used to run SSD (mEngine)
 //!
-//! \return Returns true if the engine was created successfully and false otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 bool SampleUffSSD::build()
 {
@@ -187,7 +187,6 @@ bool SampleUffSSD::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
-    config->setMaxWorkspaceSize(1_GiB);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
@@ -418,7 +417,7 @@ bool SampleUffSSD::verifyOutput(const samplesCommon::BufferManager& buffers)
 SampleUffSSDParams initializeSampleParams(const samplesCommon::Args& args)
 {
     SampleUffSSDParams params;
-    if (args.dataDirs.empty()) //!< Use default directories if user hasn't provided directory paths
+    if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths
     {
         params.dataDirs.push_back("data/ssd/");
         params.dataDirs.push_back("data/ssd/VOC2007/");
@@ -427,7 +426,7 @@ SampleUffSSDParams initializeSampleParams(const samplesCommon::Args& args)
         params.dataDirs.push_back("data/samples/ssd/VOC2007/");
         params.dataDirs.push_back("data/samples/ssd/VOC2007/PPMImages/");
     }
-    else //!< Use the data directory provided by the user
+    else // Use the data directory provided by the user
     {
         params.dataDirs = args.dataDirs;
     }

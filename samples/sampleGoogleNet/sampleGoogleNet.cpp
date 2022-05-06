@@ -87,7 +87,7 @@ private:
 //! \details This function creates the GoogleNet network by parsing the caffe model and builds
 //!          the engine that will be used to run GoogleNet (mEngine)
 //!
-//! \return Returns true if the engine was created successfully and false otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 bool SampleGoogleNet::build()
 {
@@ -117,7 +117,6 @@ bool SampleGoogleNet::build()
 
     constructNetwork(parser, network);
     builder->setMaxBatchSize(mParams.batchSize);
-    config->setMaxWorkspaceSize(16_MiB);
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
     // CUDA stream used for profiling by the builder.

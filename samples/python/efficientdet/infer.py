@@ -74,12 +74,12 @@ class TensorRTInfer:
             allocation = cuda.mem_alloc(size)
             host_allocation = None if is_input else np.zeros(shape, dtype)
             binding = {
-                'index': i,
-                'name': name,
-                'dtype': dtype,
-                'shape': list(shape),
-                'allocation': allocation,
-                'host_allocation': host_allocation,
+                "index": i,
+                "name": name,
+                "dtype": dtype,
+                "shape": list(shape),
+                "allocation": allocation,
+                "host_allocation": host_allocation,
             }
             self.allocations.append(allocation)
             if self.engine.binding_is_input(i):
@@ -151,14 +151,16 @@ class TensorRTInfer:
                     scale /= scales[i]
                 if nms_threshold and scores[i][n] < nms_threshold:
                     continue
-                detections[i].append({
-                    'ymin': boxes[i][n][0] * scale,
-                    'xmin': boxes[i][n][1] * scale,
-                    'ymax': boxes[i][n][2] * scale,
-                    'xmax': boxes[i][n][3] * scale,
-                    'score': scores[i][n],
-                    'class': int(classes[i][n]),
-                })
+                detections[i].append(
+                    {
+                        "ymin": boxes[i][n][0] * scale,
+                        "xmin": boxes[i][n][1] * scale,
+                        "ymax": boxes[i][n][2] * scale,
+                        "xmax": boxes[i][n][3] * scale,
+                        "score": scores[i][n],
+                        "class": int(classes[i][n]),
+                    }
+                )
         return detections
 
 

@@ -45,6 +45,7 @@ class Net(nn.Module):
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
+
 class MnistModel(object):
     def __init__(self):
         self.batch_size = 64
@@ -54,23 +55,28 @@ class MnistModel(object):
         self.log_interval = 100
         # Fetch MNIST data set.
         self.train_loader = torch.utils.data.DataLoader(
-            datasets.MNIST('/tmp/mnist/data', train=True, download=True, transform=transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,))
-                ])),
+            datasets.MNIST(
+                "/tmp/mnist/data",
+                train=True,
+                download=True,
+                transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]),
+            ),
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=1,
-            timeout=600)
+            timeout=600,
+        )
         self.test_loader = torch.utils.data.DataLoader(
-            datasets.MNIST('/tmp/mnist/data', train=False, transform=transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,))
-                ])),
+            datasets.MNIST(
+                "/tmp/mnist/data",
+                train=False,
+                transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]),
+            ),
             batch_size=self.test_batch_size,
             shuffle=True,
             num_workers=1,
-            timeout=600)
+            timeout=600,
+        )
         self.network = Net()
 
         self.latest_test_accuracy = 0.0
@@ -89,7 +95,15 @@ class MnistModel(object):
                 loss.backward()
                 optimizer.step()
                 if batch % self.log_interval == 0:
-                    print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(epoch, batch * len(data), len(self.train_loader.dataset), 100. * batch / len(self.train_loader), loss.data.item()))
+                    print(
+                        "Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
+                            epoch,
+                            batch * len(data),
+                            len(self.train_loader.dataset),
+                            100.0 * batch / len(self.train_loader),
+                            loss.data.item(),
+                        )
+                    )
 
         # Test the network
         def test(epoch):
@@ -106,9 +120,11 @@ class MnistModel(object):
 
             test_loss /= len(self.test_loader)
             self.latest_test_accuracy = float(correct) / len(self.test_loader.dataset)
-            print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.1f}%)\n'.format(test_loss, correct, len(self.test_loader.dataset), 100. * self.latest_test_accuracy))
-
-            
+            print(
+                "\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.1f}%)\n".format(
+                    test_loss, correct, len(self.test_loader.dataset), 100.0 * self.latest_test_accuracy
+                )
+            )
 
         for e in range(num_epochs):
             train(e + 1)

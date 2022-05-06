@@ -90,7 +90,7 @@ class ImageBatcher:
         if self.num_images < 1:
             print("Not enough images to create batches")
             sys.exit(1)
-        self.images = self.images[0:self.num_images]
+        self.images = self.images[0 : self.num_images]
 
         # Subdivide the list of images into batches
         self.num_batches = 1 + int((self.num_images - 1) / self.batch_size)
@@ -137,7 +137,7 @@ class ImageBatcher:
 
         scale = None
         image = Image.open(image_path)
-        image = image.convert(mode='RGB')
+        image = image.convert(mode="RGB")
         if self.preprocessor == "EfficientDet":
             # For EfficientNet V2: Resize & Pad with ImageNet mean values and keep as [0,255] Normalization
             image, scale = resize_pad(image, (124, 116, 104))

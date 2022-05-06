@@ -25,11 +25,13 @@ import os
 # Lin, Tsung-Yi, et al. "Microsoft COCO: Common Objects in Context."
 # European Conference on Computer Vision. Springer, Cham, 2014.
 
+
 def load_label_categories(label_file_path):
-    categories = [line.rstrip('\n') for line in open(label_file_path)]
+    categories = [line.rstrip("\n") for line in open(label_file_path)]
     return categories
 
-LABEL_FILE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'coco_labels.txt')
+
+LABEL_FILE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "coco_labels.txt")
 ALL_CATEGORIES = load_label_categories(LABEL_FILE_PATH)
 
 # Let's make sure that there are 80 classes, as expected for the COCO data set:
@@ -75,12 +77,9 @@ class PreprocessYOLO(object):
         image_raw = Image.open(input_image_path)
         # Expecting yolo_input_resolution in (height, width) format, adjusting to PIL
         # convention (width, height) in PIL:
-        new_resolution = (
-            self.yolo_input_resolution[1],
-            self.yolo_input_resolution[0])
-        image_resized = image_raw.resize(
-            new_resolution, resample=Image.BICUBIC)
-        image_resized = np.array(image_resized, dtype=np.float32, order='C')
+        new_resolution = (self.yolo_input_resolution[1], self.yolo_input_resolution[0])
+        image_resized = image_raw.resize(new_resolution, resample=Image.BICUBIC)
+        image_resized = np.array(image_resized, dtype=np.float32, order="C")
         return image_raw, image_resized
 
     def _shuffle_and_normalize(self, image):
@@ -97,19 +96,14 @@ class PreprocessYOLO(object):
         # CHW to NCHW format
         image = np.expand_dims(image, axis=0)
         # Convert the image to row-major order, also known as "C order":
-        image = np.array(image, dtype=np.float32, order='C')
+        image = np.array(image, dtype=np.float32, order="C")
         return image
 
 
 class PostprocessYOLO(object):
     """Class for post-processing the three outputs tensors from YOLOv3-608."""
 
-    def __init__(self,
-                 yolo_masks,
-                 yolo_anchors,
-                 obj_threshold,
-                 nms_threshold,
-                 yolo_input_resolution):
+    def __init__(self, yolo_masks, yolo_anchors, obj_threshold, nms_threshold, yolo_input_resolution):
         """Initialize with all values that will be kept when processing several frames.
         Assuming 3 outputs of the network in the case of (large) YOLOv3.
 
@@ -141,8 +135,7 @@ class PostprocessYOLO(object):
         for output in outputs:
             outputs_reshaped.append(self._reshape_output(output))
 
-        boxes, categories, confidences = self._process_yolo_output(
-            outputs_reshaped, resolution_raw)
+        boxes, categories, confidences = self._process_yolo_output(outputs_reshaped, resolution_raw)
 
         return boxes, categories, confidences
 
@@ -158,7 +151,7 @@ class PostprocessYOLO(object):
         dim1, dim2 = height, width
         dim3 = 3
         # There are CATEGORY_NUM=80 object categories:
-        dim4 = (4 + 1 + CATEGORY_NUM)
+        dim4 = 4 + 1 + CATEGORY_NUM
         return np.reshape(output, (dim1, dim2, dim3, dim4))
 
     def _process_yolo_output(self, outputs_reshaped, resolution_raw):
@@ -263,7 +256,7 @@ class PostprocessYOLO(object):
         box_xy += grid
         box_xy /= (grid_w, grid_h)
         box_wh /= self.input_resolution_yolo
-        box_xy -= (box_wh / 2.)
+        box_xy -= box_wh / 2.0
         boxes = np.concatenate((box_xy, box_wh), axis=-1)
 
         # boxes: centroids, box_confidence: confidence level, box_class_probs:
@@ -324,7 +317,7 @@ class PostprocessYOLO(object):
             width1 = np.maximum(0.0, xx2 - xx1 + 1)
             height1 = np.maximum(0.0, yy2 - yy1 + 1)
             intersection = width1 * height1
-            union = (areas[i] + areas[ordered[1:]] - intersection)
+            union = areas[i] + areas[ordered[1:]] - intersection
 
             # Compute the Intersection over Union (IoU) score:
             iou = intersection / union

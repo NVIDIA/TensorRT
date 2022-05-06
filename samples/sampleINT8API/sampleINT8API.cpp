@@ -485,7 +485,7 @@ bool SampleINT8API::verifyOutput(const samplesCommon::BufferManager& buffers) co
 //! \details This function creates INT8 classification network by parsing the onnx model and builds
 //!          the engine that will be used to run INT8 inference (mEngine)
 //!
-//! \return Returns true if the engine was created successfully and false otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 sample::Logger::TestResult SampleINT8API::build()
 {
@@ -541,7 +541,6 @@ sample::Logger::TestResult SampleINT8API::build()
 
     // Configure buider
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
-    config->setMaxWorkspaceSize(1_GiB);
 
     // Enable INT8 model. Required to set custom per-tensor dynamic range or INT8 Calibration
     config->setFlag(BuilderFlag::kINT8);
@@ -644,10 +643,10 @@ sample::Logger::TestResult SampleINT8API::infer()
     buffers.copyOutputToHostAsync(stream);
 
     // Wait for the work in the stream to complete
-    cudaStreamSynchronize(stream);
+    CHECK(cudaStreamSynchronize(stream));
 
     // Release stream
-    cudaStreamDestroy(stream);
+    CHECK(cudaStreamDestroy(stream));
 
     // Check and print the output of the inference
     return verifyOutput(buffers) ? sample::Logger::TestResult::kRUNNING : sample::Logger::TestResult::kFAILED;
@@ -770,17 +769,17 @@ void validateInputParams(SampleINT8APIParams& params)
 SampleINT8APIParams initializeSampleParams(SampleINT8APIArgs args)
 {
     SampleINT8APIParams params;
-    if (args.dataDirs.empty()) //!< Use default directories if user hasn't provided directory paths
+    if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths
     {
         params.dataDirs.push_back("data/samples/int8_api/");
         params.dataDirs.push_back("data/int8_api/");
     }
-    else //!< Use the data directory provided by the user
+    else // Use the data directory provided by the user
     {
         params.dataDirs = args.dataDirs;
     }
 
-    params.dataDirs.push_back(""); //! In case of absolute path search
+    params.dataDirs.push_back(""); // In case of absolute path search
     params.verbose = args.verbose;
     params.modelFileName = args.modelFileName;
     params.imageFileName = args.imageFileName;

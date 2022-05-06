@@ -21,19 +21,21 @@ from nltk import word_tokenize
 import json
 import tensorrt as trt
 
+
 def preprocess(text):
     try:
-        nltk.data.find('tokenizers/punkt')
+        nltk.data.find("tokenizers/punkt")
     except LookupError:
-        nltk.download('punkt')
+        nltk.download("punkt")
     tokens = word_tokenize(text)
     # split into lower-case word tokens, in numpy array with shape of (seq, 1)
     words = np.asarray([w.lower() for w in tokens]).reshape(-1, 1)
     # split words into chars, in numpy array with shape of (seq, 1, 1, 16)
     chars = [[c for c in t][:16] for t in tokens]
-    chars = [cs+['']*(16-len(cs)) for cs in chars]
+    chars = [cs + [""] * (16 - len(cs)) for cs in chars]
     chars = np.asarray(chars).reshape(-1, 1, 1, 16)
     return words, chars
+
 
 def get_map_func(filepath):
     file = open(filepath)

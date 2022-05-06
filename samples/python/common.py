@@ -31,6 +31,7 @@ except NameError:
 
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
+
 def GiB(val):
     return val * 1 << 30
 
@@ -41,7 +42,7 @@ def add_help(description):
 
 
 def find_sample_data(description="Runs a TensorRT Python sample", subfolder="", find_files=[], err_msg=""):
-    '''
+    """
     Parses sample arguments.
 
     Args:
@@ -51,12 +52,18 @@ def find_sample_data(description="Runs a TensorRT Python sample", subfolder="", 
 
     Returns:
         str: Path of data directory.
-    '''
+    """
 
     # Standard command-line arguments for all samples.
     kDEFAULT_DATA_ROOT = os.path.join(os.sep, "usr", "src", "tensorrt", "data")
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-d", "--datadir", help="Location of the TensorRT sample data directory, and any additional data directories.", action="append", default=[kDEFAULT_DATA_ROOT])
+    parser.add_argument(
+        "-d",
+        "--datadir",
+        help="Location of the TensorRT sample data directory, and any additional data directories.",
+        action="append",
+        default=[kDEFAULT_DATA_ROOT],
+    )
     args, _ = parser.parse_known_args()
 
     def get_data_path(data_dir):
@@ -68,11 +75,16 @@ def find_sample_data(description="Runs a TensorRT Python sample", subfolder="", 
             data_path = data_dir
         # Make sure data directory exists.
         if not (os.path.exists(data_path)) and data_dir != kDEFAULT_DATA_ROOT:
-            print("WARNING: {:} does not exist. Please provide the correct data path with the -d option.".format(data_path))
+            print(
+                "WARNING: {:} does not exist. Please provide the correct data path with the -d option.".format(
+                    data_path
+                )
+            )
         return data_path
 
     data_paths = [get_data_path(data_dir) for data_dir in args.datadir]
     return data_paths, locate_files(data_paths, find_files, err_msg)
+
 
 def locate_files(data_paths, filenames, err_msg=""):
     """
@@ -101,8 +113,11 @@ def locate_files(data_paths, filenames, err_msg=""):
     # Check that all files were found
     for f, filename in zip(found_files, filenames):
         if not f or not os.path.exists(f):
-            raise FileNotFoundError("Could not find {:}. Searched in data paths: {:}\n{:}".format(filename, data_paths, err_msg))
+            raise FileNotFoundError(
+                "Could not find {:}. Searched in data paths: {:}\n{:}".format(filename, data_paths, err_msg)
+            )
     return found_files
+
 
 # Simple helper data class that's a little nicer to use than a 2-tuple.
 class HostDeviceMem(object):
@@ -115,6 +130,7 @@ class HostDeviceMem(object):
 
     def __repr__(self):
         return self.__str__()
+
 
 # Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
 def allocate_buffers(engine):
@@ -137,6 +153,7 @@ def allocate_buffers(engine):
             outputs.append(HostDeviceMem(host_mem, device_mem))
     return inputs, outputs, bindings, stream
 
+
 # This function is generalized for multiple inputs/outputs.
 # inputs and outputs are expected to be lists of HostDeviceMem objects.
 def do_inference(context, bindings, inputs, outputs, stream, batch_size=1):
@@ -150,6 +167,7 @@ def do_inference(context, bindings, inputs, outputs, stream, batch_size=1):
     stream.synchronize()
     # Return only the host outputs.
     return [out.host for out in outputs]
+
 
 # This function is generalized for multiple inputs/outputs for full dimension networks.
 # inputs and outputs are expected to be lists of HostDeviceMem objects.

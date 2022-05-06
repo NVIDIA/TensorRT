@@ -115,7 +115,7 @@ private:
 //! \details This function creates the network by parsing the caffe model and builds
 //!          the engine that will be used to run the model (mEngine)
 //!
-//! \return Returns true if the engine was created successfully and false otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 bool SampleINT8::build(DataType dataType)
 {
@@ -191,7 +191,6 @@ bool SampleINT8::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
 
     config->setAvgTimingIterations(1);
     config->setMinTimingIterations(1);
-    config->setMaxWorkspaceSize(1_GiB);
     if (dataType == DataType::kHALF)
     {
         config->setFlag(BuilderFlag::kFP16);
@@ -301,7 +300,7 @@ bool SampleINT8::infer(std::vector<float>& score, int firstScoreBatch, int nbSco
         cudaEvent_t start, end;
         CHECK(cudaEventCreateWithFlags(&start, cudaEventBlockingSync));
         CHECK(cudaEventCreateWithFlags(&end, cudaEventBlockingSync));
-        cudaEventRecord(start, stream);
+        CHECK(cudaEventRecord(start, stream));
 
         bool status = context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr);
         if (!status)
@@ -309,11 +308,11 @@ bool SampleINT8::infer(std::vector<float>& score, int firstScoreBatch, int nbSco
             return false;
         }
 
-        cudaEventRecord(end, stream);
-        cudaEventSynchronize(end);
-        cudaEventElapsedTime(&ms, start, end);
-        cudaEventDestroy(start);
-        cudaEventDestroy(end);
+        CHECK(cudaEventRecord(end, stream));
+        CHECK(cudaEventSynchronize(end));
+        CHECK(cudaEventElapsedTime(&ms, start, end));
+        CHECK(cudaEventDestroy(start));
+        CHECK(cudaEventDestroy(end));
 
         totalTime += ms;
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -24,18 +23,19 @@ import os
 import sys
 
 
-logger = logging.getLogger('downloader')
+logger = logging.getLogger("downloader")
 
 
 class DataFile:
     """Holder of a data file."""
+
     def __init__(self, attr):
         self.attr = attr
-        self.path = attr['path']
-        self.url = attr['url']
-        if 'checksum' not in attr:
+        self.path = attr["path"]
+        self.url = attr["url"]
+        if "checksum" not in attr:
             logger.warning("Checksum of %s not provided!", self.path)
-        self.checksum = attr.get('checksum', None)
+        self.checksum = attr.get("checksum", None)
 
     def __str__(self):
         return str(self.attr)
@@ -43,10 +43,11 @@ class DataFile:
 
 class SampleData:
     """Holder of data files of an sample."""
+
     def __init__(self, attr):
         self.attr = attr
-        self.sample = attr['sample']
-        files = attr.get('files', None)
+        self.sample = attr["sample"]
+        files = attr.get("files", None)
         self.files = [DataFile(f) for f in files]
 
     def __str__(self):
@@ -54,14 +55,15 @@ class SampleData:
 
 
 def _loadYAML(yaml_path):
-    with open(yaml_path, 'rb') as f:
+    with open(yaml_path, "rb") as f:
         import yaml
+
         y = yaml.load(f, yaml.FullLoader)
         return SampleData(y)
 
 
 def _checkMD5(path, refMD5):
-    md5 = hashlib.md5(open(path, 'rb').read()).hexdigest()
+    md5 = hashlib.md5(open(path, "rb").read()).hexdigest()
     return md5 == refMD5
 
 
@@ -71,7 +73,7 @@ def _createDirIfNeeded(path):
         os.makedirs(the_dir)
     except OSError as e:
         if e.errno != errno.EEXIST:
-             raise
+            raise
 
 
 def download(data_dir, yaml_path, overwrite=False):
@@ -85,11 +87,13 @@ def download(data_dir, yaml_path, overwrite=False):
     def _downloadFile(path, url):
         logger.info("Downloading %s from %s", path, url)
         import requests
+
         r = requests.get(url, stream=True, timeout=5)
-        size = int(r.headers.get('content-length', 0))
+        size = int(r.headers.get("content-length", 0))
         from tqdm import tqdm
-        progress_bar = tqdm(total=size, unit='iB', unit_scale=True)
-        with open(path, 'wb') as fd:
+
+        progress_bar = tqdm(total=size, unit="iB", unit_scale=True)
+        with open(path, "wb") as fd:
             for chunk in r.iter_content(chunk_size=1024):
                 progress_bar.update(len(chunk))
                 fd.write(chunk)
@@ -121,16 +125,30 @@ def download(data_dir, yaml_path, overwrite=False):
 
 def _parseArgs():
     parser = argparse.ArgumentParser(description="Downloader of TensorRT sample data files.")
-    parser.add_argument('-d', '--data', help="Specify the data directory, data will be downloaded to there. $TRT_DATA_DIR will be overwritten by this argument.")
-    parser.add_argument('-f', '--file', help="Specify the path to the download.yml, default to `download.yml` in the working directory",
-                        default='download.yml')
-    parser.add_argument('-o', '--overwrite', help="Force to overwrite if MD5 check failed",
-                        action='store_true', default=False)
-    parser.add_argument('-v', '--verify', help="Verify if the data has been downloaded. Will not download if specified.",
-                        action='store_true', default=False)
+    parser.add_argument(
+        "-d",
+        "--data",
+        help="Specify the data directory, data will be downloaded to there. $TRT_DATA_DIR will be overwritten by this argument.",
+    )
+    parser.add_argument(
+        "-f",
+        "--file",
+        help="Specify the path to the download.yml, default to `download.yml` in the working directory",
+        default="download.yml",
+    )
+    parser.add_argument(
+        "-o", "--overwrite", help="Force to overwrite if MD5 check failed", action="store_true", default=False
+    )
+    parser.add_argument(
+        "-v",
+        "--verify",
+        help="Verify if the data has been downloaded. Will not download if specified.",
+        action="store_true",
+        default=False,
+    )
 
     args, _ = parser.parse_known_args()
-    data = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
+    data = os.environ.get("TRT_DATA_DIR", None) if args.data is None else args.data
     if data is None:
         raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
 
@@ -177,11 +195,12 @@ def main():
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
 
 TRT_DATA_DIR = None
+
 
 def getFilePath(path):
     """Util to get the full path to the downloaded data files.
@@ -191,9 +210,13 @@ def getFilePath(path):
     global TRT_DATA_DIR
     if not TRT_DATA_DIR:
         parser = argparse.ArgumentParser(description="Helper of data file download tool")
-        parser.add_argument('-d', '--data', help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.")
+        parser.add_argument(
+            "-d",
+            "--data",
+            help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.",
+        )
         args, _ = parser.parse_known_args()
-        TRT_DATA_DIR = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
+        TRT_DATA_DIR = os.environ.get("TRT_DATA_DIR", None) if args.data is None else args.data
     if TRT_DATA_DIR is None:
         raise ValueError("Data directory must be specified by either `-d $DATA` or environment variable $TRT_DATA_DIR.")
 

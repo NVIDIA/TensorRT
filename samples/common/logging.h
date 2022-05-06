@@ -19,10 +19,12 @@
 #define TENSORRT_LOGGING_H
 
 #include "NvInferRuntimeCommon.h"
+#include "sampleOptions.h"
 #include <cassert>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -124,6 +126,7 @@ public:
     }
 
 protected:
+    std::mutex mLogMutex;
     LogStreamConsumerBuffer mBuffer;
 }; // class LogStreamConsumerBase
 
@@ -170,6 +173,16 @@ public:
         mBuffer.setShouldLog(mShouldLog);
     }
 
+    std::mutex& getMutex()
+    {
+        return mLogMutex;
+    }
+
+    bool getShouldLog() const
+    {
+        return mShouldLog;
+    }
+
 private:
     static std::ostream& severityOstream(Severity severity)
     {
@@ -192,6 +205,46 @@ private:
     bool mShouldLog;
     Severity mSeverity;
 }; // class LogStreamConsumer
+
+template <typename T>
+LogStreamConsumer& operator<<(LogStreamConsumer& logger, const T& obj)
+{
+    if (logger.getShouldLog())
+    {
+        std::lock_guard<std::mutex> guard(logger.getMutex());
+        auto& os = static_cast<std::ostream&>(logger);
+        os << obj;
+    }
+    return logger;
+}
+
+//!
+//! Special handling std::endl
+//!
+inline LogStreamConsumer& operator<<(LogStreamConsumer& logger, std::ostream& (*f)(std::ostream&) )
+{
+    if (logger.getShouldLog())
+    {
+        std::lock_guard<std::mutex> guard(logger.getMutex());
+        auto& os = static_cast<std::ostream&>(logger);
+        os << f;
+    }
+    return logger;
+}
+
+inline LogStreamConsumer& operator<<(LogStreamConsumer& logger, const nvinfer1::Dims& dims)
+{
+    if (logger.getShouldLog())
+    {
+        std::lock_guard<std::mutex> guard(logger.getMutex());
+        auto& os = static_cast<std::ostream&>(logger);
+        for (int32_t i = 0; i < dims.nbDims; ++i)
+        {
+            os << (i ? "x" : "") << dims.d[i];
+        }
+    }
+    return logger;
+}
 
 //!
 //! \class Logger

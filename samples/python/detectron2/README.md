@@ -94,18 +94,47 @@ TensorRT engine can be built directly with `trtexec` using the ONNX graph genera
 trtexec --onnx=/path/to/converted.onnx --saveEngine=/path/to/engine.trt --useCudaGraph 
 ```
 
+However, the script `build_engine.py` is also provided in this repository for convenience, as it has been tailored to Detectron 2 2 Mask R-CNN R50-FPN 3x engine building and INT8 calibration. Run `python3 build_engine.py --help` for details on available settings.
+
 #### FP16 Precision
 
 To build the TensorRT engine file with FP16 precision, run:
 
 ```
-trtexec --onnx=/path/to/converted.onnx --saveEngine=/path/to/engine.trt --useCudaGraph --fp16
+python3 build_engine.py \
+    --onnx /path/to/converted.onnx \
+    --engine /path/to/engine.trt \
+    --precision fp16
 ```
 
 The file `engine.trt` will be created, which can now be used to infer with TensorRT.
 
 For best results, make sure no other processes are using the GPU during engine build, as it may affect the optimal tactic selection process.
 
+#### INT8 Precision
+
+To build and calibrate an engine for INT8 precision, run:
+
+```
+python3 build_engine.py \
+    --onnx /path/to/converted.onnx \
+    --engine /path/to/engine.trt \
+    --precision int8 \
+    --calib_input /path/to/calibration/images \
+    --calib_cache /path/to/calibration.cache
+```
+
+Where `--calib_input` points to a directory with several thousands of images. For example, this could be a subset of the training or validation datasets that were used for the model. It's important that this data represents the runtime data distribution relatively well, therefore, the more images that are used for calibration, the better accuracy that will be achieved in INT8 precision. For models trained for the [COCO dataset](https://cocodataset.org/#home), we have found that 5,000 images gives a good result.
+
+The `--calib_cache` is optional, and it controls where the calibration cache file will be written to. This is useful to keep a cached copy of the calibration results. Next time you need to build an int8 engine for the same network, if this file exists, the builder will skip the calibration step and use the cached values instead.
+
+Some sample results of using all precisions:
+
+| **Precision**   | **Latency** | **bbox COCO mAP** | **segm COCO mAP** |
+| ----------------|-------------|-------------------|-------------------|
+| fp32            | 34.48 ms    | 0.402             | 0.368             |
+| fp16            | 17.26 ms    | 0.402             | 0.368             |
+| int8            | 9.90 ms     | 0.398             | 0.366             |
 
 #### Benchmark Engine
 
@@ -121,7 +150,7 @@ trtexec \
 An inference benchmark will run, with GPU Compute latency times printed out to the console. Depending on your environment, you should see something similar to:
 
 ```
-GPU Compute Time: min = 78.4476 ms, max = 89.5938 ms, mean = 83.5092 ms, median = 83.626 ms, percentile(99%) = 89.5938 ms
+GPU Compute Time: min = 30.1864 ms, max = 37.0945 ms, mean = 34.481 ms, median = 34.4187 ms, percentile(99%) = 37.0945 ms
 ```
 
 ## Inference

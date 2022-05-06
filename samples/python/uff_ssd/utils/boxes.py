@@ -21,11 +21,7 @@ import PIL.ImageDraw as ImageDraw
 import PIL.ImageFont as ImageFont
 
 
-def draw_bounding_boxes_on_image(image,
-                                 boxes,
-                                 color=(255, 0, 0),
-                                 thickness=4,
-                                 display_str_list=()):
+def draw_bounding_boxes_on_image(image, boxes, color=(255, 0, 0), thickness=4, display_str_list=()):
     """Draws bounding boxes on image.
 
     Args:
@@ -44,20 +40,16 @@ def draw_bounding_boxes_on_image(image,
     if not boxes_shape:
         return
     if len(boxes_shape) != 2 or boxes_shape[1] != 4:
-        raise ValueError('boxes must be of size [N, 4]')
+        raise ValueError("boxes must be of size [N, 4]")
     for i in range(boxes_shape[0]):
-        draw_bounding_box_on_image(image, boxes[i, 0], boxes[i, 1], boxes[i, 2],
-            boxes[i, 3], color, thickness, display_str_list[i])
+        draw_bounding_box_on_image(
+            image, boxes[i, 0], boxes[i, 1], boxes[i, 2], boxes[i, 3], color, thickness, display_str_list[i]
+        )
 
-def draw_bounding_box_on_image(image,
-                               ymin,
-                               xmin,
-                               ymax,
-                               xmax,
-                               color=(255, 0, 0),
-                               thickness=4,
-                               display_str='',
-                               use_normalized_coordinates=True):
+
+def draw_bounding_box_on_image(
+    image, ymin, xmin, ymax, xmax, color=(255, 0, 0), thickness=4, display_str="", use_normalized_coordinates=True
+):
     """Adds a bounding box to an image.
 
     Bounding box coordinates can be specified in either absolute (pixel) or
@@ -84,17 +76,17 @@ def draw_bounding_box_on_image(image,
     draw = ImageDraw.Draw(image)
     im_width, im_height = image.size
     if use_normalized_coordinates:
-        (left, right, top, bottom) = (xmin * im_width, xmax * im_width,
-                                      ymin * im_height, ymax * im_height)
+        (left, right, top, bottom) = (xmin * im_width, xmax * im_width, ymin * im_height, ymax * im_height)
     else:
         (left, right, top, bottom) = (xmin, xmax, ymin, ymax)
-    draw.line([(left, top), (left, bottom), (right, bottom),
-               (right, top), (left, top)], width=thickness, fill=tuple(color))
+    draw.line(
+        [(left, top), (left, bottom), (right, bottom), (right, top), (left, top)], width=thickness, fill=tuple(color)
+    )
     try:
-        font = ImageFont.truetype('arial.ttf', 24)
+        font = ImageFont.truetype("arial.ttf", 24)
     except IOError:
         font = ImageFont.load_default()
-    
+
     # If the total height of the display string added to the top of the bounding
     # box exceeds the top of the image, move the string below the bounding box
     # instead of above
@@ -106,16 +98,11 @@ def draw_bounding_box_on_image(image,
         text_bottom = top
     else:
         text_bottom = bottom + total_display_str_height
-    
+
     text_width, text_height = font.getsize(display_str)
     margin = np.ceil(0.05 * text_height)
     draw.rectangle(
-        [(left, text_bottom - text_height - 2 * margin), (left + text_width,
-            text_bottom)],
-        fill=tuple(color))
-    draw.text(
-        (left + margin, text_bottom - text_height - margin),
-        display_str,
-        fill='black',
-        font=font)
+        [(left, text_bottom - text_height - 2 * margin), (left + text_width, text_bottom)], fill=tuple(color)
+    )
+    draw.text((left + margin, text_bottom - text_height - margin), display_str, fill="black", font=font)
     text_bottom -= text_height - 2 * margin

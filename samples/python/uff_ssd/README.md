@@ -155,32 +155,16 @@ The outputs of the SSD network are human interpretable. The post-processing work
     On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
     ```bash
     export PATH=${PATH}:/usr/local/cuda/bin/
+    ```
 
-3. Download the Tensorflow SSD model with inception backbone.
-   ```bash
-   wget http://download.tensorflow.org/models/object_detection/ssd_inception_v2_coco_2017_11_17.tar.gz
-   ```
+3. Download sample data. See the "Download Sample Data" section of [the general setup guide](../README.md).
+   The data directory needs to be specified (either via `-d /path/to/data` or environment varaiable `TRT_DATA_DIR`)
+   when running these scripts. An error will be thrown if not. Taking `TRT_DATA_DIR` approach in following example.
 
-4. Convert Tensorflow model to UFF.
-   ```bash
-   python3 model.py -d $PWD
-   ```
-
-Optional: To evaluate the accuracy of the trained model using the VOC dataset, perform the following steps.
-
-5.  Download the VOC 2007 dataset. Run the following command from the sample root directory.
-   ```bash
-   wget http://host.robots.ox.ac.uk/pascal/VOC/voc2007/VOCtest_06-Nov-2007.tar
-   ```
-
-  The first command downloads the VOC dataset from the Oxford servers, and the second command unpacks the dataset.
-
-  **NOTE:** If the download link is broken, try alternate source http://vision.cs.utexas.edu/voc/VOC2007_test/. If you don’t want to save VOC in the sample root directory, you'll need to adjust the `--voc_dir` argument to `voc_evaluation.py` script before running it. The default value of this argument is `$PWD/VOCdevkit/VOC2007`.
-
-6.  Run the VOC evaluation script for tensorflow.
+4. Run the VOC evaluation script for tensorflow.
 
    ```bash
-   python3 voc_evaluation.py tensorflow -d $PWD
+   python3 voc_evaluation.py tensorflow
    ```
 
 ## Running the sample
@@ -190,13 +174,13 @@ Both the `detect_objects.py` and `voc_evaluation.py` scripts support separate ad
 1. Return to the test container, install prerequisites and run the TensorRT inference script:
    ```bash
    pip3 install -r requirements.txt
-   python3 detect_objects.py <IMAGE_PATH>
+   python3 detect_objects.py -d /path/to/data/ <IMAGE_PATH>
    ```
    Where `<IMAGE_PATH>` contains the image you want to run inference on using the SSD network. The script should work for all popular image formats, like PNG, JPEG, and BMP. Since the model is trained for images of size 300 x 300, the input image will be resized to this size (using bilinear interpolation), if needed.
 
    Example #1:
    ```bash
-   python3 detect_objects.py images/image1.jpg
+   python3 detect_objects.py -d /path/to/data/ images/image1.jpg
    ```
 
    Expected output:
@@ -229,7 +213,7 @@ Optional: To evaluate the accuracy of the trained model using the VOC dataset, p
 
 2. Run the VOC evaluation script for TensorRT.
    ```bash
-   python3 voc_evaluation.py -d $PWD
+   python3 voc_evaluation.py
    ```
   **NOTE:** Running the script using TensorFlow will much slower than the TensorRT evaluation.
 

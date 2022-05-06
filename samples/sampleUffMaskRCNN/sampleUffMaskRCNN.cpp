@@ -401,7 +401,6 @@ bool SampleMaskRCNN::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     SampleUniquePtr<IBuilderConfig> config{builder->createBuilderConfig()};
 
     builder->setMaxBatchSize(mParams.batchSize);
-    config->setMaxWorkspaceSize(1_GiB);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);

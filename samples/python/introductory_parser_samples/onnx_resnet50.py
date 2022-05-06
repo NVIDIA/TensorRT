@@ -16,11 +16,13 @@
 #
 
 import os
+
 # This sample uses an ONNX ResNet50 Model to create a TensorRT Inference Engine
 import random
 import sys
 
 import numpy as np
+
 # This import causes pycuda to automatically manage CUDA context creation and cleanup.
 import pycuda.autoinit
 import tensorrt as trt
@@ -36,6 +38,7 @@ class ModelData(object):
     # We can convert TensorRT data types to numpy types with trt.nptype()
     DTYPE = trt.float32
 
+
 # You can set the logger severity higher to suppress messages (or lower to display more messages).
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
@@ -48,11 +51,11 @@ def build_engine_onnx(model_file):
 
     config.max_workspace_size = common.GiB(1)
     # Load the Onnx model and parse it in order to populate the TensorRT network.
-    with open(model_file, 'rb') as model:
+    with open(model_file, "rb") as model:
         if not parser.parse(model.read()):
-            print ('ERROR: Failed to parse the ONNX file.')
+            print("ERROR: Failed to parse the ONNX file.")
             for error in range(parser.num_errors):
-                print (parser.get_error(error))
+                print(parser.get_error(error))
             return None
     return builder.build_engine(network, config)
 
@@ -62,7 +65,12 @@ def load_normalized_test_case(test_image, pagelocked_buffer):
     def normalize_image(image):
         # Resize, antialias and transpose the image to CHW.
         c, h, w = ModelData.INPUT_SHAPE
-        image_arr = np.asarray(image.resize((w, h), Image.ANTIALIAS)).transpose([2, 0, 1]).astype(trt.nptype(ModelData.DTYPE)).ravel()
+        image_arr = (
+            np.asarray(image.resize((w, h), Image.ANTIALIAS))
+            .transpose([2, 0, 1])
+            .astype(trt.nptype(ModelData.DTYPE))
+            .ravel()
+        )
         # This particular ResNet50 model requires some preprocessing, specifically, mean normalization.
         return (image_arr / 255.0 - 0.45) / 0.225
 
@@ -73,11 +81,21 @@ def load_normalized_test_case(test_image, pagelocked_buffer):
 
 def main():
     # Set the data path to the directory that contains the trained models and test images for inference.
-    _, data_files = common.find_sample_data(description="Runs a ResNet50 network with a TensorRT inference engine.", subfolder="resnet50", find_files=["binoculars.jpeg", "reflex_camera.jpeg", "tabby_tiger_cat.jpg", ModelData.MODEL_PATH, "class_labels.txt"])
+    _, data_files = common.find_sample_data(
+        description="Runs a ResNet50 network with a TensorRT inference engine.",
+        subfolder="resnet50",
+        find_files=[
+            "binoculars.jpeg",
+            "reflex_camera.jpeg",
+            "tabby_tiger_cat.jpg",
+            ModelData.MODEL_PATH,
+            "class_labels.txt",
+        ],
+    )
     # Get test images, models and labels.
     test_images = data_files[0:3]
     onnx_model_file, labels_file = data_files[3:]
-    labels = open(labels_file, 'r').read().split('\n')
+    labels = open(labels_file, "r").read().split("\n")
 
     # Build a TensorRT engine.
     engine = build_engine_onnx(onnx_model_file)
@@ -101,5 +119,5 @@ def main():
         print("Incorrectly recognized " + test_case + " as " + pred)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

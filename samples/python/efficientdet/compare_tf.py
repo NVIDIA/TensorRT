@@ -45,18 +45,20 @@ def parse_annotations(annotations_path):
     if annotations_path and os.path.exists(annotations_path):
         with open(annotations_path) as f:
             ann_json = json.load(f)
-            for ann in ann_json['annotations']:
-                img_id = ann['image_id']
+            for ann in ann_json["annotations"]:
+                img_id = ann["image_id"]
                 if img_id not in annotations.keys():
                     annotations[img_id] = []
-                annotations[img_id].append({
-                    'ymin': ann['bbox'][1],
-                    'xmin': ann['bbox'][0],
-                    'ymax': ann['bbox'][1] + ann['bbox'][3],
-                    'xmax': ann['bbox'][0] + ann['bbox'][2],
-                    'score': -1,
-                    'class': ann['category_id'] - 1,
-                })
+                annotations[img_id].append(
+                    {
+                        "ymin": ann["bbox"][1],
+                        "xmin": ann["bbox"][0],
+                        "ymax": ann["bbox"][1] + ann["bbox"][3],
+                        "xmax": ann["bbox"][0] + ann["bbox"][2],
+                        "score": -1,
+                        "class": ann["category_id"] - 1,
+                    }
+                )
     return annotations
 
 

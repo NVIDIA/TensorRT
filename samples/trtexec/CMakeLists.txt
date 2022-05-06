@@ -19,9 +19,11 @@ SET(SAMPLE_SOURCES
     ../common/sampleInference.cpp
     ../common/sampleOptions.cpp
     ../common/sampleReporting.cpp
+    ../common/sampleUtils.cpp
     trtexec.cpp
 )
 
 set(SAMPLE_PARSERS "caffe" "uff" "onnx")
 
+set(PLUGINS_NEEDED ON)
 include(../CMakeSamplesTemplate.txt)

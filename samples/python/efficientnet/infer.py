@@ -63,11 +63,11 @@ class TensorRTInfer:
                 size *= s
             allocation = cuda.mem_alloc(size)
             binding = {
-                'index': i,
-                'name': name,
-                'dtype': np.dtype(trt.nptype(dtype)),
-                'shape': list(shape),
-                'allocation': allocation,
+                "index": i,
+                "name": name,
+                "dtype": np.dtype(trt.nptype(dtype)),
+                "shape": list(shape),
+                "allocation": allocation,
             }
             self.allocations.append(allocation)
             if self.engine.binding_is_input(i):
@@ -85,14 +85,14 @@ class TensorRTInfer:
         Get the specs for the input tensor of the network. Useful to prepare memory allocations.
         :return: Two items, the shape of the input tensor and its (numpy) datatype.
         """
-        return self.inputs[0]['shape'], self.inputs[0]['dtype']
+        return self.inputs[0]["shape"], self.inputs[0]["dtype"]
 
     def output_spec(self):
         """
         Get the specs for the output tensor of the network. Useful to prepare memory allocations.
         :return: Two items, the shape of the output tensor and its (numpy) datatype.
         """
-        return self.outputs[0]['shape'], self.outputs[0]['dtype']
+        return self.outputs[0]["shape"], self.outputs[0]["dtype"]
 
     def infer(self, batch, top=1):
         """
@@ -108,9 +108,9 @@ class TensorRTInfer:
         output = np.zeros(*self.output_spec())
 
         # Process I/O and execute the network
-        cuda.memcpy_htod(self.inputs[0]['allocation'], np.ascontiguousarray(batch))
+        cuda.memcpy_htod(self.inputs[0]["allocation"], np.ascontiguousarray(batch))
         self.context.execute_v2(self.allocations)
-        cuda.memcpy_dtoh(output, self.outputs[0]['allocation'])
+        cuda.memcpy_dtoh(output, self.outputs[0]["allocation"])
 
         # Process the results
         classes = np.argmax(output, axis=1)
@@ -143,14 +143,25 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--engine", help="The TensorRT engine to infer with")
-    parser.add_argument("-i", "--input",
-                        help="The input to infer, either a single image path, or a directory of images")
-    parser.add_argument("-t", "--top", default=1, type=int,
-                        help="The amount of top classes and scores to output per image, default: 1")
-    parser.add_argument("-s", "--separator", default="\t",
-                        help="Separator to use between columns when printing the results, default: \\t")
-    parser.add_argument("-p", "--preprocessor", default="V2", choices=["V1", "V1MS", "V2"],
-                        help="Select the image preprocessor to use, either 'V2', 'V1' or 'V1MS', default: V2")
+    parser.add_argument(
+        "-i", "--input", help="The input to infer, either a single image path, or a directory of images"
+    )
+    parser.add_argument(
+        "-t", "--top", default=1, type=int, help="The amount of top classes and scores to output per image, default: 1"
+    )
+    parser.add_argument(
+        "-s",
+        "--separator",
+        default="\t",
+        help="Separator to use between columns when printing the results, default: \\t",
+    )
+    parser.add_argument(
+        "-p",
+        "--preprocessor",
+        default="V2",
+        choices=["V1", "V1MS", "V2"],
+        help="Select the image preprocessor to use, either 'V2', 'V1' or 'V1MS', default: V2",
+    )
     args = parser.parse_args()
     if not all([args.engine, args.input]):
         parser.print_help()
