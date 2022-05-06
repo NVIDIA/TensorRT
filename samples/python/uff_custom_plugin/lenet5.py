@@ -23,31 +23,31 @@ import os
 
 WORKING_DIR = os.environ.get("TRT_WORKING_DIR") or os.path.dirname(os.path.realpath(__file__))
 
-MODEL_DIR = os.path.join(
-    WORKING_DIR,
-    'models'
-)
+MODEL_DIR = os.path.join(WORKING_DIR, "models")
 
 # MNIST dataset metadata
 MNIST_IMAGE_SIZE = 28
 MNIST_CHANNELS = 1
 MNIST_CLASSES = 10
 
+
 class ModelData(object):
     INPUT_NAME = "InputLayer"
     INPUT_SHAPE = (MNIST_CHANNELS, MNIST_IMAGE_SIZE, MNIST_IMAGE_SIZE)
     RELU6_NAME = "ReLU6"
     OUTPUT_NAME = "OutputLayer/Softmax"
-    OUTPUT_SHAPE = (MNIST_IMAGE_SIZE, )
+    OUTPUT_SHAPE = (MNIST_IMAGE_SIZE,)
     DATA_TYPE = trt.float32
+
 
 def load_data():
     mnist = tf.keras.datasets.mnist
-    (x_train, y_train),(x_test, y_test) = mnist.load_data()
+    (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
     x_train = np.reshape(x_train, (-1, 1, 28, 28))
     x_test = np.reshape(x_test, (-1, 1, 28, 28))
     return x_train, y_train, x_test, y_test
+
 
 def build_model():
     # Create the keras model
@@ -59,12 +59,11 @@ def build_model():
     model.add(tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="OutputLayer"))
     return model
 
+
 def train_model():
     # Build and compile model
     model = build_model()
-    model.compile(optimizer='adam',
-                  loss='sparse_categorical_crossentropy',
-                  metrics=['accuracy'])
+    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 
     # Load data
     x_train, y_train, x_test, y_test = load_data()
@@ -72,11 +71,7 @@ def train_model():
     np.save(os.path.join(MODEL_DIR, "y_test.npy"), y_test)
 
     # Train the model on the data
-    model.fit(
-        x_train, y_train,
-        epochs = 10,
-        verbose = 1
-    )
+    model.fit(x_train, y_train, epochs=10, verbose=1)
 
     # Evaluate the model on test data
     test_loss, test_acc = model.evaluate(x_test, y_test)
@@ -84,9 +79,11 @@ def train_model():
 
     return model
 
+
 def maybe_mkdir(dir_path):
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
+
 
 def save_model(model):
     output_names = model.output.op.name
@@ -107,4 +104,3 @@ def save_model(model):
 if __name__ == "__main__":
     model = train_model()
     save_model(model)
-

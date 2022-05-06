@@ -197,17 +197,34 @@ The image to be inferred.
 	&&&& RUNNING TensorRT.sample_int8_api # ./sample_int8_api
 	[I] Please follow README.md to generate missing input files.
 	[I] Validating input parameters. Using following input files for inference.
-	[I] Model File: ../../../../../../../../../data/samples/int8_api/resnet50.onnx
-	[I] Image File: ../../../../../../../../../data/samples/int8_api/airliner.ppm
-	[I] Reference File: ../../../../../../../../../data/samples/int8_api/reference_labels.txt
-	[I] Dynamic Range File: ../../../../../../../../../data/samples/int8_api/resnet50_per_tensor_dynamic_range.txt
+	[I]     Model File: ../../../../../../../../../data/samples/int8_api/resnet50.onnx
+	[I]     Image File: ../../../../../../../../../data/samples/int8_api/airliner.ppm
+	[I]     Reference File: ../../../../../../../../../data/samples/int8_api/reference_labels.txt
+	[I]     Dynamic Range File: ../../../../../../../../../data/samples/int8_api/resnet50_per_tensor_dynamic_range.txt
 	[I] Building and running a INT8 GPU inference engine for ../../../../../../../../../data/samples/int8_api/resnet50.onnx
+	[I] [TRT] ----------------------------------------------------------------
+	[I] [TRT] Input filename:   ../../../../../../../../../data/samples/int8_api/resnet50.onnx
+	[I] [TRT] ONNX IR version:  0.0.3
+	[I] [TRT] Opset version:    9
+	[I] [TRT] Producer name:    onnx-caffe2
+	[I] [TRT] Producer version:
+	[I] [TRT] Domain:
+	[I] [TRT] Model version:    0
+	[I] [TRT] Doc string:
+	[I] [TRT] ----------------------------------------------------------------
 	[I] Setting Per Layer Computation Precision
 	[I] Setting Per Tensor Dynamic Range
-	[W] [TRT] Calibrator is not being used. Users must provide dynamic range for all tensors.
-	[W] [TRT] Warning: no implementation of (Unnamed Layer* 173) [Fully Connected] obeys the requested constraints, using a higher precision type
-	[W] [TRT] Warning: no implementation of (Unnamed Layer* 174) [Softmax] obeys the requested constraints, using a higher precision type
-	[I] sampleINT8API result: Detected:
+	[W] [TRT] Calibrator is not being used. Users must provide dynamic range for all tensors that are not Int32 or Bool.
+	[I] [TRT] Local timing cache in use. Profiling results in this builder pass will not be stored.
+	[I] [TRT] Detected 1 inputs and 1 output network tensors.
+	[I] [TRT] Total Host Persistent Memory: 123728
+	[I] [TRT] Total Device Persistent Memory: 0
+	[I] [TRT] Total Scratch Memory: 0
+	[I] [TRT] [MemUsageStats] Peak memory usage of TRT CPU/GPU memory allocators: CPU 116 MiB, GPU 4523 MiB
+	[I] [TRT] [BlockAssignment] Algorithm ShiftNTopDown took 3.49361ms to assign 3 blocks to 74 nodes requiring 2408448 bytes.
+	[I] [TRT] Total Activation Memory: 2408448
+	[I] [TRT] Loaded engine size: 25 MiB
+	[I] SampleINT8API result: Detected:
 	[I] [1] space shuttle
 	[I] [2] airliner
 	[I] [3] warplane

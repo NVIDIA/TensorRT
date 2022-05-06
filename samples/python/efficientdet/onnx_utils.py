@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("EfficientDetHelper").setLevel(logging.INFO)
 log = logging.getLogger("EfficientDetHelper")
 
+
 @gs.Graph.register()
 def elt_const(self, op, name, input, value):
     """
@@ -37,6 +38,7 @@ def elt_const(self, op, name, input, value):
     const = gs.Constant(name="{}_value:0".format(name), values=value)
     return self.layer(name=name, op=op, inputs=[input_tensor, const], outputs=[name + ":0"])
 
+
 @gs.Graph.register()
 def unsqueeze(self, name, input, axes=[-1]):
     """
@@ -49,7 +51,8 @@ def unsqueeze(self, name, input, axes=[-1]):
     """
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created Unsqueeze node '{}': {}".format(name, axes))
-    return self.layer(name=name, op="Unsqueeze", inputs=[input_tensor], outputs=[name + ":0"], attrs={'axes': axes})
+    return self.layer(name=name, op="Unsqueeze", inputs=[input_tensor], outputs=[name + ":0"], attrs={"axes": axes})
+
 
 @gs.Graph.register()
 def transpose(self, name, input, perm):
@@ -63,7 +66,8 @@ def transpose(self, name, input, perm):
     """
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created Transpose node '{}': {}".format(name, perm))
-    return self.layer(name=name, op="Transpose", inputs=[input_tensor], outputs=[name + ":0"], attrs={'perm': perm})
+    return self.layer(name=name, op="Transpose", inputs=[input_tensor], outputs=[name + ":0"], attrs={"perm": perm})
+
 
 @gs.Graph.register()
 def sigmoid(self, name, input):
@@ -77,6 +81,7 @@ def sigmoid(self, name, input):
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created Sigmoid node '{}'".format(name))
     return self.layer(name=name, op="Sigmoid", inputs=[input_tensor], outputs=[name + ":0"])
+
 
 @gs.Graph.register()
 def plugin(self, op, name, inputs, outputs, attrs):
@@ -95,6 +100,7 @@ def plugin(self, op, name, inputs, outputs, attrs):
     log.debug("Created TRT Plugin node '{}': {}".format(name, attrs))
     return self.layer(op=op, name=name, inputs=input_tensors, outputs=outputs, attrs=attrs)
 
+
 @gs.Graph.register()
 def find_node_by_op(self, op):
     """
@@ -107,6 +113,7 @@ def find_node_by_op(self, op):
         if node.op == op:
             return node
     return None
+
 
 @gs.Graph.register()
 def find_descendant_by_op(self, node, op, depth=10):
@@ -124,6 +131,7 @@ def find_descendant_by_op(self, node, op, depth=10):
         if node.op == op:
             return node
     return None
+
 
 @gs.Graph.register()
 def find_ancestor_by_op(self, node, op, depth=10):

@@ -61,7 +61,7 @@ Calibration is an additional step required when building networks for INT8. The 
 
 #### Calibration data
 
-Calibration must be performed using images representative of those which will be used at runtime. Since the sample is based around Caffe, any image preprocessing that caffe would perform prior to running the network (such as scaling, cropping, or mean subtraction) will be done in Caffe and captured as a set of files. The sample uses a utility class (MNISTBatchStream) to read these files and create appropriate input for calibration.
+Calibration must be performed using images representative of those which will be used at runtime. Since the sample is based around Caffe, any image preprocessing that caffe would perform prior to running the network (such as scaling, cropping, or mean subtraction) will be done in Caffe and captured as a set of files. The sample uses a utility class (MNISTBatchStream) to read these files and create appropriate input for calibration. 
 
 You can create calibration data stream (calibrationStream), for example:
 ```cpp
@@ -147,16 +147,13 @@ The `CalibrationTable` file is generated during the build phase while running th
     `config->setAvgTimingIterations(1);`
     `config->setMinTimingIterations(1);`
 
-2.  Set maximum workspace size.
-    `config->setMaxWorkspaceSize(1_GiB);`
-
-3.  Set allowed builder precision to INT8 in addition to FP32. Default builder precision is FP32.
+2.  Set allowed builder precision to INT8 in addition to FP32. Default builder precision is FP32.
     `config->setFlag(BuilderFlag::kINT8);`
 
-4.  Set maximum batch size.
+3.  Set maximum batch size.
     `builder->setMaxBatchSize(mParams.batchSize);`
 
-5.  Pass the calibrator object (calibrator) to the builder.
+4.  Pass the calibrator object (calibrator) to the builder.
     `config->setInt8Calibrator(calibrator.get());`
 
 ### Building the engine

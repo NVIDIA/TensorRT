@@ -566,7 +566,7 @@ class DET2GraphSurgeon:
             cls_score_reshape = self.graph.op_with_const("Reshape", "cls_score/reshape", cls_score.outputs[0], cls_score_shape)
             
             # Slice operation to adjust third dimension of cls_score tensor, deletion of background class (81 in Detectron 2).
-            final_cls_score = self.graph.slice("cls_score/slicer", cls_score_reshape[0], 0, 80, 2)
+            final_cls_score = self.graph.slice("cls_score/slicer", cls_score_reshape[0], 0, self.num_classes, 2)
 
             # Create NMS node.
             nms_outputs = self.NMS(final_bbox_pred[0], final_cls_score[0], matmul_out[0], -1, False, self.second_NMS_max_proposals, self.second_NMS_iou_threshold, self.second_NMS_score_threshold, second_nms_threshold, 'box_outputs')

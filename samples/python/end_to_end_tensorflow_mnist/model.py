@@ -20,9 +20,10 @@ import os
 import numpy as np
 import tensorflow as tf
 
+
 def process_dataset():
     # Import the data
-    (x_train, y_train),(x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
 
     # Reshape the data
@@ -32,14 +33,16 @@ def process_dataset():
     x_test = np.reshape(x_test, (NUM_TEST, 28, 28, 1))
     return x_train, y_train, x_test, y_test
 
+
 def create_model():
     model = tf.keras.models.Sequential()
-    model.add(tf.keras.layers.InputLayer(input_shape=[28,28, 1]))
+    model.add(tf.keras.layers.InputLayer(input_shape=[28, 28, 1]))
     model.add(tf.keras.layers.Flatten())
     model.add(tf.keras.layers.Dense(512, activation=tf.nn.relu))
     model.add(tf.keras.layers.Dense(10, activation=tf.nn.softmax))
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
     return model
+
 
 def save(model, filename):
     # First freeze the graph and remove training nodes.
@@ -51,16 +54,18 @@ def save(model, filename):
     with open(filename, "wb") as ofile:
         ofile.write(frozen_graph.SerializeToString())
 
+
 def main():
     x_train, y_train, x_test, y_test = process_dataset()
     model = create_model()
     # Train the model on the data
-    model.fit(x_train, y_train, epochs = 5, verbose = 1)
+    model.fit(x_train, y_train, epochs=5, verbose=1)
     # Evaluate the model on test data
     model.evaluate(x_test, y_test)
     model_path = os.environ.get("MODEL_PATH") or os.path.join(os.path.dirname(__file__), "models")
     model_file = os.path.join(model_path, "lenet5.pb")
     save(model, filename=model_file)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

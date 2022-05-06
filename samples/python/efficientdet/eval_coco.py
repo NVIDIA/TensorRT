@@ -49,12 +49,12 @@ def main(args):
                 det = detections[i][n]
                 coco_det[i][n] = [
                     source_id,
-                    det['xmin'],
-                    det['ymin'],
-                    det['xmax'] - det['xmin'],
-                    det['ymax'] - det['ymin'],
-                    det['score'],
-                    det['class'] + 1,  # The COCO evaluator expects class 0 to be background, so offset by 1
+                    det["xmin"],
+                    det["ymin"],
+                    det["xmax"] - det["xmin"],
+                    det["ymax"] - det["ymin"],
+                    det["score"],
+                    det["class"] + 1,  # The COCO evaluator expects class 0 to be background, so offset by 1
                 ]
         evaluator.update_state(None, coco_det)
     print()

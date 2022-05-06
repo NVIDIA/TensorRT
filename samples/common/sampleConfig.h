@@ -45,7 +45,6 @@ private:
     std::string mTimingCacheFilename;
     int64_t mLabel{-1};
     int64_t mMaxBatchSize{32};
-    int64_t mMaxWorkspaceSize{1 * 1024 * 1024 * 1024};
     int64_t mCalibBatchSize{0};
     int64_t mMaxNCalibBatch{0};
     int64_t mFirstCalibBatch{0};
@@ -181,15 +180,6 @@ public:
     {
         return mMaxBatchSize;
     } //!<  get the Max Batch Size
-
-    void setMaxWorkSpaceSize(int64_t maxWorkSpaceSize) noexcept
-    {
-        mMaxWorkspaceSize = maxWorkSpaceSize;
-    } //!<  set the Max Work Space size
-    int64_t getMaxWorkSpaceSize() const noexcept
-    {
-        return mMaxWorkspaceSize;
-    } //!<  get the Max Work Space size
 
     void setCalibBatchSize(int64_t CalibBatchSize) noexcept
     {

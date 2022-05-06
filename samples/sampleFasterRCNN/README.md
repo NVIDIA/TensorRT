@@ -78,8 +78,6 @@ This sample uses the plugin registry to add the plugin to the network. The Caffe
 
 To build the TensorRT engine, see [Building An Engine In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#build_engine_c).
 
-**Note:** In the case of the Faster R-CNN sample, `maxWorkspaceSize` is set to `10 * (2^20)`, namely 10MiB, because there is a need of roughly 6MiB of scratch space for the plugin layer for batch size 5.
-
 After the engine is built, the next steps are to serialize the engine, then run the inference with the deserialized engine. For more information, see [Serializing A Model In C++](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#serial_model_c).
 
 ### Running the engine

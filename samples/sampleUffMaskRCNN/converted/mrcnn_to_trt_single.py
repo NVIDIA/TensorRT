@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-#
+# -*- coding: utf-8 -*-
+#
 # SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -26,6 +27,7 @@ import mrcnn.model as modellib
 from mrcnn.config import Config
 import sys
 import os
+
 ROOT_DIR = os.path.abspath("./")
 LOG_DIR = os.path.join(ROOT_DIR, "logs")
 import argparse
@@ -34,39 +36,24 @@ import uff
 
 
 def parse_command_line_arguments(args=None):
-    parser = argparse.ArgumentParser(prog='keras_to_trt', description='Convert trained keras .hdf5 model to trt .uff')
+    parser = argparse.ArgumentParser(prog="keras_to_trt", description="Convert trained keras .hdf5 model to trt .uff")
 
     parser.add_argument(
-        '-w',
-        '--weights',
-        type=str,
-        default=None,
-        required=True,
-        help="The checkpoint weights file of keras model."
+        "-w", "--weights", type=str, default=None, required=True, help="The checkpoint weights file of keras model."
     )
 
     parser.add_argument(
-        '-o',
-        '--output_file',
-        type=str,
-        default=None,
-        required=True,
-        help="The path to output .uff file."
+        "-o", "--output_file", type=str, default=None, required=True, help="The path to output .uff file."
     )
 
-    parser.add_argument(
-        '-l',
-        '--list-nodes',
-        action='store_true',
-        help="show list of nodes contained in converted pb"
-    )
+    parser.add_argument("-l", "--list-nodes", action="store_true", help="show list of nodes contained in converted pb")
 
     parser.add_argument(
-        '-p',
-        '--preprocessor',
+        "-p",
+        "--preprocessor",
         type=str,
         default=False,
-        help="The preprocess function for converting tf node to trt plugin"
+        help="The preprocess function for converting tf node to trt plugin",
     )
 
     return parser.parse_args(args)
@@ -77,6 +64,7 @@ class CocoConfig(Config):
     Derives from the base Config class and overrides values specific
     to the COCO dataset.
     """
+
     # Give the configuration a recognizable name
     NAME = "coco"
 
@@ -90,15 +78,17 @@ class CocoConfig(Config):
     # Number of classes (including background)
     NUM_CLASSES = 1 + 80  # COCO has 80 classes
 
+
 class InferenceConfig(CocoConfig):
     # Set batch size to 1 since we'll be running inference on
     # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
     GPU_COUNT = 1
     IMAGES_PER_GPU = 1
 
+
 def main(args=None):
 
-    K.set_image_data_format('channels_first')
+    K.set_image_data_format("channels_first")
     K.set_learning_phase(0)
 
     args = parse_command_line_arguments(args)
@@ -114,31 +104,26 @@ def main(args=None):
 
     model.load_weights(model_weights_path, by_name=True)
 
-
-    model_A = Model(inputs=model.input, outputs=model.get_layer('mrcnn_mask').output)
+    model_A = Model(inputs=model.input, outputs=model.get_layer("mrcnn_mask").output)
     model_A.summary()
 
-    output_nodes = ['mrcnn_detection', "mrcnn_mask/Sigmoid"]
-    convert_model(model_A, output_file_path, output_nodes, preprocessor=args.preprocessor,
-                  text=True, list_nodes=list_nodes)
+    output_nodes = ["mrcnn_detection", "mrcnn_mask/Sigmoid"]
+    convert_model(
+        model_A, output_file_path, output_nodes, preprocessor=args.preprocessor, text=True, list_nodes=list_nodes
+    )
 
 
-def convert_model(inference_model, output_path, output_nodes=[], preprocessor=None, text=False,
-                  list_nodes=False):
+def convert_model(inference_model, output_path, output_nodes=[], preprocessor=None, text=False, list_nodes=False):
     # convert the keras model to pb
     orig_output_node_names = [node.op.name for node in inference_model.outputs]
     print("The output names of tensorflow graph nodes: {}".format(str(orig_output_node_names)))
 
     sess = K.get_session()
 
-    constant_graph = graph_util.convert_variables_to_constants(
-        sess,
-        sess.graph.as_graph_def(),
-        orig_output_node_names)
+    constant_graph = graph_util.convert_variables_to_constants(sess, sess.graph.as_graph_def(), orig_output_node_names)
 
     temp_pb_path = "../temp.pb"
-    graph_io.write_graph(constant_graph, os.path.dirname(temp_pb_path), os.path.basename(temp_pb_path),
-                         as_text=False)
+    graph_io.write_graph(constant_graph, os.path.dirname(temp_pb_path), os.path.basename(temp_pb_path), as_text=False)
 
     predefined_output_nodes = output_nodes
     if predefined_output_nodes != []:
@@ -154,7 +139,7 @@ def convert_model(inference_model, output_path, output_nodes=[], preprocessor=No
         text=text,
         list_nodes=list_nodes,
         output_filename=output_path,
-        debug_mode = False
+        debug_mode=False,
     )
 
     os.remove(temp_pb_path)

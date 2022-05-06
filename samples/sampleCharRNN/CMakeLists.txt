@@ -17,6 +17,7 @@
 SET(SAMPLE_SOURCES
     sampleCharRNN.cpp
     ../common/sampleEngines.cpp
+    ../common/sampleUtils.cpp
 )
 # Required due to inclusion of sampleEnines.h
 SET(SAMPLE_PARSERS "uff" "caffe" "onnx")

@@ -21,7 +21,7 @@ import tensorflow as tf
 from PIL import Image
 import numpy as np
 
-import utils.model as model_utils # UFF conversion uttils
+import utils.model as model_utils  # UFF conversion uttils
 
 # This class is similar as TRTInference inference, but it manages Tensorflow
 class TensorflowInference(object):
@@ -29,10 +29,10 @@ class TensorflowInference(object):
         self.detection_graph = tf.Graph()
         with self.detection_graph.as_default():
             od_graph_def = tf.GraphDef()
-            with tf.gfile.GFile(pb_model_path, 'rb') as fid:
+            with tf.gfile.GFile(pb_model_path, "rb") as fid:
                 serialized_graph = fid.read()
                 od_graph_def.ParseFromString(serialized_graph)
-                tf.import_graph_def(od_graph_def, name='')
+                tf.import_graph_def(od_graph_def, name="")
         self.sess = tf.Session(graph=self.detection_graph)
 
     def infer(self, image_path):
@@ -47,31 +47,25 @@ class TensorflowInference(object):
         ops = self.detection_graph.get_operations()
         all_tensor_names = {output.name for op in ops for output in op.outputs}
         tensor_dict = {}
-        for key in [
-            'num_detections', 'detection_boxes',
-            'detection_scores', 'detection_classes'
-        ]:
-            tensor_name = key + ':0'
+        for key in ["num_detections", "detection_boxes", "detection_scores", "detection_classes"]:
+            tensor_name = key + ":0"
             if tensor_name in all_tensor_names:
-                tensor_dict[key] = self.detection_graph.get_tensor_by_name(
-                    tensor_name)
+                tensor_dict[key] = self.detection_graph.get_tensor_by_name(tensor_name)
 
-        image_tensor = self.detection_graph.get_tensor_by_name('image_tensor:0')
-        output_dict = self.sess.run(tensor_dict,
-            feed_dict={image_tensor: image_input})
+        image_tensor = self.detection_graph.get_tensor_by_name("image_tensor:0")
+        output_dict = self.sess.run(tensor_dict, feed_dict={image_tensor: image_input})
 
         # All outputs are float32 numpy arrays, so convert types as appropriate
-        output_dict['num_detections'] = output_dict['num_detections'].astype(np.int32)
-        output_dict['detection_classes'] = output_dict[
-            'detection_classes'].astype(np.uint8)
+        output_dict["num_detections"] = output_dict["num_detections"].astype(np.int32)
+        output_dict["detection_classes"] = output_dict["detection_classes"].astype(np.uint8)
 
         return output_dict
 
     def _load_image_into_numpy_array(self, image):
         (im_width, im_height) = image.size
-        return np.array(image).reshape(
-            (im_height, im_width, model_utils.ModelData.get_input_channels())
-        ).astype(np.uint8)
+        return (
+            np.array(image).reshape((im_height, im_width, model_utils.ModelData.get_input_channels())).astype(np.uint8)
+        )
 
     def _load_imgs(self, image_paths):
         numpy_array = np.zeros((len(image_paths),) + (300, 300, 3))

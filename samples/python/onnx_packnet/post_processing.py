@@ -61,20 +61,21 @@ def process_pad_nodes(graph):
 
     return graph
 
+
 def fold_pad_inputs(node, graph):
     # Gather the amount of padding in each dimension from pytorch graph.
-    if torch.__version__ < '1.5.0':
-        pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(0).attrs['value'].values
+    if torch.__version__ < "1.5.0":
+        pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(0).attrs["value"].values
     else:
         pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).inputs[0].values
 
     # Assumption a 4d input tensor
-    onnx_pad_values = [0]*4*2 # 4d tensor and 2 sides padding for each dimension
-    j=3
+    onnx_pad_values = [0] * 4 * 2  # 4d tensor and 2 sides padding for each dimension
+    j = 3
     for i in range(0, len(pad_values_pyt), 2):
         onnx_pad_values[j] = pad_values_pyt[i]
-        onnx_pad_values[j+4] = pad_values_pyt[i+1]
-        j-=1
+        onnx_pad_values[j + 4] = pad_values_pyt[i + 1]
+        j -= 1
 
     # Change the existing pad tensor to the new onnx_pad values tensor
     pads_folded_tensor = gs.Constant(name=node.inputs[1].name, values=np.array(onnx_pad_values))
@@ -108,10 +109,10 @@ def process_upsample_nodes(graph, opset=11):
        |
       ReLU
     """
-    if opset>=11:
-       upsample_layer_name = "Resize"
+    if opset >= 11:
+        upsample_layer_name = "Resize"
     else:
-       upsample_layer_name = "Upsample"
+        upsample_layer_name = "Upsample"
 
     upsample_nodes = [node for node in graph.nodes if node.op == upsample_layer_name]
     for node in upsample_nodes:
@@ -129,9 +130,9 @@ def fold_upsample_inputs(upsample, graph, opset=11):
         graph: graph object.
     """
 
-    if opset==9:
+    if opset == 9:
         # Gather the scale factor from mul op in the upsample input subgraph
-        scale_factor = upsample.i(1).i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(1).attrs['value'].values
+        scale_factor = upsample.i(1).i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(1).attrs["value"].values
 
         # Create the new scales tensor
         scales = np.array([1.0, 1.0, scale_factor, scale_factor], dtype=np.float32)
@@ -145,14 +146,14 @@ def fold_upsample_inputs(upsample, graph, opset=11):
         sizes_tensor_name = upsample.inputs[3].name
 
         # Create the new scales tensor
-        scale_factor = upsample.i(3).i(1).i().i().i().i().i(0).i(1).attrs['value'].values
+        scale_factor = upsample.i(3).i(1).i().i().i().i().i(0).i(1).attrs["value"].values
         scales = np.array([1.0, 1.0, scale_factor, scale_factor], dtype=np.float32)
         scale_tensor = gs.Constant(name=sizes_tensor_name, values=scales)
 
         # Rename the Resize op to upsample and add the data and scales as inputs to the upsample layer.
         input_tensor = upsample.inputs[0]
         upsample.inputs = [input_tensor, scale_tensor]
-        upsample.op = 'Upsample'
+        upsample.op = "Upsample"
 
 
 # Pytorch-exported GroupNorm subgraph in ONNX:
@@ -220,15 +221,15 @@ def convert_to_groupnorm(instancenorm, graph):
     graph.nodes.append(groupnorm)
 
     # The plugin needs to receive an input from the Conv node, and output to the ReLU node
-    conv_output_tensor = instancenorm.i().inputs[0] # Output of Conv
-    relu_input_tensor = instancenorm.o().o().o().outputs[0] # Output of Add
+    conv_output_tensor = instancenorm.i().inputs[0]  # Output of Conv
+    relu_input_tensor = instancenorm.o().o().o().outputs[0]  # Output of Add
 
     # Reconnect inputs/outputs to the groupnorm plugin
     conv_output_tensor.outputs[0] = groupnorm
     relu_input_tensor.inputs[0] = groupnorm
 
     # Add scale and bias constant tensors to group norm plugin
-    if torch.__version__ < '1.5.0':
+    if torch.__version__ < "1.5.0":
         groupnorm.inputs.append(instancenorm.o().o().i(1).inputs[0])
         groupnorm.inputs.append(instancenorm.o().o().o().i(1).inputs[0])
     else:

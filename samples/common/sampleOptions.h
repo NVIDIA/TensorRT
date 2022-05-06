@@ -34,7 +34,6 @@ namespace sample
 
 // Build default params
 constexpr int32_t maxBatchNotProvided{0};
-constexpr int32_t defaultWorkspace{16};
 constexpr int32_t defaultMinTiming{1};
 constexpr int32_t defaultAvgTiming{8};
 
@@ -46,10 +45,10 @@ constexpr int32_t defaultBatch{1};
 constexpr int32_t batchNotProvided{0};
 constexpr int32_t defaultStreams{1};
 constexpr int32_t defaultIterations{10};
-constexpr int32_t defaultWarmUp{200};
-constexpr int32_t defaultDuration{3};
-constexpr int32_t defaultSleep{0};
-constexpr int32_t defaultIdle{0};
+constexpr float defaultWarmUp{200.F};
+constexpr float defaultDuration{3.F};
+constexpr float defaultSleep{};
+constexpr float defaultIdle{};
 
 // Reporting default params
 constexpr int32_t defaultAvgRuns{10};
@@ -89,6 +88,9 @@ using Arguments = std::unordered_multimap<std::string, std::string>;
 using IOFormat = std::pair<nvinfer1::DataType, nvinfer1::TensorFormats>;
 
 using ShapeRange = std::array<std::vector<int32_t>, nvinfer1::EnumMax<nvinfer1::OptProfileSelector>()>;
+
+using LayerPrecisions = std::unordered_map<std::string, nvinfer1::DataType>;
+using LayerOutputTypes = std::unordered_map<std::string, std::vector<nvinfer1::DataType>>;
 
 struct Options
 {
@@ -130,7 +132,10 @@ struct ModelOptions : public Options
 struct BuildOptions : public Options
 {
     int32_t maxBatch{maxBatchNotProvided};
-    int32_t workspace{defaultWorkspace};
+    double workspace{-1.0};
+    double dlaSRAM{-1.0};
+    double dlaLocalDRAM{-1.0};
+    double dlaGlobalDRAM{-1.0};
     int32_t minTiming{defaultMinTiming};
     int32_t avgTiming{defaultAvgTiming};
     bool tf32{true};
@@ -138,9 +143,12 @@ struct BuildOptions : public Options
     bool int8{false};
     bool directIO{false};
     PrecisionConstraints precisionConstraints{PrecisionConstraints::kNONE};
+    LayerPrecisions layerPrecisions;
+    LayerOutputTypes layerOutputTypes;
     bool safe{false};
     bool consistency{false};
     bool restricted{false};
+    bool buildOnly{false};
     bool save{false};
     bool load{false};
     bool refittable{false};
@@ -177,18 +185,17 @@ struct InferenceOptions : public Options
 {
     int32_t batch{batchNotProvided};
     int32_t iterations{defaultIterations};
-    int32_t warmup{defaultWarmUp};
-    int32_t duration{defaultDuration};
-    int32_t sleep{defaultSleep};
     int32_t streams{defaultStreams};
-    int32_t idle{defaultIdle};
+    float warmup{defaultWarmUp};
+    float duration{defaultDuration};
+    float sleep{defaultSleep};
+    float idle{defaultIdle};
     bool overlap{true};
     bool skipTransfers{false};
     bool useManaged{false};
     bool spin{false};
     bool threads{false};
     bool graph{false};
-    bool skip{false};
     bool rerun{false};
     bool timeDeserialize{false};
     bool timeRefit{false};
@@ -231,6 +238,12 @@ struct SafeBuilderOptions : public Options
     std::string calibFile{};
     std::vector<std::string> plugins;
     bool consistency{false};
+    bool standard{false};
+    TimingCacheMode timingCacheMode{TimingCacheMode::kLOCAL};
+    std::string timingCacheFile{};
+    SparsityFlag sparsity{SparsityFlag::kDISABLE};
+    int32_t minTiming{defaultMinTiming};
+    int32_t avgTiming{defaultAvgTiming};
 
     void parse(Arguments& arguments) override;
 

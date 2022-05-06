@@ -35,4 +35,3 @@ class ModelData(object):
     @staticmethod
     def get_input_width():
         return ModelData.INPUT_SHAPE[2]
-

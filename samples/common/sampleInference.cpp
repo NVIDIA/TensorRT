@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cuda_profiler_api.h>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -48,11 +49,11 @@ namespace sample
 
 template <class MapType, class EngineType>
 bool validateTensorNames(
-    const MapType& map, const EngineType* engine, const int32_t endBindingIndex)
+    MapType const& map, EngineType const* engine, int32_t const endBindingIndex)
 {
     // Check if the provided input tensor names match the input tensors of the engine.
     // Throw an error if the provided input tensor names cannot be found because it implies a potential typo.
-    for (const auto& item : map)
+    for (auto const& item : map)
     {
         bool tensorNameFound{false};
         for (int32_t b = 0; b < endBindingIndex; ++b)
@@ -96,7 +97,7 @@ private:
         auto const *bindingInOutStr = isInput ? "input" : "output";
         for (auto& binding : bindings)
         {
-            const auto input = inputs.find(name);
+            auto const input = inputs.find(name);
             if (isInput && input != inputs.end())
             {
                 sample::gLogInfo << "Using values loaded from " << input->second << " for input " << name << std::endl;
@@ -162,7 +163,7 @@ Dims FillBindingClosure<nvinfer1::safe::ICudaEngine, nvinfer1::safe::IExecutionC
     return engine->getBindingDimensions(bindingIndex);
 }
 
-bool setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inference)
+bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inference)
 {
     int32_t device{};
     cudaCheck(cudaGetDevice(&device));
@@ -176,51 +177,63 @@ bool setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inferenc
     if (iEnv.safe)
     {
         ASSERT(sample::hasSafeRuntime());
-        auto* safeEngine = iEnv.safeEngine.get();
+
+        auto* safeEngine = iEnv.engine.getSafe();
+        SMP_RETVAL_IF_FALSE(safeEngine != nullptr, "Got invalid safeEngine!", false, sample::gLogError);
+
+        // Release serialized blob to save memory space.
+        iEnv.engine.releaseBlob();
+
         for (int32_t s = 0; s < inference.streams; ++s)
         {
-            iEnv.safeContext.emplace_back(safeEngine->createExecutionContext());
+            iEnv.safeContexts.emplace_back(safeEngine->createExecutionContext());
             iEnv.bindings.emplace_back(new Bindings(useManagedMemory));
         }
-        const int32_t nBindings = safeEngine->getNbBindings();
-        auto const* safeContext = iEnv.safeContext.front().get();
+        int32_t const nbBindings = safeEngine->getNbBindings();
+        auto const* safeContext = iEnv.safeContexts.front().get();
         // batch is set to 1 because safety only support explicit batch.
-        return FillSafeBindings(iEnv.safeEngine.get(), safeContext, inference.inputs, iEnv.bindings, 1, nBindings)();
+        return FillSafeBindings(safeEngine, safeContext, inference.inputs, iEnv.bindings, 1, nbBindings)();
     }
 
     using FillStdBindings = FillBindingClosure<nvinfer1::ICudaEngine, nvinfer1::IExecutionContext>;
 
+    auto* engine = iEnv.engine.get();
+    SMP_RETVAL_IF_FALSE(engine != nullptr, "Got invalid engine!", false, sample::gLogError);
+
+    // Release serialized blob to save memory space.
+    iEnv.engine.releaseBlob();
+
     for (int32_t s = 0; s < inference.streams; ++s)
     {
-        auto ec = iEnv.engine->createExecutionContext();
+        auto ec = engine->createExecutionContext();
         if (ec == nullptr)
         {
             sample::gLogError << "Unable to create execution context for stream " << s << "." << std::endl;
             return false;
         }
-        iEnv.context.emplace_back(ec);
+        iEnv.contexts.emplace_back(ec);
         iEnv.bindings.emplace_back(new Bindings(useManagedMemory));
     }
     if (iEnv.profiler)
     {
-        iEnv.context.front()->setProfiler(iEnv.profiler.get());
+        iEnv.contexts.front()->setProfiler(iEnv.profiler.get());
         // Always run reportToProfiler() after enqueue launch
-        iEnv.context.front()->setEnqueueEmitsProfile(false);
+        iEnv.contexts.front()->setEnqueueEmitsProfile(false);
     }
 
-    const int32_t nOptProfiles = iEnv.engine->getNbOptimizationProfiles();
-    const int32_t nBindings = iEnv.engine->getNbBindings();
-    const int32_t bindingsInProfile = nOptProfiles > 0 ? nBindings / nOptProfiles : 0;
-    const int32_t endBindingIndex = bindingsInProfile ? bindingsInProfile : iEnv.engine->getNbBindings();
+    int32_t const nbOptProfiles = engine->getNbOptimizationProfiles();
+    int32_t const nbBindings = engine->getNbBindings();
+    int32_t const bindingsInProfile = nbOptProfiles > 0 ? nbBindings / nbOptProfiles : 0;
+    int32_t const endBindingIndex = bindingsInProfile ? bindingsInProfile : engine->getNbBindings();
 
-    if (nOptProfiles > 1)
+    if (nbOptProfiles > 1)
     {
         sample::gLogWarning << "Multiple profiles are currently not supported. Running with one profile." << std::endl;
     }
 
     // Make sure that the tensor names provided in command-line args actually exist in any of the engine bindings
     // to avoid silent typos.
-    if (!validateTensorNames(inference.shapes, iEnv.engine.get(), endBindingIndex))
+    if (!validateTensorNames(inference.shapes, engine, endBindingIndex))
     {
         sample::gLogError << "Invalid tensor names found in --shapes flag." << std::endl;
         return false;
@@ -229,22 +242,22 @@ bool setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inferenc
     // Set all input dimensions before all bindings can be allocated
     for (int32_t b = 0; b < endBindingIndex; ++b)
     {
-        if (iEnv.engine->bindingIsInput(b))
+        if (engine->bindingIsInput(b))
         {
-            auto dims = iEnv.context.front()->getBindingDimensions(b);
-            const bool isScalar = dims.nbDims == 0;
-            const bool isDynamicInput = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; })
-                || iEnv.engine->isShapeBinding(b);
+            auto dims = iEnv.contexts.front()->getBindingDimensions(b);
+            bool const isScalar = dims.nbDims == 0;
+            bool const isDynamicInput = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; })
+                || engine->isShapeBinding(b);
             if (isDynamicInput)
             {
-                auto shape = inference.shapes.find(iEnv.engine->getBindingName(b));
+                auto shape = inference.shapes.find(engine->getBindingName(b));
 
-                // If no shape is provided, set dynamic dimensions to 1.
                 std::vector<int32_t> staticDims;
                 if (shape == inference.shapes.end())
                 {
+                    // If no shape is provided, set dynamic dimensions to 1.
                     constexpr int32_t DEFAULT_DIMENSION = 1;
-                    if (iEnv.engine->isShapeBinding(b))
+                    if (engine->isShapeBinding(b))
                     {
                         if (isScalar)
                         {
@@ -262,18 +275,37 @@ bool setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inferenc
                         std::transform(dims.d, dims.d + dims.nbDims, staticDims.begin(),
                             [&](int32_t dimension) { return dimension >= 0 ? dimension : DEFAULT_DIMENSION; });
                     }
-                    sample::gLogWarning << "Dynamic dimensions required for input: " << iEnv.engine->getBindingName(b)
+                    sample::gLogWarning << "Dynamic dimensions required for input: " << engine->getBindingName(b)
                                         << ", but no shapes were provided. Automatically overriding shape to: "
                                         << staticDims << std::endl;
+                }
+                else if (inference.inputs.count(shape->first) && engine->isShapeBinding(b))
+                {
+                    if (isScalar || dims.nbDims == 1)
+                    {
+                        // Load shape tensor from file.
+                        size_t const size = isScalar ? 1 : dims.d[0];
+                        staticDims.resize(size);
+                        auto const& filename = inference.inputs.at(shape->first);
+                        auto dst = reinterpret_cast<char*>(staticDims.data());
+                        loadFromFile(filename, dst, size * sizeof(decltype(staticDims)::value_type));
+                    }
+                    else
+                    {
+                        sample::gLogWarning << "Cannot load shape tensor " << shape->first << " from file, "
+                                            << "ND-Shape isn't supported yet" << std::endl;
+                        // Fallback
+                        staticDims = shape->second;
+                    }
                 }
                 else
                 {
                     staticDims = shape->second;
                 }
 
-                for (auto& c : iEnv.context)
+                for (auto& c : iEnv.contexts)
                 {
-                    if (iEnv.engine->isShapeBinding(b))
+                    if (engine->isShapeBinding(b))
                     {
                         if (!c->setInputShapeBinding(b, staticDims.data()))
                         {
@@ -292,8 +324,7 @@ bool setUpInference(InferenceEnvironment& iEnv, const InferenceOptions& inferenc
         }
     }
 
-    auto* engine = iEnv.engine.get();
-    auto const* context = iEnv.context.front().get();
+    auto const* context = iEnv.contexts.front().get();
     int32_t const batch = engine->hasImplicitBatchDimension() ? inference.batch : 1;
     return FillStdBindings(engine, context, inference.inputs, iEnv.bindings, batch, endBindingIndex)();
 }
@@ -329,7 +360,7 @@ struct SyncStruct
     TrtCudaStream mainStream;
     TrtCudaEvent gpuStart{cudaEventBlockingSync};
     TimePoint cpuStart{};
-    int32_t sleep{0};
+    float sleep{};
 };
 
 struct Enqueue
@@ -437,6 +468,27 @@ public:
 };
 
 //!
+//! \class EnqueueGraphSafe
+//! \brief Functor to enqueue inference from CUDA Graph
+//!
+class EnqueueGraphSafe
+{
+
+public:
+    explicit EnqueueGraphSafe(TrtCudaGraph& graph)
+        : mGraph(graph)
+    {
+    }
+
+    bool operator()(TrtCudaStream& stream) const
+    {
+        return mGraph.launch(stream);
+    }
+
+    TrtCudaGraph& mGraph;
+};
+
+//!
 //! \class EnqueueSafe
 //! \brief Functor to enqueue safe execution context
 //!
@@ -498,7 +550,7 @@ class Iteration
 {
 
 public:
-    Iteration(int32_t id, const InferenceOptions& inference, ContextType& context, Bindings& bindings)
+    Iteration(int32_t id, InferenceOptions const& inference, ContextType& context, Bindings& bindings)
         : mBindings(bindings)
         , mStreamId(id)
         , mDepth(1 + inference.overlap)
@@ -555,7 +607,7 @@ public:
     }
 
     float sync(
-        const TimePoint& cpuStart, const TrtCudaEvent& gpuStart, std::vector<InferenceTrace>& trace, bool skipTransfers)
+        TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, std::vector<InferenceTrace>& trace, bool skipTransfers)
     {
         if (mActive[mNext])
         {
@@ -575,7 +627,7 @@ public:
     }
 
     void syncAll(
-        const TimePoint& cpuStart, const TrtCudaEvent& gpuStart, std::vector<InferenceTrace>& trace, bool skipTransfers)
+        TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, std::vector<InferenceTrace>& trace, bool skipTransfers)
     {
         for (int32_t d = 0; d < mDepth; ++d)
         {
@@ -636,7 +688,7 @@ private:
         getStream(s).wait(getEvent(e));
     }
 
-    InferenceTrace getTrace(const TimePoint& cpuStart, const TrtCudaEvent& gpuStart, bool skipTransfers)
+    InferenceTrace getTrace(TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, bool skipTransfers)
     {
         float is
             = skipTransfers ? getEvent(EventType::kCOMPUTE_S) - gpuStart : getEvent(EventType::kINPUT_S) - gpuStart;
@@ -654,7 +706,7 @@ private:
     }
 
     void createEnqueueFunction(
-        const InferenceOptions& inference, nvinfer1::IExecutionContext& context, Bindings& bindings)
+        InferenceOptions const& inference, nvinfer1::IExecutionContext& context, Bindings& bindings)
     {
         if (context.getEngine().hasImplicitBatchDimension())
         {
@@ -669,7 +721,7 @@ private:
             TrtCudaStream& stream = getStream(StreamType::kCOMPUTE);
             // Avoid capturing initialization calls by executing the enqueue function at least
             // once before starting CUDA graph capture.
-            const auto ret = mEnqueue(stream);
+            auto const ret = mEnqueue(stream);
             assert(ret);
             stream.synchronize();
 
@@ -696,9 +748,20 @@ private:
         }
     }
 
-    void createEnqueueFunction(const InferenceOptions&, nvinfer1::safe::IExecutionContext& context, Bindings&)
+    void createEnqueueFunction(InferenceOptions const& inference, nvinfer1::safe::IExecutionContext& context, Bindings&)
     {
         mEnqueue = EnqueueFunction(EnqueueSafe(context, mBindings.getDeviceBuffers()));
+        if (inference.graph)
+        {
+            TrtCudaStream& stream = getStream(StreamType::kCOMPUTE);
+            ASSERT(mEnqueue(stream));
+            stream.synchronize();
+            mGraph.beginCapture(stream);
+            ASSERT(mEnqueue(stream));
+            mGraph.endCapture(stream);
+            mEnqueue = EnqueueFunction(EnqueueGraphSafe(mGraph));
+        }
+
     }
 
     Bindings& mBindings;
@@ -720,9 +783,9 @@ private:
 };
 
 template <class ContextType>
-bool inferenceLoop(std::vector<std::unique_ptr<Iteration<ContextType>>>& iStreams, const TimePoint& cpuStart,
-    const TrtCudaEvent& gpuStart, int iterations, float maxDurationMs, float warmupMs,
-    std::vector<InferenceTrace>& trace, bool skipTransfers, int idleMs)
+bool inferenceLoop(std::vector<std::unique_ptr<Iteration<ContextType>>>& iStreams, TimePoint const& cpuStart,
+    TrtCudaEvent const& gpuStart, int iterations, float maxDurationMs, float warmupMs,
+    std::vector<InferenceTrace>& trace, bool skipTransfers, float idleMs)
 {
     float durationMs = 0;
     int32_t skip = 0;
@@ -748,9 +811,9 @@ bool inferenceLoop(std::vector<std::unique_ptr<Iteration<ContextType>>>& iStream
             }
             continue;
         }
-        if(idleMs != 0)
+        if (idleMs != 0.F)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(idleMs));
+            std::this_thread::sleep_for(std::chrono::duration<float, std::milli>(idleMs));
         }
     }
     for (auto& s : iStreams)
@@ -761,11 +824,11 @@ bool inferenceLoop(std::vector<std::unique_ptr<Iteration<ContextType>>>& iStream
 }
 
 template <class ContextType>
-void inferenceExecution(const InferenceOptions& inference, InferenceEnvironment& iEnv, SyncStruct& sync,
-    const int32_t threadIdx, const int32_t streamsPerThread, int32_t device, std::vector<InferenceTrace>& trace)
+void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment& iEnv, SyncStruct& sync,
+    int32_t const threadIdx, int32_t const streamsPerThread, int32_t device, std::vector<InferenceTrace>& trace)
 {
-    float warmupMs = static_cast<float>(inference.warmup);
-    float durationMs = static_cast<float>(inference.duration) * 1000 + warmupMs;
+    float warmupMs = inference.warmup;
+    float durationMs = inference.duration * 1000.F + warmupMs;
 
     cudaCheck(cudaSetDevice(device));
 
@@ -773,7 +836,7 @@ void inferenceExecution(const InferenceOptions& inference, InferenceEnvironment&
 
     for (int32_t s = 0; s < streamsPerThread; ++s)
     {
-        const int32_t streamId{threadIdx * streamsPerThread + s};
+        int32_t const streamId{threadIdx * streamsPerThread + s};
         auto* iteration = new Iteration<ContextType>(
             streamId, inference, *iEnv.template getContext<ContextType>(streamId), *iEnv.bindings[streamId]);
         if (inference.skipTransfers)
@@ -808,7 +871,7 @@ void inferenceExecution(const InferenceOptions& inference, InferenceEnvironment&
     sync.mutex.unlock();
 }
 
-inline std::thread makeThread(const InferenceOptions& inference, InferenceEnvironment& iEnv, SyncStruct& sync,
+inline std::thread makeThread(InferenceOptions const& inference, InferenceEnvironment& iEnv, SyncStruct& sync,
     int32_t threadIdx, int32_t streamsPerThread, int32_t device, std::vector<InferenceTrace>& trace)
 {
 
@@ -826,8 +889,10 @@ inline std::thread makeThread(const InferenceOptions& inference, InferenceEnviro
 } // namespace
 
 bool runInference(
-    const InferenceOptions& inference, InferenceEnvironment& iEnv, int32_t device, std::vector<InferenceTrace>& trace)
+    InferenceOptions const& inference, InferenceEnvironment& iEnv, int32_t device, std::vector<InferenceTrace>& trace)
 {
+    cudaCheck(cudaProfilerStart());
+
     trace.resize(0);
 
     SyncStruct sync;
@@ -839,8 +904,8 @@ bool runInference(
     // When multiple streams are used, trtexec can run inference in two modes:
     // (1) if inference.threads is true, then run each stream on each thread.
     // (2) if inference.threads is false, then run all streams on the same thread.
-    const int32_t numThreads = inference.threads ? inference.streams : 1;
-    const int32_t streamsPerThread = inference.threads ? 1 : inference.streams;
+    int32_t const numThreads = inference.threads ? inference.streams : 1;
+    int32_t const streamsPerThread = inference.threads ? 1 : inference.streams;
 
     std::vector<std::thread> threads;
     for (int32_t threadIdx = 0; threadIdx < numThreads; ++threadIdx)
@@ -852,7 +917,9 @@ bool runInference(
         th.join();
     }
 
-    auto cmpTrace = [](const InferenceTrace& a, const InferenceTrace& b) { return a.h2dStart < b.h2dStart; };
+    cudaCheck(cudaProfilerStop());
+
+    auto cmpTrace = [](InferenceTrace const& a, InferenceTrace const& b) { return a.h2dStart < b.h2dStart; };
     std::sort(trace.begin(), trace.end(), cmpTrace);
 
     return !iEnv.error;
@@ -883,7 +950,6 @@ size_t reportGpuMemory()
 bool timeDeserialize(InferenceEnvironment& iEnv)
 {
     constexpr int32_t kNB_ITERS{20};
-    std::unique_ptr<IHostMemory> serializedEngine{iEnv.engine->serialize()};
     std::unique_ptr<IRuntime> rt{createInferRuntime(sample::gLogger.getTRTLogger())};
     std::unique_ptr<ICudaEngine> engine;
 
@@ -898,17 +964,17 @@ bool timeDeserialize(InferenceEnvironment& iEnv)
 
     auto timeDeserializeFn = [&]() -> float {
         bool deserializeOK{false};
-        auto startClock = std::chrono::high_resolution_clock::now();
         engine.reset(nullptr);
         safeEngine.reset(nullptr);
+        auto startClock = std::chrono::high_resolution_clock::now();
         if (iEnv.safe)
         {
-            safeEngine.reset(safeRT->deserializeCudaEngine(serializedEngine->data(), serializedEngine->size()));
+            safeEngine.reset(safeRT->deserializeCudaEngine(iEnv.engine.getBlob().data(), iEnv.engine.getBlob().size()));
             deserializeOK = (safeEngine != nullptr);
         }
         else
         {
-            engine.reset(rt->deserializeCudaEngine(serializedEngine->data(), serializedEngine->size(), nullptr));
+            engine.reset(rt->deserializeCudaEngine(iEnv.engine.getBlob().data(), iEnv.engine.getBlob().size(), nullptr));
             deserializeOK = (engine != nullptr);
         }
         auto endClock = std::chrono::high_resolution_clock::now();
@@ -927,7 +993,7 @@ bool timeDeserialize(InferenceEnvironment& iEnv)
     sample::gLogInfo << "Begin deserialization engine timing..." << std::endl;
     float const first = timeDeserializeFn();
 
-    // Check if first deserialization suceeded.
+    // Check if first deserialization succeeded.
     if (std::isnan(first))
     {
         sample::gLogError << "Engine deserialization failed." << std::endl;
@@ -944,20 +1010,21 @@ bool timeDeserialize(InferenceEnvironment& iEnv)
     {
         totalTime += timeDeserializeFn();
     }
-    const auto averageTime = totalTime / kNB_ITERS;
+    auto const averageTime = totalTime / kNB_ITERS;
     // reportGpuMemory sometimes reports zero after a single deserialization of a small engine,
     // so use the size of memory for all the iterations.
-    const auto totalEngineSizeGpu = reportGpuMemory();
-    sample::gLogInfo << "Total deserialization time = " << totalTime << " milliseconds, average time = " << averageTime
-                     << ", first time = " << first << "." << std::endl;
+    auto const totalEngineSizeGpu = reportGpuMemory();
+    sample::gLogInfo << "Total deserialization time = " << totalTime << " milliseconds in " << kNB_ITERS
+                     << " iterations, average time = " << averageTime << " milliseconds, first time = " << first
+                     << " milliseconds." << std::endl;
     sample::gLogInfo << "Deserialization Bandwidth = " << 1E-6 * totalEngineSizeGpu / totalTime << " GB/s" << std::endl;
 
     // If the first deserialization is more than tolerance slower than
     // the average deserialization, return true, which means an error occurred.
     // The tolerance is set to 2x since the deserialization time is quick and susceptible
     // to caching issues causing problems in the first timing.
-    const auto tolerance = 2.0F;
-    const bool isSlowerThanExpected = first > averageTime * tolerance;
+    auto const tolerance = 2.0F;
+    bool const isSlowerThanExpected = first > averageTime * tolerance;
     if (isSlowerThanExpected)
     {
         sample::gLogInfo << "First deserialization time divided by average time is " << (first / averageTime)
@@ -966,12 +1033,233 @@ bool timeDeserialize(InferenceEnvironment& iEnv)
     return isSlowerThanExpected;
 }
 
-std::string getLayerInformation(const InferenceEnvironment& iEnv, nvinfer1::LayerInformationFormat format)
+std::string getLayerInformation(
+    nvinfer1::ICudaEngine* engine, nvinfer1::IExecutionContext* context, nvinfer1::LayerInformationFormat format)
 {
     auto runtime = std::unique_ptr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
-    auto inspector = std::unique_ptr<IEngineInspector>(iEnv.engine->createEngineInspector());
+    auto inspector = std::unique_ptr<IEngineInspector>(engine->createEngineInspector());
+    if (context != nullptr)
+    {
+        inspector->setExecutionContext(context);
+    }
     std::string result = inspector->getEngineInformation(format);
     return result;
+}
+
+void Binding::fill(std::string const& fileName)
+{
+    loadFromFile(fileName, static_cast<char*>(buffer->getHostBuffer()), buffer->getSize());
+}
+
+void Binding::fill()
+{
+    switch (dataType)
+    {
+    case nvinfer1::DataType::kBOOL:
+    {
+        fillBuffer<bool>(buffer->getHostBuffer(), volume, 0, 1);
+        break;
+    }
+    case nvinfer1::DataType::kINT32:
+    {
+        fillBuffer<int32_t>(buffer->getHostBuffer(), volume, -128, 127);
+        break;
+    }
+    case nvinfer1::DataType::kINT8:
+    {
+        fillBuffer<int8_t>(buffer->getHostBuffer(), volume, -128, 127);
+        break;
+    }
+    case nvinfer1::DataType::kFLOAT:
+    {
+        fillBuffer<float>(buffer->getHostBuffer(), volume, -1.0F, 1.0F);
+        break;
+    }
+    case nvinfer1::DataType::kHALF:
+    {
+        fillBuffer<__half>(buffer->getHostBuffer(), volume, -1.0F, 1.0F);
+        break;
+    }
+    }
+}
+
+void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim, int32_t spv,
+    std::string const separator /*= " "*/) const
+{
+    switch (dataType)
+    {
+    case nvinfer1::DataType::kBOOL:
+    {
+        dumpBuffer<bool>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
+    case nvinfer1::DataType::kINT32:
+    {
+        dumpBuffer<int32_t>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
+    case nvinfer1::DataType::kINT8:
+    {
+        dumpBuffer<int8_t>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
+    case nvinfer1::DataType::kFLOAT:
+    {
+        dumpBuffer<float>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
+    case nvinfer1::DataType::kHALF:
+    {
+        dumpBuffer<__half>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
+    }
+}
+
+void Bindings::addBinding(int b, std::string const& name, bool isInput, int64_t volume, nvinfer1::DataType dataType,
+    std::string const& fileName /*= ""*/)
+{
+    while (mBindings.size() <= static_cast<size_t>(b))
+    {
+        mBindings.emplace_back();
+        mDevicePointers.emplace_back();
+    }
+    mNames[name] = b;
+    if (mBindings[b].buffer == nullptr)
+    {
+        if (mUseManaged)
+        {
+            mBindings[b].buffer.reset(new UnifiedMirroredBuffer);
+        }
+        else
+        {
+            mBindings[b].buffer.reset(new DiscreteMirroredBuffer);
+        }
+    }
+    mBindings[b].isInput = isInput;
+    // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
+    // even for empty tensors, so allocate a dummy byte.
+    if (volume == 0)
+    {
+        mBindings[b].buffer->allocate(1);
+    }
+    else
+    {
+        mBindings[b].buffer->allocate(static_cast<size_t>(volume) * static_cast<size_t>(dataTypeSize(dataType)));
+    }
+    mBindings[b].volume = volume;
+    mBindings[b].dataType = dataType;
+    mDevicePointers[b] = mBindings[b].buffer->getDeviceBuffer();
+    if (isInput)
+    {
+        if (fileName.empty())
+        {
+            fill(b);
+        }
+        else
+        {
+            fill(b, fileName);
+        }
+    }
+}
+
+void** Bindings::getDeviceBuffers()
+{
+    return mDevicePointers.data();
+}
+
+void Bindings::transferInputToDevice(TrtCudaStream& stream)
+{
+    for (auto& b : mNames)
+    {
+        if (mBindings[b.second].isInput)
+        {
+            mBindings[b.second].buffer->hostToDevice(stream);
+        }
+    }
+}
+
+void Bindings::transferOutputToHost(TrtCudaStream& stream)
+{
+    for (auto& b : mNames)
+    {
+        if (!mBindings[b.second].isInput)
+        {
+            mBindings[b.second].buffer->deviceToHost(stream);
+        }
+    }
+}
+
+void Bindings::dumpBindingDimensions(int binding, nvinfer1::IExecutionContext const& context, std::ostream& os) const
+{
+    auto const dims = context.getBindingDimensions(binding);
+    // Do not add a newline terminator, because the caller may be outputting a JSON string.
+    os << dims;
+}
+
+void Bindings::dumpBindingValues(nvinfer1::IExecutionContext const& context, int binding, std::ostream& os,
+    std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
+{
+    Dims dims = context.getBindingDimensions(binding);
+    Dims strides = context.getStrides(binding);
+    int32_t vectorDim = context.getEngine().getBindingVectorizedDim(binding);
+    int32_t const spv = context.getEngine().getBindingComponentsPerElement(binding);
+
+    if (context.getEngine().hasImplicitBatchDimension())
+    {
+        auto insertN = [](Dims& d, int32_t bs) {
+            int32_t const nbDims = d.nbDims;
+            ASSERT(nbDims < Dims::MAX_DIMS);
+            std::copy_backward(&d.d[0], &d.d[nbDims], &d.d[nbDims + 1]);
+            d.d[0] = bs;
+            d.nbDims = nbDims + 1;
+        };
+        int32_t batchStride = 0;
+        for (int32_t i = 0; i < strides.nbDims; ++i)
+        {
+            if (strides.d[i] * dims.d[i] > batchStride)
+            {
+                batchStride = strides.d[i] * dims.d[i];
+            }
+        }
+        insertN(dims, batch);
+        insertN(strides, batchStride);
+        vectorDim = (vectorDim == -1) ? -1 : vectorDim + 1;
+    }
+
+    mBindings[binding].dump(os, dims, strides, vectorDim, spv, separator);
+}
+
+void Bindings::dumpBindings(
+    nvinfer1::IExecutionContext const& context, std::function<bool(Binding const&)> predicate, std::ostream& os) const
+{
+    for (auto const& n : mNames)
+    {
+        auto const binding = n.second;
+        if (predicate(mBindings[binding]))
+        {
+            os << n.first << ": (";
+            dumpBindingDimensions(binding, context, os);
+            os << ")" << std::endl;
+
+            dumpBindingValues(context, binding, os);
+            os << std::endl;
+        }
+    }
+}
+
+std::unordered_map<std::string, int> Bindings::getBindings(std::function<bool(Binding const&)> predicate) const
+{
+    std::unordered_map<std::string, int> bindings;
+    for (auto const& n : mNames)
+    {
+        auto const binding = n.second;
+        if (predicate(mBindings[binding]))
+        {
+            bindings.insert(n);
+        }
+    }
+    return bindings;
 }
 
 } // namespace sample

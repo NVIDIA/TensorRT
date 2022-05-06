@@ -278,8 +278,7 @@ private:
 //!          creates the network using the TensorRT network definition API,
 //!          and builds a TensorRT engine.
 //!
-//! \return Returns true if the engine was created successfully and false
-//!         otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 bool SampleCharRNNBase::build()
 {
@@ -311,7 +310,6 @@ bool SampleCharRNNBase::build()
 
         mWeightMap = SampleCharRNNBase::loadWeights(mParams.weightFileName);
 
-        config->setMaxWorkspaceSize(40_MiB);
         config->setFlag(BuilderFlag::kGPU_FALLBACK);
 
         // CUDA stream used for profiling by the builder.
@@ -907,7 +905,7 @@ bool SampleCharRNNBase::infer()
     sample::gLogInfo << "Received: " << genstr.substr(inputSentence.size()) << std::endl;
 
     // release the stream
-    cudaStreamDestroy(stream);
+    CHECK(cudaStreamDestroy(stream));
 
     return genstr == (inputSentence + expected);
 }
@@ -943,7 +941,7 @@ bool SampleCharRNNBase::stepOnce(
     // Asynchronously copy data from device output buffers to host output buffers
     buffers.copyOutputToHostAsync(stream);
 
-    cudaStreamSynchronize(stream);
+    CHECK(cudaStreamSynchronize(stream));
     return true;
 }
 

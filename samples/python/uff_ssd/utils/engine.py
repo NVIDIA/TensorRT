@@ -26,13 +26,7 @@ import numpy as np
 from utils.modeldata import ModelData
 
 # ../../common.py
-sys.path.insert(1,
-    os.path.join(
-        os.path.dirname(os.path.realpath(__file__)),
-        os.pardir,
-        os.pardir
-    )
-)
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir, os.pardir))
 from common import HostDeviceMem
 
 
@@ -80,8 +74,13 @@ def allocate_buffers(engine):
             outputs.append(HostDeviceMem(host_mem, device_mem))
     return inputs, outputs, bindings, stream
 
+
 def build_engine(uff_model_path, trt_logger, trt_engine_datatype=trt.DataType.FLOAT, batch_size=1, silent=False):
-    with trt.Builder(trt_logger) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.UffParser() as parser, trt.Runtime(trt_logger) as runtime:
+    with trt.Builder(
+        trt_logger
+    ) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.UffParser() as parser, trt.Runtime(
+        trt_logger
+    ) as runtime:
         config.max_workspace_size = 1 << 30
         if trt_engine_datatype == trt.DataType.HALF:
             config.set_flag(trt.BuilderFlag.FP16)
@@ -97,13 +96,15 @@ def build_engine(uff_model_path, trt_logger, trt_engine_datatype=trt.DataType.FL
         plan = builder.build_serialized_network(network, config)
         return runtime.deserialize_cuda_engine(plan)
 
+
 def save_engine(engine, engine_dest_path):
     buf = engine.serialize()
-    with open(engine_dest_path, 'wb') as f:
+    with open(engine_dest_path, "wb") as f:
         f.write(buf)
 
+
 def load_engine(trt_runtime, engine_path):
-    with open(engine_path, 'rb') as f:
+    with open(engine_path, "rb") as f:
         engine_data = f.read()
     engine = trt_runtime.deserialize_cuda_engine(engine_data)
     return engine

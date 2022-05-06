@@ -21,14 +21,17 @@ from PIL import Image
 import numpy as np
 
 import pycuda.driver as cuda
+
 # This import causes pycuda to automatically manage CUDA context creation and cleanup.
 import pycuda.autoinit
 
 import tensorrt as trt
 
 import sys, os
+
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
 import common
+
 
 class ModelData(object):
     MODEL_PATH = "ResNet50_fp32.caffemodel"
@@ -37,6 +40,7 @@ class ModelData(object):
     OUTPUT_NAME = "prob"
     # We can convert TensorRT data types to numpy types with trt.nptype()
     DTYPE = trt.float32
+
 
 # You can set the logger severity higher to suppress messages (or lower to display more messages).
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
@@ -53,6 +57,7 @@ def allocate_buffers(engine):
     stream = cuda.Stream()
     return h_input, d_input, h_output, d_output, stream
 
+
 def do_inference(context, h_input, d_input, h_output, d_output, stream):
     # Transfer input data to the GPU.
     cuda.memcpy_htod_async(d_input, h_input, stream)
@@ -63,10 +68,13 @@ def do_inference(context, h_input, d_input, h_output, d_output, stream):
     # Synchronize the stream
     stream.synchronize()
 
+
 # The Caffe path is used for Caffe2 models.
 def build_engine_caffe(model_file, deploy_file):
     # You can set the logger severity higher to suppress messages (or lower to display more messages).
-    with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.CaffeParser() as parser:
+    with trt.Builder(
+        TRT_LOGGER
+    ) as builder, builder.create_network() as network, builder.create_builder_config() as config, trt.CaffeParser() as parser:
         # Workspace size is the maximum amount of memory available to the builder while building an engine.
         # It should generally be set as high as possible.
         config.max_workspace_size = common.GiB(1)
@@ -78,24 +86,42 @@ def build_engine_caffe(model_file, deploy_file):
         network.mark_output(model_tensors.find(ModelData.OUTPUT_NAME))
         return builder.build_engine(network, config)
 
+
 def load_normalized_test_case(test_image, pagelocked_buffer):
     # Converts the input image to a CHW Numpy array
     def normalize_image(image):
         # Resize, antialias and transpose the image to CHW.
         c, h, w = ModelData.INPUT_SHAPE
-        return np.asarray(image.resize((w, h), Image.ANTIALIAS)).transpose([2, 0, 1]).astype(trt.nptype(ModelData.DTYPE)).ravel()
+        return (
+            np.asarray(image.resize((w, h), Image.ANTIALIAS))
+            .transpose([2, 0, 1])
+            .astype(trt.nptype(ModelData.DTYPE))
+            .ravel()
+        )
 
     # Normalize the image and copy to pagelocked memory.
     np.copyto(pagelocked_buffer, normalize_image(Image.open(test_image)))
     return test_image
 
+
 def main():
     # Set the data path to the directory that contains the trained models and test images for inference.
-    _, data_files = common.find_sample_data(description="Runs a ResNet50 network with a TensorRT inference engine.", subfolder="resnet50", find_files=["binoculars.jpeg", "reflex_camera.jpeg", "tabby_tiger_cat.jpg", ModelData.MODEL_PATH, ModelData.DEPLOY_PATH, "class_labels.txt"])
+    _, data_files = common.find_sample_data(
+        description="Runs a ResNet50 network with a TensorRT inference engine.",
+        subfolder="resnet50",
+        find_files=[
+            "binoculars.jpeg",
+            "reflex_camera.jpeg",
+            "tabby_tiger_cat.jpg",
+            ModelData.MODEL_PATH,
+            ModelData.DEPLOY_PATH,
+            "class_labels.txt",
+        ],
+    )
     # Get test images, models and labels.
     test_images = data_files[0:3]
     caffe_model_file, caffe_deploy_file, labels_file = data_files[3:]
-    labels = open(labels_file, 'r').read().split('\n')
+    labels = open(labels_file, "r").read().split("\n")
 
     # Build a TensorRT engine.
     with build_engine_caffe(caffe_model_file, caffe_deploy_file) as engine:
@@ -117,5 +143,6 @@ def main():
             else:
                 print("Incorrectly recognized " + test_case + " as " + pred)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

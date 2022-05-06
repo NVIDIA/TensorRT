@@ -228,7 +228,6 @@ public:
         }
 
         SampleUniquePtr<IBuilderConfig> networkConfig{builder->createBuilderConfig()};
-        networkConfig->setMaxWorkspaceSize(1_GiB);
         if (gArgs.runInFp16)
         {
             networkConfig->setFlag(BuilderFlag::kFP16);
@@ -443,7 +442,7 @@ public:
         cudaStream_t stream) noexcept override
     {
         const float kONE = 1.0F, kZERO = 0.0F;
-        cudnnSetStream(mCudnn, stream);
+        CHECK(cudnnSetStream(mCudnn, stream));
 
         const int N = 1;
         // Use float to simulate int8 calculation
@@ -471,6 +470,8 @@ public:
         if (mDataType == DataType::kINT8)
         {
             copyDeviceToInt8Output(output, outputs[0]);
+            CHECK(cudaFree(input));
+            CHECK(cudaFree(output));
         }
         return 0;
     }

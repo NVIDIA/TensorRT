@@ -88,8 +88,12 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--saved_model", help="The TensorFlow saved model directory to load")
     parser.add_argument("-o", "--onnx", help="The output ONNX model file to write")
     parser.add_argument("-b", "--batch_size", type=int, default=1, help="Set the batch size, default: 1")
-    parser.add_argument("-i", "--input_size", type=int,
-                        help="Override the input height and width, e.g. '380', default: keep original size")
+    parser.add_argument(
+        "-i",
+        "--input_size",
+        type=int,
+        help="Override the input height and width, e.g. '380', default: keep original size",
+    )
     args = parser.parse_args()
     if not all([args.saved_model, args.onnx]):
         parser.print_help()

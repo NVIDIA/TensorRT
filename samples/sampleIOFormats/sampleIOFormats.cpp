@@ -16,7 +16,7 @@
  */
 
 //! \file SampleIOFormats.cpp
-//! \brief This file contains the implementation of the reformat free I/O sample.
+//! \brief This file contains the implementation of the I/O formats sample.
 //!
 //! It builds a TensorRT engine by from an MNIST network.
 //! It uses the engine to identify input images.
@@ -199,7 +199,7 @@ public:
 };
 
 //!
-//! \brief  The SampleIOFormats class implements the reformat free I/O sample
+//! \brief  The SampleIOFormats class implements the I/O formats sample
 //!
 //! \details It creates the network using the Caffe parser.
 //!
@@ -277,7 +277,7 @@ public:
 //! \details This function creates the single layer network by manual insertion and builds
 //!          the engine
 //!
-//! \return Returns true if the engine was created successfully and false otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 bool SampleIOFormats::build(int dataWidth)
 {
@@ -317,7 +317,6 @@ bool SampleIOFormats::build(int dataWidth)
 
     mEngine.reset();
 
-    config->setMaxWorkspaceSize(256_MiB);
     if (dataWidth == 1)
     {
         config->setFlag(BuilderFlag::kINT8);
@@ -450,10 +449,10 @@ bool SampleIOFormats::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf)
     }
 
     // Wait for the work in the stream to complete
-    cudaStreamSynchronize(stream);
+    CHECK(cudaStreamSynchronize(stream));
 
     // Release stream
-    cudaStreamDestroy(stream);
+    CHECK(cudaStreamDestroy(stream));
 
     CHECK(cudaMemcpy(outputBuf.buffer, devOutput.get(), outputBuf.getBufferSize(), cudaMemcpyDeviceToHost));
 
@@ -607,21 +606,6 @@ void convertGoldenData(SampleBuffer& goldenInput, SampleBuffer& dstInput)
 }
 
 //!
-//! \brief Used to randomly initialize buffers
-//!
-void randomInitBuff(SampleBuffer& buffer)
-{
-    srand(time(NULL));
-
-    float* tmpBuf = reinterpret_cast<float*>(buffer.buffer);
-
-    for (int i = 0; i < buffer.getBufferSize() / buffer.dataWidth; i++)
-    {
-        tmpBuf[i] = static_cast<float>((rand() % 256) - 128);
-    }
-}
-
-//!
 //! \brief Initializes members of the params struct using the command line args
 //!
 samplesCommon::CaffeSampleParams initializeSampleParams(const samplesCommon::Args& args)
@@ -671,7 +655,7 @@ template <typename T>
 bool process(SampleIOFormats& sample, const sample::Logger::TestAtom& sampleTest, SampleBuffer& inputBuf,
     SampleBuffer& outputBuf, SampleBuffer& goldenInput, SampleBuffer& goldenOutput)
 {
-    sample::gLogInfo << "Building and running a GPU inference engine for reformat free I/O" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine with specified I/O formats." << std::endl;
 
     inputBuf = SampleBuffer(sample.mInputDims, sizeof(T), sample.mTensorFormat);
     outputBuf = SampleBuffer(sample.mOutputDims, sizeof(T), sample.mTensorFormat);
@@ -713,7 +697,6 @@ bool runFP32Reference(SampleIOFormats& sample, const sample::Logger::TestAtom& s
     goldenInput = SampleBuffer(sample.mInputDims, sizeof(float), TensorFormat::kLINEAR);
     goldenOutput = SampleBuffer(sample.mOutputDims, sizeof(float), TensorFormat::kLINEAR);
 
-    // randomInitBuff(goldenInput);
     sample.readDigits(goldenInput, sample.mDigit);
 
     if (!sample.infer(goldenInput, goldenOutput))

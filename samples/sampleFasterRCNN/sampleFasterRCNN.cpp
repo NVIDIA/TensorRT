@@ -40,7 +40,7 @@
 
 using samplesCommon::SampleUniquePtr;
 
-const std::string gSampleName = "TensorRT.sample_fasterRCNN";
+std::string const gSampleName = "TensorRT.sample_fasterRCNN";
 
 //!
 //! \brief The SampleFasterRCNNParams structure groups the additional parameters required by
@@ -48,8 +48,8 @@ const std::string gSampleName = "TensorRT.sample_fasterRCNN";
 //!
 struct SampleFasterRCNNParams : public samplesCommon::CaffeSampleParams
 {
-    int outputClsSize; //!< The number of output classes
-    int nmsMaxOut;     //!< The maximum number of detection post-NMS
+    int32_t outputClsSize;            //!< The number of output classes
+    int32_t nmsMaxOut;                //!< The maximum number of detection post-NMS
     std::string dynamicRangeFileName; //!< The name of dynamic range file
 };
 
@@ -60,7 +60,7 @@ struct SampleFasterRCNNParams : public samplesCommon::CaffeSampleParams
 class SampleFasterRCNN
 {
 public:
-    SampleFasterRCNN(const SampleFasterRCNNParams& params)
+    SampleFasterRCNN(SampleFasterRCNNParams const& params)
         : mParams(params)
         , mEngine(nullptr)
     {
@@ -86,9 +86,9 @@ private:
 
     nvinfer1::Dims mInputDims; //!< The dimensions of the input to the network.
 
-    static const int kIMG_CHANNELS = 3;
-    static const int kIMG_H = 375;
-    static const int kIMG_W = 500;
+    static int32_t const kIMG_CHANNELS{3};
+    static int32_t const kIMG_H{375};
+    static int32_t const kIMG_W{500};
     std::vector<samplesCommon::PPM<kIMG_CHANNELS, kIMG_H, kIMG_W>> mPPMs; //!< PPMs of test images
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
@@ -103,24 +103,24 @@ private:
     //!
     //! \brief Reads the input and mean data, preprocesses, and stores the result in a managed buffer
     //!
-    bool processInput(const samplesCommon::BufferManager& buffers);
+    bool processInput(samplesCommon::BufferManager const& buffers);
 
     //!
     //! \brief Filters output detections, handles post-processing of bounding boxes and verify results
     //!
-    bool verifyOutput(const samplesCommon::BufferManager& buffers);
+    bool verifyOutput(samplesCommon::BufferManager const& buffers);
 
     //!
     //! \brief Performs inverse bounding box transform and clipping
     //!
-    void bboxTransformInvAndClip(const float* rois, const float* deltas, float* predBBoxes, const float* imInfo,
-        const int N, const int nmsMaxOut, const int numCls);
+    void bboxTransformInvAndClip(float const* rois, float const* deltas, float* predBBoxes, float const* imInfo,
+        int32_t const N, int32_t const nmsMaxOut, int32_t const numCls);
 
     //!
     //! \brief Performs non maximum suppression on final bounding boxes
     //!
-    std::vector<int> nonMaximumSuppression(std::vector<std::pair<float, int>>& scoreIndex, float* bbox,
-        const int classNum, const int numClasses, const float nmsThreshold);
+    std::vector<int32_t> nonMaximumSuppression(std::vector<std::pair<float, int32_t>>& scoreIndex, float* bbox,
+        int32_t const classNum, int32_t const numClasses, float const nmsThreshold);
 
     //!
     //! \brief Sets per-tensor DynamicRange for int8
@@ -139,7 +139,7 @@ private:
 //! \details This function creates the FasterRCNN network by parsing the caffe model and builds
 //!          the engine that will be used to run FasterRCNN (mEngine)
 //!
-//! \return Returns true if the engine was created successfully and false otherwise
+//! \return true if the engine was created successfully and false otherwise
 //!
 bool SampleFasterRCNN::build()
 {
@@ -215,7 +215,7 @@ void SampleFasterRCNN::constructNetwork(SampleUniquePtr<nvcaffeparser1::ICaffePa
     SampleUniquePtr<nvinfer1::IBuilder>& builder, SampleUniquePtr<nvinfer1::INetworkDefinition>& network,
     SampleUniquePtr<nvinfer1::IBuilderConfig>& config)
 {
-    const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor
+    nvcaffeparser1::IBlobNameToTensor const* blobNameToTensor
         = parser->parse(locateFile(mParams.prototxtFileName, mParams.dataDirs).c_str(),
             locateFile(mParams.weightsFileName, mParams.dataDirs).c_str(), *network, nvinfer1::DataType::kFLOAT);
 
@@ -231,17 +231,15 @@ void SampleFasterRCNN::constructNetwork(SampleUniquePtr<nvcaffeparser1::ICaffePa
             rois_old->setName("rois_");
             auto rois_new = network->addIdentity(*rois_old)->getOutput(0);
             rois_new->setName(s.c_str());
-            network->markOutput(*rois_new); 
+            network->markOutput(*rois_new);
         }
         else
         {
-            network->markOutput(*blobNameToTensor->find(s.c_str()));  
+            network->markOutput(*blobNameToTensor->find(s.c_str()));
         }
-
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
-    config->setMaxWorkspaceSize(16_MiB);
 
     if (mParams.int8)
     {
@@ -252,7 +250,17 @@ void SampleFasterRCNN::constructNetwork(SampleUniquePtr<nvcaffeparser1::ICaffePa
         if (!setDynamicRange(network))
         {
             sample::gLogError << "Unable to set per tensor dynamic range. The sample will continue, "
-                            <<"but you may get wrong detection results. Please try FP32 precision." << std::endl;
+                              << "but you may get wrong detection results. Please try FP32 precision." << std::endl;
+        }
+        // If Int8 is specified, disable CUDNN since the tactics tested can take too much memory and trigger OOM errors
+        // on some tactics. This can cause false alarms with compute-sanitizer due to cudaMalloc failing, but since
+        // TensorRT recovers correctly and selects a different tactic, this can be ignored. CUDNN tactic source is only
+        // disabled for SM version >= 5.0 as for GPU with lower SM version, CUDNN is the only available tactic source.
+        if (samplesCommon::getSMVersion() >= 0x500)
+        {
+            auto tactics = static_cast<uint32_t>(config->getTacticSources());
+            tactics = tactics & ~(1U << static_cast<uint32_t>(TacticSource::kCUDNN));
+            config->setTacticSources(static_cast<TacticSources>(tactics));
         }
     }
 
@@ -329,14 +337,14 @@ bool SampleFasterRCNN::readPerTensorDynamicRangeValues(std::unordered_map<std::s
     }
 
     std::string line;
-    char delim = ':';
+    char const kDELIM{':'};
     while (std::getline(iDynamicRangeStream, line))
     {
         std::istringstream iline(line);
         std::string token;
-        std::getline(iline, token, delim);
+        std::getline(iline, token, kDELIM);
         std::string tensorName = token;
-        std::getline(iline, token, delim);
+        std::getline(iline, token, kDELIM);
         float dynamicRange = std::stof(token);
         dynamicRangeMap[tensorName] = dynamicRange;
     }
@@ -356,7 +364,7 @@ bool SampleFasterRCNN::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinit
 
     sample::gLogInfo << "Setting Per Tensor Dynamic Range" << std::endl;
     // set dynamic range for network input tensors
-    for (int i = 0; i < network->getNbInputs(); ++i)
+    for (int32_t i = 0; i < network->getNbInputs(); ++i)
     {
         std::string tName = network->getInput(i)->getName();
         if (PerTensorDynamicRangeMap.find(tName) != PerTensorDynamicRangeMap.end())
@@ -369,10 +377,10 @@ bool SampleFasterRCNN::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinit
         }
     }
     // set dynamic range for layer output tensors
-    for (int i = 0; i < network->getNbLayers(); ++i)
+    for (int32_t i = 0; i < network->getNbLayers(); ++i)
     {
         auto lyr = network->getLayer(i);
-        for (int j = 0, e = lyr->getNbOutputs(); j < e; ++j)
+        for (int32_t j = 0, e = lyr->getNbOutputs(); j < e; ++j)
         {
             std::string tName = lyr->getOutput(j)->getName();
             if (PerTensorDynamicRangeMap.find(tName) != PerTensorDynamicRangeMap.end())
@@ -409,39 +417,40 @@ bool SampleFasterRCNN::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinit
 //!
 //! \brief Reads the input and mean data, preprocesses, and stores the result in a managed buffer
 //!
-bool SampleFasterRCNN::processInput(const samplesCommon::BufferManager& buffers)
+bool SampleFasterRCNN::processInput(samplesCommon::BufferManager const& buffers)
 {
-    const int inputC = mInputDims.d[0];
-    const int inputH = mInputDims.d[1];
-    const int inputW = mInputDims.d[2];
-    const int batchSize = mParams.batchSize;
+    int32_t const inputC = mInputDims.d[0];
+    int32_t const inputH = mInputDims.d[1];
+    int32_t const inputW = mInputDims.d[2];
+    int32_t const batchSize = mParams.batchSize;
 
     // Available images
-    const std::vector<std::string> imageList = {"000456.ppm", "000542.ppm", "001150.ppm", "001763.ppm", "004545.ppm"};
+    std::vector<std::string> const imageList = {"000456.ppm", "000542.ppm", "001150.ppm", "001763.ppm", "004545.ppm"};
     mPPMs.resize(batchSize);
     ASSERT(mPPMs.size() <= imageList.size());
 
     // Fill im_info buffer
-    float* hostImInfoBuffer = static_cast<float*>(buffers.getHostBuffer("im_info"));
-    for (int i = 0; i < batchSize; ++i)
+    auto* hostImInfoBuffer = static_cast<float*>(buffers.getHostBuffer("im_info"));
+    for (int32_t i = 0; i < batchSize; ++i)
     {
         readPPMFile(locateFile(imageList[i], mParams.dataDirs), mPPMs[i]);
-        hostImInfoBuffer[i * 3] = float(mPPMs[i].h);     // Number of rows
-        hostImInfoBuffer[i * 3 + 1] = float(mPPMs[i].w); // Number of columns
-        hostImInfoBuffer[i * 3 + 2] = 1;                 // Image scale
+        hostImInfoBuffer[i * 3] = static_cast<float>(mPPMs[i].h);     // Number of rows
+        hostImInfoBuffer[i * 3 + 1] = static_cast<float>(mPPMs[i].w); // Number of columns
+        hostImInfoBuffer[i * 3 + 2] = 1;                              // Image scale
     }
 
     // Fill data buffer
-    float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer("data"));
+    auto* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer("data"));
     // Pixel mean used by the Faster R-CNN's author
-    const float pixelMean[3]{102.9801f, 115.9465f, 122.7717f}; // Also in BGR order
-    for (int i = 0, volImg = inputC * inputH * inputW; i < batchSize; ++i)
+    float const pixelMean[3]{102.9801F, 115.9465F, 122.7717F}; // Also in BGR order
+    for (int32_t i = 0, volImg = inputC * inputH * inputW; i < batchSize; ++i)
     {
-        for (int c = 0; c < inputC; ++c)
+        for (int32_t c = 0; c < inputC; ++c)
         {
             // The color image to input should be in BGR order
-            for (unsigned j = 0, volChl = inputH * inputW; j < volChl; ++j)
-                hostDataBuffer[i * volImg + c * volChl + j] = float(mPPMs[i].buffer[j * inputC + 2 - c]) - pixelMean[c];
+            for (uint32_t j = 0, volChl = inputH * inputW; j < volChl; ++j)
+                hostDataBuffer[i * volImg + c * volChl + j]
+                    = static_cast<float>(mPPMs[i].buffer[j * inputC + 2 - c]) - pixelMean[c];
         }
     }
 
@@ -453,22 +462,22 @@ bool SampleFasterRCNN::processInput(const samplesCommon::BufferManager& buffers)
 //!
 //! \return whether the detection output matches expectations
 //!
-bool SampleFasterRCNN::verifyOutput(const samplesCommon::BufferManager& buffers)
+bool SampleFasterRCNN::verifyOutput(samplesCommon::BufferManager const& buffers)
 {
-    const int batchSize = mParams.batchSize;
-    const int nmsMaxOut = mParams.nmsMaxOut;
-    const int outputClsSize = mParams.outputClsSize;
-    const int outputBBoxSize = mParams.outputClsSize * 4;
+    int32_t const batchSize = mParams.batchSize;
+    int32_t const nmsMaxOut = mParams.nmsMaxOut;
+    int32_t const outputClsSize = mParams.outputClsSize;
+    int32_t const outputBBoxSize = mParams.outputClsSize * 4;
 
-    const float* imInfo = static_cast<const float*>(buffers.getHostBuffer("im_info"));
-    const float* deltas = static_cast<const float*>(buffers.getHostBuffer("bbox_pred"));
-    const float* clsProbs = static_cast<const float*>(buffers.getHostBuffer("cls_prob"));
-    float* rois = static_cast<float*>(buffers.getHostBuffer("rois"));
+    auto const* imInfo = static_cast<float const*>(buffers.getHostBuffer("im_info"));
+    auto const* deltas = static_cast<float const*>(buffers.getHostBuffer("bbox_pred"));
+    auto const* clsProbs = static_cast<float const*>(buffers.getHostBuffer("cls_prob"));
+    auto* rois = static_cast<float*>(buffers.getHostBuffer("rois"));
 
     // Unscale back to raw image space
-    for (int i = 0; i < batchSize; ++i)
+    for (int32_t i = 0; i < batchSize; ++i)
     {
-        for (int j = 0; j < nmsMaxOut * 4 && imInfo[i * 3 + 2] != 1; ++j)
+        for (int32_t j = 0; j < nmsMaxOut * 4 && imInfo[i * 3 + 2] != 1; ++j)
         {
             rois[i * nmsMaxOut * 4 + j] /= imInfo[i * 3 + 2];
         }
@@ -477,51 +486,52 @@ bool SampleFasterRCNN::verifyOutput(const samplesCommon::BufferManager& buffers)
     std::vector<float> predBBoxes(batchSize * nmsMaxOut * outputBBoxSize, 0);
     bboxTransformInvAndClip(rois, deltas, predBBoxes.data(), imInfo, batchSize, nmsMaxOut, outputClsSize);
 
-    const float nmsThreshold = 0.3f;
-    const float score_threshold = 0.8f;
-    const std::vector<std::string> classes{"background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car",
+    float const kNMS_THRESHOLD{0.3F};
+    float const kSCORE_THRESHOLD{0.8F};
+    std::vector<std::string> const classes{"background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car",
         "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa",
         "train", "tvmonitor"};
 
     // The sample passes if there is at least one detection for each item in the batch
     bool pass = true;
 
-    for (int i = 0; i < batchSize; ++i)
+    for (int32_t i = 0; i < batchSize; ++i)
     {
         float* bbox = predBBoxes.data() + i * nmsMaxOut * outputBBoxSize;
-        const float* scores = clsProbs + i * nmsMaxOut * outputClsSize;
-        int numDetections = 0;
-        for (int c = 1; c < outputClsSize; ++c) // Skip the background
+        float const* scores = clsProbs + i * nmsMaxOut * outputClsSize;
+        int32_t numDetections = 0;
+        for (int32_t c = 1; c < outputClsSize; ++c) // Skip the background
         {
-            std::vector<std::pair<float, int>> scoreIndex;
-            for (int r = 0; r < nmsMaxOut; ++r)
+            std::vector<std::pair<float, int32_t>> scoreIndex;
+            for (int32_t r = 0; r < nmsMaxOut; ++r)
             {
-                if (scores[r * outputClsSize + c] > score_threshold)
+                if (scores[r * outputClsSize + c] > kSCORE_THRESHOLD)
                 {
                     scoreIndex.push_back(std::make_pair(scores[r * outputClsSize + c], r));
                     std::stable_sort(scoreIndex.begin(), scoreIndex.end(),
-                        [](const std::pair<float, int>& pair1, const std::pair<float, int>& pair2) {
+                        [](std::pair<float, int32_t> const& pair1, std::pair<float, int32_t> const& pair2) {
                             return pair1.first > pair2.first;
                         });
                 }
             }
 
             // Apply NMS algorithm
-            const std::vector<int> indices = nonMaximumSuppression(scoreIndex, bbox, c, outputClsSize, nmsThreshold);
+            std::vector<int32_t> const indices
+                = nonMaximumSuppression(scoreIndex, bbox, c, outputClsSize, kNMS_THRESHOLD);
 
-            numDetections += static_cast<int>(indices.size());
+            numDetections += static_cast<int32_t>(indices.size());
 
             // Show results
-            for (unsigned k = 0; k < indices.size(); ++k)
+            for (uint32_t k = 0; k < indices.size(); ++k)
             {
-                const int idx = indices[k];
-                const std::string storeName
+                int32_t const idx = indices[k];
+                std::string const storeName
                     = classes[c] + "-" + std::to_string(scores[idx * outputClsSize + c]) + ".ppm";
                 sample::gLogInfo << "Detected " << classes[c] << " in " << mPPMs[i].fileName << " with confidence "
-                                 << scores[idx * outputClsSize + c] * 100.0f << "% "
+                                 << scores[idx * outputClsSize + c] * 100.0F << "% "
                                  << " (Result stored in " << storeName << ")." << std::endl;
 
-                const samplesCommon::BBox b{bbox[idx * outputBBoxSize + c * 4], bbox[idx * outputBBoxSize + c * 4 + 1],
+                samplesCommon::BBox const b{bbox[idx * outputBBoxSize + c * 4], bbox[idx * outputBBoxSize + c * 4 + 1],
                     bbox[idx * outputBBoxSize + c * 4 + 2], bbox[idx * outputBBoxSize + c * 4 + 3]};
                 writePPMFileWithBBox(storeName, mPPMs[i], b);
             }
@@ -534,17 +544,17 @@ bool SampleFasterRCNN::verifyOutput(const samplesCommon::BufferManager& buffers)
 //!
 //! \brief Performs inverse bounding box transform
 //!
-void SampleFasterRCNN::bboxTransformInvAndClip(const float* rois, const float* deltas, float* predBBoxes,
-    const float* imInfo, const int N, const int nmsMaxOut, const int numCls)
+void SampleFasterRCNN::bboxTransformInvAndClip(float const* rois, float const* deltas, float* predBBoxes,
+    float const* imInfo, int32_t const N, int32_t const nmsMaxOut, int32_t const numCls)
 {
-    for (int i = 0; i < N * nmsMaxOut; ++i)
+    for (int32_t i = 0; i < N * nmsMaxOut; ++i)
     {
         float width = rois[i * 4 + 2] - rois[i * 4] + 1;
         float height = rois[i * 4 + 3] - rois[i * 4 + 1] + 1;
-        float ctr_x = rois[i * 4] + 0.5f * width;
-        float ctr_y = rois[i * 4 + 1] + 0.5f * height;
-        const float* imInfo_offset = imInfo + i / nmsMaxOut * 3;
-        for (int j = 0; j < numCls; ++j)
+        float ctr_x = rois[i * 4] + 0.5F * width;
+        float ctr_y = rois[i * 4 + 1] + 0.5F * height;
+        auto const* imInfo_offset = imInfo + i / nmsMaxOut * 3;
+        for (int32_t j = 0; j < numCls; ++j)
         {
             float dx = deltas[i * numCls * 4 + j * 4];
             float dy = deltas[i * numCls * 4 + j * 4 + 1];
@@ -555,13 +565,13 @@ void SampleFasterRCNN::bboxTransformInvAndClip(const float* rois, const float* d
             float pred_w = exp(dw) * width;
             float pred_h = exp(dh) * height;
             predBBoxes[i * numCls * 4 + j * 4]
-                = std::max(std::min(pred_ctr_x - 0.5f * pred_w, imInfo_offset[1] - 1.f), 0.f);
+                = std::max(std::min(pred_ctr_x - 0.5F * pred_w, imInfo_offset[1] - 1.F), 0.F);
             predBBoxes[i * numCls * 4 + j * 4 + 1]
-                = std::max(std::min(pred_ctr_y - 0.5f * pred_h, imInfo_offset[0] - 1.f), 0.f);
+                = std::max(std::min(pred_ctr_y - 0.5F * pred_h, imInfo_offset[0] - 1.F), 0.F);
             predBBoxes[i * numCls * 4 + j * 4 + 2]
-                = std::max(std::min(pred_ctr_x + 0.5f * pred_w, imInfo_offset[1] - 1.f), 0.f);
+                = std::max(std::min(pred_ctr_x + 0.5F * pred_w, imInfo_offset[1] - 1.F), 0.F);
             predBBoxes[i * numCls * 4 + j * 4 + 3]
-                = std::max(std::min(pred_ctr_y + 0.5f * pred_h, imInfo_offset[0] - 1.f), 0.f);
+                = std::max(std::min(pred_ctr_y + 0.5F * pred_h, imInfo_offset[0] - 1.F), 0.F);
         }
     }
 }
@@ -569,8 +579,8 @@ void SampleFasterRCNN::bboxTransformInvAndClip(const float* rois, const float* d
 //!
 //! \brief Performs non maximum suppression on final bounding boxes
 //!
-std::vector<int> SampleFasterRCNN::nonMaximumSuppression(std::vector<std::pair<float, int>>& scoreIndex, float* bbox,
-    const int classNum, const int numClasses, const float nmsThreshold)
+std::vector<int32_t> SampleFasterRCNN::nonMaximumSuppression(std::vector<std::pair<float, int32_t>>& scoreIndex,
+    float* bbox, int32_t const classNum, int32_t const numClasses, const float nmsThreshold)
 {
     auto overlap1D = [](float x1min, float x1max, float x2min, float x2max) -> float {
         if (x1min > x2min)
@@ -591,16 +601,16 @@ std::vector<int> SampleFasterRCNN::nonMaximumSuppression(std::vector<std::pair<f
         return u == 0 ? 0 : overlap2D / u;
     };
 
-    std::vector<int> indices;
+    std::vector<int32_t> indices;
     for (auto i : scoreIndex)
     {
-        const int idx = i.second;
+        int32_t const idx = i.second;
         bool keep = true;
-        for (unsigned k = 0; k < indices.size(); ++k)
+        for (uint32_t k = 0; k < indices.size(); ++k)
         {
             if (keep)
             {
-                const int kept_idx = indices[k];
+                int32_t const kept_idx = indices[k];
                 float overlap = computeIoU(
                     &bbox[(idx * numClasses + classNum) * 4], &bbox[(kept_idx * numClasses + classNum) * 4]);
                 keep = overlap <= nmsThreshold;
@@ -621,15 +631,15 @@ std::vector<int> SampleFasterRCNN::nonMaximumSuppression(std::vector<std::pair<f
 //!
 //! \brief Initializes members of the params struct using the command line args
 //!
-SampleFasterRCNNParams initializeSampleParams(const samplesCommon::Args& args)
+SampleFasterRCNNParams initializeSampleParams(samplesCommon::Args const& args)
 {
     SampleFasterRCNNParams params;
-    if (args.dataDirs.empty()) //!< Use default directories if user hasn't provided directory paths
+    if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths
     {
         params.dataDirs.push_back("data/faster-rcnn/");
         params.dataDirs.push_back("data/samples/faster-rcnn/");
     }
-    else //!< Use the data directory provided by the user
+    else // Use the data directory provided by the user
     {
         params.dataDirs = args.dataDirs;
     }
@@ -657,9 +667,9 @@ SampleFasterRCNNParams initializeSampleParams(const samplesCommon::Args& args)
 //!
 void printHelpInfo()
 {
-    std::cout
-        << "Usage: ./sample_fasterRCNN [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]"
-        << std::endl;
+    std::cout << "Usage: ./sample_fasterRCNN [-h or --help] [-d or --datadir=<path to data directory>] "
+                 "[--useDLACore=<int32_t>]"
+              << std::endl;
     std::cout << "--help          Display help information" << std::endl;
     std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
@@ -668,10 +678,11 @@ void printHelpInfo()
     std::cout << "--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
                  "where n is the number of DLA engines on the platform."
               << std::endl;
-    std::cout << "--int8  Enable int8 precision, in addition to fp32 (default = disabled)" << std::endl;
+    std::cout << "--int8  Enable int8 precision, in addition to fp32 (default = disabled), but disabling cudnn tactics."
+              << std::endl;
 }
 
-int main(int argc, char** argv)
+int32_t main(int32_t argc, char** argv)
 {
     samplesCommon::Args args;
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);

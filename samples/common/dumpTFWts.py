@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python
 #
 # SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -22,6 +22,7 @@
 import sys
 import struct
 import argparse
+
 try:
     import tensorflow as tf
     from tensorflow.python import pywrap_tensorflow
@@ -29,11 +30,16 @@ except ImportError as err:
     sys.stderr.write("""Error: Failed to import module ({})""".format(err))
     sys.exit()
 
-parser = argparse.ArgumentParser(description='TensorFlow Weight Dumper')
+parser = argparse.ArgumentParser(description="TensorFlow Weight Dumper")
 
-parser.add_argument('-m', '--model', required=True, help='The checkpoint file basename, example basename(model.ckpt-766908.data-00000-of-00001) -> model.ckpt-766908')
-parser.add_argument('-o', '--output', required=True, help='The weight file to dump all the weights to.')
-parser.add_argument('-1', '--wtsv1', required=False, default=False, type=bool, help='Dump the weights in the wts v1.')
+parser.add_argument(
+    "-m",
+    "--model",
+    required=True,
+    help="The checkpoint file basename, example basename(model.ckpt-766908.data-00000-of-00001) -> model.ckpt-766908",
+)
+parser.add_argument("-o", "--output", required=True, help="The weight file to dump all the weights to.")
+parser.add_argument("-1", "--wtsv1", required=False, default=False, type=bool, help="Dump the weights in the wts v1.")
 
 opt = parser.parse_args()
 
@@ -49,8 +55,10 @@ else:
 inputbase = opt.model
 outputbase = opt.output
 
+
 def float_to_hex(f):
-    return hex(struct.unpack('<I', struct.pack('<f', f))[0])
+    return hex(struct.unpack("<I", struct.pack("<f", f))[0])
+
 
 def getTRTType(tensor):
     if tf.as_dtype(tensor.dtype) == tf.float32:
@@ -61,16 +69,17 @@ def getTRTType(tensor):
         return 2
     if tf.as_dtype(tensor.dtype) == tf.int32:
         return 3
-    print("Tensor data type of %s is not supported in TensorRT"%(tensor.dtype))
-    sys.exit();
+    print("Tensor data type of %s is not supported in TensorRT" % (tensor.dtype))
+    sys.exit()
+
 
 try:
-   # Open output file
+    # Open output file
     if opt.wtsv1:
         outputFileName = outputbase + ".wts"
     else:
         outputFileName = outputbase + ".wts2"
-    outputFile = open(outputFileName, 'w')
+    outputFile = open(outputFileName, "w")
 
     # read vars from checkpoint
     reader = pywrap_tensorflow.NewCheckpointReader(inputbase)
@@ -80,35 +89,33 @@ try:
     count = 0
     for key in sorted(var_to_shape_map):
         count += 1
-    outputFile.write("%s\n"%(count))
+    outputFile.write("%s\n" % (count))
 
     # Dump the weights in either v1 or v2 format
     for key in sorted(var_to_shape_map):
         tensor = reader.get_tensor(key)
-        file_key = key.replace('/','_')
+        file_key = key.replace("/", "_")
         typeOfElem = getTRTType(tensor)
         val = tensor.shape
         if opt.wtsv1:
             val = tensor.size
-        print("%s %s %s "%(file_key, typeOfElem, val))
+        print("%s %s %s " % (file_key, typeOfElem, val))
         flat_tensor = tensor.flatten()
-        outputFile.write("%s 0 %s "%(file_key, val))
+        outputFile.write("%s 0 %s " % (file_key, val))
         if opt.wtsv1:
             for weight in flat_tensor:
                 hexval = float_to_hex(float(weight))
-                outputFile.write("%s "%(hexval[2:]))
+                outputFile.write("%s " % (hexval[2:]))
         else:
             outputFile.write(flat_tensor.tobytes())
-        outputFile.write("\n");
+        outputFile.write("\n")
     outputFile.close()
 
 except Exception as e:  # pylint: disable=broad-except
     print(str(e))
     if "corrupted compressed block contents" in str(e):
-        print("It's likely that your checkpoint file has been compressed "
-                "with SNAPPY.")
-        if ("Data loss" in str(e) and
-                (any([e in inputbase for e in [".index", ".meta", ".data"]]))):
+        print("It's likely that your checkpoint file has been compressed " "with SNAPPY.")
+        if "Data loss" in str(e) and (any([e in inputbase for e in [".index", ".meta", ".data"]])):
             proposed_file = ".".join(inputbase.split(".")[0:-1])
             v2_file_error_template = """
            It's likely that this is a V2 checkpoint and you need to provide the filename

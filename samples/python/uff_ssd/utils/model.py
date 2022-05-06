@@ -33,6 +33,7 @@ from utils.modeldata import ModelData
 
 # UFF conversion functionality
 
+
 def ssd_unsupported_nodes_to_plugin_nodes(ssd_graph):
     """Makes ssd_graph TensorRT comparible using graphsurgeon.
 
@@ -56,18 +57,17 @@ def ssd_unsupported_nodes_to_plugin_nodes(ssd_graph):
     height = ModelData.get_input_height()
     width = ModelData.get_input_width()
 
-    Input = gs.create_plugin_node(name="Input",
-        op="Placeholder",
-        dtype=tf.float32,
-        shape=[1, channels, height, width])
+    Input = gs.create_plugin_node(name="Input", op="Placeholder", dtype=tf.float32, shape=[1, channels, height, width])
 
-    PriorBox = gs.create_plugin_node(name="GridAnchor", op="GridAnchor_TRT",
+    PriorBox = gs.create_plugin_node(
+        name="GridAnchor",
+        op="GridAnchor_TRT",
         minSize=0.2,
         maxSize=0.95,
         aspectRatios=[1.0, 2.0, 0.5, 3.0, 0.33],
-        variance=[0.1,0.1,0.2,0.2],
+        variance=[0.1, 0.1, 0.2, 0.2],
         featureMapShapes=[19, 10, 5, 3, 2, 1],
-        numLayers=6
+        numLayers=6,
     )
 
     NMS = gs.create_plugin_node(
@@ -83,30 +83,17 @@ def ssd_unsupported_nodes_to_plugin_nodes(ssd_graph):
         numClasses=91,
         inputOrder=[0, 2, 1],
         confSigmoid=1,
-        isNormalized=1
+        isNormalized=1,
     )
 
-    concat_priorbox = gs.create_node(
-        "concat_priorbox",
-        op="ConcatV2",
-        dtype=tf.float32,
-        axis=2
-    )
+    concat_priorbox = gs.create_node("concat_priorbox", op="ConcatV2", dtype=tf.float32, axis=2)
 
     concat_box_loc = gs.create_plugin_node(
-        "concat_box_loc",
-        op="FlattenConcat_TRT",
-        dtype=tf.float32,
-        axis=1,
-        ignoreBatch=0
+        "concat_box_loc", op="FlattenConcat_TRT", dtype=tf.float32, axis=1, ignoreBatch=0
     )
 
     concat_box_conf = gs.create_plugin_node(
-        "concat_box_conf",
-        op="FlattenConcat_TRT",
-        dtype=tf.float32,
-        axis=1,
-        ignoreBatch=0
+        "concat_box_conf", op="FlattenConcat_TRT", dtype=tf.float32, axis=1, ignoreBatch=0
     )
 
     # Create a mapping of namespace names -> plugin nodes.
@@ -119,7 +106,7 @@ def ssd_unsupported_nodes_to_plugin_nodes(ssd_graph):
         "MultipleGridAnchorGenerator/Concatenate": concat_priorbox,
         "MultipleGridAnchorGenerator/Identity": concat_priorbox,
         "concat": concat_box_loc,
-        "concat_1": concat_box_conf
+        "concat_1": concat_box_conf,
     }
 
     # Create a new graph by collapsing namespaces
@@ -128,6 +115,7 @@ def ssd_unsupported_nodes_to_plugin_nodes(ssd_graph):
     # If remove_exclusive_dependencies is True, the whole graph will be removed!
     ssd_graph.remove(ssd_graph.graph_outputs, remove_exclusive_dependencies=False)
     return ssd_graph
+
 
 def model_to_uff(model_path, output_uff_path, silent=False):
     """Takes frozen .pb graph, converts it to .uff and saves it to file.
@@ -142,14 +130,12 @@ def model_to_uff(model_path, output_uff_path, silent=False):
     dynamic_graph = ssd_unsupported_nodes_to_plugin_nodes(dynamic_graph)
 
     uff.from_tensorflow(
-        dynamic_graph.as_graph_def(),
-        [ModelData.OUTPUT_NAME],
-        output_filename=output_uff_path,
-        text=True
+        dynamic_graph.as_graph_def(), [ModelData.OUTPUT_NAME], output_filename=output_uff_path, text=True
     )
 
 
 # Model extraction functionality
+
 
 def maybe_print(should_print, print_arg):
     """Prints message if supplied boolean flag is true.
@@ -160,6 +146,7 @@ def maybe_print(should_print, print_arg):
     """
     if should_print:
         print(print_arg)
+
 
 def maybe_mkdir(dir_path):
     """Makes directory if it doesn't exist.
@@ -180,11 +167,12 @@ def _extract_model(silent=False):
     maybe_print(not silent, "Preparing pretrained model")
     model_dir = PATHS.get_models_dir_path()
     maybe_mkdir(model_dir)
-    model_archive_path = PATHS.get_data_file_path('ssd_inception_v2_coco_2017_11_17.tar.gz')
+    model_archive_path = PATHS.get_data_file_path("samples/python/uff_ssd/ssd_inception_v2_coco_2017_11_17.tar.gz")
     maybe_print(not silent, "Unpacking {}".format(model_archive_path))
     with tarfile.open(model_archive_path, "r:gz") as tar:
         tar.extractall(path=model_dir)
     maybe_print(not silent, "Model ready")
+
 
 def prepare_ssd_model(model_name="ssd_inception_v2_coco_2017_11_17", silent=False):
     """Extract pretrained object detection model and converts it to UFF.
@@ -198,8 +186,7 @@ def prepare_ssd_model(model_name="ssd_inception_v2_coco_2017_11_17", silent=Fals
         silent (bool): if False, writes progress messages to stdout
     """
     if model_name != "ssd_inception_v2_coco_2017_11_17":
-        raise NotImplementedError(
-            "Model {} is not supported yet".format(model_name))
+        raise NotImplementedError("Model {} is not supported yet".format(model_name))
     _extract_model(silent)
     ssd_pb_path = PATHS.get_model_pb_path(model_name)
     ssd_uff_path = PATHS.get_model_uff_path(model_name)
