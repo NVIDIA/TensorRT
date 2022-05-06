@@ -656,7 +656,7 @@ private:
     void createEnqueueFunction(
         const InferenceOptions& inference, nvinfer1::IExecutionContext& context, Bindings& bindings)
     {
-        if (inference.batch)
+        if (context.getEngine().hasImplicitBatchDimension())
         {
             mEnqueue = EnqueueFunction(EnqueueImplicit(context, mBindings.getDeviceBuffers(), inference.batch));
         }
