@@ -180,15 +180,18 @@ __global__ void allClassNMS_kernel(const int num, const int num_classes, const i
 
     for (int i = 0; i < num; i++)
     {
-        const int offset = i * num_classes * num_preds_per_class + blockIdx.x * num_preds_per_class;
-        const int max_idx = offset + top_k; // put top_k bboxes into NMS calculation
-        const int bbox_idx_offset = share_location ? (i * num_preds_per_class) : (i * num_classes * num_preds_per_class);
+        int32_t const offset = i * num_classes * num_preds_per_class + blockIdx.x * num_preds_per_class;
+        // Should not write data beyond [offset, top_k).
+        int32_t const max_idx = offset + top_k;
+        // Should not read beyond [offset, num_preds_per_class).
+        int32_t const max_read_idx = offset + min(top_k, num_preds_per_class);
+        int32_t const bbox_idx_offset = i * num_preds_per_class * (share_location ? 1 : num_classes);
 
         // local thread data
         int loc_bboxIndex[TSIZE];
         Bbox<T_BBOX> loc_bbox[TSIZE];
 
-// initialize Bbox, Bboxinfo, kept_bboxinfo_flag
+        // initialize Bbox, Bboxinfo, kept_bboxinfo_flag
         // Eliminate shared memory RAW hazard
         __syncthreads();
 #pragma unroll
@@ -196,10 +199,18 @@ __global__ void allClassNMS_kernel(const int num, const int num_classes, const i
         {
             const int cur_idx = threadIdx.x + blockDim.x * t;
             const int item_idx = offset + cur_idx;
-
+            // Init all output data
             if (item_idx < max_idx)
             {
-                loc_bboxIndex[t] = beforeNMS_index_array[item_idx];
+                // Do not access data if it exceeds read boundary
+                if (item_idx < max_read_idx)
+                {
+                    loc_bboxIndex[t] = beforeNMS_index_array[item_idx];
+                }
+                else
+                {
+                    loc_bboxIndex[t] = -1;
+                }
 
                 if (loc_bboxIndex[t] != -1)
                 {
@@ -224,9 +235,15 @@ __global__ void allClassNMS_kernel(const int num, const int num_classes, const i
 
         // filter out overlapped boxes with lower scores
         int ref_item_idx = offset;
-        int ref_bbox_idx = share_location ? (beforeNMS_index_array[ref_item_idx] % num_preds_per_class + bbox_idx_offset) : beforeNMS_index_array[ref_item_idx];
 
-        while ((ref_bbox_idx != -1) && ref_item_idx < max_idx)
+        int32_t ref_bbox_idx = -1;
+        if (ref_item_idx < max_read_idx)
+        {
+            ref_bbox_idx = share_location
+                ? (beforeNMS_index_array[ref_item_idx] % num_preds_per_class + bbox_idx_offset)
+                : beforeNMS_index_array[ref_item_idx];
+        }
+        while ((ref_bbox_idx != -1) && ref_item_idx < max_read_idx)
         {
             Bbox<T_BBOX> ref_bbox;
             ref_bbox.xmin = flipXY ? bbox_data[ref_bbox_idx * 4 + 1] : bbox_data[ref_bbox_idx * 4 + 0];
@@ -255,9 +272,15 @@ __global__ void allClassNMS_kernel(const int num, const int num_classes, const i
             do
             {
                 ref_item_idx++;
-            } while (ref_item_idx < max_idx && !kept_bboxinfo_flag[ref_item_idx - offset]);
+            } while (ref_item_idx < max_read_idx && !kept_bboxinfo_flag[ref_item_idx - offset]);
 
-            ref_bbox_idx = share_location ? (beforeNMS_index_array[ref_item_idx] % num_preds_per_class + bbox_idx_offset) : beforeNMS_index_array[ref_item_idx];
+            // Move to next valid point
+            if (ref_item_idx < max_read_idx)
+            {
+                ref_bbox_idx = share_location
+                    ? (beforeNMS_index_array[ref_item_idx] % num_preds_per_class + bbox_idx_offset)
+                    : beforeNMS_index_array[ref_item_idx];
+            }
         }
 
         // store data
