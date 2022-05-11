@@ -22,6 +22,7 @@ based on the provided passage. It additionally includes an interactive mode
 where multiple questions can be asked.
 """
 
+import sys
 import time
 import json
 import ctypes
@@ -118,10 +119,12 @@ if __name__ == '__main__':
         # Extract features from the paragraph and question
         return dp.convert_example_to_features(tokens, question, tokenizer, max_seq_length, doc_stride, args.max_query_length)
 
-    # Import necessary plugins for BERT TensorRT
-    handle = ctypes.CDLL("libnvinfer_plugin.so", mode=ctypes.RTLD_GLOBAL)
+    # Import necessary plugins for demoBERT
+    plugin_lib_name = "nvinfer_plugin.dll" if sys.platform == "win32" else "libnvinfer_plugin.so"
+    env_name_to_add_path = "PATH" if sys.platform == "win32" else "LD_LIBRARY_PATH"
+    handle = ctypes.CDLL(plugin_lib_name, mode=ctypes.RTLD_GLOBAL)
     if not handle:
-        raise RuntimeError("Could not load plugin library. Is `libnvinfer_plugin.so` on your LD_LIBRARY_PATH?")
+        raise RuntimeError("Could not load plugin library. Is `{}` on your {}?".format(plugin_lib_name, env_name_to_add_path))
 
     # The first context created will use the 0th profile. A new context must be created
     # for each additional profile needed. Here, we only use batch size 1, thus we only need the first profile.

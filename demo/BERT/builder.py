@@ -42,12 +42,9 @@ TensorRT Initialization
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 trt_version = [int(n) for n in trt.__version__.split('.')]
 
-plugin_lib_name = "libnvinfer_plugin.so"
-env_name_to_add_path = "LD_LIBRARY_PATH"
-if sys.platform == "win32":
-    plugin_lib_name = "nvinfer_plugin.dll"
-    env_name_to_add_path = "PATH"
-
+# Import necessary plugins for demoBERT
+plugin_lib_name = "nvinfer_plugin.dll" if sys.platform == "win32" else "libnvinfer_plugin.so"
+env_name_to_add_path = "PATH" if sys.platform == "win32" else "LD_LIBRARY_PATH"
 handle = ctypes.CDLL(plugin_lib_name, mode=ctypes.RTLD_GLOBAL)
 if not handle:
     raise RuntimeError("Could not load plugin library. Is `{}` on your {}?".format(plugin_lib_name, env_name_to_add_path))
