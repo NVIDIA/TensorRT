@@ -57,7 +57,7 @@ static void printPerfStructure(const customMatmulPerf_t& perf, int const& m, int
     AlgoProps p;
     p.populate(perf.algo);
     /* Calculate GFLOPS */
-    double timeAvg = (perf.time * 1e-3) / kernelRepeats; // Convert to seconds, then divide by loops
+    double timeAvg = perf.time * 1e-3; // Convert to seconds. It has been divided by kernelRepeats in customMatmulRun().
     double gflop = (2 * static_cast<unsigned long long int>(m * n) * k) * 1e-9; // Real
 
     gLogVerbose << "Algo=" << p.algoId << " Tile=" << p.tile << " (" << matmulTileName[p.tile] << ") K=" << p.numSplitsK << " Red.Sch.=" << p.reductionScheme << " Swiz=" << p.swizzle << " Cust=" << p.customOption << " Stat=" << perf.status << " Time=" << perf.time << " WSbytes=" << perf.workspaceSize << " math=" << p.mathMode << " waves=" << perf.wavesCount << "GFlops=" << (gflop / timeAvg) << std::endl;
