@@ -168,17 +168,38 @@ std::pair<std::string, T> splitNameAndValue(const std::string& s)
 {
     std::string tensorName;
     std::string valueString;
-    // Split on the last :
-    std::vector<std::string> nameRange{splitToStringVec(s, ':')};
-    // Everything before the last : is the name
-    tensorName = nameRange[0];
-    for (size_t i = 1; i < nameRange.size() - 1; i++)
+
+    // Support 'inputName':Path format for --loadInputs flag when dealing with Windows paths.
+    // i.e. 'inputName':c:\inputData
+    std::vector<std::string> quoteNameRange{ splitToStringVec(s, '\'') };
+    // splitToStringVec returns the entire string when delimiter is not found, so it's size is always at least 1
+    if (quoteNameRange.size() != 1)
     {
-        tensorName += ":" + nameRange[i];
+        if (quoteNameRange.size() != 3)
+        {
+            throw std::invalid_argument(std::string("Found invalid number of \'s when parsing ") + s +
+                std::string(". Expected: 2, received: ") + std::to_string(quoteNameRange.size() -1));
+        }
+        // Everything before the second "'" is the name.
+        tensorName = quoteNameRange[0] + quoteNameRange[1];
+        // Path is the last string - ignoring leading ":" so slice it with [1:]
+        valueString = quoteNameRange[2].substr(1);
+        return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
     }
-    // Value is the string element after the last :
-    valueString = nameRange[nameRange.size() - 1];
-    return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
+    else
+    {
+        // Split on the last :
+        std::vector<std::string> nameRange{ splitToStringVec(s, ':') };
+        // Everything before the last : is the name
+        tensorName = nameRange[0];
+        for (size_t i = 1; i < nameRange.size() - 1; i++)
+        {
+            tensorName += ":" + nameRange[i];
+        }
+        // Value is the string element after the last :
+        valueString = nameRange[nameRange.size() - 1];
+        return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
+    }
 }
 
 template <typename T>
