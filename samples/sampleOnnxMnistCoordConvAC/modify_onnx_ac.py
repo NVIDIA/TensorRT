@@ -21,9 +21,15 @@ import argparse
 
 COORD_CONV_AC_OP_TYPE = 'CoordConvAC'
 
-# Here we'll register a function to do all the subgraph-replacement heavy-lifting
-@gs.Graph.register()
-def replace_with_coordconvac(self, inputs, outputs):
+def replace_with_coordconvac(graph, inputs, outputs):
+    '''
+    Replace each unfolded CoordConv graph with a single CoordConv node.
+    From
+    ... -> (CoordConv subgraph) -> Conv -> Relu -> (CoordConv subgraph) -> ...
+    To
+    ... -> CoordConv -> Conv -> Relu -> CoordConv -> ...
+    '''
+
     # Disconnect output nodes of all input tensors
     for inp in inputs:
         inp.outputs.clear()
@@ -33,17 +39,10 @@ def replace_with_coordconvac(self, inputs, outputs):
         out.inputs.clear()
 
     # Insert the new node.
-    return self.layer(op=COORD_CONV_AC_OP_TYPE, inputs=inputs, outputs=outputs)
+    return graph.layer(op=COORD_CONV_AC_OP_TYPE, inputs=inputs, outputs=outputs)
 
 
 def main():
-    '''
-    Replace each unfolded CoordConv graph with a single CoordConv node.  
-    From
-    ... -> (CoordConv subgraph) -> Conv -> Relu -> (CoordConv subgraph) -> ...
-    To
-    ... -> CoordConv -> Conv -> Relu -> CoordConv -> ...
-    '''
     # Configurable parameters from command line
     parser = argparse.ArgumentParser(description='ONNX Modifying Example')
     parser.add_argument('--onnx', default="mnist_cc.onnx",
@@ -58,12 +57,12 @@ def main():
     tmap = graph.tensors()
     # You can figure out the input and output tensors using Netron.
     inputs = [tmap["conv1"]]
-    outputs = [tmap["90"]]
-    graph.replace_with_coordconvac(inputs, outputs)
+    outputs = [tmap["input"]]
+    replace_with_coordconvac(graph, inputs, outputs)
 
-    inputs = [tmap["92"]]
-    outputs = [tmap["170"]]
-    graph.replace_with_coordconvac(inputs, outputs)
+    inputs = [tmap["onnx::Cast_90"]]
+    outputs = [tmap["input.3"]]
+    replace_with_coordconvac(graph, inputs, outputs)
 
     # Remove the now-dangling subgraph.
     graph.cleanup().toposort()
@@ -73,5 +72,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-    
