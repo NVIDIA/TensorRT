@@ -22,5 +22,4 @@ from pytorch_quantization.nn.modules.quant_linear import *
 from pytorch_quantization.nn.modules.quant_pooling import *
 from pytorch_quantization.nn.modules.clip import *
 from pytorch_quantization.nn.modules.quant_rnn import *
-from pytorch_quantization.nn.modules.quant_bert import *
 from pytorch_quantization.nn.modules.quant_instancenorm import *
