@@ -318,3 +318,21 @@ class TestNodeIO(object):
         assert nlist[0] == new_tensor
         assert len(getattr(self.tensors[0], tensor_field)) == 0
         assert getattr(new_tensor, tensor_field)[0] == self.node
+
+    def test_iadd_on_node_directly(self):
+        t0 = Variable("t0")
+        n0 = Node("", inputs=[])
+
+        n0.inputs += [t0]
+        assert len(n0.inputs) == 1
+        assert n0.inputs[0] == t0
+
+
+class TestTensorIO(object):
+    def test_iadd_on_tensor_directly(self):
+        n0 = Node("")
+        t0 = Variable("t0")
+
+        t0.inputs += [n0]
+        assert len(t0.inputs) == 1
+        assert t0.inputs[0] == n0

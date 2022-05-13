@@ -467,7 +467,9 @@ class Graph(object):
 
         return tensor_map
 
-    def fold_constants(self, fold_shapes=True, recurse_subgraphs=True, partitioning=None, error_ok=True):
+    def fold_constants(
+        self, fold_shapes=True, recurse_subgraphs=True, partitioning=None, error_ok=True, flatten_subgraphs=True
+    ):
         """
         Folds constants in-place in the graph. The graph must be topologically sorted prior to
         calling this function (see `toposort()`).
@@ -502,6 +504,9 @@ class Graph(object):
                     Whether inference errors should be suppressed.
                     When this is enabled, any errors encountered during inference will be re-raised.
                     Defaults to True.
+            flatten_subgraphs (bool):
+                    Whether to flatten subgraphs where possible. For example, `If` nodes with a constant condition
+                    can be flattened into the parent graph.
 
         Returns:
             self
@@ -668,7 +673,7 @@ class Graph(object):
 
         def get_scalar_value(tensor):
             """
-            Gets the scalar value of a tensor with a single item
+            Gets the scalar value of a constant tensor with a single item
             """
             if not tensor.shape:
                 return tensor.values
@@ -866,7 +871,7 @@ class Graph(object):
                     if not error_ok:
                         raise
         elif not constant_values:
-            G_LOGGER.info(
+            G_LOGGER.debug(
                 "Could not find any nodes in this graph ({:}) that can be folded. "
                 "This could mean that constant folding has already been run on this graph. "
                 "Skipping.".format(self.name)
@@ -890,6 +895,36 @@ class Graph(object):
 
         if recurse_subgraphs:
             fold_subgraphs()
+
+        if flatten_subgraphs:
+            # Flatten conditional subgraphs
+            index = 0
+            while index < len(self.nodes):
+                node = self.nodes[index]
+                if node.op == "If" and isinstance(node.inputs[0], Constant):
+                    G_LOGGER.debug("Flattening conditional: {:}".format(node))
+                    cond = get_scalar_value(node.inputs[0])
+                    subgraph = node.attrs["then_branch"] if cond else node.attrs["else_branch"]
+                    # Need to add a suffix to subgraph tensors so they don't collide with outer graph tensors
+                    for tensor in subgraph._local_tensors().values():
+                        tensor.name += "_subg_{:}_{:}".format(index, subgraph.name)
+
+                    # The subgraph outputs correspond to the If node outputs. Only the latter are visible
+                    # in the parent graph, so we rebind the producer nodes of the subgraph outputs to point
+                    # to the output tensors of the If instead.
+                    for node_out, subgraph_out in zip(node.outputs, subgraph.outputs):
+                        node_out.inputs.clear()
+                        for producer in subgraph_out.inputs:
+                            for tensor_idx, out_tensor in enumerate(producer.outputs):
+                                if out_tensor == subgraph_out:
+                                    producer.outputs[tensor_idx] = node_out
+
+                    # Copy subgraph nodes into parent graph at the index of the If.
+                    del self.nodes[index]
+                    self.nodes[index:index] = subgraph.nodes
+                    index += len(subgraph.nodes) - 1
+
+                index += 1
 
         return self
 
