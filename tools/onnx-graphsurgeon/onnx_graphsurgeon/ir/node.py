@@ -91,8 +91,14 @@ class Node(object):
     def __setattr__(self, name, value):
         if name in ["inputs", "outputs"]:
             try:
-                getattr(self, name).clear()
-                getattr(self, name).extend(value)
+                attr = getattr(self, name)
+                if value is attr:
+                    # This can happen when using things like +=
+                    # The __iadd__ is executed followed by an assignment
+                    return
+
+                attr.clear()
+                attr.extend(value)
             except AttributeError:
                 super().__setattr__(name, value)
         else:

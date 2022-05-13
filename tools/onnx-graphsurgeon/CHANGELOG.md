@@ -2,8 +2,18 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.3.19 (2022-04-13)
+### Added
+- Added support for flattening conditional subgraphs into the parent graph in `fold_constants()`.
 
-## v0.3.17 (2021-03-18)
+
+## v0.3.18 (2022-03-31)
+### Fixed
+- Fixed a bug where `{node/tensor}.{inputs/outputs} += <value>` would cause the inputs/outputs of the node/tensor
+    to be cleared.
+
+
+## v0.3.17 (2022-03-18)
 ### Added
 - Added `producer_name` and `producer_version` to `Graph` class so that they are preserved during model import/export.
 

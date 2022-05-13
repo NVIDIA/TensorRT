@@ -1087,7 +1087,7 @@ class TestFoldConstants(object):
         assert isinstance(graph.outputs[0], Constant)
         assert np.all(graph.outputs[0].values == inp.shape[1:3:2])
 
-    def test_with_nested_graph(self):
+    def test_with_variable_conditional(self):
         cond = gs.Variable("cond", dtype=np.bool, shape=(1,))
 
         X = gs.Variable("X", dtype=np.float32, shape=(1,))
@@ -1112,6 +1112,44 @@ class TestFoldConstants(object):
         assert isinstance(else_graph.nodes[0].inputs[1], Constant)
         assert np.all(else_graph.nodes[0].inputs[1].values == (Y.values * 2))
 
+    @pytest.mark.parametrize("cond_value", [True, False])
+    @pytest.mark.parametrize("flatten", [True, False])
+    def test_flatten_static_conditional(self, flatten, cond_value):
+        cond = gs.Constant("cond", values=np.array([cond_value], dtype=np.bool))
+
+        X = gs.Variable("X", dtype=np.float32, shape=(1,))
+        Y = gs.Variable("Y", dtype=np.float32, shape=(1,))
+        graph = Graph(inputs=[X, cond])
+
+        then_graph = Graph(name="Then")
+        then_graph.outputs = [then_graph.relu(then_graph.add(Y, Y))]
+
+        else_graph = Graph(name="Else")
+        else_graph.outputs = [else_graph.add(X, else_graph.add(Y, Y))]
+
+        if_out = graph.if_op(cond, then_graph, else_graph)
+        graph.outputs = [if_out]
+
+        graph.fold_constants(flatten_subgraphs=flatten)
+        graph.cleanup()
+
+        if flatten:
+            assert len(graph.nodes) == 2
+            assert graph.nodes[0].op == "Add"
+            assert graph.nodes[1].op == "Relu" if cond_value else "Add"
+
+            subgraph = then_graph if cond_value else else_graph
+            # Make sure subgraph intermediate tensors are renamed
+            assert graph.nodes[0].outputs[0].name == "add_out_0_subg_0_{:}".format(subgraph.name)
+            assert graph.outputs[0].inputs[0] == subgraph.nodes[-1]
+            assert subgraph.nodes[-1] == graph.nodes[-1]
+        else:
+            assert len(graph.nodes) == 1
+            assert len(graph.nodes) == 1
+            assert graph.nodes[0].op == "If"
+            assert graph.outputs[0].inputs[0] == graph.nodes[-1]
+        assert graph.outputs == [if_out]
+
     def test_const_inp_but_non_foldable_nested_graph(self):
         cond = gs.Constant("cond", values=np.array(True))
         X = gs.Variable("X", dtype=np.float32, shape=(1,))
@@ -1130,7 +1168,7 @@ class TestFoldConstants(object):
 
         # This should not raise because the `If` node should be excluded from
         # constant folding.
-        graph.fold_constants(error_ok=False).cleanup()
+        graph.fold_constants(error_ok=False, flatten_subgraphs=False).cleanup()
 
         assert graph.nodes[0].op == "If"
         assert len(then_graph.nodes) == 1
