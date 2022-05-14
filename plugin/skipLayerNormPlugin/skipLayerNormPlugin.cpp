@@ -806,6 +806,11 @@ const char* SkipLayerNormVarSeqlenPlugin::getPluginNamespace() const noexcept
 
 SkipLayerNormVarSeqlenPluginCreator::SkipLayerNormVarSeqlenPluginCreator()
 {
+    mPluginAttributes.clear();
+    mPluginAttributes.emplace_back(PluginField("type_id", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("beta", nullptr, PluginFieldType::kFLOAT32 , 1));
+    mPluginAttributes.emplace_back(PluginField("gamma", nullptr, PluginFieldType::kFLOAT32 , 1));
+    mPluginAttributes.emplace_back(PluginField("mLd", nullptr, PluginFieldType::kINT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
