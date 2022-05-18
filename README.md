@@ -34,7 +34,7 @@ To build the TensorRT-OSS components, you will first need the following software
   * [Docker](https://docs.docker.com/install/) >= 19.03
   * [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-docker)
 * Toolchains and SDKs
-  * (Cross compilation for Jetson platform) [NVIDIA JetPack](https://developer.nvidia.com/embedded/jetpack) >= 4.6 (current support only for TensorRT 8.0.1)
+  * (Cross compilation for Jetson platform) [NVIDIA JetPack](https://developer.nvidia.com/embedded/jetpack) >= 5.0 (current support only for TensorRT 8.4.0)
   * (For Windows builds) [Visual Studio](https://visualstudio.microsoft.com/vs/older-downloads/) 2017 Community or Enterprise edition
   * (Cross compilation for QNX platform) [QNX Toolchain](https://blackberry.qnx.com/en)
 * PyPI packages (for demo applications/tests)
@@ -86,7 +86,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
 3. #### (Optional - for Jetson builds only) Download the JetPack SDK
     1. Download and launch the JetPack SDK manager. Login with your NVIDIA developer account.
-    2. Select the  platform and target OS  (example: Jetson AGX Xavier, `Linux Jetpack 4.6`), and click Continue.
+    2. Select the  platform and target OS  (example: Jetson AGX Xavier, `Linux Jetpack 5.0`), and click Continue.
     3. Under `Download & Install Options` change the download folder and select `Download now, Install later`. Agree to the license terms and click Continue.
     4. Move the extracted files into the `<TensorRT-OSS>/docker/jetpack_files` folder.
 
@@ -106,9 +106,9 @@ For Linux platforms, we recommend that you generate a docker container for build
     ```bash
     ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos7-cuda10.2 --cuda 10.2
     ```
-    **Example: Ubuntu 18.04 cross-compile for Jetson (aarch64) with cuda-10.2 (JetPack SDK)**
+    **Example: Ubuntu 18.04 cross-compile for Jetson (aarch64) with cuda-11.4.2 (JetPack SDK)**
     ```bash
-    ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda10.2 --cuda 10.2
+    ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda11.4
     ```
     **Example: Ubuntu 20.04 on aarch64 with cuda-11.4.2**
     ```bash
@@ -153,23 +153,24 @@ For Linux platforms, we recommend that you generate a docker container for build
 	make -j$(nproc)
 	```
 
-    **Example: Native build on Jetson (aarch64) with cuda-10.2**
+    **Example: Native build on Jetson (aarch64) with cuda-11.4**
     ```bash
     cd $TRT_OSSPATH
     mkdir -p build && cd build
-    cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DTRT_PLATFORM_ID=aarch64 -DCUDA_VERSION=10.2
+    cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DTRT_PLATFORM_ID=aarch64 -DCUDA_VERSION=11.4
     CC=/usr/bin/gcc make -j$(nproc)
     ```
     > NOTE: C compiler must be explicitly specified via `CC=` for native `aarch64` builds of protobuf.
 
-    **Example: Ubuntu 18.04 Cross-Compile for Jetson (aarch64) with cuda-10.2 (JetPack)**
+    **Example: Ubuntu 20.04 Cross-Compile for Jetson (aarch64) with cuda-11.4 (JetPack)**
 	```bash
 	cd $TRT_OSSPATH
 	mkdir -p build && cd build
-	cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=10.2 -DCUDNN_LIB=/pdk_files/cudnn/usr/lib/aarch64-linux-gnu/libcudnn.so -DCUBLAS_LIB=/usr/local/cuda-10.2/targets/aarch64-linux/lib/stubs/libcublas.so -DCUBLASLT_LIB=/usr/local/cuda-10.2/targets/aarch64-linux/lib/stubs/libcublasLt.so
+	cmake .. -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64.toolchain -DCUDA_VERSION=11.4 -DCUDNN_LIB=/pdk_files/cudnn/usr/lib/aarch64-linux-gnu/libcudnn.so -DCUBLAS_LIB=/usr/local/cuda-11.4/targets/aarch64-linux/lib/stubs/libcublas.so -DCUBLASLT_LIB=/usr/local/cuda-11.4/targets/aarch64-linux/lib/stubs/libcublasLt.so
+
 	make -j$(nproc)
 	```
-    > NOTE: The latest JetPack SDK v4.6 only supports TensorRT 8.0.1.
+    > NOTE: The latest JetPack SDK v5.0 only supports TensorRT 8.4.0.
 
     **Example: Windows (x86-64) build in Powershell**
 	```powershell
