@@ -114,6 +114,7 @@ class ModelFileConverter:
         G_LOGGER.info("Using optimization profiles: {:}".format(profiles))
 
         self.trt_inference_config = CreateConfig(
+            tf32=True,
             fp16=network_metadata.precision.fp16,
             max_workspace_size=result.DEFAULT_TRT_WORKSPACE_MB * 1024 * 1024,
             profiles=profiles,
