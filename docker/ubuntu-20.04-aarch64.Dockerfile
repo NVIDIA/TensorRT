@@ -1,8 +1,7 @@
 # Multi-arch container support available in non-cudnn containers.
-# Native aarch64 builds only support CUDA 11.4
 FROM nvidia/cuda:11.4.2-devel-ubuntu20.04
 
-ENV TRT_VERSION 8.4.1.2
+ENV TRT_VERSION 8.4.1.3
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
