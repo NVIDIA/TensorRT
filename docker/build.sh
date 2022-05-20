@@ -17,7 +17,7 @@
 
 arg_dockerfile=docker/ubuntu-20.04.Dockerfile
 arg_imagename=tensorrt-ubuntu
-arg_cudaversion=11.4.2
+arg_cudaversion=11.6.2
 arg_help=0
 
 while [[ "$#" -gt 0 ]]; do case $1 in
