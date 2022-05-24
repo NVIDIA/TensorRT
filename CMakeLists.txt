@@ -98,7 +98,6 @@ message(STATUS "Protobuf version set to ${PROTOBUF_VERSION}")
 
 find_package(Threads REQUIRED)
 if (BUILD_PLUGINS OR BUILD_PARSERS)
-    include(third_party/zlib.cmake)
     include(third_party/protobuf.cmake)
 endif()
 if(NOT CUB_ROOT_DIR)

@@ -27,7 +27,7 @@ To build the TensorRT-OSS components, you will first need the following software
 * [python](<https://www.python.org/downloads/>) >= v3.6.9
 * [pip](https://pypi.org/project/pip/#history) >= v19.0
 * Essential utilities
-  * [git](https://git-scm.com/downloads), [pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/), [wget](https://www.gnu.org/software/wget/faq.html#download), [zlib](https://zlib.net/)
+  * [git](https://git-scm.com/downloads), [pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/), [wget](https://www.gnu.org/software/wget/faq.html#download)
 
 **Optional Packages**
 * Containerized build

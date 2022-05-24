@@ -41,7 +41,6 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     wget \
-    zlib1g-dev \
     git \
     pkg-config \
     sudo \
