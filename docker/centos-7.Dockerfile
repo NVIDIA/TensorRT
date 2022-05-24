@@ -35,7 +35,6 @@ RUN yum -y install \
     openssl-devel \
     bzip2-devel \
     libffi-devel \
-    zlib-devel \
     wget \
     perl-core \
     git \
