@@ -313,6 +313,7 @@ int main(int argc, char** argv)
         auto* profiler = new Profiler;
         iEnv->profiler.reset(profiler);
         iEnv->contexts.front()->setProfiler(profiler);
+        iEnv->contexts.front()->setEnqueueEmitsProfile(false);
         if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
         {
             options.inference.graph = false;
