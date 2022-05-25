@@ -37,13 +37,23 @@ def gpt2_inference(gpt2, input_ids, timing_profile, use_cuda=True):
 
 # Code specifically for Pythonic inference measurement used across all GPT2 related scripts
 @use_cuda
-def full_inference_greedy(gpt2, input_ids, timing_profile, max_length, use_cuda=True, batch_size=1):
+def full_inference_greedy(
+    gpt2,
+    input_ids,
+    timing_profile,
+    max_length,
+    use_cuda=True,
+    batch_size=1,
+    early_stopping=True,
+):
 
     if isinstance(gpt2, TRTNativeRunner):
         gpt2.set_return_device("cuda" if use_cuda else "cpu")
 
     def _e2e():
-        return gpt2.generate(input_ids, max_length=max_length, batch_size=batch_size)  # greedy search
+        if not early_stopping:
+            return gpt2.generate(input_ids, max_length=max_length, batch_size=batch_size)  # greedy search
+        return gpt2.generate(input_ids, min_length=max_length, max_length=max_length, batch_size=batch_size)  # greedy search with fixed length
 
     full_e2e_median_time = measure_python_inference_code(_e2e, timing_profile)
     return (_e2e(), full_e2e_median_time)
