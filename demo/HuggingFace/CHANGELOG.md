@@ -20,9 +20,15 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
-# [1.2.0]
+# [1.2.1] - 2022-05-20
 
-- Added `benchmark` action to T5 TRT for performance benchmarking. It uses random inputs with fixed lengths and disables
+- Added `benchmark` action to T5 frameworks/onnxrt and GPT2 frameworks/trt for performance benchmarking. It uses random
+  inputs with fixed lengths and disables early stopping such that we can compare the performance with other frameworks.
+- Added `batch_size > 1` support to GPT2 trt sample.
+
+# [1.2.0] - 2022-03-29
+
+- Added `benchmark` action to T5 trt for performance benchmarking. It uses random inputs with fixed lengths and disables
   early stopping such that we can compare the performance with other frameworks.
 
 # [1.1.0] - 2022-02-09
