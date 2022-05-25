@@ -132,10 +132,14 @@ class GPT2TRTDecoder(TRTHFRunner):
         }
 
     def forward(self, input_ids, **kwargs):
-        self.inputs["input_ids"][:, :input_ids.shape[1]] = input_ids
+        batch_size = input_ids.shape[0]
+        seq_len = input_ids.shape[1]
+        self.inputs["input_ids"].view(-1)[:batch_size * seq_len] = input_ids.flatten()
         self.trt_context.set_binding_shape(0, input_ids.shape)
         self.trt_context.execute_v2(bindings=self.bindings)
-        return CausalLMOutputWithCrossAttentions(logits=self.outputs["logits"][:, :input_ids.shape[1], :].to(self.return_device))
+        vocab_size = self.outputs["logits"].shape[2]
+        logits = self.outputs["logits"].view(-1)[:batch_size * seq_len * vocab_size].view(batch_size, seq_len, vocab_size)
+        return CausalLMOutputWithCrossAttentions(logits=logits.to(self.return_device))
 
 class GPT2Polygraphy(TRTInferenceCommand):
     def __init__(self):
@@ -166,6 +170,7 @@ class GPT2Polygraphy(TRTInferenceCommand):
         onnx_fpaths: Dict[str, NetworkModel],
         inference_input: str,
         timing_profile: TimingProfile,
+        batch_size: int = 1,
         benchmarking_mode: bool = False,
         benchmarking_args: GPT2BenchmarkingArgs = None,
     ) -> Union[NetworkResult, BenchmarkingResult]:
@@ -179,11 +184,11 @@ class GPT2Polygraphy(TRTInferenceCommand):
         # Prepare the input tokens and find out output sequence length.
         if not benchmarking_mode:
             output_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
-            input_ids = tokenizer(inference_input, return_tensors="pt").input_ids
+            input_ids = tokenizer([inference_input] * batch_size, return_tensors="pt").input_ids
         else:
             input_seq_len = benchmarking_args.input_seq_len
             output_seq_len = benchmarking_args.output_seq_len
-            input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE, (1, input_seq_len))
+            input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE, (batch_size, input_seq_len))
 
         # get single decoder iteration inference timing profile
         _, decoder_e2e_median_time = gpt2_inference(
@@ -196,6 +201,7 @@ class GPT2Polygraphy(TRTInferenceCommand):
             input_ids,
             timing_profile,
             max_length=output_seq_len,
+            batch_size=batch_size,
             early_stopping=(not benchmarking_mode),
         )
 
@@ -225,12 +231,13 @@ class GPT2Polygraphy(TRTInferenceCommand):
         if benchmarking_mode:
             return BenchmarkingResult(median_runtime=median_runtime, models=models)
 
-        semantic_outputs = []
-        for i, sample_output in enumerate(sample_output):
-            semantic_outputs.append(tokenizer.decode(sample_output, skip_special_tokens=True))
+        # Remove the padding and end tokens.
+        semantic_outputs = tokenizer.decode(
+            sample_output[-1, :], skip_special_tokens=True
+        )
 
-        # For now, save only the last output since we only support BS = 1
-        semantic_outputs = semantic_outputs[-1]
+        if isinstance(semantic_outputs, list):
+            semantic_outputs = " ".join(semantic_outputs).strip()
 
         return NetworkResult(
             input=inference_input,
@@ -254,8 +261,6 @@ class GPT2Polygraphy(TRTInferenceCommand):
         args: object = None,
         benchmarking_mode: bool = False,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
-
-        assert batch_size == 1, "GPT2 trt can only support batch_size=1 for now."
 
         workspace = NNFolderWorkspace(
             self.frameworks_cmd.config.network_name, metadata, working_directory
@@ -296,7 +301,11 @@ class GPT2Polygraphy(TRTInferenceCommand):
             )]
 
             # Build the engine.
-            engine_tag = "-inseq{}-outseq{}".format(args.input_seq_len, args.output_seq_len) if benchmarking_mode else ""
+            if not benchmarking_mode:
+                engine_tag = "bs{}".format(batch_size)
+            else:
+                engine_tag = "bs{}-inseq{}-outseq{}".format(batch_size, benchmarking_args.input_seq_len, benchmarking_args.output_seq_len)
+
             self.gpt2_engine = GPT2ONNXFile(gpt2_onnx_fpath, metadata).as_trt_engine(
                 gpt2_onnx_fpath + engine_tag + ".engine",
                 profiles=profiles,
@@ -310,13 +319,13 @@ class GPT2Polygraphy(TRTInferenceCommand):
                 for ninput in network_input:
                     results.append(
                         self.execute_inference(
-                            metadata, hash_onnx_fpath, ninput, timing_profile
+                            metadata, hash_onnx_fpath, ninput, timing_profile, batch_size
                         )
                     )
             else:
                 benchmarking_args = GPT2BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
                 results = self.execute_inference(
-                    metadata, hash_onnx_fpath, None, timing_profile, True, benchmarking_args
+                    metadata, hash_onnx_fpath, None, timing_profile, batch_size, True, benchmarking_args
                 )
 
         finally:
