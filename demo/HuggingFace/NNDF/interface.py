@@ -22,7 +22,7 @@ Interface classes required for each registered network script.
 import argparse
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 # NNDF
 from NNDF.networks import (
@@ -99,9 +99,7 @@ class NetworkCommand(metaclass=ABCMeta):
         self.metadata = self.args_to_network_metadata(self._args)
         self.check_network_metadata_is_supported(self.metadata)
 
-    # TODO: Should be abstractmethod, but since some derived classes have not overrid this method yet, leave it as
-    # non-abstract for now.
-    # @abstractmethod
+    @abstractmethod
     def run_benchmark(self):
         """
         Run inference in performance benchmarking mode for apples-to-apples perf comparisons across platforms.
@@ -113,7 +111,7 @@ class NetworkCommand(metaclass=ABCMeta):
 
         The derived class should override this method for the benchmarking implementation for the specific framework.
         """
-        raise NotImplementedError("The run_benchmark() method is not implemented in this network/framework yet!")
+        pass
 
     def add_args(self, parser) -> None:
         general_group = parser.add_argument_group("general")
@@ -228,8 +226,10 @@ class FrameworkCommand(NetworkCommand):
         keep_onnx_model: bool,
         keep_pytorch_model: bool,
         timing_profile: TimingProfile,
-        batch_size: int
-    ) -> List[NetworkResult]:
+        batch_size: int,
+        args: object = None,
+        benchmarking_mode: bool = False,
+    ) -> Union[List[NetworkResult], BenchmarkingResult]:
         pass
 
     def __call__(self):
@@ -246,12 +246,33 @@ class FrameworkCommand(NetworkCommand):
             timing_profile=self.get_timing_profile(),
             use_cpu=self._args.cpu,
             batch_size=self._args.batch_size,
+            args=self._args,
+            benchmarking_mode=False,
         )
 
         return NetworkCheckpointResult(
             network_results=network_results,
             accuracy=checkpoint.accuracy(network_results),
         )
+
+    def run_benchmark(self):
+        self.config.MetadataClass.add_benchmarking_args(self._parser)
+        super().__call__()
+
+        network_results = self.run_framework(
+            metadata=self.metadata,
+            network_input=None,
+            working_directory=self._args.working_dir,
+            keep_onnx_model=self._args.cleanup,
+            keep_pytorch_model=self._args.cleanup,
+            timing_profile=self.get_timing_profile(),
+            use_cpu=self._args.cpu,
+            batch_size=self._args.batch_size,
+            args=self._args,
+            benchmarking_mode=True,
+        )
+
+        return network_results
 
     def add_args(self, parser) -> argparse.ArgumentParser:
         super().add_args(parser)
@@ -287,24 +308,9 @@ class TRTInferenceCommand(NetworkCommand):
         keep_torch_model: bool,
         timing_profile: TimingProfile,
         batch_size: int = 1,
-    ) -> List[NetworkResult]:
-        pass
-
-    # TODO: Should be abstractmethod, but since some derived classes have not overrid this method yet, leave it as
-    # non-abstract for now.
-    # @abstractmethod
-    def benchmark_trt(
-        self,
-        metadata: NetworkMetadata,
-        onnx_fpaths: Tuple[NetworkModel],
-        working_directory: str,
-        keep_trt_engine: bool,
-        keep_onnx_model: bool,
-        keep_torch_model: bool,
-        timing_profile: TimingProfile,
-        batch_size: int,
-        args: object,
-    ) -> BenchmarkingResult:
+        args: object = None,
+        benchmarking_mode: bool = False,
+    ) -> Union[List[NetworkResult], BenchmarkingResult]:
         pass
 
     def __call__(self):
@@ -324,6 +330,8 @@ class TRTInferenceCommand(NetworkCommand):
             keep_torch_model=self._args.cleanup,
             timing_profile=self.get_timing_profile(),
             batch_size=self._args.batch_size,
+            args=self._args,
+            benchmarking_mode=False,
         )
 
         return NetworkCheckpointResult(
@@ -337,9 +345,10 @@ class TRTInferenceCommand(NetworkCommand):
         super().__call__()
         onnx_fpaths = self.args_to_network_models(self._args)
 
-        network_results = self.benchmark_trt(
+        network_results = self.run_trt(
             metadata=self.metadata,
             onnx_fpaths=onnx_fpaths,
+            network_input=None,
             working_directory=self._args.working_dir,
             keep_trt_engine=self._args.cleanup,
             keep_onnx_model=self._args.cleanup,
@@ -347,6 +356,7 @@ class TRTInferenceCommand(NetworkCommand):
             timing_profile=self.get_timing_profile(),
             batch_size=self._args.batch_size,
             args=self._args,
+            benchmarking_mode=True,
         )
 
         return network_results
@@ -386,7 +396,9 @@ class OnnxRTCommand(NetworkCommand):
         keep_onnx_model: bool,
         keep_torch_model: bool,
         timing_profile: TimingProfile,
-    ) -> List[NetworkResult]:
+        args: object = None,
+        benchmarking_mode: bool = False,
+    ) -> Union[List[NetworkResult], BenchmarkingResult]:
         pass
 
     def __call__(self):
@@ -411,6 +423,27 @@ class OnnxRTCommand(NetworkCommand):
             network_results=network_results,
             accuracy=checkpoint.accuracy(network_results),
         )
+
+    def run_benchmark(self):
+        self.config.MetadataClass.add_inference_args(self._parser)
+        self.config.MetadataClass.add_benchmarking_args(self._parser)
+        super().__call__()
+        onnx_fpaths = self.args_to_network_models(self._args)
+
+        network_results = self.run_onnxrt(
+            metadata=self.metadata,
+            onnx_fpaths=onnx_fpaths,
+            network_input=None,
+            working_directory=self._args.working_dir,
+            keep_onnx_model=self._args.cleanup,
+            keep_torch_model=self._args.cleanup,
+            timing_profile=self.get_timing_profile(),
+            batch_size=self._args.batch_size,
+            args=self._args,
+            benchmarking_mode=True,
+        )
+
+        return network_results
 
     def args_to_network_metadata(self, args) -> NetworkMetadata:
         return self.config.MetadataClass.from_inference_args(args)

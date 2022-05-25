@@ -71,7 +71,23 @@ class GPT2Metadata(_GPT2Metadata, MetadataArgparseInteropMixin):
 
     @staticmethod
     def add_benchmarking_args(parser: argparse.ArgumentParser) -> None:
-        pass
+        benchmarking_group = parser.add_argument_group("benchmarking group")
+        benchmarking_group.add_argument(
+            "--input-seq-len",
+            type=int,
+            default=1,
+            help="Specify fixed input sequence length for perf benchmarking. (default: 1)",
+        )
+        benchmarking_group.add_argument(
+            "--output-seq-len",
+            type=int,
+            default=64,
+            help="Specify fixed output sequence length for perf benchmarking. (default: 64)",
+        )
+
+
+GPT2BenchmarkingArgs = namedtuple("GPT2BenchmarkingArgs", ["input_seq_len", "output_seq_len"])
+
 
 class GPT2ModelTRTConfig(NNConfig):
     VOCAB_SIZE = 50257  # Vocabulary size of the GPT-2 model

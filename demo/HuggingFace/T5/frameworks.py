@@ -18,7 +18,7 @@
 import os
 import sys
 
-from typing import List
+from typing import List, Union
 
 # huggingface
 from transformers import (
@@ -26,6 +26,9 @@ from transformers import (
     T5Tokenizer,
     T5Config,
 )
+
+# torch
+import torch
 
 # Add syspath for custom library
 if __name__ == "__main__":
@@ -36,6 +39,7 @@ if __name__ == "__main__":
 # TRT-HuggingFace
 from NNDF.interface import FrameworkCommand
 from NNDF.networks import (
+    BenchmarkingResult,
     NetworkResult,
     NetworkMetadata,
     NetworkRuntime,
@@ -44,7 +48,7 @@ from NNDF.networks import (
     TimingProfile,
 )
 from T5.export import T5EncoderTorchFile, T5DecoderTorchFile
-from T5.T5ModelConfig import T5ModelTRTConfig
+from T5.T5ModelConfig import T5ModelTRTConfig, T5BenchmarkingArgs
 from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy
 from NNDF.general_utils import confirm_folder_delete, NNFolderWorkspace
 
@@ -175,12 +179,23 @@ class T5FHuggingFace(FrameworkCommand):
         inference_input: str,
         timing_profile: TimingProfile,
         use_cpu: bool,
-        batch_size: int = 1
-    ) -> NetworkResult:
+        batch_size: int = 1,
+        benchmarking_mode: bool = False,
+        benchmarking_args: T5BenchmarkingArgs = None,
+    ) -> Union[NetworkResult, BenchmarkingResult]:
 
         # Execute some tests
         tokenizer = T5Tokenizer.from_pretrained(metadata.variant)
-        input_ids = tokenizer([inference_input] * batch_size, padding=True, return_tensors="pt").input_ids
+
+        # Prepare the input tokens and find out output sequence length..
+        if not benchmarking_mode:
+            output_seq_len = T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+            input_ids = tokenizer([inference_input] * batch_size, padding=True, return_tensors="pt").input_ids
+        else:
+            max_seq_len = T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+            input_seq_len = benchmarking_args.input_seq_len if benchmarking_args.input_seq_len > 0 else max_seq_len
+            output_seq_len = benchmarking_args.output_seq_len if benchmarking_args.output_seq_len > 0 else max_seq_len
+            input_ids = torch.randint(0, T5ModelTRTConfig.VOCAB_SIZE, (batch_size, input_seq_len))
 
         # By default, huggingface model structure is one giant file.
         t5_torch_fpath = network_fpaths.torch[0].fpath
@@ -207,10 +222,31 @@ class T5FHuggingFace(FrameworkCommand):
             input_ids,
             tokenizer,
             timing_profile,
-            max_length=T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
+            max_length=output_seq_len,
             use_cuda=(not use_cpu),
-            batch_size=batch_size
+            batch_size=batch_size,
+            early_stopping=(not benchmarking_mode),
         )
+
+        # Prepare runtime results.
+        median_runtime=[
+            NetworkRuntime(
+                name=T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
+                runtime=decoder_e2e_median_time,
+            ),
+            NetworkRuntime(
+                name=T5ModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME,
+                runtime=encoder_e2e_median_time,
+            ),
+            NetworkRuntime(
+                name=T5ModelTRTConfig.NETWORK_FULL_NAME,
+                runtime=full_e2e_median_runtime,
+            ),
+        ]
+
+        # Skip result checking in benchmarking mode since the input data is random.
+        if benchmarking_mode:
+            return BenchmarkingResult(median_runtime=median_runtime, models=network_fpaths)
 
         # Remove the padding and end tokens.
         semantic_outputs = tokenizer.decode(
@@ -224,20 +260,7 @@ class T5FHuggingFace(FrameworkCommand):
             input=inference_input,
             output_tensor=encoder_last_hidden_state,
             semantic_output=semantic_outputs,
-            median_runtime=[
-                NetworkRuntime(
-                    name=T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
-                    runtime=decoder_e2e_median_time,
-                ),
-                NetworkRuntime(
-                    name=T5ModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME,
-                    runtime=encoder_e2e_median_time,
-                ),
-                NetworkRuntime(
-                    name=T5ModelTRTConfig.NETWORK_FULL_NAME,
-                    runtime=full_e2e_median_runtime,
-                ),
-            ],
+            median_runtime=median_runtime,
             models=network_fpaths,
         )
 
@@ -250,8 +273,10 @@ class T5FHuggingFace(FrameworkCommand):
         keep_pytorch_model: bool,
         timing_profile: TimingProfile,
         use_cpu: bool = False,
-        batch_size: int = 1
-    ) -> List[NetworkResult]:
+        batch_size: int = 1,
+        args: object = None,
+        benchmarking_mode: bool = False,
+    ) -> Union[List[NetworkResult], BenchmarkingResult]:
         """
         Main entry point of our function which compiles and generates our model data.
         """
@@ -261,11 +286,17 @@ class T5FHuggingFace(FrameworkCommand):
         )
         try:
             network_fpaths = self.generate_and_download_framework(metadata, workspace)
-            for ninput in network_input:
-                results.append(
-                    self.execute_inference(
-                        metadata, network_fpaths, ninput, timing_profile, use_cpu, batch_size
+            if not benchmarking_mode:
+                for ninput in network_input:
+                    results.append(
+                        self.execute_inference(
+                            metadata, network_fpaths, ninput, timing_profile, use_cpu, batch_size
+                        )
                     )
+            else:
+                benchmarking_args = T5BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
+                results = self.execute_inference(
+                    metadata, network_fpaths, None, timing_profile, use_cpu, batch_size, True, benchmarking_args
                 )
         finally:
             self.cleanup(workspace, keep_onnx_model, keep_pytorch_model)

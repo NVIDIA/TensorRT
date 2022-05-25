@@ -17,7 +17,7 @@
 
 import os
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 # Add syspath for custom library
 if __name__ == "__main__":
@@ -43,6 +43,7 @@ from transformers.generation_utils import GenerationMixin
 # TRT-HuggingFace
 from NNDF.interface import TRTInferenceCommand
 from NNDF.networks import (
+    BenchmarkingResult,
     NetworkMetadata,
     NetworkModels,
     NetworkModel,
@@ -55,7 +56,7 @@ from NNDF.networks import (
 from NNDF.tensorrt_utils import TRTNativeRunner, TRTPolygraphyRunner
 from GPT2.frameworks import GPT2HuggingFace
 from NNDF.general_utils import NNFolderWorkspace
-from GPT2.GPT2ModelConfig import GPT2ModelTRTConfig
+from GPT2.GPT2ModelConfig import GPT2ModelTRTConfig, GPT2BenchmarkingArgs
 from GPT2.measurements import gpt2_inference, full_inference_greedy
 from GPT2.export import GPT2ONNXFile, GPT2TRTEngine
 
@@ -107,10 +108,12 @@ class GPT2TRTDecoder(TRTHFRunner):
         trt_engine_file: str,
         network_metadata: NetworkMetadata,
         hf_config: PretrainedConfig,
-        batch_size: int = 1
+        batch_size: int = 1,
+        max_sequence_length: int = 0,
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size)
-        self.max_sequence_length = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[network_metadata.variant]
+        self.max_sequence_length = max_sequence_length if max_sequence_length > 0 \
+            else GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[network_metadata.variant]
 
         # We only have one profile to select so we can just grab the profile at the start of the class
         self.profile_idx = self.get_optimization_profile(batch_size=batch_size, sequence_length=1)
@@ -163,14 +166,24 @@ class GPT2Polygraphy(TRTInferenceCommand):
         onnx_fpaths: Dict[str, NetworkModel],
         inference_input: str,
         timing_profile: TimingProfile,
-    ) -> NetworkResult:
+        benchmarking_mode: bool = False,
+        benchmarking_args: GPT2BenchmarkingArgs = None,
+    ) -> Union[NetworkResult, BenchmarkingResult]:
 
         tokenizer = GPT2Tokenizer.from_pretrained(metadata.variant)
 
         # GPT2 has no proper token set. Use custom token. Only "generate()" will auto
         # replace with EOS token when using generating mode
         tokenizer.add_special_tokens({"pad_token": "[PAD]"})
-        input_ids = tokenizer(inference_input, return_tensors="pt").input_ids
+
+        # Prepare the input tokens and find out output sequence length.
+        if not benchmarking_mode:
+            output_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+            input_ids = tokenizer(inference_input, return_tensors="pt").input_ids
+        else:
+            input_seq_len = benchmarking_args.input_seq_len
+            output_seq_len = benchmarking_args.output_seq_len
+            input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE, (1, input_seq_len))
 
         # get single decoder iteration inference timing profile
         _, decoder_e2e_median_time = gpt2_inference(
@@ -179,9 +192,38 @@ class GPT2Polygraphy(TRTInferenceCommand):
 
         # get complete decoder inference result and its timing profile
         sample_output, full_e2e_median_runtime = full_inference_greedy(
-            self.gpt2_trt, input_ids, timing_profile,
-            max_length=GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
+            self.gpt2_trt,
+            input_ids,
+            timing_profile,
+            max_length=output_seq_len,
+            early_stopping=(not benchmarking_mode),
         )
+
+        # Prepare runtime results.
+        median_runtime = [
+            NetworkRuntime(
+                name=GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
+                runtime=decoder_e2e_median_time,
+            ),
+            NetworkRuntime(
+                name=GPT2ModelTRTConfig.NETWORK_FULL_NAME,
+                runtime=full_e2e_median_runtime,
+            ),
+        ]
+        models = NetworkModels(
+            torch=None,
+            onnx=list(onnx_fpaths.values()),
+            trt=[
+                NetworkModel(
+                    name=GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
+                    fpath=self.gpt2_engine.fpath,
+                ),
+            ],
+        )
+
+        # Skip result checking in benchmarking mode since the input data is random.
+        if benchmarking_mode:
+            return BenchmarkingResult(median_runtime=median_runtime, models=models)
 
         semantic_outputs = []
         for i, sample_output in enumerate(sample_output):
@@ -194,26 +236,8 @@ class GPT2Polygraphy(TRTInferenceCommand):
             input=inference_input,
             output_tensor=sample_output,
             semantic_output=semantic_outputs,
-            median_runtime=[
-                NetworkRuntime(
-                    name=GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
-                    runtime=decoder_e2e_median_time,
-                ),
-                NetworkRuntime(
-                    name=GPT2ModelTRTConfig.NETWORK_FULL_NAME,
-                    runtime=full_e2e_median_runtime,
-                ),
-            ],
-            models=NetworkModels(
-                torch=None,
-                onnx=list(onnx_fpaths.values()),
-                trt=[
-                    NetworkModel(
-                        name=GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
-                        fpath=self.gpt2_engine.fpath,
-                    ),
-                ],
-            ),
+            median_runtime=median_runtime,
+            models=models,
         )
 
     def run_trt(
@@ -227,7 +251,12 @@ class GPT2Polygraphy(TRTInferenceCommand):
         keep_torch_model: bool,
         timing_profile: TimingProfile,
         batch_size: int = 1,
-    ) -> List[NetworkResult]:
+        args: object = None,
+        benchmarking_mode: bool = False,
+    ) -> Union[List[NetworkResult], BenchmarkingResult]:
+
+        assert batch_size == 1, "GPT2 trt can only support batch_size=1 for now."
+
         workspace = NNFolderWorkspace(
             self.frameworks_cmd.config.network_name, metadata, working_directory
         )
@@ -255,7 +284,10 @@ class GPT2Polygraphy(TRTInferenceCommand):
             ].fpath
 
             # Generate optimization profiles.
-            max_sequence_length = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+            if not benchmarking_mode:
+                max_sequence_length = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+            else:
+                max_sequence_length = args.output_seq_len
             profiles = [Profile().add(
                 "input_ids",
                 min=(batch_size, 1),
@@ -264,20 +296,27 @@ class GPT2Polygraphy(TRTInferenceCommand):
             )]
 
             # Build the engine.
+            engine_tag = "-inseq{}-outseq{}".format(args.input_seq_len, args.output_seq_len) if benchmarking_mode else ""
             self.gpt2_engine = GPT2ONNXFile(gpt2_onnx_fpath, metadata).as_trt_engine(
-                gpt2_onnx_fpath + ".engine",
+                gpt2_onnx_fpath + engine_tag + ".engine",
                 profiles=profiles,
             )
             tfm_config = GPT2Config(
                 use_cache=metadata.other.kv_cache,
             )
-            self.gpt2_trt = GPT2TRTDecoder(self.gpt2_engine, metadata, tfm_config)
+            self.gpt2_trt = GPT2TRTDecoder(self.gpt2_engine, metadata, tfm_config, batch_size, max_sequence_length)
 
-            for ninput in network_input:
-                results.append(
-                    self.execute_inference(
-                        metadata, hash_onnx_fpath, ninput, timing_profile
+            if not benchmarking_mode:
+                for ninput in network_input:
+                    results.append(
+                        self.execute_inference(
+                            metadata, hash_onnx_fpath, ninput, timing_profile
+                        )
                     )
+            else:
+                benchmarking_args = GPT2BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
+                results = self.execute_inference(
+                    metadata, hash_onnx_fpath, None, timing_profile, True, benchmarking_args
                 )
 
         finally:
