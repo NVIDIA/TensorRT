@@ -1,5 +1,5 @@
 onnx==1.10.2
-tensorflow-gpu==2.5.1; (platform_machine=="x86_64" and sys.platform=="linux")
+tensorflow-gpu==2.7.2; (platform_machine=="x86_64" and sys.platform=="linux")
 onnxruntime==1.8.1
 -f https://download.pytorch.org/whl/cu113/torch_stable.html
 torch==1.10.2+cu113
