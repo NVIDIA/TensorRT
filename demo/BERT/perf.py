@@ -17,6 +17,7 @@
 
 import argparse
 import ctypes
+import time
 import numpy as np
 import tensorrt as trt
 import pycuda.driver as cuda
@@ -44,6 +45,7 @@ def main():
     parser.add_argument('-s', '--sequence-length', default=128, help='Sequence length of the BERT model', type=int)
     parser.add_argument('-i', '--iterations', default=200, help='Number of iterations to run when benchmarking each batch size.', type=int)
     parser.add_argument('-w', '--warm-up-runs', default=10, help='Number of iterations to run prior to benchmarking.', type=int)
+    parser.add_argument('-d', '--duration', default=0.0, help='Minimal number of seconds to run when benchmarking each batch size.', type=float)
     parser.add_argument('-r', '--random-seed', required=False, default=12345, help='Random seed.', type=int)
     args, _ = parser.parse_known_args()
     args.batch_size = args.batch_size or [1]
@@ -118,12 +120,15 @@ def main():
 
             # Timing loop
             times = []
-            for _ in range(args.iterations):
+            actual_iterations = 0
+            start_time = time.time()
+            while actual_iterations < args.iterations or (time.time() - start_time) < args.duration:
                 start.record(stream)
                 context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
                 end.record(stream)
                 stream.synchronize()
                 times.append(end.time_since(start))
+                actual_iterations += 1
 
             # Compute average time, 95th percentile time and 99th percentile time.
             bench_times[batch_size] = times
@@ -132,11 +137,11 @@ def main():
 
         for batch_size, times in bench_times.items():
             total_time = sum(times)
-            avg_time = total_time / float(len(times))
+            avg_time = total_time / float(actual_iterations)
             times.sort()
-            percentile95 = times[int(len(times) * 0.95)]
-            percentile99 = times[int(len(times) * 0.99)]
-            print("Running {:} iterations with Batch Size: {:}\n\tTotal Time: {:} ms \tAverage Time: {:} ms\t95th Percentile Time: {:} ms\t99th Percentile Time: {:}".format(args.iterations, batch_size, total_time, avg_time, percentile95, percentile99))
+            percentile95 = times[int(actual_iterations * 0.95)]
+            percentile99 = times[int(actual_iterations * 0.99)]
+            print("Running {:} iterations with Batch Size: {:}\n\tTotal Time: {:} ms \tAverage Time: {:} ms\t95th Percentile Time: {:} ms\t99th Percentile Time: {:}".format(actual_iterations, batch_size, total_time, avg_time, percentile95, percentile99))
 
 
 if __name__ == '__main__':
