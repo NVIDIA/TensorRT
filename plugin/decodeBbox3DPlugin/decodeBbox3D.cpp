@@ -75,8 +75,8 @@ DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, fl
     for(size_t i = 0; i < anchors.size(); i++)
         anchors_.push_back(anchors[i]);
     num_classes_ = int(anchor_bottom_height_.size());
-    PLUGIN_ASSERT(num_classes_ > 0);
-    PLUGIN_ASSERT(static_cast<size_t>(num_classes_) * 2 * 4 == anchors_.size());
+    PLUGIN_VALIDATE(num_classes_ > 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(num_classes_) * 2 * 4 == anchors_.size());
 }
 
 DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max,
@@ -100,8 +100,8 @@ DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, fl
     for(size_t i = 0; i < anchors.size(); i++)
         anchors_.push_back(anchors[i]);
     num_classes_ = int(anchor_bottom_height_.size());
-    PLUGIN_ASSERT(num_classes_ > 0);
-    PLUGIN_ASSERT(static_cast<size_t>(num_classes_) * 2 * 4 == anchors_.size());
+    PLUGIN_VALIDATE(num_classes_ > 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(num_classes_) * 2 * 4 == anchors_.size());
 }
 
 DecodeBbox3DPlugin::DecodeBbox3DPlugin(const void* data, size_t length)
@@ -130,17 +130,19 @@ DecodeBbox3DPlugin::DecodeBbox3DPlugin(const void* data, size_t length)
 
 nvinfer1::IPluginV2DynamicExt* DecodeBbox3DPlugin::clone() const noexcept
 {
-    auto* plugin = new DecodeBbox3DPlugin(
-        min_x_range_, max_x_range_, min_y_range_,
-        max_y_range_, min_z_range_, max_z_range_,
-        num_dir_bins_,
-        dir_offset_, dir_limit_offset_,
-        anchor_bottom_height_,
-        anchors_, score_thresh_,
-        feature_h_, feature_w_
-    );
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        auto* plugin = new DecodeBbox3DPlugin(min_x_range_, max_x_range_, min_y_range_, max_y_range_, min_z_range_,
+            max_z_range_, num_dir_bins_, dir_offset_, dir_limit_offset_, anchor_bottom_height_, anchors_, score_thresh_,
+            feature_h_, feature_w_);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 nvinfer1::DimsExprs DecodeBbox3DPlugin::getOutputDimensions(
@@ -393,88 +395,93 @@ const PluginFieldCollection* DecodeBbox3DPluginCreator::getFieldNames() noexcept
 
 IPluginV2* DecodeBbox3DPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    int nbFields = fc->nbFields;
-    float point_cloud_range[6] = {0.0f};
-    std::vector<float> anchors{};
-    std::vector<float> anchor_bottom_height{};
-    float dir_offset = 0.78539f;
-    float dir_limit_offset = 0.0f;
-    int num_dir_bins = 2;
-    float score_thresh = 0.1f;
-    for (int i = 0; i < nbFields; ++i)
+    try
     {
-        const char* attr_name = fields[i].name;
-        if(!strcmp(attr_name, "point_cloud_range"))
+        const PluginField* fields = fc->fields;
+        int nbFields = fc->nbFields;
+        float point_cloud_range[6] = {0.0f};
+        std::vector<float> anchors{};
+        std::vector<float> anchor_bottom_height{};
+        float dir_offset = 0.78539f;
+        float dir_limit_offset = 0.0f;
+        int num_dir_bins = 2;
+        float score_thresh = 0.1f;
+        for (int i = 0; i < nbFields; ++i)
         {
-            const float* d = static_cast<const float*>(fields[i].data);
-            point_cloud_range[0] = d[0];
-            point_cloud_range[1] = d[1];
-            point_cloud_range[2] = d[2];
-            point_cloud_range[3] = d[3];
-            point_cloud_range[4] = d[4];
-            point_cloud_range[5] = d[5];
-        }
-        else if(!strcmp(attr_name, "anchors"))
-        {
-            const float* as = static_cast<const float*>(fields[i].data);
-            for (int j = 0; j < fields[i].length; ++j)
+            const char* attr_name = fields[i].name;
+            if (!strcmp(attr_name, "point_cloud_range"))
             {
-                anchors.push_back(*as);
-                ++as;
+                const float* d = static_cast<const float*>(fields[i].data);
+                point_cloud_range[0] = d[0];
+                point_cloud_range[1] = d[1];
+                point_cloud_range[2] = d[2];
+                point_cloud_range[3] = d[3];
+                point_cloud_range[4] = d[4];
+                point_cloud_range[5] = d[5];
+            }
+            else if (!strcmp(attr_name, "anchors"))
+            {
+                const float* as = static_cast<const float*>(fields[i].data);
+                for (int j = 0; j < fields[i].length; ++j)
+                {
+                    anchors.push_back(*as);
+                    ++as;
+                }
+            }
+            else if (!strcmp(attr_name, "anchor_bottom_height"))
+            {
+                const float* ah = static_cast<const float*>(fields[i].data);
+                for (int j = 0; j < fields[i].length; ++j)
+                {
+                    anchor_bottom_height.push_back(*ah);
+                    ++ah;
+                }
+            }
+            else if (!strcmp(attr_name, "dir_offset"))
+            {
+                const float* d = static_cast<const float*>(fields[i].data);
+                dir_offset = d[0];
+            }
+            else if (!strcmp(attr_name, "dir_limit_offset"))
+            {
+                const float* d = static_cast<const float*>(fields[i].data);
+                dir_limit_offset = d[0];
+            }
+            else if (!strcmp(attr_name, "num_dir_bins"))
+            {
+                const int* d = static_cast<const int*>(fields[i].data);
+                num_dir_bins = d[0];
+            }
+            else if (!strcmp(attr_name, "score_thresh"))
+            {
+                const float* d = static_cast<const float*>(fields[i].data);
+                score_thresh = d[0];
             }
         }
-        else if(!strcmp(attr_name, "anchor_bottom_height"))
-        {
-            const float* ah = static_cast<const float*>(fields[i].data);
-            for (int j = 0; j < fields[i].length; ++j)
-            {
-                anchor_bottom_height.push_back(*ah);
-                ++ah;
-            }
-        }
-        else if(!strcmp(attr_name, "dir_offset"))
-        {
-            const float* d = static_cast<const float*>(fields[i].data);
-            dir_offset = d[0];
-        }
-        else if(!strcmp(attr_name, "dir_limit_offset"))
-        {
-            const float* d = static_cast<const float*>(fields[i].data);
-            dir_limit_offset = d[0];
-        }
-        else if(!strcmp(attr_name, "num_dir_bins"))
-        {
-            const int* d = static_cast<const int*>(fields[i].data);
-            num_dir_bins = d[0];
-        }
-        else if(!strcmp(attr_name, "score_thresh"))
-        {
-            const float* d = static_cast<const float*>(fields[i].data);
-            score_thresh = d[0];
-        }
+        IPluginV2* plugin = new DecodeBbox3DPlugin(point_cloud_range[0], point_cloud_range[3], point_cloud_range[1],
+            point_cloud_range[4], point_cloud_range[2], point_cloud_range[5], num_dir_bins, dir_offset,
+            dir_limit_offset, anchor_bottom_height, anchors, score_thresh);
+        return plugin;
     }
-    IPluginV2* plugin = new DecodeBbox3DPlugin(
-        point_cloud_range[0],
-        point_cloud_range[3],
-        point_cloud_range[1],
-        point_cloud_range[4],
-        point_cloud_range[2],
-        point_cloud_range[5],
-        num_dir_bins,
-        dir_offset,
-        dir_limit_offset,
-        anchor_bottom_height,
-        anchors,
-        score_thresh
-    );
-    return plugin;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2* DecodeBbox3DPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    return new DecodeBbox3DPlugin(serialData, serialLength);
+    try
+    {
+        return new DecodeBbox3DPlugin(serialData, serialLength);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void DecodeBbox3DPluginCreator::setPluginNamespace(const char* libNamespace) noexcept

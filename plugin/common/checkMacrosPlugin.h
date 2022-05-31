@@ -93,6 +93,7 @@ extern LogStream<ILogger::Severity::kWARNING> gLogWarning;
 extern LogStream<ILogger::Severity::kINFO> gLogInfo;
 extern LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
+void reportValidationFailure(char const* msg, char const* file, int line);
 void reportAssertion(const char* msg, const char* file, int line);
 void logError(const char* msg, const char* file, const char* fn, int line);
 
@@ -102,6 +103,8 @@ void logError(const char* msg, const char* file, const char* fn, int line);
     const char* file, const char* function, int line, int status, const char* msg = nullptr);
 [[noreturn]] void throwCublasError(
     const char* file, const char* function, int line, int status, const char* msg = nullptr);
+[[noreturn]] void throwPluginError(
+    char const* file, char const* function, int line, int status, char const* msg = nullptr);
 
 class TRTException : public std::exception
 {
@@ -154,6 +157,14 @@ public:
     }
 };
 
+class PluginError : public TRTException
+{
+public:
+    PluginError(char const* fl, char const* fn, int ln, int stat, char const* msg = nullptr)
+        : TRTException(fl, fn, ln, stat, msg, "Plugin")
+    {
+    }
+};
 
 inline void caughtError(const std::exception& e)
 {
@@ -237,6 +248,20 @@ inline void caughtError(const std::exception& e)
         }                                                                                                              \
     }
 
+// Logs failed condition and throws a PluginError.
+// PLUGIN_ASSERT will eventually perform this function, at which point PLUGIN_VALIDATE
+// will be removed.
+#define PLUGIN_VALIDATE(condition)                                                                                        \
+    {                                                                                                                  \
+        if (!(condition))                                                                                              \
+        {                                                                                                              \
+            nvinfer1::plugin::throwPluginError(__FILE__, FN_NAME, __LINE__, 0, #condition);                               \
+        }                                                                                                              \
+    }
+
+// Logs failed assertion and aborts.
+// Aborting is undesirable and will be phased-out from the plugin module, at which point
+// PLUGIN_ASSERT will perform the same function as PLUGIN_VALIDATE.
 #define PLUGIN_ASSERT(assertion)                                                                                       \
     {                                                                                                                  \
         if (!(assertion))                                                                                              \

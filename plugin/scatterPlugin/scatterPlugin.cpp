@@ -90,7 +90,6 @@ bool ScatterND::supportsFormatCombination(
 
 void ScatterND::configurePlugin(const DynamicPluginTensorDesc* in, int32_t nbInputs, const DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept
 {
-
 }
 
 int32_t ScatterND::calculateNumSlices(Dims indexTensorDims) const noexcept
@@ -122,7 +121,6 @@ void ScatterND::calculateTransformCoeff(const Dims& dataTensorDims, int indexRan
     std::reverse(pitches.begin(), pitches.end()); //last dimension pitch is always one (assuming linear mem)
 
     std::copy(pitches.begin(), pitches.end(), transformCoeff);
-
 }
 
 int32_t ScatterND::calculateCopySize(const Dims& dataDims) const noexcept
@@ -201,8 +199,6 @@ void ScatterND::serialize(void* buffer) const noexcept
     return;
 }
 
-
-
 // Set plugin namespace
 void ScatterND::setPluginNamespace(const char* pluginNamespace) noexcept
 {
@@ -248,10 +244,18 @@ void ScatterND::destroy() noexcept
 // Clone the plugin
 IPluginV2DynamicExt* ScatterND::clone() const noexcept
 {
-    // Create a new instance
-    ScatterND* plugin = new ScatterND();
-    plugin->setPluginNamespace(mPluginNamespace.c_str());
-    return plugin;
+    try
+    {
+        // Create a new instance
+        ScatterND* plugin = new ScatterND();
+        plugin->setPluginNamespace(mPluginNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 ScatterNDPluginCreator::ScatterNDPluginCreator()
@@ -275,17 +279,34 @@ const PluginFieldCollection* ScatterNDPluginCreator::getFieldNames() noexcept
 }
 
 IPluginV2Ext* ScatterNDPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
-{    
-    ScatterND* obj = new ScatterND();
-    obj->setPluginNamespace(mNamespace.c_str());
-    return obj;
+{
+    try
+    {
+        ScatterND* obj = new ScatterND();
+        obj->setPluginNamespace(mNamespace.c_str());
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-IPluginV2Ext* ScatterNDPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2Ext* ScatterNDPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed, which will
-    // call Normalize::destroy()
-    ScatterND* obj = new ScatterND();
-    obj->setPluginNamespace(mNamespace.c_str());
-    return obj;
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call Normalize::destroy()
+        ScatterND* obj = new ScatterND();
+        obj->setPluginNamespace(mNamespace.c_str());
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }

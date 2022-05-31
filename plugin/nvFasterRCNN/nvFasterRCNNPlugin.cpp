@@ -41,7 +41,7 @@ RPROIPlugin::RPROIPlugin(RPROIParams params, const float* anchorsRatios, const f
      * It only supports the scenario where params.featureStride == params.minBoxSize
      * assert(params.featureStride == params.minBoxSize);
      */
-    PLUGIN_ASSERT(params.anchorsRatioCount > 0 && params.anchorsScaleCount > 0);
+    PLUGIN_VALIDATE(params.anchorsRatioCount > 0 && params.anchorsScaleCount > 0);
     anchorsRatiosHost = copyToHost(anchorsRatios, params.anchorsRatioCount);
     anchorsScalesHost = copyToHost(anchorsScales, params.anchorsScaleCount);
 
@@ -49,7 +49,7 @@ RPROIPlugin::RPROIPlugin(RPROIParams params, const float* anchorsRatios, const f
         cudaMalloc((void**) &anchorsDev, 4 * params.anchorsRatioCount * params.anchorsScaleCount * sizeof(float)));
     pluginStatus_t status = generateAnchors(0, params.anchorsRatioCount, anchorsRatiosHost, params.anchorsScaleCount,
         anchorsScalesHost, params.featureStride, anchorsDev);
-    PLUGIN_ASSERT(status == STATUS_SUCCESS);
+    PLUGIN_VALIDATE(status == STATUS_SUCCESS);
 
     deviceSmemSize = getSmemSize();
 }
@@ -68,7 +68,7 @@ RPROIPlugin::RPROIPlugin(RPROIParams params, const float* anchorsRatios, const f
     , outFeatureType(outFeatureType)
     , inFeatureLayout(inFeatureLayout)
 {
-    PLUGIN_ASSERT(params.anchorsRatioCount > 0 && params.anchorsScaleCount > 0);
+    PLUGIN_VALIDATE(params.anchorsRatioCount > 0 && params.anchorsScaleCount > 0);
     anchorsRatiosHost = copyToHost(anchorsRatios, params.anchorsRatioCount);
     anchorsScalesHost = copyToHost(anchorsScales, params.anchorsScaleCount);
 
@@ -99,13 +99,13 @@ RPROIPlugin::RPROIPlugin(const void* data, size_t length)
     d += params.anchorsRatioCount * sizeof(float);
     anchorsScalesHost = copyToHost(d, params.anchorsScaleCount);
     d += params.anchorsScaleCount * sizeof(float);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 
     PLUGIN_CHECK(
         cudaMalloc((void**) &anchorsDev, 4 * params.anchorsRatioCount * params.anchorsScaleCount * sizeof(float)));
     pluginStatus_t status = generateAnchors(0, params.anchorsRatioCount, anchorsRatiosHost, params.anchorsScaleCount,
         anchorsScalesHost, params.featureStride, anchorsDev);
-    PLUGIN_ASSERT(status == STATUS_SUCCESS);
+    PLUGIN_VALIDATE(status == STATUS_SUCCESS);
 
     deviceSmemSize = getSmemSize();
 }
@@ -291,10 +291,18 @@ void RPROIPlugin::destroy() noexcept
 
 IPluginV2Ext* RPROIPlugin::clone() const noexcept
 {
-    IPluginV2Ext* plugin = new RPROIPlugin(params, anchorsRatiosHost, anchorsScalesHost, A, C, H, W, anchorsDev,
-        deviceSmemSize, inFeatureType, outFeatureType, inFeatureLayout);
-    plugin->setPluginNamespace(mPluginNamespace.c_str());
-    return plugin;
+    try
+    {
+        IPluginV2Ext* plugin = new RPROIPlugin(params, anchorsRatiosHost, anchorsScalesHost, A, C, H, W, anchorsDev,
+            deviceSmemSize, inFeatureType, outFeatureType, inFeatureLayout);
+        plugin->setPluginNamespace(mPluginNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 // Set plugin namespace
@@ -418,98 +426,115 @@ const PluginFieldCollection* RPROIPluginCreator::getFieldNames() noexcept
 
 IPluginV2Ext* RPROIPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    int nbFields = fc->nbFields;
-
-    for (int i = 0; i < nbFields; ++i)
+    try
     {
-        const char* attrName = fields[i].name;
-        if (!strcmp(attrName, "poolingH"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.poolingH = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "poolingW"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.poolingW = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "featureStride"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.featureStride = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "preNmsTop"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.preNmsTop = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "nmsMaxOut"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.nmsMaxOut = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "anchorsRatioCount"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.anchorsRatioCount = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "anchorsScaleCount"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.anchorsScaleCount = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "iouThreshold"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            params.iouThreshold = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
-        }
-        if (!strcmp(attrName, "minBoxSize"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            params.minBoxSize = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
-        }
-        if (!strcmp(attrName, "spatialScale"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            params.spatialScale = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
-        }
-        if (!strcmp(attrName, "anchorsRatios"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            anchorsRatios.reserve(params.anchorsRatioCount);
-            const float* ratios = static_cast<const float*>(fields[i].data);
-            for (int j = 0; j < params.anchorsRatioCount; ++j)
-            {
-                anchorsRatios.push_back(*ratios);
-                ratios++;
-            }
-        }
-        if (!strcmp(attrName, "anchorsScales"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            anchorsScales.reserve(params.anchorsScaleCount);
-            const float* scales = static_cast<const float*>(fields[i].data);
-            for (int j = 0; j < params.anchorsScaleCount; ++j)
-            {
-                anchorsScales.push_back(*scales);
-                scales++;
-            }
-        }
-    }
+        const PluginField* fields = fc->fields;
+        int nbFields = fc->nbFields;
 
-    // This object will be deleted when the network is destroyed, which will
-    // call RPROIPlugin::terminate()
-    RPROIPlugin* plugin = new RPROIPlugin(params, anchorsRatios.data(), anchorsScales.data());
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+        for (int i = 0; i < nbFields; ++i)
+        {
+            const char* attrName = fields[i].name;
+            if (!strcmp(attrName, "poolingH"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.poolingH = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "poolingW"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.poolingW = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "featureStride"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.featureStride = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "preNmsTop"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.preNmsTop = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "nmsMaxOut"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.nmsMaxOut = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "anchorsRatioCount"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.anchorsRatioCount = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "anchorsScaleCount"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.anchorsScaleCount = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "iouThreshold"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                params.iouThreshold = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
+            }
+            if (!strcmp(attrName, "minBoxSize"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                params.minBoxSize = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
+            }
+            if (!strcmp(attrName, "spatialScale"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                params.spatialScale = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
+            }
+            if (!strcmp(attrName, "anchorsRatios"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                anchorsRatios.reserve(params.anchorsRatioCount);
+                const float* ratios = static_cast<const float*>(fields[i].data);
+                for (int j = 0; j < params.anchorsRatioCount; ++j)
+                {
+                    anchorsRatios.push_back(*ratios);
+                    ratios++;
+                }
+            }
+            if (!strcmp(attrName, "anchorsScales"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                anchorsScales.reserve(params.anchorsScaleCount);
+                const float* scales = static_cast<const float*>(fields[i].data);
+                for (int j = 0; j < params.anchorsScaleCount; ++j)
+                {
+                    anchorsScales.push_back(*scales);
+                    scales++;
+                }
+            }
+        }
+
+        // This object will be deleted when the network is destroyed, which will
+        // call RPROIPlugin::terminate()
+        RPROIPlugin* plugin = new RPROIPlugin(params, anchorsRatios.data(), anchorsScales.data());
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-IPluginV2Ext* RPROIPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2Ext* RPROIPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed, which will
-    // call RPROIPlugin::terminate()
-    RPROIPlugin* plugin = new RPROIPlugin(serialData, serialLength);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call RPROIPlugin::terminate()
+        RPROIPlugin* plugin = new RPROIPlugin(serialData, serialLength);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }

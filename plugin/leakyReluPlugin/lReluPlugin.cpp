@@ -39,7 +39,7 @@ LReLU::LReLU(const void* buffer, size_t length)
     const char *d = reinterpret_cast<const char*>(buffer), *a = d;
     mNegSlope = read<float>(d);
     mBatchDim = read<int>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 int LReLU::getNbOutputs() const noexcept
@@ -123,9 +123,17 @@ void LReLU::destroy() noexcept
 
 IPluginV2* LReLU::clone() const noexcept
 {
-    IPluginV2* plugin = new LReLU(mNegSlope);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        IPluginV2* plugin = new LReLU(mNegSlope);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 LReluPluginCreator::LReluPluginCreator()
@@ -154,18 +162,34 @@ const PluginFieldCollection* LReluPluginCreator::getFieldNames() noexcept
 
 IPluginV2* LReluPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    PLUGIN_ASSERT(fc->nbFields == 1);
-    PLUGIN_ASSERT(fields[0].type == PluginFieldType::kFLOAT32);
-    float negSlope = *(static_cast<const float*>(fields[0].data));
+    try
+    {
+        const PluginField* fields = fc->fields;
+        PLUGIN_VALIDATE(fc->nbFields == 1);
+        PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kFLOAT32);
+        float negSlope = *(static_cast<const float*>(fields[0].data));
 
-    return new LReLU(negSlope);
+        return new LReLU(negSlope);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2* LReluPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed, which will
-    // call LReluPlugin::destroy()
-    return new LReLU(serialData, serialLength);
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call LReluPlugin::destroy()
+        return new LReLU(serialData, serialLength);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 // LeakReLU }}}

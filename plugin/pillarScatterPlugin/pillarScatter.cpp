@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#include <cstring>
 #include "pillarScatter.h"
+#include <cstring>
 
 using namespace nvinfer1;
 using nvinfer1::plugin::PillarScatterPlugin;
@@ -47,7 +47,8 @@ T readFromBuffer(const char*& buffer)
 }
 
 PillarScatterPlugin::PillarScatterPlugin(size_t h, size_t w)
-  : feature_y_size_(h), feature_x_size_(w)
+    : feature_y_size_(h)
+    , feature_x_size_(w)
 {
 }
 
@@ -60,9 +61,17 @@ PillarScatterPlugin::PillarScatterPlugin(const void* data, size_t length)
 
 nvinfer1::IPluginV2DynamicExt* PillarScatterPlugin::clone() const noexcept
 {
-    auto* plugin = new PillarScatterPlugin(feature_y_size_, feature_x_size_);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        auto* plugin = new PillarScatterPlugin(feature_y_size_, feature_x_size_);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 nvinfer1::DimsExprs PillarScatterPlugin::getOutputDimensions(
@@ -267,33 +276,46 @@ const PluginFieldCollection* PillarScatterPluginCreator::getFieldNames() noexcep
 
 IPluginV2* PillarScatterPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    int nbFields = fc->nbFields;
-    int target_h = 0;
-    int target_w = 0;
-    for (int i = 0; i < nbFields; ++i)
+    try
     {
-        const char* attr_name = fields[i].name;
-        if (!strcmp(attr_name, "dense_shape"))
+        const PluginField* fields = fc->fields;
+        int nbFields = fc->nbFields;
+        int target_h = 0;
+        int target_w = 0;
+        for (int i = 0; i < nbFields; ++i)
         {
-            const int* ts = static_cast<const int*>(fields[i].data);
-            target_h = ts[0];
-            target_w = ts[1];
+            const char* attr_name = fields[i].name;
+            if (!strcmp(attr_name, "dense_shape"))
+            {
+                const int* ts = static_cast<const int*>(fields[i].data);
+                target_h = ts[0];
+                target_w = ts[1];
+            }
         }
+        IPluginV2* plugin = new PillarScatterPlugin(target_h, target_w);
+        return plugin;
     }
-    IPluginV2* plugin = new PillarScatterPlugin(
-        target_h,
-        target_w
-    );
-    return plugin;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2* PillarScatterPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed,
-    IPluginV2* plugin = new PillarScatterPlugin(serialData, serialLength);
-    return plugin;
+    try
+    {
+        // This object will be deleted when the network is destroyed,
+        IPluginV2* plugin = new PillarScatterPlugin(serialData, serialLength);
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void PillarScatterPluginCreator::setPluginNamespace(const char* libNamespace) noexcept

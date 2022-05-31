@@ -93,7 +93,7 @@ BatchedNMSPlugin::BatchedNMSPlugin(const void* data, size_t length)
     mPrecision = read<DataType>(d);
     mScoreBits = read<int32_t>(d);
     mCaffeSemantics = read<bool>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 
     mPluginStatus = checkParams(param);
 }
@@ -115,7 +115,7 @@ BatchedNMSDynamicPlugin::BatchedNMSDynamicPlugin(const void* data, size_t length
     mPrecision = read<DataType>(d);
     mScoreBits = read<int32_t>(d);
     mCaffeSemantics = read<bool>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 
     mPluginStatus = checkParams(param);
 }
@@ -703,32 +703,32 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const Plug
             }
             else if (!strcmp(attrName, "backgroundLabelId"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.backgroundLabelId = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "numClasses"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.numClasses = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "topK"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.topK = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "keepTopK"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.keepTopK = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "scoreThreshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             else if (!strcmp(attrName, "iouThreshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             else if (!strcmp(attrName, "isNormalized"))
@@ -745,7 +745,7 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(const char* name, const Plug
             }
             else if (!strcmp(attrName, "caffeSemantics"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 caffeSemantics = *(static_cast<const bool*>(fields[i].data));
             }
         }
@@ -784,32 +784,32 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
             }
             else if (!strcmp(attrName, "backgroundLabelId"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.backgroundLabelId = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "numClasses"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.numClasses = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "topK"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.topK = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "keepTopK"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.keepTopK = *(static_cast<const int*>(fields[i].data));
             }
             else if (!strcmp(attrName, "scoreThreshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             else if (!strcmp(attrName, "iouThreshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             else if (!strcmp(attrName, "isNormalized"))
@@ -826,7 +826,7 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
             }
             else if (!strcmp(attrName, "caffeSemantics"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 caffeSemantics = *(static_cast<const bool*>(fields[i].data));
             }
         }

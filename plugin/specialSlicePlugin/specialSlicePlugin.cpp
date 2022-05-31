@@ -55,12 +55,28 @@ const PluginFieldCollection* SpecialSlicePluginCreator::getFieldNames() noexcept
 
 IPluginV2Ext* SpecialSlicePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    return new SpecialSlice();
+    try
+    {
+        return new SpecialSlice();
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2Ext* SpecialSlicePluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
-    return new SpecialSlice(data, length);
+    try
+    {
+        return new SpecialSlice(data, length);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 size_t SpecialSlice::getWorkspaceSize(int) const noexcept
@@ -85,9 +101,17 @@ const char* SpecialSlice::getPluginVersion() const noexcept
 
 IPluginV2Ext* SpecialSlice::clone() const noexcept
 {
-    auto plugin = new SpecialSlice(*this);
-    plugin->setPluginNamespace(mNameSpace.c_str());
-    return plugin;
+    try
+    {
+        auto plugin = new SpecialSlice(*this);
+        plugin->setPluginNamespace(mNameSpace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void SpecialSlice::setPluginNamespace(const char* libNamespace) noexcept
@@ -116,7 +140,7 @@ SpecialSlice::SpecialSlice(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mBboxesCnt = read<int>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 SpecialSlice::SpecialSlice() {}

@@ -52,10 +52,10 @@ EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(const std::string& name, co
     , mMhaType(mhaType)
 {
     // Assuming Weights.count is the number of elements and not bytes
-    PLUGIN_ASSERT(beta.count == gamma.count);
-    PLUGIN_ASSERT(wordEmb.count % mLd == 0);
-    PLUGIN_ASSERT(posEmb.count % mLd == 0);
-    PLUGIN_ASSERT(tokEmb.count % mLd == 0);
+    PLUGIN_VALIDATE(beta.count == gamma.count);
+    PLUGIN_VALIDATE(wordEmb.count % mLd == 0);
+    PLUGIN_VALIDATE(posEmb.count % mLd == 0);
+    PLUGIN_VALIDATE(tokEmb.count % mLd == 0);
     mWordVocabSize = wordEmb.count / mLd;
     mPosVocabSize = posEmb.count / mLd;
     mTokVocabSize = tokEmb.count / mLd;
@@ -588,19 +588,19 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
             if (field_name.compare("output_fp16") == 0)
             {
                 BERT_DEBUG_MSG("Building output_fp16...");
-                PLUGIN_ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 output_fp16 = static_cast<const int*>(fc->fields[i].data)[0] != 0;
             }
             if (field_name.compare("full_mask") == 0)
             {
                 BERT_DEBUG_MSG("Building full_mask...");
-                PLUGIN_ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 useFullMask = static_cast<const int*>(fc->fields[i].data)[0] != 0;
             }
             if (field_name.compare("mha_type_id") == 0)
             {
                 mhaTypeId = *static_cast<const int*>(fc->fields[i].data);
-                PLUGIN_ASSERT(mhaTypeId >= 0 && mhaTypeId <= 3);
+                PLUGIN_VALIDATE(mhaTypeId >= 0 && mhaTypeId <= 3);
                 BERT_DEBUG_VALUE("Building mha typeId: ", mhaTypeId);
             }
         }

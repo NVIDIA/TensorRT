@@ -228,7 +228,7 @@ Region::Region(const void* buffer, size_t length)
     {
         smTree.reset();
     }
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 int Region::getNbOutputs() const noexcept
@@ -404,12 +404,20 @@ void Region::destroy() noexcept
 
 IPluginV2Ext* Region::clone() const noexcept
 {
-    RegionParameters params{num, coords, classes, nullptr};
-    Region* plugin = new Region(params, C, H, W);
-    plugin->setPluginNamespace(mPluginNamespace.c_str());
-    plugin->setSoftmaxTree(smTree);
+    try
+    {
+        RegionParameters params{num, coords, classes, nullptr};
+        Region* plugin = new Region(params, C, H, W);
+        plugin->setPluginNamespace(mPluginNamespace.c_str());
+        plugin->setSoftmaxTree(smTree);
 
-    return plugin;
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 // Set plugin namespace
@@ -496,43 +504,60 @@ const PluginFieldCollection* RegionPluginCreator::getFieldNames() noexcept
 
 IPluginV2Ext* RegionPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    for (int i = 0; i < fc->nbFields; ++i)
+    try
     {
-        const char* attrName = fields[i].name;
-        if (!strcmp(attrName, "num"))
+        const PluginField* fields = fc->fields;
+        for (int i = 0; i < fc->nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.num = *(static_cast<const int*>(fields[i].data));
+            const char* attrName = fields[i].name;
+            if (!strcmp(attrName, "num"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.num = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "coords"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.coords = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "classes"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                params.classes = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "smTree"))
+            {
+                // TODO not sure if this will work
+                void* tmpData = const_cast<void*>(fields[i].data);
+                params.smTree = static_cast<nvinfer1::plugin::softmaxTree*>(tmpData);
+            }
         }
-        if (!strcmp(attrName, "coords"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.coords = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "classes"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            params.classes = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "smTree"))
-        {
-            // TODO not sure if this will work
-            void* tmpData = const_cast<void*>(fields[i].data);
-            params.smTree = static_cast<nvinfer1::plugin::softmaxTree*>(tmpData);
-        }
-    }
 
-    Region* obj = new Region(params);
-    obj->setPluginNamespace(mNamespace.c_str());
-    return obj;
+        Region* obj = new Region(params);
+        obj->setPluginNamespace(mNamespace.c_str());
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-IPluginV2Ext* RegionPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2Ext* RegionPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed, which will
-    // call Region::destroy()
-    Region* obj = new Region(serialData, serialLength);
-    obj->setPluginNamespace(mNamespace.c_str());
-    return obj;
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call Region::destroy()
+        Region* obj = new Region(serialData, serialLength);
+        obj->setPluginNamespace(mNamespace.c_str());
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }

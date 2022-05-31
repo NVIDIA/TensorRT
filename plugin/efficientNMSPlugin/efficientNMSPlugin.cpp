@@ -41,7 +41,7 @@ EfficientNMSPlugin::EfficientNMSPlugin(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mParam = read<EfficientNMSParameters>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 const char* EfficientNMSPlugin::getPluginType() const noexcept
@@ -440,22 +440,22 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(const char* name, c
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "score_threshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "max_output_boxes"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mParam.numOutputBoxes = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "background_class"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mParam.backgroundClass = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "score_activation"))
@@ -464,7 +464,7 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(const char* name, c
             }
             if (!strcmp(attrName, "box_coding"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mParam.boxCoding = *(static_cast<const int*>(fields[i].data));
             }
         }
@@ -539,22 +539,22 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "score_threshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "max_output_boxes_per_class"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mParam.numOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "center_point_box"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mParam.boxCoding = *(static_cast<const int*>(fields[i].data));
             }
         }

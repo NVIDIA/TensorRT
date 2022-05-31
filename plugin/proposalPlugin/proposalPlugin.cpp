@@ -60,7 +60,7 @@ T readFromBuffer(const char*& buffer)
 
 ProposalPlugin::ProposalPlugin(int input_height, int input_width, int rpn_height, int rpn_width, float rpn_std_scaling,
     int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num,
-    const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept
+    const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num)
     : mInputHeight(input_height)
     , mInputWidth(input_width)
     , mRpnHeight(rpn_height)
@@ -87,8 +87,7 @@ ProposalPlugin::ProposalPlugin(int input_height, int input_width, int rpn_height
 
 ProposalDynamicPlugin::ProposalDynamicPlugin(int input_height, int input_width, int rpn_height, int rpn_width,
     float rpn_std_scaling, int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n,
-    int max_box_num, const float* anchor_sizes, int anc_size_num, const float* anchor_ratios,
-    int anc_ratio_num) noexcept
+    int max_box_num, const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num)
     : mInputHeight(input_height)
     , mInputWidth(input_width)
     , mRpnHeight(rpn_height)
@@ -115,7 +114,7 @@ ProposalDynamicPlugin::ProposalDynamicPlugin(int input_height, int input_width, 
 
 ProposalPlugin::ProposalPlugin(int input_height, int input_width, float rpn_std_scaling, int rpn_stride,
     float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num, const float* anchor_sizes,
-    int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept
+    int anc_size_num, const float* anchor_ratios, int anc_ratio_num)
     : mInputHeight(input_height)
     , mInputWidth(input_width)
     , mRpnStdScaling(rpn_std_scaling)
@@ -140,7 +139,7 @@ ProposalPlugin::ProposalPlugin(int input_height, int input_width, float rpn_std_
 
 ProposalDynamicPlugin::ProposalDynamicPlugin(int input_height, int input_width, float rpn_std_scaling, int rpn_stride,
     float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num, const float* anchor_sizes,
-    int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept
+    int anc_size_num, const float* anchor_ratios, int anc_ratio_num)
     : mInputHeight(input_height)
     , mInputWidth(input_width)
     , mRpnStdScaling(rpn_std_scaling)
@@ -163,7 +162,7 @@ ProposalDynamicPlugin::ProposalDynamicPlugin(int input_height, int input_width, 
     }
 }
 
-ProposalPlugin::ProposalPlugin(const void* serial_buf, size_t serial_size) noexcept
+ProposalPlugin::ProposalPlugin(const void* serial_buf, size_t serial_size)
 {
     const char* d = reinterpret_cast<const char*>(serial_buf);
     const char* a = d;
@@ -190,10 +189,10 @@ ProposalPlugin::ProposalPlugin(const void* serial_buf, size_t serial_size) noexc
         mAnchorRatios.push_back(readFromBuffer<float>(a));
     }
 
-    PLUGIN_ASSERT(a == d + serial_size);
+    PLUGIN_VALIDATE(a == d + serial_size);
 }
 
-ProposalDynamicPlugin::ProposalDynamicPlugin(const void* serial_buf, size_t serial_size) noexcept
+ProposalDynamicPlugin::ProposalDynamicPlugin(const void* serial_buf, size_t serial_size)
 {
     const char* d = reinterpret_cast<const char*>(serial_buf);
     const char* a = d;
@@ -220,7 +219,7 @@ ProposalDynamicPlugin::ProposalDynamicPlugin(const void* serial_buf, size_t seri
         mAnchorRatios.push_back(readFromBuffer<float>(a));
     }
 
-    PLUGIN_ASSERT(a == d + serial_size);
+    PLUGIN_VALIDATE(a == d + serial_size);
 }
 
 ProposalPlugin::~ProposalPlugin() noexcept {}
@@ -455,20 +454,36 @@ void ProposalDynamicPlugin::destroy() noexcept
 
 IPluginV2Ext* ProposalPlugin::clone() const noexcept
 {
-    IPluginV2Ext* plugin = new ProposalPlugin(mInputHeight, mInputWidth, mRpnHeight, mRpnWidth, mRpnStdScaling,
-        mRpnStride, mBboxMinSize, mNmsIouThreshold, mPreNmsTopN, mMaxBoxNum, &mAnchorSizes[0], mAnchorSizeNum,
-        &mAnchorRatios[0], mAnchorRatioNum);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        IPluginV2Ext* plugin = new ProposalPlugin(mInputHeight, mInputWidth, mRpnHeight, mRpnWidth, mRpnStdScaling,
+            mRpnStride, mBboxMinSize, mNmsIouThreshold, mPreNmsTopN, mMaxBoxNum, &mAnchorSizes[0], mAnchorSizeNum,
+            &mAnchorRatios[0], mAnchorRatioNum);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2DynamicExt* ProposalDynamicPlugin::clone() const noexcept
 {
-    auto* plugin = new ProposalDynamicPlugin(mInputHeight, mInputWidth, mRpnHeight, mRpnWidth, mRpnStdScaling,
-        mRpnStride, mBboxMinSize, mNmsIouThreshold, mPreNmsTopN, mMaxBoxNum, &mAnchorSizes[0], mAnchorSizeNum,
-        &mAnchorRatios[0], mAnchorRatioNum);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        auto* plugin = new ProposalDynamicPlugin(mInputHeight, mInputWidth, mRpnHeight, mRpnWidth, mRpnStdScaling,
+            mRpnStride, mBboxMinSize, mNmsIouThreshold, mPreNmsTopN, mMaxBoxNum, &mAnchorSizes[0], mAnchorSizeNum,
+            &mAnchorRatios[0], mAnchorRatioNum);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void ProposalPlugin::setPluginNamespace(const char* libNamespace) noexcept
@@ -591,189 +606,221 @@ const PluginFieldCollection* ProposalBasePluginCreator::getFieldNames() noexcept
 
 IPluginV2Ext* ProposalPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    int nbFields = fc->nbFields;
-    int input_height = 0, input_width = 0, rpn_stride = 0, pre_nms_top_n = 0, post_nms_top_n = 0;
-    float roi_min_size = 0.0f, nms_iou_threshold = 0.0f;
-    std::vector<float> anchor_sizes;
-    std::vector<float> anchor_ratios;
-
-    for (int i = 0; i < nbFields; ++i)
+    try
     {
-        const char* attr_name = fields[i].name;
+        const PluginField* fields = fc->fields;
+        int nbFields = fc->nbFields;
+        int input_height = 0, input_width = 0, rpn_stride = 0, pre_nms_top_n = 0, post_nms_top_n = 0;
+        float roi_min_size = 0.0f, nms_iou_threshold = 0.0f;
+        std::vector<float> anchor_sizes;
+        std::vector<float> anchor_ratios;
 
-        if (!strcmp(attr_name, "input_height"))
+        for (int i = 0; i < nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            input_height = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "input_width"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            input_width = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "rpn_stride"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            rpn_stride = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "roi_min_size"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            roi_min_size = *(static_cast<const float*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "nms_iou_threshold"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            nms_iou_threshold = *(static_cast<const float*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "pre_nms_top_n"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            pre_nms_top_n = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "post_nms_top_n"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            post_nms_top_n = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "anchor_sizes"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            const float* as = static_cast<const float*>(fields[i].data);
+            const char* attr_name = fields[i].name;
 
-            for (int j = 0; j < fields[i].length; ++j)
+            if (!strcmp(attr_name, "input_height"))
             {
-                PLUGIN_ASSERT(*as > 0.0f);
-                anchor_sizes.push_back(*as);
-                ++as;
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                input_height = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "input_width"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                input_width = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "rpn_stride"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                rpn_stride = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "roi_min_size"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                roi_min_size = *(static_cast<const float*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "nms_iou_threshold"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                nms_iou_threshold = *(static_cast<const float*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "pre_nms_top_n"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                pre_nms_top_n = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "post_nms_top_n"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                post_nms_top_n = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "anchor_sizes"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                const float* as = static_cast<const float*>(fields[i].data);
+
+                for (int j = 0; j < fields[i].length; ++j)
+                {
+                    PLUGIN_VALIDATE(*as > 0.0f);
+                    anchor_sizes.push_back(*as);
+                    ++as;
+                }
+            }
+            else if (!strcmp(attr_name, "anchor_ratios"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                const float* ar = static_cast<const float*>(fields[i].data);
+
+                // take the square root.
+                for (int j = 0; j < fields[i].length; ++j)
+                {
+                    PLUGIN_VALIDATE(*ar > 0.0f);
+                    anchor_ratios.push_back(std::sqrt(*ar));
+                    ++ar;
+                }
             }
         }
-        else if (!strcmp(attr_name, "anchor_ratios"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            const float* ar = static_cast<const float*>(fields[i].data);
 
-            // take the square root.
-            for (int j = 0; j < fields[i].length; ++j)
-            {
-                PLUGIN_ASSERT(*ar > 0.0f);
-                anchor_ratios.push_back(std::sqrt(*ar));
-                ++ar;
-            }
-        }
+        PLUGIN_VALIDATE(input_height > 0 && input_width > 0 && rpn_stride > 0 && pre_nms_top_n > 0 && post_nms_top_n
+            && roi_min_size >= 0.0f && nms_iou_threshold > 0.0f);
+
+        IPluginV2Ext* plugin = new ProposalPlugin(input_height, input_width, RPN_STD_SCALING, rpn_stride, roi_min_size,
+            nms_iou_threshold, pre_nms_top_n, post_nms_top_n, &anchor_sizes[0], anchor_sizes.size(), &anchor_ratios[0],
+            anchor_ratios.size());
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
     }
-
-    PLUGIN_ASSERT(input_height > 0 && input_width > 0 && rpn_stride > 0 && pre_nms_top_n > 0 && post_nms_top_n
-        && roi_min_size >= 0.0f && nms_iou_threshold > 0.0f);
-
-    IPluginV2Ext* plugin = new ProposalPlugin(input_height, input_width, RPN_STD_SCALING, rpn_stride, roi_min_size,
-        nms_iou_threshold, pre_nms_top_n, post_nms_top_n, &anchor_sizes[0], anchor_sizes.size(), &anchor_ratios[0],
-        anchor_ratios.size());
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2DynamicExt* ProposalDynamicPluginCreator::createPlugin(
     const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    int nbFields = fc->nbFields;
-    int input_height = 0, input_width = 0, rpn_stride = 0, pre_nms_top_n = 0, post_nms_top_n = 0;
-    float roi_min_size = 0.0f, nms_iou_threshold = 0.0f;
-    std::vector<float> anchor_sizes;
-    std::vector<float> anchor_ratios;
-
-    for (int i = 0; i < nbFields; ++i)
+    try
     {
-        const char* attr_name = fields[i].name;
+        const PluginField* fields = fc->fields;
+        int nbFields = fc->nbFields;
+        int input_height = 0, input_width = 0, rpn_stride = 0, pre_nms_top_n = 0, post_nms_top_n = 0;
+        float roi_min_size = 0.0f, nms_iou_threshold = 0.0f;
+        std::vector<float> anchor_sizes;
+        std::vector<float> anchor_ratios;
 
-        if (!strcmp(attr_name, "input_height"))
+        for (int i = 0; i < nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            input_height = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "input_width"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            input_width = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "rpn_stride"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            rpn_stride = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "roi_min_size"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            roi_min_size = *(static_cast<const float*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "nms_iou_threshold"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            nms_iou_threshold = *(static_cast<const float*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "pre_nms_top_n"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            pre_nms_top_n = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "post_nms_top_n"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            post_nms_top_n = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attr_name, "anchor_sizes"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            const float* as = static_cast<const float*>(fields[i].data);
+            const char* attr_name = fields[i].name;
 
-            for (int j = 0; j < fields[i].length; ++j)
+            if (!strcmp(attr_name, "input_height"))
             {
-                PLUGIN_ASSERT(*as > 0.0f);
-                anchor_sizes.push_back(*as);
-                ++as;
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                input_height = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "input_width"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                input_width = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "rpn_stride"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                rpn_stride = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "roi_min_size"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                roi_min_size = *(static_cast<const float*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "nms_iou_threshold"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                nms_iou_threshold = *(static_cast<const float*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "pre_nms_top_n"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                pre_nms_top_n = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "post_nms_top_n"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                post_nms_top_n = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attr_name, "anchor_sizes"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                const float* as = static_cast<const float*>(fields[i].data);
+
+                for (int j = 0; j < fields[i].length; ++j)
+                {
+                    PLUGIN_VALIDATE(*as > 0.0f);
+                    anchor_sizes.push_back(*as);
+                    ++as;
+                }
+            }
+            else if (!strcmp(attr_name, "anchor_ratios"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                const float* ar = static_cast<const float*>(fields[i].data);
+
+                // take the square root.
+                for (int j = 0; j < fields[i].length; ++j)
+                {
+                    PLUGIN_VALIDATE(*ar > 0.0f);
+                    anchor_ratios.push_back(std::sqrt(*ar));
+                    ++ar;
+                }
             }
         }
-        else if (!strcmp(attr_name, "anchor_ratios"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            const float* ar = static_cast<const float*>(fields[i].data);
 
-            // take the square root.
-            for (int j = 0; j < fields[i].length; ++j)
-            {
-                PLUGIN_ASSERT(*ar > 0.0f);
-                anchor_ratios.push_back(std::sqrt(*ar));
-                ++ar;
-            }
-        }
+        PLUGIN_VALIDATE(input_height > 0 && input_width > 0 && rpn_stride > 0 && pre_nms_top_n > 0 && post_nms_top_n
+            && roi_min_size >= 0.0f && nms_iou_threshold > 0.0f);
+
+        IPluginV2DynamicExt* plugin = new ProposalDynamicPlugin(input_height, input_width, RPN_STD_SCALING, rpn_stride,
+            roi_min_size, nms_iou_threshold, pre_nms_top_n, post_nms_top_n, &anchor_sizes[0], anchor_sizes.size(),
+            &anchor_ratios[0], anchor_ratios.size());
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
     }
-
-    PLUGIN_ASSERT(input_height > 0 && input_width > 0 && rpn_stride > 0 && pre_nms_top_n > 0 && post_nms_top_n
-        && roi_min_size >= 0.0f && nms_iou_threshold > 0.0f);
-
-    IPluginV2DynamicExt* plugin = new ProposalDynamicPlugin(input_height, input_width, RPN_STD_SCALING, rpn_stride,
-        roi_min_size, nms_iou_threshold, pre_nms_top_n, post_nms_top_n, &anchor_sizes[0], anchor_sizes.size(),
-        &anchor_ratios[0], anchor_ratios.size());
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2Ext* ProposalPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed,
-    IPluginV2Ext* plugin = new ProposalPlugin(serialData, serialLength);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        // This object will be deleted when the network is destroyed,
+        IPluginV2Ext* plugin = new ProposalPlugin(serialData, serialLength);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2DynamicExt* ProposalDynamicPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed,
-    IPluginV2DynamicExt* plugin = new ProposalDynamicPlugin(serialData, serialLength);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        // This object will be deleted when the network is destroyed,
+        IPluginV2DynamicExt* plugin = new ProposalDynamicPlugin(serialData, serialLength);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }

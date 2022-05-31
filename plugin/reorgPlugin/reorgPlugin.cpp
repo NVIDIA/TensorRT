@@ -45,7 +45,7 @@ Reorg::Reorg(const void* buffer, size_t length)
     H = read<int>(d);
     W = read<int>(d);
     stride = read<int>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 int Reorg::getNbOutputs() const noexcept
@@ -174,9 +174,17 @@ void Reorg::detachFromContext() noexcept {}
 
 IPluginV2Ext* Reorg::clone() const noexcept
 {
-    IPluginV2Ext* plugin = new Reorg(C, H, W, stride);
-    plugin->setPluginNamespace(mPluginNamespace.c_str());
-    return plugin;
+    try
+    {
+        IPluginV2Ext* plugin = new Reorg(C, H, W, stride);
+        plugin->setPluginNamespace(mPluginNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 ReorgPluginCreator::ReorgPluginCreator()
@@ -205,21 +213,38 @@ const PluginFieldCollection* ReorgPluginCreator::getFieldNames() noexcept
 
 IPluginV2Ext* ReorgPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    PLUGIN_ASSERT(fc->nbFields == 1);
-    PLUGIN_ASSERT(fields[0].type == PluginFieldType::kINT32);
-    stride = static_cast<int>(*(static_cast<const int*>(fields[0].data)));
+    try
+    {
+        const PluginField* fields = fc->fields;
+        PLUGIN_VALIDATE(fc->nbFields == 1);
+        PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kINT32);
+        stride = static_cast<int>(*(static_cast<const int*>(fields[0].data)));
 
-    Reorg* obj = new Reorg(stride);
-    obj->setPluginNamespace(mNamespace.c_str());
-    return obj;
+        Reorg* obj = new Reorg(stride);
+        obj->setPluginNamespace(mNamespace.c_str());
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-IPluginV2Ext* ReorgPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2Ext* ReorgPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed, which will
-    // call ReorgPlugin::destroy()
-    Reorg* obj = new Reorg(serialData, serialLength);
-    obj->setPluginNamespace(mNamespace.c_str());
-    return obj;
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call ReorgPlugin::destroy()
+        Reorg* obj = new Reorg(serialData, serialLength);
+        obj->setPluginNamespace(mNamespace.c_str());
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }

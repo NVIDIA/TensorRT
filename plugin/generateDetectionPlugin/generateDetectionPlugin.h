@@ -37,9 +37,9 @@ class GenerateDetection : public IPluginV2Ext
 {
 public:
     GenerateDetection(
-        int num_classes, int keep_topk, float score_threshold, float iou_threshold, const nvinfer1::Dims& image_size) noexcept;
+        int num_classes, int keep_topk, float score_threshold, float iou_threshold, const nvinfer1::Dims& image_size);
 
-    GenerateDetection(const void* data, size_t length) noexcept;
+    GenerateDetection(const void* data, size_t length);
 
     ~GenerateDetection() noexcept override = default;
 

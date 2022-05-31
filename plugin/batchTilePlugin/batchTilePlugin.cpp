@@ -61,7 +61,7 @@ BatchTilePlugin::BatchTilePlugin(const std::string name, const void* data, size_
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mCopySize = readFromBuffer<size_t>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 int BatchTilePlugin::getNbOutputs() const noexcept

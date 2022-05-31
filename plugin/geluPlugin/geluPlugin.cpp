@@ -69,7 +69,7 @@ GeluPluginDynamic::GeluPluginDynamic(const std::string name, const void* data, s
 
     if (mHasBias)
     {
-        PLUGIN_ASSERT(mLd > 0);
+        PLUGIN_VALIDATE(mLd > 0);
         const char* d = static_cast<const char*>(data);
         make_cuda_shared(mBiasDev, deserToDev<char>(d, mLd * getElementSize(mType)));
     }
@@ -77,10 +77,18 @@ GeluPluginDynamic::GeluPluginDynamic(const std::string name, const void* data, s
 // IPluginV2DynamicExt Methods
 nvinfer1::IPluginV2DynamicExt* GeluPluginDynamic::clone() const noexcept
 {
-    gLogVerbose << "GeluPluginDynamic clone\n";
-    auto* plugin = new GeluPluginDynamic(*this);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        gLogVerbose << "GeluPluginDynamic clone\n";
+        auto* plugin = new GeluPluginDynamic(*this);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 nvinfer1::DimsExprs GeluPluginDynamic::getOutputDimensions(

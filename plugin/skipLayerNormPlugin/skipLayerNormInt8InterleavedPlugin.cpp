@@ -80,8 +80,8 @@ SkipLayerNormInterleavedPluginBase::SkipLayerNormInterleavedPluginBase(
     , mLd(beta.count)
     , mParamsOnDevice(false)
 {
-    PLUGIN_ASSERT(mLd > 0);
-    PLUGIN_ASSERT(beta.count == gamma.count);
+    PLUGIN_VALIDATE(mLd > 0);
+    PLUGIN_VALIDATE(beta.count == gamma.count);
     // dataType for beta, gamma weights is always fp16
 
     mParamWordsize = getElementSize(param_type);
@@ -136,22 +136,38 @@ SkipLayerNormInterleavedPluginMTron::SkipLayerNormInterleavedPluginMTron(
 // IPluginV2DynamicExt Methods
 IPluginV2DynamicExt* SkipLayerNormInterleavedPluginHFace::clone() const noexcept
 {
-    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace clone");
+    try
+    {
+        BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace clone");
 
-    auto* p = new SkipLayerNormInterleavedPluginHFace(mLayerName, mBeta, mGamma);
-    p->initialize();
-    p->setPluginNamespace(mNamespace.c_str());
-    return p;
+        auto* p = new SkipLayerNormInterleavedPluginHFace(mLayerName, mBeta, mGamma);
+        p->initialize();
+        p->setPluginNamespace(mNamespace.c_str());
+        return p;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2DynamicExt* SkipLayerNormInterleavedPluginMTron::clone() const noexcept
 {
-    BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron clone");
+    try
+    {
+        BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron clone");
 
-    auto* p = new SkipLayerNormInterleavedPluginMTron(mLayerName, mBeta, mGamma);
-    p->initialize();
-    p->setPluginNamespace(mNamespace.c_str());
-    return p;
+        auto* p = new SkipLayerNormInterleavedPluginMTron(mLayerName, mBeta, mGamma);
+        p->initialize();
+        p->setPluginNamespace(mNamespace.c_str());
+        return p;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 DimsExprs SkipLayerNormInterleavedPluginBase::getOutputDimensions(
@@ -479,7 +495,7 @@ IPluginV2* SkipLayerNormInterleavedPluginHFaceCreator::createPlugin(
 
         return new SkipLayerNormInterleavedPluginHFace(name, beta, gamma);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -499,7 +515,7 @@ IPluginV2* SkipLayerNormInterleavedPluginMTronCreator::createPlugin(
 
         return new SkipLayerNormInterleavedPluginMTron(name, beta, gamma);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -516,7 +532,7 @@ IPluginV2* SkipLayerNormInterleavedPluginHFaceCreator::deserializePlugin(
         BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFaceCreator deserializePlugin");
         return new SkipLayerNormInterleavedPluginHFace(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -533,7 +549,7 @@ IPluginV2* SkipLayerNormInterleavedPluginMTronCreator::deserializePlugin(
         BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTronCreator deserializePlugin");
         return new SkipLayerNormInterleavedPluginMTron(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

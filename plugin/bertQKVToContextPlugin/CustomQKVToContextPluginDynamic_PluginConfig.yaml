@@ -39,16 +39,16 @@ versions:
         - 2
       hidden_size:
         min: "0"
-        max: "pinf"
+        max: "=pinf"
       num_heads:
         min: "0"
-        max: "pinf"
+        max: "=pinf"
       has_mask:
         - 0
         - 1
       dq_probs:
         min: "0"
-        max: "pinf"
+        max: "=pinf"
   "2":
     inputs:
       - input
@@ -88,16 +88,16 @@ versions:
         - 2
       hidden_size:
         min: "0"
-        max: "pinf"
+        max: "=pinf"
       num_heads:
         min: "0"
-        max: "pinf"
+        max: "=pinf"
       has_mask:
         - 0
         - 1
       dq_probs:
         min: "0"
-        max: "pinf"
+        max: "=pinf"
       var_seqlen:
         - 0
         # - 1 Disabled since SM specific tests are not supported yet

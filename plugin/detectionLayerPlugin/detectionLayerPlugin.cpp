@@ -69,22 +69,22 @@ IPluginV2Ext* DetectionLayerPluginCreator::createPlugin(const char* name, const 
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "num_classes"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mNbClasses = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "keep_topk"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mKeepTopK = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "score_threshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mScoreThreshold = *(static_cast<const float*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mIOUThreshold = *(static_cast<const float*>(fields[i].data));
             }
         }
@@ -117,10 +117,10 @@ DetectionLayer::DetectionLayer(int num_classes, int keep_topk, float score_thres
     , mIOUThreshold(iou_threshold)
 {
     mBackgroundLabel = 0;
-    PLUGIN_ASSERT(mNbClasses > 0);
-    PLUGIN_ASSERT(mKeepTopK > 0);
-    PLUGIN_ASSERT(score_threshold >= 0.0f);
-    PLUGIN_ASSERT(iou_threshold > 0.0f);
+    PLUGIN_VALIDATE(mNbClasses > 0);
+    PLUGIN_VALIDATE(mKeepTopK > 0);
+    PLUGIN_VALIDATE(score_threshold >= 0.0f);
+    PLUGIN_VALIDATE(iou_threshold > 0.0f);
 
     mParam.backgroundLabelId = 0;
     mParam.numClasses = mNbClasses;
@@ -229,7 +229,7 @@ DetectionLayer::DetectionLayer(const void* data, size_t length)
     float iou_threshold = read<float>(d);
     mMaxBatchSize = read<int>(d);
     mAnchorsCnt = read<int>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 
     mNbClasses = num_classes;
     mKeepTopK = keep_topk;

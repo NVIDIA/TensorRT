@@ -38,7 +38,7 @@ FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch)
     : mIgnoreBatch(ignoreBatch)
     , mConcatAxisID(concatAxis)
 {
-    PLUGIN_ASSERT(mConcatAxisID == 1 || mConcatAxisID == 2 || mConcatAxisID == 3);
+    PLUGIN_VALIDATE(mConcatAxisID == 1 || mConcatAxisID == 2 || mConcatAxisID == 3);
 }
 
 FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, int outputConcatAxis,
@@ -50,7 +50,7 @@ FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, in
     , mOutputConcatAxis(outputConcatAxis)
     , mNumInputs(numInputs)
 {
-    PLUGIN_ASSERT(mConcatAxisID >= 1 && mConcatAxisID <= 3);
+    PLUGIN_VALIDATE(mConcatAxisID >= 1 && mConcatAxisID <= 3);
 
     std::copy(copySize, copySize + mNumInputs, mCopySize.begin());
     std::copy(inputConcatAxis, inputConcatAxis + mNumInputs, mInputConcatAxis.begin());
@@ -62,7 +62,7 @@ FlattenConcat::FlattenConcat(const void* data, size_t length)
     const char* const a = d;
     mIgnoreBatch = read<bool>(d);
     mConcatAxisID = read<int>(d);
-    PLUGIN_ASSERT(mConcatAxisID >= 1 && mConcatAxisID <= 3);
+    PLUGIN_VALIDATE(mConcatAxisID >= 1 && mConcatAxisID <= 3);
     mOutputConcatAxis = read<int>(d);
     mNumInputs = read<int>(d);
 
@@ -74,7 +74,7 @@ FlattenConcat::FlattenConcat(const void* data, size_t length)
     mCopySize.resize(mNumInputs);
     std::for_each(mCopySize.begin(), mCopySize.end(), [&](size_t& inp) { inp = read<size_t>(d); });
 
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 FlattenConcat::~FlattenConcat() {}
@@ -367,12 +367,12 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(const char* name, const P
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "axis"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mConcatAxisID = *(static_cast<const int*>(fields[i].data));
             }
             if (!strcmp(attrName, "ignoreBatch"))
             {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mIgnoreBatch = *(static_cast<const bool*>(fields[i].data));
             }
         }
