@@ -104,7 +104,7 @@ private:
     std::string mNameSpace;
 };
 
-class DetectionLayerPluginCreator : public BaseCreator
+class DetectionLayerPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     DetectionLayerPluginCreator();

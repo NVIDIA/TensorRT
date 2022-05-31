@@ -100,7 +100,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class GridAnchorBasePluginCreator : public BaseCreator
+class GridAnchorBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     GridAnchorBasePluginCreator();

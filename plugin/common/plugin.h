@@ -36,7 +36,8 @@ typedef enum
 
 namespace nvinfer1
 {
-namespace plugin
+
+namespace pluginInternal
 {
 
 class BasePlugin : public IPluginV2
@@ -65,6 +66,11 @@ public:
 protected:
     std::string mNamespace;
 };
+
+} // namespace pluginInternal
+
+namespace plugin
+{
 
 // Write values into buffer
 template <typename T>

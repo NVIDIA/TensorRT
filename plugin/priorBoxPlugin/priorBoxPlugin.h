@@ -97,7 +97,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class PriorBoxPluginCreator : public BaseCreator
+class PriorBoxPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     PriorBoxPluginCreator();

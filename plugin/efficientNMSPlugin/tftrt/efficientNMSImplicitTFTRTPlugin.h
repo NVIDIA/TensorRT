@@ -81,7 +81,7 @@ protected:
     std::string mNamespace;
 };
 
-class EfficientNMSImplicitTFTRTPluginCreator : public BaseCreator
+class EfficientNMSImplicitTFTRTPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     EfficientNMSImplicitTFTRTPluginCreator();

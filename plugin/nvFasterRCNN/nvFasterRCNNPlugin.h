@@ -111,7 +111,7 @@ private:
     DLayout_t inFeatureLayout;
 };
 
-class RPROIPluginCreator : public BaseCreator
+class RPROIPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     RPROIPluginCreator();

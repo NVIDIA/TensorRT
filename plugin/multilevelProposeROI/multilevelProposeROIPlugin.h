@@ -120,7 +120,7 @@ private:
     std::string mNameSpace;
 };
 
-class MultilevelProposeROIPluginCreator : public BaseCreator
+class MultilevelProposeROIPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     MultilevelProposeROIPluginCreator() noexcept;

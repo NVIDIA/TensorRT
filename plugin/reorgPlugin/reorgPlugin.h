@@ -89,7 +89,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class ReorgPluginCreator : public BaseCreator
+class ReorgPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     ReorgPluginCreator();

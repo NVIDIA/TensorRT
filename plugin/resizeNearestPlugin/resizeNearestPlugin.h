@@ -92,7 +92,7 @@ private:
     std::string mNameSpace;
 };
 
-class ResizeNearestPluginCreator : public BaseCreator
+class ResizeNearestPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     ResizeNearestPluginCreator();

@@ -95,7 +95,7 @@ private:
     std::string mNameSpace;
 };
 
-class SpecialSlicePluginCreator : public BaseCreator
+class SpecialSlicePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     SpecialSlicePluginCreator();

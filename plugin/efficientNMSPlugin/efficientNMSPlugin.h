@@ -70,7 +70,7 @@ protected:
 };
 
 // Standard NMS Plugin Operation
-class EfficientNMSPluginCreator : public BaseCreator
+class EfficientNMSPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     EfficientNMSPluginCreator();
@@ -92,7 +92,7 @@ protected:
 };
 
 // ONNX NonMaxSuppression Op Compatibility
-class EfficientNMSONNXPluginCreator : public BaseCreator
+class EfficientNMSONNXPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     EfficientNMSONNXPluginCreator();

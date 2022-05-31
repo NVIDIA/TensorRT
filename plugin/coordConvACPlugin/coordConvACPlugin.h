@@ -89,7 +89,7 @@ private:
     const char* mPluginNamespace;
 };
 
-class CoordConvACPluginCreator : public BaseCreator
+class CoordConvACPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     CoordConvACPluginCreator();

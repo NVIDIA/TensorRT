@@ -130,7 +130,7 @@ private:
     pluginStatus_t mPluginStatus{};
 };
 
-class BatchedNMSBasePluginCreator : public BaseCreator
+class BatchedNMSBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     BatchedNMSBasePluginCreator();
