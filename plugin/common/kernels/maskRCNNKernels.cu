@@ -1400,7 +1400,7 @@ cudaError_t PerClassNMS(cudaStream_t stream, int N, nvinfer1::DataType dtype, in
         PerClassNMS_kernel<float, float, Threads><<<blocks, threads, 0, stream>>>(samples, NClass, nmsThreshold,
             validSampleCount, inLabel, inBbox, inBboxRefIdx, classStarts, outFlagSamples);
         break;
-    case nvinfer1::DataType::kHALF: 
+    case nvinfer1::DataType::kHALF:
         PerClassNMS_half_kernel<Threads><<<blocks, threads, 0, stream>>>(samples, NClass, nmsThreshold,
             validSampleCount, inLabel, inBbox, inBboxRefIdx, classStarts, outFlagSamples);
         break;
@@ -2436,10 +2436,10 @@ __device__ inline Tfeat interpolateBilinear(const Tfeat* src, xy_t srcDims, floa
     const Tfeat src10 = src[(y1) *srcDims.x + (x0)];
     const Tfeat src11 = src[(y1) *srcDims.x + (x1)];
 
-    const Tfeat src0 = src00 * (1.0 - xAlpha) + src01 * xAlpha;
-    const Tfeat src1 = src10 * (1.0 - xAlpha) + src11 * xAlpha;
+    const Tfeat src0 = src00 * (1.0F - xAlpha) + src01 * xAlpha;
+    const Tfeat src1 = src10 * (1.0F - xAlpha) + src11 * xAlpha;
 
-    return src0 * (1.0 - yAlpha) + src1 * yAlpha;
+    return src0 * (1.0F - yAlpha) + src1 * yAlpha;
 }
 
 template <>
@@ -2464,10 +2464,10 @@ __device__ inline __half interpolateBilinear(const __half* src, xy_t srcDims, fl
     const __half src10 = src[(y1) *srcDims.x + (x0)];
     const __half src11 = src[(y1) *srcDims.x + (x1)];
 
-    const __half src0 = add_fb(mul_fb(src00, (1.0 - xAlpha)), mul_fb(src01, xAlpha));
-    const __half src1 = add_fb(mul_fb(src10, (1.0 - xAlpha)), mul_fb(src11, xAlpha));
+    const __half src0 = add_fb(mul_fb(src00, (1.0F - xAlpha)), mul_fb(src01, xAlpha));
+    const __half src1 = add_fb(mul_fb(src10, (1.0F - xAlpha)), mul_fb(src11, xAlpha));
 
-    return add_fb(mul_fb(src0, (1.0 - yAlpha)), mul_fb(src1, yAlpha));
+    return add_fb(mul_fb(src0, (1.0F - yAlpha)), mul_fb(src1, yAlpha));
 }
 
 template <typename Trois, typename Tfeat>
@@ -2882,20 +2882,16 @@ cudaError_t roiAlignHalfCenter(cudaStream_t stream, int batchSize, int featureCo
     switch (dtype){
         case nvinfer1::DataType::kFLOAT:
         {
-            roiAlignHalfCenter_kernel<float, float><<<blocks, threads, 0, stream>>>(featureCount, roiCount, firstThreshold, inputHeight,
-                inputWidth, rois, layers[0], layerDims[0],
-                layers[1], layerDims[1], layers[2], layerDims[2],
-                layers[3], layerDims[3], layers[4], layerDims[4],
-                pooled, poolDims);
+            roiAlignHalfCenter_kernel<float, float><<<blocks, threads, 0, stream>>>(featureCount, roiCount,
+                firstThreshold, inputHeight, inputWidth, rois, layers[0], layerDims[0], layers[1], layerDims[1],
+                layers[2], layerDims[2], layers[3], layerDims[3], layers[4], layerDims[4], pooled, poolDims);
             break;
         }
-        case nvinfer1::DataType::kHALF: 
-        {            
-            roiAlignHalfCenter_kernel<__half, __half><<<blocks, threads, 0, stream>>>(featureCount, roiCount, firstThreshold, inputHeight,
-            inputWidth, rois, layers[0], layerDims[0],
-            layers[1], layerDims[1], layers[2], layerDims[2],
-            layers[3], layerDims[3], layers[4], layerDims[4],
-            pooled, poolDims);
+        case nvinfer1::DataType::kHALF:
+        {
+            roiAlignHalfCenter_kernel<__half, __half><<<blocks, threads, 0, stream>>>(featureCount, roiCount,
+                firstThreshold, inputHeight, inputWidth, rois, layers[0], layerDims[0], layers[1], layerDims[1],
+                layers[2], layerDims[2], layers[3], layerDims[3], layers[4], layerDims[4], pooled, poolDims);
             break;
         }
         default: PLUGIN_ASSERT(false);

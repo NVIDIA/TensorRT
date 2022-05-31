@@ -148,18 +148,18 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
         dim3 dimIndex2(dims3.d[0], dims3.d[1], dims3.d[2]);
         dim3 dimResult(dimIndex2);
 
-        dim3 block_optimized( kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY );
-        dim3 grid_optimized( (dimResult.z-1)/kDISENTANGLED_TILESIZE+1, (dimResult.y-1)/kDISENTANGLED_TILESIZE+1,
-        dimResult.x);
+        dim3 block_optimized(kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY);
+        dim3 grid_optimized((dimResult.z - 1) / kDISENTANGLED_TILESIZE + 1,
+            (dimResult.y - 1) / kDISENTANGLED_TILESIZE + 1, dimResult.x);
 
-        __half const *data1 = static_cast<__half const *>(inputs[0]);
-        int32_t const *index1 = static_cast<int32_t const *>(inputs[1]);
-        __half const *data2 = static_cast<__half const *>(inputs[2]);
-        int32_t const * index2 = static_cast<int32_t const *>(inputs[3]);
-        __half *result = static_cast<__half*>(outputs[0]);
+        __half const* data1 = static_cast<__half const*>(inputs[0]);
+        int32_t const* index1 = static_cast<int32_t const*>(inputs[1]);
+        __half const* data2 = static_cast<__half const*>(inputs[2]);
+        int32_t const* index2 = static_cast<int32_t const*>(inputs[3]);
+        __half* result = static_cast<__half*>(outputs[0]);
 
-        disentangled_kernel_wrapper_v1<__half>(data1, index1, data2, index2, result, dimData1, dimIndex1,
-        dimData2, dimIndex2, dimResult, block_optimized, grid_optimized, stream);
+        disentangled_kernel_wrapper_v1<__half>(data1, index1, data2, index2, result, dimData1, dimIndex1, dimData2,
+            dimIndex2, dimResult, block_optimized, grid_optimized, stream);
     }
     else if (kDISENTANGLED_VERSION == 2)
     {
@@ -172,8 +172,8 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
         dim3 dimResult(dimData0);
 
         dim3 block_optimized(kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY);
-        dim3 grid_optimized(
-            (dimResult.z - 1) / kDISENTANGLED_TILESIZE + 1, (dimResult.y - 1) / kDISENTANGLED_TILESIZE + 1, dimResult.x);
+        dim3 grid_optimized((dimResult.z - 1) / kDISENTANGLED_TILESIZE + 1,
+            (dimResult.y - 1) / kDISENTANGLED_TILESIZE + 1, dimResult.x);
 
         if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
         {
@@ -182,7 +182,8 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             auto const* data2 = pointer_const_cast<float>(inputs[2]);
             auto* result = pointer_cast<float>(outputs[0]);
             disentangled_kernel_wrapper_v2<float, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(data0, data1, data2,
-                result, dimData0, dimData1, dimData2, dimResult, mFactor, mSpan, block_optimized, grid_optimized, stream);
+                result, dimData0, dimData1, dimData2, dimResult, mFactor, mSpan, block_optimized, grid_optimized,
+                stream);
         }
         else if (inputDesc[0].type == nvinfer1::DataType::kHALF)
         {
@@ -192,7 +193,8 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             auto* result = pointer_cast<__half>(outputs[0]);
             __half factor = __float2half(mFactor);
             disentangled_kernel_wrapper_v2<__half, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(data0, data1, data2,
-                result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized, stream);
+                result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized,
+                stream);
         }
         else if (inputDesc[0].type == nvinfer1::DataType::kINT8)
         {
@@ -202,7 +204,8 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             auto* result = pointer_cast<int8_t>(outputs[0]);
             int8_t factor = int8_t(mFactor);
             disentangled_kernel_wrapper_v2<int8_t, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(data0, data1, data2,
-                result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized, stream);
+                result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized,
+                stream);
         }
     }
 
