@@ -81,7 +81,7 @@ private:
     std::string mNamespace;
 };
 
-class BatchTilePluginCreator : public BaseCreator
+class BatchTilePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     BatchTilePluginCreator();

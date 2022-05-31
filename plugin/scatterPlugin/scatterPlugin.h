@@ -91,7 +91,7 @@ private:
     static constexpr  int dataTensorIdx = 0;
 };
 
-class ScatterNDPluginCreator : public BaseCreator
+class ScatterNDPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     ScatterNDPluginCreator();

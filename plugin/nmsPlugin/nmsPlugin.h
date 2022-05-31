@@ -140,7 +140,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class NMSBasePluginCreator : public BaseCreator
+class NMSBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     NMSBasePluginCreator();

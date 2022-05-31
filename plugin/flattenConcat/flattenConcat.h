@@ -105,7 +105,7 @@ private:
     cublasHandle_t mCublas{nullptr};
 };
 
-class FlattenConcatPluginCreator : public BaseCreator
+class FlattenConcatPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     FlattenConcatPluginCreator();

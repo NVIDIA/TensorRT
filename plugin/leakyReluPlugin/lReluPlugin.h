@@ -28,7 +28,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class LReLU : public BasePlugin
+class LReLU : public nvinfer1::pluginInternal::BasePlugin
 {
 public:
     LReLU(float negSlope);
@@ -71,7 +71,7 @@ private:
     int mBatchDim;
 };
 
-class LReluPluginCreator : public BaseCreator
+class LReluPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     LReluPluginCreator();

@@ -103,7 +103,7 @@ private:
     DataType mPrecision;
 };
 
-class MultilevelCropAndResizePluginCreator : public BaseCreator
+class MultilevelCropAndResizePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     MultilevelCropAndResizePluginCreator() noexcept;

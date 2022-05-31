@@ -104,7 +104,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class NormalizePluginCreator : public BaseCreator
+class NormalizePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     NormalizePluginCreator();

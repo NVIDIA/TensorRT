@@ -142,7 +142,7 @@ private:
     std::string mNamespace;
 };
 
-class CropAndResizeBasePluginCreator : public BaseCreator
+class CropAndResizeBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     CropAndResizeBasePluginCreator();

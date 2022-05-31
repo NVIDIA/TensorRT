@@ -181,7 +181,7 @@ private:
     size_t mAnchorRatioNum;
 };
 
-class ProposalBasePluginCreator : public BaseCreator
+class ProposalBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     ProposalBasePluginCreator() noexcept;

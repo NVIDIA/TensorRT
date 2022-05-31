@@ -112,7 +112,7 @@ private:
     std::string mNameSpace;
 };
 
-class ProposalLayerPluginCreator : public BaseCreator
+class ProposalLayerPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     ProposalLayerPluginCreator();

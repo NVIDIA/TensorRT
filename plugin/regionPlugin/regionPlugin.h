@@ -99,7 +99,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class RegionPluginCreator : public BaseCreator
+class RegionPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     RegionPluginCreator();

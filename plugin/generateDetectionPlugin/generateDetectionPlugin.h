@@ -110,7 +110,7 @@ private:
     std::string mNameSpace;
 };
 
-class GenerateDetectionPluginCreator : public BaseCreator
+class GenerateDetectionPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     GenerateDetectionPluginCreator() noexcept;

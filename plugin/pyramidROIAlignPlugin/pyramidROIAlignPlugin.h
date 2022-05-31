@@ -109,7 +109,7 @@ private:
     std::string mNameSpace;
 };
 
-class PyramidROIAlignPluginCreator : public BaseCreator
+class PyramidROIAlignPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     PyramidROIAlignPluginCreator();

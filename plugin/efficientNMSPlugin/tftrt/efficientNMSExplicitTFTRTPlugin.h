@@ -44,7 +44,7 @@ public:
 };
 
 // TF-TRT CombinedNMS Op Compatibility
-class EfficientNMSExplicitTFTRTPluginCreator : public BaseCreator
+class EfficientNMSExplicitTFTRTPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     EfficientNMSExplicitTFTRTPluginCreator();

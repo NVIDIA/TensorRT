@@ -122,7 +122,7 @@ private:
     InstanceNormFwdContext mContext;
 };
 
-class InstanceNormalizationPluginCreator : public BaseCreator
+class InstanceNormalizationPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     InstanceNormalizationPluginCreator();
