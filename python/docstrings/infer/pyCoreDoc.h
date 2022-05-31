@@ -178,7 +178,7 @@ constexpr const char* set_shape = R"trtdoc(
     This function must be called for any network input tensor that has dynamic dimensions. If ``min``, ``opt``, and ``max`` are the minimum, optimum, and maximum dimensions, and ``real_shape`` is the shape for this input tensor provided to the :class:`INetworkDefinition` ,then the following conditions must hold:
 
     (1) ``len(min)`` == ``len(opt)`` == ``len(max)`` == ``len(real_shape)``
-    (2) 1 <= ``min[i]`` <= ``opt[i]`` <= ``max[i]`` for all ``i``
+    (2) 0 <= ``min[i]`` <= ``opt[i]`` <= ``max[i]`` for all ``i``
     (3) if ``real_shape[i]`` != -1, then ``min[i]`` == ``opt[i]`` == ``max[i]`` == ``real_shape[i]``
 
     This function may (but need not be) called for an input tensor that does not have dynamic dimensions. In this

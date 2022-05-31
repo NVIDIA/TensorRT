@@ -94,7 +94,7 @@ enum class EngineCapability : int32_t
     //!
     kDLA_STANDALONE = 2,
 
-    //! \deprecated Use kSTANDALONE. Deprecated in TensorRT 8.0.
+    //! \deprecated Use kDLA_STANDALONE. Deprecated in TensorRT 8.0.
     kSAFE_DLA TRT_DEPRECATED_ENUM = kDLA_STANDALONE,
 };
 

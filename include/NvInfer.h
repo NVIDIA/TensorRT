@@ -8027,7 +8027,7 @@ enum class MemoryPoolType : int32_t
 {
     //!
     //! kWORKSPACE is used by TensorRT to store intermediate buffers within an operation.
-    //! This is equivalent to the deprecated IBuilderConfig::setMaxWorkspace size and overrides that value.
+    //! This is equivalent to the deprecated IBuilderConfig::setMaxWorkspaceSize and overrides that value.
     //! This defaults to max device memory. Set to a smaller value to restrict tactics that use over the
     //! threshold en masse. For more targeted removal of tactics use the IAlgorithmSelector
     //! interface.
