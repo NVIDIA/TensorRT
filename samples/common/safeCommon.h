@@ -25,6 +25,7 @@
 #include <stdexcept>
 #include <string>
 
+#undef CHECK
 #define CHECK(status)                                                                                                  \
     do                                                                                                                 \
     {                                                                                                                  \

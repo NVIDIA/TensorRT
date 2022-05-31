@@ -454,7 +454,7 @@ public:
         if (mGraph.launch(stream))
         {
             // Collecting layer timing info from current profile index of execution context
-            if (mContext.getProfiler() && !mContext.reportToProfiler())
+            if (mContext.getProfiler() && !mContext.getEnqueueEmitsProfile() && !mContext.reportToProfiler())
             {
                 gLogWarning << "Failed to collect layer timing info from previous CUDA graph launch" << std::endl;
             }
