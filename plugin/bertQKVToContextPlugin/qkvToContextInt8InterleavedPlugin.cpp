@@ -62,7 +62,7 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(
     mSM = getSMVersion();
     // variable sequence length is only supported with the fused MHA kernels
     // we should not override mS!
-    PLUGIN_ASSERT((mSM == kSM_AMPERE_100 || mSM == kSM_AMPERE_10X || mSM == kSM_AMPERE_10B || mSM == kSM_TURING
+    PLUGIN_VALIDATE((mSM == kSM_AMPERE_100 || mSM == kSM_AMPERE_10X || mSM == kSM_AMPERE_10B || mSM == kSM_TURING
                || mSM == kSM_XAVIER)
         && "requesting maxSeqlen not compatible with GPU arch");
     // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
@@ -93,11 +93,19 @@ int QKVToContextInterleavedPlugin::getSMVersion() const noexcept
 // IPluginV2DynamicExt Methods
 nvinfer1::IPluginV2DynamicExt* QKVToContextInterleavedPlugin::clone() const noexcept
 {
-    QKVToContextInterleavedPlugin* ret
-        = new QKVToContextInterleavedPlugin(mLayerName, mHiddenSize, mNumHeads, mDqProbs);
+    try
+    {
+        QKVToContextInterleavedPlugin* ret
+            = new QKVToContextInterleavedPlugin(mLayerName, mHiddenSize, mNumHeads, mDqProbs);
 
-    ret->setPluginNamespace(mNamespace.c_str());
-    return ret;
+        ret->setPluginNamespace(mNamespace.c_str());
+        return ret;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 DimsExprs QKVToContextInterleavedPlugin::getOutputDimensions(
@@ -301,60 +309,76 @@ const PluginFieldCollection* QKVToContextInterleavedPluginCreator::getFieldNames
 
 IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    int hiddenSize = 0;
-    int numHeads = 0;
-
-    float dqProbs = -1;
-
-    for (int i = 0; i < fc->nbFields; i++)
+    try
     {
-        std::string field_name(fc->fields[i].name);
+        int hiddenSize = 0;
+        int numHeads = 0;
 
-        if (field_name.compare("hidden_size") == 0)
+        float dqProbs = -1;
+
+        for (int i = 0; i < fc->nbFields; i++)
         {
-            hiddenSize = *static_cast<const int*>(fc->fields[i].data);
-            BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
+            std::string field_name(fc->fields[i].name);
+
+            if (field_name.compare("hidden_size") == 0)
+            {
+                hiddenSize = *static_cast<const int*>(fc->fields[i].data);
+                BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
+            }
+            if (field_name.compare("num_heads") == 0)
+            {
+                numHeads = *static_cast<const int*>(fc->fields[i].data);
+                BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
+            }
+            if (field_name.compare("dq_probs") == 0)
+            {
+                dqProbs = *static_cast<const float*>(fc->fields[i].data);
+                BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
+            }
         }
-        if (field_name.compare("num_heads") == 0)
+
+        if (hiddenSize <= 0)
         {
-            numHeads = *static_cast<const int*>(fc->fields[i].data);
-            BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
+            gLogError << "QKV: Invalid hiddenSize " << hiddenSize << std::endl;
+            return nullptr;
         }
-        if (field_name.compare("dq_probs") == 0)
+
+        if (numHeads <= 0)
         {
-            dqProbs = *static_cast<const float*>(fc->fields[i].data);
-            BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
+            gLogError << "QKV: Invalid numHeads " << numHeads << std::endl;
+            return nullptr;
         }
-    }
 
-    if (hiddenSize <= 0)
+        if (dqProbs < 0)
+        {
+            gLogInfo << "Using default scale factor\n";
+            dqProbs = 1.F / 127.F;
+        }
+
+        QKVToContextInterleavedPlugin* p = new QKVToContextInterleavedPlugin(name, hiddenSize, numHeads, dqProbs);
+        return p;
+    }
+    catch (std::exception const& e)
     {
-        gLogError << "QKV: Invalid hiddenSize " << hiddenSize << std::endl;
-        return nullptr;
+        caughtError(e);
     }
-
-    if (numHeads <= 0)
-    {
-        gLogError << "QKV: Invalid numHeads " << numHeads << std::endl;
-        return nullptr;
-    }
-
-    if (dqProbs < 0)
-    {
-        gLogInfo << "Using default scale factor\n";
-        dqProbs = 1.F / 127.F;
-    }
-
-    QKVToContextInterleavedPlugin* p = new QKVToContextInterleavedPlugin(name, hiddenSize, numHeads, dqProbs);
-    return p;
+    return nullptr;
 }
 
 IPluginV2* QKVToContextInterleavedPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength)  noexcept
 {
-    // This object will be deleted when the network is destroyed, which will
-    // call QKVToContextInterleavedPlugin::destroy() noexcept
-    return new QKVToContextInterleavedPlugin(name, serialData, serialLength);
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call QKVToContextInterleavedPlugin::destroy() noexcept
+        return new QKVToContextInterleavedPlugin(name, serialData, serialLength);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void QKVToContextInterleavedPluginCreator::setPluginNamespace(const char* libNamespace) noexcept

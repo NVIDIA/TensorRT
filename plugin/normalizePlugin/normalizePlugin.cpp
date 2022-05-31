@@ -41,8 +41,8 @@ Normalize::Normalize(const Weights* weights, int nbWeights, bool acrossSpatial, 
     , eps(eps)
 {
     mNbWeights = nbWeights;
-    PLUGIN_ASSERT(nbWeights == 1);
-    PLUGIN_ASSERT(weights[0].count >= 1);
+    PLUGIN_VALIDATE(nbWeights == 1);
+    PLUGIN_VALIDATE(weights[0].count >= 1);
     mWeights = copyToDevice(weights[0].values, weights[0].count);
 }
 
@@ -56,8 +56,8 @@ Normalize::Normalize(
     , W(W)
 {
     mNbWeights = nbWeights;
-    PLUGIN_ASSERT(nbWeights == 1);
-    PLUGIN_ASSERT(weights[0].count >= 1);
+    PLUGIN_VALIDATE(nbWeights == 1);
+    PLUGIN_VALIDATE(weights[0].count >= 1);
     mWeights = copyToDevice(weights[0].values, weights[0].count);
 }
 
@@ -75,7 +75,7 @@ Normalize::Normalize(const void* buffer, size_t length)
     mNbWeights = read<int>(d);
     int count = read<int>(d);
     mWeights = deserializeToDevice(d, count);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 int Normalize::getNbOutputs() const noexcept
@@ -113,7 +113,7 @@ int Normalize::enqueue(
     void* outputData = outputs[0];
     pluginStatus_t status = normalizeInference(stream, mCublas, acrossSpatial, channelShared, batchSize, C, H, W, eps,
         static_cast<const float*>(mWeights.values), inputData, outputData, workspace);
-    
+
     return status;
 }
 
@@ -251,12 +251,20 @@ void Normalize::destroy() noexcept
 // Clone the plugin
 IPluginV2Ext* Normalize::clone() const noexcept
 {
-    // Create a new instance
-    IPluginV2Ext* plugin = new Normalize(&mWeights, mNbWeights, acrossSpatial, channelShared, eps, C, H, W);
+    try
+    {
+        // Create a new instance
+        IPluginV2Ext* plugin = new Normalize(&mWeights, mNbWeights, acrossSpatial, channelShared, eps, C, H, W);
 
-    // Set the namespace
-    plugin->setPluginNamespace(mPluginNamespace.c_str());
-    return plugin;
+        // Set the namespace
+        plugin->setPluginNamespace(mPluginNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 NormalizePluginCreator::NormalizePluginCreator()
@@ -289,56 +297,73 @@ const PluginFieldCollection* NormalizePluginCreator::getFieldNames() noexcept
 
 IPluginV2Ext* NormalizePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    std::vector<float> weightValues;
-    const PluginField* fields = fc->fields;
-    for (int i = 0; i < fc->nbFields; ++i)
+    try
     {
-        const char* attrName = fields[i].name;
-        if (!strcmp(attrName, "nbWeights"))
+        std::vector<float> weightValues;
+        const PluginField* fields = fc->fields;
+        for (int i = 0; i < fc->nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mNbWeights = *(static_cast<const int*>(fields[i].data));
-        }
-        else if (!strcmp(attrName, "acrossSpatial"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mAcrossSpatial = *(static_cast<const bool*>(fields[i].data));
-        }
-        else if (!strcmp(attrName, "channelShared"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mChannelShared = *(static_cast<const bool*>(fields[i].data));
-        }
-        else if (!strcmp(attrName, "eps"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            mEps = *(static_cast<const float*>(fields[i].data));
-        }
-        else if (!strcmp(attrName, "weights"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            int size = fields[i].length;
-            weightValues.reserve(size);
-            const auto* w = static_cast<const float*>(fields[i].data);
-            for (int j = 0; j < size; j++)
+            const char* attrName = fields[i].name;
+            if (!strcmp(attrName, "nbWeights"))
             {
-                weightValues.push_back(*w);
-                w++;
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                mNbWeights = *(static_cast<const int*>(fields[i].data));
+            }
+            else if (!strcmp(attrName, "acrossSpatial"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                mAcrossSpatial = *(static_cast<const bool*>(fields[i].data));
+            }
+            else if (!strcmp(attrName, "channelShared"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                mChannelShared = *(static_cast<const bool*>(fields[i].data));
+            }
+            else if (!strcmp(attrName, "eps"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                mEps = *(static_cast<const float*>(fields[i].data));
+            }
+            else if (!strcmp(attrName, "weights"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                int size = fields[i].length;
+                weightValues.reserve(size);
+                const auto* w = static_cast<const float*>(fields[i].data);
+                for (int j = 0; j < size; j++)
+                {
+                    weightValues.push_back(*w);
+                    w++;
+                }
             }
         }
-    }
-    Weights weights{DataType::kFLOAT, weightValues.data(), (int64_t) weightValues.size()};
+        Weights weights{DataType::kFLOAT, weightValues.data(), (int64_t) weightValues.size()};
 
-    Normalize* obj = new Normalize(&weights, mNbWeights, mAcrossSpatial, mChannelShared, mEps);
-    obj->setPluginNamespace(mNamespace.c_str());
-    return obj;
+        Normalize* obj = new Normalize(&weights, mNbWeights, mAcrossSpatial, mChannelShared, mEps);
+        obj->setPluginNamespace(mNamespace.c_str());
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-IPluginV2Ext* NormalizePluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2Ext* NormalizePluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    // This object will be deleted when the network is destroyed, which will
-    // call Normalize::destroy()
-    Normalize* obj = new Normalize(serialData, serialLength);
-    obj->setPluginNamespace(mNamespace.c_str());
-    return obj;
+    try
+    {
+        // This object will be deleted when the network is destroyed, which will
+        // call Normalize::destroy()
+        Normalize* obj = new Normalize(serialData, serialLength);
+        obj->setPluginNamespace(mNamespace.c_str());
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }

@@ -39,13 +39,13 @@ class ProposalPlugin : public IPluginV2Ext
 public:
     ProposalPlugin(int input_height, int input_width, int rpn_height, int rpn_width, float rpn_std_scaling,
         int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num,
-        const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept;
+        const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num);
 
     ProposalPlugin(int input_height, int input_width, float rpn_std_scaling, int rpn_stride, float bbox_min_size,
         float nms_iou_threshold, int pre_nms_top_n, int max_box_num, const float* anchor_sizes, int anc_size_num,
-        const float* anchor_ratios, int anc_ratio_num) noexcept;
+        const float* anchor_ratios, int anc_ratio_num);
 
-    ProposalPlugin(const void* serial_buf, size_t serial_size) noexcept;
+    ProposalPlugin(const void* serial_buf, size_t serial_size);
 
     // It doesn't make sense to make ProposalPlugin without arguments, so we delete default constructor.
     ProposalPlugin() noexcept = delete;
@@ -122,13 +122,13 @@ class ProposalDynamicPlugin : public IPluginV2DynamicExt
 public:
     ProposalDynamicPlugin(int input_height, int input_width, int rpn_height, int rpn_width, float rpn_std_scaling,
         int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num,
-        const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num) noexcept;
+        const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num);
 
     ProposalDynamicPlugin(int input_height, int input_width, float rpn_std_scaling, int rpn_stride, float bbox_min_size,
         float nms_iou_threshold, int pre_nms_top_n, int max_box_num, const float* anchor_sizes, int anc_size_num,
-        const float* anchor_ratios, int anc_ratio_num) noexcept;
+        const float* anchor_ratios, int anc_ratio_num);
 
-    ProposalDynamicPlugin(const void* serial_buf, size_t serial_size) noexcept;
+    ProposalDynamicPlugin(const void* serial_buf, size_t serial_size);
 
     // It doesn't make sense to make ProposalDynamicPlugin without arguments, so we delete default constructor.
     ProposalDynamicPlugin() noexcept = delete;

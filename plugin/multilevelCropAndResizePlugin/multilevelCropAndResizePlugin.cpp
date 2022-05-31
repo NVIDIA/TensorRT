@@ -61,38 +61,56 @@ const PluginFieldCollection* MultilevelCropAndResizePluginCreator::getFieldNames
     return &mFC;
 }
 
-IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
 {
-    auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
-    const PluginField* fields = fc->fields;
-    for (int i = 0; i < fc->nbFields; ++i)
+    try
     {
-        const char* attrName = fields[i].name;
-        if (!strcmp(attrName, "pooled_size"))
+        auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
+        const PluginField* fields = fc->fields;
+        for (int i = 0; i < fc->nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mPooledSize = *(static_cast<const int*>(fields[i].data));
+            const char* attrName = fields[i].name;
+            if (!strcmp(attrName, "pooled_size"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                mPooledSize = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "image_size"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                const auto dims = static_cast<const int32_t*>(fields[i].data);
+                std::copy_n(dims, 3, image_size.d);
+            }
         }
-        if (!strcmp(attrName, "image_size"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            const auto dims = static_cast<const int32_t*>(fields[i].data);
-            std::copy_n(dims, 3, image_size.d);
-        }
+        return new MultilevelCropAndResize(mPooledSize, image_size);
     }
-    return new MultilevelCropAndResize(mPooledSize, image_size);
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
+IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(
+    const char* name, const void* data, size_t length) noexcept
 {
-    return new MultilevelCropAndResize(data, length);
+    try
+    {
+        return new MultilevelCropAndResize(data, length);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1::Dims& image_size) noexcept
+MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1::Dims& image_size)
     : mPooledSize({pooled_size, pooled_size})
 {
 
-    PLUGIN_ASSERT(pooled_size > 0);
+    PLUGIN_VALIDATE(pooled_size > 0);
     // shape
     mInputHeight = image_size.d[1];
     mInputWidth = image_size.d[2];
@@ -141,7 +159,15 @@ const char* MultilevelCropAndResize::getPluginVersion() const noexcept
 
 IPluginV2Ext* MultilevelCropAndResize::clone() const noexcept
 {
-    return new MultilevelCropAndResize(*this);
+    try
+    {
+        return new MultilevelCropAndResize(*this);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void MultilevelCropAndResize::setPluginNamespace(const char* libNamespace) noexcept
@@ -235,7 +261,7 @@ void MultilevelCropAndResize::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length) noexcept
+MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length)
 {
     const char *d = reinterpret_cast<const char*>(data), *a = d;
     mPooledSize = {read<int>(d), read<int>(d)};
@@ -251,7 +277,7 @@ MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length
     }
     mPrecision = read<DataType>(d);
 
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 // Return the DataType of the plugin output at the requested index

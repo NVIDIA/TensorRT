@@ -68,7 +68,8 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
     , mType(type)
     , mBiasDev(nullptr)
 {
-    PLUGIN_ASSERT(mType == nvinfer1::DataType::kFLOAT || mType == nvinfer1::DataType::kHALF || mType == nvinfer1::DataType::kINT8);
+    PLUGIN_VALIDATE(mType == nvinfer1::DataType::kFLOAT || mType == nvinfer1::DataType::kHALF
+        || mType == nvinfer1::DataType::kINT8);
     // mCfgType is the dataType for beta, gamma bias weights, always fp16 or fp32
     // mType is the plugin IO datatype, can be int8
     mCfgType = mType == DataType::kINT8 ? DataType::kHALF :  mType;
@@ -105,7 +106,7 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
     deserialize_value(&data, &length, &mLd);
     deserialize_value(&data, &length, &mHasBias);
 
-    PLUGIN_ASSERT(mCfgType == nvinfer1::DataType::kFLOAT || mCfgType == nvinfer1::DataType::kHALF);
+    PLUGIN_VALIDATE(mCfgType == nvinfer1::DataType::kFLOAT || mCfgType == nvinfer1::DataType::kHALF);
     mParamWordsize = getElementSize(mCfgType);
 
     const char* d = static_cast<const char*>(data);
@@ -127,12 +128,20 @@ SkipLayerNormPluginDynamic::SkipLayerNormPluginDynamic(const std::string name, c
 // IPluginV2DynamicExt Methods
 IPluginV2DynamicExt* SkipLayerNormPluginDynamic::clone() const noexcept
 {
-    BERT_DEBUG_MSG("SkipLayerNormPluginDynamic clone");
+    try
+    {
+        BERT_DEBUG_MSG("SkipLayerNormPluginDynamic clone");
 
-    auto* p = new SkipLayerNormPluginDynamic(mLayerName, mType, mLd, mBeta, mGamma, mBias);
-    p->initialize();
-    p->setPluginNamespace(mNamespace.c_str());
-    return p;
+        auto* p = new SkipLayerNormPluginDynamic(mLayerName, mType, mLd, mBeta, mGamma, mBias);
+        p->initialize();
+        p->setPluginNamespace(mNamespace.c_str());
+        return p;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 DimsExprs SkipLayerNormPluginDynamic::getOutputDimensions(
@@ -471,7 +480,7 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, con
 
         return new SkipLayerNormPluginDynamic(name, static_cast<DataType>(typeId), ld, beta, gamma, bias);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -487,7 +496,7 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::deserializePlugin(
     {
         return new SkipLayerNormPluginDynamic(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -513,9 +522,10 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(
     , mType(type)
     , mBiasDev(nullptr)
 {
-    PLUGIN_ASSERT(mLd > 0);
-    PLUGIN_ASSERT(beta.count == gamma.count);
-    PLUGIN_ASSERT(mType == nvinfer1::DataType::kFLOAT || mType == nvinfer1::DataType::kHALF || mType == nvinfer1::DataType::kINT8);
+    PLUGIN_VALIDATE(mLd > 0);
+    PLUGIN_VALIDATE(beta.count == gamma.count);
+    PLUGIN_VALIDATE(mType == nvinfer1::DataType::kFLOAT || mType == nvinfer1::DataType::kHALF
+        || mType == nvinfer1::DataType::kINT8);
     // mCfgType is the dataType for beta, gamma bias weights, always fp16 or fp32
     // mType is the plugin IO datatype, can be int8
     mCfgType = mType == DataType::kINT8 ? DataType::kHALF :  mType;
@@ -552,7 +562,7 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string nam
     deserialize_value(&data, &length, &mLd);
     deserialize_value(&data, &length, &mHasBias);
 
-    PLUGIN_ASSERT(mCfgType == nvinfer1::DataType::kFLOAT || mCfgType == nvinfer1::DataType::kHALF);
+    PLUGIN_VALIDATE(mCfgType == nvinfer1::DataType::kFLOAT || mCfgType == nvinfer1::DataType::kHALF);
     mParamWordsize = getElementSize(mCfgType);
 
     const char* d = static_cast<const char*>(data);
@@ -574,12 +584,20 @@ SkipLayerNormVarSeqlenPlugin::SkipLayerNormVarSeqlenPlugin(const std::string nam
 // IPluginV2DynamicExt Methods
 IPluginV2DynamicExt* SkipLayerNormVarSeqlenPlugin::clone() const noexcept
 {
-    BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPlugin clone");
+    try
+    {
+        BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPlugin clone");
 
-    auto* p = new SkipLayerNormVarSeqlenPlugin(mLayerName, mType, mBeta, mGamma, mBias);
-    p->initialize();
-    p->setPluginNamespace(mNamespace.c_str());
-    return p;
+        auto* p = new SkipLayerNormVarSeqlenPlugin(mLayerName, mType, mBeta, mGamma, mBias);
+        p->initialize();
+        p->setPluginNamespace(mNamespace.c_str());
+        return p;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 DimsExprs SkipLayerNormVarSeqlenPlugin::getOutputDimensions(
@@ -907,7 +925,7 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(const char* name, c
 
         return new SkipLayerNormVarSeqlenPlugin(name, static_cast<DataType>(typeId), beta, gamma, bias);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -923,7 +941,7 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::deserializePlugin(
     {
         return new SkipLayerNormVarSeqlenPlugin(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

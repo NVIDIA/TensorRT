@@ -55,7 +55,7 @@ CoordConvACPlugin::CoordConvACPlugin(const void* data, size_t length)
     oC = read<int>(d);
     oH = read<int>(d);
     oW = read<int>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 int CoordConvACPlugin::getNbOutputs() const noexcept
@@ -146,9 +146,17 @@ void CoordConvACPlugin::destroy() noexcept
 
 IPluginV2Ext* CoordConvACPlugin::clone() const noexcept
 {
-    auto* plugin = new CoordConvACPlugin(iType, iC, iH, iW, oC, oH, oW);
-    plugin->setPluginNamespace(mPluginNamespace);
-    return plugin;
+    try
+    {
+        auto* plugin = new CoordConvACPlugin(iType, iC, iH, iW, oC, oH, oW);
+        plugin->setPluginNamespace(mPluginNamespace);
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void CoordConvACPlugin::setPluginNamespace(const char* pluginNamespace) noexcept
@@ -198,14 +206,31 @@ const PluginFieldCollection* CoordConvACPluginCreator::getFieldNames() noexcept
 
 IPluginV2Ext* CoordConvACPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    CoordConvACPlugin* plugin = new CoordConvACPlugin();
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        CoordConvACPlugin* plugin = new CoordConvACPlugin();
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-IPluginV2Ext* CoordConvACPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2Ext* CoordConvACPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    CoordConvACPlugin* plugin = new CoordConvACPlugin(serialData, serialLength);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        CoordConvACPlugin* plugin = new CoordConvACPlugin(serialData, serialLength);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }

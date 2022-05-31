@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-#include <iostream>
-#include <cstring>
 #include "voxelGenerator.h"
+#include <cstring>
+#include <iostream>
 
 #define checkCudaErrors(status)                                   \
 {                                                                 \
@@ -119,16 +119,19 @@ VoxelGeneratorPlugin::VoxelGeneratorPlugin(const void* data, size_t length)
 
 nvinfer1::IPluginV2DynamicExt* VoxelGeneratorPlugin::clone() const noexcept
 {
-    auto* plugin = new VoxelGeneratorPlugin(
-        pillarNum_, pointNum_, featureNum_,
-        min_x_range_, max_x_range_, min_y_range_,
-        max_y_range_, min_z_range_, max_z_range_,
-        pillar_x_size_, pillar_y_size_,
-        pillar_z_size_, pointFeatureNum_,
-        grid_x_size_, grid_y_size_, grid_z_size_
-    );
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    try
+    {
+        auto* plugin = new VoxelGeneratorPlugin(pillarNum_, pointNum_, featureNum_, min_x_range_, max_x_range_,
+            min_y_range_, max_y_range_, min_z_range_, max_z_range_, pillar_x_size_, pillar_y_size_, pillar_z_size_,
+            pointFeatureNum_, grid_x_size_, grid_y_size_, grid_z_size_);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 nvinfer1::DimsExprs VoxelGeneratorPlugin::getOutputDimensions(
@@ -397,70 +400,75 @@ const PluginFieldCollection* VoxelGeneratorPluginCreator::getFieldNames() noexce
 
 IPluginV2* VoxelGeneratorPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    int nbFields = fc->nbFields;
-    int max_points = 0;
-    int max_voxels = 0;
-    float point_cloud_range[6] = {0.0f};
-    int voxel_feature_num = 0;
-    float voxel_size[3] = {0.0f};
-    for (int i = 0; i < nbFields; ++i)
+    try
     {
-        const char* attr_name = fields[i].name;
-        if (!strcmp(attr_name, "max_num_points_per_voxel"))
+        const PluginField* fields = fc->fields;
+        int nbFields = fc->nbFields;
+        int max_points = 0;
+        int max_voxels = 0;
+        float point_cloud_range[6] = {0.0f};
+        int voxel_feature_num = 0;
+        float voxel_size[3] = {0.0f};
+        for (int i = 0; i < nbFields; ++i)
         {
-            const int* d = static_cast<const int*>(fields[i].data);
-            max_points = d[0];
+            const char* attr_name = fields[i].name;
+            if (!strcmp(attr_name, "max_num_points_per_voxel"))
+            {
+                const int* d = static_cast<const int*>(fields[i].data);
+                max_points = d[0];
+            }
+            else if (!strcmp(attr_name, "max_voxels"))
+            {
+                const int* d = static_cast<const int*>(fields[i].data);
+                max_voxels = d[0];
+            }
+            else if (!strcmp(attr_name, "point_cloud_range"))
+            {
+                const float* d = static_cast<const float*>(fields[i].data);
+                point_cloud_range[0] = d[0];
+                point_cloud_range[1] = d[1];
+                point_cloud_range[2] = d[2];
+                point_cloud_range[3] = d[3];
+                point_cloud_range[4] = d[4];
+                point_cloud_range[5] = d[5];
+            }
+            else if (!strcmp(attr_name, "voxel_feature_num"))
+            {
+                const int* d = static_cast<const int*>(fields[i].data);
+                voxel_feature_num = d[0];
+            }
+            else if (!strcmp(attr_name, "voxel_size"))
+            {
+                const float* d = static_cast<const float*>(fields[i].data);
+                voxel_size[0] = d[0];
+                voxel_size[1] = d[1];
+                voxel_size[2] = d[2];
+            }
         }
-        else if(!strcmp(attr_name, "max_voxels"))
-        {
-            const int* d = static_cast<const int*>(fields[i].data);
-            max_voxels = d[0];
-        }
-        else if(!strcmp(attr_name, "point_cloud_range"))
-        {
-            const float* d = static_cast<const float*>(fields[i].data);
-            point_cloud_range[0] = d[0];
-            point_cloud_range[1] = d[1];
-            point_cloud_range[2] = d[2];
-            point_cloud_range[3] = d[3];
-            point_cloud_range[4] = d[4];
-            point_cloud_range[5] = d[5];
-        }
-        else if(!strcmp(attr_name, "voxel_feature_num"))
-        {
-            const int* d = static_cast<const int*>(fields[i].data);
-            voxel_feature_num = d[0];
-        }
-        else if(!strcmp(attr_name, "voxel_size"))
-        {
-            const float* d = static_cast<const float*>(fields[i].data);
-            voxel_size[0] = d[0];
-            voxel_size[1] = d[1];
-            voxel_size[2] = d[2];
-        }
+        IPluginV2* plugin = new VoxelGeneratorPlugin(max_voxels, max_points, voxel_feature_num, point_cloud_range[0],
+            point_cloud_range[3], point_cloud_range[1], point_cloud_range[4], point_cloud_range[2],
+            point_cloud_range[5], voxel_size[0], voxel_size[1], voxel_size[2]);
+        return plugin;
     }
-    IPluginV2* plugin = new VoxelGeneratorPlugin(
-        max_voxels,
-        max_points,
-        voxel_feature_num,
-        point_cloud_range[0],
-        point_cloud_range[3],
-        point_cloud_range[1],
-        point_cloud_range[4],
-        point_cloud_range[2],
-        point_cloud_range[5],
-        voxel_size[0],
-        voxel_size[1],
-        voxel_size[2]
-    );
-    return plugin;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2* VoxelGeneratorPluginCreator::deserializePlugin(
     const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    return new VoxelGeneratorPlugin(serialData, serialLength);
+    try
+    {
+        return new VoxelGeneratorPlugin(serialData, serialLength);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void VoxelGeneratorPluginCreator::setPluginNamespace(const char* libNamespace) noexcept

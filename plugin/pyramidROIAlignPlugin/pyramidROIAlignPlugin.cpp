@@ -66,78 +66,94 @@ PluginFieldCollection const* PyramidROIAlignPluginCreator::getFieldNames() noexc
 
 IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
-    // Default values for the plugin creator, these will be used when the corresponding
-    // plugin field is not passed, allowing to have defaults for "optional" ONNX attributes.
-    int32_t pooledSize = 7;
-    int32_t transformCoords = 2;
-    bool absCoords = true;
-    bool swapCoords = false;
-    bool plusOneCoords = false;
-    int32_t samplingRatio = 0;
-    xy_t imageSize = {MaskRCNNConfig::IMAGE_SHAPE.d[1], MaskRCNNConfig::IMAGE_SHAPE.d[2]};
-    int32_t fpnScale = 224;
-
-    PluginField const* fields = fc->fields;
-    for (int32_t i = 0; i < fc->nbFields; ++i)
+    try
     {
-        char const* attrName = fields[i].name;
-        if (!strcmp(attrName, "fpn_scale"))
+        // Default values for the plugin creator, these will be used when the corresponding
+        // plugin field is not passed, allowing to have defaults for "optional" ONNX attributes.
+        int32_t pooledSize = 7;
+        int32_t transformCoords = 2;
+        bool absCoords = true;
+        bool swapCoords = false;
+        bool plusOneCoords = false;
+        int32_t samplingRatio = 0;
+        xy_t imageSize = {MaskRCNNConfig::IMAGE_SHAPE.d[1], MaskRCNNConfig::IMAGE_SHAPE.d[2]};
+        int32_t fpnScale = 224;
+
+        PluginField const* fields = fc->fields;
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            fpnScale = *(static_cast<int32_t const*>(fields[i].data));
-            PLUGIN_ASSERT(fpnScale >= 1);
+            char const* attrName = fields[i].name;
+            if (!strcmp(attrName, "fpn_scale"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                fpnScale = *(static_cast<int32_t const*>(fields[i].data));
+                PLUGIN_VALIDATE(fpnScale >= 1);
+            }
+            if (!strcmp(attrName, "pooled_size"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                pooledSize = *(static_cast<int32_t const*>(fields[i].data));
+                PLUGIN_VALIDATE(pooledSize >= 1);
+            }
+            if (!strcmp(attrName, "image_size"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                PLUGIN_VALIDATE(fields[i].length == 2);
+                auto const dims = static_cast<int32_t const*>(fields[i].data);
+                imageSize.y = dims[0];
+                imageSize.x = dims[1];
+                PLUGIN_VALIDATE(imageSize.y >= 1);
+                PLUGIN_VALIDATE(imageSize.x >= 1);
+            }
+            if (!strcmp(attrName, "roi_coords_absolute"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                absCoords = *(static_cast<int32_t const*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "roi_coords_swap"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                swapCoords = *(static_cast<int32_t const*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "roi_coords_plusone"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                plusOneCoords = *(static_cast<int32_t const*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "roi_coords_transform"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                transformCoords = *(static_cast<int32_t const*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "sampling_ratio"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                samplingRatio = *(static_cast<int32_t const*>(fields[i].data));
+                PLUGIN_VALIDATE(samplingRatio >= 0);
+            }
         }
-        if (!strcmp(attrName, "pooled_size"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            pooledSize = *(static_cast<int32_t const*>(fields[i].data));
-            PLUGIN_ASSERT(pooledSize >= 1);
-        }
-        if (!strcmp(attrName, "image_size"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            PLUGIN_ASSERT(fields[i].length == 2);
-            auto const dims = static_cast<int32_t const*>(fields[i].data);
-            imageSize.y = dims[0];
-            imageSize.x = dims[1];
-            PLUGIN_ASSERT(imageSize.y >= 1);
-            PLUGIN_ASSERT(imageSize.x >= 1);
-        }
-        if (!strcmp(attrName, "roi_coords_absolute"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            absCoords = *(static_cast<int32_t const*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "roi_coords_swap"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            swapCoords = *(static_cast<int32_t const*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "roi_coords_plusone"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            plusOneCoords = *(static_cast<int32_t const*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "roi_coords_transform"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            transformCoords = *(static_cast<int32_t const*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "sampling_ratio"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            samplingRatio = *(static_cast<int32_t const*>(fields[i].data));
-            PLUGIN_ASSERT(samplingRatio >= 0);
-        }
+        return new PyramidROIAlign(
+            pooledSize, transformCoords, absCoords, swapCoords, plusOneCoords, samplingRatio, imageSize, fpnScale);
     }
-    return new PyramidROIAlign(
-        pooledSize, transformCoords, absCoords, swapCoords, plusOneCoords, samplingRatio, imageSize, fpnScale);
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2Ext* PyramidROIAlignPluginCreator::deserializePlugin(
     char const* name, void const* data, size_t length) noexcept
 {
-    return new PyramidROIAlign(data, length);
+    try
+    {
+        return new PyramidROIAlign(data, length);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 PyramidROIAlign::PyramidROIAlign(int32_t pooledSize, int32_t transformCoords, bool absCoords, bool swapCoords,
@@ -151,9 +167,9 @@ PyramidROIAlign::PyramidROIAlign(int32_t pooledSize, int32_t transformCoords, bo
     , mPlusOneCoords(plusOneCoords)
     , mSamplingRatio(samplingRatio)
 {
-    PLUGIN_ASSERT(pooledSize >= 1);
-    PLUGIN_ASSERT(samplingRatio >= 0);
-    PLUGIN_ASSERT(fpnScale >= 1);
+    PLUGIN_VALIDATE(pooledSize >= 1);
+    PLUGIN_VALIDATE(samplingRatio >= 0);
+    PLUGIN_VALIDATE(fpnScale >= 1);
 }
 
 int32_t PyramidROIAlign::getNbOutputs() const noexcept
@@ -195,9 +211,17 @@ char const* PyramidROIAlign::getPluginVersion() const noexcept
 
 IPluginV2Ext* PyramidROIAlign::clone() const noexcept
 {
-    auto plugin = new PyramidROIAlign(*this);
-    plugin->setPluginNamespace(mNameSpace.c_str());
-    return plugin;
+    try
+    {
+        auto plugin = new PyramidROIAlign(*this);
+        plugin->setPluginNamespace(mNameSpace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void PyramidROIAlign::setPluginNamespace(char const* libNamespace) noexcept
@@ -337,7 +361,7 @@ PyramidROIAlign::PyramidROIAlign(void const* data, size_t length)
     mFeatureSpatialSize[3].y = read<int>(d);
     mFeatureSpatialSize[3].x = read<int>(d);
 
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 // Return the DataType of the plugin output at the requested index

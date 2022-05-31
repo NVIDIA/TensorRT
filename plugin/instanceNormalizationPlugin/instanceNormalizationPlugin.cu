@@ -70,7 +70,7 @@ InstanceNormalizationPlugin::InstanceNormalizationPlugin(
     , mHostScale(scale)
     , mHostBias(bias)
 {
-    PLUGIN_ASSERT(scale.size() == bias.size());
+    PLUGIN_VALIDATE(scale.size() == bias.size());
 }
 
 InstanceNormalizationPlugin::InstanceNormalizationPlugin(
@@ -80,8 +80,9 @@ InstanceNormalizationPlugin::InstanceNormalizationPlugin(
     , mRelu(relu)
     , mNchan(scale.count)
 {
-    PLUGIN_ASSERT(scale.count == bias.count);
-    auto const copyWeights = [](nvinfer1::Weights const& input, std::vector<float>& output) {
+    PLUGIN_VALIDATE(scale.count == bias.count);
+    auto const copyWeights = [](nvinfer1::Weights const& input, std::vector<float>& output)
+    {
         output.reserve(input.count);
         if (input.type == nvinfer1::DataType::kFLOAT)
         {
@@ -510,10 +511,18 @@ void InstanceNormalizationPlugin::destroy() noexcept
 template <class PluginType>
 IPluginV2DynamicExt* InstanceNormalizationPlugin::cloneBase() const noexcept
 {
-    auto* plugin = new PluginType{mEpsilon, mHostScale, mHostBias, mRelu, mAlpha};
-    plugin->setPluginNamespace(mPluginNamespace.c_str());
-    plugin->initialize();
-    return plugin;
+    try
+    {
+        auto* plugin = new PluginType{mEpsilon, mHostScale, mHostBias, mRelu, mAlpha};
+        plugin->setPluginNamespace(mPluginNamespace.c_str());
+        plugin->initialize();
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2DynamicExt* InstanceNormalizationPlugin::clone() const noexcept
@@ -598,63 +607,71 @@ template <class PluginType>
 IPluginV2DynamicExt* InstanceNormalizationPluginCreator::createPluginBase(
     char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept
 {
-    std::vector<float> scaleValues;
-    std::vector<float> biasValues;
-    float epsilon{};
-    int32_t relu{};
-    float alpha{};
-    PluginField const* fields = fc->fields;
-    for (int32_t i = 0; i < fc->nbFields; ++i)
+    try
     {
-        char const* attrName = fields[i].name;
-        if (!strcmp(attrName, "epsilon"))
+        std::vector<float> scaleValues;
+        std::vector<float> biasValues;
+        float epsilon{};
+        int32_t relu{};
+        float alpha{};
+        PluginField const* fields = fc->fields;
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            epsilon = *(static_cast<float const*>(fields[i].data));
-        }
-        else if (!strcmp(attrName, "scales"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            int32_t size = fields[i].length;
-            scaleValues.reserve(size);
-            auto const* w = static_cast<float const*>(fields[i].data);
-            for (int32_t j = 0; j < size; j++)
+            char const* attrName = fields[i].name;
+            if (!strcmp(attrName, "epsilon"))
             {
-                scaleValues.push_back(*w);
-                w++;
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                epsilon = *(static_cast<float const*>(fields[i].data));
+            }
+            else if (!strcmp(attrName, "scales"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                int32_t size = fields[i].length;
+                scaleValues.reserve(size);
+                auto const* w = static_cast<float const*>(fields[i].data);
+                for (int32_t j = 0; j < size; j++)
+                {
+                    scaleValues.push_back(*w);
+                    w++;
+                }
+            }
+            else if (!strcmp(attrName, "bias"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                int32_t size = fields[i].length;
+                biasValues.reserve(size);
+                auto const* w = static_cast<float const*>(fields[i].data);
+                for (int32_t j = 0; j < size; j++)
+                {
+                    biasValues.push_back(*w);
+                    w++;
+                }
+            }
+            else if (!strcmp(attrName, "relu"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                relu = *(static_cast<int32_t const*>(fields[i].data));
+            }
+            else if (!strcmp(attrName, "alpha"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                alpha = *(static_cast<float const*>(fields[i].data));
             }
         }
-        else if (!strcmp(attrName, "bias"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            int32_t size = fields[i].length;
-            biasValues.reserve(size);
-            auto const* w = static_cast<float const*>(fields[i].data);
-            for (int32_t j = 0; j < size; j++)
-            {
-                biasValues.push_back(*w);
-                w++;
-            }
-        }
-        else if (!strcmp(attrName, "relu"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            relu = *(static_cast<int32_t const*>(fields[i].data));
-        }
-        else if (!strcmp(attrName, "alpha"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            alpha = *(static_cast<float const*>(fields[i].data));
-        }
+
+        Weights scaleWeights{DataType::kFLOAT, scaleValues.data(), (int64_t) scaleValues.size()};
+        Weights biasWeights{DataType::kFLOAT, biasValues.data(), (int64_t) biasValues.size()};
+
+        auto* obj = new PluginType(epsilon, scaleWeights, biasWeights, relu, alpha);
+        obj->setPluginNamespace(mNamespace.c_str());
+        obj->initialize();
+        return obj;
     }
-
-    Weights scaleWeights{DataType::kFLOAT, scaleValues.data(), (int64_t) scaleValues.size()};
-    Weights biasWeights{DataType::kFLOAT, biasValues.data(), (int64_t) biasValues.size()};
-
-    auto* obj = new PluginType(epsilon, scaleWeights, biasWeights, relu, alpha);
-    obj->setPluginNamespace(mNamespace.c_str());
-    obj->initialize();
-    return obj;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2DynamicExt* InstanceNormalizationPluginCreator::createPlugin(
@@ -673,10 +690,18 @@ template <class PluginType>
 IPluginV2DynamicExt* InstanceNormalizationPluginCreator::deserializePluginBase(
     char const* name, void const* serialData, size_t serialLength) noexcept
 {
-    auto* obj = new PluginType{serialData, serialLength};
-    obj->setPluginNamespace(mNamespace.c_str());
-    obj->initialize();
-    return obj;
+    try
+    {
+        auto* obj = new PluginType{serialData, serialLength};
+        obj->setPluginNamespace(mNamespace.c_str());
+        obj->initialize();
+        return obj;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2DynamicExt* InstanceNormalizationPluginCreator::deserializePlugin(

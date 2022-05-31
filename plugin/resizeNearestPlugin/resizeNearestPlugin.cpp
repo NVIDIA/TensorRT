@@ -62,28 +62,44 @@ const PluginFieldCollection* ResizeNearestPluginCreator::getFieldNames() noexcep
 
 IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    const PluginField* fields = fc->fields;
-    for (int i = 0; i < fc->nbFields; ++i)
+    try
     {
-        const char* attrName = fields[i].name;
-        if (!strcmp(attrName, "scale"))
+        const PluginField* fields = fc->fields;
+        for (int i = 0; i < fc->nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            mScale = *(static_cast<const float*>(fields[i].data));
+            const char* attrName = fields[i].name;
+            if (!strcmp(attrName, "scale"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                mScale = *(static_cast<const float*>(fields[i].data));
+            }
         }
+        return new ResizeNearest(mScale);
     }
-    return new ResizeNearest(mScale);
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
-    return new ResizeNearest(data, length);
+    try
+    {
+        return new ResizeNearest(data, length);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 ResizeNearest::ResizeNearest(float scale)
     : mScale(scale)
 {
-    PLUGIN_ASSERT(mScale > 0);
+    PLUGIN_VALIDATE(mScale > 0);
 }
 
 int ResizeNearest::getNbOutputs() const noexcept
@@ -162,7 +178,7 @@ ResizeNearest::ResizeNearest(const void* data, size_t length)
     mOutputDims.d[0] = read<int>(d);
     mOutputDims.d[1] = read<int>(d);
     mOutputDims.d[2] = read<int>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 }
 
 const char* ResizeNearest::getPluginType() const noexcept
@@ -177,9 +193,17 @@ const char* ResizeNearest::getPluginVersion() const noexcept
 
 IPluginV2Ext* ResizeNearest::clone() const noexcept
 {
-    auto plugin = new ResizeNearest(*this);
-    plugin->setPluginNamespace(mNameSpace.c_str());
-    return plugin;
+    try
+    {
+        auto plugin = new ResizeNearest(*this);
+        plugin->setPluginNamespace(mNameSpace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void ResizeNearest::setPluginNamespace(const char* libNamespace) noexcept

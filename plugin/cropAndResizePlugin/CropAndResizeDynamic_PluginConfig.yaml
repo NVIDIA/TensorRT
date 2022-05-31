@@ -29,8 +29,8 @@ versions:
     attribute_options:
       crop_height:
         min: "0"
-        max: "pinf"
+        max: "=pinf"
       crop_width:
         min: "0"
-        max: "pinf"
+        max: "=pinf"
 ...

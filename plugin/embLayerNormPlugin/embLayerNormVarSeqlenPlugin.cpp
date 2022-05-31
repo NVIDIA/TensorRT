@@ -149,22 +149,38 @@ EmbLayerNormVarSeqlenPluginMTron::EmbLayerNormVarSeqlenPluginMTron(
 // IPluginV2DynamicExt Methods
 IPluginV2DynamicExt* EmbLayerNormVarSeqlenPluginHFace::clone() const noexcept
 {
-    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace clone");
+    try
+    {
+        BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace clone");
 
-    auto p = new EmbLayerNormVarSeqlenPluginHFace(mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
-    p->setPluginNamespace(mNamespace.c_str());
+        auto p = new EmbLayerNormVarSeqlenPluginHFace(mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
+        p->setPluginNamespace(mNamespace.c_str());
 
-    return p;
+        return p;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2DynamicExt* EmbLayerNormVarSeqlenPluginMTron::clone() const noexcept
 {
-    BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron clone");
+    try
+    {
+        BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron clone");
 
-    auto p = new EmbLayerNormVarSeqlenPluginMTron(mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
-    p->setPluginNamespace(mNamespace.c_str());
+        auto p = new EmbLayerNormVarSeqlenPluginMTron(mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
+        p->setPluginNamespace(mNamespace.c_str());
 
-    return p;
+        return p;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 DimsExprs EmbLayerNormVarSeqlenPluginHFace::getOutputDimensions(
@@ -697,14 +713,15 @@ bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights
         if (field_name.compare("output_fp16") == 0)
         {
             BERT_DEBUG_MSG("Building output_fp16...");
-            PLUGIN_ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
             output_fp16 = static_cast<const int32_t*>(fc->fields[i].data)[0] != 0;
         }
     }
     return output_fp16;
 }
 
-IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
 {
     try
     {
@@ -729,7 +746,8 @@ IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(const char* nam
     return nullptr;
 }
 
-IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
 {
     try
     {

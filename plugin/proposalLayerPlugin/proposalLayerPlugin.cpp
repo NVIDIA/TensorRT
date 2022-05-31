@@ -65,39 +65,55 @@ const PluginFieldCollection* ProposalLayerPluginCreator::getFieldNames() noexcep
 
 IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    auto image_size = MaskRCNNConfig::IMAGE_SHAPE;
-    const PluginField* fields = fc->fields;
-    for (int i = 0; i < fc->nbFields; ++i)
+    try
     {
-        const char* attrName = fields[i].name;
-        if (!strcmp(attrName, "prenms_topk"))
+        auto image_size = MaskRCNNConfig::IMAGE_SHAPE;
+        const PluginField* fields = fc->fields;
+        for (int i = 0; i < fc->nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mPreNMSTopK = *(static_cast<const int*>(fields[i].data));
+            const char* attrName = fields[i].name;
+            if (!strcmp(attrName, "prenms_topk"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                mPreNMSTopK = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "keep_topk"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                mKeepTopK = *(static_cast<const int*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "iou_threshold"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                mIOUThreshold = *(static_cast<const float*>(fields[i].data));
+            }
+            if (!strcmp(attrName, "image_size"))
+            {
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                const auto* const dims = static_cast<const int32_t*>(fields[i].data);
+                std::copy_n(dims, 3, image_size.d);
+            }
         }
-        if (!strcmp(attrName, "keep_topk"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            mKeepTopK = *(static_cast<const int*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "iou_threshold"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-            mIOUThreshold = *(static_cast<const float*>(fields[i].data));
-        }
-        if (!strcmp(attrName, "image_size"))
-        {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-            const auto* const dims = static_cast<const int32_t*>(fields[i].data);
-            std::copy_n(dims, 3, image_size.d);
-        }
+        return new ProposalLayer(mPreNMSTopK, mKeepTopK, mIOUThreshold, image_size);
     }
-    return new ProposalLayer(mPreNMSTopK, mKeepTopK, mIOUThreshold, image_size);
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
 {
-    return new ProposalLayer(data, length);
+    try
+    {
+        return new ProposalLayer(data, length);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold, const nvinfer1::Dims& image_size)
@@ -107,9 +123,9 @@ ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold
     , mImageSize(image_size)
 {
     mBackgroundLabel = -1;
-    PLUGIN_ASSERT(mPreNMSTopK > 0);
-    PLUGIN_ASSERT(mKeepTopK > 0);
-    PLUGIN_ASSERT(iou_threshold > 0.0F);
+    PLUGIN_VALIDATE(mPreNMSTopK > 0);
+    PLUGIN_VALIDATE(mKeepTopK > 0);
+    PLUGIN_VALIDATE(iou_threshold > 0.0F);
 
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
@@ -174,9 +190,17 @@ const char* ProposalLayer::getPluginVersion() const noexcept
 
 IPluginV2Ext* ProposalLayer::clone() const noexcept
 {
-    auto* plugin = new ProposalLayer(*this);
-    plugin->setPluginNamespace(mNameSpace.c_str());
-    return plugin;
+    try
+    {
+        auto* plugin = new ProposalLayer(*this);
+        plugin->setPluginNamespace(mNameSpace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void ProposalLayer::setPluginNamespace(const char* libNamespace) noexcept
@@ -215,7 +239,7 @@ ProposalLayer::ProposalLayer(const void* data, size_t length)
     mMaxBatchSize = read<int>(d);
     mAnchorsCnt = read<int>(d);
     mImageSize = read<nvinfer1::Dims3>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_VALIDATE(d == a + length);
 
     mBackgroundLabel = -1;
     mPreNMSTopK = prenms_topk;

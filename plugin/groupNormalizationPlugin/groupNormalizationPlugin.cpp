@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+#include "groupNormalizationPlugin.h"
 #include <numeric>
 #include <stdexcept>
-#include "groupNormalizationPlugin.h"
 
 using namespace nvinfer1;
 using nvinfer1::plugin::GroupNormalizationPlugin;
@@ -46,11 +46,11 @@ std::vector<nvinfer1::PluginField> GroupNormalizationPluginCreator::mPluginAttri
 REGISTER_TENSORRT_PLUGIN(GroupNormalizationPluginCreator);
 
 GroupNormalizationPlugin::GroupNormalizationPlugin(float epsilon, int nbGroups)
-    : mEpsilon(epsilon),
-      mNbGroups(nbGroups)
+    : mEpsilon(epsilon)
+    , mNbGroups(nbGroups)
 {
     // Number of groups should be positive
-    PLUGIN_ASSERT(nbGroups > 0);
+    PLUGIN_VALIDATE(nbGroups > 0);
 }
 
 int GroupNormalizationPlugin::initialize() noexcept
@@ -191,9 +191,17 @@ void GroupNormalizationPlugin::destroy() noexcept
 
 IPluginV2DynamicExt* GroupNormalizationPlugin::clone() const noexcept
 {
-    auto* plugin = new GroupNormalizationPlugin(mEpsilon, mNbGroups);
-    plugin->setPluginNamespace(mPluginNamespace);
-    return plugin;
+    try
+    {
+        auto* plugin = new GroupNormalizationPlugin(mEpsilon, mNbGroups);
+        plugin->setPluginNamespace(mPluginNamespace);
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 void GroupNormalizationPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
@@ -202,11 +210,11 @@ void GroupNormalizationPlugin::configurePlugin(const nvinfer1::DynamicPluginTens
 
     for (int i = 0; i < nbInputs; i++)
     {
-      for (int j = 0; j < in[0].desc.dims.nbDims; j++)
-      {
-        // Do not support dynamic dimensions
-        PLUGIN_ASSERT(in[0].desc.dims.d[j] != -1);
-      }
+        for (int j = 0; j < in[0].desc.dims.nbDims; j++)
+        {
+            // Do not support dynamic dimensions
+            PLUGIN_ASSERT(in[0].desc.dims.d[j] != -1);
+        }
     }
 
     int batchSize = in[0].desc.dims.d[0];
@@ -282,34 +290,52 @@ void GroupNormalizationPluginCreator::setPluginNamespace(const char* libNamespac
     mNamespace = libNamespace;
 }
 
-IPluginV2DynamicExt* GroupNormalizationPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2DynamicExt* GroupNormalizationPluginCreator::createPlugin(
+    const char* name, const PluginFieldCollection* fc) noexcept
 {
-    // Set default values
-    int nbGroups{1};
-    float epsilon{0.00001F};
-    for (int i = 0; i < fc->nbFields; i++)
+    try
     {
-        std::string field_name(fc->fields[i].name);
-        if (field_name.compare("eps") == 0)
+        // Set default values
+        int nbGroups{1};
+        float epsilon{0.00001F};
+        for (int i = 0; i < fc->nbFields; i++)
         {
-            epsilon = *static_cast<const float*>(fc->fields[i].data);
+            std::string field_name(fc->fields[i].name);
+            if (field_name.compare("eps") == 0)
+            {
+                epsilon = *static_cast<const float*>(fc->fields[i].data);
+            }
+            if (field_name.compare("num_groups") == 0)
+            {
+                nbGroups = *static_cast<const int*>(fc->fields[i].data);
+            }
         }
-        if (field_name.compare("num_groups") == 0)
-        {
-            nbGroups = *static_cast<const int*>(fc->fields[i].data);
-        }
+
+        GroupNormalizationPlugin* plugin = new GroupNormalizationPlugin(epsilon, nbGroups);
+        plugin->setPluginNamespace(mNamespace.c_str());
+
+        return plugin;
     }
-
-    GroupNormalizationPlugin* plugin = new GroupNormalizationPlugin(epsilon, nbGroups);
-    plugin->setPluginNamespace(mNamespace.c_str());
-
-    return plugin;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-IPluginV2DynamicExt* GroupNormalizationPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2DynamicExt* GroupNormalizationPluginCreator::deserializePlugin(
+    const char* name, const void* serialData, size_t serialLength) noexcept
 {
-    GroupNormalizationPlugin* plugin = new GroupNormalizationPlugin(serialData, serialLength);
-    plugin->setPluginNamespace(mNamespace.c_str());
+    try
+    {
+        GroupNormalizationPlugin* plugin = new GroupNormalizationPlugin(serialData, serialLength);
+        plugin->setPluginNamespace(mNamespace.c_str());
 
-    return plugin;
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }

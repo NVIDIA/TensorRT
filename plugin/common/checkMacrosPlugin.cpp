@@ -92,10 +92,26 @@ void throwCudnnError(const char* file, const char* function, int line, int statu
     throw error;
 }
 
+// break-pointable
+void throwPluginError(char const* file, char const* function, int line, int status, char const* msg)
+{
+    PluginError error(file, function, line, status, msg);
+    reportValidationFailure(msg, file, line);
+    throw error;
+}
+
 void logError(const char* msg, const char* file, const char* fn, int line)
 {
     gLogError << "Parameter check failed at: " << file << "::" << fn << "::" << line;
     gLogError << ", condition: " << msg << std::endl;
+}
+
+void reportValidationFailure(char const* msg, char const* file, int line)
+{
+    std::ostringstream stream;
+    stream << "Validation failed: " << msg << std::endl
+           << file << ':' << line << std::endl;
+    getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
 }
 
 // break-pointable

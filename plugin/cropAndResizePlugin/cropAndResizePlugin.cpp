@@ -78,7 +78,7 @@ CropAndResizePlugin::CropAndResizePlugin(const void* serial_buf, size_t serial_s
     mInputHeight = readFromBuffer<size_t>(d);
     mDepth = readFromBuffer<size_t>(d);
     mNumboxes = readFromBuffer<size_t>(d);
-    PLUGIN_ASSERT(d == a + sizeof(size_t) * 6);
+    PLUGIN_VALIDATE(d == a + sizeof(size_t) * 6);
 }
 
 CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(const void* serial_buf, size_t serial_size)
@@ -91,7 +91,7 @@ CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(const void* serial_buf, s
     mInputHeight = readFromBuffer<size_t>(d);
     mDepth = readFromBuffer<size_t>(d);
     mNumboxes = readFromBuffer<size_t>(d);
-    PLUGIN_ASSERT(d == a + sizeof(size_t) * 6);
+    PLUGIN_VALIDATE(d == a + sizeof(size_t) * 6);
 }
 
 CropAndResizePlugin::CropAndResizePlugin(
@@ -500,7 +500,7 @@ IPluginV2Ext* CropAndResizePluginCreator::createPlugin(const char* name, const P
 
         for (int i = 0; i < nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
 
             if (!strcmp(fields[i].name, "crop_width"))
             {
@@ -513,7 +513,7 @@ IPluginV2Ext* CropAndResizePluginCreator::createPlugin(const char* name, const P
             }
         }
 
-        PLUGIN_ASSERT(crop_width > 0 && crop_height > 0);
+        PLUGIN_VALIDATE(crop_width > 0 && crop_height > 0);
         IPluginV2Ext* plugin = new CropAndResizePlugin(crop_width, crop_height);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
@@ -530,14 +530,13 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::createPlugin(
 {
     try
     {
-        
         const PluginField* fields = fc->fields;
         int nbFields = fc->nbFields;
         int crop_width = 0, crop_height = 0;
 
         for (int i = 0; i < nbFields; ++i)
         {
-            PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+            PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
 
             if (!strcmp(fields[i].name, "crop_width"))
             {
@@ -550,7 +549,7 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::createPlugin(
             }
         }
 
-        PLUGIN_ASSERT(crop_width > 0 && crop_height > 0);
+        PLUGIN_VALIDATE(crop_width > 0 && crop_height > 0);
         IPluginV2DynamicExt* plugin = new CropAndResizeDynamicPlugin(crop_width, crop_height);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
