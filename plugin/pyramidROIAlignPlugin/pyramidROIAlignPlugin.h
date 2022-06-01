@@ -36,7 +36,7 @@ class PyramidROIAlign : public IPluginV2Ext
 {
 public:
     PyramidROIAlign(int32_t pooledSize, int32_t transformCoords, bool absCoords, bool swapCoords, bool plusOneCoords,
-        int32_t samplingRatio, xy_t roiRange, int32_t fpnScale);
+        int32_t samplingRatio, bool legacy, xy_t roiRange, int32_t fpnScale);
 
     PyramidROIAlign(void const* data, size_t length);
 
@@ -105,6 +105,7 @@ private:
     bool mSwapCoords;
     bool mPlusOneCoords;
     int32_t mSamplingRatio;
+    bool mIsLegacy{false};
     xy_t mFeatureSpatialSize[mFeatureMapCount];
     std::string mNameSpace;
 };

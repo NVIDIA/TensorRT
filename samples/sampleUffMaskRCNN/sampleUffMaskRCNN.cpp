@@ -608,6 +608,11 @@ bool SampleMaskRCNN::verifyOutput(const samplesCommon::BufferManager& buffers)
     for (int p = 0; p < mParams.batchSize; ++p)
     {
         std::vector<MaskRCNNUtils::BBoxInfo> binfo = decodeOutput(p, detectionsHost, masksHost);
+        if (binfo.size() == 0)
+        {
+            sample::gLogError << "No detections were found in the input image!" << std::endl;
+            pass = false;
+        }
         for (size_t roi_id = 0; roi_id < binfo.size(); roi_id++)
         {
             const auto resized_mask = MaskRCNNUtils::resizeMask(binfo[roi_id], mParams.maskThreshold); // mask threshold

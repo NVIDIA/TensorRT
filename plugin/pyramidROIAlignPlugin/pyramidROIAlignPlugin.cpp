@@ -44,6 +44,7 @@ PyramidROIAlignPluginCreator::PyramidROIAlignPluginCreator()
     mPluginAttributes.emplace_back(PluginField("roi_coords_plusone", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("roi_coords_transform", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("sampling_ratio", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("legacy", nullptr, PluginFieldType::kINT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -75,6 +76,7 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
         bool absCoords = true;
         bool swapCoords = false;
         bool plusOneCoords = false;
+        bool legacy = false;
         int32_t samplingRatio = 0;
         xy_t imageSize = {MaskRCNNConfig::IMAGE_SHAPE.d[1], MaskRCNNConfig::IMAGE_SHAPE.d[2]};
         int32_t fpnScale = 224;
@@ -130,10 +132,15 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 samplingRatio = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(samplingRatio >= 0);
+            }            
+            if (!strcmp(attrName, "legacy"))
+            {
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                legacy = *(static_cast<int32_t const*>(fields[i].data));
             }
         }
         return new PyramidROIAlign(
-            pooledSize, transformCoords, absCoords, swapCoords, plusOneCoords, samplingRatio, imageSize, fpnScale);
+            pooledSize, transformCoords, absCoords, swapCoords, plusOneCoords, samplingRatio, legacy, imageSize, fpnScale);
     }
     catch (std::exception const& e)
     {
@@ -157,7 +164,7 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::deserializePlugin(
 }
 
 PyramidROIAlign::PyramidROIAlign(int32_t pooledSize, int32_t transformCoords, bool absCoords, bool swapCoords,
-    bool plusOneCoords, int32_t samplingRatio, xy_t imageSize, int32_t fpnScale)
+    bool plusOneCoords, int32_t samplingRatio, bool legacy, xy_t imageSize, int32_t fpnScale)
     : mPooledSize({pooledSize, pooledSize})
     , mImageSize(imageSize)
     , mFPNScale(fpnScale)
@@ -166,6 +173,7 @@ PyramidROIAlign::PyramidROIAlign(int32_t pooledSize, int32_t transformCoords, bo
     , mSwapCoords(swapCoords)
     , mPlusOneCoords(plusOneCoords)
     , mSamplingRatio(samplingRatio)
+    , mIsLegacy(legacy)
 {
     PLUGIN_VALIDATE(pooledSize >= 1);
     PLUGIN_VALIDATE(samplingRatio >= 0);
@@ -277,24 +285,41 @@ Dims PyramidROIAlign::getOutputDimensions(int32_t index, Dims const* inputs, int
 
 int32_t PyramidROIAlign::enqueue(
     int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+
 {
     void* const pooled = outputs[0];
+    cudaError_t status;
 
-    // As per FPN paper equation 1 (https://arxiv.org/pdf/1612.03144.pdf)
-    // the default 224 FPN scale corresponds to the canonical ImageNet size
-    // used to define the ROI scale threshold that samples from P4. Because the
-    // plugin works with normalized ROI coordinates, the FPN scale must be normalized
-    // by the input image size.
-    float const scale = static_cast<float>(mFPNScale);
-    float const normScale = sqrtf(scale * scale / (mImageSize.y * mImageSize.x));
-    // Furthermore, the roiAlign kernel expects a first threshold instead. This is
-    // the *area* of an ROI but for one level down, i.e. at the P2->P3 transition.
-    float const firstThreshold = normScale * normScale / 4.F;
-
-    cudaError_t status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstThreshold,
-        mTransformCoords, mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1],
-        mFeatureSpatialSize, pooled, mPooledSize);
-
+    // Support legacy UFF mode
+    if (mIsLegacy)
+    {
+        // Legacy values
+        mTransformCoords = -1;
+        mPlusOneCoords = 0;
+        mSwapCoords = true;
+        mAbsCoords = false;
+        mSamplingRatio = 1;
+        float const firstThreshold = (224 * 224 * 2.0f / (MaskRCNNConfig::IMAGE_SHAPE.d[1] * MaskRCNNConfig::IMAGE_SHAPE.d[2])) / (4.0 * 4.0f);
+        status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstThreshold,
+            mTransformCoords, mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1],
+            mFeatureSpatialSize, pooled, mPooledSize);
+    }
+    else
+    {
+        // As per FPN paper equation 1 (https://arxiv.org/pdf/1612.03144.pdf)
+        // the default 224 FPN scale corresponds to the canonical ImageNet size
+        // used to define the ROI scale threshold that samples from P4. Because the
+        // plugin works with normalized ROI coordinates, the FPN scale must be normalized
+        // by the input image size.
+        float const scale = static_cast<float>(mFPNScale);
+        float const normScale = sqrtf(scale * scale / (mImageSize.y * mImageSize.x));
+        // Furthermore, the roiAlign kernel expects a first threshold instead. This is
+        // the *area* of an ROI but for one level down, i.e. at the P2->P3 transition.
+        float const firstThreshold = normScale * normScale / 4.F;
+        status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstThreshold,
+            mTransformCoords, mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1],
+            mFeatureSpatialSize, pooled, mPooledSize);
+    }
     return status;
 }
 
@@ -310,6 +335,7 @@ size_t PyramidROIAlign::getSerializationSize() const noexcept
         + sizeof(bool)     // mSwapCoords
         + sizeof(bool)     // mPlusOneCoords
         + sizeof(int)      // mSamplingRatio
+        + sizeof(bool)     // mIsLegacy
         + sizeof(int) * 8; // mFeatureSpatialSize
 }
 
@@ -328,6 +354,7 @@ void PyramidROIAlign::serialize(void* buffer) const noexcept
     write(d, mSwapCoords);
     write(d, mPlusOneCoords);
     write(d, mSamplingRatio);
+    write(d, mIsLegacy);
     write(d, mFeatureSpatialSize[0].y);
     write(d, mFeatureSpatialSize[0].x);
     write(d, mFeatureSpatialSize[1].y);
@@ -352,6 +379,7 @@ PyramidROIAlign::PyramidROIAlign(void const* data, size_t length)
     mSwapCoords = read<bool>(d);
     mPlusOneCoords = read<bool>(d);
     mSamplingRatio = read<int>(d);
+    mIsLegacy = read<bool>(d);
     mFeatureSpatialSize[0].y = read<int>(d);
     mFeatureSpatialSize[0].x = read<int>(d);
     mFeatureSpatialSize[1].y = read<int>(d);

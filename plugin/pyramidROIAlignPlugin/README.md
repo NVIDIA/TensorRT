@@ -85,7 +85,7 @@ To replicate the standard ROI Pooling behavior of [maskrcnn-benchmark](https://g
 
 #### Backward-Compatibility
 
-This plugin underwent a major refactoring since its initial version. In order to replicate the original plugin behavior, use the following parameters:
+This plugin underwent a major refactoring since its initial version. In order to replicate the original plugin behavior, use the following parameters or set the `legacy` parameter to 1.
 
 - `roi_coords_transform`: -1. This is a special mode exclusively to allow back-compatibility with the original PyramidROIAlign plugin.
 - `roi_coords_plusone`: 0. The original implementation had no such logic.
