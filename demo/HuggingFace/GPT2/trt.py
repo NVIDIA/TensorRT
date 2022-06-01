@@ -304,7 +304,7 @@ class GPT2Polygraphy(TRTInferenceCommand):
             if not benchmarking_mode:
                 engine_tag = "bs{}".format(batch_size)
             else:
-                engine_tag = "bs{}-inseq{}-outseq{}".format(batch_size, benchmarking_args.input_seq_len, benchmarking_args.output_seq_len)
+                engine_tag = "bs{}-inseq{}-outseq{}".format(batch_size, args.input_seq_len, args.output_seq_len)
 
             self.gpt2_engine = GPT2ONNXFile(gpt2_onnx_fpath, metadata).as_trt_engine(
                 gpt2_onnx_fpath + engine_tag + ".engine",
