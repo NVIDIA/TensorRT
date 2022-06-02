@@ -30,23 +30,24 @@
 namespace bert
 {
 
-int computeMaskIdx(cudaStream_t stream, const int S, const int B, const int* mask, int* maskIdx);
+int32_t computeMaskIdx(cudaStream_t stream, int32_t const S, int32_t const B, int32_t const* mask, int* maskIdx);
 
 template <typename T>
-int embSkipLayerNorm(cudaStream_t stream, int ld, int B, int S, const int* inputIds, const int* token_ids,
-    const float* beta, const float* gamma, const T* wordEmb, const T* posEmb, const T* tokEmb, T* output);
+int32_t embSkipLayerNorm(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, int32_t const* inputIds,
+    int32_t const* token_ids, float const* beta, float const* gamma, T const* wordEmb, T const* posEmb, T const* tokEmb,
+    int32_t const wordSize, int32_t const tokSize, T* output);
 
-cudaError_t convertMask(const uint32_t S, const uint32_t B, const uint32_t warps_m, const uint32_t warps_n,
-    const uint32_t warps_k, const int* inputMaskSB, uint32_t* inputMaskX, cudaStream_t stream);
+cudaError_t convertMask(uint32_t const S, uint32_t const B, uint32_t const warps_m, uint32_t const warps_n,
+    uint32_t const warps_k, int32_t const* inputMaskSB, uint32_t* inputMaskX, cudaStream_t stream);
 
 class EmbLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    EmbLayerNormPluginDynamic(const std::string& name, const nvinfer1::DataType type, const nvinfer1::DataType mhaType,
-        const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma, const nvinfer1::Weights& word_emb,
-        const nvinfer1::Weights& pos_emb, const nvinfer1::Weights& tok_emb, const bool useFullMask);
+    EmbLayerNormPluginDynamic(std::string const& name, nvinfer1::DataType const type, nvinfer1::DataType const mhaType,
+        nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& word_emb,
+        nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb, bool const useFullMask);
 
-    EmbLayerNormPluginDynamic(const std::string& name, const void* data, size_t length);
+    EmbLayerNormPluginDynamic(std::string const& name, const void* data, size_t length);
 
     // It doesn't make sense to make EmbLayerNormPluginDynamic without arguments, so we
     // delete default constructor.
@@ -54,34 +55,35 @@ public:
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(
-        int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
+        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
-    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
+        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int32_t nbInputs,
+        const nvinfer1::DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     // IPluginV2 Methods
-    const char* getPluginType() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    char const* getPluginType() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
     void destroy() noexcept override;
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
-    const std::string mLayerName;
+    std::string const mLayerName;
     std::string mNamespace;
 
     bert::cuda_unique_ptr<float> mGammaDev;
@@ -102,7 +104,7 @@ private:
     nvinfer1::DataType mType;
     bool mUseFullMask;
     nvinfer1::DataType mMhaType;
-    int mSM;
+    int32_t mSM;
 };
 
 class EmbLayerNormPluginDynamicCreator : public nvinfer1::IPluginCreator
@@ -110,19 +112,20 @@ class EmbLayerNormPluginDynamicCreator : public nvinfer1::IPluginCreator
 public:
     EmbLayerNormPluginDynamicCreator();
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
 
-    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    nvinfer1::IPluginV2* deserializePlugin(
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
 
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     static nvinfer1::PluginFieldCollection mFC;

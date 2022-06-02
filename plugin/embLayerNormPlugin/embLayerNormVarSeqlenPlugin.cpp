@@ -46,9 +46,9 @@ constexpr size_t packedMaskSize384 = xmmasM384 * threadsPerCta384;
 
 namespace
 {
-const char* EMB_LAYER_NORM_VAR_SEQLEN_VERSION_HFACE{"2"};
-const char* EMB_LAYER_NORM_VAR_SEQLEN_VERSION_MTRON{"3"};
-const char* EMB_LAYER_NORM_VAR_SEQLEN_NAME{"CustomEmbLayerNormPluginDynamic"};
+char const* EMB_LAYER_NORM_VAR_SEQLEN_VERSION_HFACE{"2"};
+char const* EMB_LAYER_NORM_VAR_SEQLEN_VERSION_MTRON{"3"};
+char const* EMB_LAYER_NORM_VAR_SEQLEN_NAME{"CustomEmbLayerNormPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
@@ -58,8 +58,8 @@ std::vector<PluginField> EmbLayerNormVarSeqlenPluginBaseCreator::mPluginAttribut
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormVarSeqlenPluginHFaceCreator);
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormVarSeqlenPluginMTronCreator);
 
-EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(const std::string& name, const DataType type,
-    const Weights& beta, const Weights& gamma, const Weights& wordEmb, const Weights& posEmb, const Weights& tokEmb)
+EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(std::string const& name, DataType const type,
+    Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb)
     : mLayerName(name)
     , mLd(beta.count)
     , mType(type)
@@ -89,7 +89,7 @@ EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(const std::stri
 }
 
 EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(
-    const std::string& name, const void* data, size_t length)
+    std::string const& name, void const* data, size_t length)
     : mLayerName(name)
     , mGammaDev(nullptr)
     , mBetaDev(nullptr)
@@ -104,7 +104,7 @@ EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(
     deserialize_value(&data, &length, &mPosVocabSize);
     deserialize_value(&data, &length, &mTokVocabSize);
 
-    const char* d = static_cast<const char*>(data);
+    char const* d = static_cast<char const*>(data);
     mBeta.convertAndCopy(d, mLd, nvinfer1::DataType::kFLOAT);
     mGamma.convertAndCopy(d, mLd, nvinfer1::DataType::kFLOAT);
 
@@ -120,27 +120,27 @@ EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(
     copyToDevice(mTokEmb, getWeightsSize(mTokEmb, mType), mTokEmbDev);
 }
 
-EmbLayerNormVarSeqlenPluginHFace::EmbLayerNormVarSeqlenPluginHFace(const std::string& name, const DataType type,
-    const Weights& beta, const Weights& gamma, const Weights& wordEmb, const Weights& posEmb, const Weights& tokEmb)
+EmbLayerNormVarSeqlenPluginHFace::EmbLayerNormVarSeqlenPluginHFace(std::string const& name, DataType const type,
+    Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb)
     : EmbLayerNormVarSeqlenPluginBase(name, type, beta, gamma, wordEmb, posEmb, tokEmb)
 {
 }
 
 EmbLayerNormVarSeqlenPluginHFace::EmbLayerNormVarSeqlenPluginHFace(
-    const std::string& name, const void* data, size_t length)
+    std::string const& name, void const* data, size_t length)
     : EmbLayerNormVarSeqlenPluginBase(name, data, length)
 {
     BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace deserialize");
 }
 
-EmbLayerNormVarSeqlenPluginMTron::EmbLayerNormVarSeqlenPluginMTron(const std::string& name, const DataType type,
-    const Weights& beta, const Weights& gamma, const Weights& wordEmb, const Weights& posEmb, const Weights& tokEmb)
+EmbLayerNormVarSeqlenPluginMTron::EmbLayerNormVarSeqlenPluginMTron(std::string const& name, DataType const type,
+    Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb)
     : EmbLayerNormVarSeqlenPluginBase(name, type, beta, gamma, wordEmb, posEmb, tokEmb)
 {
 }
 
 EmbLayerNormVarSeqlenPluginMTron::EmbLayerNormVarSeqlenPluginMTron(
-    const std::string& name, const void* data, size_t length)
+    std::string const& name, void const* data, size_t length)
     : EmbLayerNormVarSeqlenPluginBase(name, data, length)
 {
     BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron deserialize");
@@ -184,7 +184,7 @@ IPluginV2DynamicExt* EmbLayerNormVarSeqlenPluginMTron::clone() const noexcept
 }
 
 DimsExprs EmbLayerNormVarSeqlenPluginHFace::getOutputDimensions(
-    int32_t outputIndex, const DimsExprs* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     // Input should be input ids and token ids and cumulative seqlens
     // Output should be the embeddings tensor and mask indices
@@ -227,7 +227,7 @@ DimsExprs EmbLayerNormVarSeqlenPluginHFace::getOutputDimensions(
 }
 
 DimsExprs EmbLayerNormVarSeqlenPluginMTron::getOutputDimensions(
-    int32_t outputIndex, const DimsExprs* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     // Input should be input ids and token ids and cumulative seqlens
     // Output should be the embeddings tensor and mask indices
@@ -250,7 +250,7 @@ DimsExprs EmbLayerNormVarSeqlenPluginMTron::getOutputDimensions(
 }
 
 bool EmbLayerNormVarSeqlenPluginBase::supportsFormatCombination(
-    int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     // The four inputs to this plugin input_ids, segment_ids, cu_seqlens and a dummy input with the
     // size of the max seq length in that order
@@ -258,7 +258,7 @@ bool EmbLayerNormVarSeqlenPluginBase::supportsFormatCombination(
     // The two outputs of the plugin are embedding and the mask
     PLUGIN_ASSERT(nbOutputs == 2);
 
-    const PluginTensorDesc& desc = inOut[pos];
+    PluginTensorDesc const& desc = inOut[pos];
     if (desc.format != TensorFormat::kLINEAR)
     {
         return false;
@@ -268,7 +268,7 @@ bool EmbLayerNormVarSeqlenPluginBase::supportsFormatCombination(
         return desc.type == DataType::kINT32 && desc.dims.nbDims == 1;
     }
 
-    const PluginTensorDesc& prev = inOut[pos - 1];
+    PluginTensorDesc const& prev = inOut[pos - 1];
     if (pos == 1) // segment ids: check it's the same as input_ids
     {
         return desc.type == DataType::kINT32 && desc.dims.nbDims == 1 && desc.dims.d[0] == prev.dims.d[0];
@@ -289,8 +289,8 @@ bool EmbLayerNormVarSeqlenPluginBase::supportsFormatCombination(
     return desc.type == DataType::kHALF;
 }
 
-void checkConfigurationInputs(const DynamicPluginTensorDesc* inputs, int32_t nbInputs,
-    const DynamicPluginTensorDesc* outputs, int32_t nbOutputs) noexcept
+void checkConfigurationInputs(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
 {
     // Validate input arguments
     PLUGIN_ASSERT(nbInputs == 4);
@@ -313,14 +313,14 @@ void checkConfigurationInputs(const DynamicPluginTensorDesc* inputs, int32_t nbI
     PLUGIN_ASSERT(inputs[2].desc.type == DataType::kINT32);
 }
 
-void EmbLayerNormVarSeqlenPluginHFace::configurePlugin(const DynamicPluginTensorDesc* inputs, int32_t nbInputs,
-    const DynamicPluginTensorDesc* outputs, int32_t nbOutputs) noexcept
+void EmbLayerNormVarSeqlenPluginHFace::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
 {
     BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace configurePlugin");
     checkConfigurationInputs(inputs, nbInputs, outputs, nbOutputs);
     PLUGIN_ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[1]) == static_cast<size_t>(mLd));
 
-    const int32_t B = inputs[2].desc.dims.d[0] - 1;
+    int32_t const B = inputs[2].desc.dims.d[0] - 1;
 
     // check mask
     PLUGIN_ASSERT(outputs[1].desc.dims.nbDims == 2);
@@ -336,8 +336,8 @@ void EmbLayerNormVarSeqlenPluginHFace::configurePlugin(const DynamicPluginTensor
     PLUGIN_ASSERT(outputs[1].desc.type == DataType::kHALF);
 }
 
-void EmbLayerNormVarSeqlenPluginMTron::configurePlugin(const DynamicPluginTensorDesc* inputs, int32_t nbInputs,
-    const DynamicPluginTensorDesc* outputs, int32_t nbOutputs) noexcept
+void EmbLayerNormVarSeqlenPluginMTron::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
 {
     BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron configurePlugin");
     checkConfigurationInputs(inputs, nbInputs, outputs, nbOutputs);
@@ -354,19 +354,19 @@ void EmbLayerNormVarSeqlenPluginMTron::configurePlugin(const DynamicPluginTensor
 }
 
 size_t EmbLayerNormVarSeqlenPluginBase::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int32_t nbInputs, const PluginTensorDesc* outputs, int32_t nbOutputs) const noexcept
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
     return 0;
 }
 
-int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
-        const int32_t batchSize = inputDesc[2].dims.d[0] - 1;
+        int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
         // read out the maximum sequence length from the dummy input
-        const int32_t maxSeqlen = inputDesc[3].dims.d[0];
+        int32_t const maxSeqlen = inputDesc[3].dims.d[0];
 
         // There are four versions of the kernel which are optimized for sequence lengths 384, 256, 192 and 128.
         // Find the closest sequence length bigger than the max seq length in this batch.
@@ -385,31 +385,31 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(const PluginTensorDesc* inputD
         }
 
         // Our plugin outputs only one tensor
-        const auto inputIds = static_cast<const int32_t*>(inputs[0]);
-        const auto segmentIds = static_cast<const int32_t*>(inputs[1]);
-        const int32_t* cuSeqlens = static_cast<const int32_t*>(inputs[2]);
+        auto const inputIds = static_cast<int32_t const*>(inputs[0]);
+        auto const segmentIds = static_cast<int32_t const*>(inputs[1]);
+        int32_t const* cuSeqlens = static_cast<int32_t const*>(inputs[2]);
 
         const float* beta = mBetaDev.get();
         const float* gamma = mGammaDev.get();
         if (mType == DataType::kFLOAT)
         {
             auto output = static_cast<float*>(outputs[0]);
-            const auto wordEmb = static_cast<const float*>(mWordEmbDev.get());
-            const auto tokEmb = static_cast<const float*>(mTokEmbDev.get());
-            const auto posEmb = static_cast<const float*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<const float*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<const float*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<const float*>(mPosEmbDev.get());
 
             return embSkipLayerNormHFace<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, output);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
         }
         else if (mType == DataType::kHALF)
         {
             auto output = static_cast<half*>(outputs[0]);
-            const auto wordEmb = static_cast<const half*>(mWordEmbDev.get());
-            const auto tokEmb = static_cast<const half*>(mTokEmbDev.get());
-            const auto posEmb = static_cast<const half*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<const half*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<const half*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<const half*>(mPosEmbDev.get());
 
             return embSkipLayerNormHFace<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, output);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
         }
         else
         {
@@ -421,21 +421,21 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(const PluginTensorDesc* inputD
 
         return STATUS_SUCCESS;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
     return STATUS_FAILURE;
 }
 
-int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
-        const int32_t batchSize = inputDesc[2].dims.d[0] - 1;
+        int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
         // read out the maximum sequence length from the dummy input
-        const int32_t maxSeqlen = inputDesc[3].dims.d[0];
+        int32_t const maxSeqlen = inputDesc[3].dims.d[0];
 
         // There are four versions of the kernel which are optimized for sequence lengths 384, 256, 192 and 128.
         // Find the closest sequence length bigger than the max seq length in this batch.
@@ -454,9 +454,9 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(const PluginTensorDesc* inputD
         }
 
         // Our plugin outputs only one tensor
-        const auto inputIds = static_cast<const int32_t*>(inputs[0]);
-        const auto segmentIds = static_cast<const int32_t*>(inputs[1]);
-        const int32_t* cuSeqlens = static_cast<const int32_t*>(inputs[2]);
+        auto const inputIds = static_cast<int32_t const*>(inputs[0]);
+        auto const segmentIds = static_cast<int32_t const*>(inputs[1]);
+        int32_t const* cuSeqlens = static_cast<int32_t const*>(inputs[2]);
 
         const float* beta = mBetaDev.get();
         const float* gamma = mGammaDev.get();
@@ -464,23 +464,23 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(const PluginTensorDesc* inputD
         {
             auto output = static_cast<float*>(outputs[0]);
             auto skip = static_cast<float*>(outputs[1]);
-            const auto wordEmb = static_cast<const float*>(mWordEmbDev.get());
-            const auto tokEmb = static_cast<const float*>(mTokEmbDev.get());
-            const auto posEmb = static_cast<const float*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<const float*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<const float*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<const float*>(mPosEmbDev.get());
 
             return embSkipLayerNormMTron<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, output, skip);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);
         }
         else if (mType == DataType::kHALF)
         {
             auto output = static_cast<half*>(outputs[0]);
             auto skip = static_cast<half*>(outputs[1]);
-            const auto wordEmb = static_cast<const half*>(mWordEmbDev.get());
-            const auto tokEmb = static_cast<const half*>(mTokEmbDev.get());
-            const auto posEmb = static_cast<const half*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<const half*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<const half*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<const half*>(mPosEmbDev.get());
 
             return embSkipLayerNormMTron<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, output, skip);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);
         }
         else
         {
@@ -492,7 +492,7 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(const PluginTensorDesc* inputD
 
         return STATUS_SUCCESS;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -501,7 +501,7 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(const PluginTensorDesc* inputD
 
 // IPluginV2Ext Methods
 DataType EmbLayerNormVarSeqlenPluginBase::getOutputDataType(
-    int32_t index, const DataType* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
 
     PLUGIN_ASSERT(index == 0 || index == 1);
@@ -514,17 +514,17 @@ DataType EmbLayerNormVarSeqlenPluginBase::getOutputDataType(
 }
 
 // IPluginV2 Methods
-const char* EmbLayerNormVarSeqlenPluginBase::getPluginType() const noexcept
+char const* EmbLayerNormVarSeqlenPluginBase::getPluginType() const noexcept
 {
     return EMB_LAYER_NORM_VAR_SEQLEN_NAME;
 }
 
-const char* EmbLayerNormVarSeqlenPluginHFace::getPluginVersion() const noexcept
+char const* EmbLayerNormVarSeqlenPluginHFace::getPluginVersion() const noexcept
 {
     return EMB_LAYER_NORM_VAR_SEQLEN_VERSION_HFACE;
 }
 
-const char* EmbLayerNormVarSeqlenPluginMTron::getPluginVersion() const noexcept
+char const* EmbLayerNormVarSeqlenPluginMTron::getPluginVersion() const noexcept
 {
     return EMB_LAYER_NORM_VAR_SEQLEN_VERSION_MTRON;
 }
@@ -558,7 +558,7 @@ void EmbLayerNormVarSeqlenPluginMTron::terminate() noexcept
 
 size_t EmbLayerNormVarSeqlenPluginBase::getSerializationSize() const noexcept
 {
-    const size_t wordSize = getElementSize(mType);
+    size_t const wordSize = getElementSize(mType);
     return 2 * sizeof(float) * mLd        // beta + gamma
         + sizeof(mType)                   //
         + sizeof(mLd)                     //
@@ -580,7 +580,7 @@ void EmbLayerNormVarSeqlenPluginBase::serialize(void* buffer) const noexcept
     serialize_value(&buffer, mTokVocabSize);
 
     char* d = static_cast<char*>(buffer);
-    const size_t wordSize = getElementSize(mType);
+    size_t const wordSize = getElementSize(mType);
 
     serFromDev(d, mBetaDev.get(), mLd);
     serFromDev(d, mGammaDev.get(), mLd);
@@ -612,19 +612,19 @@ void EmbLayerNormVarSeqlenPluginMTron::destroy() noexcept
     EmbLayerNormVarSeqlenPluginBase::destroy();
 }
 
-void EmbLayerNormVarSeqlenPluginBase::setPluginNamespace(const char* libNamespace) noexcept
+void EmbLayerNormVarSeqlenPluginBase::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
         mNamespace = libNamespace;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
 }
 
-const char* EmbLayerNormVarSeqlenPluginBase::getPluginNamespace() const noexcept
+char const* EmbLayerNormVarSeqlenPluginBase::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -644,27 +644,27 @@ EmbLayerNormVarSeqlenPluginBaseCreator::EmbLayerNormVarSeqlenPluginBaseCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* EmbLayerNormVarSeqlenPluginBaseCreator::getPluginName() const noexcept
+char const* EmbLayerNormVarSeqlenPluginBaseCreator::getPluginName() const noexcept
 {
     return EMB_LAYER_NORM_VAR_SEQLEN_NAME;
 }
 
-const char* EmbLayerNormVarSeqlenPluginHFaceCreator::getPluginVersion() const noexcept
+char const* EmbLayerNormVarSeqlenPluginHFaceCreator::getPluginVersion() const noexcept
 {
     return EMB_LAYER_NORM_VAR_SEQLEN_VERSION_HFACE;
 }
 
-const char* EmbLayerNormVarSeqlenPluginMTronCreator::getPluginVersion() const noexcept
+char const* EmbLayerNormVarSeqlenPluginMTronCreator::getPluginVersion() const noexcept
 {
     return EMB_LAYER_NORM_VAR_SEQLEN_VERSION_MTRON;
 }
 
-const PluginFieldCollection* EmbLayerNormVarSeqlenPluginBaseCreator::getFieldNames() noexcept
+PluginFieldCollection const* EmbLayerNormVarSeqlenPluginBaseCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights& beta, Weights& gamma,
+bool initializeFields(char const* name, PluginFieldCollection const* fc, Weights& beta, Weights& gamma,
     Weights& word_emb, Weights& pos_emb, Weights& tok_emb)
 {
     bool output_fp16 = false;
@@ -714,14 +714,14 @@ bool initializeFields(const char* name, const PluginFieldCollection* fc, Weights
         {
             BERT_DEBUG_MSG("Building output_fp16...");
             PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
-            output_fp16 = static_cast<const int32_t*>(fc->fields[i].data)[0] != 0;
+            output_fp16 = static_cast<int32_t const*>(fc->fields[i].data)[0] != 0;
         }
     }
     return output_fp16;
 }
 
 IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+    char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -739,7 +739,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(
             name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, beta, gamma, word_emb, pos_emb, tok_emb);
         return p;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -747,7 +747,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(
 }
 
 IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+    char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -765,7 +765,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(
             name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, beta, gamma, word_emb, pos_emb, tok_emb);
         return p;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -773,7 +773,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(
 }
 
 IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -781,7 +781,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::deserializePlugin(
         // call EmbLayerNormVarSeqlen::destroy()
         return new EmbLayerNormVarSeqlenPluginHFace(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -789,7 +789,7 @@ IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::deserializePlugin(
 }
 
 IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -797,26 +797,26 @@ IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::deserializePlugin(
         // call EmbLayerNormVarSeqlen::destroy()
         return new EmbLayerNormVarSeqlenPluginMTron(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
     return nullptr;
 }
 
-void EmbLayerNormVarSeqlenPluginBaseCreator::setPluginNamespace(const char* libNamespace) noexcept
+void EmbLayerNormVarSeqlenPluginBaseCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
         mNamespace = libNamespace;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
 }
 
-const char* EmbLayerNormVarSeqlenPluginBaseCreator::getPluginNamespace() const noexcept
+char const* EmbLayerNormVarSeqlenPluginBaseCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
