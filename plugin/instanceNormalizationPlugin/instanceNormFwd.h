@@ -134,7 +134,7 @@ struct InstanceNormFwdContext
 struct InstanceNormFwdParams
 {
     // The input/output tensors.
-    const void* gmem_src;
+    void const* gmem_src;
     void* gmem_dst;
     // The bias/scale.
     float* gmem_bias;
@@ -171,11 +171,11 @@ struct InstanceNormFwdParams
     float out_scale;
 };
 
-void instanceNormBufferSizesDispatch(const InstanceNormFwdContext& context, const InstanceNormFwdParams& params,
+void instanceNormBufferSizesDispatch(InstanceNormFwdContext const& context, InstanceNormFwdParams const& params,
     size_t& size_sums, size_t& size_counts, size_t& size_retired_ctas, int32_t input_data_type = 1,
     int32_t output_data_type = 1);
 
-int32_t instanceNormFwdDispatch(const InstanceNormFwdContext& context, InstanceNormFwdParams& params,
+int32_t instanceNormFwdDispatch(InstanceNormFwdContext const& context, InstanceNormFwdParams& params,
     cudaStream_t stream, int32_t input_data_type = 1, int32_t output_data_type = 1);
 
 } // namespace instance_norm_impl

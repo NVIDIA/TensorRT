@@ -53,7 +53,7 @@ struct PackedStorage<int8_t, ELEMENTS_PER_LDG>
 };
 
 template <int32_t N>
-DEVICE_FUNCTION void fromFloat(int32_t (&dst)[N], const float (&src)[2 * N])
+DEVICE_FUNCTION void fromFloat(int32_t (&dst)[N], float const (&src)[2 * N])
 {
 #pragma unroll
     for (int32_t i = 0; i < N; ++i)
@@ -66,9 +66,10 @@ DEVICE_FUNCTION void fromFloat(int32_t (&dst)[N], const float (&src)[2 * N])
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void fromFloat(int32_t (&dst)[N], const float (&src)[4 * N], float scale)
+DEVICE_FUNCTION void fromFloat(int32_t (&dst)[N], float const (&src)[4 * N], float scale)
 {
-    union Pack_t {
+    union Pack_t
+    {
         int8_t x[4];
         int32_t val;
     };
@@ -86,7 +87,7 @@ DEVICE_FUNCTION void fromFloat(int32_t (&dst)[N], const float (&src)[4 * N], flo
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void fromFloat(float (&dst)[N], const float (&src)[N])
+DEVICE_FUNCTION void fromFloat(float (&dst)[N], float const (&src)[N])
 {
 #pragma unroll
     for (int32_t i = 0; i < N; ++i)
@@ -140,13 +141,13 @@ DEVICE_FUNCTION void toFloat(float (&dst)[N], float (&src)[N], float scale = 1.f
 }
 
 template <typename T>
-DEVICE_FUNCTION void ldg(int32_t (&dst)[1], const T* gmem)
+DEVICE_FUNCTION void ldg(int32_t (&dst)[1], T const* gmem)
 {
-    dst[0] = __ldg((const int32_t*) gmem);
+    dst[0] = __ldg((int32_t const*) gmem);
 }
 
 template <typename T>
-DEVICE_FUNCTION void ldgStream(int32_t (&dst)[1], const T* gmem)
+DEVICE_FUNCTION void ldgStream(int32_t (&dst)[1], T const* gmem)
 {
     uint32_t tmp;
     asm volatile("ld.global.cs.nc.s32 %0, [%1];" : "=r"(tmp) : "l"((const uint32_t*) gmem));
@@ -154,7 +155,7 @@ DEVICE_FUNCTION void ldgStream(int32_t (&dst)[1], const T* gmem)
 }
 
 template <typename T>
-DEVICE_FUNCTION void ldg(int32_t (&dst)[2], const T* gmem)
+DEVICE_FUNCTION void ldg(int32_t (&dst)[2], T const* gmem)
 {
     int2 tmp = __ldg((const int2*) gmem);
     dst[0] = tmp.x;
@@ -162,7 +163,7 @@ DEVICE_FUNCTION void ldg(int32_t (&dst)[2], const T* gmem)
 }
 
 template <typename T>
-DEVICE_FUNCTION void ldgStream(int32_t (&dst)[2], const T* gmem)
+DEVICE_FUNCTION void ldgStream(int32_t (&dst)[2], T const* gmem)
 {
     int2 tmp;
     asm volatile("ld.global.cs.nc.v2.s32 {%0,%1}, [%2];" : "=r"(tmp.x), "=r"(tmp.y) : "l"((const int2*) gmem));
@@ -276,14 +277,14 @@ DEVICE_FUNCTION void stgStream(int8_t* gmem, float (&src)[N], float scale)
     stg(gmem, tmp);
 }
 
-DEVICE_FUNCTION void readFromGmem(float (&dst)[2], const float* gmem, int32_t idx)
+DEVICE_FUNCTION void readFromGmem(float (&dst)[2], float const* gmem, int32_t idx)
 {
     float2 tmp = __ldg((float2*) &gmem[2 * idx]);
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 }
 
-DEVICE_FUNCTION void readFromGmem(float (&dst)[4], const float* gmem, int32_t idx)
+DEVICE_FUNCTION void readFromGmem(float (&dst)[4], float const* gmem, int32_t idx)
 {
     float4 tmp = __ldg((float4*) &gmem[4 * idx]);
     dst[0] = tmp.x;
@@ -310,46 +311,46 @@ DEVICE_FUNCTION void readFromGmem(float (&dst)[N], const __half* gmem, int32_t i
     }
 }
 
-DEVICE_FUNCTION void readFromSmem(float (&x)[2], const float* smem, int32_t idx)
+DEVICE_FUNCTION void readFromSmem(float (&x)[2], float const* smem, int32_t idx)
 {
-    float2 tmp = *(const float2*) &smem[2 * idx];
+    float2 tmp = *(float2 const*) &smem[2 * idx];
     x[0] = tmp.x;
     x[1] = tmp.y;
 }
 
-DEVICE_FUNCTION void readFromSmem(float (&x)[4], const float* smem, int32_t idx)
+DEVICE_FUNCTION void readFromSmem(float (&x)[4], float const* smem, int32_t idx)
 {
-    float4 tmp = *(const float4*) &smem[4 * idx];
+    float4 tmp = *(float4 const*) &smem[4 * idx];
     x[0] = tmp.x;
     x[1] = tmp.y;
     x[2] = tmp.z;
     x[3] = tmp.w;
 }
 
-DEVICE_FUNCTION void readFromSmem(int32_t (&x)[1], const int32_t* smem, int32_t idx)
+DEVICE_FUNCTION void readFromSmem(int32_t (&x)[1], int32_t const* smem, int32_t idx)
 {
     x[0] = smem[idx];
 }
 
-DEVICE_FUNCTION void readFromSmem(int32_t (&x)[2], const int32_t* smem, int32_t idx)
+DEVICE_FUNCTION void readFromSmem(int32_t (&x)[2], int32_t const* smem, int32_t idx)
 {
-    int2 tmp = *(const int2*) &smem[2 * idx];
+    int2 tmp = *(int2 const*) &smem[2 * idx];
     x[0] = tmp.x;
     x[1] = tmp.y;
 }
 
-DEVICE_FUNCTION void writeToGmem(float* gmem, int32_t idx, const float (&src)[2])
+DEVICE_FUNCTION void writeToGmem(float* gmem, int32_t idx, float const (&src)[2])
 {
     reinterpret_cast<float2*>(&gmem[2 * idx])[0] = make_float2(src[0], src[1]);
 }
 
-DEVICE_FUNCTION void writeToGmem(float* gmem, int32_t idx, const float (&src)[4])
+DEVICE_FUNCTION void writeToGmem(float* gmem, int32_t idx, float const (&src)[4])
 {
     reinterpret_cast<float4*>(&gmem[4 * idx])[0] = make_float4(src[0], src[1], src[2], src[3]);
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void writeToGmem(__half* gmem, int32_t idx, const float (&src)[N])
+DEVICE_FUNCTION void writeToGmem(__half* gmem, int32_t idx, float const (&src)[N])
 {
     int32_t ival[N / 2];
 #pragma unroll
@@ -371,22 +372,22 @@ DEVICE_FUNCTION void writeToGmem(__half* gmem, int32_t idx, const float (&src)[N
     }
 }
 
-DEVICE_FUNCTION void writeToSmem(float* smem, int32_t idx, const float (&x)[2])
+DEVICE_FUNCTION void writeToSmem(float* smem, int32_t idx, float const (&x)[2])
 {
     reinterpret_cast<float2*>(&smem[2 * idx])[0] = make_float2(x[0], x[1]);
 }
 
-DEVICE_FUNCTION void writeToSmem(float* smem, int32_t idx, const float (&x)[4])
+DEVICE_FUNCTION void writeToSmem(float* smem, int32_t idx, float const (&x)[4])
 {
     reinterpret_cast<float4*>(&smem[4 * idx])[0] = make_float4(x[0], x[1], x[2], x[3]);
 }
 
-DEVICE_FUNCTION void writeToSmem(int32_t* smem, int32_t idx, const int32_t (&x)[1])
+DEVICE_FUNCTION void writeToSmem(int32_t* smem, int32_t idx, int32_t const (&x)[1])
 {
     smem[idx] = x[0];
 }
 
-static inline __device__ void writeToSmem(int32_t* smem, int32_t idx, const int32_t (&x)[2])
+static inline __device__ void writeToSmem(int32_t* smem, int32_t idx, int32_t const (&x)[2])
 {
     reinterpret_cast<int2*>(&smem[2 * idx])[0] = make_int2(x[0], x[1]);
 }
@@ -412,7 +413,7 @@ DEVICE_FUNCTION void zero(float (&dst)[N])
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void add(float (&x)[N], const float (&y)[N])
+DEVICE_FUNCTION void add(float (&x)[N], float const (&y)[N])
 {
 #pragma unroll
     for (int32_t i = 0; i < N; ++i)
@@ -422,7 +423,7 @@ DEVICE_FUNCTION void add(float (&x)[N], const float (&y)[N])
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void normalize(float (&x)[N], const float (&bias)[N], const float (&scale)[N], const float (&m1)[N])
+DEVICE_FUNCTION void normalize(float (&x)[N], float const (&bias)[N], float const (&scale)[N], float const (&m1)[N])
 {
 #pragma unroll
     for (int32_t i = 0; i < N; ++i)
@@ -453,16 +454,16 @@ DEVICE_FUNCTION void parallelSums_16x2(float* smem, float (&x)[4], int32_t nhw)
 {
 
     // The size of a warp.
-    const int32_t THREADS_PER_WARP = 32;
+    int32_t const THREADS_PER_WARP = 32;
     // The number of warps in a CTA.
-    const int32_t WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
+    int32_t const WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
     // The number of threads per pixel.
-    const int32_t THREADS_PER_PIXEL = 16;
+    int32_t const THREADS_PER_PIXEL = 16;
     // The number of elements per ldg.
-    const int32_t ELEMENTS_PER_LDG = 4;
+    int32_t const ELEMENTS_PER_LDG = 4;
     // The warp decomposition.
-    const int32_t warp_id = threadIdx.x / THREADS_PER_WARP;
-    const int32_t lane_id = threadIdx.x % THREADS_PER_WARP;
+    int32_t const warp_id = threadIdx.x / THREADS_PER_WARP;
+    int32_t const lane_id = threadIdx.x % THREADS_PER_WARP;
 
     // Store the values to shared memory.
     writeToSmem(smem, threadIdx.x, x);
@@ -548,16 +549,16 @@ template <int32_t THREADS_PER_CTA>
 static inline __device__ void parallelSums_8x4(float* smem, float (&x)[4], int32_t nhw)
 {
     // The size of a warp.
-    const int32_t THREADS_PER_WARP = 32;
+    int32_t const THREADS_PER_WARP = 32;
     // The number of warps in a CTA.
-    const int32_t WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
+    int32_t const WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
     // The number of threads per pixel.
-    const int32_t THREADS_PER_PIXEL = 8;
+    int32_t const THREADS_PER_PIXEL = 8;
     // The number of elements per ldg.
-    const int32_t ELEMENTS_PER_LDG = 4;
+    int32_t const ELEMENTS_PER_LDG = 4;
     // The warp decomposition.
-    const int32_t warp_id = threadIdx.x / THREADS_PER_WARP;
-    const int32_t lane_id = threadIdx.x % THREADS_PER_WARP;
+    int32_t const warp_id = threadIdx.x / THREADS_PER_WARP;
+    int32_t const lane_id = threadIdx.x % THREADS_PER_WARP;
 
 #pragma unroll
     for (int32_t i = 0; i < ELEMENTS_PER_LDG; ++i)
@@ -613,16 +614,16 @@ DEVICE_FUNCTION void parallelSums(float* smem, float (&x)[ELEMENTS_PER_LDG], int
 {
 
     // The size of a warp.
-    const int32_t THREADS_PER_WARP = 32;
+    int32_t const THREADS_PER_WARP = 32;
     // The number of warps in a CTA.
-    const int32_t WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
+    int32_t const WARPS_PER_CTA = THREADS_PER_CTA / THREADS_PER_WARP;
     // The number of pixels computed by a single warp.
-    const int32_t PIXELS_PER_WARP = THREADS_PER_WARP / THREADS_PER_PIXEL;
+    int32_t const PIXELS_PER_WARP = THREADS_PER_WARP / THREADS_PER_PIXEL;
 
     // The position in the warp.
-    const int32_t nhw_in_warp = nhw % PIXELS_PER_WARP;
+    int32_t const nhw_in_warp = nhw % PIXELS_PER_WARP;
     // The C in the warp.
-    const int32_t c_in_warp = threadIdx.x % THREADS_PER_PIXEL;
+    int32_t const c_in_warp = threadIdx.x % THREADS_PER_PIXEL;
 
     // Store the values to shared memory.
     writeToSmem(smem, threadIdx.x, x);
@@ -672,7 +673,7 @@ DEVICE_FUNCTION void parallelSums(float* smem, float (&x)[ELEMENTS_PER_LDG], int
     __syncthreads();
 
     // The warp leaders, write to SMEM.
-    const int32_t idx = (threadIdx.x / THREADS_PER_WARP) * THREADS_PER_PIXEL + c_in_warp;
+    int32_t const idx = (threadIdx.x / THREADS_PER_WARP) * THREADS_PER_PIXEL + c_in_warp;
     if (nhw_in_warp == 0)
     {
         writeToSmem(smem, idx, x);
