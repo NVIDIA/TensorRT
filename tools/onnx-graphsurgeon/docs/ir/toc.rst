@@ -1,5 +1,5 @@
 ============================
-Intermediate Represenatation
+Intermediate Representation
 ============================
 
 .. toctree::
