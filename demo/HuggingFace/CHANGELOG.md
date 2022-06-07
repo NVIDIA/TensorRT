@@ -20,6 +20,9 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+# [1.2.?] - 2022-06-?
+- Added BART demo
+
 # [1.2.1] - 2022-05-20
 
 - Added `benchmark` action to T5 frameworks/onnxrt and GPT2 frameworks/trt for performance benchmarking. It uses random
