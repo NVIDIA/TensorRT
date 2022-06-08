@@ -9,7 +9,7 @@ Create a directory for external sources and download pybind11 into it.
 export EXT_PATH=~/external
 
 mkdir -p $EXT_PATH && cd $EXT_PATH
-git clone https://github.com/pybind/pybind11.git
+git clone https://github.com/pybind/pybind11.git -b v2.6.2
 ```
 
 ### Download Python headers
