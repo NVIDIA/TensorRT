@@ -18,7 +18,7 @@ The `inspect model` subtool can display ONNX models.
 
     ```
     [I] ==== ONNX Model ====
-        Name: test_identity | Opset: 8
+        Name: test_identity | ONNX Opset: 8
 
         ---- 1 Graph Input(s) ----
         {x [dtype=float32, shape=(1, 1, 2, 2)]}

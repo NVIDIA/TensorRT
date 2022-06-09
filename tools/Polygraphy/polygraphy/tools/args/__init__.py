@@ -13,14 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from polygraphy.tools.args.backend import *
 from polygraphy.tools.args.comparator import *
-from polygraphy.tools.args.data_loader import *
 from polygraphy.tools.args.logger import *
 from polygraphy.tools.args.model import *
-from polygraphy.tools.args.onnx import *
-from polygraphy.tools.args.onnxrt import *
-from polygraphy.tools.args.pluginref import *
-from polygraphy.tools.args.tf2onnx import *
-from polygraphy.tools.args.tf import *
-from polygraphy.tools.args.trt import *
-from polygraphy.tools.args.trt_legacy import *

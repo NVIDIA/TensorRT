@@ -31,13 +31,12 @@ class GenData(Tool):
     """
     Generate random data and write it to a file.
     """
-    # First, we'll implement the constructor to subscribe to argument groups
+    # First, we'll implement `get_subscriptions()` to subscribe to argument groups
     # that we're intrested in.
     # All the argument groups we subscribe to will be stored in a member called
     # arg_groups, which maps types to instances.
-    def __init__(self):
-        super().__init__()
-        self.subscribe_args(DataLoaderArgs())
+    def get_subscriptions(self):
+        return [DataLoaderArgs()]
 
     # Next, we'll add custom arguments, beyond those provided by our subscribed
     # argument groups, by defining `add_parser_args`.

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -49,7 +50,7 @@ class LoadPlugins(BaseLoader):
         Args:
             plugins (List[str]):
                     A list of paths to plugin libraries to load before inference.
-            obj (object):
+            obj :
                     An object or callable to return or call respectively.
                     If ``obj`` is callable, extra parameters will be forwarded to ``obj``.
                     If ``obj`` is not callable, it will be returned.
@@ -65,7 +66,7 @@ class LoadPlugins(BaseLoader):
                     callable. Returns ``None`` if ``obj`` was not set.
         """
         for plugin in self.plugins:
-            G_LOGGER.info("Loading plugin library: {:}".format(plugin))
+            G_LOGGER.info(f"Loading plugin library: {plugin}")
             ctypes.CDLL(plugin)
 
         ret, _ = util.invoke_if_callable(self.obj, *args, **kwargs)
@@ -84,10 +85,15 @@ class CreateNetwork(BaseLoader):
 
         Args:
             explicit_precision (bool):
-                    Whether to create the network with explicit precision enabled. Defaults to False
+                    [DEPRECATED] Whether to create the network with explicit precision enabled.
+                    Defaults to False
             explicit_batch (bool):
-                    Whether to create the network with explicit batch mode. Defaults to True.
+                    Whether to create the network with explicit batch mode.
+                    Defaults to True.
         """
+        if explicit_precision is not None:
+            mod.warn_deprecated("explicit_precision", use_instead=None, remove_in="0.42.0")
+
         self.explicit_precision = util.default(explicit_precision, False)
         self.explicit_batch = util.default(explicit_batch, True)
 
@@ -261,6 +267,7 @@ class CreateConfig(BaseLoader):
         profiles=None,
         calibrator=None,
         obey_precision_constraints=None,
+        precision_constraints=None,
         strict_types=None,
         load_timing_cache=None,
         algorithm_selector=None,
@@ -297,18 +304,27 @@ class CreateConfig(BaseLoader):
                     the network does not have explicit precision. For networks with
                     dynamic shapes, the last profile provided (or default profile if
                     no profiles are provided) is used during calibration.
+            precision_constraints (Optional[str]):
+                    If set to "obey", require that layers execute in specified precisions.
+                    If set to "prefer", prefer that layers execute in specified precisions but allow TRT to fall back to
+                    other precisions if no implementation exists for the requested precision.
+                    Otherwise, precision constraints are ignored.
+                    Defaults to None.
             obey_precision_constraints (bool):
-                    If True, require that layers execute in specified precisions.
+                    [DEPRECATED] If set, is alias for precision_constraints="obey".  Ignored if precision_constraints is not None.
+                    precision_constraints is recommended instead.
                     Defaults to False.
             strict_types (bool):
                     [DEPRECATED] If True, prefer that layers execute in specified precisions and avoid I/O reformatting.
                     Fall back to ignoring the preferences if such an engine cannot be built.
-                    obey_precision_constraints is recommended instead.
+                    precision_constraints is recommended instead.
                     Defaults to False.
             load_timing_cache (Union[str, file-like]):
                     A path or file-like object from which to load a tactic timing cache.
                     Providing a tactic timing cache can speed up the engine building process.
                     Caches can be generated while building an engine with, for example, EngineFromNetwork.
+                    If a path is provided, the file will be locked for exclusive access so that other processes
+                    cannot update the cache while it is being read.
             algorithm_selector (trt.IAlgorithmSelector):
                     An algorithm selector. Allows the user to control how tactics are selected
                     instead of letting TensorRT select them automatically.
@@ -353,7 +369,12 @@ class CreateConfig(BaseLoader):
         self.int8 = util.default(int8, False)
         self.profiles = util.default(profiles, [Profile()])
         self.calibrator = calibrator
-        self.obey_precision_constraints = util.default(obey_precision_constraints, False)
+        if precision_constraints is None and obey_precision_constraints is not None:
+            mod.warn_deprecated("obey_precision_constraints", use_instead="precision_constraints", remove_in="0.40.0")
+            obey_precision_constraints = util.default(obey_precision_constraints, False)
+            if obey_precision_constraints:
+                precision_constraints = "obey"
+        self.precision_constraints = precision_constraints
         self.strict_types = util.default(strict_types, False)
         self.restricted = util.default(restricted, False)
         self.timing_cache_path = load_timing_cache
@@ -389,7 +410,7 @@ class CreateConfig(BaseLoader):
                 try:
                     return func()
                 except AttributeError:
-                    trt_util.fail_unavailable("{:} in CreateConfig".format(name))
+                    trt_util.fail_unavailable(f"{name} in CreateConfig")
 
             def try_set_flag(flag_name):
                 return try_run(lambda: config.set_flag(getattr(trt.BuilderFlag, flag_name)), flag_name.lower())
@@ -401,15 +422,17 @@ class CreateConfig(BaseLoader):
                     # Last trt_profile is used for set_calibration_profile.
                     trt_profile = profile.fill_defaults(network).to_trt(builder, network)
                     config.add_optimization_profile(trt_profile)
-                G_LOGGER.info("Configuring with profiles: {:}".format(profiles))
+                G_LOGGER.info(f"Configuring with profiles: {profiles}")
 
             config.max_workspace_size = int(self.max_workspace_size)
 
-            if self.obey_precision_constraints:
+            if self.precision_constraints == "obey":
                 try_set_flag("OBEY_PRECISION_CONSTRAINTS")
+            elif self.precision_constraints == "prefer":
+                try_set_flag("PREFER_PRECISION_CONSTRAINTS")
 
             if self.strict_types:
-                mod.warn_deprecated("strict_types", use_instead="obey_precision_constraints", remove_in="0.36.0")
+                mod.warn_deprecated("strict_types", use_instead="precision_constraints", remove_in="0.40.0")
                 try_set_flag("STRICT_TYPES")
 
             if self.restricted:
@@ -476,7 +499,8 @@ class CreateConfig(BaseLoader):
 
             try:
                 if self.timing_cache_path:
-                    timing_cache_data = util.load_file(self.timing_cache_path, description="tactic timing cache")
+                    with util.LockFile(self.timing_cache_path):
+                        timing_cache_data = util.load_file(self.timing_cache_path, description="tactic timing cache")
                     cache = config.create_timing_cache(timing_cache_data)
                 else:
                     # Create an empty timing cache by default so it will be populated during engine build.
@@ -494,6 +518,10 @@ class CreateConfig(BaseLoader):
                     config.algorithm_selector = self.algorithm_selector
 
                 try_run(set_algo_selector, name="algorithm_selector")
+
+                if not self.timing_cache_path:
+                    G_LOGGER.warning("Disabling tactic timing cache because algorithm selector is enabled.")
+                    try_set_flag("DISABLE_TIMING_CACHE")
 
             return config
 
@@ -519,8 +547,9 @@ class EngineBytesFromNetwork(BaseLoader):
                     a `CreateConfig` instance with default parameters is used.
             save_timing_cache (Union[str, file-like]):
                     A path or file-like object at which to save a tactic timing cache.
-                    Any existing cache will be overwritten. Note that if the provided config includes a tactic
-                    timing cache, the data from that cache will be copied into the new cache.
+                    Any existing cache will be appended to.
+                    If a path is provided, the file will be locked for exclusive access to prevent
+                    multiple processes from attempting to update the timing cache at the same time.
         """
         self._network = network
         self._config = util.default(config, CreateConfig())
@@ -537,8 +566,7 @@ class EngineBytesFromNetwork(BaseLoader):
 
         if builder is None or network is None:
             G_LOGGER.critical(
-                "Expected to recevie a (builder, network) tuple for the `network` parameter, "
-                "but received: ({:}, {:})".format(builder, network)
+                f"Expected to recevie a (builder, network) tuple for the `network` parameter, but received: ({builder}, {network})"
             )
 
         with contextlib.ExitStack() as stack:
@@ -550,8 +578,7 @@ class EngineBytesFromNetwork(BaseLoader):
             else:
                 provided = "Builder and Network" if parser is None else "Builder, Network, and Parser"
                 G_LOGGER.verbose(
-                    "{:} were provided directly instead of via a Callable. This loader will not assume ownership. "
-                    "Please ensure that they are freed.".format(provided)
+                    f"{provided} were provided directly instead of via a Callable. This loader will not assume ownership. Please ensure that they are freed."
                 )
 
             config, owns_config = util.invoke_if_callable(self._config, builder, network)
@@ -562,13 +589,6 @@ class EngineBytesFromNetwork(BaseLoader):
                     "Builder configuration was provided directly instead of via a Callable. This loader will not assume "
                     "ownership. Please ensure it is freed."
                 )
-
-            try:
-                config.int8_calibrator.__enter__  # Polygraphy calibrator frees device buffers on exit.
-            except AttributeError:
-                pass
-            else:
-                stack.enter_context(config.int8_calibrator)
 
             G_LOGGER.super_verbose(
                 lambda: (
@@ -582,7 +602,7 @@ class EngineBytesFromNetwork(BaseLoader):
                 )
             )
 
-            G_LOGGER.start("Building engine with configuration:\n{:}".format(trt_util.str_from_config(config)))
+            G_LOGGER.start(f"Building engine with configuration:\n{trt_util.str_from_config(config)}")
 
             start_time = time.time()
             try:
@@ -598,15 +618,26 @@ class EngineBytesFromNetwork(BaseLoader):
             if not engine_bytes:
                 G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
 
-            G_LOGGER.finish("Finished engine building in {:.3f} seconds".format(end_time - start_time))
+            G_LOGGER.finish(f"Finished engine building in {end_time - start_time:.3f} seconds")
 
             if self.timing_cache_path:
                 try:
                     timing_cache = config.get_timing_cache()
                 except AttributeError:
                     trt_util.fail_unavailable("save_timing_cache in EngineBytesFromNetwork")
-                else:
+
+                with util.LockFile(self.timing_cache_path):
+                    try:
+                        prev_cache = config.create_timing_cache(util.load_file(self.timing_cache_path))
+                    except:
+                        prev_cache = None
+
                     if timing_cache:
+                        if prev_cache is not None:
+                            combine_success = timing_cache.combine(prev_cache, ignore_mismatch=True)
+                            if not combine_success:
+                                G_LOGGER.warning("Could not combine old timing cache into current timing cache")
+
                         with timing_cache.serialize() as buffer:
                             util.save_file(buffer, self.timing_cache_path, description="tactic timing cache")
 
@@ -767,8 +798,7 @@ class OnnxLikeFromNetwork(BaseLoader):
 
         if builder is None or network is None:
             G_LOGGER.critical(
-                "Expected to recevie a (builder, network) tuple for the `network` parameter, "
-                "but received: ({:}, {:})".format(builder, network)
+                f"Expected to recevie a (builder, network) tuple for the `network` parameter, but received: ({builder}, {network})"
             )
 
         with contextlib.ExitStack() as stack:
@@ -780,18 +810,19 @@ class OnnxLikeFromNetwork(BaseLoader):
 
             tensor_map = {}
 
-            def tensors_from_meta(meta):
+            def tensors_from_names_meta(names, meta):
                 nonlocal tensor_map
                 tensors = []
-                for name, (dtype, shape) in meta.items():
+                for name in names:
                     if name not in tensor_map:
+                        dtype, shape = meta[name]
                         tensor_map[name] = gs.Variable(name=name, dtype=dtype, shape=shape)
                     tensors.append(tensor_map[name])
                 return tensors
 
             nodes = []
-            graph_inputs = tensors_from_meta(trt_util.get_network_input_metadata(network))
-            graph_outputs = tensors_from_meta(trt_util.get_network_output_metadata(network))
+            graph_inputs = tensors_from_names_meta(*trt_util.get_network_input_names_meta(network))
+            graph_outputs = tensors_from_names_meta(*trt_util.get_network_output_names_meta(network))
 
             LAYER_TYPE_CLASS_MAPPING = trt_util.get_layer_class_mapping()
 
@@ -800,8 +831,8 @@ class OnnxLikeFromNetwork(BaseLoader):
                 if layer.type in LAYER_TYPE_CLASS_MAPPING:
                     layer.__class__ = LAYER_TYPE_CLASS_MAPPING[layer.type]
 
-                node_inputs = tensors_from_meta(trt_util.get_layer_input_metadata(layer))
-                node_outputs = tensors_from_meta(trt_util.get_layer_output_metadata(layer))
+                node_inputs = tensors_from_names_meta(*trt_util.get_layer_input_names_meta(layer))
+                node_outputs = tensors_from_names_meta(*trt_util.get_layer_output_names_meta(layer))
                 attrs = {}
                 attr_names = trt_util.get_layer_attribute_names(layer)
                 for name in attr_names:
@@ -823,8 +854,7 @@ class OnnxLikeFromNetwork(BaseLoader):
                     VALID_TYPES = [np.ndarray, list, int, str, bool, float]
                     if not any(isinstance(attr, cls) for cls in VALID_TYPES):
                         G_LOGGER.internal_error(
-                            "Unknown type: {:} for layer attribute: {:}.\n"
-                            "Note: Layer was: {:}".format(type(attr), attr, layer)
+                            f"Unknown type: {type(attr)} for layer attribute: {attr}.\nNote: Layer was: {layer}"
                         )
                         try:
                             attr = str(attr)

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +16,7 @@
 #
 
 import copy
+import os
 import sys
 from textwrap import dedent
 
@@ -25,7 +27,7 @@ from polygraphy.exception import PolygraphyException
 from polygraphy.mod.importer import _version_ok
 
 
-class TestImporter(object):
+class TestImporter:
     def test_import_from_script(self):
         script = dedent(
             """
@@ -44,6 +46,7 @@ class TestImporter(object):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
             f.flush()
+            os.fsync(f.fileno())
 
             orig_sys_path = copy.deepcopy(sys.path)
             load_network = mod.import_from_script(f.name, "load_network")
@@ -67,6 +70,7 @@ class TestImporter(object):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
             f.flush()
+            os.fsync(f.fileno())
 
             orig_sys_path = copy.deepcopy(sys.path)
             example = mod.import_from_script(f.name, "example")

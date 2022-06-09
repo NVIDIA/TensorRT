@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,14 +16,14 @@
 #
 
 import onnxruntime as onnxrt
-from polygraphy.tools.args import ModelArgs, OnnxLoaderArgs, OnnxrtSessionArgs
+from polygraphy.tools.args import ModelArgs, OnnxLoadArgs, OnnxrtSessionArgs
 from tests.models.meta import ONNX_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
 
 
-class TestOnnxrtSessionArgs(object):
+class TestOnnxrtSessionArgs:
     def test_execution_providers(self):
-        arg_group = ArgGroupTestHelper(OnnxrtSessionArgs(), deps=[ModelArgs(), OnnxLoaderArgs()])
+        arg_group = ArgGroupTestHelper(OnnxrtSessionArgs(), deps=[ModelArgs(), OnnxLoadArgs()])
         arg_group.parse_args([ONNX_MODELS["identity_identity"].path, "--providers", "cpu"])
         sess = arg_group.load_onnxrt_session()
 

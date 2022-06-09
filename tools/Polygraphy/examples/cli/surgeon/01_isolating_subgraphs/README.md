@@ -56,7 +56,7 @@ When `auto` is specified as a shape or data type, Polygraphy relies on ONNX shap
 inference to determine the shapes and data types of intermediate tensors.
 
 In cases where ONNX shape inference cannot determine shapes, Polygraphy
-will run inference on the model using ONNX Runtime with synthetic input data
+will run inference on the model using ONNX-Runtime with synthetic input data
 You can control the shape of this input data using the `--model-inputs` argument
 and the contents using the `Data Loader` options.
 

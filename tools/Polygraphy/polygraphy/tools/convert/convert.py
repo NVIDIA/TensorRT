@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,16 +21,16 @@ from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import (
     DataLoaderArgs,
     ModelArgs,
-    OnnxLoaderArgs,
+    OnnxFromTfArgs,
+    OnnxInferShapesArgs,
+    OnnxLoadArgs,
     OnnxSaveArgs,
-    OnnxShapeInferenceArgs,
-    Tf2OnnxLoaderArgs,
-    TfLoaderArgs,
+    TfLoadArgs,
     TrtConfigArgs,
-    TrtEngineLoaderArgs,
-    TrtEngineSaveArgs,
-    TrtNetworkLoaderArgs,
-    TrtPluginLoaderArgs,
+    TrtLoadEngineArgs,
+    TrtLoadNetworkArgs,
+    TrtLoadPluginsArgs,
+    TrtSaveEngineArgs,
 )
 from polygraphy.tools.base import Tool
 
@@ -44,18 +45,22 @@ class Convert(Tool):
 
     def __init__(self):
         super().__init__("convert")
-        self.subscribe_args(ModelArgs(model_required=True))
-        self.subscribe_args(TfLoaderArgs(artifacts=False))
-        self.subscribe_args(Tf2OnnxLoaderArgs())
-        self.subscribe_args(OnnxShapeInferenceArgs())
-        self.subscribe_args(OnnxLoaderArgs())
-        self.subscribe_args(OnnxSaveArgs(output=False))
-        self.subscribe_args(DataLoaderArgs())  # For int8 calibration
-        self.subscribe_args(TrtConfigArgs())
-        self.subscribe_args(TrtPluginLoaderArgs())
-        self.subscribe_args(TrtNetworkLoaderArgs())
-        self.subscribe_args(TrtEngineLoaderArgs())
-        self.subscribe_args(TrtEngineSaveArgs(output=False))
+
+    def get_subscriptions(self):
+        return [
+            ModelArgs(model_opt_required=True),
+            TfLoadArgs(allow_artifacts=False),
+            OnnxFromTfArgs(),
+            OnnxInferShapesArgs(),
+            OnnxLoadArgs(allow_from_tf=True),
+            OnnxSaveArgs(output_opt=False),
+            DataLoaderArgs(),  # For int8 calibration
+            TrtConfigArgs(),
+            TrtLoadPluginsArgs(),
+            TrtLoadNetworkArgs(),
+            TrtLoadEngineArgs(),
+            TrtSaveEngineArgs(output_opt=False),
+        ]
 
     def add_parser_args(self, parser):
         parser.add_argument("-o", "--output", help="Path to save the converted model", required=True)
@@ -67,7 +72,7 @@ class Convert(Tool):
             choices=["onnx", "trt", "onnx-like-trt-network"],
         )
 
-        onnx_args = self.arg_groups[OnnxLoaderArgs].group
+        onnx_args = self.arg_groups[OnnxLoadArgs].group
         onnx_args.add_argument(
             "--fp-to-fp16",
             help="Convert all floating point tensors in an ONNX model to 16-bit precision. "
@@ -82,8 +87,7 @@ class Convert(Tool):
             _, ext = os.path.splitext(args.output)
             if ext not in ModelArgs.EXT_MODEL_TYPE_MAPPING:
                 G_LOGGER.critical(
-                    "Could not automatically determine model type based on output path: {:}\n"
-                    "Please specify the desired output format with --convert-to".format(args.output)
+                    f"Could not automatically determine model type based on output path: {args.output}\nPlease specify the desired output format with --convert-to"
                 )
             convert_type = ModelArgs.ModelType(ModelArgs.EXT_MODEL_TYPE_MAPPING[ext])
         elif args.convert_to == "onnx-like-trt-network":
@@ -93,15 +97,15 @@ class Convert(Tool):
             convert_type = ModelArgs.ModelType(CONVERT_TO_MODEL_TYPE_MAPPING[args.convert_to])
 
         if convert_type == "onnx-like-trt-network":
-            onnx_like = trt_backend.onnx_like_from_network(self.arg_groups[TrtNetworkLoaderArgs].get_network_loader())
+            onnx_like = trt_backend.onnx_like_from_network(self.arg_groups[TrtLoadNetworkArgs].load_network())
             onnx_backend.save_onnx(onnx_like, args.output)
         elif convert_type.is_onnx():
-            model = self.arg_groups[OnnxLoaderArgs].load_onnx()
+            model = self.arg_groups[OnnxLoadArgs].load_onnx()
             if args.fp_to_fp16:
                 model = onnx_backend.convert_to_fp16(model)
             self.arg_groups[OnnxSaveArgs].save_onnx(model, args.output)
         elif convert_type.is_trt():
-            with self.arg_groups[TrtEngineLoaderArgs].build_engine() as engine:
-                self.arg_groups[TrtEngineSaveArgs].save_engine(engine, args.output)
+            with self.arg_groups[TrtLoadEngineArgs].load_engine() as engine:
+                self.arg_groups[TrtSaveEngineArgs].save_engine(engine, args.output)
         else:
-            G_LOGGER.critical("Cannot convert to model type: {:}".format(convert_type))
+            G_LOGGER.critical(f"Cannot convert to model type: {convert_type}")

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,13 +27,13 @@ from tests.models.meta import TF_MODELS
 tf = pytest.importorskip("tensorflow")
 
 
-class TestLoggerCallbacks(object):
+class TestLoggerCallbacks:
     @pytest.mark.parametrize("sev", G_LOGGER.SEVERITY_LETTER_MAPPING.keys())
     def test_set_severity(self, sev):
         G_LOGGER.severity = sev
 
 
-class TestFrozenGraphLoader(object):
+class TestFrozenGraphLoader:
     def test_load_graph(self):
         with tf.compat.v1.Graph().as_default() as graph:
             inp = tf.placeholder(shape=(1, 1, 1, 1), dtype=tf.float32)
@@ -47,7 +48,7 @@ class TestFrozenGraphLoader(object):
         tf_loader()
 
 
-class TestModifyGraph(object):
+class TestModifyGraph:
     def test_layerwise(self):
         load_frozen = GraphFromFrozen(TF_MODELS["identity"].path)
         modify_tf = ModifyGraphOutputs(load_frozen, outputs=constants.MARK_ALL)
@@ -57,7 +58,7 @@ class TestModifyGraph(object):
         assert outputs
 
 
-class TestSaveGraph(object):
+class TestSaveGraph:
     def test_save_pb(self):
         with util.NamedTemporaryFile() as outpath:
             tf_loader = SaveGraph(GraphFromFrozen(TF_MODELS["identity"].path), path=outpath.name)

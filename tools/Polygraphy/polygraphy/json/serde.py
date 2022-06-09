@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,7 +38,7 @@ def str_from_type(typ):
     return typ.__name__
 
 
-class BaseCustomImpl(object):
+class BaseCustomImpl:
     """
     Base class for Polygraphy's JSON encoder/decoder.
     """
@@ -50,7 +51,7 @@ class BaseCustomImpl(object):
         For the documentation that follows, assume we have a class:
         ::
 
-            class Dummy(object):
+            class Dummy:
                 def __init__(self, x):
                     self.x = x
 
@@ -105,10 +106,7 @@ class BaseCustomImpl(object):
             def add(key, val):
                 if key in cls.polygraphy_registered:
                     G_LOGGER.critical(
-                        "Duplicate serialization function for type: {:}.\n"
-                        "Note: Existing function: {:}, New function: {:}".format(
-                            key, cls.polygraphy_registered[key], func
-                        )
+                        f"Duplicate serialization function for type: {key}.\nNote: Existing function: {cls.polygraphy_registered[key]}, New function: {func}"
                     )
                 cls.polygraphy_registered[key] = val
 
@@ -170,7 +168,7 @@ class Decoder(BaseCustomImpl):
             custom_type_keys = [key for key in dct if key.startswith(TYPE_STRING_PREFIX)]
             if custom_type_keys and custom_type_keys[0] not in self.polygraphy_registered:
                 G_LOGGER.internal_error(
-                    "Custom type has no decode function registered! " "Note: Encoded object is:\n{:}".format(dct)
+                    f"Custom type has no decode function registered! Note: Encoded object is:\n{dct}"
                 )
 
         # The encoder will insert special key-value pairs into dictionaries encoded from
@@ -221,7 +219,7 @@ def try_register_numpy_json(func):
                     elif mode == "latin-1":
                         data = dct["array"].encode(mode)
                     else:
-                        assert False, "Unsupported mode: {:}".format(mode)
+                        assert False, f"Unsupported mode: {mode}"
                     infile = io.BytesIO(data)
                     return np.load(infile, allow_pickle=False)
 
@@ -280,7 +278,7 @@ def save_json(obj, dest, description=None):
     NOTE: For Polygraphy objects, you should use the ``save()`` method instead.
 
     Args:
-        obj (object): The object to save.
+        obj : The object to save.
         src (Union[str, file-like]): The path or file-like object to save to.
     """
     util.save_file(to_json(obj), dest, mode="w", description=description)
@@ -324,8 +322,7 @@ def add_json_methods(description=None):
         def check_decoded(obj):
             if not isinstance(obj, cls):
                 G_LOGGER.critical(
-                    "Provided JSON cannot be decoded into a {:}.\n"
-                    "Note: JSON was decoded into a {:}:\n{:}".format(cls.__name__, type(obj), obj)
+                    f"Provided JSON cannot be decoded into a {cls.__name__}.\nNote: JSON was decoded into a {type(obj)}:\n{obj}"
                 )
             return obj
 
@@ -341,7 +338,7 @@ def add_json_methods(description=None):
         def _from_json_method(src):
             return check_decoded(from_json(src))
 
-        _from_json_method.__doc__ = """
+        _from_json_method.__doc__ = f"""
             Decode a JSON object and create an instance of this class.
 
             Args:
@@ -349,14 +346,12 @@ def add_json_methods(description=None):
                         The JSON representation of the object
 
             Returns:
-                {cls}: The decoded instance
+                {cls.__name__}: The decoded instance
 
             Raises:
                 PolygraphyException:
-                        If the JSON cannot be decoded to an instance of {cls}
-            """.format(
-            cls=cls.__name__
-        )
+                        If the JSON cannot be decoded to an instance of {cls.__name__}
+            """
 
         cls.to_json = _to_json_method
         cls.from_json = staticmethod(_from_json_method)
@@ -378,21 +373,19 @@ def add_json_methods(description=None):
         def _load_method(src):
             return check_decoded(load_json(src, description=description))
 
-        _load_method.__doc__ = """
+        _load_method.__doc__ = f"""
             Loads an instance of this class from a JSON file.
 
             Args:
                 src (Union[str, file-like]): The path or file-like object to read from.
 
             Returns:
-                {cls}: The decoded instance
+                {cls.__name__}: The decoded instance
 
             Raises:
                 PolygraphyException:
-                        If the JSON cannot be decoded to an instance of {cls}
-            """.format(
-            cls=cls.__name__
-        )
+                        If the JSON cannot be decoded to an instance of {cls.__name__}
+            """
 
         cls.save = _save_method
         cls.load = staticmethod(_load_method)

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,7 +30,7 @@ def void_ptr(val=None):
 
 
 @mod.export()
-class MemcpyKind(object):
+class MemcpyKind:
     """
     Enumerates different kinds of copy operations.
     """
@@ -46,7 +47,7 @@ class MemcpyKind(object):
 
 
 @mod.export()
-class Cuda(object):
+class Cuda:
     """
     NOTE: Do *not* construct this class manually.
     Instead, use the ``wrapper()`` function to get the global wrapper.
@@ -56,20 +57,36 @@ class Cuda(object):
 
     def __init__(self):
         self.handle = None
+
+        fallback_lib = None
         if sys.platform.startswith("win"):
             cuda_paths = [os.environ.get("CUDA_PATH", "")]
             cuda_paths += os.environ.get("PATH", "").split(os.path.pathsep)
-            cuda_paths = list(filter(lambda x: x, cuda_paths))  # Filter out empty paths (i.e. "")
-
-            candidates = util.find_in_dirs("cudart64_*.dll", cuda_paths)
-            if not candidates:
-                G_LOGGER.critical(
-                    "Could not find the CUDA runtime library.\nNote: Paths searched were:\n{:}".format(cuda_paths)
-                )
-
-            self.handle = ctypes.CDLL(candidates[0])
+            lib_pat = "cudart64_*.dll"
         else:
-            self.handle = ctypes.CDLL("libcudart.so")
+            cuda_paths = [
+                *os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep),
+                os.path.join("/", "usr", "local", "cuda", "lib64"),
+                os.path.join("/", "usr", "lib"),
+                os.path.join("/", "lib"),
+            ]
+            lib_pat = "libcudart.so*"
+            fallback_lib = "libcudart.so"
+
+        cuda_paths = list(filter(lambda x: x, cuda_paths))  # Filter out empty paths (i.e. "")
+
+        candidates = util.find_in_dirs(lib_pat, cuda_paths)
+        if not candidates:
+            log_func = G_LOGGER.critical if fallback_lib is None else G_LOGGER.warning
+            log_func(f"Could not find the CUDA runtime library.\nNote: Paths searched were:\n{cuda_paths}")
+
+            lib = fallback_lib
+            G_LOGGER.warning(f"Attempting to load: '{lib}' using default loader paths")
+        else:
+            G_LOGGER.verbose(f"Found candidate CUDA libraries: {candidates}")
+            lib = candidates[0]
+
+        self.handle = ctypes.CDLL(lib)
 
         if not self.handle:
             G_LOGGER.critical("Could not load the CUDA runtime library. Is it on your loader path?")
@@ -78,10 +95,7 @@ class Cuda(object):
     def check(self, status):
         if status != 0:
             G_LOGGER.critical(
-                "CUDA Error: {:}. To figure out what this means, refer to "
-                "https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g3f51e3575c2178246db0a94a430e0038".format(
-                    status
-                )
+                f"CUDA Error: {status}. To figure out what this means, refer to https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g3f51e3575c2178246db0a94a430e0038"
             )
 
     @func.constantmethod
@@ -179,7 +193,7 @@ def wrapper():
 
 
 @mod.export()
-class Stream(object):
+class Stream:
     """
     High-level wrapper for a CUDA stream.
     """
@@ -232,7 +246,7 @@ def make_np_contiguous(arr):
 
 
 @mod.export()
-class DeviceView(object):
+class DeviceView:
     """
     A read-only view of a GPU memory region.
     """
@@ -256,8 +270,7 @@ class DeviceView(object):
     def _check_dtype_matches(self, host_buffer):
         if host_buffer.dtype != self.dtype:
             G_LOGGER.error(
-                "Host buffer type: {:} does not match the type of this device buffer: {:}. "
-                "This may cause CUDA errors!".format(host_buffer.dtype, self.dtype)
+                f"Host buffer type: {host_buffer.dtype} does not match the type of this device buffer: {self.dtype}. This may cause CUDA errors!"
             )
 
     @property
@@ -301,8 +314,7 @@ class DeviceView(object):
                 host_buffer.resize(self.shape, refcheck=False)
             except ValueError as err:
                 G_LOGGER.warning(
-                    "Could not resize host buffer to shape: {:}. Allocating a new buffer instead.\n"
-                    "Note: Error was: {:}".format(self.shape, err)
+                    f"Could not resize host buffer to shape: {self.shape}. Allocating a new buffer instead.\nNote: Error was: {err}"
                 )
                 host_buffer = np.empty(self.shape, dtype=np.dtype(self.dtype))
 
@@ -332,9 +344,7 @@ class DeviceView(object):
         return self.copy_to(arr)
 
     def __str__(self):
-        return "DeviceView[(dtype={:}, shape={:}), ptr={:}]".format(
-            np.dtype(self.dtype).name, self.shape, hex(self.ptr)
-        )
+        return f"DeviceView[(dtype={np.dtype(self.dtype).name}, shape={self.shape}), ptr={hex(self.ptr)}]"
 
 
 @mod.export()
@@ -437,6 +447,4 @@ class DeviceArray(DeviceView):
         return DeviceView(self.ptr, self.shape, self.dtype)
 
     def __str__(self):
-        return "DeviceArray[(dtype={:}, shape={:}), ptr={:}]".format(
-            np.dtype(self.dtype).name, self.shape, hex(self.ptr)
-        )
+        return f"DeviceArray[(dtype={np.dtype(self.dtype).name}, shape={self.shape}), ptr={hex(self.ptr)}]"

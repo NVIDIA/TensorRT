@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +18,7 @@ import contextlib
 from collections import OrderedDict
 
 from polygraphy import constants, func, mod, util
+from polygraphy.exception import PolygraphyException
 from polygraphy.json import save_json
 from polygraphy.logger import G_LOGGER, LogMode
 
@@ -24,7 +26,7 @@ np = mod.lazy_import("numpy")
 
 
 @mod.export()
-class DataLoader(object):
+class DataLoader:
     """
     Generates synthetic input data.
     """
@@ -102,9 +104,7 @@ class DataLoader(object):
 
         if self.user_input_metadata:
             G_LOGGER.info(
-                "Will generate inference input data according to provided TensorMetadata: {}".format(
-                    self.user_input_metadata
-                )
+                f"Will generate inference input data according to provided TensorMetadata: {self.user_input_metadata}"
             )
 
     def __repr__(self):
@@ -144,7 +144,7 @@ class DataLoader(object):
         if index >= self.iterations:
             raise IndexError()
 
-        G_LOGGER.verbose("Generating data using numpy seed: {:}".format(self.seed + index))
+        G_LOGGER.verbose(f"Generating data using numpy seed: {self.seed + index}")
         rng = np.random.RandomState(self.seed + index)
 
         def get_static_shape(name, shape):
@@ -154,14 +154,10 @@ class DataLoader(object):
                 if static_shape != shape:
                     if not util.is_valid_shape_override(static_shape, shape):
                         G_LOGGER.critical(
-                            "Input tensor: {:} | Cannot override original shape: {:} to {:}".format(
-                                name, shape, static_shape
-                            )
+                            f"Input tensor: {name} | Cannot override original shape: {shape} to {static_shape}"
                         )
                     G_LOGGER.warning(
-                        "Input tensor: {:} [shape={:}] | Will generate data of shape: {:}.\n"
-                        "If this is incorrect, please set input_metadata "
-                        "or provide a custom data loader.".format(name, shape, static_shape),
+                        f"Input tensor: {name} [shape={shape}] | Will generate data of shape: {static_shape}.\nIf this is incorrect, please set input_metadata or provide a custom data loader.",
                         mode=LogMode.ONCE,
                     )
             return static_shape
@@ -186,14 +182,13 @@ class DataLoader(object):
             if is_shape_tensor(name, dtype):
                 buffer = np.array(shape, dtype=dtype)
                 G_LOGGER.info(
-                    "Assuming {:} is a shape tensor. Setting input values to: {:}. If this is not correct, "
-                    "please set it correctly in 'input_metadata' or by providing --input-shapes".format(name, buffer),
+                    f"Assuming {name} is a shape tensor. Setting input values to: {buffer}. If this is not correct, please set it correctly in 'input_metadata' or by providing --input-shapes",
                     mode=LogMode.ONCE,
                 )
             elif np.issubdtype(dtype, np.integer) or np.issubdtype(dtype, np.bool_):
                 imin, imax = self._get_range(name, cast_type=int if np.issubdtype(dtype, np.integer) else bool)
                 G_LOGGER.verbose(
-                    "Input tensor: {:} | Generating input data in range: [{:}, {:}]".format(name, imin, imax),
+                    f"Input tensor: {name} | Generating input data in range: [{imin}, {imax}]",
                     mode=LogMode.ONCE,
                 )
                 # high is 1 greater than the max int drawn.
@@ -201,7 +196,7 @@ class DataLoader(object):
             else:
                 fmin, fmax = self._get_range(name, cast_type=float)
                 G_LOGGER.verbose(
-                    "Input tensor: {:} | Generating input data in range: [{:}, {:}]".format(name, fmin, fmax),
+                    f"Input tensor: {name} | Generating input data in range: [{fmin}, {fmax}]",
                     mode=LogMode.ONCE,
                 )
                 buffer = (rng.random_sample(size=shape) * (fmax - fmin) + fmin).astype(dtype)
@@ -222,17 +217,11 @@ class DataLoader(object):
 
                 if util.is_shape_dynamic(user_shape):
                     G_LOGGER.warning(
-                        "Input tensor: {:} [shape={:}] | Provided input shape: {:} is dynamic.\n"
-                        "Dynamic shapes cannot be used to generate inference data. "
-                        "Will use default shape instead.\n"
-                        "To avoid this, please provide a fixed shape to the data loader. ".format(
-                            name, shape, user_shape
-                        )
+                        f"Input tensor: {name} [shape={shape}] | Provided input shape: {user_shape} is dynamic.\nDynamic shapes cannot be used to generate inference data. Will use default shape instead.\nTo avoid this, please provide a fixed shape to the data loader. "
                     )
                 elif not is_valid_shape_override and not is_shape_tensor(name, dtype):
                     G_LOGGER.warning(
-                        "Input tensor: {:} [shape={:}] | Cannot use provided custom shape: {:} "
-                        "to override tensor shape. Will use default shape instead.".format(name, shape, user_shape),
+                        f"Input tensor: {name} [shape={shape}] | Cannot use provided custom shape: {user_shape} to override tensor shape. Will use default shape instead.",
                         mode=LogMode.ONCE,
                     )
                 else:
@@ -244,12 +233,10 @@ class DataLoader(object):
         # Warn about unused metadata
         for name in self.user_input_metadata.keys():
             if name not in self.input_metadata:
-                msg = "Input tensor: {:} | Metadata was provided, but the input does not exist in one or more runners.".format(
-                    name
-                )
+                msg = f"Input tensor: {name} | Metadata was provided, but the input does not exist in one or more runners."
                 close_match = util.find_str_in_iterable(name, self.input_metadata.keys())
                 if close_match:
-                    msg += "\nMaybe you meant to set: {:}?".format(close_match)
+                    msg += f"\nMaybe you meant to set: {close_match}?"
                 G_LOGGER.warning(msg)
 
         # Warn about unused val_range
@@ -262,7 +249,7 @@ class DataLoader(object):
 
 
 # Caches data loaded by a DataLoader for use across multiple runners.
-class DataLoaderCache(object):
+class DataLoaderCache:
     def __init__(self, data_loader, save_inputs_path=None):
         self.data_loader = data_loader
         self.cache = []  # List[OrderedDict[str, numpy.ndarray]]
@@ -283,22 +270,19 @@ class DataLoaderCache(object):
         def coerce_cached_input(index, name, dtype, shape):
             cached_feed_dict = self.cache[iteration]
             cached_name = util.find_str_in_iterable(name, cached_feed_dict.keys(), index)
-            util.check(cached_name is not None)
+            if cached_name is None:
+                G_LOGGER.critical(f"Input tensor: {name} | Does not exist in the data loader cache.")
 
             if cached_name != name:
                 G_LOGGER.warning(
-                    "Input tensor: {:} | Buffer name ({:}) does not match expected input name ({:}).".format(
-                        name, cached_name, name
-                    )
+                    f"Input tensor: {name} | Buffer name ({cached_name}) does not match expected input name ({name})."
                 )
 
             buffer = cached_feed_dict[cached_name]
 
             if dtype != buffer.dtype:
                 G_LOGGER.warning(
-                    "Input tensor: {:} | Buffer dtype ({:}) does not match expected input dtype ({:}), attempting to cast. ".format(
-                        name, buffer.dtype, np.dtype(dtype).name
-                    )
+                    f"Input tensor: {name} | Buffer dtype ({buffer.dtype}) does not match expected input dtype ({np.dtype(dtype).name}), attempting to cast. "
                 )
 
                 type_info = None
@@ -309,21 +293,20 @@ class DataLoaderCache(object):
 
                 if type_info is not None and np.any((buffer < type_info.min) | (buffer > type_info.max)):
                     G_LOGGER.warning(
-                        "Some values in this input are out of range of {:}. Unexpected behavior may ensue!".format(
-                            dtype
-                        )
+                        f"Some values in this input are out of range of {dtype}. Unexpected behavior may ensue!"
                     )
                 buffer = buffer.astype(dtype)
 
             if not util.is_valid_shape_override(buffer.shape, shape):
                 G_LOGGER.warning(
-                    "Input tensor: {:} | Buffer shape ({:}) does not match expected input shape ({:}), attempting to transpose/reshape. ".format(
-                        name, buffer.shape, shape
-                    )
+                    f"Input tensor: {name} | Buffer shape ({buffer.shape}) does not match expected input shape ({shape}), attempting to transpose/reshape. "
                 )
                 buffer = util.try_match_shape(buffer, shape)
 
-            util.check(buffer.dtype == dtype and util.is_valid_shape_override(buffer.shape, shape))
+            if buffer.dtype != dtype or not util.is_valid_shape_override(buffer.shape, shape):
+                G_LOGGER.critical(
+                    f"Input tensor: {name} | Cannot reuse input data due to mismatch in shape or data type.\nNote: Cached input: [dtype={buffer.dtype}, shape={buffer.shape}], Requested input: [dtype={dtype}, shape={shape}]"
+                )
             return buffer
 
         feed_dict = OrderedDict()
@@ -334,14 +317,9 @@ class DataLoaderCache(object):
         for index, (name, (dtype, shape)) in enumerate(self.input_metadata.items()):
             try:
                 buffer = coerce_cached_input(index, name, dtype, shape)
-            except AssertionError:
+            except PolygraphyException:
                 G_LOGGER.warning(
-                    "Could not use buffer previously cached from data loader for input: {:}. Attempting to reload "
-                    "inputs from the data loader.\n"
-                    "Note that this will only work if the data loader supports random access.\n"
-                    "Please refer to warnings above for details on why the previously generated input buffer didn't work. ".format(
-                        name
-                    )
+                    f"Could not use buffer previously cached from data loader for input: {name}. Attempting to reload inputs from the data loader.\nNote that this will only work if the data loader supports random access.\nPlease refer to warnings above for details on why the previously generated input buffer didn't work. "
                 )
                 try:
                     if data_loader_feed_dict is None:

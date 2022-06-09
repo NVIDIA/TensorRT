@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -101,14 +102,7 @@ def extend(extend_func):
                         return fn
 
                 G_LOGGER.critical(
-                    "Function: {:} accepts {:} parameter(s), but "
-                    "needs to accept {:} parameter(s) from: {:} instead.\nNote: Parameters should be: {:}".format(
-                        try_get_name(func),
-                        len(func_args),
-                        len(extend_func_ret_tuple),
-                        try_get_name(extend_func),
-                        tuple(map(type, extend_func_ret_tuple)),
-                    )
+                    f"Function: {try_get_name(func)} accepts {len(func_args)} parameter(s), but needs to accept {len(extend_func_ret_tuple)} parameter(s) from: {try_get_name(extend_func)} instead.\nNote: Parameters should be: {tuple(map(type, extend_func_ret_tuple))}"
                 )
 
             if func_retval is not None:
@@ -130,7 +124,7 @@ def constantmethod(func):
     Example:
     ::
 
-        class Dummy(object):
+        class Dummy:
             def __init__(self):
                 self.x = 1
 
@@ -158,9 +152,7 @@ def constantmethod(func):
         finally:
             if vars(self) != old_dict:
                 G_LOGGER.internal_error(
-                    "{:} was mutated in a constant method! Note:\nOld state: {:}\nNew state: {:}".format(
-                        self, old_dict, vars(self)
-                    )
+                    f"{self} was mutated in a constant method! Note:\nOld state: {old_dict}\nNew state: {vars(self)}"
                 )
         return ret
 

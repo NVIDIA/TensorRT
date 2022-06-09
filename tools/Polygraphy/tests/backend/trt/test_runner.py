@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,13 +35,13 @@ from tests.models.meta import ONNX_MODELS
 from tests.helper import time_func
 
 
-class TestLoggerCallbacks(object):
+class TestLoggerCallbacks:
     @pytest.mark.parametrize("sev", G_LOGGER.SEVERITY_LETTER_MAPPING.keys())
     def test_set_severity(self, sev):
         G_LOGGER.severity = sev
 
 
-class TestTrtRunner(object):
+class TestTrtRunner:
     def test_can_name_runner(self):
         NAME = "runner"
         runner = TrtRunner(None, name=NAME)
@@ -50,6 +51,7 @@ class TestTrtRunner(object):
         model = ONNX_MODELS["identity"]
         network_loader = NetworkFromOnnxBytes(model.loader)
         with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+            assert runner.optimization_profile is None
             assert runner.is_active
             assert runner.owns_engine
             assert runner.owns_context
@@ -94,7 +96,8 @@ class TestTrtRunner(object):
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     @pytest.mark.skipif(mod.version(trt.__version__)[0:2] == mod.version("7.2"), reason="Bugged in TRT 7.2")
-    def test_multiple_profiles(self):
+    @pytest.mark.parametrize("use_optimization_profile", [True, False])
+    def test_multiple_profiles(self, use_optimization_profile):
         model = ONNX_MODELS["dynamic_identity"]
         profile0_shapes = [(1, 2, 1, 1), (1, 2, 1, 1), (1, 2, 1, 1)]  # Use min==opt==max to fix shapes in the engine.
         profile1_shapes = [(1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4)]
@@ -106,9 +109,18 @@ class TestTrtRunner(object):
             Profile().add("X", *profile2_shapes),
         ]
         config_loader = CreateConfig(profiles=profiles)
-        with TrtRunner(EngineFromNetwork(network_loader, config_loader)) as runner:
-            for index, shapes in enumerate([profile0_shapes, profile1_shapes, profile2_shapes]):
-                runner.set_profile(index)
+        engine = engine_from_network(network_loader, config_loader)
+        context = engine.create_execution_context()
+
+        for index, shapes in enumerate([profile0_shapes, profile1_shapes, profile2_shapes]):
+            with TrtRunner(
+                context,
+                optimization_profile=index if use_optimization_profile else None,
+            ) as runner:
+                if not use_optimization_profile:
+                    runner.set_profile(index)
+
+                assert runner.context.active_optimization_profile == index
                 for shape in shapes:
                     model.check_runner(runner, {"X": shape})
 
@@ -223,17 +235,17 @@ class TestTrtRunner(object):
     @pytest.mark.parametrize("copy_outputs", [True, False], ids=["output_dtoh", "no_output_copy"])
     @pytest.mark.parametrize("copy_inputs", [True, False], ids=["input_htod", "no_input_copy"])
     def test_infer_overhead(self, copy_inputs, copy_outputs):
-        inp = np.ones(shape=(1, 2, 1024, 1024), dtype=np.float32)
+        inp = np.ones(shape=(1, 2, 2048, 2048), dtype=np.float32)
         dev_inp = cuda.DeviceArray(shape=inp.shape, dtype=inp.dtype).copy_from(inp)
 
-        out = np.zeros(shape=(1, 2, 1024, 1024), dtype=np.float32)  # Using identity model!
+        out = np.zeros(shape=(1, 2, 2048, 2048), dtype=np.float32)  # Using identity model!
         dev_out = cuda.DeviceArray(shape=out.shape, dtype=out.dtype)
 
         stream = cuda.Stream()
 
         model = ONNX_MODELS["dynamic_identity"]
         profiles = [
-            Profile().add("X", (1, 2, 1024, 1024), (1, 2, 1024, 1024), (1, 2, 1024, 1024)),
+            Profile().add("X", (1, 2, 2048, 2048), (1, 2, 2048, 2048), (1, 2, 2048, 2048)),
         ]
         inp_name = list(model.input_metadata.keys())[0]
 
@@ -257,6 +269,6 @@ class TestTrtRunner(object):
             )
 
         # The overhead should be less than 0.75ms, or the runtime should be within 8%
-        print("Absolute difference: {:.5g}".format(runner_time - native_time))
-        print("Relative difference: {:.5g}".format(runner_time / native_time))
+        print(f"Absolute difference: {runner_time - native_time:.5g}")
+        print(f"Relative difference: {runner_time / native_time:.5g}")
         assert (runner_time - native_time) < 0.75e-3 or runner_time <= (native_time * 1.08)

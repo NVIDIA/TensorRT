@@ -56,7 +56,7 @@ Were you able to reproduce the accuracy failure when comparing layer-wise output
 
     Go To: [Extracting A Failing Subgraph](#extracting-a-failing-subgraph)
 
-- No, marking other outputs causes the accuracy to improve.
+- No, marking other outputs causes the accuracy to improve OR I am not able to run the model at all when I mark other outputs.
 
     Go To: [Reducing A Failing Onnx Model](#reducing-a-failing-onnx-model)
 

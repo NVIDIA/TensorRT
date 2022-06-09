@@ -1,3 +1,19 @@
+#
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 import functools
 
 from polygraphy import mod, util, config
@@ -71,35 +87,26 @@ def str_histogram(output, hist_range=None):
         try:
             hist, bin_edges = np.histogram(output, range=hist_range)
         except ValueError as err:
-            G_LOGGER.verbose("Could not generate histogram. Note: Error was: {:}".format(err))
+            G_LOGGER.verbose(f"Could not generate histogram. Note: Error was: {err}")
             return ""
 
         max_num_elems = compute_max(hist)
         if not max_num_elems:  # Empty tensor
             return
 
-        bin_edges = ["{:.3g}".format(bin) for bin in bin_edges]
+        bin_edges = [f"{bin:.3g}" for bin in bin_edges]
         max_start_bin_width = max(len(bin) for bin in bin_edges)
         max_end_bin_width = max(len(bin) for bin in bin_edges[1:])
 
         MAX_WIDTH = 40
         ret = "---- Histogram ----\n"
-        ret += "{:{width}}|  Num Elems | Visualization\n".format(
-            "Bin Range", width=max_start_bin_width + max_end_bin_width + 5
-        )
+        ret += f"{'Bin Range':{max_start_bin_width + max_end_bin_width + 5}}|  Num Elems | Visualization\n"
         for num, bin_start, bin_end in zip(hist, bin_edges, bin_edges[1:]):
             bar = "#" * int(MAX_WIDTH * float(num) / float(max_num_elems))
-            ret += "({:<{max_start_bin_width}}, {:<{max_end_bin_width}}) | {:10} | {:}\n".format(
-                bin_start,
-                bin_end,
-                num,
-                bar,
-                max_start_bin_width=max_start_bin_width,
-                max_end_bin_width=max_end_bin_width,
-            )
+            ret += f"({bin_start:<{max_start_bin_width}}, {bin_end:<{max_end_bin_width}}) | {num:10} | {bar}\n"
         return ret
     except Exception as err:
-        G_LOGGER.verbose("Could not generate histogram.\nNote: Error was: {:}".format(err))
+        G_LOGGER.verbose(f"Could not generate histogram.\nNote: Error was: {err}")
         if config.INTERNAL_CORRECTNESS_CHECKS:
             raise
         return ""
@@ -108,24 +115,14 @@ def str_histogram(output, hist_range=None):
 def str_output_stats(output, runner_name=None):
     ret = ""
     if runner_name:
-        ret += "{:} | Stats: ".format(runner_name)
+        ret += f"{runner_name} | Stats: "
 
     try:
         with np.testing.suppress_warnings() as sup:
             sup.filter(RuntimeWarning)
-            ret += "mean={:.5g}, std-dev={:.5g}, var={:.5g}, median={:.5g}, min={:.5g} at {:}, max={:.5g} at {:}, avg-magnitude={:.5g}\n".format(
-                compute_mean(output),
-                compute_stddev(output),
-                compute_variance(output),
-                compute_median(output),
-                compute_min(output),
-                compute_argmin(output),
-                compute_max(output),
-                compute_argmax(output),
-                compute_average_magnitude(output),
-            )
+            ret += f"mean={compute_mean(output):.5g}, std-dev={compute_stddev(output):.5g}, var={compute_variance(output):.5g}, median={compute_median(output):.5g}, min={compute_min(output):.5g} at {compute_argmin(output)}, max={compute_max(output):.5g} at {compute_argmax(output)}, avg-magnitude={compute_average_magnitude(output):.5g}\n"
     except Exception as err:
-        G_LOGGER.verbose("Could not generate statistics.\nNote: Error was: {:}".format(err))
+        G_LOGGER.verbose(f"Could not generate statistics.\nNote: Error was: {err}")
         ret += "<Error while computing statistics>"
         if config.INTERNAL_CORRECTNESS_CHECKS:
             raise

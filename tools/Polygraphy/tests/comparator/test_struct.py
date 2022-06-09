@@ -1,3 +1,19 @@
+#
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 import numpy as np
 import pytest
 import contextlib
@@ -23,7 +39,7 @@ def run_results():
     return results
 
 
-class TestRunResults(object):
+class TestRunResults:
     def test_items(self, run_results):
         for name, iteration_results in run_results.items():
             assert isinstance(name, str)
@@ -99,7 +115,7 @@ class TestRunResults(object):
         assert all(isinstance(iter_result, IterationResult) for iter_result in iter_results)
 
 
-class TestLazyNumpyArray(object):
+class TestLazyNumpyArray:
     @pytest.mark.parametrize("set_threshold", [True, False])
     def test_unswapped_array(self, set_threshold):
         with contextlib.ExitStack() as stack:

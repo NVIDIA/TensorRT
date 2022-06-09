@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -38,7 +39,7 @@ def TypedDict(key_type_func, value_type_func):
                 A callable that returns the expected value type.
     """
 
-    class Interface(object):
+    class Interface:
         def __init__(self, dct=None):
             self.dct = OrderedDict(util.default(dct, {}))
             self.key_type = key_type_func()
@@ -47,15 +48,11 @@ def TypedDict(key_type_func, value_type_func):
         def _check_types(self, key, val):
             if not isinstance(key, self.key_type):
                 G_LOGGER.critical(
-                    "Unsupported key type in {:}. Key: {:} is type `{:}` but {:} expects type `{:}`".format(
-                        self, repr(key), type(key).__name__, type(self).__name__, self.key_type.__name__
-                    )
+                    f"Unsupported key type in {self}. Key: {repr(key)} is type `{type(key).__name__}` but {type(self).__name__} expects type `{self.key_type.__name__}`"
                 )
             if not isinstance(val, self.value_type):
                 G_LOGGER.critical(
-                    "Unsupported value type in {:}. Value: {:} for key: {:} is type `{:}` but {:} expects type `{:}`".format(
-                        self, repr(val), repr(key), type(val).__name__, type(self).__name__, self.value_type.__name__
-                    )
+                    f"Unsupported value type in {self}. Value: {repr(val)} for key: {repr(key)} is type `{type(val).__name__}` but {type(self).__name__} expects type `{self.value_type.__name__}`"
                 )
 
         def keys(self):
@@ -125,7 +122,7 @@ def TypedList(elem_type_func):
                 A callable that returns the expected list-element type.
     """
 
-    class Interface(object):
+    class Interface:
         def __init__(self, lst=None):
             self.lst = util.default(lst, [])
             self.elem_type = elem_type_func()
@@ -133,9 +130,7 @@ def TypedList(elem_type_func):
         def _check_type(self, elem):
             if not isinstance(elem, self.elem_type):
                 G_LOGGER.critical(
-                    "Unsupported element type type in {:}. Element: {:} is type: {:} but type: {:} was expected".format(
-                        type(self).__name__, repr(elem), type(elem).__name__, self.elem_type.__name__
-                    )
+                    f"Unsupported element type type in {type(self).__name__}. Element: {repr(elem)} is type: {type(elem).__name__} but type: {self.elem_type.__name__} was expected"
                 )
 
         def __contains__(self, key):

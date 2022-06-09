@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -61,7 +62,7 @@ class BaseLoadOnnxCopy(BaseLoader):
         return model
 
 
-class _GSGraphManager(object):
+class _GSGraphManager:
     """
     Imports an ONNX-GraphSurgeon graph.
 
@@ -136,11 +137,11 @@ class OnnxFromPath(BaseLoader):
         Returns:
             onnx.ModelProto: The ONNX model
         """
-        G_LOGGER.info("Loading model: {:}".format(self.path))
+        G_LOGGER.info(f"Loading model: {self.path}")
         # If external_data_dir is not None, we'll load external data ourselves
         model = onnx.load(self.path, load_external_data=self.external_data_dir is None)
         if self.external_data_dir is not None:
-            G_LOGGER.verbose("Loading external data from: {:}".format(self.external_data_dir))
+            G_LOGGER.verbose(f"Loading external data from: {self.external_data_dir}")
             external_data_helper.load_external_data_for_model(model, self.external_data_dir)
         return model
 
@@ -169,6 +170,10 @@ class OnnxFromTfGraph(BaseLoader):
         """
         self._graph = graph
         self.opset = util.default(opset, 11)
+
+        if fold_constant is not None:
+            mod.warn_deprecated("fold_constant", use_instead=None, remove_in="0.40.0")
+
         self.fold_constant = util.default(fold_constant, True)
         self.optimize = util.default(optimize, True)
 
@@ -189,9 +194,13 @@ class OnnxFromTfGraph(BaseLoader):
             G_LOGGER.info("Folding constants in graph using tf2onnx.tfonnx.tf_optimize")
         graphdef = graph.as_graph_def()
         if self.optimize:
-            graphdef = tf2onnx.tfonnx.tf_optimize(
-                input_names, output_names, graph.as_graph_def(), fold_constant=self.fold_constant
-            )
+            try:
+                graphdef = tf2onnx.tfonnx.tf_optimize(
+                    input_names, output_names, graph.as_graph_def(), fold_constant=self.fold_constant
+                )
+            except TypeError:
+                # Newer versions of tf2onnx have dropped the `fold_constant` parameter.
+                graphdef = tf2onnx.tfonnx.tf_optimize(input_names, output_names, graph.as_graph_def())
 
         with tf.Graph().as_default() as graph, tf.compat.v1.Session(graph=graph) as sess:
             tf.import_graph_def(graphdef, name="")
@@ -362,15 +371,11 @@ class FoldConstants(BaseLoadOnnxCopy):
             except TypeError as err:  # Using an old version of ONNX-GS
                 if self.partitioning:
                     G_LOGGER.critical(
-                        "This version of ONNX-GraphSurgeon may not support partitioning the graph.\n"
-                        "Please upgrade to a newer version of ONNX-GraphSurgeon or disable partitioning.\n"
-                        "Note: Error was:\n{:}".format(err)
+                        f"This version of ONNX-GraphSurgeon may not support partitioning the graph.\nPlease upgrade to a newer version of ONNX-GraphSurgeon or disable partitioning.\nNote: Error was:\n{err}"
                     )
                 if self.fold_shapes:
                     G_LOGGER.critical(
-                        "This version of ONNX-GraphSurgeon may not support folding shapes.\n"
-                        "Please upgrade to a newer version of ONNX-GraphSurgeon or disable shape folding.\n"
-                        "Note: Error was:\n{:}".format(err)
+                        f"This version of ONNX-GraphSurgeon may not support folding shapes.\nPlease upgrade to a newer version of ONNX-GraphSurgeon or disable shape folding.\nNote: Error was:\n{err}"
                     )
 
                 graph.fold_constants()
@@ -385,8 +390,7 @@ class FoldConstants(BaseLoadOnnxCopy):
         mod.autoinstall(onnxrt)
         if not mod.has_mod("onnxruntime"):
             G_LOGGER.error(
-                "ONNX-Runtime is not installed, so constant folding may be suboptimal or not work at all.\n"
-                "Consider installing ONNX-Runtime: {:} -m pip install onnxruntime".format(sys.executable)
+                f"ONNX-Runtime is not installed, so constant folding may be suboptimal or not work at all.\nConsider installing ONNX-Runtime: {sys.executable} -m pip install onnxruntime"
             )
 
         model = self.load()
@@ -398,24 +402,20 @@ class FoldConstants(BaseLoadOnnxCopy):
         while (prefold_num_nodes != postfold_num_nodes) and (self.num_passes is None or index < self.num_passes):
             prefold_num_nodes = onnx_util.get_num_nodes(model)
 
-            G_LOGGER.start("Folding Constants | Pass {:}".format(index + 1))
+            G_LOGGER.start(f"Folding Constants | Pass {index + 1}")
             try:
                 model = run_const_fold_pass(model)
             except Exception as err:
                 if not self.error_ok:
                     raise
-                G_LOGGER.warning(
-                    "Constant folding pass failed. Skipping subsequent passes.\nNote: Error was:\n{:}".format(err)
-                )
+                G_LOGGER.warning(f"Constant folding pass failed. Skipping subsequent passes.\nNote: Error was:\n{err}")
                 break
             else:
                 postfold_num_nodes = onnx_util.get_num_nodes(model)
                 index += 1
 
                 G_LOGGER.finish(
-                    "\tTotal Nodes | Original: {:5}, After Folding: {:5} | {:5} Nodes Folded".format(
-                        prefold_num_nodes, postfold_num_nodes, prefold_num_nodes - postfold_num_nodes
-                    )
+                    f"\tTotal Nodes | Original: {prefold_num_nodes:5}, After Folding: {postfold_num_nodes:5} | {prefold_num_nodes - postfold_num_nodes:5} Nodes Folded"
                 )
 
         return model
@@ -474,10 +474,7 @@ class InferShapes(BaseLoader):
 
                 if MODEL_SIZE > self.save_to_disk_threshold_bytes:
                     G_LOGGER.warning(
-                        "Model size ({:.3} MiB) exceeds the in-memory size threshold: {:.3} MiB.\n"
-                        "The model will be saved to a temporary file before shape inference is run.".format(
-                            MODEL_SIZE / (1024.0 ** 2), self.save_to_disk_threshold_bytes / (1024.0 ** 2)
-                        ),
+                        f"Model size ({MODEL_SIZE / 1024.0 ** 2:.3} MiB) exceeds the in-memory size threshold: {self.save_to_disk_threshold_bytes / 1024.0 ** 2:.3} MiB.\nThe model will be saved to a temporary file before shape inference is run.",
                         mode=LogMode.ONCE,
                     )
                     outdir = tempfile.TemporaryDirectory()
@@ -491,7 +488,7 @@ class InferShapes(BaseLoader):
                 model = shape_inference.infer_shapes(model)
             else:
                 tmp_path = util.NamedTemporaryFile(prefix="tmp_polygraphy_", suffix=".onnx").name
-                G_LOGGER.verbose("Writing shape-inferred model to: {:}".format(tmp_path))
+                G_LOGGER.verbose(f"Writing shape-inferred model to: {tmp_path}")
                 shape_inference.infer_shapes_path(model, tmp_path)
                 # When external_data_dir is unset, use the model's current directory
                 model = onnx_from_path(
@@ -501,8 +498,8 @@ class InferShapes(BaseLoader):
         except Exception as err:
             if not self.error_ok:
                 raise
-            G_LOGGER.warning("ONNX shape inference exited with an error:\n{:}".format(err))
-            G_LOGGER.internal_error("ONNX shape inference exited with an error:\n{:}".format(err))
+            G_LOGGER.warning(f"ONNX shape inference exited with an error:\n{err}")
+            G_LOGGER.internal_error(f"ONNX shape inference exited with an error:\n{err}")
 
             if not isinstance(model, onnx.ModelProto):
                 model = onnx_from_path(model, external_data_dir=self.external_data_dir)
@@ -553,7 +550,7 @@ class ExtractSubgraph(BaseLoader):
 
             def get_tensor(name):
                 if name not in TENSOR_MAP:
-                    G_LOGGER.critical("Tensor: {:} does not exist in the model.".format(name))
+                    G_LOGGER.critical(f"Tensor: {name} does not exist in the model.")
                 return TENSOR_MAP[name]
 
             def update_tensor(name, dtype, shape):
@@ -568,13 +565,11 @@ class ExtractSubgraph(BaseLoader):
                     return
                 if needs_shape and shape is None:
                     G_LOGGER.warning(
-                        "{:} metadata should include shape, but no shape was "
-                        "provided for tensor: {:}".format(meta_type, name)
+                        f"{meta_type} metadata should include shape, but no shape was provided for tensor: {name}"
                     )
                 if dtype is None:
                     G_LOGGER.warning(
-                        "{:} metadata should include data type, but no data type was "
-                        "provided for tensor: {:}".format(meta_type, name)
+                        f"{meta_type} metadata should include data type, but no data type was provided for tensor: {name}"
                     )
 
             if self.input_metadata is not None:
@@ -592,7 +587,7 @@ class ExtractSubgraph(BaseLoader):
                     check_meta(name, tensor.dtype, tensor.shape, "Output", needs_shape=False)
                     graph.outputs.append(tensor)
 
-            graph.cleanup().toposort()
+            graph.cleanup()
 
         return manager.retval
 
@@ -641,9 +636,9 @@ class SaveOnnx(BaseLoader):
             onnx.ModelProto: The model, after saving it.
         """
         model, _ = util.invoke_if_callable(self._model)
-        G_LOGGER.info("Saving ONNX model to: {:}".format(self.path))
+        G_LOGGER.info(f"Saving ONNX model to: {self.path}")
         if self.external_data_path is not None:
-            G_LOGGER.verbose("Saving external data for ONNX model to: {:}".format(self.external_data_path))
+            G_LOGGER.verbose(f"Saving external data for ONNX model to: {self.external_data_path}")
             try:
                 external_data_helper.convert_model_to_external_data(
                     model,

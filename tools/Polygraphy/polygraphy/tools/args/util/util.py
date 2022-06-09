@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -63,7 +64,7 @@ def run_script(script_func, *args):
                 the name of an object defined within the script to retrieve.
         args:
                 Additional positional argruments to pass to script_func.
-                The script_func should accept these by variable name instead
+                The script_func must accept these by variable name instead
                 of taking the values themselves. Values of ``None`` will be
                 passed directly instead of by variable name.
 
@@ -148,8 +149,7 @@ def np_type_from_str(dt_str):
         return {np.dtype(dtype).name: np.dtype(dtype) for dtype in np.sctypeDict.values()}[dt_str]
     except KeyError:
         G_LOGGER.error(
-            "Could not understand data type: {:}. Did you forget to specify a data type? "
-            "Please use one of: {:} or `auto`.".format(dt_str, np_types())
+            f"Could not understand data type: {dt_str}. Did you forget to specify a data type? Please use one of: {np_types()} or `auto`."
         )
         raise
 
@@ -187,7 +187,7 @@ def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=Non
         key, _, val = arg.rpartition(sep)
         if not key and not allow_empty_key:
             G_LOGGER.critical(
-                "Could not parse argument: {:}. Expected an argument in the format: `key{:}value`.\n".format(arg, sep)
+                f"Could not parse argument: {arg}. Expected an argument in the format: `key{sep}value`.\n"
             )
         arg_map[key] = cast_to(val)
     return arg_map
@@ -222,8 +222,7 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
             tensor_meta_arg, _, val = tensor_meta_arg.rpartition(SEP)
             if not tensor_meta_arg:
                 G_LOGGER.critical(
-                    "Could not parse {:} from argument: {:}. Is it separated by a comma "
-                    "(,) from the tensor name?".format(name, orig_tensor_meta_arg)
+                    f"Could not parse {name} from argument: {orig_tensor_meta_arg}. Is it separated by a comma (,) from the tensor name?"
                 )
             if val.lower() == "auto":
                 val = None
@@ -298,7 +297,7 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
         "See the CHANGELOG for the motivation behind this deprecation.",
         mode=LogMode.ONCE,
     )
-    G_LOGGER.warning("Instead of: '{:}', use: '{:}'\n".format(" ".join(meta_args), " ".join(new_style)))
+    G_LOGGER.warning(f"Instead of: '{' '.join(meta_args)}', use: '{' '.join(new_style)}'\n")
     return meta
 
 
@@ -379,7 +378,7 @@ def parse_num_bytes(num_bytes_arg):
         return int(float(num_component) * multiplier)
     except:
         G_LOGGER.critical(
-            "Could not convert {:} to a number of bytes. "
+            f"Could not convert {num_bytes_arg} to a number of bytes. "
             "Please use either an integer (e.g. 16000000), scientific notation (e.g. 16e6), "
-            "or a number with a valid suffix: K, M, or G (e.g. 16M).".format(num_bytes_arg)
+            "or a number with a valid suffix: K, M, or G (e.g. 16M)."
         )

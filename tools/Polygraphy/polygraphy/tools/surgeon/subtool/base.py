@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +17,7 @@
 
 from polygraphy import mod
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import LoggerArgs, OnnxLoaderArgs, OnnxSaveArgs
+from polygraphy.tools.args import LoggerArgs, OnnxLoadArgs, OnnxSaveArgs
 from polygraphy.tools.base import Tool
 
 gs = mod.lazy_import("onnx_graphsurgeon")
@@ -28,9 +29,9 @@ class BaseSurgeonSubtool(Tool):
         super().__init__(name)
 
     def load_model(self, log_model=True):
-        model = self.arg_groups[OnnxLoaderArgs].load_onnx()
+        model = self.arg_groups[OnnxLoadArgs].load_onnx()
         if log_model:
-            G_LOGGER.info("Original Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model)))
+            G_LOGGER.info(f"Original Model:\n{onnx_util.str_from_onnx(model)}\n\n")
         return model
 
     # Since new graph outputs may be added, and we don't know the types,
@@ -41,7 +42,7 @@ class BaseSurgeonSubtool(Tool):
     def save_model(self, model, log_model=True):
         model = self.arg_groups[OnnxSaveArgs].save_onnx(model)
         if log_model:
-            G_LOGGER.info("New Model:\n{:}\n\n".format(onnx_util.str_from_onnx(model)))
+            G_LOGGER.info(f"New Model:\n{onnx_util.str_from_onnx(model)}\n\n")
 
     def run_impl(self, args):
         raise NotImplementedError("Subclasses must implement run_impl!")

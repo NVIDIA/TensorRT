@@ -1,5 +1,5 @@
 ============
-ONNX Runtime
+ONNX-Runtime
 ============
 
 Module: ``polygraphy.backend.onnxrt``

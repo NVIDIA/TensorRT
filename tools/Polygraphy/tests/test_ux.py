@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,10 +29,14 @@ import requests
 
 from tests.helper import ROOT_DIR
 
-readme_test_cases = glob.glob(os.path.join(ROOT_DIR, "**", "*.md"), recursive=True)
+readme_test_cases = [
+    path
+    for path in glob.glob(os.path.join(ROOT_DIR, "**", "*.md"), recursive=True)
+    if not path.startswith(os.path.join(ROOT_DIR, "build"))
+]
 
 
-class TestReadme(object):
+class TestReadme:
     @pytest.mark.parametrize("readme", readme_test_cases)
     def test_links_valid(self, readme):
         MD_LINK_PAT = re.compile(r"\[.*?\]\((.*?)\)")
@@ -46,9 +51,12 @@ class TestReadme(object):
                 assert requests.get(link).status_code == 200
             else:
                 assert os.path.pathsep * 2 not in link, "Duplicate slashes break links in GitHub"
-                link_abs_path = os.path.abspath(os.path.join(readme_dir, link))
+                if link.startswith('/'):
+                    # GFM links which start with '/' are relative to the root of the repository
+                    # See examples in https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#images
+                    link_abs_path = os.path.abspath(os.path.join(ROOT_DIR, link.lstrip('/')))
+                else:
+                    link_abs_path = os.path.abspath(os.path.join(readme_dir, link))
                 assert os.path.exists(
                     link_abs_path
-                ), "In README: '{:}', link: '{:}' does not exist. Note: Full path was: '{:}'".format(
-                    readme, link, link_abs_path
-                )
+                ), f"In README: '{readme}', link: '{link}' does not exist. Note: Full path was: '{link_abs_path}'"

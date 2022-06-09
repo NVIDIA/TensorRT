@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,7 +31,7 @@ def model_path(name=None):
     return path
 
 
-class Model(object):
+class Model:
     def __init__(self, path, LoaderType, check_runner, input_metadata=None, ext_data=None):
         self.path = path
         self.loader = LoaderType(self.path)
@@ -150,5 +151,8 @@ ONNX_MODELS = {
     ),
     "instancenorm": Model(
         path=model_path("instancenorm.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "add_with_dup_inputs": Model(
+        path=model_path("add_with_dup_inputs.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
     ),
 }

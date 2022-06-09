@@ -15,13 +15,9 @@
 # limitations under the License.
 #
 """
-The Polygraphy CLI Toolkit
-
-Includes various subtools that can assist with prototyping and
-debugging inference with deep learning models. See the help output
-for details.
+A wrapper around ``polygraphy.tools.main()``. This is primarily for development purposes
+as it will inject the Polygraphy source path into PYTHONPATH.
 """
-import argparse
 import os
 import sys
 
@@ -30,43 +26,7 @@ G_ROOT_DIR = os.path.join(os.path.dirname(G_SCRIPT_FILE), os.pardir)
 sys.path.insert(0, G_ROOT_DIR)
 
 
-import polygraphy
-from polygraphy.logger import G_LOGGER
-from polygraphy.tools import TOOL_REGISTRY
-from polygraphy.exception import PolygraphyException
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Polygraphy: A Deep Learning Debugging Toolkit",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "-v", "--version", action="version", version=G_LOGGER._str_from_module_info(polygraphy, name="Polygraphy")
-    )
-
-    subparsers = parser.add_subparsers(title="Tools", dest="tools")
-    subparsers.required = True
-
-    for tool in TOOL_REGISTRY:
-        tool.setup_parser(subparsers)
-
-    args, unknown = parser.parse_known_args()
-
-    if unknown:
-        G_LOGGER.error("Unrecognized Options: {:}".format(unknown))
-        return 1
-
-    G_LOGGER.verbose("Running Command: {:}".format(" ".join(sys.argv)))
-
-    try:
-        status = args.subcommand(args)
-    except PolygraphyException:
-        # `PolygraphyException`s indicate user error, so we need not display the stack trace.
-        status = 1
-
-    return status
-
+from polygraphy import tools
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(tools.main())

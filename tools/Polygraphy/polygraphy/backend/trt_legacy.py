@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -105,9 +106,7 @@ class LoadNetworkFromUff(BaseLoader):
                 if FormatManager.determine_format(shape) == DataFormat.NHWC:
                     input_order = trt.UffInputOrder.NHWC
             shape = shape[1:]
-            G_LOGGER.verbose(
-                "Registering UFF input: {:} with shape: {:} and input order: {:}".format(name, shape, input_order)
-            )
+            G_LOGGER.verbose(f"Registering UFF input: {name} with shape: {shape} and input order: {input_order}")
             parser.register_input(name, shape, input_order)
 
         if output_names and output_names != constants.MARK_ALL:
@@ -115,7 +114,7 @@ class LoadNetworkFromUff(BaseLoader):
                 G_LOGGER.verbose("Registering UFF output: " + str(name))
                 parser.register_output(name)
 
-        G_LOGGER.info("Parsing UFF model with inputs: {:} and outputs: {:}".format(input_names, output_names))
+        G_LOGGER.info(f"Parsing UFF model with inputs: {input_names} and outputs: {output_names}")
         success = parser.parse_buffer(uff_model, network)
         if not success:
             G_LOGGER.critical("Could not parse UFF correctly")
@@ -148,7 +147,7 @@ class ParseNetworkFromOnnxLegacy(BaseNetworkFromOnnx):
             return builder, network, parser, shape[0]
 
 
-class LoadNetworkFromCaffe(object):
+class LoadNetworkFromCaffe:
     def __init__(self, deploy, model, outputs, batch_size=None, dtype=None):
         self.deploy = deploy
         self.model = model
@@ -160,8 +159,8 @@ class LoadNetworkFromCaffe(object):
 
         if not outputs:
             G_LOGGER.critical(
-                "Please set Caffe model outputs using the outputs parameter, or --trt-outputs. "
-                "Note: To determine possible outputs, try running: tail -n50 {:}".format(deploy)
+                f"Please set Caffe model outputs using the outputs parameter, or --trt-outputs. "
+                "Note: To determine possible outputs, try running: tail -n50 {deploy}"
             )
 
         self.outputs = outputs
@@ -196,7 +195,7 @@ class TrtLegacyRunner(BaseRunner):
     """
 
     # Simple helper data class that's a little nicer to use than a 2-tuple.
-    class HostDeviceMem(object):
+    class HostDeviceMem:
         def __init__(self, host_mem, device_mem):
             self.host = host_mem
             self.device = device_mem
@@ -242,7 +241,7 @@ class TrtLegacyRunner(BaseRunner):
 
             for plugin in plugins:
                 path = os.path.abspath(plugin)
-                G_LOGGER.info("Loading plugin library: {:}".format(path))
+                G_LOGGER.info(f"Loading plugin library: {path}")
                 ctypes.CDLL(path)
 
         # Choose a unique name for this runner.
@@ -266,7 +265,9 @@ class TrtLegacyRunner(BaseRunner):
 
     def activate_impl(self):
         """
-        Vars:
+        Parses command-line arguments and populates the following attributes:
+
+        Attributes:
             engine (trt.ICudaEngine):
                     The engine tracked by this runner. The TrtLegacyRunner OWNS the engine it
                     manages, and therefore is responsible for it's destruction. Do not free the engine outside of the
@@ -291,7 +292,7 @@ class TrtLegacyRunner(BaseRunner):
                 dtype = engine.get_binding_dtype(binding)
 
                 device_mem = cuda.DeviceArray(shape=shape, dtype=trt.nptype(dtype))
-                G_LOGGER.extra_verbose("Tensor: " "{:35} | Allocated: {:}".format(binding, device_mem))
+                G_LOGGER.extra_verbose(f"Tensor: {binding:35} | Allocated: {device_mem}")
 
                 if engine.binding_is_input(binding):
                     input_buffers[binding] = TrtLegacyRunner.HostDeviceMem(None, device_mem)
@@ -303,12 +304,12 @@ class TrtLegacyRunner(BaseRunner):
         # Always try reading the engine first, or, failing that, build it.
         if self.load_engine:
             with open(self.load_engine, "rb") as f, trt.Runtime(get_trt_logger()) as runtime:
-                G_LOGGER.info("Reading engine from {:}".format(self.load_engine))
+                G_LOGGER.info(f"Reading engine from {self.load_engine}")
                 self.engine = runtime.deserialize_cuda_engine(f.read())
         else:
             trt.init_libnvinfer_plugins(get_trt_logger(), "")
             builder, network, parser, model_batch_size = self.network_loader()
-            with builder, network, parser, builder.create_builder_config() as config:
+            with builder, network, parser, builder.create_builder_config() as config, contextlib.ExitStack() as stack:
                 if not network:
                     G_LOGGER.critical("Invalid network")
                 G_LOGGER.super_verbose(lambda: trt_util.str_from_network(network) or "Finished logging network")
@@ -341,10 +342,8 @@ class TrtLegacyRunner(BaseRunner):
                     trt_util.mark_layerwise(network)
 
                 G_LOGGER.info(
-                    "Building engine: max workspace size={:} bytes, max batch size={:}, fp16={:}, "
-                    "tf32={:}, int8={:}".format(
-                        config.max_workspace_size, builder.max_batch_size, self.fp16, self.tf32, self.int8
-                    )
+                    f"Building engine: max workspace size={config.max_workspace_size} bytes, max batch size={builder.max_batch_size}, "
+                    f"fp16={self.fp16}, tf32={self.tf32}, int8={self.int8}"
                 )
                 self.engine = builder.build_engine(network, config)
 
@@ -353,7 +352,7 @@ class TrtLegacyRunner(BaseRunner):
 
         if self.engine_path:
             with open(self.engine_path, "wb") as f:
-                G_LOGGER.info("Writing engine to {:}".format(self.engine_path))
+                G_LOGGER.info(f"Writing engine to {self.engine_path}")
                 f.write(self.engine.serialize())
 
         self.context = self.engine.create_execution_context()

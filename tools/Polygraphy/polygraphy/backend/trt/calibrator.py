@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +18,7 @@ import contextlib
 from collections import OrderedDict
 
 from polygraphy import cuda, mod, util
+from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER, LogMode
 
 trt = mod.lazy_import("tensorrt")
@@ -31,7 +33,7 @@ def Calibrator(
     Supplies calibration data to TensorRT to calibrate the network for INT8 inference.
 
     Args:
-        data_loader (Generator -> OrderedDict[str, Union[numpy.ndarray, DeviceView, int]]):
+        data_loader (Sequence[OrderedDict[str, Union[numpy.ndarray, DeviceView, int]]]):
             A generator or iterable that yields a dictionary that maps input names to NumPy
             arrays, Polygraphy DeviceViews, or GPU pointers.
 
@@ -75,13 +77,11 @@ def Calibrator(
             # Must explicitly initialize parent for any trampoline class! Will mysteriously segfault without this.
             BaseClass.__init__(self)
 
-            self.is_active = False
-
             self.data_loader = data_loader
             self._cache = cache
             self.device_buffers = OrderedDict()
             self.reset()
-            G_LOGGER.verbose("Created calibrator [cache={:}]".format(self._cache))
+            G_LOGGER.verbose(f"Created calibrator [cache={self._cache}]")
 
             self.batch_size = util.default(batch_size, 1)
 
@@ -100,6 +100,7 @@ def Calibrator(
                         Passed along to the data loader if provided. Generally should not be required
                         unless using Polygraphy's included `DataLoader` for this calibrator.
             """
+            self.input_metadata = input_metadata
             if input_metadata is not None:
                 with contextlib.suppress(AttributeError):
                     self.data_loader.input_metadata = input_metadata
@@ -115,19 +116,12 @@ def Calibrator(
         def get_batch_size(self):
             return self.batch_size
 
-        def get_batch(self, names):
-            if not self.is_active:
-                G_LOGGER.error(
-                    "Calibrator must be activated prior to use. Please use a context manager. "
-                    "For example:\nwith calibrator:\n\t# Use calibrator here"
-                )
-                return None
-
+        def _get_batch_impl(self, names):
             try:
                 buffers = next(self.data_loader_iter)
             except StopIteration:
                 if not self.num_batches:
-                    G_LOGGER.error(
+                    G_LOGGER.critical(
                         "Calibrator data loader provided no data.\nPossible reasons for this include:\n(1) data loader "
                         "has no data to provide\n(2) data loader was a generator, and the calibrator is being "
                         "used multiple times (generators cannot be rewound)"
@@ -136,32 +130,58 @@ def Calibrator(
             else:
                 self.num_batches += 1
 
-            if not util.check_dict_contains(buffers, names, dict_name="calibration data", log_func=G_LOGGER.error):
-                return None
+            util.check_dict_contains(buffers, names, dict_name="calibration data", log_func=G_LOGGER.critical)
+
+            def check_buffer(name, buffer):
+                if self.input_metadata is None:
+                    return
+
+                expected_dtype, expected_shape = self.input_metadata[name]
+
+                err_prefix = "Received an unexpected input from the data loader during calibration. "
+                if buffer.dtype != expected_dtype:
+                    G_LOGGER.critical(
+                        err_prefix
+                        + f"For input: '{name}', expected data type: {expected_dtype}, but received: {buffer.dtype}"
+                    )
+
+                if not util.is_valid_shape_override(buffer.shape, expected_shape):
+                    G_LOGGER.critical(
+                        err_prefix
+                        + f"For input: '{name}', expected a shape compatible with: {expected_shape}, but received: {buffer.shape}"
+                    )
 
             ptrs = []
             for name in names:
                 buf = buffers[name]
 
                 if isinstance(buf, cuda.DeviceView):
+                    check_buffer(name, buf)
                     ptrs.append(buf.ptr)
                 elif isinstance(buf, np.ndarray):
+                    check_buffer(name, buf)
                     if name not in self.device_buffers:
                         self.device_buffers[name] = cuda.DeviceArray(shape=buf.shape, dtype=buf.dtype)
-                        G_LOGGER.verbose("Allocated: {:}".format(self.device_buffers[name]))
+                        G_LOGGER.verbose(f"Allocated: {self.device_buffers[name]}")
 
                     ptrs.append(self.device_buffers[name].copy_from(buf).ptr)
                 elif isinstance(buf, int):
                     ptrs.append(buf)
                 else:
-                    G_LOGGER.error(
-                        "Calibration data loader provided an unrecognized type: {:} for input: {:}.\n"
-                        "Please provide either a NumPy array, Polygraphy DeviceView, or GPU pointer. ".format(
-                            type(buf).__name__, name
-                        )
+                    G_LOGGER.critical(
+                        f"Calibration data loader provided an unrecognized type: {type(buf).__name__} for input: {name}.\nPlease provide either a NumPy array, Polygraphy DeviceView, or GPU pointer. "
                     )
-                    return None
 
+            return ptrs
+
+        def get_batch(self, names):
+            ptrs = None
+            try:
+                ptrs = self._get_batch_impl(names)
+            except PolygraphyException:
+                pass
+            if ptrs is None:
+                self.free()
             return ptrs
 
         def read_calibration_cache(self):
@@ -172,9 +192,7 @@ def Calibrator(
                 try:
                     return util.load_file(self._cache, description="calibration cache")
                 except Exception as err:
-                    G_LOGGER.error(
-                        "Could not read from calibration cache: {:}\nNote: Error was: {:}".format(self._cache, err)
-                    )
+                    G_LOGGER.error(f"Could not read from calibration cache: {self._cache}\nNote: Error was: {err}")
                     return None
 
             # Only attempt to read from the cache once.
@@ -206,35 +224,41 @@ def Calibrator(
             try:
                 util.save_file(contents=self.cache_contents, dest=self._cache, description="calibration cache")
             except Exception as err:
-                G_LOGGER.error(
-                    "Could not write to calibration cache: {:}.\nNote: Error was: {:}".format(self._cache, err)
-                )
+                G_LOGGER.error(f"Could not write to calibration cache: {self._cache}.\nNote: Error was: {err}")
 
-        def __enter__(self):
-            self.is_active = True
-            return self
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.is_active = False
+        def free(self):
+            """
+            Frees all device buffers associated with this calibrator
+            """
             for device_buffer in self.device_buffers.values():
                 device_buffer.free()
 
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.free()
+
         # IInt8LegacyCalibrator methods
-        def get_quantile(self):
-            return util.default(quantile, 0.5)
+        if BaseClass == trt.IInt8LegacyCalibrator:
 
-        def get_regression_cutoff(self):
-            return util.default(regression_cutoff, 0.5)
+            def get_quantile(self):
+                return util.default(quantile, 0.5)
 
-        def read_histogram_cache(self, length):
-            pass
+            def get_regression_cutoff(self):
+                return util.default(regression_cutoff, 0.5)
 
-        def write_histogram_cache(self, ptr, length):
-            pass
+            def read_histogram_cache(self, length):
+                pass
+
+            def write_histogram_cache(self, ptr, length):
+                pass
 
         # IInt8Calibrator methods
-        def get_algorithm(self):
-            return util.default(algo, trt.CalibrationAlgoType.MINMAX_CALIBRATION)
+        if BaseClass == trt.IInt8Calibrator:
+
+            def get_algorithm(self):
+                return util.default(algo, trt.CalibrationAlgoType.ENTROPY_CALIBRATION_2)
 
         def __repr__(self):
             return util.make_repr(

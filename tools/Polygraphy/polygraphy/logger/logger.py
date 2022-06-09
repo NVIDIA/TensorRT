@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,7 +41,7 @@ def has_colors():
 
 
 # Context manager to apply indentation to messages
-class LoggerIndent(object):
+class LoggerIndent:
     def __init__(self, logger, indent):
         self.logger = logger
         self.old_indent = self.logger.logging_indent
@@ -55,7 +56,7 @@ class LoggerIndent(object):
 
 
 # Context manager to temporarily set verbosity
-class LoggerVerbosity(object):
+class LoggerVerbosity:
     def __init__(self, logger, severity):
         self.logger = logger
         self.old_severity = self.logger.severity
@@ -80,7 +81,7 @@ class LogMode(enum.IntEnum):
     """Log the message only once. The same message will not be logged again."""
 
 
-class Logger(object):
+class Logger:
     ULTRA_VERBOSE = -20  # Cast it into the flames!
     SUPER_VERBOSE = -10
     EXTRA_VERBOSE = 0
@@ -191,6 +192,9 @@ class Logger(object):
     def indent(self, level=1):
         """
         Returns a context manager that indents all strings logged by the specified amount.
+
+        Args:
+            level (int): The indentation level
         """
         return LoggerIndent(self, level + self.logging_indent)
 
@@ -244,13 +248,13 @@ class Logger(object):
                     # If the file is not located in polygraphy, use its basename instead.
                     if os.pardir in filename:
                         filename = os.path.basename(filename)
-                    return "[{:}:{:}] ".format(filename, sys._getframe(adjusted_stack_depth).f_lineno)
+                    return f"[{filename}:{sys._getframe(adjusted_stack_depth).f_lineno}] "
 
                 prefix = ""
                 if self.letter:
                     prefix += Logger.SEVERITY_LETTER_MAPPING[severity] + " "
                 if self.timestamp:
-                    prefix += "({:}) ".format(time.strftime("%X"))
+                    prefix += f"({time.strftime('%X')}) "
                 if self.line_info:
                     prefix += get_line_info()
                 return prefix
@@ -271,7 +275,7 @@ class Logger(object):
 
             prefix = get_prefix()
             message = apply_indentation(prefix, message)
-            return apply_color("{:}{:}".format(prefix, message))
+            return apply_color(f"{prefix}{message}")
 
         def should_log(message):
             should = severity >= self._severity
@@ -290,7 +294,7 @@ class Logger(object):
             except Exception as err:
                 if not error_ok or config.INTERNAL_CORRECTNESS_CHECKS:
                     raise
-                message = "<Error while logging this message: {:}>".format(str(err))
+                message = f"<Error while logging this message: {str(err)}>"
 
         message = str(message)
         message = message.replace("\t", constants.TAB)
@@ -367,9 +371,9 @@ class Logger(object):
             except:
                 pass
 
-        try_append(lambda: name or "Loaded Module: {:<18}".format(module.__name__))
-        try_append(lambda: " | Version: {:}".format(module.__version__))
-        try_append(lambda: " | Path: {:}".format(list(map(os.path.realpath, module.__path__))))
+        try_append(lambda: name or f"Loaded Module: {module.__name__:<18}")
+        try_append(lambda: f" | Version: {module.__version__}")
+        try_append(lambda: f" | Path: {list(map(os.path.realpath, module.__path__))}")
         return ret
 
     def module_info(self, module, name=None, severity=VERBOSE):

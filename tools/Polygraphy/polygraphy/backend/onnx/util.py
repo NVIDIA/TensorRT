@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -48,10 +49,9 @@ def all_tensor_names(model):
 
 def check_outputs_not_found(not_found, all_outputs):
     if not_found:
+        sep = "\n\t"
         G_LOGGER.critical(
-            "The following outputs were not found: {:}.\nNote: Available tensors:\n\t{:}".format(
-                not_found, "\n\t".join(all_outputs)
-            )
+            f"The following outputs were not found: {not_found}.\nNote: Available tensors:{sep}{sep.join(all_outputs)}"
         )
 
 
@@ -167,15 +167,21 @@ def str_from_onnx(model, show_layers=None, show_attrs=None, show_weights=None):
     show_weights = util.default(show_weights, False)
 
     def get_opset():
-        try:
-            return model.opset_import[0].version
-        except:
-            G_LOGGER.warning("Model does not contain opset information!")
-            return None
+        default_opset = "Unknown"
+        other_opsets = {}
+        for info in model.opset_import:
+            if not info.domain:
+                default_opset = info.version
+            else:
+                other_opsets[info.domain] = info.version
+        return default_opset, other_opsets
 
+    default_opset, other_opsets = get_opset()
     onnx_str = ""
-    onnx_str += "Name: {:} | Opset: {:}\n".format(model.graph.name, get_opset())
-    onnx_str += "\n"
+    onnx_str += f"Name: {model.graph.name} | ONNX Opset: {default_opset}"
+    if other_opsets:
+        onnx_str += f" | Other Opsets: {other_opsets}"
+    onnx_str += "\n\n"
 
     onnx_str += str_from_onnx_graph(
         model.graph, tensors={}, show_layers=show_layers, show_attrs=show_attrs, show_weights=show_weights
@@ -199,15 +205,16 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
     graph_type = "Graph" if indent_level == 0 else "Subgraph"
 
     onnx_str = ""
-    onnx_str += "---- {:} {:} Input(s) ----\n{:}\n\n".format(len(input_metadata), graph_type, input_metadata)
-    onnx_str += "---- {:} {:} Output(s) ----\n{:}\n\n".format(len(output_metadata), graph_type, output_metadata)
+    if show_attrs and graph.doc_string:
+        onnx_str += f"---- Docstring ----\n{graph.doc_string}\n\n"
 
-    onnx_str += "---- {:} Initializer(s) ----\n".format(len(initializer_metadata))
+    onnx_str += f"---- {len(input_metadata)} {graph_type} Input(s) ----\n{input_metadata}\n\n"
+    onnx_str += f"---- {len(output_metadata)} {graph_type} Output(s) ----\n{output_metadata}\n\n"
+
+    onnx_str += f"---- {len(initializer_metadata)} Initializer(s) ----\n"
     if show_weights:
         for init in graph.initializer:
-            onnx_str += "Initializer | {:} [dtype={:}, shape={:}] | Values:\n{:}\n\n".format(
-                init.name, get_dtype(init), get_shape(init), util.indent_block(str(get_values(init)))
-            )
+            onnx_str += f"Initializer | {init.name} [dtype={get_dtype(init)}, shape={get_shape(init)}] | Values:\n{util.indent_block(str(get_values(init)))}\n\n"
         if not graph.initializer:
             onnx_str += "{}\n\n"
     elif show_layers:
@@ -216,14 +223,16 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
     else:
         onnx_str += "\n"
 
-    def metadata_from_names(names):
+    def get_names_and_meta(names):
+        names_lst = []
         metadata = TensorMetadata()
         for name in names:
             dtype, shape = tensors.get(name, (None, None))
             if name in initializer_metadata:
-                name = "Initializer | {:}".format(name)
+                name = f"Initializer | {name}"
+            names_lst.append(name)
             metadata.add(name=name, dtype=dtype, shape=shape)
-        return metadata
+        return names_lst, metadata
 
     # Maps values from the AttributeType enum to their string representations, e.g., {1: "FLOAT"}
     ATTR_TYPE_MAPPING = dict(zip(onnx.AttributeProto.AttributeType.values(), onnx.AttributeProto.AttributeType.keys()))
@@ -249,7 +258,7 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
                 if attr_str == "STRING":
                     processed = processed.decode()
                 elif attr_str == "TENSOR":
-                    tensor_str = "Tensor: [dtype={:}, shape={:}]".format(get_dtype(processed), get_shape(processed))
+                    tensor_str = f"Tensor: [dtype={get_dtype(processed)}, shape={get_shape(processed)}]"
                     if show_weights:
                         tensor_str += " | Values:\n" + util.indent_block(str(get_values(processed)))
                     processed = tensor_str
@@ -274,23 +283,22 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
                 if attr_str in ONNX_PYTHON_ATTR_MAPPING:
                     attr_dict[attr.name] = process_attr(attr_str)
                 else:
-                    G_LOGGER.warning(
-                        "Attribute of type {:} is currently unsupported. Skipping attribute.".format(attr_str)
-                    )
+                    G_LOGGER.warning(f"Attribute of type {attr_str} is currently unsupported. Skipping attribute.")
             else:
                 G_LOGGER.warning(
-                    "Attribute type: {:} was not recognized. Was the graph generated with a newer IR "
-                    "version than the installed `onnx` package? Skipping attribute.".format(attr.type)
+                    f"Attribute type: {attr.type} was not recognized. Was the graph generated with a newer IR version than the installed `onnx` package? Skipping attribute."
                 )
         return attr_dict
 
-    onnx_str += "---- {:} Node(s) ----\n".format(len(graph.node))
+    onnx_str += f"---- {len(graph.node)} Node(s) ----\n"
     if show_layers:
         for index, node in enumerate(graph.node):
-            input_info = metadata_from_names(node.input)
-            output_info = metadata_from_names(node.output)
+            input_names, input_meta = get_names_and_meta(node.input)
+            output_names, output_meta = get_names_and_meta(node.output)
 
-            onnx_str += util.str_from_layer("Node", index, node.name, node.op_type, input_info, output_info)
+            onnx_str += util.str_from_layer(
+                "Node", index, node.name, node.op_type, input_names, input_meta, output_names, output_meta
+            )
 
             if show_attrs:
                 attrs = attrs_to_dict(node.attribute)
@@ -299,8 +307,8 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
                 for key, val in attrs.items():
                     attr_str = ""
                     if node.name:
-                        attr_str += "{:}.".format(node.name)
-                    onnx_str += util.indent_block("{:}{:} = {:}".format(attr_str, key, val)) + "\n"
+                        attr_str += f"{node.name}."
+                    onnx_str += util.indent_block(f"{attr_str}{key} = {val}") + "\n"
             onnx_str += "\n"
 
     return util.indent_block(onnx_str, indent_level)
@@ -320,6 +328,11 @@ def meta_from_gs_tensors(tensors):
 
 
 def set_shapes_from_layerwise_meta(graph, layerwise_meta):
+    """
+    Args:
+        graph (gs.Graph): An ONNX graphsurgeon graph.
+        layerwise_meta (TensorMetadata): Metadata for tensors in the graph.
+    """
     for tensor in graph.tensors().values():
         if isinstance(tensor, gs.Variable) and tensor.name in layerwise_meta:
             tensor.shape = layerwise_meta[tensor.name].shape

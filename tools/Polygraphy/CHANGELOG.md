@@ -2,6 +2,123 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.38.0 (2022-05-24)
+### Added
+- Added an `optimization_profile` parameter to the constructor of `TrtRunner` to allow for setting an optimization profile index
+    whenver the runner is activated.
+- Added an `--optimization-profile` argument to CLI tools to allow for setting the optimization profile to use for inference.
+- Rewrote examples on [comparing frameworks](/examples/cli/run/01_comparing_frameworks) and
+  [comparing across runs](/examples/cli/run/02_comparing_across_runs) to provide more detailed use cases and tips.
+- Added new examples:
+  - An [example](/examples/cli/run/07_checking_nan_inf) on how to use the `run` subtool's `--validate` flag to
+    check for intermediate NaN/infinity outputs,
+  - An [example](/examples/cli/run/08_adding_precision_constraints) on how to selectively constrain
+    layer precisions in a model using Polygraphy network scripts,
+  - An [example](/examples/cli/convert/04_converting_models_to_fp16) on how to use the `convert` subtool's `--fp-to-fp16` flag
+    to convert an ONNX model to fp16.
+- Added an extensibility interface for `polygraphy run` along with a [new example](/examples/dev/02_extending_polygraphy_run/)
+    demonstrating how to write an extension module.
+- Added `--load-debug-replay` and `--save-debug-replay` options to various `debug` subtools.
+    This allows you to save your progress when debugging and resume from that point later.
+- Added a [how-to guide](/how-to/work_with_reduced_precision.md) on working with reduced precision optimizations using Polygraphy.
+
+### Changed
+- The `fold_constant` parameter in `OnnxFromTfGraph` has been deprecated since the corresponding parameter in `tf2onnx` was removed,
+    and will be removed in a future release.
+- The `explicit_precision` parameter to `CreateNetwork` has been deprecated and will be removed in a future release.
+- Updated Polygraphy wheels to use `entry_points` instead of `scripts`, which should improve cross-platform support.
+- Updated `debug` subtools to support an interactive mode. When no `--check` command is provided, the tools will now interactively
+    prompt you during each iteration to determine whether it passed or failed.
+
+### Removed
+- Removed support for Python 3.5 and older.
+
+
+## v0.37.3 (2022-05-04)
+### Added
+- Added a new example for `inspect capability`.
+
+### Changed
+- Updated `polygraphy debug` subtools which use `--check` commands to log the duration of each iteration of the command.
+- Updated the CUDA wrapper to search more paths on Linux for the CUDA runtime library.
+
+
+## v0.37.2 (2022-04-20)
+### Changed
+- Updated the calibrator to check the data type and shape of data provided by the data loader in cases where input metadata
+    is available.
+
+
+## v0.37.1 (2022-04-18)
+### Added
+- Added support for a top-K axis argument in `--postprocess`.
+- Extended `PostprocessFunc.topk_func()` to support per-output axes.
+
+
+## v0.37.0 (2022-04-18)
+### Added
+- Added an `precision_constraints` argument to `CreateConfig` and corresponding `--precision-constraints` CLI argument.
+- Added a generic `--postprocess` CLI option which can apply different post-processing functions to different output tensors.
+- Added an experimental `--compare-func-script` option to allow for custom comparison functions in the CLI.
+- Added a new `indices` comparison function and corresponding entry to `--compare-func` to work with outputs including indices,
+    e.g. class indices in image classification.
+
+### Changed
+- Deprecated `obey_precision_constraints` option in `CreateConfig` and corresponding `--obey-precision-constraints` CLI argument.
+- Made `--obey-precision-constraints`, `--precision-constraints`, and `--strict-types` mutually exclusive options.
+
+
+## v0.36.4 (2022-04-12)
+### Fixed
+- Fixed `CompareFunc.simple()` so that `NaNs` in the output always result in mismatches.
+
+
+## v0.36.3 (2022-04-07)
+### Added
+- Added DLA information to build configuration summary.
+- Added warnings when the `--load-inputs` or `--data-loader-script` options are used together with options only applicable to the default data loader.
+
+### Changed
+- Updated the included `Calibrator` to no longer require manual activation before use with TensorRT.
+
+
+## v0.36.2 (2022-03-31)
+### Fixed
+- Fixed a bug in `debug reduce` where models with multiple branches would not be correctly reduced when using custom input data.
+
+
+## v0.36.1 (2022-03-25)
+### Added
+- Updates `inspect model` to show ONNX graph docstrings when `--show attrs` is set.
+
+### Fixed
+- Fixed a bug in the `TrtLegacyRunner` where attempting to use Polygraphy's calibrator could sometimes result in a crash.
+
+
+## v0.36.0 (2022-02-24)
+### Added
+- Added an `ASK_BEFORE_INSTALL` option to `polygraphy.config` and corresponding environment variable, `POLYGRAPHY_ASK_BEFORE_INSTALL`.
+    This option will cause Polygraphy to prompt before automatically installing any packages.
+    Only relevant if `POLYGRAPHY_AUTOINSTALL_DEPS` is set.
+- Added `--load-timing-cache`/`--save-timing-cache` options to be more consistent with other options.
+    The `--timing-cache` argument will be deprecated in favor of these.
+
+### Changed
+- Updated `EngineBytesFromNetwork` to append to existing timing caches instead of overwriting them
+    Additionally, the write operation is now atomic so that multiple processes can safely write to the same cache.
+- Updated `CreateConfig` to read from timing caches atomically.
+
+### Fixed
+- Fixed a bug in `surgeon insert` where tensors connected to multiple consumers would not be correctly replaced.
+
+
+## v0.35.2 (2022-02-03)
+### Fixed
+- Fixed a bug in `inspect model` where tensors appearing more than once in a node's inputs or outputs would only be displayed once.
+- Fixed a bug in `inspect model` where ONNX opset would not be displayed correctly for models using multiple opsets.
+- Fixed an edge case where Polygraphy's lazy importer would not ignore modules that are installed but cannot be imported.
+    Now, modules that cannot be imported for any reason are treated as though they are not available.
+
 
 ## v0.35.1 (2022-01-14)
 ### Added
@@ -1114,7 +1231,7 @@ Dates are in YYYY-MM-DD format.
 
 ## v0.9.0 (2019-09-30)
 ### Added
-- Added `BaseModelLoader` that can be used to load models. This allows for reuse of existing runners with different import paths. For example, `OnnxrtRunner` can be used with `OnnxFromTfGraph` in order to run a TensorFlow frozen graph via ONNX Runtime.
+- Added `BaseModelLoader` that can be used to load models. This allows for reuse of existing runners with different import paths. For example, `OnnxrtRunner` can be used with `OnnxFromTfGraph` in order to run a TensorFlow frozen graph via ONNX-Runtime.
 - Implements `ModelLoader`s for `TfRunner`, including a frozen model loader, checkpoint loader, and TF-TRT loader.
 
 ### Changed

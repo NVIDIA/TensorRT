@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +23,7 @@ from polygraphy.backend.base import BaseLoader
 functor2 = None
 
 
-class TestExporter(object):
+class TestExporter:
     def test_func(self):
         @mod.export()
         def test_func0():
@@ -48,7 +49,7 @@ class TestExporter(object):
         with pytest.raises(AssertionError, match="must derive from BaseLoader"):
 
             @mod.export(funcify=True)
-            class NonFunctor0(object):
+            class NonFunctor0:
                 def __init__(self, x):
                     self.x = x
 
@@ -112,7 +113,7 @@ class TestExporter(object):
         x, y, z = functor1(y=1, x=0, z=-1)
         assert (x, y, z) == (0, 1, -1)
 
-    def test_funcify_functor_with_call_args(self):
+    def test_funcify_functor_with_call_args_defaults(self):
         @mod.export(funcify=True)
         class FunctorWithCallArgs(BaseLoader):
             def __init__(self, x=0):
@@ -157,10 +158,10 @@ class TestExporter(object):
 
         # We should be able to pass arbitrary arguments to call now.
         # __init__ arguments are always first.
-        def f(arg0, arg1, arg2):
+        def func(arg0, arg1, arg2):
             return arg0 + arg1 + arg2
 
-        assert functor3(f, 1, 2, arg2=4) == 7
+        assert functor3(func, 1, 2, arg2=4) == 7
 
     def test_funcify_with_inherited_init(self):
         class BaseFunctor4(BaseLoader):
@@ -197,4 +198,26 @@ class TestExporter(object):
         assert (w, x, y, z) == (-1, 1, -2, 3)
 
         w, x, y, z = functor_with_defaults(0, 1, 2, 3)  # Set all
+        assert (w, x, y, z) == (0, 2, 1, 3)
+
+    def test_funcify_functor_with_type_annotations(self):
+        @mod.export(funcify=True)
+        class FunctorWithTypeAnnotations(BaseLoader):
+            def __init__(self, w: int, x: int = 1):
+                self.w = w
+                self.x = x
+
+            def call_impl(self, y: int, z: int = 3):
+                return self.w, self.x, y, z
+
+        assert "FunctorWithTypeAnnotations" in __all__
+        assert "functor_with_type_annotations" in __all__
+
+        # Since x and z have default values, the arguments will be interlaced into:
+        # w, y, x, z
+        # __init__ parameters take precedence, and call_impl parameters follow.
+        w, x, y, z = functor_with_type_annotations(-1, -2)  # Set just w, y
+        assert (w, x, y, z) == (-1, 1, -2, 3)
+
+        w, x, y, z = functor_with_type_annotations(0, 1, 2, 3)  # Set all
         assert (w, x, y, z) == (0, 2, 1, 3)

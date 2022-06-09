@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +21,7 @@ from polygraphy.logger import G_LOGGER, LogMode
 
 
 @mod.export()
-class ShapeTuple(object):
+class ShapeTuple:
     """
     Represents a set of shapes for a single binding in a profile.
     """
@@ -37,7 +38,7 @@ class ShapeTuple(object):
         self.max = max
 
     def __str__(self):
-        return "(min={:}, opt={:}, max={:})".format(self.min, self.opt, self.max)
+        return f"(min={self.min}, opt={self.opt}, max={self.max})"
 
     def __repr__(self):
         return type(self).__name__ + self.__str__()
@@ -84,7 +85,7 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
                     corresponding to the input.
         """
         if key not in self:
-            G_LOGGER.critical("Binding: {:} does not have shapes set in this profile".format(key))
+            G_LOGGER.critical(f"Binding: {key} does not have shapes set in this profile")
         return super().__getitem__(key)
 
     def fill_defaults(self, network, default_shape_value=None):
@@ -116,9 +117,8 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
                 rank = inp.shape[0]
                 shape = (default_shape_value,) * rank
                 G_LOGGER.warning(
-                    "{:} | No values provided; Will use input values: {:} for min/opt/max in profile.\n".format(
-                        trt_util.str_from_tensor(inp, is_shape_tensor), shape, rank
-                    ),
+                    f"{trt_util.str_from_tensor(inp, is_shape_tensor)} | No values provided; "
+                    f"Will use input values: {shape} for min/opt/max in profile.\n",
                     mode=LogMode.ONCE,
                 )
                 G_LOGGER.warning(
@@ -130,9 +130,7 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
                 shape = util.override_dynamic_shape(inp.shape, default_shape_value)
                 if shape != inp.shape:
                     G_LOGGER.warning(
-                        "{:} | No shapes provided; Will use shape: {:} for min/opt/max in profile.\n".format(
-                            trt_util.str_from_tensor(inp, is_shape_tensor), shape
-                        ),
+                        f"{trt_util.str_from_tensor(inp, is_shape_tensor)} | No shapes provided; Will use shape: {shape} for min/opt/max in profile.\n",
                         mode=LogMode.ONCE,
                     )
                     G_LOGGER.warning(
@@ -174,31 +172,24 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
                     shapes = self[inp.name]
                     trt_profile.set_shape_input(inp.name, shapes.min, shapes.opt, shapes.max)
                     G_LOGGER.verbose(
-                        "{:} | Setting input shape-tensor value range to: {:}".format(
-                            trt_util.str_from_tensor(inp, is_shape_tensor), shapes
-                        )
+                        f"{trt_util.str_from_tensor(inp, is_shape_tensor)} | Setting input shape-tensor value range to: {shapes}"
                     )
                 else:
                     G_LOGGER.warning(
-                        "{:} | No values provided. "
-                        "Assuming this is not a dynamic shape-tensor.".format(
-                            trt_util.str_from_tensor(inp, is_shape_tensor)
-                        ),
+                        f"{trt_util.str_from_tensor(inp, is_shape_tensor)} | No values provided. Assuming this is not a dynamic shape-tensor.",
                         mode=LogMode.ONCE,
                     )
             else:
                 shapes = self[inp.name]
                 trt_profile.set_shape(inp.name, shapes.min, shapes.opt, shapes.max)
                 G_LOGGER.verbose(
-                    "{:} | Setting input tensor shapes to: {:}".format(
-                        trt_util.str_from_tensor(inp, is_shape_tensor), shapes
-                    )
+                    f"{trt_util.str_from_tensor(inp, is_shape_tensor)} | Setting input tensor shapes to: {shapes}"
                 )
 
         if unused_keys:
-            G_LOGGER.error(
-                "Invalid inputs were provided to the optimization profile: {:}\n"
-                "Note: Inputs available in the TensorRT network are: {:}".format(unused_keys, available_inputs)
+            G_LOGGER.critical(
+                f"Invalid inputs were provided to the optimization profile: {unused_keys}\n"
+                f"Note: Inputs available in the TensorRT network are: {available_inputs}"
             )
 
         return trt_util.check_profile(trt_profile)
@@ -206,13 +197,13 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
     def __repr__(self):
         ret = "Profile()"
         for name, (min, opt, max) in self.items():
-            ret += ".add({:}, min={:}, opt={:}, max={:})".format(name, min, opt, max)
+            ret += f".add('{name}', min={min}, opt={opt}, max={max})"
         return ret
 
     def __str__(self):
         elems = []
         for name, (min, opt, max) in self.items():
-            elems.append("{:} [min={:}, opt={:}, max={:}]".format(name, min, opt, max))
+            elems.append(f"{name} [min={min}, opt={opt}, max={max}]")
 
         sep = ",\n "
         return "{" + sep.join(elems) + "}"

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,31 +24,33 @@ from polygraphy import util
 from polygraphy.backend.onnx import util as onnx_util
 from tests.helper import is_file_non_empty
 from tests.models.meta import ONNX_MODELS
-from tests.tools.common import run_polygraphy_run, run_polygraphy_surgeon
 
 
-def onnx_model_sanity_check(model_path):
-    run_polygraphy_run([model_path, "--model-type=onnx", "--onnxrt"])
+@pytest.fixture()
+def onnx_model_sanity_check(poly_run):
+    def onnx_model_sanity_check_impl(model_path):
+        poly_run([model_path, "--model-type=onnx", "--onnxrt"])
+
+    return onnx_model_sanity_check_impl
 
 
 def was_shape_inference_run(status):
     return "ONNX Shape Inference completed successfully" in (status.stdout + status.stderr)
 
 
-class TestSurgeonExtract(object):
-    def test_no_shape_inference_if_has_metadata(self):
+class TestSurgeonExtract:
+    def test_no_shape_inference_if_has_metadata(self, poly_surgeon_extract, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
-            status = run_polygraphy_surgeon(
-                ["extract", ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--inputs", "X:auto:auto"]
+            status = poly_surgeon_extract(
+                [ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--inputs", "X:auto:auto"]
             )
             onnx_model_sanity_check(outmodel.name)
             assert not was_shape_inference_run(status)
 
-    def test_onnx_shape_inference_if_no_metadata(self):
+    def test_onnx_shape_inference_if_no_metadata(self, poly_surgeon_extract, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
-            status = run_polygraphy_surgeon(
+            status = poly_surgeon_extract(
                 [
-                    "extract",
                     ONNX_MODELS["identity_identity"].path,
                     "-o",
                     outmodel.name,
@@ -58,11 +61,10 @@ class TestSurgeonExtract(object):
             onnx_model_sanity_check(outmodel.name)
             assert was_shape_inference_run(status)
 
-    def test_fallback_shape_inference_no_onnx_shape_inference(self):
+    def test_fallback_shape_inference_no_onnx_shape_inference(self, poly_surgeon_extract, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
-            status = run_polygraphy_surgeon(
+            status = poly_surgeon_extract(
                 [
-                    "extract",
                     ONNX_MODELS["identity_identity"].path,
                     "-o",
                     outmodel.name,
@@ -76,11 +78,12 @@ class TestSurgeonExtract(object):
             onnx_model_sanity_check(outmodel.name)
             assert not was_shape_inference_run(status)
 
-    def test_force_fallback_shape_inference_will_override_model_shapes(self):
+    def test_force_fallback_shape_inference_will_override_model_shapes(
+        self, poly_surgeon_extract, onnx_model_sanity_check
+    ):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon_extract(
                 [
-                    "extract",
                     ONNX_MODELS["dynamic_identity"].path,
                     "-o",
                     outmodel.name,
@@ -97,13 +100,13 @@ class TestSurgeonExtract(object):
             assert tuple(graph.inputs[0].shape) == (1, 2, 1, 1)
             assert tuple(graph.outputs[0].shape) == (1, 2, 1, 1)
 
-    def test_sanity_dim_param(self):
+    def test_sanity_dim_param(self, poly_surgeon_extract, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(["extract", ONNX_MODELS["dim_param"].path, "-o", outmodel.name])
+            poly_surgeon_extract([ONNX_MODELS["dim_param"].path, "-o", outmodel.name])
             onnx_model_sanity_check(outmodel.name)
 
 
-class TestSurgeonInsert(object):
+class TestSurgeonInsert:
     def check_insert_model(self, path, expected_node_ops, expected_graph_input_names, expected_graph_output_names):
         model = onnx.load(path)
         assert [node.op_type for node in model.graph.node] == expected_node_ops
@@ -116,10 +119,10 @@ class TestSurgeonInsert(object):
         assert graph_input_names == set(expected_graph_input_names)
         return model
 
-    def test_insert_at_tensor(self):
+    def test_insert_at_tensor(self, poly_surgeon):
         # Insert a new node in between existing nodes without replacing any existing nodes.
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "insert",
                     ONNX_MODELS["identity_identity"].path,
@@ -132,10 +135,10 @@ class TestSurgeonInsert(object):
             )
             self.check_insert_model(outmodel.name, ["Identity", "FakeOp", "Identity"], ["X"], ["identity_out_2"])
 
-    def test_graph_output(self):
+    def test_graph_output(self, poly_surgeon):
         # FakeOp output tensor should be marked as a graph output. Name should be preserved - identity_out_2
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "insert",
                     ONNX_MODELS["identity_identity"].path,
@@ -148,9 +151,9 @@ class TestSurgeonInsert(object):
             )
             self.check_insert_model(outmodel.name, ["Identity", "Identity", "FakeOp"], ["X"], ["identity_out_2"])
 
-    def test_at_graph_input(self):
+    def test_at_graph_input(self, poly_surgeon):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "insert",
                     ONNX_MODELS["identity_identity"].path,
@@ -165,9 +168,9 @@ class TestSurgeonInsert(object):
 
     # When a specified input tensor is used by multiple other nodes, it should not be
     # disconnected from other nodes.
-    def test_multi_use_input(self):
+    def test_multi_use_input_replace_single_path(self, poly_surgeon):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "insert",
                     ONNX_MODELS["reducable"].path,
@@ -188,12 +191,35 @@ class TestSurgeonInsert(object):
             assert other_branch_node.name == "onnx_graphsurgeon_node_7"
             assert other_branch_node.input == ["add_out_4"]
 
-    def test_with_attributes(self):
+    def test_multi_use_input_replace_all_paths(self, poly_surgeon):
+        with util.NamedTemporaryFile() as outmodel:
+            poly_surgeon(
+                [
+                    "insert",
+                    ONNX_MODELS["reducable"].path,
+                    "-o",
+                    outmodel.name,
+                    "--inputs=add_out_4",
+                    "--outputs=add_out_4",
+                    "--op=FakeOp",
+                ]
+            )
+            model = self.check_insert_model(
+                outmodel.name,
+                ["Identity", "Identity", "Add", "FakeOp", "Identity", "Identity"],
+                ["X0", "Y0"],
+                ["identity_out_6", "identity_out_8"],
+            )
+            for branch_num in range(1, 3):
+                branch = model.graph.node[-branch_num]
+                assert branch.input == ["add_out_4_polygraphy_surgeon_insert_output"]
+
+    def test_with_attributes(self, poly_surgeon):
         with util.NamedTemporaryFile() as outmodel:
             # str_attr='0' should be interpreted as a string, not an int
             # float_attr=0.0 should be interpreted as a float, not an int
             # int_attr=0 should be interpreted as an int
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "insert",
                     ONNX_MODELS["identity_identity"].path,
@@ -240,11 +266,13 @@ class TestSurgeonInsert(object):
             assert attrs[6].floats == [0.0, -1.0, -2.0]
 
 
-class TestSurgeonSanitize(object):
+class TestSurgeonSanitize:
     @pytest.mark.parametrize("no_per_pass_shape_inf", [None, "--no-per-pass-shape-inference"])
     @pytest.mark.parametrize("fold_shapes", [None, "--no-fold-shapes"])
     @pytest.mark.parametrize("partitioning", [None, "basic", "recursive"])
-    def test_fold_constants(self, no_per_pass_shape_inf, partitioning, fold_shapes):
+    def test_fold_constants(
+        self, poly_surgeon, no_per_pass_shape_inf, partitioning, fold_shapes, onnx_model_sanity_check
+    ):
         with util.NamedTemporaryFile() as outmodel:
             cmd = ["sanitize", ONNX_MODELS["const_foldable"].path, "-o", outmodel.name, "--fold-constants"]
             if fold_shapes:
@@ -253,15 +281,15 @@ class TestSurgeonSanitize(object):
                 cmd += ["--partitioning", partitioning]
             if no_per_pass_shape_inf:
                 cmd += [no_per_pass_shape_inf]
-            run_polygraphy_surgeon(cmd)
+            poly_surgeon(cmd)
 
             onnx_model_sanity_check(outmodel.name)
             model = onnx.load(outmodel.name)
             assert len(model.graph.node) == 1
 
-    def test_fold_constants_single_pass(self):
+    def test_fold_constants_single_pass(self, poly_surgeon, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
-            status = run_polygraphy_surgeon(
+            status = poly_surgeon(
                 [
                     "sanitize",
                     ONNX_MODELS["const_foldable"].path,
@@ -280,16 +308,16 @@ class TestSurgeonSanitize(object):
             assert len(model.graph.node) == 1
 
     @pytest.mark.parametrize("new_dim", [1, 2, 3])
-    def test_override_shapes(self, new_dim):
+    def test_override_shapes(self, poly_surgeon, new_dim, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
             cmd = [
                 "sanitize",
                 ONNX_MODELS["dynamic_identity"].path,
                 "-o",
                 outmodel.name,
-                "--override-input-shapes=X:[1,2,{new_dim},{new_dim}]".format(new_dim=new_dim),
+                f"--override-input-shapes=X:[1,2,{new_dim},{new_dim}]",
             ]
-            run_polygraphy_surgeon(cmd)
+            poly_surgeon(cmd)
             onnx_model_sanity_check(outmodel.name)
 
             model = onnx.load(outmodel.name)
@@ -301,9 +329,9 @@ class TestSurgeonSanitize(object):
 
             assert shape == [1, 2, new_dim, new_dim]
 
-    def test_override_shapes_no_clear_const_tensors_meta(self):
+    def test_override_shapes_no_clear_const_tensors_meta(self, poly_surgeon):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "sanitize",
                     ONNX_MODELS["const_foldable"].path,
@@ -313,9 +341,9 @@ class TestSurgeonSanitize(object):
                 ]
             )
 
-    def test_override_shapes_partial_inputs(self):
+    def test_override_shapes_partial_inputs(self, poly_surgeon):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "sanitize",
                     ONNX_MODELS["dynamic_identity"].path,
@@ -328,9 +356,9 @@ class TestSurgeonSanitize(object):
             assert model.graph.input[0].type.tensor_type.shape.dim[2].dim_param == "height"
             assert model.graph.input[0].type.tensor_type.shape.dim[3].dim_param == "width"
 
-    def test_override_shapes_no_reorder(self):
+    def test_override_shapes_no_reorder(self, poly_surgeon):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "sanitize",
                     ONNX_MODELS["reducable"].path,
@@ -345,18 +373,18 @@ class TestSurgeonSanitize(object):
             assert model.graph.input[0].name == "X0"
             assert model.graph.input[1].name == "Y0"
 
-    def test_modify_onnx_outputs(self):
+    def test_modify_onnx_outputs(self, poly_surgeon):
         with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 ["sanitize", ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--outputs", "mark", "all"]
             )
 
             model = onnx.load(outmodel.name)
             assert len(model.graph.output) == 2
 
-    def test_cleanup(self):
+    def test_cleanup(self, poly_surgeon):
         with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
-            run_polygraphy_surgeon(
+            poly_surgeon(
                 [
                     "sanitize",
                     ONNX_MODELS["identity_identity"].path,
@@ -372,12 +400,12 @@ class TestSurgeonSanitize(object):
             assert len(model.graph.node) == 1
             assert model.graph.output[0].name == "identity_out_0"
 
-    def test_external_data(self):
+    def test_external_data(self, poly_surgeon, poly_run):
         with tempfile.TemporaryDirectory() as outdir:
             model = ONNX_MODELS["ext_weights"]
             outmodel = os.path.join(outdir, "out_model.onnx")
             outdata = "ext_weights.data"
-            assert run_polygraphy_surgeon(
+            assert poly_surgeon(
                 [
                     "sanitize",
                     model.path,
@@ -394,11 +422,11 @@ class TestSurgeonSanitize(object):
             )
             assert is_file_non_empty(outmodel)
             assert is_file_non_empty(os.path.join(outdir, outdata))
-            assert run_polygraphy_run([outmodel, "--onnxrt", "--external-data-dir", outdir])
+            assert poly_run([outmodel, "--onnxrt", "--external-data-dir", outdir])
 
-    def test_force_fallback_shape_inference_will_override_model_shapes(self):
+    def test_force_fallback_shape_inference_will_override_model_shapes(self, poly_surgeon, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
-            status = run_polygraphy_surgeon(
+            status = poly_surgeon(
                 [
                     "sanitize",
                     ONNX_MODELS["dynamic_identity"].path,

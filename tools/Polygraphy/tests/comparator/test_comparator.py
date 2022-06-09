@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +29,7 @@ from polygraphy.exception import PolygraphyException
 from tests.models.meta import ONNX_MODELS
 
 
-class TestComparator(object):
+class TestComparator:
     def test_warmup_runs(self):
         onnx_loader = ONNX_MODELS["identity"].loader
         runner = OnnxrtRunner(SessionFromOnnx(onnx_loader))
@@ -81,7 +82,7 @@ class TestComparator(object):
         onnx_loader = ONNX_MODELS["identity"].loader
         run_results = Comparator.run([OnnxrtRunner(SessionFromOnnx(onnx_loader))], use_subprocess=True)
         # Output shape is (1, 1, 2, 2)
-        postprocessed = Comparator.postprocess(run_results, postprocess_func=PostprocessFunc.topk_func(k=1, axis=-1))
+        postprocessed = Comparator.postprocess(run_results, postprocess_func=PostprocessFunc.top_k(k=1, axis=-1))
         for _, results in postprocessed.items():
             for result in results:
                 for _, output in result.items():
@@ -89,7 +90,7 @@ class TestComparator(object):
 
     def test_errors_do_not_hang(self):
         # Should error because interface is not implemented correctly.
-        class FakeRunner(object):
+        class FakeRunner:
             def __init__(self):
                 self.name = "fake"
 

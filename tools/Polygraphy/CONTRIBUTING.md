@@ -48,7 +48,7 @@ with the `deprecate()` decorator defined in `exporter.py`. For example:
 
 ```python
 @mod.deprecate(remove_in="0.25.0", use_instead="NewClass")
-class OldClass(object):
+class OldClass:
     ...
 ```
 
@@ -64,7 +64,7 @@ In those cases, we can export the old name as a deprecated alias to preserve bac
 
     ```python
     @mod.export_deprecated_alias("Old", remove_in="0.25.0")
-    class New(object):
+    class New:
         ...
     ```
 

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,21 +27,9 @@ from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
 
-
-@mod.export()
-def check(cond, msg=None):
-    """
-    Like assert, but applies even when optimizations are enabled (i.e. __debug__ is False).
-
-    Args:
-        cond (bool): The condition to check.
-        msg (str): The error message in case condition is False.
-
-    Raises:
-        AssertionError: If the condition is False.
-    """
-    if not cond:
-        raise AssertionError(msg)
+# These modules are not cross-platform so any usage should be guarded
+fcntl = mod.lazy_import("fcntl")
+msvcrt = mod.lazy_import("msvcrt")
 
 
 @mod.export()
@@ -105,18 +94,12 @@ def check_dict_contains(dct, keys, check_missing=True, dict_name=None, log_func=
 
     if missing_in_dct:
         log_func(
-            "Some keys are missing in {:}: {:}.\n"
-            "Note: Expected keys are: {:}, but keys provided were: {:}".format(
-                dict_name, missing_in_dct, keys, feed_names
-            )
+            f"Some keys are missing in {dict_name}: {missing_in_dct}.\nNote: Expected keys are: {keys}, but keys provided were: {feed_names}"
         )
 
     if extra_in_dct:
         log_func(
-            "Extra keys in {:}: {:}.\n"
-            "Note: Expected keys are: {:}, but keys provided were: {:}".format(
-                dict_name, extra_in_dct, keys, feed_names
-            )
+            f"Extra keys in {dict_name}: {extra_in_dct}.\nNote: Expected keys are: {keys}, but keys provided were: {feed_names}"
         )
 
     return not extra_in_dct and not missing_in_dct
@@ -179,7 +162,7 @@ def unique_list(sequence):
 # default exists to solve issues that might result from Python's normal default arguments.
 # Specifically, consider the following class:
 #
-# class MyClass(object):
+# class MyClass:
 #     def __init__(self, value=[]):
 #         self.value = value
 #
@@ -193,7 +176,7 @@ def unique_list(sequence):
 #
 # If we rewrite the class using default value:
 #
-# class MyClass(object):
+# class MyClass:
 #     def __init__(self, value=None):
 #         self.value = default(value, [])
 #
@@ -210,8 +193,8 @@ def default(value, default):
     Returns a specified default value if the provided value is None.
 
     Args:
-        value (object): The value.
-        default (object): The default value to use if value is None.
+        value : The value.
+        default : The default value to use if value is None.
 
     Returns:
         object: Either value, or the default.
@@ -248,7 +231,7 @@ def unpack_args(args, num):
 
 
 @mod.export()
-class NamedTemporaryFile(object):
+class NamedTemporaryFile:
     """
     Cross-platform temporary file implementation. Unlike tempfile.NamedTemporaryFile,
     it can be opened multiple times without error on Windows.
@@ -266,7 +249,7 @@ class NamedTemporaryFile(object):
         suffix = default(suffix, "")
 
         def rand_path():
-            return os.path.join(tempfile.gettempdir(), "{:}{:}{:}".format(prefix, os.urandom(24).hex(), suffix))
+            return os.path.join(tempfile.gettempdir(), f"{prefix}{os.urandom(24).hex()}{suffix}")
 
         # In the unlikely event the path exists, generate a new one. Only try 100 times so
         # we don't end up in an infinite loop.
@@ -276,10 +259,10 @@ class NamedTemporaryFile(object):
                 break
             path = rand_path()
         else:
-            G_LOGGER.critical("Could not create a temporary file under: {:}".format(tempfile.gettempdir()))
+            G_LOGGER.critical(f"Could not create a temporary file under: {tempfile.gettempdir()}")
 
         self.name = path  # Use 'name' to be compatible with tempfile.NamedTemporaryFile
-        open(self.name, "x").close()
+        open(self.name, "x").close()  # `touch` the file
         self._fhandle = None
 
     def __enter__(self):
@@ -296,6 +279,67 @@ class NamedTemporaryFile(object):
         """
         Closes the file handle.
         """
+        self._fhandle.flush()
+        os.fsync(self._fhandle.fileno())
+        self._fhandle.close()
+
+
+@mod.export()
+class LockFile:
+    """
+    Context manager that locks a file for exclusive access.
+    Has no effect for file-like objects.
+    """
+
+    def __init__(self, path):
+        """
+        Args:
+            path (str): The path to the file.
+        """
+        self.is_file_like = is_file_like(path)
+        if not self.is_file_like:
+            self.lock_path = path + ".lock"
+            self._fhandle = None
+
+    def __enter__(self):
+        """
+        Locks the file by creating a temporary `.lock` file and acquiring exclusive access to it.
+
+        Returns:
+            file-like: The open file object.
+        """
+        if self.is_file_like:
+            return
+
+        self._fhandle = open(self.lock_path, "wb+")
+        if sys.platform.startswith("win"):
+            # On Windows, msvcrt.locking() raises an OSError if the file cannot be locked after 10 attempts.
+            # To compensate, keep trying until we finally get the lock.
+            locked = False
+            while not locked:
+                try:
+                    msvcrt.locking(self._fhandle.fileno(), msvcrt.LK_RLCK, get_file_size(self._fhandle))
+                except OSError:
+                    locked = False
+                else:
+                    locked = True
+        else:
+            fcntl.lockf(self._fhandle.fileno(), fcntl.LOCK_EX)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Unlocks and closes the lock file.
+        """
+        if self.is_file_like:
+            return
+
+        if sys.platform.startswith("win"):
+            msvcrt.locking(self._fhandle.fileno(), msvcrt.LK_UNLCK, get_file_size(self._fhandle))
+        else:
+            fcntl.lockf(self._fhandle.fileno(), fcntl.LOCK_UN)
+
+        # The lock file should not be deleted here since other processes might create new handles
+        # which therefore don't block correctly if there are already processes holding the old handle.
         self._fhandle.close()
 
 
@@ -362,8 +406,7 @@ def warn_if_wrong_mode(file_like, mode):
         or (writable(mode) and not writable(fmode))
     ):
         G_LOGGER.warning(
-            "File-like object has a different mode than requested!\n"
-            "Note: Requested mode was: {:} but file-like object has mode: {:}".format(mode, file_like.mode)
+            f"File-like object has a different mode than requested!\nNote: Requested mode was: {mode} but file-like object has mode: {file_like.mode}"
         )
 
 
@@ -378,12 +421,28 @@ def is_file_like(obj):
 
 
 @mod.export()
+def add_file_suffix(path: str, suffix: str):
+    """
+    Adds a suffix to a path or filename, before the file extension.
+
+    Args:
+        path (str): The path or filename.
+        suffix (str): The suffix.
+
+    Returns:
+        str: The path or filename with the suffix attached.
+    """
+    path, ext = os.path.splitext(path)
+    return f"{path}{suffix}{ext}"
+
+
+@mod.export()
 def makedirs(path):
     dir_path = os.path.dirname(path)
     if dir_path:
         dir_path = os.path.realpath(dir_path)
         if not os.path.exists(dir_path):
-            G_LOGGER.verbose("{:} does not exist, creating now.".format(dir_path))
+            G_LOGGER.verbose(f"{dir_path} does not exist, creating now.")
         os.makedirs(dir_path, exist_ok=True)
 
 
@@ -406,7 +465,7 @@ def load_file(src, mode="rb", description=None):
         Exception: If the file or file-like object could not be read.
     """
     if description is not None:
-        G_LOGGER.info("Loading {:} from {:}".format(description, src))
+        G_LOGGER.info(f"Loading {description} from {src}")
 
     if is_file_like(src):
         warn_if_wrong_mode(src, mode)
@@ -445,12 +504,13 @@ def save_file(contents, dest, mode="wb", description=None):
         Exception: If the path could not be written to, or if the file-like object could not be written to.
     """
     if description is not None:
-        G_LOGGER.info("Saving {:} to {:}".format(description, dest))
+        G_LOGGER.info(f"Saving {description} to {dest}")
 
     if is_file_like(dest):
         warn_if_wrong_mode(dest, mode)
         bytes_written = dest.write(contents)
         dest.flush()
+        os.fsync(dest.fileno())
         try:
             content_bytes = len(contents.encode())
         except:
@@ -458,8 +518,7 @@ def save_file(contents, dest, mode="wb", description=None):
         else:
             if bytes_written != content_bytes:
                 G_LOGGER.warning(
-                    "Could not write entire file. Note: file contains {:} bytes, but only "
-                    "{:} bytes were written".format(content_bytes, bytes_written)
+                    f"Could not write entire file. Note: file contains {content_bytes} bytes, but only {bytes_written} bytes were written"
                 )
     else:
         makedirs(dest)
@@ -473,7 +532,7 @@ def save_file(contents, dest, mode="wb", description=None):
 ##
 
 
-class Compressed(object):
+class Compressed:
     """
     Represents an object compressed by zlib
     """
@@ -487,7 +546,7 @@ def is_compressed(obj):
 
 
 def compress(obj):
-    G_LOGGER.verbose("Compressing {} object".format(type(obj)))
+    G_LOGGER.verbose(f"Compressing {type(obj)} object")
     return Compressed(zlib.compress(obj))
 
 
@@ -507,16 +566,13 @@ PIPE_MAX_SEND_BYTES = 1 << 31
 def send_on_queue(queue, obj):
     if sys.getsizeof(obj) > PIPE_MAX_SEND_BYTES:
         G_LOGGER.warning(
-            "Object size ({:} bytes) exceeds maximum size that can be sent over queues ({:} bytes). "
-            "Attempting to compress - this may take some time. If this does not work or you want to avoid "
-            "the compression overhead, you should disable subprocesses by omitting the --use-subprocess flag, "
-            "or by setting use_subprocess=False in Comparator.run().".format(sys.getsizeof(obj), PIPE_MAX_SEND_BYTES)
+            f"Object size ({sys.getsizeof(obj)} bytes) exceeds maximum size that can be sent over queues ({PIPE_MAX_SEND_BYTES} bytes). Attempting to compress - this may take some time. If this does not work or you want to avoid the compression overhead, you should disable subprocesses by omitting the --use-subprocess flag, or by setting use_subprocess=False in Comparator.run()."
         )
         obj = compress(obj)
 
     assert sys.getsizeof(obj) <= PIPE_MAX_SEND_BYTES
 
-    G_LOGGER.ultra_verbose("Sending: {:} on queue".format(obj))
+    G_LOGGER.ultra_verbose(f"Sending: {obj} on queue")
     queue.put(obj)
 
 
@@ -528,12 +584,12 @@ def try_send_on_queue(queue, obj):
 
     Args:
         queue (queue.Queue): The queue to send the object over.
-        obj (object): The object to send.
+        obj : The object to send.
     """
     try:
         send_on_queue(queue, obj)
     except Exception as err:
-        G_LOGGER.warning("Could not send object on queue: {:}\nSending None instead.".format(err))
+        G_LOGGER.warning(f"Could not send object on queue: {err}\nSending None instead.")
         queue.put(None)
 
 
@@ -542,7 +598,7 @@ def receive_on_queue(queue, timeout=None):
     obj = queue.get(block=True, timeout=timeout)
     if is_compressed(obj):
         obj = decompress(obj)
-    G_LOGGER.ultra_verbose("Received {:} on queue".format(obj))
+    G_LOGGER.ultra_verbose(f"Received {obj} on queue")
     return obj
 
 
@@ -552,15 +608,12 @@ def try_receive_on_queue(queue, timeout=None):
         obj = receive_on_queue(queue, timeout)
         if obj is None:
             G_LOGGER.warning(
-                "Received {:} on the queue. This likely means that there was an error in sending "
-                "the object over the queue. You may want to run with use_subprocess=False in Comparator.run() "
-                "or omit the --use-subprocess flag to prevent further issues.".format(obj)
+                f"Received {obj} on the queue. This likely means that there was an error in sending the object over the queue. You may want to run with use_subprocess=False in Comparator.run() or omit the --use-subprocess flag to prevent further issues."
             )
         return obj
     except Exception as err:
         G_LOGGER.warning(
-            "Could not receive on queue: {:}\nYou may want to run with use_subprocess=False in Comparator.run() "
-            "or omit the --use-subprocess flag to prevent further issues.".format(err)
+            f"Could not receive on queue: {err}\nYou may want to run with use_subprocess=False in Comparator.run() or omit the --use-subprocess flag to prevent further issues."
         )
         return None
 
@@ -649,19 +702,17 @@ def try_match_shape(arr, shape):
         try:
             arr = arr.reshape(shape)
         except ValueError:
-            G_LOGGER.warning(
-                "Could not reshape array from shape: {:} to {:}. Skipping reshape.".format(arr.shape, shape)
-            )
+            G_LOGGER.warning(f"Could not reshape array from shape: {arr.shape} to {shape}. Skipping reshape.")
         else:
             if arr.shape != original_shape:
-                G_LOGGER.info("Reshaped array from shape: {:} to: {:}".format(original_shape, arr.shape))
+                G_LOGGER.info(f"Reshaped array from shape: {original_shape} to: {arr.shape}")
         return arr
 
     def try_permute(arr, shape):
         original_shape = arr.shape
 
         if sorted(arr.shape) != sorted(shape):
-            G_LOGGER.extra_verbose("Array of shape: {:} cannot be permuted to: {:}".format(arr.shape, shape))
+            G_LOGGER.extra_verbose(f"Array of shape: {arr.shape} cannot be permuted to: {shape}")
             return arr
 
         # We need to remove axes from the original shape as we use them to avoid
@@ -680,12 +731,10 @@ def try_match_shape(arr, shape):
             perm = [find_axis(dimlen) for dimlen in shape]
             arr = np.transpose(arr, perm)
         except Exception as err:
-            G_LOGGER.extra_verbose("Skipping permutation due to {:}".format(err))
+            G_LOGGER.extra_verbose(f"Skipping permutation due to {err}")
         else:
             if arr.shape != original_shape:
-                G_LOGGER.info(
-                    "Permuted array of shape: {:} to: {:} using permutation {:}".format(original_shape, arr.shape, perm)
-                )
+                G_LOGGER.info(f"Permuted array of shape: {original_shape} to: {arr.shape} using permutation {perm}")
         return arr
 
     # Override any dynamic dimensions in the shape with concrete shapes from the array.
@@ -725,14 +774,23 @@ def try_match_shape(arr, shape):
 
 
 @mod.export()
-def str_from_layer(prefix, index, name, op, input_info, output_info):
-    layer_str = "{:} {:<4} | {:} [Op: {:}]\n".format(prefix, index, name, op)
-    layer_str += indent_block(input_info)
+def str_from_layer(prefix, index, name, op, input_names, input_meta, output_names, output_meta):
+    def tensor_names_to_string(tensor_names, meta):
+        sep = ",\n "
+        elems = [f"{name} {meta[name]}".strip() for name in tensor_names]
+        return "{" + sep.join(elems) + "}"
 
-    layer_str += "\n" if (input_info and output_info) else ""
-    indent_level = 1 if (input_info and output_info) else 0
+    layer_str = f"{prefix} {index:<4} | {name} [Op: {op}]\n"
+    layer_str += indent_block(tensor_names_to_string(input_names, input_meta))
+
+    layer_str += "\n" if (input_names and output_names) else ""
+    indent_level = 1 if (input_names and output_names) else 0
     layer_str += (
-        indent_block(" -> {:}".format(indent_block(output_info, level=indent_level).strip()), level=indent_level) + "\n"
+        indent_block(
+            f" -> {indent_block(tensor_names_to_string(output_names, output_meta), level=indent_level).strip()}",
+            level=indent_level,
+        )
+        + "\n"
     )
     return layer_str
 
@@ -750,7 +808,7 @@ def indent_block(block, level=1):
         str: The indented block.
     """
     tab = "\t" * level
-    sep = "\n{:}".format(tab)
+    sep = f"\n{tab}"
     return tab + sep.join(str(block).splitlines())
 
 
@@ -776,9 +834,9 @@ def make_repr(type_str, *args, **kwargs):
     all_args = list(map(repr, args))
 
     for key, val in filter(lambda t: t[1] is not None, kwargs.items()):
-        all_args.append("{:}={:}".format(key, repr(val)))
+        all_args.append(f"{key}={repr(val)}")
 
-    repr_str = "{:}({:})".format(type_str, ", ".join(all_args))
+    repr_str = f"{type_str}({', '.join(all_args)})"
     return repr_str, all(arg == repr(None) for arg in all_args)
 
 
@@ -788,7 +846,7 @@ def make_repr(type_str, *args, **kwargs):
 
 
 @mod.export()
-class FreeOnException(object):
+class FreeOnException:
     def __init__(self, objs):
         """
         Frees the specified objects if an exception occurs in this context.
@@ -825,25 +883,26 @@ class FreeOnException(object):
 
 
 @mod.export()
-class TempAttrChange(object):
+class TempAttrChange:
     """
-    Temporarily set an instance member to a particular value for the duration
+    Temporarily set attributes to a particular value for the duration
     of the context manager.
     """
 
-    def __init__(self, arg_group, attr, value):
+    def __init__(self, arg_group, attr_values):
         self.arg_group = arg_group
-        self.attr = attr
-
-        self.old_value = getattr(arg_group, attr)
-        self.new_value = value
+        self.old_values = {}
+        self.new_values = attr_values
 
     def __enter__(self):
-        if self.new_value is not None:
-            setattr(self.arg_group, self.attr, self.new_value)
+        for attr, new_value in self.new_values.items():
+            if new_value is not None:
+                self.old_values[attr] = getattr(self.arg_group, attr)
+                setattr(self.arg_group, attr, new_value)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        setattr(self.arg_group, self.attr, self.old_value)
+        for attr, old_value in self.old_values.items():
+            setattr(self.arg_group, attr, old_value)
 
 
 @mod.export()

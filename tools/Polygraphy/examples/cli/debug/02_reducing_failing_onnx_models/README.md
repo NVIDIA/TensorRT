@@ -16,7 +16,8 @@ reduce the model: `bisect` operates in O(log(N)) time, while `linear` operates i
 lead to smaller models. A good compromise is to use `bisect` on the original model, then further reduce
 the result using `linear`. This is the approach that will be outlined in this example.
 
-For more details on how the `debug` tools work, see [here](../../../../polygraphy/tools/debug/).
+For more details on how the `debug` tools work, see the help output:
+`polygraphy debug -h` and `polygraphy debug reduce -h`.
 
 
 ## A Note On Models With Dynamic Input Shapes
@@ -55,8 +56,8 @@ Our simulated failures will trigger whenever there's a `Mul` node in the model:
 
 Hence, the final reduced model should contain just the `Mul` node (since the other nodes don't cause a failure).
 
-1. For models that use dynamic input shapes or contains shape operations, freeze the input
-    shapes and fold the shape operations with:
+1. For models that use dynamic input shapes or contain shape operations, freeze the input
+    shapes and fold shape operations with:
 
     ```bash
     polygraphy surgeon sanitize model.onnx -o folded.onnx --fold-constants \
@@ -83,30 +84,58 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
 3. Next, we'll use `debug reduce` in `bisect` mode:
 
     ```bash
-    polygraphy debug reduce folded.onnx -o initial_reduced.onnx --mode=bisect \
+    polygraphy debug reduce folded.onnx -o initial_reduced.onnx --mode=bisect --load-inputs layerwise_inputs.json \
         --check polygraphy run polygraphy_debug.onnx --trt \
                 --load-inputs layerwise_inputs.json --load-outputs layerwise_golden.json
     ```
 
-    Similar to the other `debug` subtools, `debug reduce` generates an intermediate artifact each iteration
-    (`./polygraphy_debug.onnx` by default). In order for `debug reduce` to determine whether the model
-    fails or passes, we need to provide a `--check` command. Since we're looking into an accuracy issue,
-    we can use `polygraphy run` to compare against our golden outputs from before.
+    Let's break this down:
 
-    *NOTE: We must provide the layerwise inputs file, since otherwise, `polygraphy run`*
-        *would generate new inputs for the subgraph tensors, which may not match the values those tensors*
-        *had when we generated our golden data. An alternative approach is to run the reference implementation*
-        *(ONNX-Runtime here) during each iteration of `debug reduce` rather than ahead of time.*
+    - Like the other `debug` subtools, `debug reduce` generates an intermediate artifact each iteration
+        (`./polygraphy_debug.onnx` by default). The artifact in this case is some subgraph of the original ONNX model.
+        In order for `debug reduce` to determine whether each subgraph fails or passes, we need to provide a `--check`
+        command. Since we're looking into an accuracy issue, we can use `polygraphy run` to compare against our golden outputs from before.
 
-    Sometimes, the reduced model may fail in a different way than the original; generally, we're more interested
-    in the original failure, and so we would like to ignore other types of failures. The `debug` subtools provide
-    multiple ways of doing so. For example, with `--fail-regex` set, `debug reduce` counts a failure only
-    when some part of the output (on either `stdout` or `stderr`) from the `--check` command matches the specified regular expression(s).
+    - In the `--check` command, we provide the layerwise inputs via `--load-inputs`, since otherwise, `polygraphy run`
+        would generate new inputs for the subgraph tensors, which may not match the values those tensors
+        had when we generated our golden data. An alternative approach is to run the reference implementation
+        (ONNX-Runtime here) during each iteration of `debug reduce` rather than ahead of time.
 
-    Finally, the reduced model will be written to `initial_reduced.onnx`, as specified by the `-o` option.
+    - Since we're using non-default input data, we also provide the layerwise inputs via `--load-inputs` directly to the
+        `debug reduce` command (in addition to providing it to the `--check` command).
+        This is important in models with multiple parallel branches (*referring to paths in the model rather than control flow*) like:
+        <!-- Polygraphy Test: Ignore Start -->
+        ```
+         inp0  inp1
+          |     |
+         Abs   Abs
+            \ /
+            Sum
+             |
+            out
+        ```
+        In such cases, `debug reduce` needs to be able to replace one branch with a constant.
+        To do so, it needs to know the input data you are using so that it can replace it with the correct values.
+        Though we're using a file here, it can be provided via any other Polygraphy data loader argument covered in
+        [the CLI user guide](../../../../polygraphy/tools/README.md#using-custom-input-data).
 
-    *TIP: It can also be useful to write out the first passing subgraph to compare it to the reduced failing model.*
-        *To do so, you can use `--min-good <path>`.*
+        In case you're not sure whether you need to provide a data loader, `debug reduce` will emit a warning like this when it tries to replace a branch:
+        ```
+        [W]     This model includes multiple branches/paths. In order to continue reducing, one branch needs to be folded away.
+                Please ensure that you have provided a data loader argument to `debug reduce` if your `--check` command is using a non-default data loader.
+                Not doing so may result in false negatives!
+        ```
+        <!-- Polygraphy Test: Ignore End -->
+
+    - We specify the `-o` option so that the reduced model will be written to `initial_reduced.onnx`.
+        *TIP: It can also be useful to write out the first passing subgraph to compare it to the reduced failing model.*
+            *To do so, you can use `--min-good <path>`.*
+
+    *NOTE: Sometimes, the reduced model may fail in a different way than the original; generally, we're more interested*
+        *in the original failure, and so we would like to ignore other types of failures. The `debug` subtools provide*
+        *multiple ways of doing so. For example, with `--fail-regex`, `debug reduce` counts a failure only*
+        *when some part of the output (on either `stdout` or `stderr`) from the `--check` command matches the specified regular expression(s).*
+        *We'll take advantage of this in order to simulate a faliure below.*
 
     **To Simulate A Failure:** We can use `polygraphy inspect model` in conjunction with `--fail-regex` to trigger
     a failure whenever the model contains a `Mul` node:
@@ -127,7 +156,7 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
     To further refine it, we'll run `debug reduce` again in `linear` mode:
 
     ```bash
-    polygraphy debug reduce initial_reduced.onnx -o final_reduced.onnx --mode=linear \
+    polygraphy debug reduce initial_reduced.onnx -o final_reduced.onnx --mode=linear --load-inputs layerwise_inputs.json \
         --check polygraphy run polygraphy_debug.onnx --trt \
                 --load-inputs layerwise_inputs.json --load-outputs layerwise_golden.json
     ```

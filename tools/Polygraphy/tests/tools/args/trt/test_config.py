@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +16,7 @@
 #
 
 import contextlib
+import os
 from textwrap import dedent
 
 import polygraphy.tools.args.util as args_util
@@ -33,7 +35,7 @@ def trt_config_args():
     return ArgGroupTestHelper(TrtConfigArgs(), deps=[ModelArgs(), DataLoaderArgs()])
 
 
-class TestTrtConfigArgs(object):
+class TestTrtConfigArgs:
     def test_defaults(self, trt_config_args):
         trt_config_args.parse_args([])
         assert trt_config_args.workspace is None
@@ -46,23 +48,29 @@ class TestTrtConfigArgs(object):
             assert isinstance(config, trt.IBuilderConfig)
 
     @pytest.mark.parametrize(
-        "arg, flag",
+        "args, flag",
         [
-            ("--int8", "INT8"),
-            ("--fp16", "FP16"),
-            ("--tf32", "TF32"),
-            ("--allow-gpu-fallback", "GPU_FALLBACK"),
-            ("--obey-precision-constraints", "OBEY_PRECISION_CONSTRAINTS"),
+            (["--int8"], "INT8"),
+            (["--fp16"], "FP16"),
+            (["--tf32"], "TF32"),
+            (["--allow-gpu-fallback"], "GPU_FALLBACK"),
+            (["--obey-precision-constraints"], "OBEY_PRECISION_CONSTRAINTS"),
+            (["--precision-constraints", "obey"], "OBEY_PRECISION_CONSTRAINTS"),
+            (["--precision-constraints", "prefer"], "PREFER_PRECISION_CONSTRAINTS"),
         ],
     )
-    def test_precision_flags(self, trt_config_args, arg, flag):
+    def test_precision_flags(self, trt_config_args, args, flag):
         if flag == "TF32" and mod.version(trt.__version__) < mod.version("7.1"):
             pytest.skip("TF32 support was added in 7.1")
 
-        if flag == "OBEY_PRECISION_CONSTRAINTS" and mod.version(trt.__version__) < mod.version("8.2"):
-            pytest.skip("OBEY_PRECISION_CONSTRAINTS support was added in 8.2")
+        if (
+            flag == "OBEY_PRECISION_CONSTRAINTS"
+            or flag == "PREFER_PRECISION_CONSTRAINTS"
+            and mod.version(trt.__version__) < mod.version("8.2")
+        ):
+            pytest.skip("OBEY_PRECISION_CONSTRAINTS/PREFER_PRECISION_CONSTRAINTS support was added in 8.2")
 
-        trt_config_args.parse_args([arg])
+        trt_config_args.parse_args(args)
 
         builder, network = create_network()
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
@@ -91,7 +99,8 @@ class TestTrtConfigArgs(object):
         builder, network = create_network()
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
             assert config.default_device_type == trt.DeviceType.DLA
-            assert config.DLA_core == 0
+            if has_dla():
+                assert config.DLA_core == 0
 
     def test_calibrator_when_dla(self, trt_config_args):
         trt_config_args.parse_args(["--use-dla", "--int8"])
@@ -124,19 +133,11 @@ class TestTrtConfigArgs(object):
             trt_config_args.parse_args([opt, f.name])
             builder, network = create_network()
             with builder, network, trt_config_args.create_config(builder, network=network) as config:
-                recorder = config.algorithm_selector
-                assert recorder.make_func == cls
-                assert recorder.path == f.name
+                selector = config.algorithm_selector
+                assert selector.make_func == cls
+                assert selector.path == f.name
 
-    if mod.version(trt.__version__) < mod.version("8.0"):
-        TACTIC_SOURCES_CASES = [
-            ([], 3),  # By default, all sources are enabled.
-            (["--tactic-sources"], 0),
-            (["--tactic-sources", "CUBLAS"], 1),
-            (["--tactic-sources", "CUBLAS_LT"], 2),
-            (["--tactic-sources", "CUblAS", "cublas_lt"], 3),  # Not case sensitive
-        ]
-    else:
+    if mod.version(trt.__version__) >= mod.version("8.0"):
         TACTIC_SOURCES_CASES = [
             ([], 7),  # By default, all sources are enabled.
             (["--tactic-sources"], 0),
@@ -148,6 +149,20 @@ class TestTrtConfigArgs(object):
             (["--tactic-sources", "CUBLAS_LT", "CUDNN"], 6),
             (["--tactic-sources", "CUDNN", "cuBLAS", "CUBLAS_LT"], 7),
         ]
+    else:
+        TACTIC_SOURCES_CASES = [
+            ([], 3),  # By default, all sources are enabled.
+            (["--tactic-sources"], 0),
+            (["--tactic-sources", "CUBLAS"], 1),
+            (["--tactic-sources", "CUBLAS_LT"], 2),
+            (["--tactic-sources", "CUblAS", "cublas_lt"], 3),  # Not case sensitive
+        ]
+
+    if mod.version(trt.__version__) >= mod.version("8.4"):
+        TACTIC_SOURCES_CASES[0] = ([], 15)
+        TACTIC_SOURCES_CASES.extend(
+            [(["--tactic-sources", "CUDNN", "cuBLAS", "CUBLAS_LT", "edge_mask_convolutions"], 15)]
+        )
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.2"), reason="Not available before 7.2")
     @pytest.mark.parametrize("opt, expected", TACTIC_SOURCES_CASES)
@@ -160,7 +175,7 @@ class TestTrtConfigArgs(object):
     @pytest.mark.parametrize("base_class", ["IInt8LegacyCalibrator", "IInt8EntropyCalibrator2"])
     def test_calibration_base_class(self, trt_config_args, base_class):
         trt_config_args.parse_args(["--int8", "--calibration-base-class", base_class])
-        assert trt_config_args.calibration_base_class.unwrap() == "trt.{:}".format(base_class)
+        assert trt_config_args.calibration_base_class.unwrap() == f"trt.{base_class}"
 
         builder, network = create_network()
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
@@ -188,9 +203,8 @@ class TestTrtConfigArgs(object):
             assert config.int8_calibrator.get_quantile() == quantile
             assert config.int8_calibrator.get_regression_cutoff() == regression_cutoff
 
-    def test_no_deps_profiles_int8(self):
-        arg_group = ArgGroupTestHelper(TrtConfigArgs())
-        arg_group.parse_args(
+    def test_no_deps_profiles_int8(self, trt_config_args):
+        trt_config_args.parse_args(
             [
                 "--trt-min-shapes=input:[1,25,25]",
                 "--trt-opt-shapes=input:[2,25,25]",
@@ -199,23 +213,25 @@ class TestTrtConfigArgs(object):
             ]
         )
 
-        for (min_shapes, opt_shapes, max_shapes) in arg_group.profile_dicts:
-            assert min_shapes["input"] == [1, 25, 25]
-            assert opt_shapes["input"] == [2, 25, 25]
-            assert max_shapes["input"] == [4, 25, 25]
+        for profile in trt_config_args.profile_dicts:
+            assert profile["input"][0] == [1, 25, 25]
+            assert profile["input"][1] == [2, 25, 25]
+            assert profile["input"][2] == [4, 25, 25]
 
         builder, network = create_network()
+        network.add_input("input", shape=(-1, 25, 25), dtype=trt.float32)
 
-        with builder, network, arg_group.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(builder, network=network) as config:
             assert isinstance(config, trt.IBuilderConfig)
             # Unfortunately there is no API to check the contents of the profile in a config.
             # The checks above will have to do.
             assert config.num_optimization_profiles == 1
+            assert config.get_calibration_profile().get_shape("input") == [
+                tuple(s) for s in trt_config_args.profile_dicts[0]["input"]
+            ]
             assert config.get_flag(trt.BuilderFlag.INT8)
 
-    def test_config_script(self):
-        arg_group = ArgGroupTestHelper(TrtConfigArgs())
-
+    def test_config_script(self, trt_config_args):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
                 dedent(
@@ -231,13 +247,14 @@ class TestTrtConfigArgs(object):
                 )
             )
             f.flush()
+            os.fsync(f.fileno())
 
-            arg_group.parse_args(["--trt-config-script", f.name, "--trt-config-func-name=my_load_config"])
-            assert arg_group.trt_config_script == f.name
-            assert arg_group.trt_config_func_name == "my_load_config"
+            trt_config_args.parse_args(["--trt-config-script", f.name, "--trt-config-func-name=my_load_config"])
+            assert trt_config_args.trt_config_script == f.name
+            assert trt_config_args.trt_config_func_name == "my_load_config"
 
             builder, network = create_network()
-            with builder, network, arg_group.create_config(builder, network) as config:
+            with builder, network, trt_config_args.create_config(builder, network) as config:
                 assert isinstance(config, trt.IBuilderConfig)
                 assert config.get_flag(trt.BuilderFlag.FP16)
 
@@ -282,7 +299,7 @@ class TestTrtConfigArgs(object):
         def test_memory_pool_limits(self, args, expected, trt_config_args):
             trt_config_args.parse_args(args)
             builder, network = create_network()
-            loader = args_util.run_script(trt_config_args.add_trt_config_loader)
+            loader = args_util.run_script(trt_config_args.add_to_script)
             assert loader.memory_pool_limits == expected
             with builder, network, loader(builder, network=network) as config:
                 for pool_type, pool_size in expected.items():

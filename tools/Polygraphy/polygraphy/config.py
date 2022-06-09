@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +29,14 @@ bool: Whether Polygraphy will automatically install required Python packages at 
 This can be configured by setting the 'POLYGRAPHY_AUTOINSTALL_DEPS' environment variable.
 """
 
-INSTALL_CMD = os.environ.get("POLYGRAPHY_INSTALL_CMD", "{:} -m pip install".format(sys.executable)).split()
+ASK_BEFORE_INSTALL = bool(os.environ.get("POLYGRAPHY_ASK_BEFORE_INSTALL", "0" != "0"))
+"""
+bool: Whether Polygraphy should ask before automatically installing required Python packages.
+Has no effect if AUTOINSTALL_DEPS is not enabled.
+This can be configured by setting the 'POLYGRAPHY_ASK_BEFORE_INSTALL' environment variable.
+"""
+
+INSTALL_CMD = os.environ.get("POLYGRAPHY_INSTALL_CMD", f"{sys.executable} -m pip install").split()
 """
 List[str]: The command to use to automatically install dependencies. Only relevant when
 AUTOINSTALL_DEPS is enabled. Defaults to ``["python", "-m", "pip", "install"]``.

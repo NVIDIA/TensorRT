@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,7 +24,7 @@ def make_test_string():
     return Script.String("test")
 
 
-class TestScript(object):
+class TestScript:
     @pytest.mark.parametrize(
         "func",
         [
@@ -55,7 +56,7 @@ class TestScript(object):
     )
     def test_non_inlined_strings_escaped(self, case, expected):
         out = make_invocable("Dummy", case, x=case)
-        ex_out = "Dummy({:}, x={:})".format(expected, expected)
+        ex_out = f"Dummy({expected}, x={expected})"
         assert out.unwrap() == ex_out
 
     def test_invoke_none_args(self):

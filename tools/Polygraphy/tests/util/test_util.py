@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,13 +15,13 @@
 # limitations under the License.
 #
 import os
-import tempfile
 import random
+import tempfile
+from multiprocessing import Process
 
 import numpy as np
 import pytest
 from polygraphy import util
-
 
 VOLUME_CASES = [
     ((1, 1, 1), 1),
@@ -35,7 +36,7 @@ def test_volume(case):
     assert util.volume(it) == vol
 
 
-class FindStrInIterableCase(object):
+class FindStrInIterableCase:
     def __init__(self, name, seq, index, expected):
         self.name = name
         self.seq = seq
@@ -150,3 +151,44 @@ def test_find_in_dirs():
 def test_value_or_from_dict(val, key, default, expected):
     actual = util.value_or_from_dict(val, key, default)
     assert actual == expected
+
+
+def test_atomic_open():
+    def write_to_file(path, content):
+        with util.LockFile(path):
+            old_contents = util.load_file(path, mode="r")
+            util.save_file(old_contents + content, path, mode="w")
+
+    NUM_LINES = 10
+    NUM_PROCESSES = 5
+
+    outfile = util.NamedTemporaryFile()
+
+    processes = [
+        Process(target=write_to_file, args=(outfile.name, f"{proc} - writing line\n" * NUM_LINES))
+        for proc in range(NUM_PROCESSES)
+    ]
+
+    for process in processes:
+        process.start()
+
+    for process in processes:
+        process.join()
+
+    for process in processes:
+        assert not process.is_alive()
+        assert process.exitcode == 0
+
+    # Since we write atomically, all processes should be able to write their
+    # contents. Furthermore, the contents should be grouped by process.
+    with open(outfile.name) as f:
+        lines = list(f.readlines())
+        assert len(lines) == NUM_LINES * NUM_PROCESSES
+
+        for idx in range(NUM_PROCESSES):
+            offset = idx * NUM_LINES
+            expected_prefix = lines[offset].partition("-")[0].strip()
+            assert all(line.startswith(expected_prefix) for line in lines[offset : offset + NUM_LINES])
+
+    # Make sure the lock file is written to the correct path and not removed automatically.
+    assert os.path.exists(outfile.name + ".lock")

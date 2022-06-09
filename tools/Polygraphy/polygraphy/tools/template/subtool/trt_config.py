@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,9 +32,14 @@ class TrtConfig(Tool):
 
     def __init__(self):
         super().__init__("trt-config")
-        self.subscribe_args(ModelArgs(model_required=False))
-        self.subscribe_args(DataLoaderArgs())
-        self.subscribe_args(TrtConfigArgs())
+
+    def get_subscriptions(self):
+        return [
+            ModelArgs(model_opt_required=False),
+            # For INT8 calibration
+            DataLoaderArgs(),
+            TrtConfigArgs(),
+        ]
 
     def add_parser_args(self, parser):
         parser.add_argument(
@@ -45,7 +51,7 @@ class TrtConfig(Tool):
         script.add_import(imports=["func"], frm="polygraphy")
         script.add_import(imports=["tensorrt as trt"])
 
-        loader_name = self.arg_groups[TrtConfigArgs].add_trt_config_loader(script)
+        loader_name = self.arg_groups[TrtConfigArgs].add_to_script(script)
         if not loader_name:
             script.add_import(imports=["CreateConfig"], frm="polygraphy.backend.trt")
             loader_name = script.add_loader(safe("CreateConfig()"), "create_trt_config")

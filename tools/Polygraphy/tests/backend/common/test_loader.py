@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 from textwrap import dedent
 
 import pytest
@@ -23,7 +25,7 @@ from polygraphy.backend.common import InvokeFromScript, invoke_from_script
 from polygraphy.exception import PolygraphyException
 
 
-class TestImporter(object):
+class TestImporter:
     @pytest.mark.parametrize("loader", [InvokeFromScript, invoke_from_script])
     def test_import_from_script(self, loader):
         script = dedent(
@@ -43,6 +45,7 @@ class TestImporter(object):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
             f.flush()
+            os.fsync(f.fileno())
 
             if loader == InvokeFromScript:
                 load_network = loader(f.name, "load_network")
@@ -66,6 +69,7 @@ class TestImporter(object):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
             f.flush()
+            os.fsync(f.fileno())
 
             with pytest.raises(PolygraphyException, match="Could not import symbol: non_existent from"):
                 invoke_from_script(f.name, "non_existent")

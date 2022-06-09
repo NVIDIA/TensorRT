@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +21,7 @@ from polygraphy.common.interface import TypedDict
 np = mod.lazy_import("numpy")
 
 
-class MetadataTuple(object):
+class MetadataTuple:
     def __init__(self, dtype, shape):
         self.dtype = dtype
         self.shape = shape
@@ -29,15 +30,15 @@ class MetadataTuple(object):
         yield from [self.dtype, self.shape]
 
     def __repr__(self):
-        return "MetadataTuple({:}, {:})".format(self.dtype, self.shape)
+        return f"MetadataTuple({self.dtype}, {self.shape})"
 
     def __str__(self):
         ret = ""
         meta_items = []
         if self.dtype is not None:
-            meta_items.append("dtype={:}".format(np.dtype(self.dtype).name))
+            meta_items.append(f"dtype={np.dtype(self.dtype).name}")
         if self.shape is not None:
-            meta_items.append("shape={:}".format(tuple(self.shape)))
+            meta_items.append(f"shape={tuple(self.shape)}")
         if meta_items:
             ret += "[" + ", ".join(meta_items) + "]"
         return ret
@@ -94,10 +95,10 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
     def __repr__(self):
         ret = "TensorMetadata()"
         for name, (dtype, shape) in self.items():
-            ret += ".add('{:}', {:}, {:})".format(name, dtype, shape)
+            ret += f".add('{name}', {dtype}, {shape})"
         return ret
 
     def __str__(self):
         sep = ",\n "
-        elems = ["{:} {:}".format(name, meta_tuple).strip() for name, meta_tuple in self.items()]
+        elems = [f"{name} {meta_tuple}".strip() for name, meta_tuple in self.items()]
         return "{" + sep.join(elems) + "}"

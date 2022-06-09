@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -41,13 +42,13 @@ from tests.models.meta import ONNX_MODELS, TF_MODELS
 import onnx
 
 
-class TestLoggerCallbacks(object):
+class TestLoggerCallbacks:
     @pytest.mark.parametrize("sev", G_LOGGER.SEVERITY_LETTER_MAPPING.keys())
     def test_set_severity(self, sev):
         G_LOGGER.severity = sev
 
 
-class TestOnnxFromPath(object):
+class TestOnnxFromPath:
     def test_basic(self):
         loader = OnnxFromPath(ONNX_MODELS["identity"].path)
         model = loader()
@@ -60,7 +61,7 @@ class TestOnnxFromPath(object):
         assert isinstance(loader(), onnx.ModelProto)
 
 
-class TestOnnxFromBytes(object):
+class TestOnnxFromBytes:
     def test_basic(self):
         loader = OnnxFromBytes(ONNX_MODELS["identity"].loader)
         model = loader()
@@ -68,13 +69,13 @@ class TestOnnxFromBytes(object):
         assert len(model.graph.node) == 1
 
 
-class TestGsFromOnnx(object):
+class TestGsFromOnnx:
     def test_basic(self):
         graph = gs_from_onnx(OnnxFromPath(ONNX_MODELS["identity"].path))
         assert isinstance(graph, gs.Graph)
 
 
-class TestExportOnnxFromTf(object):
+class TestExportOnnxFromTf:
     pytest.importorskip("tensorflow")
 
     def test_no_optimize(self):
@@ -87,7 +88,7 @@ class TestExportOnnxFromTf(object):
         assert model.opset_import[0].version == 9
 
 
-class TestModifyOnnx(object):
+class TestModifyOnnx:
     @pytest.mark.parametrize("copy", [True, False])
     def test_layerwise(self, copy):
         original_model = onnx_from_path(ONNX_MODELS["identity_identity"].path)
@@ -114,7 +115,7 @@ class TestModifyOnnx(object):
         assert model.graph.output[0].name == "identity_out_0"
 
 
-class TestInferShapes(object):
+class TestInferShapes:
     def check_model(self, model):
         # Find all intermediate tensors to check if they have shapes.
         tensors = set()
@@ -172,7 +173,7 @@ class TestFoldConstants:
         assert len(model.graph.node) == 1
 
 
-class TestSaveOnnx(object):
+class TestSaveOnnx:
     def test_save_onnx(self):
         with tempfile.TemporaryDirectory() as outdir:
             outpath = os.path.join(outdir, "test", "nested")
@@ -196,7 +197,7 @@ def extract_model():
     return onnx_from_path(ONNX_MODELS["identity_identity"].path), input_metadata, output_metadata
 
 
-class TestExtractSubgraph(object):
+class TestExtractSubgraph:
     def check_model(self, model):
         graph = gs_from_onnx(model)
         assert len(graph.nodes) == 1

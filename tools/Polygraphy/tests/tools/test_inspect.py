@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,12 +22,11 @@ from textwrap import dedent
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util
+from polygraphy.backend.trt import CreateConfig, Profile, engine_from_network, network_from_onnx_bytes, save_engine
 from tests.models.meta import ONNX_MODELS, TF_MODELS
-from tests.tools.common import run_polygraphy_inspect, run_polygraphy_run
 
 
 @pytest.fixture(
-    scope="session",
     params=[
         [],
         ["layers"],
@@ -35,43 +35,39 @@ from tests.tools.common import run_polygraphy_inspect, run_polygraphy_run
         ["weights"],
     ],
 )
-def run_inspect_model(request):
+def run_inspect_model(request, poly_inspect):
     show_args = (["--show"] if request.param else []) + request.param
-    yield lambda additional_opts: run_polygraphy_inspect(["model"] + additional_opts + show_args)
+    yield lambda additional_opts: poly_inspect(["model"] + additional_opts + show_args)
 
 
 @pytest.fixture(scope="session")
 def dynamic_identity_engine():
     with util.NamedTemporaryFile(suffix=".engine") as outpath:
-        run_polygraphy_run(
-            [
-                ONNX_MODELS["dynamic_identity"].path,
-                "--trt",
-                "--trt-min-shapes=X:[1,2,1,1]",
-                "--trt-opt-shapes=X:[1,2,3,3]",
-                "--trt-max-shapes=X:[1,2,5,5]",
-                "--trt-min-shapes=X:[1,2,2,2]",
-                "--trt-opt-shapes=X:[1,2,4,4]",
-                "--trt-max-shapes=X:[1,2,6,6]",
-                "--save-engine",
-                outpath.name,
-            ]
+        engine = engine_from_network(
+            network_from_onnx_bytes(ONNX_MODELS["dynamic_identity"].loader),
+            CreateConfig(
+                profiles=[
+                    Profile().add("X", (1, 2, 1, 1), (1, 2, 3, 3), (1, 2, 5, 5)),
+                    Profile().add("X", (1, 2, 2, 2), (1, 2, 4, 4), (1, 2, 6, 6)),
+                ]
+            ),
         )
+        save_engine(engine, path=outpath)
         yield outpath.name
 
 
 def check_lines_match(actual, expected, should_check_line=lambda x: True):
-    print("Actual output:\n{:}".format(actual))
+    print(f"Actual output:\n{actual}")
 
-    actual = [line for line in actual.splitlines() if "Loading" not in line]
+    actual = [line for line in actual.splitlines() if "Loading" not in line and "[V]" not in line]
     expected = expected.splitlines()
     assert len(actual) == len(expected)
 
     for acline, exline in zip(actual, expected):
         acline = acline.rstrip()
         exline = exline.rstrip()
-        print("Checking line : {:}".format(acline))
-        print("Expecting line: {:}".format(exline))
+        print(f"Checking line : {acline}")
+        print(f"Expecting line: {exline}")
         if should_check_line(exline):
             assert acline == exline
 
@@ -82,7 +78,7 @@ ONNX_CASES = [
         [],
         r"""
         [I] ==== ONNX Model ====
-            Name: test_identity | Opset: 8
+            Name: test_identity | ONNX Opset: 8
 
             ---- 1 Graph Input(s) ----
             {x [dtype=float32, shape=(1, 1, 2, 2)]}
@@ -100,7 +96,7 @@ ONNX_CASES = [
         ["layers"],
         r"""
         [I] ==== ONNX Model ====
-            Name: test_identity | Opset: 8
+            Name: test_identity | ONNX Opset: 8
 
             ---- 1 Graph Input(s) ----
             {x [dtype=float32, shape=(1, 1, 2, 2)]}
@@ -122,7 +118,7 @@ ONNX_CASES = [
         ["layers"],
         r"""
         [I] ==== ONNX Model ====
-            Name: onnx_graphsurgeon | Opset: 11
+            Name: onnx_graphsurgeon | ONNX Opset: 11
 
             ---- 0 Graph Input(s) ----
             {}
@@ -144,7 +140,7 @@ ONNX_CASES = [
         ["layers", "attrs", "weights"],
         r"""
         [I] ==== ONNX Model ====
-            Name: onnx_graphsurgeon | Opset: 11
+            Name: onnx_graphsurgeon | ONNX Opset: 11
 
             ---- 0 Graph Input(s) ----
             {}
@@ -164,11 +160,34 @@ ONNX_CASES = [
         """,
     ],
     [
+        "add_with_dup_inputs",
+        ["layers"],
+        r"""
+        [I] ==== ONNX Model ====
+            Name: onnx_graphsurgeon_graph | ONNX Opset: 11
+
+            ---- 1 Graph Input(s) ----
+            {inp [dtype=float32, shape=(4, 4)]}
+
+            ---- 1 Graph Output(s) ----
+            {add_out_0 [dtype=float32, shape=()]}
+
+            ---- 0 Initializer(s) ----
+            {}
+
+            ---- 1 Node(s) ----
+            Node 0    | onnx_graphsurgeon_node_1 [Op: Add]
+                {inp [dtype=float32, shape=(4, 4)],
+                 inp [dtype=float32, shape=(4, 4)]}
+                 -> {add_out_0 [dtype=float32, shape=()]}
+        """,
+    ],
+    [
         "tensor_attr",
         ["layers"],
         r"""
         [I] ==== ONNX Model ====
-            Name: onnx_graphsurgeon | Opset: 11
+            Name: onnx_graphsurgeon | ONNX Opset: 11
 
             ---- 0 Graph Input(s) ----
             {}
@@ -189,7 +208,7 @@ ONNX_CASES = [
         ["layers", "attrs"],
         r"""
         [I] ==== ONNX Model ====
-            Name: onnx_graphsurgeon | Opset: 11
+            Name: onnx_graphsurgeon | ONNX Opset: 11
 
             ---- 0 Graph Input(s) ----
             {}
@@ -212,7 +231,7 @@ ONNX_CASES = [
         ["layers", "attrs", "weights"],
         r"""
         [I] ==== ONNX Model ====
-            Name: onnx_graphsurgeon | Opset: 11
+            Name: onnx_graphsurgeon | ONNX Opset: 11
 
             ---- 0 Graph Input(s) ----
             {}
@@ -249,7 +268,7 @@ ONNX_CASES = [
         ["layers", "attrs", "weights"],
         r"""
         [I] ==== ONNX Model ====
-            Name: graph | Opset: 10
+            Name: graph | ONNX Opset: 10
 
             ---- 2 Graph Input(s) ----
             {initial [dtype=float32, shape=(2,)],
@@ -299,7 +318,7 @@ ONNX_CASES = [
         ["layers"],
         r"""
         [I] ==== ONNX Model ====
-            Name: tf2onnx | Opset: 10
+            Name: tf2onnx | ONNX Opset: 10
 
             ---- 1 Graph Input(s) ----
             {Input:0 [dtype=float32, shape=('dim0', 16, 128)]}
@@ -428,11 +447,11 @@ ENGINE_CASES = [
 ]
 
 
-class TestInspectModel(object):
-    @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: "{:}-{:}".format(case[0], case[1]))
-    def test_onnx(self, case):
+class TestInspectModel:
+    @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: f"{case[0]}-{case[1]}")
+    def test_onnx(self, case, poly_inspect):
         model, show, expected = case
-        status = run_polygraphy_inspect(["model", ONNX_MODELS[model].path, "--show"] + show, disable_verbose=True)
+        status = poly_inspect(["model", ONNX_MODELS[model].path, "--show"] + show)
 
         expected = dedent(expected).strip()
         actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
@@ -451,7 +470,7 @@ class TestInspectModel(object):
 
         run_inspect_model([ONNX_MODELS[model].path, "--display-as=trt"])
 
-    def test_trt_network_script(self):
+    def test_trt_network_script(self, poly_inspect):
         script = dedent(
             """
             from polygraphy.backend.trt import CreateNetwork
@@ -469,19 +488,20 @@ class TestInspectModel(object):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(script)
             f.flush()
+            os.fsync(f.fileno())
 
-            run_polygraphy_inspect(["model", f.name])
+            poly_inspect(["model", f.name])
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported for TRT 8.0 and older")
-    @pytest.mark.parametrize("case", ENGINE_CASES, ids=lambda case: "{:}".format(case[0]))
-    def test_trt_engine(self, case, dynamic_identity_engine):
+    @pytest.mark.parametrize("case", ENGINE_CASES, ids=lambda case: f"{case[0]}")
+    def test_trt_engine(self, case, dynamic_identity_engine, poly_inspect):
         show, expected = case
-        status = run_polygraphy_inspect(["model", dynamic_identity_engine, "--show"] + show, disable_verbose=True)
+        status = poly_inspect(["model", dynamic_identity_engine, "--show"] + show)
 
         expected = dedent(expected).strip()
         actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
 
-        check_lines_match(actual, expected)
+        check_lines_match(actual, expected, should_check_line=lambda exline: "Tactic =" not in exline)
 
     def test_tf_sanity(self, run_inspect_model):
         pytest.importorskip("tensorflow")
@@ -489,18 +509,18 @@ class TestInspectModel(object):
         run_inspect_model([TF_MODELS["identity"].path, "--model-type=frozen"])
 
 
-class TestInspectData(object):
+class TestInspectData:
     @pytest.mark.parametrize("opts", [[], ["--show-values"]])
-    def test_outputs(self, opts):
+    def test_outputs(self, opts, poly_run, poly_inspect):
         with util.NamedTemporaryFile() as outpath:
-            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", outpath.name])
-            run_polygraphy_inspect(["data", outpath.name] + opts)
+            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", outpath.name])
+            poly_inspect(["data", outpath.name] + opts)
 
     @pytest.mark.parametrize("opts", [[], ["--show-values"]])
-    def test_inputs(self, opts):
+    def test_inputs(self, opts, poly_run, poly_inspect):
         with util.NamedTemporaryFile() as outpath:
-            run_polygraphy_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
-            run_polygraphy_inspect(["data", outpath.name] + opts)
+            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
+            poly_inspect(["data", outpath.name] + opts)
 
 
 TACTIC_REPLAY_CASES = [
@@ -515,14 +535,14 @@ TACTIC_REPLAY_CASES = [
 
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
-class TestInspectTactics(object):
+class TestInspectTactics:
     @pytest.mark.parametrize("case", TACTIC_REPLAY_CASES, ids=lambda case: case[0])
-    def test_show_tactics(self, case):
+    def test_show_tactics(self, case, poly_run, poly_inspect):
         with util.NamedTemporaryFile() as replay:
             model_name, expected = case
 
-            run_polygraphy_run([ONNX_MODELS[model_name].path, "--trt", "--save-tactics", replay.name])
-            status = run_polygraphy_inspect(["tactics", replay.name], disable_verbose=True)
+            poly_run([ONNX_MODELS[model_name].path, "--trt", "--save-tactics", replay.name])
+            status = poly_inspect(["tactics", replay.name])
 
             expected = dedent(expected).strip()
             actual = status.stdout
@@ -560,15 +580,15 @@ TEST_CAPABILITY_CASES = [
 ]
 
 
-class TestCapability(object):
+class TestCapability:
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.0"), reason="supports_model API not available before TRT 8.0"
     )
     @pytest.mark.parametrize("case", TEST_CAPABILITY_CASES, ids=lambda case: case[0])
-    def test_capability(self, case):
+    def test_capability(self, case, poly_inspect):
         model, expected_files, expected_summary = case
         with tempfile.TemporaryDirectory() as outdir:
-            status = run_polygraphy_inspect(
+            status = poly_inspect(
                 ["capability", ONNX_MODELS[model].path, "-o", os.path.join(outdir, "subgraphs")],
             )
             assert sorted(map(os.path.basename, glob.glob(os.path.join(outdir, "subgraphs", "**")))) == sorted(

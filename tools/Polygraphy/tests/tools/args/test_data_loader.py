@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 from textwrap import dedent
 
 import numpy as np
@@ -23,6 +25,12 @@ from polygraphy.common import TensorMetadata
 from polygraphy.exception import PolygraphyException
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs
 from tests.tools.args.helper import ArgGroupTestHelper
+
+
+@pytest.fixture()
+def data_loader_args():
+    return ArgGroupTestHelper(DataLoaderArgs(), deps=[ModelArgs()])
+
 
 ARG_CASES = [
     (["--seed=123"], ["seed"], [123]),
@@ -43,41 +51,37 @@ ARG_CASES = [
 ]
 
 
-class TestDataLoaderArgs(object):
+class TestDataLoaderArgs:
     @pytest.mark.parametrize("case", ARG_CASES, ids=lambda c: c[1][0])
-    def test_parsing(self, case):
-        arg_group = ArgGroupTestHelper(DataLoaderArgs())
+    def test_parsing(self, data_loader_args, case):
         cli_args, attrs, expected, expected_dl = util.unpack_args(case, 4)
         expected_dl = expected_dl or expected
 
-        arg_group.parse_args(cli_args)
-        data_loader = arg_group.get_data_loader()
+        data_loader_args.parse_args(cli_args)
+        data_loader = data_loader_args.get_data_loader()
 
         for attr, exp, exp_dl in zip(attrs, expected, expected_dl):
-            assert getattr(arg_group, attr) == exp
+            assert getattr(data_loader_args, attr) == exp
             assert getattr(data_loader, attr) == exp_dl
 
-    def test_input_metadata(self):
-        arg_group = ArgGroupTestHelper(DataLoaderArgs(), deps=[ModelArgs()])
-        arg_group.parse_args(["--input-shapes", "test0:[1,1,1]", "test1:[2,32,2]"])
-        data_loader = arg_group.get_data_loader()
+    def test_input_metadata(self, data_loader_args):
+        data_loader_args.parse_args(["--input-shapes", "test0:[1,1,1]", "test1:[2,32,2]"])
+        data_loader = data_loader_args.get_data_loader()
 
         for feed_dict in data_loader:
             assert feed_dict["test0"].shape == (1, 1, 1)
             assert feed_dict["test1"].shape == (2, 32, 2)
 
-    def test_override_input_metadata(self):
-        arg_group = ArgGroupTestHelper(DataLoaderArgs(), deps=[ModelArgs()])
-        arg_group.parse_args([])
-        data_loader = arg_group.get_data_loader(
+    def test_override_input_metadata(self, data_loader_args):
+        data_loader_args.parse_args([])
+        data_loader = data_loader_args.get_data_loader(
             user_input_metadata=TensorMetadata().add("test0", dtype=np.float32, shape=(4, 4))
         )
 
         for feed_dict in data_loader:
             assert feed_dict["test0"].shape == (4, 4)
 
-    def test_data_loader_script(self):
-        arg_group = ArgGroupTestHelper(DataLoaderArgs())
+    def test_data_loader_script(self, data_loader_args):
 
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
@@ -92,13 +96,14 @@ class TestDataLoaderArgs(object):
                 )
             )
             f.flush()
+            os.fsync(f.fileno())
 
-            arg_group.parse_args(["--data-loader-script", f.name, "--data-loader-func-name=my_load_data"])
+            data_loader_args.parse_args(["--data-loader-script", f.name, "--data-loader-func-name=my_load_data"])
 
-            assert arg_group.data_loader_script == f.name
-            assert arg_group.data_loader_func_name == "my_load_data"
+            assert data_loader_args.data_loader_script == f.name
+            assert data_loader_args.data_loader_func_name == "my_load_data"
 
-            data_loader = arg_group.get_data_loader()
+            data_loader = data_loader_args.get_data_loader()
             data = list(data_loader)
             assert len(data) == 5
             assert all(np.all(d["inp"] == np.ones((3, 5), dtype=np.float32) * 6.4341) for d in data)
@@ -110,8 +115,12 @@ class TestDataLoaderArgs(object):
             (["--val-range", "x:[1,2,3]"], "expected to receive exactly 2 values, but received 3"),
         ],
     )
-    def test_val_range_errors(self, opts, expected_err):
-        arg_group = ArgGroupTestHelper(DataLoaderArgs())
+    def test_val_range_errors(self, data_loader_args, opts, expected_err):
 
         with pytest.raises(PolygraphyException, match=expected_err):
-            arg_group.parse_args(opts)
+            data_loader_args.parse_args(opts)
+
+    def test_cannot_provide_two_custom_data_loader_methods(self, data_loader_args):
+
+        with pytest.raises(SystemExit):
+            data_loader_args.parse_args(["--data-loader-script", "my_script.py", "--load-inputs", "inputs.json"])

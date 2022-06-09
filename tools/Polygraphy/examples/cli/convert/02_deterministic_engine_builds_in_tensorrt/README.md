@@ -43,5 +43,5 @@ The CLI tools include `--save-tactics` and `--load-tactics` options correspnding
 3. Verify that the engines are exactly the same:
 
     ```bash
-    diff -s 0.engine 1.engine
+    diff -sa 0.engine 1.engine
     ```

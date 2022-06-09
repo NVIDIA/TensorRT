@@ -1,28 +1,64 @@
 # Comparing Across Runs
 
+## Prerequisites
+For a general overview of how to use `polygraphy run` to compare the outputs of
+different frameworks, see the example on [Comparing Frameworks](/examples/cli/run/01_comparing_frameworks).
 
 ## Introduction
 
-In some cases, it may be be useful to compare results across different runs of `polygraphy run` -
-for example, comparing between different machines, or comparing between multiple different versions
-of the same library.
+There are situations where you may need to compare results across different invocations
+of the `polygraphy run` command.  Some examples of this include:
 
-In this example, we'll compare results generated on two different (hypothetical) systems: System A and System B.
+* Comparing results across different platforms
+* Comparing results across different versions of TensorRT
+* Comparing different model types with compatible input(s)/output(s)
 
+In this example, we'll demonstrate how to accomplish this with Polygraphy.
 
 ## Running The Example
 
-1. First save the results from System A:
+### Comparing Across Runs
+
+1. Save the input and output values from the first run:
 
     ```bash
     polygraphy run identity.onnx --onnxrt \
-        --save-outputs system_a_results.json
+        --save-inputs inputs.json --save-outputs run_0_outputs.json
     ```
 
-2. Next, run the model on System B, and load the results saved from
-    System A to compare against:
+2. Run the model again, this time loading the saved inputs and outputs from
+    the first run.  The saved inputs will be used as inputs for the current run, and
+    the saved outputs will be used to compare against the first run.
 
     ```bash
     polygraphy run identity.onnx --onnxrt \
-        --load-outputs system_a_results.json
+        --load-inputs inputs.json --load-outputs run_0_outputs.json
+    ```
+
+    The `--atol/--rtol/--check-error-stat` options all work the same as in the
+    [Comparing Frameworks](/examples/cli/run/01_comparing_frameworks) example:
+
+    ```bash
+    polygraphy run identity.onnx --onnxrt \
+        --load-inputs inputs.json --load-outputs run_0_outputs.json \
+        --atol 0.001 --rtol 0.001 --check-error-stat median
+    ```
+
+### Comparing Different Models
+
+We can also use this technique to compare different models, like TensorRT engines
+and ONNX modles (if they have matching outputs).
+
+1. Convert the ONNX model to a TensorRT engine and save it to disk:
+
+    ```bash
+    polygraphy convert identity.onnx -o identity.engine
+    ```
+
+2. Run the saved engine in Polygraphy, using the saved inputs from the ONNX-Runtime run as
+    inputs to the engine, and compare the engine's outputs to the saved ONNX-Runtime outputs:
+
+    ```bash
+    polygraphy run --trt identity.engine --model-type=engine \
+        --load-inputs inputs.json --load-outputs run_0_outputs.json
     ```

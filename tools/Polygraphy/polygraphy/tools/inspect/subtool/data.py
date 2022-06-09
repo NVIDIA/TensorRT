@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -61,18 +62,18 @@ class Data(Tool):
                 iter_meta = meta_from_iter_result(iter_result)
                 indent = 1
                 if len(iters) > 1 and args.all:
-                    out_str += util.indent_block("\n-- Iteration: {:}\n".format(index), indent - 1)
+                    out_str += util.indent_block(f"\n-- Iteration: {index}\n", indent - 1)
                     indent = 2
 
                 for name, arr in iter_result.items():
                     out_str += util.indent_block(
-                        "\n{:} {:} | Stats: {:}".format(name, iter_meta[name], comp_util.str_output_stats(arr)),
+                        f"\n{name} {iter_meta[name]} | Stats: {comp_util.str_output_stats(arr)}",
                         indent - 1,
                     )
                     if args.histogram:
-                        out_str += "\n{:}".format(util.indent_block(comp_util.str_histogram(arr), indent))
+                        out_str += f"\n{util.indent_block(comp_util.str_histogram(arr), indent)}"
                     if args.show_values:
-                        out_str += "\n{:}".format(util.indent_block(str(arr), indent))
+                        out_str += f"\n{util.indent_block(str(arr), indent)}"
 
                 if indent == 2:
                     out_str += "\n"
@@ -82,13 +83,11 @@ class Data(Tool):
 
         def display_results(results):
             results_str = ""
-            results_str += "==== Run Results ({:} runners) ====\n\n".format(len(results))
+            results_str += f"==== Run Results ({len(results)} runners) ====\n\n"
 
             max_runner_width = max(len(runner_name) for runner_name in results.keys())
             for runner_name, iters in results.items():
-                results_str += "---- {:<{max_runner_width}} ({:} iterations) ----\n".format(
-                    runner_name, len(iters), max_runner_width=max_runner_width
-                )
+                results_str += f"---- {runner_name:<{max_runner_width}} ({len(iters)} iterations) ----\n"
                 results_str += str_from_iters(iters) + "\n"
 
             results_str = util.indent_block(results_str, level=0).strip()
@@ -96,7 +95,7 @@ class Data(Tool):
 
         def display_inputs(input_data):
             inputs_str = ""
-            inputs_str += "==== Data ({:} iterations) ====\n".format(len(input_data))
+            inputs_str += f"==== Data ({len(input_data)} iterations) ====\n"
             inputs_str += str_from_iters(input_data) + "\n"
             inputs_str = util.indent_block(inputs_str, level=0).strip()
             G_LOGGER.info(inputs_str)

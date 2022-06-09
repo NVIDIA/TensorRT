@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,18 +18,18 @@
 import math
 
 from polygraphy import mod, util
-from polygraphy.logger.logger import G_LOGGER
+from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.tools import util as tools_util
-from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
+from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool.artifact_sorter import ArtifactSorterArgs
+from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, IterativeDebugArgs, CheckCmdArgs
 
 gs = mod.lazy_import("onnx_graphsurgeon")
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
 
 
-class MarkerBase(object):
+class MarkerBase:
     """
     Controls how layers are marked for reduction.
     """
@@ -135,9 +136,16 @@ class Reduce(Tool):
 
     1. Generates a successively smaller subgraph of a given ONNX model and saves it in the
         current directory as `polygraphy_debug.onnx` by default.
-    2. Evaluates it using the provided `--check` command; if the command fails, it further reduces the model
-        during the subsequent iteration. Otherwise, it expands the model to include more nodes from the original.
+
+    2. Evaluates it using one of two methods:
+        a. In an automated fashion, if a `--check` command was provided.
+        b. In an interactive fashion otherwise. In interactive mode, the tool will prompt you to report whether
+            the iteration passed or failed.
+       In either case, if the iteration fails, it further reduces the model during the subsequent iteration.
+       Otherwise, it expands the model to include more nodes from the original.
+
     3. When the model cannot be reduced further, it saves it to the path specfied by `--output`.
+
     4. Optionally, as with other `debug` subtools, it can track and sort additional files specified by `--artifacts`.
 
     NOTE: When your model includes dynamic input shapes, it is generally a good idea to tell `debug reduce` what
@@ -148,19 +156,25 @@ class Reduce(Tool):
     The typical usage of `debug reduce` is:
 
         polygraphy debug reduce <onnx_model> --output <reduced_model> \
-            --check <check_command>
+            [--check <check_command>]
 
     `polygraphy run` is usually a good choice for the `--check` command.
     """
 
     def __init__(self):
         super().__init__("reduce")
-        self.subscribe_args(ArtifactSorterArgs("polygraphy_debug.onnx", prefer_artifacts=False))
-        self.subscribe_args(ModelArgs(model_required=True, inputs="--model-inputs", model_type="onnx"))
-        self.subscribe_args(OnnxSaveArgs())
-        self.subscribe_args(OnnxShapeInferenceArgs(default=True, enable_force_fallback=True))
-        self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
-        self.subscribe_args(DataLoaderArgs())  # For fallback shape inference
+
+    def get_subscriptions(self):
+        return [
+            CheckCmdArgs(),
+            ArtifactSortArgs(allow_no_artifacts_warning=False),
+            IterativeDebugArgs(iter_art_opt_default="polygraphy_debug.onnx"),
+            ModelArgs(model_opt_required=True, input_shapes_opt_name="model-inputs", required_model_type="onnx"),
+            OnnxSaveArgs(),
+            OnnxInferShapesArgs(default=True, allow_force_fallback=True),
+            OnnxLoadArgs(outputs_opt_prefix=False),
+            DataLoaderArgs(),  # For fallback shape inference
+        ]
 
     def add_parser_args(self, parser):
         parser.add_argument(
@@ -192,7 +206,8 @@ class Reduce(Tool):
             help="Strategy to use to iteratively remove nodes from the model. "
             "'bisect' will use binary search, and 'linear' will delete one node at a time. "
             "'linear' mode may be significantly slower, but can offer better results in models with branches. "
-            "One strategy is to use 'bisect' first, and then further reduce the result with 'linear'. ",
+            "One strategy is to use 'bisect' first, and then further reduce the result with 'linear'. "
+            "Defaults to 'bisect'.",
             choices=["bisect", "linear"],
             default="bisect",
         )
@@ -204,7 +219,7 @@ class Reduce(Tool):
                 "--min-good (where to write a reduced model that passes) must be provided!"
             )
 
-        model = self.arg_groups[OnnxLoaderArgs].load_onnx()
+        model = self.arg_groups[OnnxLoadArgs].load_onnx()
         num_orig_nodes = len(model.graph.node)
 
         # When --model-input-shapes are set, we need to override the shapes in the model, and then run
@@ -214,7 +229,7 @@ class Reduce(Tool):
             model = gs.export_onnx(
                 tools_util.override_input_shapes(onnx_backend.gs_from_onnx(model), user_input_metadata)
             )
-            if self.arg_groups[OnnxShapeInferenceArgs].do_shape_inference:
+            if self.arg_groups[OnnxInferShapesArgs].do_shape_inference:
                 model = onnx_backend.infer_shapes(model)
 
         # Lower Constant nodes into Constant tensors
@@ -233,10 +248,11 @@ class Reduce(Tool):
                     "Running inference with ONNX-Runtime to determine metadata for intermediate tensors.\n"
                     "This will cause intermediate models to have static shapes."
                 )
-                _layerwise_outputs, _layerwise_meta = self.arg_groups[OnnxShapeInferenceArgs].fallback_inference(model)
+                with G_LOGGER.indent():
+                    _layerwise_outputs, _layerwise_meta = self.arg_groups[OnnxInferShapesArgs].fallback_inference(model)
             return _layerwise_outputs if include_data else _layerwise_meta
 
-        if self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
+        if self.arg_groups[OnnxInferShapesArgs].force_fallback:
             G_LOGGER.info("Freezing shapes in the model according to values determined by fallback shape inference")
             onnx_util.set_shapes_from_layerwise_meta(GRAPH, layerwise(model))
 
@@ -248,10 +264,10 @@ class Reduce(Tool):
             )
         elif any(tensor.shape is None or util.is_shape_dynamic(tensor.shape) for tensor in GRAPH.tensors().values()):
             msg = ""
-            if self.arg_groups[OnnxShapeInferenceArgs].do_shape_inference:
+            if self.arg_groups[OnnxInferShapesArgs].do_shape_inference:
                 msg += "ONNX shape inference was unable to infer some shapes in this model.\n"
                 msg += "You may want to use `--force-fallback-shape-inference` to freeze the shapes of intermediate tensors to prevent unexpected behavior."
-            elif self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
+            elif self.arg_groups[OnnxInferShapesArgs].force_fallback:
                 msg += "Fallback shape inference was unable to infer some shapes in this model.\n"
                 msg += "The shapes for those tensors will remain dynamic. Please ensure that your `--check` command can handle this."
             else:
@@ -290,11 +306,19 @@ class Reduce(Tool):
             for tensor in tensor_map.values():
                 if isinstance(tensor, gs.Variable) and not tensor.inputs and tensor not in graph.inputs:
                     needs_const_fold = True
-                    G_LOGGER.info("Freezing model input: {:}".format(tensor))
+                    if self.arg_groups[DataLoaderArgs].is_using_random_data():
+                        G_LOGGER.warning(
+                            "This model includes multiple branches/paths. In order to continue reducing, one branch needs to be folded away.\n"
+                            "Please ensure that you have provided a data loader argument directly to `debug reduce` (i.e. prior to `--check`) "
+                            "if your `--check` command is using a non-default data loader.\n"
+                            "Not doing so may result in false negatives!\n",
+                            mode=LogMode.ONCE,
+                        )
+                    G_LOGGER.info(f"Freezing tensor: {tensor} to eliminate branches.")
                     tensor.to_constant(layerwise(model, include_data=True)[tensor.name])
 
             if needs_const_fold:
-                G_LOGGER.info("Folding constants to remove extraneous subgraphs")
+                G_LOGGER.verbose("Folding constants to remove extraneous subgraphs")
                 graph.fold_constants().cleanup()
 
             return graph
@@ -310,7 +334,7 @@ class Reduce(Tool):
                 )
 
             setattr(graph, attr, tensors)
-            G_LOGGER.info("Marking model {attr}: {:}".format(getattr(graph, attr), attr=attr))
+            G_LOGGER.info(f"Marking model {attr}: {getattr(graph, attr)}")
             return graph
 
         def names_from_tensors(tensors):
@@ -323,16 +347,12 @@ class Reduce(Tool):
         # Bisect using the given marker, and modifying the given graph attribute.
         # attr should be one of ["inputs", "outputs"].
         # filter_const indicates whether to filter out constant tensors before updating graph I/O.
-        def bisect_io(graph, model, marker, attr, filter_const=True):
-            G_LOGGER.start("Reducing model {:}".format(attr))
-            iter_graph = graph
+        # debug_replay is used to provide the debug_replay from previous iterations to subsequent iterations.
+        #   Without this, the debug_replay would only contain entries for the final call to `bisect_io`.
+        def bisect_io(graph, model, marker, attr, filter_const=True, debug_replay=None):
+            G_LOGGER.start(f"Reducing model {attr}")
 
-            while not marker.stop():
-                G_LOGGER.start(
-                    "RUNNING | Iteration {:} | Approximately {:} iteration(s) remaining".format(
-                        marker.iteration + 1, marker.remaining()
-                    )
-                )
+            def make_iter_art():
                 iter_graph = graph.copy()  # This is a very light-weight copy of the entire graph.
 
                 with G_LOGGER.indent():
@@ -340,17 +360,27 @@ class Reduce(Tool):
                     mark_io(iter_graph, attr, io_list, filter_const)
                     iter_graph.cleanup()
                     self.arg_groups[OnnxSaveArgs].save_onnx(
-                        gs.export_onnx(fix_graph(iter_graph, model)), self.arg_groups[ArtifactSorterArgs].iter_artifact
+                        gs.export_onnx(fix_graph(iter_graph, model)),
+                        self.arg_groups[IterativeDebugArgs].iter_artifact_path,
                     )
 
-                num_nodes = len(iter_graph.nodes)
-                success = self.arg_groups[ArtifactSorterArgs].sort_artifacts(
-                    marker.iteration + 1, suffix="_reduce_{:}_{:}_nodes".format(attr, num_nodes)
-                )
+                return len(iter_graph.nodes)
+
+            def advance(index, success, num_nodes):
                 marker.step(success, num_nodes)
+                if marker.stop():
+                    self.arg_groups[IterativeDebugArgs].stop_iteration()
+
+            debug_replay = self.arg_groups[IterativeDebugArgs].iterate(
+                make_iter_art_func=make_iter_art,
+                advance_func=advance,
+                get_remaining_func=lambda: marker.remaining(),
+                suffix=f"{attr}",
+                initial_debug_replay=debug_replay,
+            )
 
             marker.finish()
-            G_LOGGER.finish("Finished reducing model {attr}".format(attr=attr))
+            G_LOGGER.finish(f"Finished reducing model {attr}")
 
             # Find minimal good/bad inputs/outputs, falling back to existing graph inputs/outputs.
             def get_io(index):
@@ -358,7 +388,7 @@ class Reduce(Tool):
                     return names_from_tensors(getattr(graph, attr))
                 return names_from_tensors(list(getattr(graph.nodes[index], attr)))
 
-            return get_io(marker.best_bad_node_index), get_io(marker.best_good_node_index)
+            return get_io(marker.best_bad_node_index), get_io(marker.best_good_node_index), debug_replay
 
         # We reduce the model in 2 phases:
         #   1. Find the earliest output nodes that cause a failure.
@@ -374,9 +404,12 @@ class Reduce(Tool):
 
         # == Phase 1 ==
 
+        debug_replay = None
         if args.reduce_outputs:
             out_marker = MarkerType(len(bad_graph.nodes))
-            bad_outputs, good_outputs = bisect_io(bad_graph, model, out_marker, attr="outputs", filter_const=False)
+            bad_outputs, good_outputs, debug_replay = bisect_io(
+                bad_graph, model, out_marker, attr="outputs", filter_const=False, debug_replay=debug_replay
+            )
             bad_graph = mark_io(bad_graph, "outputs", lookup_tensors(bad_graph, bad_outputs)).cleanup()
             if good_graph is not None:
                 good_graph = mark_io(
@@ -389,7 +422,9 @@ class Reduce(Tool):
 
         if args.reduce_inputs:
             in_marker = MarkerType(len(bad_graph.nodes), invert=True)
-            bad_inputs, good_inputs = bisect_io(bad_graph, model, in_marker, attr="inputs")
+            bad_inputs, good_inputs, debug_replay = bisect_io(
+                bad_graph, model, in_marker, attr="inputs", debug_replay=debug_replay
+            )
             bad_graph = mark_io(bad_graph, "inputs", lookup_tensors(bad_graph, bad_inputs)).cleanup()
             if good_graph is not None:
                 good_graph = mark_io(
@@ -409,11 +444,10 @@ class Reduce(Tool):
                 and args.mode == "bisect"
             ):
                 G_LOGGER.warning(
-                    "It looks like this model could potentially be reduced further.\n"
-                    "You may want to reduce {:} again using --mode=linear. ".format(self.arg_groups[OnnxSaveArgs].path)
+                    f"It looks like this model could potentially be reduced further.\nYou may want to reduce {self.arg_groups[OnnxSaveArgs].path} again using --mode=linear. "
                 )
 
-            G_LOGGER.info("Minimum Bad Model:\n{:}\n\n".format(onnx_util.str_from_onnx(reduced_model)))
+            G_LOGGER.info(f"Minimum Bad Model:\n{onnx_util.str_from_onnx(reduced_model)}\n\n")
             self.arg_groups[OnnxSaveArgs].save_onnx(reduced_model)
 
         # == Write Good Model ==
@@ -425,5 +459,5 @@ class Reduce(Tool):
                     "Could not find a minimal model close in size to the reduced model that does not cause a failure."
                 )
             else:
-                G_LOGGER.info("Minimum Good Model:\n{:}\n\n".format(onnx_util.str_from_onnx(min_good_model)))
+                G_LOGGER.info(f"Minimum Good Model:\n{onnx_util.str_from_onnx(min_good_model)}\n\n")
                 self.arg_groups[OnnxSaveArgs].save_onnx(min_good_model, args.min_good)
