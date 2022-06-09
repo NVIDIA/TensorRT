@@ -1,0 +1,3 @@
+*/weights
+efficientnet/models/*
+*/test_qdq_node_placement

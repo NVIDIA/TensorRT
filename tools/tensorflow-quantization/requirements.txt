@@ -1,0 +1,9 @@
+-i https://pypi.ngc.nvidia.com
+tensorflow-gpu==2.8.0
+tensorflow_datasets
+numpy
+pytest
+pytest-html
+graphviz
+tf2onnx==1.10.1
+onnx_graphsurgeon

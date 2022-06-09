@@ -1,0 +1,6 @@
+# ImageNet: conversion to tfrecord
+gcloud
+google-cloud-storage
+
+# TensorRT: build/infer engine
+pycuda
