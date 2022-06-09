@@ -1,5 +1,16 @@
 # TensorRT OSS Release Changelog
 
+## [22.06](https://github.com/NVIDIA/TensorRT/releases/tag/22.06) - 2022-06-08
+### Added
+- None
+
+### Changed
+- Disentangled attention (DMHA) plugin refactored
+- ONNX parser updated to 8.2GA
+
+### Removed
+- None
+
 ## [22.05](https://github.com/NVIDIA/TensorRT/releases/tag/22.05) - 2022-05-13
 ### Added
 - Disentangled attention plugin for DeBERTa
