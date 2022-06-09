@@ -1,0 +1,127 @@
+#
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""
+JSON file parsing
+"""
+
+
+import json
+from typing import Dict, List, Tuple, BinaryIO
+
+
+def read_json(json_file: str) -> BinaryIO:
+    try:
+        data = json.load(json_file)
+    except:
+        raise ValueError(f"Could not load JSON file {json_file}")
+    return data
+
+
+def read_graph_file(graph_file: str) -> List:
+    err_msg = f"File {graph_file} does not conform to the expected JSON format."
+    with open(graph_file) as json_file:
+        graph = read_json(json_file)
+        if not isinstance(graph, dict):
+            raise ValueError(err_msg)
+        layers = graph['Layers']
+        try:
+            bindings = graph['Bindings']
+        except KeyError:
+            # Older TRT didn't include bindings
+            bindings = list()
+        if not isinstance(layers, list):
+            raise ValueError(err_msg)
+        if not isinstance(layers[0], dict):
+            details_msg = "\nMake sure to enable detailed ProfilingVerbosity."
+            details_msg += "\nSee https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#engine-inspector"
+            raise ValueError(err_msg + details_msg)
+        return layers, bindings
+
+
+def read_profiling_file(profiling_file: str) -> List[Dict[str, any]]:
+    perf = None
+    with open(profiling_file) as json_file:
+        perf = read_json(json_file)
+        # Clean data (remove records with short size)
+        perf = [rec for rec in perf if len(rec) in (4, 5)]
+        return perf
+
+
+def read_metadata_file(metadata_file: str, device: int=0):
+    with open(metadata_file) as json_file:
+        metadata = read_json(json_file)
+        return metadata[device]
+
+
+def read_timing_file(timing_json_file: str):
+    with open(timing_json_file) as json_file:
+        timing_recs = read_json(json_file)
+        latencies_list = [rec['latencyMs'] for rec in timing_recs]
+        return latencies_list
+
+
+def read_perf_metadata_file(metadata_file: str, group: str):
+    with open(metadata_file) as json_file:
+        metadata = read_json(json_file)
+        return metadata[group]
+
+
+def get_device_properties(metadata_file) -> Dict:
+    try:
+        return read_perf_metadata_file(metadata_file, 'device_information')
+    except (FileNotFoundError, TypeError):
+        return {}
+
+
+def get_performance_summary(metadata_file) -> Dict:
+    try:
+        return read_perf_metadata_file(metadata_file, 'performance_summary')
+    except (FileNotFoundError, TypeError):
+        return {}
+
+
+def import_graph_file(graph_file: str):
+    def disambiguate_layer_names(raw_layers: List) -> List:
+        """If a layer name appears twice we need to disabmiguate it"""
+        names_cnt = {}
+        for raw_layer in raw_layers:
+            name = raw_layer['Name']
+            if name in names_cnt:
+                names_cnt[name] += 1
+                name += "_" + str(names_cnt[name])
+                raw_layer['Name'] = name
+            else:
+                names_cnt[name] = 1
+        return raw_layers
+
+    def convert_deconv(raw_layers: List) -> List:
+        for raw_layer in raw_layers:
+            try:
+                is_deconv = (
+                    raw_layer['ParameterType'] == "Convolution" and
+                    raw_layer['LayerType'] == "CaskDeconvolutionV2")
+                if is_deconv:
+                    raw_layer['ParameterType'] = "Deconvolution"
+            except KeyError:
+                pass
+        return raw_layers
+
+    raw_layers, bindings = read_graph_file(graph_file)
+    raw_layers = convert_deconv(raw_layers)
+    raw_layers = disambiguate_layer_names(raw_layers)
+    return raw_layers, bindings

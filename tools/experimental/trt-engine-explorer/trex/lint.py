@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +22,7 @@ This file contains layer linting functions.
 
 from collections import OrderedDict
 from collections import OrderedDict
+from typing import Dict
 import pandas as pd
 from .activations import create_activations
 from .engine_plan import EnginePlan
@@ -38,19 +40,20 @@ class ConvLinter():
 
         def is_small_conv(conv):
             inputs, _ = create_activations(conv)
+            if len(inputs[0].shape) != 4:
+                return False
             n, c, h, w = inputs[0].shape
             return c < 32
 
         report = OrderedDict()
 
-        # Look for kernels that are not scheduled for xmma (TensorCore
-        # acceleration)
+        # Look for kernels that are not scheduled for TensorCore acceleration
         tc_candidates = self.convs.query(f"precision != \"FP32\"").copy()
 
         # Identify acceleration from tactic name
         df = tc_candidates
         df = df[df['tactic'].str.contains("imma|hmma|xmma|i88|884", na=False) == False]
-        for index, conv in df.iterrows():
+        for _, conv in df.iterrows():
             mitigation = ""
             if is_small_conv(conv):
                 mitigation = "This Convolution has a small number " \
@@ -89,9 +92,38 @@ class ConvLinter():
             })
         return report
 
+    def alignment_lint(self):
+        def alignment_ok(conv):
+            inputs, outputs = create_activations(conv)
+            prec = conv["precision"]
+            if len(inputs[0].shape) != 4 or len(outputs[0].shape) != 4:
+                return True
+            N, C, H, W = inputs[0].shape
+            _, K, P, Q = outputs[0].shape
+            if prec == 'INT8':
+                ok = (C % 16 == 0) and (K % 16 == 0)
+            else:
+                ok = (C % 8 == 0) and (K % 8 == 0)
+            return ok
+
+        report = OrderedDict()
+        for _, conv in self.convs.iterrows():
+            if not alignment_ok(conv):
+                report[conv.Name] = {
+                    'name': conv.Name,
+                    'tactic': conv.tactic,
+                    'subtype': conv.subtype,
+                    'hazard': "Convolution channels are not optimally aligned.",
+                    'mitigation': "Consider changing the alignment of the convolution's channels.",
+                    'help': "For best performance, the input and outputs channels of a Tensor Core"
+                            "accelerated convolution should be aligned to 8 (FP32/FP16) or 16 (INT8)"
+                }
+        return report
+
     def lint(self):
             report = self.tc_lint()
             report.update(self.mixed_precision_lint())
+            report.update(self.alignment_lint())
             df = pd.DataFrame.from_dict(report, orient='index')
             return df
 

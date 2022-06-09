@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,9 +29,10 @@ from .notebook import display_df
 from .df_preprocessing import clean_for_display
 from .plotting import *
 from .graphing import *
+from .parser import read_timing_file
 
 
-def report_card_perf_overview(plan: pd.DataFrame):
+def report_card_perf_overview(plan: EnginePlan):
     """Display performance overview diagrams.
 
     Display a dropdown widget to choose between diagrams showing various
@@ -68,9 +70,18 @@ def report_card_perf_overview(plan: pd.DataFrame):
     precision_per_layer = partial(
         plotly_bar2,
         plan.df,
-        values_col='latency.pct_time',
+        values_col='latency.avg_time',
         names_col='Name',
-        color='precision', colormap=precision_colormap)
+        color='precision', colormap=precision_colormap,
+        xaxis_title="Layer")
+
+    output_precision_per_layer = partial(
+        plotly_bar2,
+        plan.df,
+        values_col='latency.avg_time',
+        names_col='Name',
+        color='output_precision', colormap=precision_colormap,
+        xaxis_title="Layer")
 
     latency_distribution = partial(
         plotly_hist,
@@ -84,14 +95,16 @@ def report_card_perf_overview(plan: pd.DataFrame):
         plan.df,
         values_col='latency.pct_time',
         names_col='Name',
-        color='type', colormap=layer_colormap)
+        color='type', colormap=layer_colormap,
+        xaxis_title="Layer")
 
     latency_per_layer_ms = partial(
         plotly_bar2,
         plan.df,
         values_col='latency.avg_time',
         names_col='Name',
-        color='type', colormap=layer_colormap)
+        color='type', colormap=layer_colormap,
+        xaxis_title="Layer")
 
     precision_charts = []
     layer_precisions = group_count(plan.df, 'precision')
@@ -118,6 +131,7 @@ def report_card_perf_overview(plan: pd.DataFrame):
         colormap=precision_colormap)
 
     def precision_per_type(title):
+        title = f"{title}\n({plan.name})"
         df = plan.df
         precision_sunburst = df.groupby(['type', 'precision']).count().reset_index()
         color = [precision_colormap[p] for p in df['precision']]
@@ -135,6 +149,7 @@ def report_card_perf_overview(plan: pd.DataFrame):
         "Latency per layer (ms)": latency_per_layer_ms,
         "Layer latency distribution": latency_distribution,
         "Precision per layer": precision_per_layer,
+        "Output precision per layer": output_precision_per_layer,
         "Count per layer type": count_per_layer_type,
         "Latency per layer type (ms)": latency_per_type_ms,
         "Latency per layer type (%)": latency_per_type_pct,
@@ -259,7 +274,7 @@ def report_card_convolutions_overview(convs: pd.DataFrame):
     InteractiveDiagram_2(dropdown_choices, 'Diagram:')
 
 
-def report_card_table_view(plan: pd.DataFrame):
+def report_card_table_view(plan: EnginePlan):
     """Layers tabular views.
 
     Display a dropdown widget to choose among tabular views of all, or specific,
@@ -271,7 +286,7 @@ def report_card_table_view(plan: pd.DataFrame):
         else:
             df = plan.get_layers_by_type(choice)
             print(f"There are {len(df)} {choice} layers which account for"
-                  f"{df['latency.pct_time'].sum(): .2f}% of the overall latency.")
+                  f"{df['latency.pct_time'].sum(): .2f}% ({df['latency.avg_time'].sum(): .5f} ms) of the overall latency.")
             display_df(clean_for_display(df))
 
     types = ['All'] + list(set(plan.df['type']))
@@ -279,15 +294,15 @@ def report_card_table_view(plan: pd.DataFrame):
     InteractiveDiagram(render_diagram, dropdown_choices, 'Dataframe')
 
 
-def report_card_memory_footprint(plan: pd.DataFrame):
+def report_card_memory_footprint(plan: EnginePlan):
     """Memory footprint diagrams"""
 
-    def render_diagram(choice, color_col, colormap):
+    def render_diagram(choice, values_col, colormap):
         if 'distribution' in choice:
             plotly_hist(
                 plan.df,
                 f"{choice}",
-                color_col,
+                values_col,
                 "Size (bytes)",
                 color='type',
                 colormap=colormap)
@@ -295,7 +310,7 @@ def report_card_memory_footprint(plan: pd.DataFrame):
             plotly_bar2(
                 plan.df,
                 f"{choice}",
-                color_col,
+                values_col,
                 "Name",
                 color='type',
                 colormap=colormap,
@@ -319,13 +334,13 @@ def report_card_memory_footprint(plan: pd.DataFrame):
     InteractiveDiagram(render_diagram, dropdown_choices, 'Bar color')
 
 
-def report_card_draw_plan_graph(plan: pd.DataFrame, engine_name: str):
+def report_card_draw_plan_graph(plan: EnginePlan, engine_name: str):
     """Draw the plan graph (export to SVG)"""
     def render_diagram(choice, formatter, display_regions, expand_layer_details):
         graph = to_dot(plan, formatter,
             display_regions=display_regions,
             expand_layer_details=expand_layer_details)
-        svg_file = render_dot(graph, engine_name, 'svg')
+        render_dot(graph, engine_name, 'svg')
 
     # Color code nodes by precision or layer-type
     dropdown_choices = {
@@ -338,7 +353,7 @@ def report_card_draw_plan_graph(plan: pd.DataFrame, engine_name: str):
     InteractiveDiagram(render_diagram, dropdown_choices, 'Color formatting:')
 
 
-def report_card_pointwise_lint(plan: pd.DataFrame):
+def report_card_pointwise_lint(plan: EnginePlan):
     pws = plan.get_layers_by_type('PointWise')
 
     if len(pws) == 0:
@@ -372,7 +387,7 @@ def report_card_pointwise_lint(plan: pd.DataFrame):
         'attr.n_operations'))
 
     def list_pw_operations(pws):
-        for index, pw in pws.iterrows():
+        for _, pw in pws.iterrows():
             if pw['attr.n_operations'] < 2:
                 continue
             operations = "\n\t".join([op for op in pw['attr.operations']])
@@ -381,3 +396,128 @@ def report_card_pointwise_lint(plan: pd.DataFrame):
     plotly_pie2("Pointwise Statistics", charts)
     list_pw_operations(pws)
     print(pws['per_op_latency'])
+
+
+def layer_latency_sunburst(df: pd.DataFrame, title: str):
+    precision_sunburst = df.groupby(['type', 'latency.pct_time']).count().reset_index()
+
+    fig = px.sunburst(
+        precision_sunburst,
+        path=['type', 'latency.pct_time'],
+        values='latency.avg_time',
+        color_discrete_map=layer_colormap,
+        color='type')
+    fig.update_layout(title=title, title_x=0.5, font_size=15,)
+    fig.show()
+
+
+def plot_engine_timings(timing_json_file: str):
+    """Plot the engine profiling timings"""
+    latencies = read_timing_file(timing_json_file)
+    samples = range(len(latencies))
+
+    fig = px.scatter(
+        title="Engine Timing Samples",
+        x=samples, y=latencies)
+    trex_base_layout(fig)
+    fig.update_layout({
+        'yaxis_title': "Latency (ms)",
+        'xaxis_title': "Timing Samples",
+        'title_x': 0.5})
+    fig.show()
+
+
+def report_card_gemm_MNK(plan: pd.DataFrame):
+    def render_scatter3d(choice, x, y, z, color, size):
+        convs = plan.get_layers_by_type('Convolution')
+        fig = px.scatter_3d(convs, x=x, y=y, z=z, color=color, size=size,
+                size_max=18, opacity=0.7)
+        trex_base_layout(fig)
+        fig.update_layout({
+            'title': "Implicit GEMM " + choice,
+            'title_x': 0.5})
+        fig.show()
+
+    dropdown_choices = {
+        "MxNxK color=mean time; size=mean time":
+            ('attr.M', 'attr.N', 'attr.K', 'latency.avg_time', 'latency.avg_time',),
+        "MxNxK color=arithmetic intensity; size=mean time":
+            ('attr.M', 'attr.N', 'attr.K', 'attr.arithmetic_intensity', 'latency.avg_time',),
+        "MxNxK color=compute efficiency; size=mean time":
+            ('attr.M', 'attr.N', 'attr.K', 'attr.compute_efficiency', 'latency.avg_time',),
+        "MxNxK color=memory efficiency; size=mean time":
+            ('attr.M', 'attr.N', 'attr.K', 'attr.memory_efficiency', 'latency.avg_time',),
+    }
+
+    InteractiveDiagram(render_scatter3d, dropdown_choices, 'Diagram')
+
+
+def report_card_gemm_MNK_scatter(plan: pd.DataFrame):
+    def render_scatter(choice, x, y, color, size):
+        convs = plan.get_layers_by_type('Convolution')
+        fig = px.scatter(convs, x=x, y=y, color=color, size=size, size_max=18, opacity=0.7)
+        fig.update_layout(
+            margin=dict(l=0, r=0, b=0, t=50),
+            title=choice, title_x=0.5)
+        fig.show()
+
+    dropdown_choices = {
+        "M vs. Latency (color = foorprint)": (
+            'attr.M', 'latency.avg_time', 'total_footprint_bytes', None),
+        "N vs. Latency (color = foorprint)": (
+            'attr.N', 'latency.avg_time', 'total_footprint_bytes', None),
+        "K vs. Latency (color = foorprint)": (
+            'attr.K', 'latency.avg_time', 'total_footprint_bytes', None),
+
+    }
+
+    InteractiveDiagram(render_scatter, dropdown_choices, 'Diagram')
+
+
+def report_card_efficiency_vs_latency_3d(plan: pd.DataFrame):
+    convs = plan.get_layers_by_type('Convolution')
+    fig = px.scatter_3d(
+        convs,
+        x='attr.compute_efficiency', y='attr.memory_efficiency', z='latency.avg_time',
+        color='total_footprint_bytes', size='latency.avg_time', size_max=18,
+        opacity=0.7)
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, b=0, t=50),
+        title="Compute-efficiency vs Memory-efficiency vs Latency",
+        title_x=0.5)
+
+    trex_base_layout(fig)
+    fig.show()
+
+
+def report_card_perf_scatter(plan: pd.DataFrame):
+    def render_scatter(choice, x, y, color, size):
+        convs = plan.get_layers_by_type('Convolution')
+        fig = px.scatter(convs, x=x, y=y, color=color, size=size, size_max=18, opacity=0.7)
+        fig.update_layout(
+            margin=dict(l=0, r=0, b=0, t=50),
+            title=choice, title_x=0.5)
+        fig.show()
+
+    dropdown_choices = {
+        "Compute-efficiency vs. FMAs (size = foorprint)": (
+            'attr.compute_efficiency', 'attr.macs', 'latency.avg_time', 'total_footprint_bytes',),
+
+        "Memory-efficiency vs. footprint (size = FMAs)": (
+            'attr.memory_efficiency', 'total_footprint_bytes', 'latency.avg_time', 'attr.macs',),
+
+        "Compute-efficiency vs. memory-efficiency (size = AI)": (
+            'attr.compute_efficiency', 'attr.memory_efficiency', 'latency.avg_time', 'attr.arithmetic_intensity'),
+
+        "Memory footprint vs FMAs (size = AI)": (
+            'total_footprint_bytes', 'attr.macs', 'latency.avg_time', 'attr.arithmetic_intensity'),
+
+        "Arithmetic-intensity vs. compute-efficiency (size = memory-efficiency)": (
+            'attr.arithmetic_intensity', 'attr.compute_efficiency', 'latency.avg_time', 'attr.memory_efficiency'),
+
+        "Arithmetic-intensity vs. memory-efficiency (size = compute-efficiency)": (
+            'attr.arithmetic_intensity', 'attr.memory_efficiency', 'latency.avg_time', 'attr.compute_efficiency'),
+    }
+
+    InteractiveDiagram(render_scatter, dropdown_choices, 'Diagram')

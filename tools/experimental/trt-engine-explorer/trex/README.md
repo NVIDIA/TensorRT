@@ -1,5 +1,7 @@
 # Design
 
+![](../images/trex_logo.png)
+
 The `trex` package design follows the Model View Controller (MVC) design pattern:
 * An `EnginePlan` instance represents a plan file and provides access to a Pandas dataframe which acts as the plan model. Each row in the dataframe represents one layer in the plan file, including its name, tactic, inputs and outputs and other attributes describing the layer.
     ```
@@ -18,7 +20,7 @@ The `trex` package design follows the Model View Controller (MVC) design pattern
     plan = EnginePlan(
         "my-engine.graph.json",
         "my-engine.profile.json",
-        "my-engine.metadata.json")
+        "my-engine.profile.metadata.json")
     ```
 
 * A thin API provides access to views of the model. This is a convinience API on top of the Pandas dataframe. For example, `plan.get_layers_by_type` further preprocesses the dataframe for display. Other functions, like `group_count` provide dataframe groupding and reduction shortcuts.

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,10 +18,12 @@
 
 import cmd
 import os
+import json
 import argparse
 import subprocess
 from typing import List
 from device_info import device_info
+from parse_trtexec_log import parse_build_log, parse_profiling_log
 
 
 def run_trtexec(trt_cmdline: List[str], build_log_file: str):
@@ -55,12 +58,20 @@ def build_engine_cmd(args, onnx_path: str, engine_path: str, timing_cache_path: 
         f"--saveEngine={engine_path}",
         f"--timingCacheFile={timing_cache_path}",
     ]
-    add_trtexec_args(args.trtexec, cmd_line)
-    build_log_file = os.path.join(args.outdir, "log.build.txt")
-    return cmd_line, build_log_file
+    append_trtexec_args(args.trtexec, cmd_line)
+
+    build_log_fname = f"{engine_path}.build.log"
+    return cmd_line, build_log_fname
 
 
 def build_engine(args, timing_cache_path: str) -> bool:
+    def generate_build_metadata(log_file: str, output_json: str):
+        """Parse trtexec engine build log file and write to a JSON file"""
+        build_metadata = parse_build_log(log_file)
+        with open(output_json, 'w') as fout:
+            json.dump(build_metadata , fout)
+            print(f"Engine building metadata: generated output file {output_json}")
+
     onnx_path = args.input
     onnx_fname = os.path.basename(onnx_path)
     outdir = args.outdir
@@ -75,6 +86,8 @@ def build_engine(args, timing_cache_path: str) -> bool:
     success = run_trtexec(cmd_line, build_log_file)
     if success:
         print("\nSuccessfully built the engine.\n")
+        build_md_json_fname = f"{engine_path}.build.metadata.json"
+        generate_build_metadata(build_log_file, build_md_json_fname)
     else:
         print("\nFailed to build the engine.")
         print(f"See logfile in: {build_log_file}\n")
@@ -94,7 +107,10 @@ def profile_engine_cmd(args, engine_path:str, timing_cache_path: str):
         "--verbose",
         "--noDataTransfers",
         "--useCudaGraph",
+        # Profiling affects the performance of your kernel!
+        # Always run and time without profiling.
         "--separateProfileRun",
+        "--useSpinWait",
         # nvtxMode=verbose is the same as profilingVerbosity=detailed, but backward-compatible
         "--nvtxMode=verbose",
         f"--loadEngine={engine_path}",
@@ -104,14 +120,14 @@ def profile_engine_cmd(args, engine_path:str, timing_cache_path: str):
         f"--timingCacheFile={timing_cache_path}",
     ]
 
-    add_trtexec_args(args.trtexec, cmd_line)
+    append_trtexec_args(args.trtexec, cmd_line)
 
-    profile_log_file = os.path.join(args.outdir, "log.profile.txt")
-    return cmd_line, profile_log_file
+    profile_log_fname = f"{engine_path}.profile.log"
+    return cmd_line, profile_log_fname
 
 
-def get_engine_path(args, from_onnx: bool):
-    if from_onnx:
+def get_engine_path(args, add_suffix: bool):
+    if add_suffix:
         onnx_path = args.input
         onnx_fname = os.path.basename(onnx_path)
         outdir = args.outdir
@@ -121,8 +137,15 @@ def get_engine_path(args, from_onnx: bool):
     return engine_path
 
 
-def profile_engine(args, timing_cache_path:str, from_onnx: bool) -> bool:
-    engine_path = get_engine_path(args, from_onnx)
+def profile_engine(args, timing_cache_path:str, add_suffix: bool) -> bool:
+    def generate_profiling_metadata(log_file: str, output_json: str):
+        """Parse trtexec profiling session log file and write to a JSON file"""
+        profiling_metadata = parse_profiling_log(log_file)
+        with open(output_json, 'w') as fout:
+            json.dump(profiling_metadata , fout)
+            print(f"Profiling metadata: generated output file {output_json}")
+
+    engine_path = get_engine_path(args, add_suffix)
 
     print("Profiling the engine:")
     cmd_line, profile_log_file = profile_engine_cmd(
@@ -133,17 +156,17 @@ def profile_engine(args, timing_cache_path:str, from_onnx: bool) -> bool:
     success = run_trtexec(cmd_line, profile_log_file)
     if success:
         print("\nSuccessfully profiled the engine.\n")
-        metadata_json_fname = f"{engine_path}.metadata.json"
-        device_info(metadata_json_fname)
+        profiling_md_json_fname = f"{engine_path}.profile.metadata.json"
+        generate_profiling_metadata(profile_log_file, profiling_md_json_fname)
     else:
         print("\nFailed to profile the engine.")
         print(f"See logfile in: {profile_log_file}\n")
     return success
 
 
-def generate_engine_svg(args, from_onnx: bool) -> bool:
-    engine_path = get_engine_path(args, from_onnx)
-    if from_onnx:
+def generate_engine_svg(args, add_suffix: bool) -> bool:
+    engine_path = get_engine_path(args, add_suffix)
+    if add_suffix:
         graph_json_fname = f"{engine_path}.graph.json"
     else:
         graph_json_fname = engine_path
@@ -168,9 +191,9 @@ def process_engine(args, build: bool, profile: bool, draw: bool) -> bool:
     if build:
         success = build_engine(args, timing_cache_path)
     if profile and success:
-        success = profile_engine(args, timing_cache_path, from_onnx=build)
+        success = profile_engine(args, timing_cache_path, add_suffix=build)
     if draw and success:
-        success = generate_engine_svg(args, from_onnx=build)
+        success = generate_engine_svg(args, add_suffix=not build)
     print(f"Artifcats directory: {args.outdir}")
     return success
 
@@ -200,7 +223,7 @@ def parse_args():
     return args
 
 
-def add_trtexec_args(trt_args, cmd_line):
+def append_trtexec_args(trt_args, cmd_line):
     for arg in trt_args:
         cmd_line.append(f"--{arg}")
 
