@@ -1,0 +1,29 @@
+[
+  { "count" : 1 }
+, { "name" : "QuantizeLinear_2", "timeMs" : 0.095232, "averageMs" : 0.095232, "medianMs" : 0.095232, "percentage" : 13.0252 }
+, { "name" : "conv1.weight + QuantizeLinear_7 + Conv_9 + MaxPool_12", "timeMs" : 0.072704, "averageMs" : 0.072704, "medianMs" : 0.072704, "percentage" : 9.94398 }
+, { "name" : "layer1.0.conv1.weight + QuantizeLinear_20 + Conv_22", "timeMs" : 0.031744, "averageMs" : 0.031744, "medianMs" : 0.031744, "percentage" : 4.34174 }
+, { "name" : "layer1.0.conv2.weight + QuantizeLinear_32 + Conv_34 + Add_42 + Relu_43", "timeMs" : 0.034816, "averageMs" : 0.034816, "medianMs" : 0.034816, "percentage" : 4.76191 }
+, { "name" : "layer1.1.conv1.weight + QuantizeLinear_51 + Conv_53", "timeMs" : 0.03072, "averageMs" : 0.03072, "medianMs" : 0.03072, "percentage" : 4.20168 }
+, { "name" : "layer1.1.conv2.weight + QuantizeLinear_63 + Conv_65 + Add_73 + Relu_74", "timeMs" : 0.034816, "averageMs" : 0.034816, "medianMs" : 0.034816, "percentage" : 4.76191 }
+, { "name" : "layer2.0.conv1.weight + QuantizeLinear_82 + Conv_84", "timeMs" : 0.021504, "averageMs" : 0.021504, "medianMs" : 0.021504, "percentage" : 2.94118 }
+, { "name" : "layer2.0.downsample.0.weight + QuantizeLinear_105 + Conv_107", "timeMs" : 0.012288, "averageMs" : 0.012288, "medianMs" : 0.012288, "percentage" : 1.68067 }
+, { "name" : "layer2.0.conv2.weight + QuantizeLinear_94 + Conv_96 + Add_115 + Relu_116", "timeMs" : 0.028672, "averageMs" : 0.028672, "medianMs" : 0.028672, "percentage" : 3.92157 }
+, { "name" : "layer2.1.conv1.weight + QuantizeLinear_124 + Conv_126", "timeMs" : 0.027648, "averageMs" : 0.027648, "medianMs" : 0.027648, "percentage" : 3.78151 }
+, { "name" : "layer2.1.conv2.weight + QuantizeLinear_136 + Conv_138 + Add_146 + Relu_147", "timeMs" : 0.027648, "averageMs" : 0.027648, "medianMs" : 0.027648, "percentage" : 3.78151 }
+, { "name" : "layer3.0.conv1.weight + QuantizeLinear_155 + Conv_157", "timeMs" : 0.019456, "averageMs" : 0.019456, "medianMs" : 0.019456, "percentage" : 2.66106 }
+, { "name" : "layer3.0.downsample.0.weight + QuantizeLinear_178 + Conv_180", "timeMs" : 0.012288, "averageMs" : 0.012288, "medianMs" : 0.012288, "percentage" : 1.68067 }
+, { "name" : "layer3.0.conv2.weight + QuantizeLinear_167 + Conv_169 + Add_188 + Relu_189", "timeMs" : 0.026624, "averageMs" : 0.026624, "medianMs" : 0.026624, "percentage" : 3.64146 }
+, { "name" : "layer3.1.conv1.weight + QuantizeLinear_197 + Conv_199", "timeMs" : 0.024576, "averageMs" : 0.024576, "medianMs" : 0.024576, "percentage" : 3.36135 }
+, { "name" : "layer3.1.conv2.weight + QuantizeLinear_209 + Conv_211 + Add_219 + Relu_220", "timeMs" : 0.027648, "averageMs" : 0.027648, "medianMs" : 0.027648, "percentage" : 3.78151 }
+, { "name" : "layer4.0.conv1.weight + QuantizeLinear_228 + Conv_230", "timeMs" : 0.02048, "averageMs" : 0.02048, "medianMs" : 0.02048, "percentage" : 2.80112 }
+, { "name" : "layer4.0.downsample.0.weight + QuantizeLinear_251 + Conv_253", "timeMs" : 0.011264, "averageMs" : 0.011264, "medianMs" : 0.011264, "percentage" : 1.54062 }
+, { "name" : "layer4.0.conv2.weight + QuantizeLinear_240 + Conv_242 + Add_261 + Relu_262", "timeMs" : 0.029696, "averageMs" : 0.029696, "medianMs" : 0.029696, "percentage" : 4.06163 }
+, { "name" : "DequantizeLinear_291", "timeMs" : 0.013312, "averageMs" : 0.013312, "medianMs" : 0.013312, "percentage" : 1.82073 }
+, { "name" : "layer4.1.conv1.weight + QuantizeLinear_270 + Conv_272", "timeMs" : 0.028672, "averageMs" : 0.028672, "medianMs" : 0.028672, "percentage" : 3.92157 }
+, { "name" : "layer4.1.conv2.weight + QuantizeLinear_282 + Conv_284 + Add_292 + Relu_293", "timeMs" : 0.069632, "averageMs" : 0.069632, "medianMs" : 0.069632, "percentage" : 9.52381 }
+, { "name" : "GlobalAveragePool_294", "timeMs" : 0.009216, "averageMs" : 0.009216, "medianMs" : 0.009216, "percentage" : 1.2605 }
+, { "name" : "QuantizeLinear_298", "timeMs" : 0.007168, "averageMs" : 0.007168, "medianMs" : 0.007168, "percentage" : 0.980392 }
+, { "name" : "fc.weight + QuantizeLinear_303 + Gemm_305 + fc.bias + (Unnamed Layer* 354) [Shuffle] + unsqueeze_node_after_fc.bias + (Unnamed Layer* 354) [Shuffle]_(Unnamed Layer* 354) [Shuffle]_output + (Unnamed Layer* 355) [ElementWise]", "timeMs" : 0.013312, "averageMs" : 0.013312, "medianMs" : 0.013312, "percentage" : 1.82073 }
+, { "name" : "copied_squeeze_after_(Unnamed Layer* 355) [ElementWise]", "timeMs" : 0, "averageMs" : 0, "medianMs" : 0, "percentage" : 0 }
+]

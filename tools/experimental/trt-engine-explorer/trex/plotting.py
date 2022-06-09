@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,14 +25,15 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Dict, List, Tuple
 from collections import defaultdict
-import functools
 import pandas as pd
 import math
 from .notebook import display_df
 from .misc import stack_dataframes
 
+
 NVDA_GREEN = '#76b900'
 UNKNOWN_KEY_COLOR = 'gray'
+GRID_COLOR = 'rgba(114, 179, 24, 0.3)'
 
 
 # pallete = px.colors.qualitative.G10
@@ -64,19 +66,22 @@ precision_colormap = defaultdict(lambda: UNKNOWN_KEY_COLOR, {
 # Set a color for each layer type.
 layer_colormap = defaultdict(lambda: UNKNOWN_KEY_COLOR, {
     # https://htmlcolorcodes.com/
-    "Convolution":    "#2E86C1",
-    "MatrixMultiply": "#1B4F72",
-    "Scale":          "#a11350",
-    "Shuffle":        "#FAD7A0",
-    "Pooling":        "#008619",
-    "Reformat":       "#F8C471",
-    "SoftMax":        "#8f1a8e",
-    "PluginV2":       "#b2b200",
-    "PointWise":      "#1ABC9C",
-    "ElementWise":    "#1ABC9C",
-    "Myelin":         "#6C3483",
-    "Reduce":         "#ABEBC6",
-    "Slice":          "#7e4401",
+    "Convolution":    "#4682B4", # SteelBlue
+    "Deconvolution":  "#7B68EE", # MediumSlateBlue
+    "ConvActPool":    "#6495ED", # CornflowerBlue
+    "MatrixMultiply": "#1E90FF", # DodgerBlue
+    "Reformat":       "#00FFFF", # Cyan
+    "Shuffle":        "#BC8F8F", # RosyBrown
+    "Slice":          "#FFA500", # Orange
+    "Scale":          "#8FBC8B", # DarkSeaGreen
+    "Quantize":       "#6B8E23", # OliveDrab
+    "Pooling":        "#3CB371", # MediumSeaGreen
+    "PluginV2":       "#C71585", # MediumVioletRed
+    "PointWise":      "#9ACD32", # YellowGreen
+    "ElementWise":    "#9ACD32", # YellowGreen
+    "Reduce":         "#90EE90", # LightGreen
+    "SoftMax":        "#DA70D6", # Orchid
+    "Myelin":         "#800080", # Purple
 })
 
 
@@ -84,11 +89,15 @@ def _categorical_colormap(df: pd.DataFrame, color_col:str):
     # Protect against index-out-of-range
     max_idx = len(default_pallete) - 1
     colormap = {category:
-            default_pallete[min(i,max_idx)] for i,category in enumerate(set(df[color_col]))}
+        default_pallete[min(i,max_idx)] for i,category in enumerate(set(df[color_col]))}
     return colormap
 
 
-def _create_categorical_marker(df: pd.DataFrame, color_col: str, colormap: Dict=None):
+def _create_categorical_marker(
+    df: pd.DataFrame,
+    color_col: str,
+    colormap: Dict=None
+):
     if not colormap:
         colormap = _categorical_colormap(df, color_col)
     # Make colormap robust to unknown keys
@@ -96,6 +105,17 @@ def _create_categorical_marker(df: pd.DataFrame, color_col: str, colormap: Dict=
     color_list = [colormap[key] for key in df[color_col]]
     marker = dict(color=color_list)
     return marker
+
+
+def trex_base_layout(fig, gridcolor=None):
+    "White background with colored grid"
+    gridcolor = gridcolor or GRID_COLOR
+    fig.update_layout({
+        'xaxis': {'gridcolor': gridcolor},
+        'yaxis': {'gridcolor': gridcolor},
+        'plot_bgcolor': 'rgba(0, 0, 0, 0)',
+        'paper_bgcolor': 'rgba(0, 0, 0, 0)',
+    })
 
 
 def create_layout(
@@ -106,12 +126,17 @@ def create_layout(
     orientation: str,
     show_axis_ticks: Tuple[bool]=(True,True)
 ):
-    grid_color = 'rgba(114, 179, 24, 0.3)'
-    y_grid = None if orientation == 'h' else grid_color
-    x_grid = None if orientation == 'v' else grid_color
+    y_grid = None if orientation == 'h' else GRID_COLOR
+    x_grid = None if orientation == 'v' else GRID_COLOR
 
     if orientation == 'h':
         x_title, y_title = y_title, x_title
+
+    top_right = {
+        'yanchor': "top",
+        'y': 0.99,
+        'xanchor': "right",
+        'x': 0.99}
 
     layout = go.Layout(
         title={
@@ -134,6 +159,7 @@ def create_layout(
             'gridcolor': y_grid,
             'tickformat': "%{y:$.2f}"},
         plot_bgcolor='rgba(0,0,0,0)',
+        legend=top_right,
     )
     return layout
 
@@ -150,6 +176,8 @@ def plotly_bar2(
     colormap: Dict=None,
     show_axis_ticks:Tuple=(False, True),
     showlegend: bool=False,
+    xaxis_title: str=None,
+    yaxis_title: str=None,
 ):
     def categorical_color(df, color) -> bool:
         if df[color].dtype in [float, int]:
@@ -159,17 +187,16 @@ def plotly_bar2(
     def add_bar(df, name, color, colormap, showlegend):
         if orientation == 'v':
             x, y = (names_col, values_col)
-            hover_txt = f"{x}: " + "%{x}" + f"<br>{y}: " + "%{y:.1f}"
+            hover_txt = f"{x}: " + "%{x}" + f"<br>{y}: " + "%{y:.4f}"
         else:
             x, y = (values_col, names_col)
-            hover_txt = f"{x}: " + "%{x:.1f}" + f"<br>{y}: " + "%{y}"
+            hover_txt = f"{x}: " + "%{x:.4f}" + f"<br>{y}: " + "%{y}"
 
         is_categorical = False
         colorbar = None
         if color is not None:
             assert isinstance(color, str)
-            if df[color].dtype in [float, int]:
-                # Continuous.
+            if not categorical_color(df, color):
                 colorbar = dict(title=color)
                 color = df[color]
             else:
@@ -180,7 +207,7 @@ def plotly_bar2(
         else:
             marker = _create_categorical_marker(df, color, colormap)
 
-        texttemplate = "%{value:.2f}" if df[values_col].dtype == float else '%{value}'
+        texttemplate = "%{value:.4f}" if df[values_col].dtype == float else '%{value}'
         bar = go.Bar(
             x=df[x], y=df[y],
             orientation=orientation,
@@ -195,10 +222,10 @@ def plotly_bar2(
     layout = create_layout(
         title,
         size,
-        x_title=names_col,
-        y_title=values_col,
+        x_title=xaxis_title or names_col,
+        y_title=yaxis_title or values_col,
         orientation=orientation,
-        show_axis_ticks=show_axis_ticks)
+        show_axis_ticks=show_axis_ticks,)
     fig = go.Figure(layout=layout)
 
     if not isinstance(df, Dict):
@@ -215,99 +242,6 @@ def plotly_bar2(
     fig.show()
 
 
-def _create_bar(
-    df: pd.DataFrame,
-    names: str,
-    values: str,
-    color_col: str,
-    orientation: str
-) -> go.Bar:
-    """Create a single bar diagram."""
-
-    if orientation == 'v':
-        x, y = (names, values)
-        hover_txt = f"{x}: " + "%{x}: " + f"<br>{y}: " + "%{y:.1f}"
-    else:
-        x, y = (values, names)
-        hover_txt = f"{x}: " + "%{x:.1f}: " + f"<br>{y}: " + "%{y}"
-
-    is_categorical = False
-    colorbar = None
-    if color_col is None:
-        color = None
-    else:
-        color = color_col
-        assert isinstance(color, str)
-        if df[color].dtype in [float, int]:
-            # Continuous.
-            colorbar = dict(title=color_col)
-            color = df[color_col]
-        else:
-            is_categorical = True
-
-    if is_categorical:
-        marker = _create_categorical_marker(df, color)
-    else:
-        #marker = create_continuous_marker(df, color)
-        marker = dict(color=color, colorbar=colorbar)
-
-    bar = go.Bar(
-            x=df[x], y=df[y],
-            orientation=orientation,
-            marker=marker,
-            text=df[values],
-            texttemplate = "%{value:.2f}" if df[values].dtype == float else '%{value}',
-            textposition='outside',
-            hovertemplate = hover_txt)
-    return bar
-
-
-def plotly_multi_bar(
-    title: str,
-    bar_sources: List[Tuple[pd.DataFrame, str]],
-    names: str,
-    orientation: str='v',
-    color: str=None,
-    size: Tuple[int, int]=(None, None),
-    use_slider: bool=False,
-    colormap=None,
-    use_subplots: bool=False
-):
-    """Draw several bar diagrams."""
-
-    if orientation == 'v':
-        x_title, y_title = names, bar_sources[0][1]
-    else:
-        x_title, y_title = bar_sources[0][1], names
-
-    if use_subplots:
-        fig = make_subplots(rows=1, cols=len(bar_sources))
-    else:
-        fig = go.Figure()
-    layout = create_layout(title, size, x_title, y_title, orientation=orientation)
-    fig.update_layout(layout)
-
-    for col, source in enumerate(bar_sources, start=1):
-        df = source[0]
-        values = source[1]
-        bar = _create_bar(df, names, values, color, orientation)
-        if use_subplots:
-            if orientation == 'v':
-                x_title, y_title = names, bar_sources[col-1][1]
-            else:
-                x_title, y_title = bar_sources[col-1][1], names
-            fig.update_yaxes(title_text=y_title, row=1, col=col)
-            fig.update_xaxes(title_text=x_title, row=1, col=col)
-            fig.add_trace(bar, row=1, col=col)
-        else:
-            fig.add_trace(bar)
-
-    fig.update_layout(showlegend=False)
-    if use_slider:
-        fig.update_xaxes(rangeslider_visible=True)
-    fig.show()
-
-
 def rotate_columns(df: pd.DataFrame):
     cols = df.columns.tolist()
     cols = cols[-1:] + cols[:-1]
@@ -315,16 +249,22 @@ def rotate_columns(df: pd.DataFrame):
     return df
 
 
-def stacked_tabular(
+def stacked_tabular_df(
     bar_names: List[str],
     df_list: List[pd.DataFrame],
     names_col: str,
-    values_col: str
+    values_col: str,
+    empty_symbol: object=0,
 ):
-    stacked = stack_dataframes(df_list, names_col, values_col)
+    stacked = stack_dataframes(df_list, names_col, values_col, empty_symbol)
     df = pd.DataFrame.from_dict(stacked, orient='index', columns=bar_names)
     df[values_col] = stacked.keys()
     df = rotate_columns(df)
+    return df
+
+
+def stacked_tabular(*args, **kwargs):
+    df = stacked_tabular_df(*args, **kwargs)
     display_df(df)
 
 
@@ -337,6 +277,9 @@ def stacked_bars(
     empty_symbol: object=0,
     colormap: Dict=None,
     display_tbl: bool=True,
+    fig: go.Figure=None,
+    xaxis_title: str=None,
+    yaxis_title: str=None,
 ):
     """Stack a list of dataframes.
     Each df in df_list has a `names` column and a 'values` column.
@@ -346,21 +289,32 @@ def stacked_bars(
     If a df[name] does not exist, we create an `empty_symbol` entry for it.
     """
 
-    stacked = stack_dataframes(df_list, names_col, values_col)
+    stacked = stack_dataframes(df_list, names_col, values_col, empty_symbol)
     if colormap:
         bars = [go.Bar(name=k, x=bar_names, y=v, marker_color=colormap[k], text=v) for k,v in stacked.items()]
     else:
         bars = [go.Bar(name=k, x=bar_names, y=v, text=v) for k,v in stacked.items()]
-    layout = go.Layout(plot_bgcolor='rgba(0,0,0,0)')
-    fig = go.Figure(layout=layout, data=bars)
+
+    display_bars = True
+    if fig is None:
+        fig = go.Figure(data=bars)
+        trex_base_layout(fig)
+    else:
+        fig.add_traces(bars)
+        display_bars = False
     fig.update_layout(title=title, title_x=0.5, font_size=15,)
     fig.update_layout(barmode='stack')
     fig.update_layout(showlegend=colormap is not None)
     fig.update_traces(texttemplate='%{text:.4f}')
     fig.update_layout(uniformtext_minsize=8, uniformtext_mode='hide')
-    fig.show()
+    fig.update_layout({
+        'yaxis_title': yaxis_title or values_col,
+        'xaxis_title': xaxis_title})
+    if display_bars:
+        fig.show()
     if display_tbl:
-        stacked_tabular(bar_names, df_list, names_col, values_col)
+        stacked_tabular(bar_names, df_list, names_col, values_col, empty_symbol)
+    return fig
 
 
 def plotly_hist(
@@ -369,10 +323,10 @@ def plotly_hist(
     values_col: str,
     xaxis_title: str,
     color: str,
-    colormap=None):
+    colormap=None
+):
     """Draw a histogram diagram."""
 
-    nvgreen = [NVDA_GREEN]*len(df)
     fig = px.histogram(
         df, x=values_col, title=title, nbins=len(df),
         histfunc="count",
@@ -388,7 +342,8 @@ def plotly_pie(
     title: str,
     values: str,
     names: str,
-    colormap: Dict[str,str]=None):
+    colormap: Dict[str,str]=None
+):
     """Draw a pie diagram."""
 
     fig = go.Figure(data=[go.Pie(
@@ -410,7 +365,8 @@ def plotly_pie2(
     title: str,
     charts: list,
     max_cols: int=3,
-    colormap: Dict[str,str]=None):
+    colormap: Dict[str,str]=None
+):
     """Draw a pie diagram."""
 
     main_title = title

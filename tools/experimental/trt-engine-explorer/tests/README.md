@@ -1,5 +1,9 @@
+# Tests
+
+Currently `trex` is light on testing
+
 ## Executing the tests
 
 ```
-$ pytest tests/test_1.py
+$ pytest tests
 ```

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -129,7 +130,7 @@ layer_attributes = {
 }
 
 
-def fix_type(df: pd.DataFrame):
+def __fix_type(df: pd.DataFrame):
     df.rename(columns={'LayerType': 'subtype'}, inplace=True)
     try:
         df['type'] = df.ParameterType.fillna(value=df.subtype)
@@ -138,7 +139,7 @@ def fix_type(df: pd.DataFrame):
         pass
 
 
-def fix_tactic(df: pd.DataFrame):
+def __fix_tactic(df: pd.DataFrame):
     df.rename(columns={'TacticName': 'tactic'}, inplace=True)
     try:
         df['tactic'] = df.tactic.fillna(value='TensorRT')
@@ -146,7 +147,7 @@ def fix_tactic(df: pd.DataFrame):
         df['tactic'] = 'TensorRT'
 
 
-def fix_columns_types(df: pd.DataFrame):
+def __fix_columns_types(df: pd.DataFrame):
     int_cols = [
         'Groups', 'OutMaps', 'HasBias', 'HasReLU', 'AllowSparse',
         'NbInputArgs', 'NbOutputVars', 'NbParams', 'NbLiterals', ]
@@ -157,6 +158,23 @@ def fix_columns_types(df: pd.DataFrame):
         except KeyError:
             pass
     df.fillna("", inplace=True)
+
+
+def __fix_output_precision(df: pd.DataFrame):
+    df['output_precision'] = [Activation(outputs[0]).precision for outputs in df['Outputs']]
+
+
+
+def fix_df(df: pd.DataFrame):
+    """One-time preprocessing of the DF.
+
+    Performed only on DF construction.
+    """
+    __fix_type(df)
+    __fix_tactic(df)
+    __fix_columns_types(df)
+    __fix_output_precision(df)
+    return df
 
 
 def clean_io(df: pd.DataFrame):
@@ -220,13 +238,6 @@ def change_col_order(df: pd.DataFrame):
     return df
 
 
-def fix_df(df: pd.DataFrame):
-    fix_type(df)
-    fix_tactic(df)
-    fix_columns_types(df)
-    return df
-
-
 def drop_columns(df: pd.DataFrame, columns: list):
     for col in columns:
         try:
@@ -261,16 +272,21 @@ def annotate_convolutions(convs: pd.DataFrame):
         # K: number of channels; P: Height; Q: Width
         _, K, P, Q = outputs[0].shape
         R, S = convs.loc[index, 'attr.kernel']
-        weights_size = K * C * R * S
+        G = convs.loc[index, 'attr.groups']
+        weights_vol = (K * C * R * S) / G
+        input_vol = N * C * H * W
+        output_vol = N * K * P * Q
+        input_bytes = input_vol * inputs[0].data_size
+        output_bytes = output_vol * outputs[0].data_size
+        weights_bytes = weights_vol * inputs[0].data_size
+        nb_bytes = input_bytes + weights_bytes + output_bytes
+        nb_macs = N * K * P * Q * C * R * S / G
+        convs.loc[index, 'attr.macs'] = nb_macs
         # Arithmetic intensity: ops/bytes
-        n_ops = N * K * P * Q * C * R * S
-        n_bytes = N * C * H * W + weights_size + N * K * P * Q
-        n_bytes = n_bytes * inputs[0].data_size
-        convs.loc[index, 'attr.macs'] = n_ops
-        convs.loc[index, 'attr.arithmetic_intensity'] = n_ops / n_bytes
+        convs.loc[index, 'attr.arithmetic_intensity'] = nb_macs / nb_bytes
         latency = convs.loc[index, 'latency.avg_time']
-        convs.loc[index, 'attr.compute_efficiency'] = n_ops / latency
-        convs.loc[index, 'attr.memory_efficiency'] = n_bytes / latency
+        convs.loc[index, 'attr.compute_efficiency'] = nb_macs / latency
+        convs.loc[index, 'attr.memory_efficiency'] = nb_bytes / latency
         # Conversion to matrices (M, K) * (K, N)
         M = N * P * Q
         N = K

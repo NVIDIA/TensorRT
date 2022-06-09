@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -51,14 +52,22 @@ def display_df_qgrid(df: pd.DataFrame):
     display(grid)
 
 
-def display_df_dtale(df: pd.DataFrame):
+def display_df_dtale(
+    df: pd.DataFrame,
+    range_highlights: dict=None,
+    nan_display: str='...',
+    precision: int=4):
     """Display a Pandas dataframe using a dtale widget"""
-    d = dtale.show(df, drop_index=True, allow_cell_edits=False, precision=4)
+    d = dtale.show(
+        df, drop_index=True, allow_cell_edits=False,
+        precision=precision, nan_display=nan_display)
+    if range_highlights is not None:
+        d.update_settings(range_highlights=range_highlights, background_mode='range')
     display(d)
 
 
-def display_df(df: pd.DataFrame):
-    display_df_dtale(df)
+def display_df(df: pd.DataFrame, **kwargs):
+    display_df_dtale(df, **kwargs)
 
 
 def display_filechooser(rootdir: str) -> FileChooser:
