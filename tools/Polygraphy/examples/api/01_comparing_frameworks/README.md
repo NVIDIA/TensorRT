@@ -8,7 +8,7 @@ different backends. This makes it possible to check the accuracy of one backend 
 respect to another.
 
 In this example, we'll look at how you can use the Polygraphy API to run inference
-with synthetic input data using ONNX Runtime and TensorRT, and then compare the results.
+with synthetic input data using ONNX-Runtime and TensorRT, and then compare the results.
 
 
 ## Running The Example

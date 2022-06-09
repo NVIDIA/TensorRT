@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +19,7 @@ import os
 from polygraphy import mod
 from polygraphy.common.interface import TypedDict
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
+from polygraphy.tools.args import OnnxInferShapesArgs, OnnxLoadArgs, ModelArgs, OnnxSaveArgs
 from polygraphy.tools.base import Tool
 
 common_backend = mod.lazy_import("polygraphy.backend.common")
@@ -116,7 +117,7 @@ def save_subgraph(onnx_save_args, graph, start, end, prefix="", use_tmp_file=Fal
         path = util.NamedTemporaryFile(prefix=prefix, suffix=".onnx").name
     else:
         # end is exclusive, so subtract one to make the model names friendlier.
-        path = os.path.join(onnx_save_args.path, "{:}_subgraph-nodes-{:}-{:}.onnx".format(prefix, start, end - 1))
+        path = os.path.join(onnx_save_args.path, f"{prefix}_subgraph-nodes-{start}-{end - 1}.onnx")
     onnx_save_args.save_onnx(subgraph, path)
     return path
 
@@ -137,16 +138,12 @@ def gen_results_summary(final_unsupported):
 
     summary = "===== Summary =====\n"
 
-    header = "{:{op_width}}| {:7} | {:{reason_width}} | {:}\n".format(
-        "Operator", "Count", "Reason", "Nodes", op_width=op_width, reason_width=reason_width
-    )
+    header = f"{'Operator':{op_width}}| {'Count':7} | {'Reason':{reason_width}} | Nodes\n"
     summary += header + "-" * len(header) + "\n"
 
     for op, node_index_map in final_unsupported.items():
         for reason, node_indices in node_index_map.items():
-            summary += "{:{op_width}}| {:7} | {:{reason_width}} | {:}\n".format(
-                op, len(node_indices), reason, node_indices, op_width=op_width, reason_width=reason_width
-            )
+            summary += f"{op:{op_width}}| {len(node_indices):7} | {reason:{reason_width}} | {node_indices}\n"
     return summary
 
 
@@ -157,26 +154,22 @@ class Capability(Tool):
 
     def __init__(self):
         super().__init__("capability")
-        self.subscribe_args(ModelArgs(model_required=True, inputs=None, model_type="onnx"))
-        self.subscribe_args(OnnxShapeInferenceArgs(default=True))
-        self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
-        # Disallow ext data path since we're writing multiple models - otherwise, it'll be clobbered each time.
-        self.subscribe_args(
-            OnnxSaveArgs(
-                allow_ext_data_path=False,
-                custom_help="Directory to write out supported and unsupported subgraphs. "
-                "Defaults to 'polygraphy_capability_dumps' in the current directory",
-                default_output_path="polygraphy_capability_dumps",
-            )
-        )
+
+    def get_subscriptions(self):
+        return [
+            ModelArgs(model_opt_required=True, input_shapes_opt_name=False, required_model_type="onnx"),
+            OnnxInferShapesArgs(),
+            OnnxLoadArgs(outputs_opt_prefix=False),
+            OnnxSaveArgs(output_default_path="polygraphy_capability_dumps", allow_multiple_models=True),
+        ]
 
     def run(self, args):
-        supported, nodelists, _ = supports_model(self.arg_groups[ModelArgs].model_file)
+        supported, nodelists, _ = supports_model(self.arg_groups[ModelArgs].path)
         if supported:
             G_LOGGER.info("Graph is fully supported by TensorRT; Will not generate subgraphs.")
             return
 
-        parent_graph = onnx_backend.gs_from_onnx(self.arg_groups[OnnxLoaderArgs].load_onnx())
+        parent_graph = onnx_backend.gs_from_onnx(self.arg_groups[OnnxLoadArgs].load_onnx())
 
         def partition(nodelists, offset):
             """
@@ -255,7 +248,7 @@ class Capability(Tool):
 
         summary = gen_results_summary(unsupported_node_dict)
 
-        G_LOGGER.finish(summary)
+        G_LOGGER.info(summary)
         util.save_file(
             summary, os.path.join(self.arg_groups[OnnxSaveArgs].path, "results.txt"), "w", description="results"
         )

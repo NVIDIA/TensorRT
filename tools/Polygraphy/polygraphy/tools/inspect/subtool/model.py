@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,12 +20,12 @@ from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import (
     ModelArgs,
-    OnnxLoaderArgs,
-    OnnxShapeInferenceArgs,
-    TfLoaderArgs,
-    TrtEngineLoaderArgs,
-    TrtNetworkLoaderArgs,
-    TrtPluginLoaderArgs,
+    OnnxLoadArgs,
+    OnnxInferShapesArgs,
+    TfLoadArgs,
+    TrtLoadEngineArgs,
+    TrtLoadNetworkArgs,
+    TrtLoadPluginsArgs,
 )
 from polygraphy.tools.base import Tool
 
@@ -40,13 +41,17 @@ class Model(Tool):
 
     def __init__(self):
         super().__init__("model")
-        self.subscribe_args(ModelArgs(model_required=True, inputs=None))
-        self.subscribe_args(TfLoaderArgs(artifacts=False, outputs=False))
-        self.subscribe_args(OnnxShapeInferenceArgs())
-        self.subscribe_args(OnnxLoaderArgs(output_prefix=None))
-        self.subscribe_args(TrtPluginLoaderArgs())
-        self.subscribe_args(TrtNetworkLoaderArgs(outputs=False))
-        self.subscribe_args(TrtEngineLoaderArgs())
+
+    def get_subscriptions(self):
+        return [
+            ModelArgs(model_opt_required=True, input_shapes_opt_name=False),
+            TfLoadArgs(allow_artifacts=False, allow_custom_outputs=False),
+            OnnxInferShapesArgs(),
+            OnnxLoadArgs(outputs_opt_prefix=False),
+            TrtLoadPluginsArgs(),
+            TrtLoadNetworkArgs(allow_custom_outputs=False),
+            TrtLoadEngineArgs(),
+        ]
 
     def add_parser_args(self, parser):
         parser.add_argument(
@@ -99,11 +104,11 @@ class Model(Tool):
 
         def inspect_trt():
             if self.arg_groups[ModelArgs].model_type == "engine":
-                with self.arg_groups[TrtEngineLoaderArgs].load_serialized_engine() as engine:
+                with self.arg_groups[TrtLoadEngineArgs].load_engine() as engine:
                     engine_str = trt_util.str_from_engine(engine, show_layers=show("layers"), show_attrs=show("attrs"))
-                    G_LOGGER.info("==== TensorRT Engine ====\n{:}".format(engine_str))
+                    G_LOGGER.info(f"==== TensorRT Engine ====\n{engine_str}")
             else:
-                builder, network, parser = util.unpack_args(self.arg_groups[TrtNetworkLoaderArgs].load_network(), 3)
+                builder, network, parser = util.unpack_args(self.arg_groups[TrtLoadNetworkArgs].load_network(), 3)
                 with contextlib.ExitStack() as stack:
                     stack.enter_context(builder)
                     stack.enter_context(network)
@@ -112,21 +117,21 @@ class Model(Tool):
                     network_str = trt_util.str_from_network(
                         network, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
                     ).strip()
-                    G_LOGGER.info("==== TensorRT Network ====\n{:}".format(network_str))
+                    G_LOGGER.info(f"==== TensorRT Network ====\n{network_str}")
 
         def inspect_onnx():
-            onnx_model = self.arg_groups[OnnxLoaderArgs].load_onnx()
+            onnx_model = self.arg_groups[OnnxLoadArgs].load_onnx()
             model_str = onnx_util.str_from_onnx(
                 onnx_model, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
             ).strip()
-            G_LOGGER.info("==== ONNX Model ====\n{:}".format(model_str))
+            G_LOGGER.info(f"==== ONNX Model ====\n{model_str}")
 
         def inspect_tf():
-            tf_graph, _ = self.arg_groups[TfLoaderArgs].load_graph()
+            tf_graph, _ = self.arg_groups[TfLoadArgs].load_graph()
             graph_str = tf_util.str_from_graph(
                 tf_graph, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
             ).strip()
-            G_LOGGER.info("==== TensorFlow Graph ====\n{:}".format(graph_str))
+            G_LOGGER.info(f"==== TensorFlow Graph ====\n{graph_str}")
 
         func = None
         if self.arg_groups[ModelArgs].model_type.is_tf():

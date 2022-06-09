@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 from textwrap import dedent
 
 import onnx
@@ -22,49 +24,46 @@ from polygraphy import mod, util
 from polygraphy.backend.common.loader import BytesFromPath
 from polygraphy.backend.trt.loader import EngineFromBytes
 from tests.models.meta import ONNX_MODELS, TF_MODELS
-from tests.tools.common import run_polygraphy_convert
 
 
-class TestConvertToOnnx(object):
-    def test_tf2onnx(self):
+class TestConvertToOnnx:
+    def test_tf2onnx(self, poly_convert):
         pytest.importorskip("tensorflow")
 
         with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
-            run_polygraphy_convert([TF_MODELS["identity"].path, "--model-type=frozen", "-o", outmodel.name])
+            poly_convert([TF_MODELS["identity"].path, "--model-type=frozen", "-o", outmodel.name])
             assert onnx.load(outmodel.name)
 
-    def test_fp_to_fp16(self):
+    def test_fp_to_fp16(self, poly_convert):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_convert(
+            poly_convert(
                 [ONNX_MODELS["identity_identity"].path, "--convert-to=onnx", "--fp-to-fp16", "-o", outmodel.name]
             )
             assert onnx.load(outmodel.name).graph.input[0].type.tensor_type.elem_type == 10
 
 
-class TestConvertToTrt(object):
+class TestConvertToTrt:
     def check_engine(self, path):
         loader = EngineFromBytes(BytesFromPath(path))
         with loader() as engine:
             assert isinstance(engine, trt.ICudaEngine)
 
-    def test_onnx_to_trt(self):
+    def test_onnx_to_trt(self, poly_convert):
         with util.NamedTemporaryFile(suffix=".engine") as outmodel:
-            run_polygraphy_convert([ONNX_MODELS["identity"].path, "--model-type=onnx", "-o", outmodel.name])
+            poly_convert([ONNX_MODELS["identity"].path, "--model-type=onnx", "-o", outmodel.name])
             self.check_engine(outmodel.name)
 
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.0"), reason="Bug in older versions of TRT breaks this test"
     )
-    def test_tf_to_onnx_to_trt(self):
+    def test_tf_to_onnx_to_trt(self, poly_convert):
         pytest.importorskip("tensorflow")
 
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_convert(
-                [TF_MODELS["identity"].path, "--model-type=frozen", "--convert-to=trt", "-o", outmodel.name]
-            )
+            poly_convert([TF_MODELS["identity"].path, "--model-type=frozen", "--convert-to=trt", "-o", outmodel.name])
             self.check_engine(outmodel.name)
 
-    def test_trt_network_config_script_to_engine(self):
+    def test_trt_network_config_script_to_engine(self, poly_convert):
         script = dedent(
             """
         from polygraphy.backend.trt import CreateNetwork, CreateConfig
@@ -86,8 +85,9 @@ class TestConvertToTrt(object):
         with util.NamedTemporaryFile("w+", suffix=".py") as f, util.NamedTemporaryFile() as outmodel:
             f.write(script)
             f.flush()
+            os.fsync(f.fileno())
 
-            run_polygraphy_convert(
+            poly_convert(
                 [
                     f.name,
                     "--model-type=trt-network-script",
@@ -101,23 +101,19 @@ class TestConvertToTrt(object):
             )
             self.check_engine(outmodel.name)
 
-    def test_modify_onnx_outputs(self):
+    def test_modify_onnx_outputs(self, poly_convert):
         with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
-            run_polygraphy_convert(
-                [ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--onnx-outputs", "mark", "all"]
-            )
+            poly_convert([ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--onnx-outputs", "mark", "all"])
 
             model = onnx.load(outmodel.name)
             assert len(model.graph.output) == 2
 
 
-class TestConvertToOnnxLikeTrt(object):
+class TestConvertToOnnxLikeTrt:
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.2"), reason="Unsupported for TRT 7.1 and older")
     @pytest.mark.parametrize(
         "model_name", ["identity", "empty_tensor_expand", "const_foldable", "and", "scan", "dim_param", "tensor_attr"]
     )
-    def test_onnx_to_trt_to_onnx_like(self, model_name):
+    def test_onnx_to_trt_to_onnx_like(self, poly_convert, model_name):
         with util.NamedTemporaryFile() as outmodel:
-            run_polygraphy_convert(
-                [ONNX_MODELS[model_name].path, "--convert-to=onnx-like-trt-network", "-o", outmodel.name]
-            )
+            poly_convert([ONNX_MODELS[model_name].path, "--convert-to=onnx-like-trt-network", "-o", outmodel.name])

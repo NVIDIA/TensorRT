@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -45,9 +46,7 @@ class ToInput(Tool):
 
             if inputs and len(inputs) != len(new_inputs):
                 G_LOGGER.warning(
-                    "The provided files have different numbers of iterations.\n"
-                    "Note: Inputs currently contains {:} iterations, but the data in {:} contains {:} iterations. "
-                    "Some iterations will contain incomplete data".format(len(inputs), path, len(new_inputs))
+                    f"The provided files have different numbers of iterations.\nNote: Inputs currently contains {len(inputs)} iterations, but the data in {path} contains {len(new_inputs)} iterations. Some iterations will contain incomplete data"
                 )
 
             # Pad to appropriate length
@@ -68,4 +67,4 @@ class ToInput(Tool):
                     data = [data]
                 update_inputs(data, path)
 
-        save_json(inputs, args.output, description="input file containing {:} iteration(s)".format(len(inputs)))
+        save_json(inputs, args.output, description=f"input file containing {len(inputs)} iteration(s)")

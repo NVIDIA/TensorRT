@@ -17,12 +17,17 @@ see `this page <https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy/po
     self
 
 .. toctree::
-    :caption: API Reference
-    :maxdepth: 2
+    :caption: API Reference: Main
+    :maxdepth: 4
 
     backend/toc
-    common/toc
     comparator/toc
+
+.. toctree::
+    :caption: API Reference: Miscellaneous
+    :maxdepth: 4
+
+    common/toc
     config/toc
     constants/toc
     cuda/toc
@@ -30,3 +35,9 @@ see `this page <https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy/po
     func/toc
     json/toc
     mod/toc
+
+.. toctree::
+    :caption: API Reference: Development
+    :maxdepth: 4
+
+    tool/toc

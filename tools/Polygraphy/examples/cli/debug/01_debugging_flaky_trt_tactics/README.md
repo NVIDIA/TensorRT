@@ -15,7 +15,9 @@ is likely to be the source of error.
 
 The `debug build` subtool allows us to automate this process.
 
-For more details on how the `debug` tools work, see [here](../../../../polygraphy/tools/debug/).
+For more details on how the `debug` tools work, see the help output:
+`polygraphy debug -h` and `polygraphy debug build -h`.
+
 
 ## Running The Example
 
@@ -58,8 +60,6 @@ For this example, we'll break the process down into 3 steps:
         *`--fail-regex`, `--fail-code`, and `--ignore-fail-code` options. See `polygraphy debug build -h` for details.*
         *By default, only the status code is taken into consideration.*
 
-    *NOTE: In this case, all the replay files should be copied into the `good` directory - it's*
-        *very unlikely that a simple identity model will fail.*
 
 3. Use `debug diff-tactics` to determine which tactics could be bad:
 
@@ -68,7 +68,7 @@ For this example, we'll break the process down into 3 steps:
     ```
 
     *NOTE: This last step should report that it could not determine potentially bad tactics since*
-        *our `bad` directory is empty at this point:*
+        *our `bad` directory should be empty at this point (please file a TensorRT issue otherwise!):*
 
     <!-- Polygraphy Test: Ignore Start -->
     ```

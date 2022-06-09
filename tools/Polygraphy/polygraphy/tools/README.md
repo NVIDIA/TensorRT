@@ -28,12 +28,12 @@ and debugging use-cases. This guide provides a broad overview of the capabilitie
 
 For more information about a specific tool, see the README in the corresponding directory here.
 
-Note that some of the tools included are still experimental. Any tool labeled `[EXPERIMENTAL]`
-may be subject to backwards-incompatible changes, or even complete removal at any point in time.
+All the tools provided by Polygraphy can be invoked using the polygraphy binary: `polygraphy`.
 
-All the tools provided by Polygraphy can be invoked using the polygraphy binary: [`bin/polygraphy`](../../bin/polygraphy).
-For usage information on a specific tool, you can see the help output with: `polygraphy <subtool> -h`
+For usage information on a specific tool, you can refer to the help output with: `polygraphy <subtool> -h`.
 
+*NOTE: Some of the tools included are still experimental. Any tool labeled `[EXPERIMENTAL]`*
+*may be subject to backwards-incompatible changes, or even complete removal at any point in time.*
 
 ## Common Use-Cases
 
@@ -180,7 +180,7 @@ For more information, refer to [`debug` example 01](../../examples/cli/debug/01_
 ### Reducing Failing ONNX Models
 
 When investigating bugs involving ONNX models, it can be useful to reduce the model to a minimum
-faliing subgraph. This helps us pinpoint the issue and makes further debugging much easier.
+failing subgraph. This helps us pinpoint the issue and makes further debugging much easier.
 The `debug reduce` tools helps us automate this process.
 
 For more information, refer to [`debug` example 02](../../examples/cli/debug/02_reducing_failing_onnx_models/).

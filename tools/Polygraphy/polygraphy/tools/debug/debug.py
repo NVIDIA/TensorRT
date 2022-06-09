@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,12 +29,14 @@ class Debug(Tool):
     3. Sort any tracked artifacts into `good` and `bad` directories based on (2)
 
     The "some output" referred to in (1) is usually a model file and is written to the current
-    directory (by default) during each iteration.
+    directory by default during each iteration.
 
-    In order to distinguish between `good` and `bad`, the subtool uses the `--check` command provided by
-    the user (that's you!). It can be virtually any command, which makes `debug` extremely flexible.
+    In order to distinguish between `good` and `bad`, the subtool uses one of two methods:
+        a. The `--check` command, if one is provided. It can be virtually any command, which makes `debug` extremely flexible.
+        b. Prompting you. If no `--check` command is provided, the subtool will prompt you in an interactive fashion
+            to report whether the iteration passed or failed.
 
-    Artifacts to track can be specified with `--artifacts`. When the `--check` command exits with a failure,
+    Artifacts to track can be specified with `--artifacts`. When the iteration fails,
     they are moved into the `bad` directory and otherwise into the `good` directory.
 
     By default, if the status code of the `--check` command is non-zero, the iteration is considered a failure.
@@ -44,10 +47,14 @@ class Debug(Tool):
         * `--fail-returncode` lets you specify a status code to count as a failure, excluding all other non-zeros status
             codes.
 
+    Most subtools also provide a replay mechanism where a 'debug replay' file containing information about the
+    status of each iteration is saved after each iteration. This can then be loaded during subsequent debugging commands
+    in order to quickly resume debugging from the same point.
+
     The general usage of most `debug` subtools is:
 
         polygraphy debug <subtool> <model> [--artifacts files_to_sort_each_iteration...] \
-            --check <checker_command>
+            [--check <checker_command>]
     """
 
     def __init__(self):

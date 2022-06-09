@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +22,8 @@ from polygraphy.backend.trt import get_trt_logger
 
 ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), os.path.pardir))
 
+# Use bin/polygraphy for any invocations of Polygraphy that don't use the script_runner fixture.
+POLYGRAPHY_CMD = [os.path.join(ROOT_DIR, "bin", "polygraphy")]
 
 # CLI tools and all their subtools
 ALL_TOOLS = {
@@ -46,7 +49,7 @@ def is_file_non_empty(path):
     return not is_file_empty(path)
 
 
-def time_func(func, warm_up=50, iters=100):
+def time_func(func, warm_up=10, iters=50):
     for _ in range(warm_up):
         func()
 
@@ -66,6 +69,10 @@ def has_dla():
     global HAS_DLA
     if HAS_DLA is None:
         builder = trt.Builder(get_trt_logger())
-        HAS_DLA = builder.num_DLA_cores > 0
+
+        try:
+            HAS_DLA = builder.num_DLA_cores > 0
+        except AttributeError:
+            HAS_DLA = False
 
     return HAS_DLA

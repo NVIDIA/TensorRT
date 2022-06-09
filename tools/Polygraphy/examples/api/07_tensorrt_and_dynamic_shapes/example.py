@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -53,7 +54,7 @@ def main():
     ]
 
     # See examples/api/06_immediate_eval_api for details on immediately evaluated functional loaders like `engine_from_network`.
-    # Note that we can freely inter-mix lazy and immediately-evaluated loaders.
+    # Note that we can freely mix lazy and immediately-evaluated loaders.
     engine = engine_from_network(
         network_from_onnx_path("dynamic_identity.onnx"), config=CreateConfig(profiles=profiles)
     )
@@ -69,14 +70,19 @@ def main():
     #
     low_latency = TrtRunner(engine.create_execution_context())
 
-    # NOTE: The following two lines will cause TensorRT to display errors since profile 0
+    # NOTE: The following two lines may cause TensorRT to display errors since profile 0
     # is already in use by the first execution context. We'll suppress them using G_LOGGER.verbosity().
     #
     with G_LOGGER.verbosity(G_LOGGER.CRITICAL):
-        dynamic_batching = TrtRunner(engine.create_execution_context())
+        # We can use the `optimization_profile` parameter of the runner to ensure that the correct optimization profile is used.
+        # This eliminates the need to call `set_profile()` later.
+        dynamic_batching = TrtRunner(
+            engine.create_execution_context(), optimization_profile=1
+        )  # Use the second profile, which is intended for dynamic batching.
+
+        # For the sake of example, we *won't* use `optimization_profile` here.
+        # Instead, we'll use `set_profile()` after activating the runner.
         offline = TrtRunner(engine.create_execution_context())
-        # NOTE: We could update the profile index here (e.g. `context.active_optimization_profile = 2`),
-        # but instead, we'll use TrtRunner's `set_profile()` API when we later activate the runner.
 
     # Finally, we can activate the runners as we need them.
     #
@@ -101,12 +107,6 @@ def main():
         # it might be better to keep the runner active the whole time.
         #
         with dynamic_batching:
-            # NOTE: The very first time we activate this runner, we need to set
-            # the profile index (it's 0 by default). We need to do this *only once*.
-            # Alternatively, we could have set the profile index in the context directly (see above).
-            #
-            dynamic_batching.set_profile(1)  # Use the second profile, which is intended for dynamic batching.
-
             # We'll create fake batches by repeating our fake input image.
             small_input_batch = np.repeat(input_img, 4, axis=0)  # Shape: (4, 3, 28, 28)
             outputs = dynamic_batching.infer({"X": small_input_batch})
@@ -127,8 +127,12 @@ def main():
         print("Dynamic batching runner succeeded!")
 
     with offline:
-        # NOTE: We must set the profile to something other than 0 or 1 since both of those
-        # are now in use by the `low_latency` and `dynamic_batching` runners respectively.
+        # NOTE: When we first activate this runner, we need to set the profile index (it's 0 by default).
+        # Since we provided our own execution context when we created the runner, we need to do this *only once*.
+        # Our settings persist since the context will remain alive even after the runner is deactivated.
+        # If we had instead allowed the runner to own the context, we'd need to repeat this step each time we activated the runner.
+        #
+        # Alternatively, we could have used the `optimization_profile` parameter (see above).
         #
         offline.set_profile(2)  # Use the third profile, which is intended for the offline case.
 

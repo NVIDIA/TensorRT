@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +19,7 @@ from polygraphy import func
 from polygraphy.exception import PolygraphyException, PolygraphyInternalException
 
 
-class TestExtend(object):
+class TestExtend:
     def test_override_rv(self):
         def x():
             return 1
@@ -110,7 +111,7 @@ class TestExtend(object):
         assert y() == [1, 2, 3]
 
     def test_extend_can_modify_rv_objects(self):
-        class ModifiableObj(object):
+        class ModifiableObj:
             def __init__(self):
                 self.value = 0
 
@@ -139,9 +140,9 @@ class TestExtend(object):
             y()
 
 
-class TestConstantMethod(object):
+class TestConstantMethod:
     def test_cannot_modify_attrs(self):
-        class Dummy(object):
+        class Dummy:
             def __init__(self):
                 self.x = 1
 
@@ -154,7 +155,7 @@ class TestConstantMethod(object):
             d.modify_x()
 
     def test_cannot_add_attrs(self):
-        class Dummy(object):
+        class Dummy:
             @func.constantmethod
             def modify_x(self):
                 self.x = 2

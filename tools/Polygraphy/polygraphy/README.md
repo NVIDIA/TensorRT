@@ -9,6 +9,7 @@
         - [Writing A Custom Runner](#writing-a-custom-runner)
 - [Comparator](#comparator)
     - [Data Loaders](#data-loaders)
+- [Logger](#logger)
 - [Putting It All Together](#putting-it-all-together)
 - [Enabling PyTorch](#enabling-pytorch)
 - [Examples](#examples)
@@ -140,6 +141,23 @@ property in your data loader, which will be set to an `TensorMetadata` instance 
 
 **NOTE:** Polygraphy provides a default `DataLoader` class that uses numpy to generate random input buffers.
 The input data can be bounded via parameters to the constructor.
+
+
+## Logger
+
+Polygraphy also includes a global logger which can control the verbosity not only of messages emitted by Polygraphy,
+but also of those emitted by underlying frameworks, like TensorRT. For example, the `EXTRA_VERBOSE` verbosity corresponds
+to TensorRT's `kVERBOSE` logging mode.
+
+To set the verbosity of the logger, use:
+```py
+G_LOGGER.severity = severity
+```
+
+For example:
+```py
+G_LOGGER.severity = G_LOGGER.EXTRA_VERBOSE
+```
 
 
 ## Putting It All Together

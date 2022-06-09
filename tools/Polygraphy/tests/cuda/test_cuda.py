@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +22,7 @@ from polygraphy.cuda import DeviceArray, Stream, DeviceView, wrapper, MemcpyKind
 from tests.helper import time_func
 
 
-class TestDeviceView(object):
+class TestDeviceView:
     def test_basic(self):
         with DeviceArray(shape=(1, 4, 2), dtype=np.float32) as arr:
             v = DeviceView(arr.ptr, arr.shape, arr.dtype)
@@ -53,7 +54,7 @@ class TestDeviceView(object):
             assert np.all(v.numpy() == 4)
 
 
-class ResizeTestCase(object):
+class ResizeTestCase:
     # *_bytes is the size of the allocated buffer, old/new are the apparent shapes of the buffer.
     def __init__(self, old, old_size, new, new_size):
         self.old = old
@@ -69,7 +70,7 @@ RESIZES = [
 ]
 
 
-class TestDeviceBuffer(object):
+class TestDeviceBuffer:
     @pytest.mark.parametrize("shapes", RESIZES)
     def test_device_buffer_resize(self, shapes):
         with DeviceArray(shapes.old) as buf:
@@ -134,7 +135,7 @@ class TestDeviceBuffer(object):
 
     @pytest.mark.serial
     def test_copy_from_overhead(self):
-        host_buf = np.ones(shape=(1, 2, 1024, 1024), dtype=np.float32)
+        host_buf = np.ones(shape=(4, 8, 1024, 1024), dtype=np.float32)
         with DeviceArray(shape=host_buf.shape, dtype=host_buf.dtype) as dev_buf:
             memcpy_time = time_func(
                 lambda: wrapper().memcpy(
@@ -147,12 +148,12 @@ class TestDeviceBuffer(object):
 
             copy_from_time = time_func(lambda: dev_buf.copy_from(host_buf))
 
-        print("memcpy time: {:}, copy_from time: {:}".format(memcpy_time, copy_from_time))
+        print(f"memcpy time: {memcpy_time}, copy_from time: {copy_from_time}")
         assert copy_from_time <= (memcpy_time * 1.04)
 
     @pytest.mark.serial
     def test_copy_to_overhead(self):
-        host_buf = np.ones(shape=(1, 2, 1024, 1024), dtype=np.float32)
+        host_buf = np.ones(shape=(4, 8, 1024, 1024), dtype=np.float32)
         with DeviceArray(shape=host_buf.shape, dtype=host_buf.dtype) as dev_buf:
             memcpy_time = time_func(
                 lambda: wrapper().memcpy(
@@ -165,5 +166,5 @@ class TestDeviceBuffer(object):
 
             copy_to_time = time_func(lambda: dev_buf.copy_to(host_buf))
 
-        print("memcpy time: {:}, copy_to time: {:}".format(memcpy_time, copy_to_time))
+        print(f"memcpy time: {memcpy_time}, copy_to time: {copy_to_time}")
         assert copy_to_time <= (memcpy_time * 1.04)

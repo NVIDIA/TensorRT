@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,69 +17,57 @@
 import argparse
 import copy
 
+from polygraphy import mod
+from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import (
     ComparatorCompareArgs,
+    ComparatorPostprocessArgs,
     ComparatorRunArgs,
+    CompareFuncIndicesArgs,
+    CompareFuncSimpleArgs,
     DataLoaderArgs,
     LoggerArgs,
     ModelArgs,
-    OnnxLoaderArgs,
+    OnnxFromTfArgs,
+    OnnxInferShapesArgs,
+    OnnxLoadArgs,
     OnnxrtRunnerArgs,
     OnnxrtSessionArgs,
     OnnxSaveArgs,
-    OnnxShapeInferenceArgs,
-    PluginRefArgs,
-    Tf2OnnxLoaderArgs,
+    PluginRefRunnerArgs,
+    RunnerSelectArgs,
     TfConfigArgs,
-    TfLoaderArgs,
+    TfLoadArgs,
     TfRunnerArgs,
+    TfTrtArgs,
     TrtConfigArgs,
-    TrtEngineLoaderArgs,
-    TrtEngineSaveArgs,
-    TrtLegacyArgs,
-    TrtNetworkLoaderArgs,
-    TrtPluginLoaderArgs,
+    TrtLegacyRunnerArgs,
+    TrtLoadEngineArgs,
+    TrtLoadNetworkArgs,
+    TrtLoadPluginsArgs,
     TrtRunnerArgs,
+    TrtSaveEngineArgs,
 )
 from polygraphy.tools.base import Tool
 from polygraphy.tools.script import Script, inline, safe
 
-
-# FIXME: This should be moved into tools/args/
-def add_runner_args(parser):
-    class StoreRunnerOrdered(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string=None):
-            if not hasattr(namespace, "runners"):
-                namespace.runners = []
-            namespace.runners.append(option_string.lstrip("-").replace("-", "_"))
-
-    runner_args = parser.add_argument_group(
-        "Runners", "Options for selecting runners. Zero or more runners may be specified"
-    )
-
-    def add_runner(option, help):
-        runner_args.add_argument(option, help=help, action=StoreRunnerOrdered, dest="runners", default=[], nargs=0)
-
-    add_runner("--trt", help="Run inference using TensorRT")
-    add_runner(
-        "--trt-legacy",
-        help="Run inference using Legacy TensorRT Runner. Only supports networks using implicit batch mode",
-    )
-    add_runner("--tf", help="Run inference using TensorFlow")
-    add_runner("--onnxrt", help="Run inference using ONNX Runtime")
-    add_runner(
-        "--pluginref",
-        help="Run inference for models containing single TensorRT plugins using a CPU reference implementation",
-    )
+try:
+    # No need to lazy import since this is part of the standard library
+    from importlib import metadata
+except:
+    # importlib.metadata may not exist in older versions of Python.
+    metadata = mod.lazy_import("importlib_metadata")
 
 
-# Generate a summary line to add as a comment to the script
+PLUGIN_ENTRY_POINT = "polygraphy.run.plugins"
+
+
 def generate_summary(model_file, runners, load_results):
     def join_list(lst):
-        new_list = copy.copy(lst)
+        new_list = copy.copy(list(lst))
         if len(new_list) > 1:
-            new_list[-1] = "and {:}".format(new_list[-1])
+            new_list[-1] = f"and {new_list[-1]}"
         return ", ".join(new_list) if len(new_list) > 2 else " ".join(new_list)
 
     summary = ""
@@ -90,26 +79,15 @@ def generate_summary(model_file, runners, load_results):
         else:
             summary += "runs "
         if model_file:
-            summary += "{:} ".format(model_file)
+            summary += f"{model_file} "
 
-        runner_names = {
-            "trt": "TensorRT",
-            "trt_legacy": "TensorRT Legacy",
-            "tf": "TensorFlow",
-            "onnxrt": "ONNX Runtime",
-            "pluginref": "CPU plugin references",
-        }
-        runners = [runner_names[runner] for runner in runners]
         summary += "between " if len(runners) > 1 else "using "
         summary += join_list(runners) + "."
 
     if load_results:
-        summary += "\nIt will check against outputs stored in {:}\n".format(join_list(load_results))
+        summary += f"\nIt will check against outputs stored in {join_list(load_results)}\n"
 
     return summary
-
-
-################################# TOOL #################################
 
 
 class Run(Tool):
@@ -129,76 +107,90 @@ class Run(Tool):
 
     def __init__(self):
         super().__init__("run")
-        self.subscribe_args(ModelArgs())
-        self.subscribe_args(TfLoaderArgs(tftrt=True))
-        self.subscribe_args(TfConfigArgs())
-        self.subscribe_args(TfRunnerArgs())
-        self.subscribe_args(Tf2OnnxLoaderArgs())
-        self.subscribe_args(OnnxSaveArgs(output="save-onnx", short_opt=None))
-        self.subscribe_args(OnnxShapeInferenceArgs())
-        self.subscribe_args(OnnxLoaderArgs(save=True))
-        self.subscribe_args(OnnxrtSessionArgs())
-        self.subscribe_args(OnnxrtRunnerArgs())
-        self.subscribe_args(PluginRefArgs())
-        self.subscribe_args(
-            TrtConfigArgs(random_data_calib_warning=False)
-        )  # We run calibration with the inference-time data
-        self.subscribe_args(TrtPluginLoaderArgs())
-        self.subscribe_args(TrtNetworkLoaderArgs())
-        self.subscribe_args(TrtEngineSaveArgs(output="save-engine", short_opt=None))
-        self.subscribe_args(TrtEngineLoaderArgs(save=True))
-        self.subscribe_args(TrtRunnerArgs())
-        self.subscribe_args(TrtLegacyArgs())
-        self.subscribe_args(DataLoaderArgs())
-        self.subscribe_args(ComparatorRunArgs())
-        self.subscribe_args(ComparatorCompareArgs())
+
+    def get_subscriptions(self):
+        deps = [
+            RunnerSelectArgs(),
+            ModelArgs(guess_model_type_from_runners=True),
+            TfTrtArgs(),
+            TfLoadArgs(allow_tftrt=True),
+            TfConfigArgs(),
+            TfRunnerArgs(),
+            OnnxFromTfArgs(),
+            OnnxSaveArgs(output_opt="save-onnx", output_short_opt=False),
+            OnnxInferShapesArgs(),
+            OnnxLoadArgs(allow_saving=True, allow_from_tf=True),
+            OnnxrtSessionArgs(),
+            OnnxrtRunnerArgs(),
+            PluginRefRunnerArgs(),
+            # We run calibration/inference with the same data, so it doesn't really matter if it's random.
+            TrtConfigArgs(allow_random_data_calib_warning=False),
+            TrtLoadPluginsArgs(),
+            TrtLoadNetworkArgs(),
+            TrtSaveEngineArgs(output_opt="save-engine", output_short_opt=False),
+            TrtLoadEngineArgs(allow_saving=True),
+            TrtRunnerArgs(),
+            TrtLegacyRunnerArgs(),
+            DataLoaderArgs(),
+            ComparatorRunArgs(),
+            ComparatorPostprocessArgs(),
+            ComparatorCompareArgs(),
+            CompareFuncSimpleArgs(),
+            CompareFuncIndicesArgs(),
+        ]
+
+        # Initialize plugins
+        self.loaded_plugins = []
+        try:
+            entry_points = metadata.entry_points()
+        except PolygraphyException as err:
+            G_LOGGER.warning(
+                f"Could not load extension modules since `importlib.metadata` and `importlib_metadata` are missing."
+            )
+        else:
+            plugins = entry_points.get(PLUGIN_ENTRY_POINT, [])
+            for plugin in plugins:
+                try:
+                    get_arg_groups = plugin.load()
+                    plugin_arg_groups = get_arg_groups()
+                except Exception as err:
+                    G_LOGGER.warning(f"Failed to load plugin: {plugin.name}.\nNote: Error was:\n{err}")
+                else:
+                    deps.extend(plugin_arg_groups)
+                    self.loaded_plugins.append(plugin.name)
+        return deps
 
     def add_parser_args(self, parser):
         parser.add_argument(
             "--gen",
             "--gen-script",
             help="Path to save a generated Python script, that will do exactly "
-            "what `run` would. When this option is enabled, `run` will just save the script and exit. "
-            "Use `-` to print the script to the standard output",
+            "what `run` would. When this option is enabled, `run` will save the script and exit. "
+            "Use a value of `-` to print the script to the standard output instead of saving it to a file",
             type=argparse.FileType("w"),
             dest="gen_script",
         )
-        add_runner_args(parser)
 
     def run(self, args):
-        if self.arg_groups[ModelArgs].model_file is None and args.runners:
+        G_LOGGER.verbose(f"Loaded extension modules: {self.loaded_plugins}")
+
+        if self.arg_groups[ModelArgs].path is None and self.arg_groups[RunnerSelectArgs].runners:
             G_LOGGER.critical(
                 "One or more runners was specified, but no model file was provided. Make sure you've specified the model path, "
                 "and also that it's not being consumed as an argument for another parameter"
             )
 
-        script = self.build_script(args)
-
-        if args.gen_script:
-            script.save(args.gen_script)
-        else:
-            exec(str(script))
-
-    # Generates a script based on command-line arguments
-    def build_script(self, args):
         script = Script(
-            summary=generate_summary(self.arg_groups[ModelArgs].model_file, args.runners, args.load_results)
+            summary=generate_summary(
+                self.arg_groups[ModelArgs].path,
+                self.arg_groups[RunnerSelectArgs].runners.values(),
+                self.arg_groups[ComparatorCompareArgs].load_outputs_paths,
+            )
         )
 
         self.arg_groups[LoggerArgs].add_to_script(script)
 
-        if not args.runners:
-            G_LOGGER.warning("No runners have been selected. Inference will not be run!")
-
-        for runner_arg in args.runners:
-            add_runner_func = {
-                "tf": self.arg_groups[TfRunnerArgs].add_to_script,
-                "onnxrt": self.arg_groups[OnnxrtRunnerArgs].add_to_script,
-                "trt": self.arg_groups[TrtRunnerArgs].add_to_script,
-                "trt_legacy": self.arg_groups[TrtLegacyArgs].add_to_script,
-                "pluginref": self.arg_groups[PluginRefArgs].add_to_script,
-            }[runner_arg]
-            add_runner_func(script)
+        self.arg_groups[RunnerSelectArgs].add_to_script(script)
 
         RESULTS_VAR_NAME = self.arg_groups[ComparatorRunArgs].add_to_script(script)
         SUCCESS_VAR_NAME = self.arg_groups[ComparatorCompareArgs].add_to_script(script, results_name=RESULTS_VAR_NAME)
@@ -210,11 +202,14 @@ class Run(Tool):
             "# Report Results\n"
             "cmd_run = {cmd}\n"
             "if not {success}:\n"
-            '\tG_LOGGER.critical("FAILED | Command: {{}}".format(cmd_run))\n'
-            'G_LOGGER.finish("PASSED | Command: {{}}".format(cmd_run))\n',
+            '\tG_LOGGER.critical(f"FAILED | Command: {{cmd_run}}")\n'
+            'G_LOGGER.finish(f"PASSED | Command: {{cmd_run}}")\n',
             cmd=cmd_run,
             success=SUCCESS_VAR_NAME,
         )
         script.append_suffix(exit_status)
 
-        return script
+        if args.gen_script:
+            script.save(args.gen_script)
+        else:
+            exec(str(script))

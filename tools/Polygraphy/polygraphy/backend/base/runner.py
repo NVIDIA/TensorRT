@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +25,7 @@ np = mod.lazy_import("numpy")
 
 
 @mod.export()
-class BaseRunner(object):
+class BaseRunner:
     """
     Base class for Polygraphy runners. All runners should override the functions and attributes specified here.
     """
@@ -45,7 +46,7 @@ class BaseRunner(object):
         if name is None:
             count = BaseRunner.RUNNER_COUNTS[prefix]
             BaseRunner.RUNNER_COUNTS[prefix] += 1
-            name = "{:}-N{:}-{:}-{:}".format(prefix, count, time.strftime("%x"), time.strftime("%X"))
+            name = f"{prefix}-N{count}-{time.strftime('%x')}-{time.strftime('%X')}"
         self.name = name
         self.inference_time = None
 
@@ -83,8 +84,8 @@ class BaseRunner(object):
         """
         if self.is_active:
             G_LOGGER.warning(
-                "{:35} | Already active; will not activate again. If you really want to "
-                "activate this runner again, call activate_impl() directly".format(self.name)
+                f"{self.name:35} | Already active; will not activate again. "
+                "If you really want to activate this runner again, call activate_impl() directly"
             )
             return
 
@@ -106,7 +107,7 @@ class BaseRunner(object):
         """
         Returns information about the inputs of the model.
         Shapes here may include dynamic dimensions, represented by ``None``.
-        Must be called only after activate() and before deactivate().
+        Must be called only after ``activate()`` and before ``deactivate()``.
 
         Returns:
             TensorMetadata: Input names, shapes, and data types.
@@ -122,6 +123,8 @@ class BaseRunner(object):
         """
         Runs inference using the provided feed_dict.
 
+        Must be called only after ``activate()`` and before ``deactivate()``.
+
         NOTE: Some runners may accept additional parameters in infer().
         For details on these, see the documentation for their `infer_impl()` methods.
 
@@ -135,6 +138,11 @@ class BaseRunner(object):
                     Disabling this may improve performance.
                     Defaults to True.
 
+        Attributes:
+            inference_time (float):
+                    The time required to run inference.
+                    Derived classes should set this so that performance metrics are accurate.
+
         Returns:
             OrderedDict[str, numpy.ndarray]:
                     A mapping of output tensor names to their corresponding NumPy arrays.
@@ -143,11 +151,11 @@ class BaseRunner(object):
                     outputs from multiple inferences, you should make a copy with ``copy.deepcopy(outputs)``.
         """
         if not self.is_active:
-            G_LOGGER.critical("{:35} | Must be activated prior to calling infer()".format(self.name))
+            G_LOGGER.critical(f"{self.name:35} | Must be activated prior to calling infer()")
 
         if check_inputs:
             input_metadata = self.get_input_metadata()
-            G_LOGGER.verbose("Runner input metadata is: {:}".format(input_metadata))
+            G_LOGGER.verbose(f"Runner input metadata is: {input_metadata}")
 
             util.check_dict_contains(
                 feed_dict, input_metadata.keys(), dict_name="feed_dict", log_func=G_LOGGER.critical
@@ -157,14 +165,12 @@ class BaseRunner(object):
                 meta = input_metadata[name]
                 if not np.issubdtype(inp.dtype, meta.dtype):
                     G_LOGGER.critical(
-                        "Input tensor: {:} | Received unexpected dtype: {:}.\n"
-                        "Note: Expected type: {:}".format(name, inp.dtype, meta.dtype)
+                        f"Input tensor: {name} | Received unexpected dtype: {inp.dtype}.\nNote: Expected type: {meta.dtype}"
                     )
 
                 if not util.is_valid_shape_override(inp.shape, meta.shape):
                     G_LOGGER.critical(
-                        "Input tensor: {:} | Received incompatible shape: {:}.\n"
-                        "Note: Expected a shape compatible with: {:}".format(name, inp.shape, meta.shape)
+                        f"Input tensor: {name} | Received incompatible shape: {inp.shape}.\nNote: Expected a shape compatible with: {meta.shape}"
                     )
 
         return self.infer_impl(feed_dict, *args, **kwargs)
@@ -174,16 +180,17 @@ class BaseRunner(object):
         """
         Returns the total inference time required during the last call to ``infer()``.
 
+        Must be called only after ``activate()`` and before ``deactivate()``.
+
         Returns:
             float: The time in seconds, or None if runtime was not measured by the runner.
         """
         if self.inference_time is None:
-            G_LOGGER.warning(
-                "{:35} | inference_time was not set. Inference time will be incorrect!"
-                "To correctly compare runtimes, please set the inference_time property in the"
-                "infer() function".format(self.name),
-                mode=LogMode.ONCE,
-            )
+            msg = f"{self.name:35} | `inference_time` was not set. Inference time will be incorrect! "
+            msg += ("To correctly compare runtimes, please set the `inference_time` attribute in `infer_impl()`",)
+
+            G_LOGGER.internal_error(msg)
+            G_LOGGER.warning(msg, mode=LogMode.ONCE)
             return None
         return self.inference_time
 
@@ -205,8 +212,7 @@ class BaseRunner(object):
         """
         if not self.is_active:
             G_LOGGER.warning(
-                "{:35} | Not active; will not deactivate. If you really want to "
-                "deactivate this runner, call deactivate_impl() directly".format(self.name)
+                f"{self.name:35} | Not active; will not deactivate. If you really want to deactivate this runner, call deactivate_impl() directly"
             )
             return
 
@@ -220,11 +226,10 @@ class BaseRunner(object):
             del self._pre_activate_runner_state
             if old_state != vars(self):
                 G_LOGGER.internal_error(
-                    "Runner state was not reset after deactivation. "
-                    "Note:\nOld state: {:}\nNew state: {:}".format(old_state, vars(self))
+                    f"Runner state was not reset after deactivation. Note:\nOld state: {old_state}\nNew state: {vars(self)}"
                 )
 
     def __del__(self):
         if self.is_active:
             # __del__ is not guaranteed to be called, but when it is, this could be a useful warning.
-            print("[W] {:35} | Was activated but never deactivated. This could cause a memory leak!".format(self.name))
+            print(f"[W] {self.name:35} | Was activated but never deactivated. This could cause a memory leak!")

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +16,9 @@
 #
 import numpy as np
 import pytest
+from polygraphy.backend.trt import Calibrator
 from polygraphy.backend.trt_legacy import ConvertToUff, LoadNetworkFromUff, ParseNetworkFromOnnxLegacy, TrtLegacyRunner
+from polygraphy.comparator import DataLoader
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
 
@@ -24,7 +27,9 @@ def test_uff_identity():
 
     model = TF_MODELS["identity"]
     loader = model.loader
-    with TrtLegacyRunner(LoadNetworkFromUff(ConvertToUff(loader))) as runner:
+    with TrtLegacyRunner(
+        LoadNetworkFromUff(ConvertToUff(loader)), int8=True, calibrator=Calibrator(DataLoader())
+    ) as runner:
         assert runner.is_active
         feed_dict = {"Input": np.random.random_sample(size=(1, 15, 25, 30)).astype(np.float32)}
         outputs = runner.infer(feed_dict)

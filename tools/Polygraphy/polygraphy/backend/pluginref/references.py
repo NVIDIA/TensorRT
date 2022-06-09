@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -43,15 +44,13 @@ def register(op):
                     inputs.append(intermediate_tensors[inp.name])
                 else:
                     G_LOGGER.internal_error(
-                        "Input: {:} was not found in intermediate tensors and is not a constant.\n"
-                        "Note: Intermediate tensors include: {:}".format(inp.name, list(intermediate_tensors.keys()))
+                        f"Input: {inp.name} was not found in intermediate tensors and is not a constant.\nNote: Intermediate tensors include: {list(intermediate_tensors.keys())}"
                     )
 
             outputs = func(node.attrs, *inputs)
             if len(outputs) != len(node.outputs):
                 G_LOGGER.internal_error(
-                    "{:} reference implementation returned the wrong number of outputs.\n"
-                    "Note: Expected {:} but recevied {:}".format(op, len(node.outputs), len(outputs))
+                    f"{op} reference implementation returned the wrong number of outputs.\nNote: Expected {len(node.outputs)} but recevied {len(outputs)}"
                 )
 
             return {out_tensor.name: out for out_tensor, out in zip(node.outputs, outputs)}

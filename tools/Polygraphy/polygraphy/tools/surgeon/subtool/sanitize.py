@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +16,7 @@
 #
 from polygraphy import mod
 from polygraphy.tools import util as tools_util
-from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoaderArgs, OnnxSaveArgs, OnnxShapeInferenceArgs
+from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
 from polygraphy.tools.surgeon.subtool.base import BaseSurgeonSubtool
 
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
@@ -30,18 +31,20 @@ class Sanitize(BaseSurgeonSubtool):
 
     def __init__(self):
         super().__init__("sanitize")
-        self.subscribe_args(
+
+    def get_subscriptions(self):
+        return [
             ModelArgs(
-                model_required=True,
-                inputs="--override-inputs",
-                model_type="onnx",
-                inputs_doc="Override input shapes in the model for the given inputs",
-            )
-        )
-        self.subscribe_args(DataLoaderArgs())
-        self.subscribe_args(OnnxShapeInferenceArgs(default=True, enable_force_fallback=True))
-        self.subscribe_args(OnnxLoaderArgs(output_prefix=""))
-        self.subscribe_args(OnnxSaveArgs(infer_shapes=True, required=True))
+                model_opt_required=True,
+                input_shapes_opt_name="override-inputs",
+                required_model_type="onnx",
+                input_shapes_opt_doc="Override input shapes in the model for the given inputs",
+            ),
+            DataLoaderArgs(),
+            OnnxInferShapesArgs(default=True, allow_force_fallback=True),
+            OnnxLoadArgs(outputs_opt_prefix=""),
+            OnnxSaveArgs(allow_shape_inference=True, output_opt_required=True),
+        ]
 
     def add_parser_args(self, parser):
         const_fold_args = parser.add_argument_group("Constant Folding", "Options for folding constants")
@@ -113,8 +116,8 @@ class Sanitize(BaseSurgeonSubtool):
                 graph = tools_util.override_input_shapes(graph, user_input_metadata)
                 rerun_shape_inference = True
 
-            if self.arg_groups[OnnxShapeInferenceArgs].force_fallback:
-                _, layerwise_meta = self.arg_groups[OnnxShapeInferenceArgs].fallback_inference(model)
+            if self.arg_groups[OnnxInferShapesArgs].force_fallback:
+                _, layerwise_meta = self.arg_groups[OnnxInferShapesArgs].fallback_inference(model)
                 graph = get_graph()
                 onnx_util.set_shapes_from_layerwise_meta(graph, layerwise_meta)
 
@@ -131,7 +134,7 @@ class Sanitize(BaseSurgeonSubtool):
                 model = onnx_backend.fold_constants(
                     model,
                     num_passes=args.num_const_fold_passes,
-                    do_shape_inference=self.arg_groups[OnnxShapeInferenceArgs].do_shape_inference
+                    do_shape_inference=self.arg_groups[OnnxInferShapesArgs].do_shape_inference
                     if args.per_pass_shape_inference
                     else False,
                     fold_shapes=args.fold_shapes,
@@ -142,7 +145,7 @@ class Sanitize(BaseSurgeonSubtool):
         model = super().load_model()
         model, rerun_shape_inference = do_graph_processing(model)
 
-        if rerun_shape_inference and self.arg_groups[OnnxShapeInferenceArgs].do_shape_inference:
+        if rerun_shape_inference and self.arg_groups[OnnxInferShapesArgs].do_shape_inference:
             model = onnx_backend.infer_shapes(model)
 
         model = do_model_processing(model)

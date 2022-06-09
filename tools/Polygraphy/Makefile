@@ -1,39 +1,56 @@
-.PHONY: test leak_check clean build install docs
+#
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+.ONESHELL: # Run all rules in the same shell to make it easier to run tests with environment variables
+.PHONY: test_venv test leak_check clean build install docs
 
 NPROC ?= 8
 
+BUILD_DIR := build
+TESTS_DIR := tests
+
+PYTEST_OPTS := -v -x --durations=5 --failed-first --new-first --script-launch-mode=subprocess
+
 # Tests also check that docs can build
-test: docs
+test: docs install
+	export PYTHONPATH=$(CURDIR):$${PYTHON_PATH}
+	export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1
     # Some tests need to be run serially - we annotate those with a `serial` marker.
-	export PYTHONPATH=$(CURDIR):$${PYTHONPATH} && \
-		export PATH=$(CURDIR)/bin:$${PATH} && \
-		export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1 && \
-		python3 -m pytest tests/ -v -x --durations=5 -m "serial" && \
-		\
-		export PYTHONPATH=$(CURDIR):$${PYTHONPATH} && \
-	    export PATH=$(CURDIR)/bin:$${PATH} && \
-	    export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1 && \
-	    python3 -m pytest tests/ -v -x -n $(NPROC) --dist=loadscope --durations=5 -m "not serial"
+	python3 -m pytest $(TESTS_DIR) -m "serial" $(PYTEST_OPTS) && \
+		python3 -m pytest $(TESTS_DIR) -n $(NPROC) --dist=loadscope -m "not serial" $(PYTEST_OPTS)
 
 leak_check:
-	export PYTHONPATH=$(CURDIR):$${PYTHONPATH} && \
-	    export PATH=$(CURDIR)/bin:$${PATH} && \
-	    export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1 && \
-		export PYTHONMALLOC=malloc && \
-		valgrind --leak-check=full python3 -m pytest tests/ -v --durations=5 2>&1 | tee leak-check.log
+	export PYTHONPATH=$(CURDIR):$${PYTHON_PATH}
+	export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1
+	export PYTHONMALLOC=malloc
+	valgrind --leak-check=full python3 -m pytest $(TESTS_DIR) -v --durations=5 2>&1 | tee leak-check.log
 
 clean:
-	rm -rf dist/ build/ polygraphy.egg-info/
+	rm -rf dist/ $(BUILD_DIR)/ polygraphy.egg-info/
 
-build: clean
+build:
 	python3 setup.py bdist_wheel
 
 install_deps: build
-	-python3 -m pip install colored wheel
+	- python3 -m pip install colored wheel
 
 install: install_deps
-	python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl
+	- python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl
 
-docs: clean
-	mkdir -p build/docs
-	python3 `which sphinx-build` docs build/docs/ -j $(NPROC) -W
+docs:
+	mkdir -p $(BUILD_DIR)/docs
+	python3 `which sphinx-build` docs $(BUILD_DIR)/docs/ -j $(NPROC) -W

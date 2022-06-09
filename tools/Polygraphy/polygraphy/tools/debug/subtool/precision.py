@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,28 +26,25 @@ trt = mod.lazy_import("tensorrt")
 trt_util = mod.lazy_import("polygraphy.backend.trt.util")
 
 
-class BaseMarker(object):
-    def __init__(self, max_layers, direction, num_layers):
+class BaseMarker:
+    def __init__(self, max_layers, direction, num_layers_to_mark):
         self.max_layers = max_layers
         self.direction = direction
-        self.num_layers = num_layers
+        self.num_layers_to_mark = num_layers_to_mark
         self.good = max_layers + 1  # Pretend marking all the layers gives us good accuracy.
-        self.iteration = 0
 
     def select_layers(self):
-        self.iteration += 1
         if self.direction == "forward":
-            G_LOGGER.info("Selecting first {:} layer(s) to run in higher precision".format(self.num_layers))
-            return range(0, self.num_layers)
+            G_LOGGER.info(f"Selecting first {self.num_layers_to_mark} layer(s) to run in higher precision")
+            return range(0, self.num_layers_to_mark)
         else:
-            G_LOGGER.info("Selecting last {:} layer(s) to run in higher precision".format(self.num_layers))
-            return range(self.max_layers - self.num_layers, self.max_layers)
+            G_LOGGER.info(f"Selecting last {self.num_layers_to_mark} layer(s) to run in higher precision")
+            return range(self.max_layers - self.num_layers_to_mark, self.max_layers)
 
     def success_message(self):
         which_layers = "first" if self.direction == "forward" else "last"
         G_LOGGER.finish(
-            "To achieve acceptable accuracy, try running the {:} {:} "
-            "layer(s) in higher precision".format(which_layers, self.good)
+            f"To achieve acceptable accuracy, try running the {which_layers} {self.good} layer(s) in higher precision"
         )
 
 
@@ -55,19 +53,17 @@ class BisectMarker(BaseMarker):
         super().__init__(max_layers, direction, max_layers)
         self.bad = 0
 
-    def select_layers(self, prev_success):
-        if prev_success:
-            self.good = self.num_layers
-            # On successes, we want num_layers to go closer to self.bad
+    def step(self, success):
+        if success:
+            self.good = self.num_layers_to_mark
+            # On successes, we want num_layers_to_mark to go closer to self.bad
             round_func = math.floor
         else:
-            self.bad = self.num_layers
+            self.bad = self.num_layers_to_mark
             round_func = math.ceil
 
-        self.num_layers = round_func((self.good + self.bad) / 2.0)
-        return super().select_layers()
+        self.num_layers_to_mark = round_func((self.good + self.bad) / 2.0)
 
-    def stop(self, index, success):
         # If good and bad are within 1 layer of each other,
         # then we already have the information we need.
         if abs(self.good - self.bad) <= 1:
@@ -77,37 +73,37 @@ class BisectMarker(BaseMarker):
                 self.success_message()
             return True
 
-        if index >= (self.max_layers - 1):
+        if self.num_layers_to_mark <= 1 or self.num_layers_to_mark > self.max_layers:
             G_LOGGER.error("Could not find a configuration that satisfied accuracy requirements.")
             return True
+
         return False
 
     def remaining(self):
-        return int(math.log2(self.max_layers) - self.iteration)
+        return int(math.log2(self.good - self.bad))
 
 
 class LinearMarker(BaseMarker):
     def __init__(self, max_layers, direction) -> None:
         super().__init__(max_layers, direction, 0)
 
-    def select_layers(self, prev_success):
-        if prev_success:
-            self.good = self.num_layers
-        self.num_layers += 1
-        return super().select_layers()
+    def step(self, success):
+        if success:
+            self.good = self.num_layers_to_mark
+        self.num_layers_to_mark += 1
 
-    def stop(self, index, success):
         if success:
             self.success_message()
             return True
 
-        if index >= (self.max_layers - 1):
+        if self.num_layers_to_mark > self.max_layers:
             G_LOGGER.error("Could not find a configuration that satisfied accuracy requirements.")
             return True
+
         return False
 
     def remaining(self):
-        return self.max_layers - self.iteration
+        return self.max_layers - self.num_layers_to_mark
 
 
 class Precision(BaseCheckerSubtool):
@@ -118,7 +114,7 @@ class Precision(BaseCheckerSubtool):
     """
 
     def __init__(self):
-        super().__init__("precision", obey_precision_constraints_default=True, prefer_artifacts=False)
+        super().__init__("precision", precision_constraints_default="obey", allow_no_artifacts_warning=False)
 
     def add_parser_args(self, parser):
         parser.add_argument(
@@ -176,7 +172,7 @@ class Precision(BaseCheckerSubtool):
                 "Please provide a different format, such as an ONNX or TensorFlow model."
             )
 
-        G_LOGGER.start("Using {:} as higher precision".format(self.precision))
+        G_LOGGER.start(f"Using {self.precision} as higher precision")
 
         if args.mode == "linear":
             self.layer_marker = LinearMarker(len(network), args.direction)
@@ -202,20 +198,18 @@ class Precision(BaseCheckerSubtool):
                 return layer.type in EXCLUDE_LAYERS or has_non_execution_output
 
             if not should_exclude():
-                G_LOGGER.extra_verbose(
-                    "Running layer in higher precision: {:}".format(trt_util.str_from_layer(layer, index))
-                )
+                G_LOGGER.extra_verbose(f"Running layer in higher precision: {trt_util.str_from_layer(layer, index)}")
                 layer.precision = self.precision
                 marked_indices.add(index)
 
-        G_LOGGER.verbose("Marking layer(s): {:} to run in {:} precision".format(marked_indices, self.precision))
+        G_LOGGER.verbose(f"Marking layer(s): {marked_indices} to run in {self.precision} precision")
 
-    def process_network(self, network, prev_success):
-        indices = list(self.layer_marker.select_layers(prev_success))
+    def process_network(self, network):
+        indices = list(self.layer_marker.select_layers())
         self.mark_layers(network, indices)
 
-    def stop(self, index, success):
-        return self.layer_marker.stop(index, success)
+    def step(self, success):
+        return self.layer_marker.step(success)
 
     def remaining(self):
         return self.layer_marker.remaining()

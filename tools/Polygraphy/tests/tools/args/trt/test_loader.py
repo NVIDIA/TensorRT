@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,30 +15,30 @@
 # limitations under the License.
 #
 
+import os
+
 import pytest
 import tensorrt as trt
 from polygraphy import util
 from polygraphy.backend.trt import create_network, engine_bytes_from_network, network_from_onnx_path
 from polygraphy.tools.args import (
     ModelArgs,
-    OnnxLoaderArgs,
+    OnnxLoadArgs,
     TrtConfigArgs,
-    TrtEngineLoaderArgs,
-    TrtNetworkLoaderArgs,
-    TrtPluginLoaderArgs,
+    TrtLoadEngineArgs,
+    TrtLoadNetworkArgs,
+    TrtLoadPluginsArgs,
 )
 from tests.models.meta import ONNX_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
 
 
-class TestTrtNetworkLoaderArgs(object):
+class TestTrtNetworkLoaderArgs:
     def test_load_network(self):
-        arg_group = ArgGroupTestHelper(
-            TrtNetworkLoaderArgs(), deps=[ModelArgs(), OnnxLoaderArgs(), TrtPluginLoaderArgs()]
-        )
+        arg_group = ArgGroupTestHelper(TrtLoadNetworkArgs(), deps=[ModelArgs(), OnnxLoadArgs(), TrtLoadPluginsArgs()])
         arg_group.parse_args([ONNX_MODELS["identity_identity"].path, "--trt-outputs=identity_out_0"])
 
-        builder, network, parser = arg_group.load_network()
+        builder, network, _ = arg_group.load_network()
         with builder, network:
             assert network.num_outputs == 1
             assert network.get_output(0).name == "identity_out_0"
@@ -46,16 +47,16 @@ class TestTrtNetworkLoaderArgs(object):
 @pytest.fixture()
 def engine_loader_args():
     return ArgGroupTestHelper(
-        TrtEngineLoaderArgs(),
-        deps=[ModelArgs(), OnnxLoaderArgs(), TrtConfigArgs(), TrtPluginLoaderArgs(), TrtNetworkLoaderArgs()],
+        TrtLoadEngineArgs(),
+        deps=[ModelArgs(), OnnxLoadArgs(), TrtConfigArgs(), TrtLoadPluginsArgs(), TrtLoadNetworkArgs()],
     )
 
 
-class TestTrtEngineLoaderArgs(object):
+class TestTrtEngineLoaderArgs:
     def test_build_engine(self, engine_loader_args):
         engine_loader_args.parse_args([ONNX_MODELS["identity_identity"].path, "--trt-outputs=identity_out_0"])
 
-        with engine_loader_args.build_engine() as engine:
+        with engine_loader_args.load_engine() as engine:
             assert isinstance(engine, trt.ICudaEngine)
             assert len(engine) == 2
             assert engine[1] == "identity_out_0"
@@ -69,7 +70,7 @@ class TestTrtEngineLoaderArgs(object):
         out.name = "output"
         network.mark_output(out)
 
-        with builder, network, engine_loader_args.build_engine(network=(builder, network)) as engine:
+        with builder, network, engine_loader_args.load_engine(network=(builder, network)) as engine:
             assert isinstance(engine, trt.ICudaEngine)
             assert len(engine) == 2
             assert engine[0] == "input"
@@ -81,9 +82,10 @@ class TestTrtEngineLoaderArgs(object):
         ) as engine_bytes:
             f.write(engine_bytes)
             f.flush()
+            os.fsync(f.fileno())
 
             engine_loader_args.parse_args([f.name, "--model-type=engine"])
-            with engine_loader_args.load_serialized_engine() as engine:
+            with engine_loader_args.load_engine() as engine:
                 assert isinstance(engine, trt.ICudaEngine)
                 assert len(engine) == 2
                 assert engine[0] == "x"

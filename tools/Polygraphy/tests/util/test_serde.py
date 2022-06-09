@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +25,7 @@ from polygraphy.exception import PolygraphyException
 from polygraphy.json import Decoder, Encoder, from_json, load_json, to_json
 
 
-class Dummy(object):
+class Dummy:
     def __init__(self, x):
         self.x = x
 
@@ -40,16 +41,16 @@ def decode(dct):
     return Dummy(x=dct["x"])
 
 
-class TestEncoder(object):
+class TestEncoder:
     def test_registered(self):
         d = Dummy(x=-1)
         d_json = to_json(d)
         assert encode(d) == {"x": d.x, constants.TYPE_MARKER: "Dummy"}
-        expected = '{{\n    "x": {:},\n    "{:}": "Dummy"\n}}'.format(d.x, constants.TYPE_MARKER)
+        expected = f'{{\n    "x": {d.x},\n    "{constants.TYPE_MARKER}": "Dummy"\n}}'
         assert d_json == expected
 
 
-class TestDecoder(object):
+class TestDecoder:
     def test_object_pairs_hook(self):
         d = Dummy(x=-1)
         d_json = to_json(d)
@@ -84,7 +85,7 @@ JSONABLE_CASES = [
 ]
 
 
-class TestImplementations(object):
+class TestImplementations:
     @pytest.mark.parametrize(
         "obj",
         [

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -104,7 +105,7 @@ def export(funcify=False, func_name=None):
             if method in vars(ancestor):
                 return vars(ancestor)[method]
 
-        assert False, "Could not find method: {:} in the inheritance hierarcy of: {:}".format(method, symbol)
+        assert False, f"Could not find method: {method} in the inheritance hierarcy of: {symbol}"
 
     def export_impl(func_or_cls):
         _add_to_all(func_or_cls.__name__, module)
@@ -118,20 +119,27 @@ def export(funcify=False, func_name=None):
             assert BaseLoader in inspect.getmro(
                 func_or_cls
             ), "Decorated type must derive from BaseLoader to use funcify=True"
-            loader = func_or_cls
 
             def get_params(method):
-                return [
-                    p
-                    for p in inspect.signature(find_method(func_or_cls, method)).parameters.values()
-                    if p.name != "self"
-                ]
+                return list(inspect.signature(find_method(func_or_cls, method)).parameters.values())[1:]
+
+            def is_variadic(param):
+                return param.kind in [param.VAR_POSITIONAL, param.VAR_KEYWORD]
+
+            def has_default(param):
+                return param.default != param.empty
+
+            def get_param_name(p):
+                # For variadic arguments, p.name will drop the *, **
+                return str(p) if is_variadic(p) else p.name
+
+            def param_names(params):
+                return [get_param_name(p) for p in params]
+
+            loader = func_or_cls
 
             init_params = get_params("__init__")
             call_impl_params = get_params("call_impl")
-
-            def param_names(params):
-                return list(str(p).partition("=")[0] for p in params)
 
             assert (set(param_names(call_impl_params)) - set(param_names(init_params))) == set(
                 param_names(call_impl_params)
@@ -141,20 +149,18 @@ def export(funcify=False, func_name=None):
 
             # To generate the signature, we use the init and call_impl arguments,
             # but move required arguments (i.e. without default values) to the front.
-            def is_special(param):
-                return "*" in str(param)
-
-            def has_default(param):  # Non special arguments that have default values
-                return "=" in str(param)
 
             def build_arg_list(should_include):
-                arg_list = [str(p) for p in init_params if should_include(p)]
-                arg_list += [str(p) for p in call_impl_params if should_include(p)]
+                def str_from_param(p):
+                    return get_param_name(p) + (f"={p.default}" if has_default(p) else "")
+
+                arg_list = [str_from_param(p) for p in init_params if should_include(p)]
+                arg_list += [str_from_param(p) for p in call_impl_params if should_include(p)]
                 return arg_list
 
-            non_default_args = build_arg_list(should_include=lambda p: not is_special(p) and not has_default(p))
-            default_args = build_arg_list(should_include=lambda p: not is_special(p) and has_default(p))
-            special_args = build_arg_list(should_include=is_special)
+            non_default_args = build_arg_list(should_include=lambda p: not is_variadic(p) and not has_default(p))
+            default_args = build_arg_list(should_include=lambda p: not is_variadic(p) and has_default(p))
+            special_args = build_arg_list(should_include=is_variadic)
 
             signature = ", ".join(non_default_args + default_args + special_args)
 
@@ -162,14 +168,12 @@ def export(funcify=False, func_name=None):
             call_impl_args = ", ".join(param_names(call_impl_params))
 
             func_code = dedent(
-                """
+                f"""
                 def func_impl({signature}):
                     return loader_binding({init_args})({call_impl_args})
 
                 func_var = func_impl
-                """.format(
-                    signature=signature, init_args=init_args, call_impl_args=call_impl_args
-                )
+                """
             )
 
             exec(
@@ -179,7 +183,7 @@ def export(funcify=False, func_name=None):
 
             # Next we setup the docstring so that it is a combination of the __init__
             # and call_impl docstrings.
-            func.__doc__ = "Immediately evaluated functional variant of :class:`{}` .\n".format(loader.__name__)
+            func.__doc__ = f"Immediately evaluated functional variant of :class:`{loader.__name__}` .\n"
 
             def try_add_method_doc(method):
                 call_impl = find_method(loader, method)
@@ -192,7 +196,7 @@ def export(funcify=False, func_name=None):
             # Now that the function has been defined, we just need to add it into the module's
             # __dict__ so it is accessible like a normal symbol.
             def pascal_to_snake(name):
-                return "".join("_{:}".format(c.lower()) if c.isupper() else c for c in name).lstrip("_")
+                return "".join(f"_{c.lower()}" if c.isupper() else c for c in name).lstrip("_")
 
             nonlocal func_name
             func_name = func_name or pascal_to_snake(loader.__name__)
@@ -208,12 +212,12 @@ def export(funcify=False, func_name=None):
 def warn_deprecated(name, use_instead, remove_in, module_name=None, always_show_warning=False):
 
     if config.INTERNAL_CORRECTNESS_CHECKS and version(polygraphy.__version__) >= version(remove_in):
-        G_LOGGER.internal_error("{:} should have been removed in version: {:}".format(name, remove_in))
+        G_LOGGER.internal_error(f"{name} should have been removed in version: {remove_in}")
 
-    full_obj_name = "{:}.{:}".format(module_name, name) if module_name else name
-    msg = "{:} is deprecated and will be removed in Polygraphy {:}. Use {:} instead.".format(
-        full_obj_name, remove_in, use_instead
-    )
+    full_obj_name = f"{module_name}.{name}" if module_name else name
+    msg = f"{full_obj_name} is deprecated and will be removed in Polygraphy {remove_in}."
+    if use_instead is not None:
+        msg += f" Use {use_instead} instead."
 
     warnings.warn(msg, DeprecationWarning, stacklevel=3)
     if always_show_warning:
@@ -242,14 +246,14 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
 
     def deprecate_impl(obj):
         if config.INTERNAL_CORRECTNESS_CHECKS and version(polygraphy.__version__) >= version(remove_in):
-            G_LOGGER.internal_error("{:} should have been removed in version: {:}".format(obj, remove_in))
+            G_LOGGER.internal_error(f"{obj} should have been removed in version: {remove_in}")
 
         nonlocal name
         name = name or obj.__name__
 
         if inspect.ismodule(obj):
 
-            class DeprecatedModule(object):
+            class DeprecatedModule:
                 def __getattr__(self, attr_name):
                     warn_deprecated(name, use_instead, remove_in, module_name)
                     self = obj
@@ -260,7 +264,7 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
                     self = obj
                     return setattr(self, attr_name, value)
 
-            DeprecatedModule.__doc__ = "Deprecated: Use {:} instead".format(use_instead)
+            DeprecatedModule.__doc__ = f"Deprecated: Use {use_instead} instead"
             return DeprecatedModule()
         elif inspect.isclass(obj):
 
@@ -269,7 +273,7 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
                     warn_deprecated(name, use_instead, remove_in, module_name)
                     super().__init__(*args, **kwargs)
 
-            Deprecated.__doc__ = "Deprecated: Use {:} instead".format(use_instead)
+            Deprecated.__doc__ = f"Deprecated: Use {use_instead} instead"
             return Deprecated
         elif inspect.isfunction(obj):
 
@@ -277,10 +281,10 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
                 warn_deprecated(name, use_instead, remove_in, module_name)
                 return obj(*args, **kwargs)
 
-            wrapped.__doc__ = "Deprecated: Use {:} instead".format(use_instead)
+            wrapped.__doc__ = f"Deprecated: Use {use_instead} instead"
             return wrapped
         else:
-            G_LOGGER.internal_error("deprecate is not implemented for: {:}".format(obj))
+            G_LOGGER.internal_error(f"deprecate is not implemented for: {obj}")
 
     return deprecate_impl
 

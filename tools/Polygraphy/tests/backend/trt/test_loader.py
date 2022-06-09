@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -49,7 +50,7 @@ from tests.models.meta import ONNX_MODELS
 @pytest.fixture(scope="session")
 def identity_engine():
     network_loader = NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader)
-    engine_loader = EngineFromNetwork(network_loader, CreateConfig())
+    engine_loader = EngineFromNetwork(network_loader)
     with engine_loader() as engine:
         yield engine
 
@@ -99,7 +100,7 @@ def modifiable_reshape_network():
 ##
 
 
-class TestLoadPlugins(object):
+class TestLoadPlugins:
     def test_can_load_libnvinfer_plugins(self):
         def get_plugin_names():
             return [pc.name for pc in trt.get_plugin_registry().plugin_creator_list]
@@ -111,7 +112,7 @@ class TestLoadPlugins(object):
         assert get_plugin_names()
 
 
-class TestSerializedEngineLoader(object):
+class TestSerializedEngineLoader:
     def test_serialized_engine_loader_from_lambda(self, identity_engine):
         with util.NamedTemporaryFile() as outpath:
             with open(outpath.name, "wb") as f, identity_engine.serialize() as buffer:
@@ -128,7 +129,7 @@ class TestSerializedEngineLoader(object):
                 assert isinstance(engine, trt.ICudaEngine)
 
 
-class TestOnnxNetworkLoader(object):
+class TestOnnxNetworkLoader:
     def test_loader(self):
         builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity"].loader)
         with builder, network, parser:
@@ -144,7 +145,7 @@ class TestOnnxNetworkLoader(object):
 
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.1.0.0"), reason="API was added in TRT 7.1")
-class TestNetworkFromOnnxPath(object):
+class TestNetworkFromOnnxPath:
     def test_loader(self):
         builder, network, parser = network_from_onnx_path(ONNX_MODELS["identity"].path)
         with builder, network, parser:
@@ -159,7 +160,7 @@ class TestNetworkFromOnnxPath(object):
                 assert network.has_explicit_precision
 
 
-class TestModifyNetwork(object):
+class TestModifyNetwork:
     def test_mark_layerwise(self, modifiable_network):
         load_network = ModifyNetworkOutputs(modifiable_network, outputs=constants.MARK_ALL)
         builder, network, parser = load_network()
@@ -201,7 +202,7 @@ class TestModifyNetwork(object):
             assert network.num_outputs == 1
 
 
-class TestCreateConfig(object):
+class TestCreateConfig:
     def test_defaults(self, identity_builder_network):
         builder, network = identity_builder_network
         loader = CreateConfig()
@@ -218,10 +219,12 @@ class TestCreateConfig(object):
             assert config.num_optimization_profiles == 1
             assert config.int8_calibrator is None
             with contextlib.suppress(AttributeError):
-                if mod.version(trt.__version__) < mod.version("8.0"):
-                    assert config.get_tactic_sources() == 3
-                else:
+                if mod.version(trt.__version__) >= mod.version("8.4"):
+                    assert config.get_tactic_sources() == 15
+                elif mod.version(trt.__version__) >= mod.version("8.0"):
                     assert config.get_tactic_sources() == 7
+                else:
+                    assert config.get_tactic_sources() == 3
             with contextlib.suppress(AttributeError):
                 assert not config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
 
@@ -238,6 +241,21 @@ class TestCreateConfig(object):
         loader = CreateConfig(obey_precision_constraints=flag)
         with loader(builder, network) as config:
             assert config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS) == flag
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported before TRT 8.2")
+    @pytest.mark.parametrize("flag", ["obey", "prefer", None])
+    def test_precision_constraints(self, identity_builder_network, flag):
+        builder, network = identity_builder_network
+        loader = CreateConfig(precision_constraints=flag)
+        with loader(builder, network) as config:
+            obey_set = config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
+            prefer_set = config.get_flag(trt.BuilderFlag.PREFER_PRECISION_CONSTRAINTS)
+            if flag == "obey":
+                assert obey_set and not prefer_set
+            elif flag == "prefer":
+                assert not obey_set and prefer_set
+            else:
+                assert not obey_set and not prefer_set
 
     @pytest.mark.parametrize("flag", [True, False])
     def test_strict_types(self, identity_builder_network, flag):
@@ -298,18 +316,11 @@ class TestCreateConfig(object):
         loader = CreateConfig(use_dla=True)
         with loader(builder, network) as config:
             assert config.default_device_type == trt.DeviceType.DLA
-            assert config.DLA_core == 0
+            if has_dla():
+                assert config.DLA_core == 0
 
     with contextlib.suppress(AttributeError):
-        if mod.version(trt.__version__) < mod.version("8.0"):
-            TACTIC_SOURCES_CASES = [
-                (None, 3),  # By default, all sources are enabled.
-                ([], 0),
-                ([trt.TacticSource.CUBLAS], 1),
-                ([trt.TacticSource.CUBLAS_LT], 2),
-                ([trt.TacticSource.CUBLAS, trt.TacticSource.CUBLAS_LT], 3),
-            ]
-        else:
+        if mod.version(trt.__version__) >= mod.version("8.0"):
             TACTIC_SOURCES_CASES = [
                 (None, 7),  # By default, all sources are enabled.
                 ([], 0),
@@ -321,6 +332,30 @@ class TestCreateConfig(object):
                 ([trt.TacticSource.CUBLAS_LT, trt.TacticSource.CUDNN], 6),
                 ([trt.TacticSource.CUDNN, trt.TacticSource.CUBLAS, trt.TacticSource.CUBLAS_LT], 7),
             ]
+        else:
+            TACTIC_SOURCES_CASES = [
+                (None, 3),  # By default, all sources are enabled.
+                ([], 0),
+                ([trt.TacticSource.CUBLAS], 1),
+                ([trt.TacticSource.CUBLAS_LT], 2),
+                ([trt.TacticSource.CUBLAS, trt.TacticSource.CUBLAS_LT], 3),
+            ]
+
+        if mod.version(trt.__version__) >= mod.version("8.4"):
+            TACTIC_SOURCES_CASES[0] = (None, 15)
+            TACTIC_SOURCES_CASES.extend(
+                [
+                    (
+                        [
+                            trt.TacticSource.CUDNN,
+                            trt.TacticSource.CUBLAS,
+                            trt.TacticSource.CUBLAS_LT,
+                            trt.TacticSource.EDGE_MASK_CONVOLUTIONS,
+                        ],
+                        15,
+                    )
+                ]
+            )
 
         @pytest.mark.parametrize("sources, expected", TACTIC_SOURCES_CASES)
         def test_tactic_sources(self, identity_builder_network, sources, expected):
@@ -407,14 +442,14 @@ class TestCreateConfig(object):
                     assert config.get_memory_pool_limit(pool_type) == pool_size
 
 
-class TestEngineBytesFromNetwork(object):
+class TestEngineBytesFromNetwork:
     def test_can_build(self, identity_network):
         loader = EngineBytesFromNetwork(identity_network)
         with loader() as serialized_engine:
             assert isinstance(serialized_engine, trt.IHostMemory)
 
 
-class TestEngineFromNetwork(object):
+class TestEngineFromNetwork:
     def test_defaults(self, identity_network):
         loader = EngineFromNetwork(identity_network)
         assert loader.timing_cache_path is None
@@ -482,14 +517,14 @@ class TestEngineFromNetwork(object):
             assert total_cache_size <= (const_foldable_cache_size + identity_cache_size)
 
 
-class TestBytesFromEngine(object):
+class TestBytesFromEngine:
     def test_serialize_engine(self, identity_network):
         with engine_from_network(identity_network) as engine:
             serialized_engine = bytes_from_engine(engine)
             assert isinstance(serialized_engine, bytes)
 
 
-class TestSaveEngine(object):
+class TestSaveEngine:
     def test_save_engine(self, identity_network):
         with util.NamedTemporaryFile() as outpath:
             engine_loader = SaveEngine(EngineFromNetwork(identity_network), path=outpath.name)
@@ -497,7 +532,7 @@ class TestSaveEngine(object):
                 assert is_file_non_empty(outpath.name)
 
 
-class TestOnnxLikeFromNetwork(object):
+class TestOnnxLikeFromNetwork:
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.2"), reason="Unsupported for TRT 7.1 and older")
     @pytest.mark.parametrize(
         "model_name", ["identity", "empty_tensor_expand", "const_foldable", "and", "scan", "dim_param", "tensor_attr"]

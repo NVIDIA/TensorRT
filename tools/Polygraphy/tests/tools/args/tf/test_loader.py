@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,16 +16,16 @@
 #
 
 import pytest
-from polygraphy.tools.args import ModelArgs, TfLoaderArgs
+from polygraphy.tools.args import ModelArgs, TfLoadArgs
 from tests.models.meta import TF_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
 
 tf = pytest.importorskip("tensorflow")
 
 
-class TestTfLoaderArgs(object):
+class TestTfLoaderArgs:
     def test_load_graph(self):
-        arg_group = ArgGroupTestHelper(TfLoaderArgs(), deps=[ModelArgs()])
+        arg_group = ArgGroupTestHelper(TfLoadArgs(), deps=[ModelArgs()])
         arg_group.parse_args([TF_MODELS["identity"].path, "--model-type=frozen"])
         graph, outputs = arg_group.load_graph()
 

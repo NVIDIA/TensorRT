@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,7 +28,7 @@ def meta(dtype):
     return TensorMetadata().add("X", dtype=dtype, shape=(4, 4)).add("Y", dtype=dtype, shape=(5, 5))
 
 
-class TestDataLoader(object):
+class TestDataLoader:
     @pytest.mark.parametrize("dtype", [np.int32, bool, np.float32, np.int64])
     def test_default_ranges(self, dtype):
         data_loader = DataLoader(input_metadata=meta(dtype))
@@ -140,7 +141,7 @@ class TestDataLoader(object):
         assert feed_dict["X"].shape == (3,)  # Treat as a normal tensor
 
 
-class TestDataLoaderCache(object):
+class TestDataLoaderCache:
     def test_can_cast_dtype(self):
         # Ensure that the data loader can only be used once
         def load_data():

@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,8 +25,9 @@ from polygraphy.backend.trt import (
     get_trt_logger,
     network_from_onnx_bytes,
 )
+from polygraphy.common import TensorMetadata
 from polygraphy.exception import PolygraphyException
-from tests.helper import is_file_non_empty, get_file_size
+from tests.helper import get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
 
 
@@ -48,7 +50,7 @@ def generate_data(num_batches):
         yield {"x": item}
 
 
-class TestCalibrator(object):
+class TestCalibrator:
     def check_calibrator_cleanup(self, calibrator):
         # Calibrator buffers should be freed after the build
         assert all([buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()])
@@ -85,6 +87,7 @@ class TestCalibrator(object):
             arr = v.numpy()
             assert arr.shape == (1, 1, 2, 2)
             assert np.all(arr == 1)
+        self.check_calibrator_cleanup(calibrator)
 
     def test_calibrator_data_and_ordering_correct(self):
         def generate_multidata(num_batches):
@@ -102,6 +105,7 @@ class TestCalibrator(object):
                 for index, ptr in enumerate(ptrs):
                     v = cuda.DeviceView(ptr, shape=(4, 5), dtype=np.float32)
                     assert np.all(v.numpy() == index)
+        self.check_calibrator_cleanup(calibrator)
 
     def test_calibrator_generator_data(self, identity_builder_network):
         builder, network = identity_builder_network
@@ -143,26 +147,18 @@ class TestCalibrator(object):
 
         config = builder.create_builder_config()
         config.set_flag(trt.BuilderFlag.INT8)
-        with Calibrator(generate_data(NUM_BATCHES)) as calibrator:
-            config.int8_calibrator = calibrator
+        calibrator = Calibrator(generate_data(NUM_BATCHES))
+        config.int8_calibrator = calibrator
 
-            if mod.version(trt.__version__) < mod.version("8.0"):
-                engine = builder.build_engine(network, config)
-            else:
-                with trt.Runtime(get_trt_logger()) as runtime:
-                    engine = runtime.deserialize_cuda_engine(builder.build_serialized_network(network, config))
+        if mod.version(trt.__version__) < mod.version("8.0"):
+            engine = builder.build_engine(network, config)
+        else:
+            with trt.Runtime(get_trt_logger()) as runtime:
+                engine = runtime.deserialize_cuda_engine(builder.build_serialized_network(network, config))
 
-            with engine:
-                assert engine
+        with engine:
+            assert engine
         self.check_calibrator_cleanup(calibrator)
-
-    def test_cannot_use_calibrator_without_activation(self):
-        def generate_data():
-            for item in [np.ones((1, 1, 2, 2), dtype=np.float32)]:
-                yield {"x": item}
-
-        calibrator = Calibrator(generate_data())
-        assert calibrator.get_batch(["x"]) is None
 
     def test_calibrator_with_path_name_cache(self, identity_builder_network):
         builder, network = identity_builder_network
@@ -240,3 +236,39 @@ class TestCalibrator(object):
         with pytest.raises(PolygraphyException):
             with engine_from_network((builder, network), create_config):
                 pass
+        self.check_calibrator_cleanup(calibrator)
+
+    @pytest.mark.parametrize(
+        "expected_meta,meta,should_pass",
+        [
+            (
+                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
+                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
+                True,
+            ),
+            (
+                TensorMetadata().add(name="input", dtype=np.float32, shape=(-1, None, 28, 28)),
+                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
+                True,
+            ),
+            # Wrong data type
+            (
+                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
+                TensorMetadata().add(name="input", dtype=np.float64, shape=(1, 3, 28, 28)),
+                False,
+            ),
+            # Wrong shape
+            (
+                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 3, 28, 28)),
+                TensorMetadata().add(name="input", dtype=np.float32, shape=(1, 2, 28, 28)),
+                False,
+            ),
+        ],
+    )
+    def test_calibrator_checks_input_metadata(self, expected_meta, meta, should_pass):
+        data = [{name: np.ones(shape=shape, dtype=dtype) for name, (dtype, shape) in meta.items()}]
+        calibrator = Calibrator(data)
+        calibrator.reset(expected_meta)
+
+        with calibrator:
+            assert (calibrator.get_batch(list(expected_meta.keys())) is not None) == should_pass

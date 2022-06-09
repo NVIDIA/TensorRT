@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +22,7 @@ from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
 
 
-class TestBasicCompareFunc(object):
+class TestSimpleCompareFunc:
     def test_can_compare_bool(self):
         iter_result0 = IterationResult(outputs={"output": np.zeros((4, 4), dtype=bool)})
         iter_result1 = IterationResult(outputs={"output": np.ones((4, 4), dtype=bool)})
@@ -208,7 +209,43 @@ class TestBasicCompareFunc(object):
 
     def test_invalid_error_stat(self):
         res0 = IterationResult(outputs={"output": np.array([0, 1, 2, 3], dtype=np.float32)})
-        res1 = IterationResult(outputs={"output": np.array((0.15, 1.25, 2.5, 3.75), dtype=np.float32)})
+        res1 = IterationResult(outputs={"output": np.array([0.15, 1.25, 2.5, 3.75], dtype=np.float32)})
 
         with pytest.raises(PolygraphyException, match="Invalid choice"):
             CompareFunc.simple(check_error_stat="invalid-stat")(res0, res1)
+
+    @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "elemwise"])
+    @pytest.mark.parametrize("val0, val1", [(np.nan, 0.15), (0.15, np.nan)])
+    def test_nans_always_fail(self, check_error_stat, val0, val1):
+        res0 = IterationResult(outputs={"output": np.array([val0], dtype=np.float32)})
+        res1 = IterationResult(outputs={"output": np.array([val1], dtype=np.float32)})
+
+        assert not CompareFunc.simple(check_error_stat=check_error_stat)(res0, res1)["output"]
+
+
+class TestIndicesCompareFunc:
+    @pytest.mark.parametrize(
+        "out0,out1,index_tolerance,expected",
+        [
+            ([0, 1, 2, 3], [0, 1, 2, 3], 0, True),
+            # Check that dictionaries work for index tolerance
+            ([0, 1, 2, 3], [0, 1, 2, 3], {"": 0}, True),
+            ([0, 1, 2, 3], [0, 1, 2, 3], {"output": 0}, True),
+            ([[0, 1], [0, 1], [0, 1]], [[0, 1], [0, 1], [0, 1]], 0, True),
+            ([1, 0, 2, 3], [0, 1, 2, 3], 0, False),
+            ([1, 0, 2, 3], [0, 1, 2, 3], 1, True),
+            ([0, 1, 2, 3], [0, 1, 3, 2], 1, True),
+            # Last 'index_tolerance' indices should be ignored.
+            ([1, 0, 2, 7], [0, 1, 2, 3], 0, False),
+            ([1, 0, 2, 7], [0, 1, 2, 3], 1, True),
+            ([[2, 3, 4], [5, 6, 9]], [[3, 2, 4], [5, 9, 6]], 0, False),
+            ([[2, 3, 4], [5, 6, 9]], [[3, 2, 4], [5, 9, 6]], 1, True),
+            ([0, 1, 2, 3, 4, 5, 6], [0, 3, 2, 1, 4, 5, 6], 0, False),
+            ([0, 1, 2, 3, 4, 5, 6], [0, 3, 2, 1, 4, 5, 6], 2, True),
+        ],
+    )
+    def test_index_tolerance(self, out0, out1, index_tolerance, expected):
+        res0 = IterationResult(outputs={"output": np.array(out0, dtype=np.int32)})
+        res1 = IterationResult(outputs={"output": np.array(out1, dtype=np.int32)})
+
+        assert CompareFunc.indices(index_tolerance=index_tolerance)(res0, res1)["output"] == expected

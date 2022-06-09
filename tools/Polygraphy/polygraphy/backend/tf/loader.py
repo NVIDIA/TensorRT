@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -77,7 +78,7 @@ class OptimizeGraph(BaseLoader):
 
             graphdef = sess.graph.as_graph_def()
             removed = tf.graph_util.remove_training_nodes(graphdef)
-            G_LOGGER.ultra_verbose("Removed nodes: {:}".format(removed))
+            G_LOGGER.ultra_verbose(f"Removed nodes: {removed}")
 
             for node in graphdef.node:
                 if node.op == "RefSwitch":
@@ -200,7 +201,7 @@ class GraphFromCkpt(BaseLoader):
         #
         # where "model" is the checkpoint name
         if not os.path.isdir(self.dir):
-            G_LOGGER.warning("Specified checkpoint directory: {:} does not look like a directory.".format(self.dir))
+            G_LOGGER.warning(f"Specified checkpoint directory: {self.dir} does not look like a directory.")
 
         if self.name is None:
             G_LOGGER.verbose("Checkpoint name was not explicitly provided, searching for `checkpoint` file")
@@ -208,10 +209,7 @@ class GraphFromCkpt(BaseLoader):
             if checkpoint is None:
                 ckpt_file_contents = '\nmodel_checkpoint_path: "model"\nall_model_checkpoint_paths: "model"\n'
                 G_LOGGER.critical(
-                    "Checkpoint directory: {:} does not contain a `checkpoint` file, and the checkpoint name was "
-                    "not provided. Please either create a checkpoint file with the contents:\n{:} "
-                    "\nWhere `model` is the name of the checkpoint, or explicitly provide the name with "
-                    "--ckpt, not including file extensions".format(self.dir, ckpt_file_contents)
+                    f"Checkpoint directory: {self.dir} does not contain a `checkpoint` file, and the checkpoint name was not provided. Please either create a checkpoint file with the contents:\n{ckpt_file_contents} \nWhere `model` is the name of the checkpoint, or explicitly provide the name with --ckpt, not including file extensions"
                 )
             input_checkpoint = checkpoint.model_checkpoint_path
         else:
@@ -271,15 +269,7 @@ class UseTfTrt(BaseLoader):
         precision_mode = "INT8" if self.int8 else precision_mode
 
         G_LOGGER.info(
-            "For TF-TRT, using outputs={:}, max_workspace_size_bytes={:}, max_batch_size={:}, "
-            "minimum_segment_size={:}, is_dynamic_op={:}, precision_mode={:}".format(
-                output_names,
-                self.max_workspace_size,
-                self.max_batch_size,
-                self.minimum_segment_size,
-                self.is_dynamic_op,
-                precision_mode,
-            )
+            f"For TF-TRT, using outputs={output_names}, max_workspace_size_bytes={self.max_workspace_size}, max_batch_size={self.max_batch_size}, minimum_segment_size={self.minimum_segment_size}, is_dynamic_op={self.is_dynamic_op}, precision_mode={precision_mode}"
         )
 
         graphdef = tf_trt.create_inference_graph(
@@ -297,7 +287,7 @@ class UseTfTrt(BaseLoader):
             if node.op == "TRTEngineOp":
                 engine = node.attr["serialized_segment"].s
                 segment_number += 1
-        G_LOGGER.info("Found {:} engines in TFTRT graph".format(segment_number))
+        G_LOGGER.info(f"Found {segment_number} engines in TFTRT graph")
 
         with tf.Graph().as_default() as graph:
             tf.import_graph_def(graphdef, name="")
@@ -376,7 +366,7 @@ class SaveGraph(BaseLoader):
         if self.path:
             util.save_file(graph.as_graph_def().SerializeToString(), dest=self.path)
         if self.tensorboard_dir:
-            G_LOGGER.info("Writing tensorboard events to {:}".format(self.tensorboard_dir))
+            G_LOGGER.info(f"Writing tensorboard events to {self.tensorboard_dir}")
             train_writer = tf.compat.v1.summary.FileWriter(self.tensorboard_dir)
             train_writer.add_graph(graph)
 
@@ -388,7 +378,7 @@ class SaveGraph(BaseLoader):
                     engine = node.attr["serialized_segment"].s
                     if self.engine_dir is not None:
                         util.save_file(
-                            contents=engine, dest=os.path.join(self.engine_dir, "segment-{:}".format(segment_number))
+                            contents=engine, dest=os.path.join(self.engine_dir, f"segment-{segment_number}")
                         )
                     segment_number += 1
 
@@ -429,7 +419,7 @@ class CreateConfig(BaseLoader):
         config = tf.compat.v1.ConfigProto(gpu_options=gpu_options)
         if self.use_xla:
             config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
-        G_LOGGER.verbose("Using gpu memory fraction: {:}, XLA: {:}".format(self.gpu_memory_fraction, self.use_xla))
+        G_LOGGER.verbose(f"Using gpu memory fraction: {self.gpu_memory_fraction}, XLA: {self.use_xla}")
         return config
 
 
@@ -463,7 +453,7 @@ class SessionFromGraph(BaseLoader):
         (graph, output_names), _ = util.invoke_if_callable(self.graph)
 
         with graph.as_default() as graph, tf.compat.v1.Session(graph=graph, config=config).as_default() as sess:
-            G_LOGGER.verbose("Using TensorFlow outputs: {:}".format(output_names))
+            G_LOGGER.verbose(f"Using TensorFlow outputs: {output_names}")
             G_LOGGER.extra_verbose("Initializing variables in TensorFlow Graph")
             sess.run(tf.compat.v1.initializers.global_variables())
             return sess, output_names

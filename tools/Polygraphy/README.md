@@ -35,8 +35,8 @@ Among other things, Polygraphy lets you:
 
 ## Installation
 
-**IMPORTANT**: **Polygraphy does *not* support Python 2.X.**
-    **All the instructions here assume you are using Python 3 or later.**
+**IMPORTANT**: **Polygraphy supports only Python 3.6 and later.**
+    **Before following the instructions below, please ensure you are using a supported version of Python.**
 
 
 ### Installing Prebuilt Wheels

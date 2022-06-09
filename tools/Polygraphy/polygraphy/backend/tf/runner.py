@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -67,7 +68,7 @@ class TfRunner(BaseRunner):
         return tf_util.get_input_metadata(self.sess.graph)
 
     def infer_impl(self, feed_dict):
-        G_LOGGER.extra_verbose("Received feed_dict: {:}".format(feed_dict))
+        G_LOGGER.extra_verbose(f"Received feed_dict: {feed_dict}")
         start = time.time()
         inference_outputs = self.sess.run(
             self.output_names, feed_dict=feed_dict, options=self.run_options, run_metadata=self.run_metadata
@@ -86,7 +87,7 @@ class TfRunner(BaseRunner):
 
             util.save_file(
                 contents=t1.generate_chrome_trace_format(),
-                dest=os.path.join(self.timeline_dir, "run-{:}".format(self.num_inferences)),
+                dest=os.path.join(self.timeline_dir, f"run-{self.num_inferences}"),
                 mode="w",
             )
         self.num_inferences += 1

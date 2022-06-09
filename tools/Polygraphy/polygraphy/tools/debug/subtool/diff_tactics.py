@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -82,7 +83,7 @@ class DiffTactics(Tool):
             for path in search_paths:
                 replay = try_load_replay(path)
                 if replay is None:
-                    G_LOGGER.verbose("{:} does not look like a tactic replay file, skipping.".format(path))
+                    G_LOGGER.verbose(f"{path} does not look like a tactic replay file, skipping.")
                     continue
 
                 replay_paths.append(path)
@@ -92,13 +93,13 @@ class DiffTactics(Tool):
 
         good_dir = util.default(args.good, os.path.join(args.dir, "good"))
         good_tactics, good_paths = load_tactics(good_dir)
-        G_LOGGER.info("Loaded {:} good tactic replays.".format(len(good_paths)))
-        G_LOGGER.verbose("Good tactic replays: {:}".format(good_paths))
+        G_LOGGER.info(f"Loaded {len(good_paths)} good tactic replays.")
+        G_LOGGER.verbose(f"Good tactic replays: {good_paths}")
 
         bad_dir = util.default(args.bad, os.path.join(args.dir, "bad"))
         bad_tactics, bad_paths = load_tactics(bad_dir)
-        G_LOGGER.info("Loaded {:} bad tactic replays.".format(len(bad_paths)))
-        G_LOGGER.verbose("Bad tactic replays: {:}".format(bad_paths))
+        G_LOGGER.info(f"Loaded {len(bad_paths)} bad tactic replays.")
+        G_LOGGER.verbose(f"Bad tactic replays: {bad_paths}")
 
         # Walk bad tactics and remove all the known good tactics.
         potential_bad_tactics = OrderedDict()
@@ -113,6 +114,6 @@ class DiffTactics(Tool):
             G_LOGGER.info("Found potentially bad tactics:")
             for name, algo_set in potential_bad_tactics.items():
                 algo_set_str = list(map(str, algo_set))
-                G_LOGGER.info("Layer: {:}\n\tAlgorithms: {:}".format(name, algo_set_str))
+                G_LOGGER.info(f"Layer: {name}\n\tAlgorithms: {algo_set_str}")
         else:
             G_LOGGER.info("Could not determine potentially bad tactics. Try generating more tactic replay files?")

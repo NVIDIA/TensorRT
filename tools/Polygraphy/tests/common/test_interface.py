@@ -1,11 +1,12 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +29,7 @@ def int_to_float():
     return IntToFloat()
 
 
-class TestTypedDict(object):
+class TestTypedDict:
     def test_wrong_type_set_item_value(self, int_to_float):
         with pytest.raises(PolygraphyException, match="Unsupported value type"):
             int_to_float[0] = "hi"
@@ -50,7 +51,7 @@ def ints():
     return Ints()
 
 
-class TestTypedList(object):
+class TestTypedList:
     def test_wrong_type_append(self, ints):
         with pytest.raises(PolygraphyException, match="Unsupported element type"):
             ints.append(1.0)
