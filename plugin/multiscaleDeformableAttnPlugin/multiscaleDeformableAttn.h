@@ -32,14 +32,13 @@
 #ifndef TRT_MULTISCALE_DEFORMABLE_ATTN_H
 #define TRT_MULTISCALE_DEFORMABLE_ATTN_H
 
-int ms_deform_attn_cuda_forward(cudaStream_t stream, const float* value, const int32_t* spatialShapes,
-    const int32_t* levelStartIndex, const float* samplingLoc, const float* attnWeight, float* output, int batch,
-    int mSpatialSize, int mNumHeads, int mChannels, int mNumLevels, int mNumQuery, int mNumPoint);
+int32_t ms_deform_attn_cuda_forward(cudaStream_t stream, float const* value, int32_t const* spatialShapes,
+    int32_t const* levelStartIndex, float const* samplingLoc, float const* attnWeight, float* output, int32_t batch,
+    int32_t mSpatialSize, int32_t mNumHeads, int32_t mChannels, int32_t mNumLevels, int32_t mNumQuery, int32_t mNumPoint);
 
-#if __CUDA_ARCH__ >= 530
-int ms_deform_attn_cuda_forward(cudaStream_t stream, const __half* value, const int32_t* spatialShapes,
-    const int32_t* levelStartIndex, const __half* samplingLoc, const __half* attnWeight, __half* output, int batch,
-    int mSpatialSize, int mNumHeads, int mChannels, int mNumLevels, int mNumQuery, int mNumPoint);
-#endif
+
+int32_t ms_deform_attn_cuda_forward(cudaStream_t stream, const __half* value, int32_t const* spatialShapes,
+    int32_t const* levelStartIndex, const __half* samplingLoc, const __half* attnWeight, __half* output, int32_t batch,
+    int32_t mSpatialSize, int32_t mNumHeads, int32_t mChannels, int32_t mNumLevels, int32_t mNumQuery, int32_t mNumPoint);
 
 #endif
