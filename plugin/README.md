@@ -27,7 +27,7 @@
 | [leakyReluPlugin](leakyReluPlugin) | LReLU_TRT | 1 |
 | [multilevelCropAndResizePlugin](multilevelCropAndResizePlugin) | MultilevelCropAndResize_TRT | 1 |
 | [multilevelProposeROI](multilevelProposeROI) | MultilevelProposeROI_TRT | 1 |
-| [multiscaleDeformableAttnPlugin](multiscaleDeformableAttnPlugin) | DMHA | 1 |
+| [multiscaleDeformableAttnPlugin](multiscaleDeformableAttnPlugin) | MultiscaleDeformableAttnPlugin_TRT | 1 |
 | [nmsPlugin](nmsPlugin) | NMS_TRT | 1 |
 | [normalizePlugin](normalizePlugin) | Normalize_TRT | 1 |
 | [nvFasterRCNN](nvFasterRCNN) | RPROI_TRT | 1 |
