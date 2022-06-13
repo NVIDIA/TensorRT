@@ -48,6 +48,7 @@ EXAMPLES = [
     ("07_creating_a_model_with_the_layer_api", [Artifact("model.onnx")]),
     ("08_replacing_a_subgraph", [Artifact("model.onnx"), Artifact("replaced.onnx")]),
     ("09_shape_operations_with_the_layer_api", [Artifact("model.onnx")]),
+    ("10_dynamic_batch_size", [Artifact("model.onnx"), Artifact("dynamic.onnx")]),
 ]
 
 # Extract any ``` blocks from the README
