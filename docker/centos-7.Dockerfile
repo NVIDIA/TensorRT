@@ -82,7 +82,7 @@ RUN cd /tmp && \
     rm ./cmake-3.14.4-Linux-x86_64.sh
 
 # Download NGC client
-RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip && unzip ngccli_cat_linux.zip && chmod u+x ngc && rm ngccli_cat_linux.zip ngc.md5 && echo "no-apikey\nascii\n" | ngc config set
+RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip && unzip ngccli_cat_linux.zip && chmod u+x ngc-cli/ngc && rm ngccli_cat_linux.zip ngc-cli.md5 && echo "no-apikey\nascii\n" | ngc-cli/ngc config set
 
 RUN rm /usr/bin/python && ln -s /usr/bin/python3 /usr/bin/python
 
