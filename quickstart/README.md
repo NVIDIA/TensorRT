@@ -9,4 +9,5 @@ Introductory notebooks in TensorRT QuickStartGuide
 - [Understanding TensorRT Runtimes](IntroNotebooks/5.%20Understanding%20TensorRT%20Runtimes.ipynb)
 
 Tutorials corresponding to TensorRT QuickStartGuide
-- Semantic Segmentation using TensorRT - [C++ sample and Python notebook](./SemanticSegmentation/) 
+- Semantic Segmentation using TensorRT - [C++ sample and Python notebook](./SemanticSegmentation/)
+- Optimize with TensorRT, Deploy with Triton - [Walkthrough and Python code](./deploy_to_triton/) 
