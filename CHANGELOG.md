@@ -37,7 +37,7 @@ Key Features and Updates:
   - Use axis0 as default for deconv.
   - [#1939](https://github.com/NVIDIA/TensorRT/issues/1939) - Fixed path in `classification_flow` example.
 
-- Plugins
+- Plugin enhancements
   - Added [Disentangled attention plugin](plugin/disentangledAttentionPlugin), `DisentangledAttention_TRT`, to support DeBERTa model.
   - Added [Multiscale deformable attention plugin](plugin/multiscaleDeformableAttnPlugin), `MultiscaleDeformableAttnPlugin_TRT`, to support DDETR model.
   - Added new plugins: [decodeBbox3DPlugin](plugin/decodeBbox3DPlugin), [pillarScatterPlugin](plugin/pillarScatterPlugin), and [voxelGeneratorPlugin](plugin/voxelGeneratorPlugin).
