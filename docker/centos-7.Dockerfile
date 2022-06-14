@@ -89,6 +89,7 @@ RUN rm /usr/bin/python && ln -s /usr/bin/python3 /usr/bin/python
 # Set environment and working directory
 ENV TRT_LIBPATH /usr/lib/x86_64-linux-gnu
 ENV TRT_OSSPATH /workspace/TensorRT
+ENV PATH="${PATH}:/usr/local/bin/ngc-cli"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 # Use devtoolset-8 as default compiler
 ENV PATH="/opt/rh/devtoolset-8/root/bin:${PATH}"

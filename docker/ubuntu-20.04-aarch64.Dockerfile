@@ -78,6 +78,7 @@ RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_arm64.zip 
 # Set environment and working directory
 ENV TRT_LIBPATH /usr/lib/aarch64-linux-gnu/
 ENV TRT_OSSPATH /workspace/TensorRT
+ENV PATH="${PATH}:/usr/local/bin/ngc-cli"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 WORKDIR /workspace
 
