@@ -4,7 +4,7 @@ onnxruntime==1.8.1
 -f https://download.pytorch.org/whl/cu113/torch_stable.html
 torch==1.10.2+cu113
 torchvision==0.11.3
-Pillow==8.3.2
+Pillow
 numpy
 pycuda<2021.1
 pytest
