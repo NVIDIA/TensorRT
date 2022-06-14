@@ -1,5 +1,67 @@
 # TensorRT OSS Release Changelog
 
+## [8.4.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-1) - 2022-06-17
+
+TensorRT OSS release corresponding to TensorRT 8.4.1.5 GA release.
+- Updates since [TensorRT 8.2.1 GA release](https://github.com/NVIDIA/TensorRT/releases/tag/8.2.1).
+- Please refer to the [TensorRT 8.4.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-1) for more information.
+
+Key Features and Updates:
+
+- Samples enhancements
+  - Added [Detectron2 Mask R-CNN R50-FPN](samples/python/detectron2/README.md) python sample
+  - Added a [quickstart guide](quickstart/deploy_to_triton) for NVidia Triton deployment workflow.
+  - Added onnx export script for [sampleOnnxMnistCoordConvAC](samples/sampleOnnxMnistCoordConvAC)
+  - Removed `sampleNMT`.
+  - Removed usage of deprecated TensorRT APIs in samples.
+
+- EfficientDet sample
+  - Added support for EfficientDet Lite and AdvProp models.
+  - Added dynamic batch support.
+  - Added mixed precision engine builder.
+
+- HuggingFace transformer demo
+  - Added BART model.
+  - Performance speedup of GPT-2 greedy search using GPU implementation.
+  - Fixed GPT2 onnx export failure due to 2G file size limitation.
+  - Extended Megatron LayerNorm plugins to support larger hidden sizes.
+  - Added performance benchmarking mode.
+  - Enable tf32 format by default.
+
+- `demoBERT` enhancements
+  - Add `--duration` flag to perf benchmarking script.
+  - Fixed import of `nvinfer_plugins` library in demoBERT on Windows.
+
+- Torch-QAT toolkit
+  - `quant_bert.py` module removed. It is now upstreamed to [HuggingFace QDQBERT](https://huggingface.co/docs/transformers/model_doc/qdqbert).
+  - Use axis0 as default for deconv.
+  - [#1939](https://github.com/NVIDIA/TensorRT/issues/1939) - Fixed path in `classification_flow` example.
+
+- Plugins
+  - Added [Disentangled attention plugin](plugin/disentangledAttentionPlugin), `DisentangledAttention_TRT`, to support DeBERTa model.
+  - Added [Multiscale deformable attention plugin](plugin/multiscaleDeformableAttnPlugin), `MultiscaleDeformableAttnPlugin_TRT`, to support DDETR model.
+  - Added new plugins: [decodeBbox3DPlugin](plugin/decodeBbox3DPlugin), [pillarScatterPlugin](plugin/pillarScatterPlugin), and [voxelGeneratorPlugin](plugin/voxelGeneratorPlugin).
+  - Refactored [EfficientNMS plugin](plugin/efficientNMSPlugin) to support [TF-TRT](https://github.com/tensorflow/tensorrt) and implicit batch mode.
+  - `fp16` support for `pillarScatterPlugin`.
+
+- Build containers
+  - Updated default cuda versions to `11.6.2`.
+  - [CentOS Linux 8 has reached End-of-Life](https://www.centos.org/centos-linux-eol/) on Dec 31, 2021. The corresponding container has been removed from TensorRT-OSS.
+  - Install `devtoolset-8` for updated g++ versions in CentOS7 container.
+
+- Tooling enhancements
+  - Added [Tensorflow Quantization Toolkit](tools/tensorflow-quantization) v0.1.0 for Quantization-Aware-Training of Tensorflow 2.x Keras models.
+  - Added [TensorRT Engine Explorer](tools/experimental/trt-engine-explorer/README.md) v0.1.2 for inspecting TensorRT engine plans and associated inference profiling data.
+  - Updated [Polygraphy](tools/Polygraphy) to v0.38.0.
+  - Updated [onnx-graphsurgeon](tools/onnx-graphsurgeon) to v0.3.19.
+
+- `trtexec` enhancements
+  - Added `--layerPrecisions` and `--layerOutputTypes` flags for specifying layer-wise precision and output type constraints.
+  - Added `--memPoolSize` flag to specify the size of workspace as well as the DLA memory pools via a unified interface. Correspondingly the `--workspace` flag has been deprecated.
+  - "End-To-End Host Latency" metric has been removed. Use the “Host Latency” metric instead. For more information, refer to [Benchmarking Network](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#trtexec-benchmark) section in the TensorRT Developer Guide.
+  - Use `enqueueV2()` instead of `enqueue()` when engine has explicit batch dimensions.
+
+
 ## [22.06](https://github.com/NVIDIA/TensorRT/releases/tag/22.06) - 2022-06-08
 ### Added
 - None
