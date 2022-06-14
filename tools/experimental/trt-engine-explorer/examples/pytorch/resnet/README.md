@@ -9,7 +9,7 @@ The example uses PyTorch,  TorchVision and Nvidia's [PyTorch Quantization Toolki
 python3 -m pip install -r requirements.txt
 ```
 
-### Introduction
+### Description
 This example walks you through the process of optimizing a TensorRT engine created from QAT ResNet18.
 File `resnet_example.py` contains code to generate several variations of QAT ResNet18, each one performing better than the previous.
 

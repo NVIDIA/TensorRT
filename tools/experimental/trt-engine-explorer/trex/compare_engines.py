@@ -31,6 +31,7 @@ from .plotting import *
 from .interactive import *
 from .misc import stack_dicts
 from .activations import create_activations
+from .engine_plan import summary_dict
 
 
 def get_plans_names(plans: List[EnginePlan]):
@@ -201,8 +202,18 @@ def compare_engines_overview(plans: List[EnginePlan]):
 
 def compare_engines_summaries_tbl(plans: List[EnginePlan], orientation: str='vertical'):
     """Display a tabular comparison of several engine plans."""
-    summary_dicts = [plan.summary_dict() for plan in plans]
-    merged_summaries = stack_dicts(summary_dicts, empty_placeholder="")
+
+    merged_summaries = {}
+    summary_dicts_list = (
+        [summary_dict(plan) for plan in plans],
+        [plan.performance_summary for plan in plans],
+        [plan.device_properties for plan in plans],
+        [plan.builder_cfg for plan in plans]
+    )
+
+    for d in summary_dicts_list:
+        merged_summaries.update(stack_dicts(d, empty_placeholder=""))
+
     if orientation == 'vertical':
         df = pd.DataFrame.from_dict(
             merged_summaries, orient='index', columns=get_plans_names(plans))

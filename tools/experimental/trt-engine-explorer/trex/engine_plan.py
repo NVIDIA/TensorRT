@@ -114,34 +114,8 @@ class EnginePlan:
         compute_summary(self)
         self.device_properties = get_device_properties(profiling_metadata_file)
         self.performance_summary = get_performance_summary(profiling_metadata_file)
+        self.builder_cfg = get_builder_config(build_metadata_file)
         assert self._df is not None, f"Failed parsing plan file {graph_file}"
-
-    def summary_dict(self):
-        """Create a dictionary of important attributes of the engine plan."""
-        MB_1 = 1024 * 1024
-        bindings = self.get_bindings()
-
-        d = {
-            "Inputs": f"{bindings[0]}",
-            "Average time": f"{self.total_runtime:.3f} ms",
-            "Layers": f"{len(self.df)}",
-            "Weights": f"{self.total_weights_size / MB_1 :.1f} MB",
-            "Activations": f"{self.total_act_size/ MB_1 :.1f} MB",
-        }
-        d.update(self.device_properties)
-        d.update(self.performance_summary)
-        return d
-
-    def print_summary(self):
-        d = self.summary_dict()
-        for k,v in d.items():
-            print(f"{k}: {v}")
-
-    def summary(self):
-        return self.print_summary()
-
-    def as_dataframe(self):
-        return self._df
 
     @property
     def df(self):
@@ -162,3 +136,33 @@ class EnginePlan:
             inputs += [inp for inp in layer.inputs if inp.name in self.bindings]
             outputs += [outp for outp in layer.outputs if outp.name in self.bindings]
         return inputs, outputs
+
+    def summary(self):
+        return print_summary(self)
+
+
+def summary_dict(plan: EnginePlan):
+    """Create a dictionary of important attributes of the engine plan."""
+    MB_1 = 1024 * 1024
+    bindings = plan.get_bindings()
+
+    d = {
+        "Inputs": f"{bindings[0]}",
+        "Average time": f"{plan.total_runtime:.3f} ms",
+        "Layers": f"{len(plan.df)}",
+        "Weights": f"{plan.total_weights_size / MB_1 :.1f} MB",
+        "Activations": f"{plan.total_act_size/ MB_1 :.1f} MB",
+    }
+    return d
+
+
+def print_summary(plan: EnginePlan):
+    def print_dict(d: Dict):
+        for k,v in d.items():
+            print(f"\t{k}: {v}")
+    print("Model:")
+    print_dict(summary_dict(plan))
+    print("Device Properties:")
+    print_dict(plan.device_properties)
+    print("Performance Summary:")
+    print_dict(plan.performance_summary)

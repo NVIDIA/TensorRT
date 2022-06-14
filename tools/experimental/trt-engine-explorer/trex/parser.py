@@ -75,22 +75,31 @@ def read_timing_file(timing_json_file: str):
         return latencies_list
 
 
-def read_perf_metadata_file(metadata_file: str, group: str):
+def read_perf_metadata_file(metadata_file: str, section: str):
     with open(metadata_file) as json_file:
         metadata = read_json(json_file)
-        return metadata[group]
+        return metadata[section]
 
 
-def get_device_properties(metadata_file) -> Dict:
+def get_device_properties(metadata_file: str) -> Dict:
     try:
         return read_perf_metadata_file(metadata_file, 'device_information')
     except (FileNotFoundError, TypeError):
         return {}
 
 
-def get_performance_summary(metadata_file) -> Dict:
+def get_performance_summary(metadata_file:str) -> Dict:
     try:
         return read_perf_metadata_file(metadata_file, 'performance_summary')
+    except (FileNotFoundError, TypeError):
+        return {}
+
+
+def get_builder_config(metadata_file:str) -> Dict:
+    try:
+        d = read_perf_metadata_file(metadata_file, 'model_options')
+        d.update(read_perf_metadata_file(metadata_file, 'build_options'))
+        return d
     except (FileNotFoundError, TypeError):
         return {}
 
@@ -110,6 +119,7 @@ def import_graph_file(graph_file: str):
         return raw_layers
 
     def convert_deconv(raw_layers: List) -> List:
+        """Distinguish between convolution and convolution-transpose (deconvolution)"""
         for raw_layer in raw_layers:
             try:
                 is_deconv = (

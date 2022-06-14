@@ -48,7 +48,7 @@ def test_summary(plan):
     assert len(plan.layers) == 72
     assert plan.total_weights_size == 3469760
     assert plan.total_act_size == 16629344
-    d = plan.summary_dict()
+    d = summary_dict(plan)
     assert d["Inputs"] == "[input1: [1, 3, 224, 224]xFP32 NCHW]"
     assert d["Average time"] == "0.470 ms"
     assert d["Layers"] == "72"
