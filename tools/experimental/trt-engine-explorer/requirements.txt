@@ -1,7 +1,9 @@
 setuptools # for qgrid
 wheel # for qgrid
+protobuf==3.16.0
+onnx==1.11.0
 numpy
-pandas
+pandas==1.1.5
 plotly
 qgrid
 graphviz
@@ -13,5 +15,4 @@ ipyfilechooser
 jupyterlab
 jupyter-dash
 pytest
-dtale
-onnx
+dtale==2.2.0

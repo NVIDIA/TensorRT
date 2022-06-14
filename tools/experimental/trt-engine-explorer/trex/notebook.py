@@ -59,8 +59,11 @@ def display_df_dtale(
     precision: int=4):
     """Display a Pandas dataframe using a dtale widget"""
     d = dtale.show(
-        df, drop_index=True, allow_cell_edits=False,
-        precision=precision, nan_display=nan_display)
+        df,
+        drop_index=True,
+        allow_cell_edits=False,
+        precision=precision,
+        nan_display=nan_display)
     if range_highlights is not None:
         d.update_settings(range_highlights=range_highlights, background_mode='range')
     display(d)

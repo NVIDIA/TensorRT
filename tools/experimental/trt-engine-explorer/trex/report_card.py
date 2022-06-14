@@ -83,6 +83,14 @@ def report_card_perf_overview(plan: EnginePlan):
         color='output_precision', colormap=precision_colormap,
         xaxis_title="Layer")
 
+    output_precision_per_layer = partial(
+        plotly_bar2,
+        plan.df,
+        values_col='latency.avg_time',
+        names_col='Name',
+        color='output_precision', colormap=precision_colormap,
+        xaxis_title="Layer")
+
     latency_distribution = partial(
         plotly_hist,
         plan.df,

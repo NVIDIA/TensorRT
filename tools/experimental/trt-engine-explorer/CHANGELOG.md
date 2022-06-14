@@ -2,7 +2,7 @@
 
 Dates are in YYYY-MM-DD format.
 
-## v0.1.1 (2022-06-01)
+## v0.1.2 (2022-06-01)
 - Graph rendering:
   - Add timing information to engine graph nodes.
   - Change layer coloring scheme.

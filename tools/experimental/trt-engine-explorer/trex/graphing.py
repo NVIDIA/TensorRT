@@ -69,7 +69,7 @@ class RegionGenerations:
 
         # Create region generations.
 
-        # Each time we switch between C events to P events we create a new
+        # Each time we switch between C events and P events we create a new
         # Region generation.
         regions_gens = {}
         for region, region_evts in story.items():

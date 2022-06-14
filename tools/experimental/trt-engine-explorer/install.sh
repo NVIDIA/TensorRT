@@ -16,6 +16,16 @@
 # limitations under the License.
 #
 
+#
+# TREx installation script.
+#
+# Usage:
+#   $ source install.sh
+#
+
+
+sudo apt install graphviz
+sudo apt install virtualenv
 python3 -m virtualenv env_trex
 source env_trex/bin/activate
 python3 -m pip install -e .

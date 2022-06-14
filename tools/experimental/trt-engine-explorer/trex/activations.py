@@ -21,6 +21,8 @@ This file contains the Activation class which abstracts plan Region views.
 
 
 import numpy as np
+from typing import Dict
+import pandas as pd
 
 
 # This dictionary compresses JSON's long format description strings.
@@ -59,7 +61,7 @@ _regionFormatDict = {
 
 class Activation:
     """Convenience class wrapping activation regions."""
-    def __init__(self, raw_dict):
+    def __init__(self, raw_dict: Dict):
         def parse_tensor_info(desc):
             if 'Int8' in desc:
                 precision = 'INT8'
@@ -76,6 +78,9 @@ class Activation:
             elif 'Bool' in desc:
                 precision = 'BOOL'
                 data_size = 4
+            elif desc == "Unknown format":
+                precision = 'Unknown'
+                data_size = 0
             else:
                 raise ValueError(f"Uknown precision {desc}")
             return precision, data_size
@@ -83,7 +88,7 @@ class Activation:
         self.name = raw_dict['Name']
         self.shape = raw_dict['Dimensions']
         format = raw_dict['Format/Datatype'].replace('.', '')
-        self.format = _regionFormatDict[format]
+        self.format = _regionFormatDict.get(format,"Unknown format")
         self.precision, self.data_size = parse_tensor_info(self.format)
         self.size_bytes = np.prod(self.shape) * self.data_size
 
@@ -97,7 +102,8 @@ class Activation:
     def __repr__(self):
         return f"{self.name}: {str(self.shape)}x{self.format}"
 
-def create_activations(layer):
+
+def create_activations(layer: pd.Series):
     inputs = [Activation(tensor) for tensor in layer.Inputs]
     outputs = [Activation(tensor) for tensor in layer.Outputs]
     return inputs, outputs

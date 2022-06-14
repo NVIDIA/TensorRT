@@ -15,14 +15,24 @@
 # limitations under the License.
 #
 
+"""
+Use this script to:
+1. Build a TensorRT engine from an ONNX file.
+2. Profile an engine plan file.
+3. Generate JSON files for exploration with trex.
+4. Draw an SVG graph from an engine.
 
-import cmd
+Note: this script requires Graphviz for function `draw_engine`.
+Graphviz can be installed manually:
+    $ sudo apt-get --yes install graphviz
+"""
+
+
 import os
 import json
 import argparse
 import subprocess
-from typing import List
-from device_info import device_info
+from typing import List, Dict, Tuple
 from parse_trtexec_log import parse_build_log, parse_profiling_log
 
 
@@ -33,9 +43,12 @@ def run_trtexec(trt_cmdline: List[str], build_log_file: str):
         log_str = None
         try:
             log = subprocess.run(
-                trt_cmdline, check=True,
+                trt_cmdline,
+                check=True,
                 # Redirection
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True)
             success = True
             log_str = log.stdout
         except subprocess.CalledProcessError as err:
@@ -47,7 +60,12 @@ def run_trtexec(trt_cmdline: List[str], build_log_file: str):
     return success
 
 
-def build_engine_cmd(args, onnx_path: str, engine_path: str, timing_cache_path: str):
+def build_engine_cmd(
+    args: Dict,
+    onnx_path: str,
+    engine_path: str,
+    timing_cache_path: str
+) -> Tuple[List[str], str]:
     cmd_line = ["trtexec",
         "--verbose",
         # nvtxMode=verbose is the same as profilingVerbosity=detailed, but backward-compatible
@@ -64,7 +82,10 @@ def build_engine_cmd(args, onnx_path: str, engine_path: str, timing_cache_path: 
     return cmd_line, build_log_fname
 
 
-def build_engine(args, timing_cache_path: str) -> bool:
+def build_engine(
+    args: Dict,
+    timing_cache_path: str
+) -> bool:
     def generate_build_metadata(log_file: str, output_json: str):
         """Parse trtexec engine build log file and write to a JSON file"""
         build_metadata = parse_build_log(log_file)
@@ -99,7 +120,11 @@ def build_engine(args, timing_cache_path: str) -> bool:
     return success
 
 
-def profile_engine_cmd(args, engine_path:str, timing_cache_path: str):
+def profile_engine_cmd(
+    args: Dict,
+    engine_path:str,
+    timing_cache_path: str
+):
     profiling_json_fname = f"{engine_path}.profile.json"
     graph_json_fname = f"{engine_path}.graph.json"
     timing_json_fname = f"{engine_path}.timing.json"
@@ -126,7 +151,7 @@ def profile_engine_cmd(args, engine_path:str, timing_cache_path: str):
     return cmd_line, profile_log_fname
 
 
-def get_engine_path(args, add_suffix: bool):
+def get_engine_path(args: Dict, add_suffix: bool):
     if add_suffix:
         onnx_path = args.input
         onnx_fname = os.path.basename(onnx_path)
@@ -137,7 +162,11 @@ def get_engine_path(args, add_suffix: bool):
     return engine_path
 
 
-def profile_engine(args, timing_cache_path:str, add_suffix: bool) -> bool:
+def profile_engine(
+    args: Dict,
+    timing_cache_path:str,
+    add_suffix: bool
+) -> bool:
     def generate_profiling_metadata(log_file: str, output_json: str):
         """Parse trtexec profiling session log file and write to a JSON file"""
         profiling_metadata = parse_profiling_log(log_file)
@@ -164,8 +193,11 @@ def profile_engine(args, timing_cache_path:str, add_suffix: bool) -> bool:
     return success
 
 
-def generate_engine_svg(args, add_suffix: bool) -> bool:
+def generate_engine_svg(args: Dict, add_suffix: bool) -> bool:
+    if args.print_only:
+        return
     engine_path = get_engine_path(args, add_suffix)
+
     if add_suffix:
         graph_json_fname = f"{engine_path}.graph.json"
     else:
@@ -173,6 +205,7 @@ def generate_engine_svg(args, add_suffix: bool) -> bool:
 
     try:
         from draw_engine import draw_engine
+        print(f"Generating graph diagram: {graph_json_fname}")
         draw_engine(graph_json_fname)
     except ModuleNotFoundError:
         print("Can't generate plan SVG graph because some package is not installed")
@@ -185,7 +218,12 @@ def create_artifacts_directory(path: str):
         pass
 
 
-def process_engine(args, build: bool, profile: bool, draw: bool) -> bool:
+def process_engine(
+    args: Dict,
+    build: bool,
+    profile: bool,
+    draw: bool
+) -> bool:
     timing_cache_path = "./timing.cache"
     success = True
     if build:
@@ -193,7 +231,7 @@ def process_engine(args, build: bool, profile: bool, draw: bool) -> bool:
     if profile and success:
         success = profile_engine(args, timing_cache_path, add_suffix=build)
     if draw and success:
-        success = generate_engine_svg(args, add_suffix=not build)
+        success = generate_engine_svg(args, add_suffix=build)
     print(f"Artifcats directory: {args.outdir}")
     return success
 
@@ -223,12 +261,12 @@ def parse_args():
     return args
 
 
-def append_trtexec_args(trt_args, cmd_line):
+def append_trtexec_args(trt_args: Dict, cmd_line: List[str]):
     for arg in trt_args:
         cmd_line.append(f"--{arg}")
 
 
-def get_subcmds(args):
+def get_subcmds(args: Dict):
     all = (not args.build_engine and
            not args.profile_engine and
            not args.draw_engine)
