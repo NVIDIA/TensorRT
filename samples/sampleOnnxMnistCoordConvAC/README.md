@@ -127,7 +127,7 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
     python3 mnist_coord_conv_train.py --save-onnx
     python3 modify_onnx_ac.py
     ``` 
-    The first line trains a model for the MNIST dataset and saves it as an ONNX model. The second line modifies the ONNX model structure to make it work with TensorRT for building the MNIST engine.
+    The first line trains a model for the MNIST dataset and saves it as an ONNX model. The second line modifies the ONNX model structure to make it work with TensorRT for building the MNIST engine. Please use torch 1.10.2 to run these scripts.
 
 3.  Run the sample to build and run the MNIST engine from the ONNX model.
     ```
