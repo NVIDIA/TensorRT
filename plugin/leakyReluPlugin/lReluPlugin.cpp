@@ -129,6 +129,7 @@ IPluginV2* LReLU::clone() const noexcept
 
 LReluPluginCreator::LReluPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("negSlope", nullptr, PluginFieldType::kFLOAT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();

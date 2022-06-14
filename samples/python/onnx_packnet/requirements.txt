@@ -1,6 +1,8 @@
 -f https://download.pytorch.org/whl/torch_stable.html
-torchvision==0.5.0; platform_machine=="x86_64" and sys.platform=="linux"
-torch==1.4.0+cpu; platform_machine=="x86_64" and sys.platform=="linux"
-onnx==1.8.0
+torchvision==0.10.0
+torch==1.9.0+cpu
+onnx==1.9.0
 numpy
 pycuda<2021.1
+--extra-index-url https://pypi.ngc.nvidia.com
+onnx-graphsurgeon

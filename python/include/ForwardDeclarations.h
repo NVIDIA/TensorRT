@@ -14,7 +14,18 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef TRT_PYTHON_FORWARD_DECLARATIONS_H
+#define TRT_PYTHON_FORWARD_DECLARATIONS_H
+
+// clang-format off
+// Hack for missing declarations on Windows.
+// These headers must be included before pybind11.h as some dependencies are missing.
+#ifdef _MSC_VER
+#include <cstdint>
+using ssize_t = int64_t;
+#endif // _MSC_VER
+// clang-format on
+
 #include <pybind11/pybind11.h>
 
 #include "NvCaffeParser.h"
@@ -70,3 +81,5 @@ void bindOnnx(py::module& m);
 void bindUff(py::module& m);
 void bindCaffe(py::module& m);
 } // namespace tensorrt
+
+#endif // TRT_PYTHON_FORWARD_DECLARATIONS_H

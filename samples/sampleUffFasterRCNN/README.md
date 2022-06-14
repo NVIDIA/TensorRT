@@ -177,12 +177,12 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
 
    To run the sample in FP32 mode:
     ```bash
-    sample_uff_fasterRCNN --datadir $TRT_DATADIR/faster-rcnn -W 480 -H 272 -I 000456.ppm
+    ./sample_uff_fasterRCNN --datadir $TRT_DATADIR/faster-rcnn -W 480 -H 272 -I 000456.ppm
     ```
 
    To run the sample in INT8 mode:
     ```bash
-    sample_uff_fasterRCNN --datadir $TRT_DATADIR/faster-rcnn -i -W 480 -H 272 -I 000456.ppm
+    ./sample_uff_fasterRCNN --datadir $TRT_DATADIR/faster-rcnn -i -W 480 -H 272 -I 000456.ppm
     ```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

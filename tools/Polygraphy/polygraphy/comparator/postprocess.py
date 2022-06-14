@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy import mod
+from polygraphy import mod, util
 
 np = mod.lazy_import("numpy")
 
@@ -47,17 +47,8 @@ class PostprocessFunc(object):
         """
         # Top-K implementation.
         def topk(iter_result):
-            def get_k(name):
-                if isinstance(k, int):
-                    return k
-                elif name in k:
-                    return k[name]
-                elif "" in k:
-                    return k[""]
-                return None
-
             for name, output in iter_result.items():
-                k_val = get_k(name)
+                k_val = util.value_or_from_dict(k, name)
                 if k_val:
                     indices = np.argsort(-output, axis=axis, kind="stable")
                     axis_len = indices.shape[axis]

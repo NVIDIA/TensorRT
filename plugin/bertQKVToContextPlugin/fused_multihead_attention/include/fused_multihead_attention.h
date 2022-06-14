@@ -213,17 +213,14 @@ public:
     {
     }
 
-    void loadXMMAKernels()
+    void loadXMMAKernels(uint32_t smVersion)
     {
-        if (!mFunctions.empty())
-        {
-            return;
-        }
-
         for (uint32_t i = 0; i < mKernelMetaCount; ++i)
         {
             const auto& kernelMeta = mKernelMeta[i];
-            if (kernelMeta.mSM == mSM && kernelMeta.mDataType == mDataType)
+            const auto kernelKey = hashID(kernelMeta);
+            if (kernelMeta.mSM == smVersion && kernelMeta.mDataType == mDataType
+                && mFunctions.find(kernelKey) == mFunctions.end())
             {
                 CUmodule hmod{0};
                 auto findModuleIter = mModules.find(kernelMeta.mCubin);
@@ -240,17 +237,40 @@ public:
                 FusedMultiHeadAttentionKernelInfo funcInfo;
                 funcInfo.mMetaInfoIndex = i;
                 cuErrCheck(mDriver.cuModuleGetFunction(&funcInfo.mDeviceFunction, hmod, kernelMeta.mFuncName), mDriver);
-                if (kernelMeta.mSharedMemBytes >= 48 * 1024)
+                const uint32_t DEFAULT_SMEM_SIZE{48 * 1024};
+                if (kernelMeta.mSharedMemBytes >= DEFAULT_SMEM_SIZE)
                 {
-                    cuErrCheck(mDriver.cuFuncSetAttribute(funcInfo.mDeviceFunction,
-                                   CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, kernelMeta.mSharedMemBytes),
-                        mDriver);
+                    if (mDriver.cuFuncSetAttribute(funcInfo.mDeviceFunction,
+                            CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, kernelMeta.mSharedMemBytes)
+                        != CUDA_SUCCESS)
+                    {
+                        // some chip may not have enough shared memory to launch the kernel
+                        continue;
+                    }
                 }
-                mFunctions.insert(std::make_pair(hashID(kernelMeta), funcInfo));
-                int s = static_cast<int>(kernelMeta.mS);
+                mFunctions.insert({kernelKey, funcInfo});
+                const int s = static_cast<int>(kernelMeta.mS);
                 if (mValidSequences.find(s) == mValidSequences.end())
+                {
                     mValidSequences.insert(s);
+                }
             }
+        }
+    }
+
+    void loadXMMAKernels()
+    {
+        if (!mFunctions.empty())
+        {
+            return;
+        }
+
+        loadXMMAKernels(mSM);
+
+        // sm_86 chips prefer sm_86 sass, but can also use sm_80 sass if sm_86 not exist.
+        if (mSM != kSM_80 && mSM / 10U == 8)
+        {
+            loadXMMAKernels(kSM_80);
         }
     }
 

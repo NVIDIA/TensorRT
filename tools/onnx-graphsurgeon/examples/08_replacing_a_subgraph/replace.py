@@ -15,7 +15,6 @@
 #
 
 import onnx_graphsurgeon as gs
-import numpy as np
 import onnx
 
 

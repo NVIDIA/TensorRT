@@ -133,7 +133,7 @@ struct InstanceNormFwdContext
 struct InstanceNormFwdParams
 {
     // The input/output tensors.
-    void* gmem_src;
+    const void* gmem_src;
     void* gmem_dst;
     // The bias/scale.
     float* gmem_bias;

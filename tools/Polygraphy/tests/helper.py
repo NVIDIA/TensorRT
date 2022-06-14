@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 import os
+import time
 
 
 def get_file_size(path):
@@ -26,3 +27,16 @@ def is_file_empty(path):
 
 def is_file_non_empty(path):
     return not is_file_empty(path)
+
+
+def time_func(func, warm_up=10, iters=100):
+    for _ in range(warm_up):
+        func()
+
+    total = 0
+    for _ in range(iters):
+        start = time.time()
+        func()
+        end = time.time()
+        total += end - start
+    return total / float(iters)

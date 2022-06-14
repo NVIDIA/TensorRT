@@ -36,7 +36,7 @@ def Calibrator(
             arrays, Polygraphy DeviceViews, or GPU pointers.
 
             In case you don't know details about the inputs ahead of time, you can access the
-            `input_metadata` property in your data loader, which will be set to an `TensorMetadata` instance.
+            `input_metadata` property in your data loader, which will be set to an ``TensorMetadata`` instance.
             Note that this does not work for generators or lists.
 
             The number of calibration batches is controlled by the number of items supplied
@@ -48,7 +48,7 @@ def Calibrator(
                 By default, the calibration cache is not saved.
         BaseClass (type):
                 The type of calibrator to inherit from.
-                Defaults to trt.IInt8MinMaxCalibrator.
+                Defaults to ``trt.IInt8MinMaxCalibrator``.
         batch_size (int):
                 [DEPRECATED] The size of each batch provided by the data loader.
         quantile (float):
@@ -62,7 +62,7 @@ def Calibrator(
         algo (trt.CalibrationAlgoType):
                 Calibration algorithm to use for ``trt.IInt8Calibrator``.
                 Has no effect for other calibrator types.
-                Defaults to trt.CalibrationAlgoType.MINMAX_CALIBRATION.
+                Defaults to ``trt.CalibrationAlgoType.MINMAX_CALIBRATION``.
     """
     BaseClass = util.default(BaseClass, trt.IInt8MinMaxCalibrator)
 

@@ -17,6 +17,7 @@
 #ifndef TENSORRT_SAFE_COMMON_H
 #define TENSORRT_SAFE_COMMON_H
 
+#include "NvInferRuntimeCommon.h"
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -46,15 +47,15 @@ inline std::shared_ptr<T> infer_object(T* obj)
     return std::shared_ptr<T>(obj);
 }
 
-inline uint32_t elementSize(DataType t)
+inline uint32_t elementSize(nvinfer1::DataType t)
 {
     switch (t)
     {
-    case DataType::kINT32:
-    case DataType::kFLOAT: return 4;
-    case DataType::kHALF: return 2;
-    case DataType::kINT8: return 1;
-    case DataType::kBOOL: return 1;
+    case nvinfer1::DataType::kINT32:
+    case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kHALF: return 2;
+    case nvinfer1::DataType::kINT8: return 1;
+    case nvinfer1::DataType::kBOOL: return 1;
     }
     return 0;
 }

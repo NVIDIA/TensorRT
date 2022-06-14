@@ -66,14 +66,7 @@ pluginStatus_t permuteData_gpu(
 }
 
 // permuteData LAUNCH CONFIG
-typedef pluginStatus_t (*pdFunc)(cudaStream_t,
-                              const int,
-                              const int,
-                              const int,
-                              const int,
-                              bool,
-                              const void*,
-                              void*);
+typedef pluginStatus_t (*pdFunc)(cudaStream_t, const int, const int, const int, const int, bool, const void*, void*);
 
 struct pdLaunchConfig
 {
@@ -96,19 +89,10 @@ struct pdLaunchConfig
 };
 
 static std::array<pdLaunchConfig, 2> pdLCOptions = {
-  pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>),
-  pdLaunchConfig(DataType::kHALF, permuteData_gpu<__half>)
-};
+    pdLaunchConfig(DataType::kFLOAT, permuteData_gpu<float>), pdLaunchConfig(DataType::kHALF, permuteData_gpu<__half>)};
 
-pluginStatus_t permuteData(cudaStream_t stream,
-                        const int nthreads,
-                        const int num_classes,
-                        const int num_data,
-                        const int num_dim,
-                        const DataType DT_DATA,
-                        bool confSigmoid,
-                        const void* data,
-                        void* new_data)
+pluginStatus_t permuteData(cudaStream_t stream, const int nthreads, const int num_classes, const int num_data,
+    const int num_dim, const DataType DT_DATA, bool confSigmoid, const void* data, void* new_data)
 {
     pdLaunchConfig lc = pdLaunchConfig(DT_DATA);
     for (unsigned i = 0; i < pdLCOptions.size(); ++i)

@@ -17,15 +17,16 @@
 #ifndef TRT_SAMPLE_INFERENCE_H
 #define TRT_SAMPLE_INFERENCE_H
 
+#include "sampleReporting.h"
+#include "sampleUtils.h"
+
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "NvInfer.h"
-
-#include "sampleReporting.h"
-#include "sampleUtils.h"
+#include "NvInferSafeRuntime.h"
 
 namespace sample
 {
@@ -37,7 +38,28 @@ struct InferenceEnvironment
     std::vector<TrtUniquePtr<nvinfer1::IExecutionContext>> context;
     std::vector<std::unique_ptr<Bindings>> bindings;
     bool error{false};
+
+    std::unique_ptr<IHostMemory> serializedEngine;
+
+    bool safe{false};
+    std::unique_ptr<nvinfer1::safe::ICudaEngine> safeEngine;
+    std::vector<std::unique_ptr<nvinfer1::safe::IExecutionContext>> safeContext;
+
+    template <class ContextType>
+    inline ContextType* getContext(int32_t streamIdx);
 };
+
+template <>
+inline nvinfer1::IExecutionContext* InferenceEnvironment::getContext(int32_t streamIdx)
+{
+    return context[streamIdx].get();
+}
+
+template <>
+inline nvinfer1::safe::IExecutionContext* InferenceEnvironment::getContext(int32_t streamIdx)
+{
+    return safeContext[streamIdx].get();
+}
 
 //!
 //! \brief Set up contexts and bindings for inference
@@ -52,7 +74,13 @@ bool timeDeserialize(InferenceEnvironment& iEnv);
 //!
 //! \brief Run inference and collect timing, return false if any error hit during inference
 //!
-bool runInference(const InferenceOptions& inference, InferenceEnvironment& iEnv, int device, std::vector<InferenceTrace>& trace);
+bool runInference(
+    const InferenceOptions& inference, InferenceEnvironment& iEnv, int32_t device, std::vector<InferenceTrace>& trace);
+
+//!
+//! \brief Get layer information of the engine.
+//!
+std::string getLayerInformation(const InferenceEnvironment& iEnv, nvinfer1::LayerInformationFormat format);
 
 } // namespace sample
 

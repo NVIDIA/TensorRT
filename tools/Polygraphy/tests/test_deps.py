@@ -121,7 +121,9 @@ class TestAutoinstallDeps(object):
 
         virtualenv_with_poly.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
         POLYGRAPHY_BIN = os.path.join(ROOT_DIR, "bin", "polygraphy")
-        output = virtualenv_with_poly.run(["python3", POLYGRAPHY_BIN] + cmd, capture=True)
+        cmd = ["python3", POLYGRAPHY_BIN] + cmd
+        print("Running: {:}".format(" ".join(cmd)))
+        output = virtualenv_with_poly.run(cmd, capture=True)
         print(output)
         assert "is required, but not installed. Attempting to install now" in output
 

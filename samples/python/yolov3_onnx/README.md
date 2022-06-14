@@ -39,7 +39,7 @@ For specific software versions, see the [TensorRT Installation Guide](https://do
 ## Running the sample
 
 The data directory needs to be specified (either via `-d /path/to/data` or environment varaiable `TRT_DATA_DIR`)
-when running these scripts. An error will be thrown if not.
+when running these scripts. An error will be thrown if not. Taking `TRT_DATA_DIR` approach in following example.
 
 1.  Create an ONNX version of YOLOv3 with the following command.
     ```sh

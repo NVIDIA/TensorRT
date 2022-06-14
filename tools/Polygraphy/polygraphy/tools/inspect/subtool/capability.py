@@ -24,7 +24,7 @@ from polygraphy.tools.base import Tool
 common_backend = mod.lazy_import("polygraphy.backend.common")
 gs = mod.lazy_import("onnx_graphsurgeon")
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
-tools_util = mod.lazy_import("polygraphy.tools.util")
+onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
 trt = mod.lazy_import("tensorrt")
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
 trt_util = mod.lazy_import("polygraphy.backend.trt.util")
@@ -37,7 +37,7 @@ class UnsupportedNodeDict(TypedDict(lambda: str, lambda: dict)):
     while trying to parse them, and the range of node indices for the subgraphs
     where these errors were encountered.
 
-    More specifically, it is an `OrderedDict[str, Dict[str, List[Tuple[int]]]]`.
+    More specifically, it is an ``OrderedDict[str, Dict[str, List[Tuple[int]]]]``.
     """
 
     def add(self, op, err_string, node_range):
@@ -107,8 +107,8 @@ def save_subgraph(onnx_save_args, graph, start, end, prefix="", use_tmp_file=Fal
     in_dict = {inp.name: inp for node in subgraph_nodes for inp in node.inputs}
 
     # Guess graph inputs/outputs by checking all output tensor names against all input tensor names, and vice-versa.
-    subgraph_inputs = tools_util.meta_from_gs_tensors([in_dict[k] for k in in_dict if k not in out_dict])
-    subgraph_outputs = tools_util.meta_from_gs_tensors([out_dict[k] for k in out_dict if k not in in_dict])
+    subgraph_inputs = onnx_util.meta_from_gs_tensors([in_dict[k] for k in in_dict if k not in out_dict])
+    subgraph_outputs = onnx_util.meta_from_gs_tensors([out_dict[k] for k in out_dict if k not in in_dict])
 
     subgraph = gs.export_onnx(onnx_backend.extract_subgraph(graph, subgraph_inputs, subgraph_outputs))
 
@@ -176,7 +176,7 @@ class Capability(Tool):
             G_LOGGER.info("Graph is fully supported by TensorRT; Will not generate subgraphs.")
             return
 
-        parent_graph = gs.import_onnx(self.arg_groups[OnnxLoaderArgs].load_onnx())
+        parent_graph = onnx_backend.gs_from_onnx(self.arg_groups[OnnxLoaderArgs].load_onnx())
 
         def partition(nodelists, offset):
             """

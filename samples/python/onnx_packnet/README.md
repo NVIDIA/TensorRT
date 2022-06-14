@@ -30,34 +30,14 @@ This sample converts the Pytorch graph into ONNX and uses ONNX-parser included i
 
 ## Prerequisites
 
-Dependencies required for this sample
-
-1. Install the dependencies for Python: `python3 -m pip install -r requirements.txt`
-
-    NOTE: The included scripts do not currently work with Torch 1.5.0. Thus, it is recommended that you use 1.4.0, which is the default version in the requirements file.
-
-2. [ONNX-GraphSurgeon](https://github.com/NVIDIA/TensorRT/tree/master/tools/onnx-graphsurgeon)
+Install the dependencies using: `python3 -m pip install -r requirements.txt`
 
 
 ## Running the sample
 
 ### Preparing packnet
 
-[Packnet](https://github.com/TRI-ML/packnet-sfm) can be either downloaded or cloned.
-
-**Download**
-
-Download the source (see the "Download Sample Data" section of [the general setup guide](../README.md))
-, unzip the downloaded file and setup `PYTHONPATH`.
-
-```
-unzip $TRT_DATA_DIR/samples/python/onnx_packnet/packnet-sfm-0.1.2.zip -d $PWD
-export PYTHONPATH=$PWD/packnet-sfm-0.1.2
-```
-
-**Clone**
-
-Clone the [packnet](https://github.com/TRI-ML/packnet-sfm) repository and set `PYTHONPATH` variable accordingly.
+Clone the [packnet](https://github.com/TRI-ML/packnet-sfm) repository and update `PYTHONPATH`.
 
 ```
 git clone https://github.com/TRI-ML/packnet-sfm.git packnet-sfm
@@ -112,6 +92,7 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+August 2021: Update sample to work with latest torch version
 June 2020: Initial release of this sample
 
 # Known issues

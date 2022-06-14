@@ -179,6 +179,11 @@ def skipln(prefix, config, init_dict, network, input_tensor, skip, bias=None):
     layer = network.add_plugin_v2(skipln_inputs, skipln_plug)
     return layer
 
+# Custom FC plugin is faster than native FC only on older architectures.
+def use_custom_fc():
+    cc = pycuda.autoinit.device.compute_capability()
+    return cc[0] * 10 + cc[1] <= 70
+
 def custom_fc(config, network, input_tensor, out_dims, W):
     pf_out_dims = trt.PluginField("out_dims", np.array([out_dims], dtype=np.int32), trt.PluginFieldType.INT32)
     pf_W = trt.PluginField("W", W.numpy(), trt.PluginFieldType.FLOAT32)
@@ -219,9 +224,13 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
         if config.use_qat:
             dr_fc_aout = init_dict[prefix + 'attention_output_add_local_input_quantizer_amax']
             set_output_range(attention_out_fc, dr_fc_aout)
-    else:
+    elif use_custom_fc():
         W_aoutT = init_dict[prefix + W_AOUT + "_notrans"]
         attention_out_fc = custom_fc(config, network, attention_heads, hidden_size, W_aoutT)
+    else:
+        W_aout = init_dict[prefix + W_AOUT]
+        attention_out_fc = network.add_fully_connected(attention_heads, hidden_size, W_aout, B_aout)
+        B_aout = None
 
     skiplayer = skipln(prefix + "attention_output_layernorm_",config, init_dict, network, attention_out_fc.get_output(0), input_tensor, B_aout)
     attention_ln = skiplayer.get_output(0)
@@ -275,9 +284,13 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
 
         if not config.use_int8_skipln:
             out_dense.set_output_type(0, trt.DataType.HALF if config.use_fp16 else trt.DataType.FLOAT)
-    else:
+    elif use_custom_fc():
         W_loutT = init_dict[prefix + W_LOUT + "_notrans"]
         out_dense = custom_fc(config, network, intermediate_act, hidden_size, W_loutT)
+    else:
+        W_lout = init_dict[prefix + W_LOUT]
+        out_dense = network.add_fully_connected(intermediate_act, hidden_size, W_lout, B_lout)
+        B_lout = None
 
     if config.use_qat:
         dr_fc_out = init_dict[prefix + 'output_add_local_input_quantizer_amax']
@@ -326,31 +339,32 @@ def squad_output(prefix, config, init_dict, network, input_tensor):
 
 def emb_layernorm(builder, network, config, weights_dict, builder_config, sequence_lengths, batch_sizes):
     # int8 only support some of the sequence length, we dynamic on sequence length is not allowed.
-    input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1, -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
-    segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1, -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
-    input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1, -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
+    input_ids = network.add_input(name="input_ids", dtype=trt.int32, shape=(-1 if len(batch_sizes) > 1 else batch_sizes[0], -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
+    segment_ids = network.add_input(name="segment_ids", dtype=trt.int32, shape=(-1 if len(batch_sizes) > 1 else batch_sizes[0], -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
+    input_mask = network.add_input(name="input_mask", dtype=trt.int32, shape=(-1 if len(batch_sizes) > 1 else batch_sizes[0], -1 if len(sequence_lengths) > 1 else sequence_lengths[0]))
 
     # Specify profiles for the batch sizes we're interested in.
     # Make sure the profile also works for all sizes not covered by the previous profile.
 
-    for batch_size in sorted(batch_sizes):
-        if len(sequence_lengths) == 1:
-            profile = builder.create_optimization_profile()
-            min_shape = (1, sequence_lengths[0])
-            shape = (batch_size, sequence_lengths[0])
-            profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
-            profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
-            profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
-            builder_config.add_optimization_profile(profile)
-        else:
-            for sequence_length in sorted(sequence_lengths):
+    if len(sequence_lengths) > 1 or len(batch_sizes) > 1:
+        for batch_size in sorted(batch_sizes):
+            if len(sequence_lengths) == 1:
                 profile = builder.create_optimization_profile()
-                min_shape = (1, sequence_length)
-                shape = (batch_size, sequence_length)
+                min_shape = (1, sequence_lengths[0])
+                shape = (batch_size, sequence_lengths[0])
                 profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
                 profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
                 profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
                 builder_config.add_optimization_profile(profile)
+            else:
+                for sequence_length in sorted(sequence_lengths):
+                    profile = builder.create_optimization_profile()
+                    min_shape = (1, sequence_length)
+                    shape = (batch_size, sequence_length)
+                    profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
+                    profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
+                    profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
+                    builder_config.add_optimization_profile(profile)
 
     wbeta = trt.PluginField("bert_embeddings_layernorm_beta", weights_dict["bert_embeddings_layernorm_beta"].numpy(), trt.PluginFieldType.FLOAT32)
     wgamma = trt.PluginField("bert_embeddings_layernorm_gamma", weights_dict["bert_embeddings_layernorm_gamma"].numpy(), trt.PluginFieldType.FLOAT32)

@@ -21,13 +21,14 @@
 
 namespace nmtSample
 {
-TextWriter::TextWriter(std::shared_ptr<std::ostream> textOnput, Vocabulary::ptr vocabulary)
+TextWriter::TextWriter(std::shared_ptr<std::ostream>& textOnput, Vocabulary::ptr& vocabulary)
     : mOutput(textOnput)
     , mVocabulary(vocabulary)
 {
 }
 
-void TextWriter::write(const int* hOutputData, int actualOutputSequenceLength, int actualInputSequenceLength)
+void TextWriter::write(
+    const int32_t* hOutputData, int32_t actualOutputSequenceLength, int32_t actualInputSequenceLength)
 {
     // if clean and handle BPE outputs is required
     *mOutput << DataWriter::generateText(actualOutputSequenceLength, hOutputData, mVocabulary) << "\n";

@@ -3,6 +3,17 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.3.13 (2021-09-21)
+### Added
+- `Graph.tensors()` will now display a warning when duplicate tensors are detected in the graph, even if `check_duplicates=False`.
+    As before, when `check_duplicates=True`, it will throw an exception in such cases.
+
+
+## v0.3.12 (2021-08-24)
+### Added
+- Added support for `Cast` elision in `fold_constants()`.
+
+
 ## v0.3.11 (2021-07-14)
 ### Changed
 - Updated `fold_constants()` so that it no longer fails if a shape folding pass fails when `error_ok` is `True`.

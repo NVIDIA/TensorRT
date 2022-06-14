@@ -16,7 +16,8 @@
 
 import tensorrt as trt
 from polygraphy import util
-from polygraphy.backend.common.loader import InvokeFromScript
+from polygraphy.backend.common import InvokeFromScript
+from polygraphy.backend.trt import create_network
 from tests.models.meta import ONNX_MODELS
 from tests.tools.common import run_polygraphy_template
 
@@ -42,3 +43,25 @@ class TestTrtNetwork(object):
                 assert isinstance(builder, trt.Builder)
                 assert isinstance(network, trt.INetworkDefinition)
                 assert isinstance(parser, trt.OnnxParser)
+
+
+class TestTrtConfig(object):
+    def test_no_opts(self):
+        with util.NamedTemporaryFile("w+", suffix=".py") as template:
+            run_polygraphy_template(["trt-config", "-o", template.name])
+
+            builder, network = create_network()
+            create_config = InvokeFromScript(template.name, "load_config")
+            with builder, network, create_config(builder, network) as config:
+                assert isinstance(config, trt.IBuilderConfig)
+
+    def test_opts_basic(self):
+        with util.NamedTemporaryFile("w+", suffix=".py") as template:
+            run_polygraphy_template(["trt-config", "--fp16", "--int8", "-o", template.name])
+
+            builder, network = create_network()
+            create_config = InvokeFromScript(template.name, "load_config")
+            with builder, network, create_config(builder, network) as config:
+                assert isinstance(config, trt.IBuilderConfig)
+                assert config.get_flag(trt.BuilderFlag.FP16)
+                assert config.get_flag(trt.BuilderFlag.INT8)

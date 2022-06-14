@@ -15,20 +15,11 @@
 #
 
 from polygraphy import mod
-from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER
 
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
+onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
 gs = mod.lazy_import("onnx_graphsurgeon")
-
-
-@mod.export()
-def meta_from_gs_tensors(tensors):
-    """Get TensorMetadata from a list of ONNX-GraphSurgeon tensors"""
-    meta = TensorMetadata()
-    for tensor in tensors:
-        meta.add(tensor.name, tensor.dtype, tensor.shape)
-    return meta
 
 
 @mod.export()
@@ -41,11 +32,11 @@ def override_input_shapes(graph, user_input_metadata):
     """
     # We can leverage extract_subgraph if we make sure all the current graph inputs are preserved.
     # We need to be careful to preserve the order of graph inputs here.
-    input_metadata = meta_from_gs_tensors(graph.inputs)
+    input_metadata = onnx_util.meta_from_gs_tensors(graph.inputs)
     input_metadata.update(user_input_metadata)
     graph = onnx_backend.extract_subgraph(graph, input_metadata)
 
-    G_LOGGER.info("Overriding input shapes to:\n{:}".format(meta_from_gs_tensors(graph.inputs)))
+    G_LOGGER.info("Overriding input shapes to:\n{:}".format(onnx_util.meta_from_gs_tensors(graph.inputs)))
 
     # Have to unset intermediate shapes as they may cause problems.
     tensors = graph.tensors()
@@ -54,11 +45,3 @@ def override_input_shapes(graph, user_input_metadata):
             tensor.shape = None
 
     return graph
-
-
-@mod.export()
-def set_shapes_from_layerwise_meta(graph, layerwise_meta):
-    for tensor in graph.tensors().values():
-        if isinstance(tensor, gs.Variable) and tensor.name in layerwise_meta:
-            tensor.shape = layerwise_meta[tensor.name].shape
-            tensor.dtype = layerwise_meta[tensor.name].dtype

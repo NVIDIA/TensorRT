@@ -16,7 +16,7 @@
 #
 
 """
-This script loads the TensorRT engine built by `build_and_run.py` and then runs it.
+This script loads the TensorRT engine built by `build_and_run.py` and runs inference.
 """
 import numpy as np
 from polygraphy.backend.common import BytesFromPath

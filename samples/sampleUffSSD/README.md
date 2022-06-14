@@ -77,7 +77,7 @@ The TensorFlow graph has some operations like `Assert` and `Identity` which can 
 The generated network has an input node called `Input`, and the output node is given the name `MarkOutput_0` by the UFF converter. These nodes are registered by the UFF Parser in the sample.
 
 ```
-parser->registerInput("Input", DimsCHW(3, 300, 300),
+parser->registerInput("Input", Dims3(3, 300, 300),
 UffInputOrder::kNCHW);  
 parser->registerOutput("MarkOutput_0");  
 ```  
@@ -225,18 +225,18 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 	1. Copy the TensorFlow protobuf file (`frozen_inference_graph.pb`) from the downloaded directory in the previous step to the working directory (for example `$TRT_OSSPATH/samples/opensource/sampleUffSSD/`).
 
 	2. Run the following command for the conversion.
-	```bash
-    convert-to-uff ssd_inception_v2_coco_2017_11_17/frozen_inference_graph.pb -O NMS -p config.py
-    ```
+        ```bash
+        convert-to-uff ssd_inception_v2_coco_2017_11_17/frozen_inference_graph.pb -O NMS -p config.py
+        ```
 
 		This saves the converted `.uff` file in the same directory as the input with the name `frozen_inference_graph.pb.uff`.
 
 		The `config.py` script specifies the preprocessing operations necessary for the SSD TensorFlow graph. The plugin nodes and plugin parameters used in the `config.py` script should match the registered plugins in TensorRT.
 
 	3. Copy the converted `.uff` file to the data directory and rename it to `sample_ssd_relu6.uff $TRT_DATADIR/ssd/sample_ssd_relu6.uff`.
-	```bash
-    mv ./ssd_inception_v2_coco_2017_11_17/frozen_inference_graph.uff $TRT_DATADIR/ssd/sample_ssd_relu6.uff
-	```
+        ```bash
+        mv ./ssd_inception_v2_coco_2017_11_17/frozen_inference_graph.uff $TRT_DATADIR/ssd/sample_ssd_relu6.uff
+        ```
 
 5. The sample also requires a `labels.txt` file with a list of all labels used to train the model. The labels file for this network is `$TRT_DATADIR/ssd/ssd_coco_labels.txt`.
 
@@ -247,17 +247,17 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 
 2. Run the sample to perform object detection and localization.
 
-	To run the sample in FP32 mode:
-	```bash
-    sample_uff_ssd --datadir=$TRT_DATADIR/ssd
+    To run the sample in FP32 mode:
+    ```bash
+    ./sample_uff_ssd --datadir=$TRT_DATADIR/ssd
     ```
 
-	To run the sample in INT8 mode:
-	```bash
-    sample_uff_ssd sample_uff_ssd --datadir=$TRT_DATADIR/ssd --int8
+    To run the sample in INT8 mode:
+    ```bash
+    ./sample_uff_ssd sample_uff_ssd --datadir=$TRT_DATADIR/ssd --int8
     ```
 
-	**NOTE:** To run the network in INT8 mode, refer to `BatchStreamPPM.h` for details on how
+    **Note:** To run the network in INT8 mode, refer to `BatchStreamPPM.h` for details on how
 calibration can be performed. Currently, we require a file called `list.txt`, with a list of all PPM images for calibration in the `$TRT_DATADIR/ssd/` folder. The PPM images to be used for calibration can also reside in the same folder.
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

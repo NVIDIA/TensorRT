@@ -56,12 +56,17 @@ class ModelArgs(BaseArgs):
         def is_trt(self):
             return self in ModelArgs.ModelType.TRT_TYPES
 
-    def __init__(self, model_required=False, inputs="--inputs", model_type=None):
+    def __init__(self, model_required=False, inputs="--inputs", model_type=None, inputs_doc=None):
         super().__init__()
         self._model_required = model_required
         self._inputs = inputs
         # If model type is provided, it means the tool only supports a single type of model.
         self._model_type = model_type
+        self._inputs_doc = util.default(
+            inputs_doc,
+            "Model input(s) and their shape(s). "
+            "Used to determine shapes to use while generating input data for inference",
+        )
 
     def add_to_parser(self, parser):
         model_args = parser.add_argument_group("Model", "Options for the model")
@@ -81,10 +86,9 @@ class ModelArgs(BaseArgs):
             model_args.add_argument(
                 self._inputs.replace("inputs", "input") + "-shapes",
                 self._inputs,
-                help="Model input(s) and their shape(s). Generally, this is used to determine inference-time input shapes, "
-                "or override dynamic shapes set in the model. Format: {arg_name}-shapes <name>:<shape>. "
+                help="{:}. Format: {arg_name}-shapes <name>:<shape>. "
                 "For example: {arg_name}-shapes image:[1,3,224,224] other_input:[10]".format(
-                    arg_name=self._inputs.replace("inputs", "input")
+                    self._inputs_doc, arg_name=self._inputs.replace("inputs", "input")
                 ),
                 nargs="+",
                 default=None,
@@ -104,7 +108,7 @@ class ModelArgs(BaseArgs):
                 if file_ext in ext_mapping:
                     return ext_mapping[file_ext]
 
-            runners = util.default(args_util.get(args, "runners"), [])
+            runners = args_util.get(args, "runners", default=[])
             if args_util.get(args, "ckpt") or os.path.isdir(args.model_file):
                 return "ckpt"
             elif "tf" in runners or "trt_legacy" in runners:

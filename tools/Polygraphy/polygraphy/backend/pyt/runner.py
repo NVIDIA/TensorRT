@@ -16,7 +16,7 @@
 import time
 from collections import OrderedDict
 
-from polygraphy import func, mod, util
+from polygraphy import mod, util
 from polygraphy.backend.base import BaseRunner
 
 torch = mod.lazy_import("torch")
@@ -31,8 +31,8 @@ class PytRunner(BaseRunner):
     def __init__(self, model, input_metadata, output_names, name=None):
         """
         Args:
-            model (Callable() -> torch.nn.Module):
-                    A model loader that returns a torch.nn.Module or subclass.
+            model (Union[torch.nn.Module, Callable() -> torch.nn.Module]):
+                    A torch.nn.Module or subclass or a callable that returns one.
             input_metadata (TensorMetadata): Mapping of input names to their data types and shapes.
             output_names (List[str]):
                     A list of output names of the model. This information is used by the
@@ -52,6 +52,9 @@ class PytRunner(BaseRunner):
         self.model, _ = util.invoke_if_callable(self._model)
         self.model.eval()
 
+    def get_input_metadata_impl(self):
+        return self.input_metadata
+
     def infer_impl(self, feed_dict):
         with torch.no_grad():
             inputs = [
@@ -69,7 +72,3 @@ class PytRunner(BaseRunner):
 
     def deactivate_impl(self):
         del self.model
-
-    @func.constantmethod
-    def get_input_metadata_impl(self):
-        return self.input_metadata

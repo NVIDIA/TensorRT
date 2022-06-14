@@ -20,7 +20,8 @@
 
 namespace nmtSample
 {
-std::string DataWriter::generateText(int sequenceLength, const int* currentOutputData, Vocabulary::ptr vocabulary)
+std::string DataWriter::generateText(
+    int32_t sequenceLength, const int32_t* currentOutputData, Vocabulary::ptr vocabulary)
 {
     // if clean and handle BPE outputs is required
     std::string delimiter = "@@";
@@ -28,9 +29,9 @@ std::string DataWriter::generateText(int sequenceLength, const int* currentOutpu
     std::stringstream sentence;
     std::string word("");
     const char* wordDelimiter = "";
-    for (int i = 0; i < sequenceLength; ++i)
+    for (int32_t i = 0; i < sequenceLength; ++i)
     {
-        int id = currentOutputData[i];
+        int32_t id = currentOutputData[i];
         if (id != vocabulary->getEndSequenceId())
         {
             std::string token = vocabulary->getToken(id);

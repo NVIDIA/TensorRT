@@ -32,9 +32,10 @@ namespace nmtSample
 class TextReader : public DataReader
 {
 public:
-    TextReader(std::shared_ptr<std::istream> textInput, Vocabulary::ptr vocabulary);
+    TextReader(std::shared_ptr<std::istream>& textInput, Vocabulary::ptr& vocabulary);
 
-    int read(int samplesToRead, int maxInputSequenceLength, int* hInputData, int* hActualInputSequenceLengths) override;
+    int32_t read(int32_t samplesToRead, int32_t maxInputSequenceLength, int32_t* hInputData,
+        int32_t* hActualInputSequenceLengths) override;
 
     void reset() override;
 

@@ -15,7 +15,7 @@
  */
 #ifndef TRT_L_RELU_PLUGIN_H
 #define TRT_L_RELU_PLUGIN_H
-#include "NvInfer.h"
+#include "NvInferPlugin.h"
 #include "kernel.h"
 #include "plugin.h"
 #include <cassert>

@@ -33,9 +33,10 @@ namespace nmtSample
 class TextWriter : public DataWriter
 {
 public:
-    TextWriter(std::shared_ptr<std::ostream> textOnput, Vocabulary::ptr vocabulary);
+    TextWriter(std::shared_ptr<std::ostream>& textOnput, Vocabulary::ptr& vocabulary);
 
-    void write(const int* hOutputData, int actualOutputSequenceLength, int actualInputSequenceLength) override;
+    void write(
+        const int32_t* hOutputData, int32_t actualOutputSequenceLength, int32_t actualInputSequenceLength) override;
 
     void initialize() override;
 

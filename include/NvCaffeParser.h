@@ -156,8 +156,8 @@ public:
     //!
     //! \see nvcaffeparser1::IBlobNameToTensor
     //!
-    virtual const IBlobNameToTensor* parseBuffers(const char* deployBuffer, std::size_t deployLength,
-        const char* modelBuffer, std::size_t modelLength, nvinfer1::INetworkDefinition& network,
+    virtual const IBlobNameToTensor* parseBuffers(const uint8_t* deployBuffer, std::size_t deployLength,
+        const uint8_t* modelBuffer, std::size_t modelLength, nvinfer1::INetworkDefinition& network,
         nvinfer1::DataType weightType) noexcept
         = 0;
 

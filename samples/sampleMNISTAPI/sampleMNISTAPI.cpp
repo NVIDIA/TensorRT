@@ -133,7 +133,8 @@ bool SampleMNISTAPI::build()
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+    const auto explicitBatchFlag = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatchFlag));
     if (!network)
     {
         return false;
@@ -153,11 +154,11 @@ bool SampleMNISTAPI::build()
 
     ASSERT(network->getNbInputs() == 1);
     auto inputDims = network->getInput(0)->getDimensions();
-    ASSERT(inputDims.nbDims == 3);
+    ASSERT(inputDims.nbDims == 4);
 
     ASSERT(network->getNbOutputs() == 1);
     auto outputDims = network->getOutput(0)->getDimensions();
-    ASSERT(outputDims.nbDims == 3);
+    ASSERT(outputDims.nbDims == 4);
 
     return true;
 }
@@ -174,7 +175,7 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
 {
     // Create input tensor of shape { 1, 1, 28, 28 }
     ITensor* data = network->addInput(
-        mParams.inputTensorNames[0].c_str(), DataType::kFLOAT, Dims3{1, mParams.inputH, mParams.inputW});
+        mParams.inputTensorNames[0].c_str(), DataType::kFLOAT, Dims4{1, 1, mParams.inputH, mParams.inputW});
     ASSERT(data);
 
     // Create scale layer with default power/shift and specified scale parameter.
@@ -228,7 +229,6 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
     network->markOutput(*prob->getOutput(0));
 
     // Build engine
-    builder->setMaxBatchSize(mParams.batchSize);
     config->setMaxWorkspaceSize(16_MiB);
     if (mParams.fp16)
     {
@@ -281,7 +281,7 @@ bool SampleMNISTAPI::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& build
 bool SampleMNISTAPI::infer()
 {
     // Create RAII buffer manager object
-    samplesCommon::BufferManager buffers(mEngine, mParams.batchSize);
+    samplesCommon::BufferManager buffers(mEngine);
 
     auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
@@ -299,7 +299,7 @@ bool SampleMNISTAPI::infer()
     // Memcpy from host input buffers to device input buffers
     buffers.copyInputToDevice();
 
-    bool status = context->execute(mParams.batchSize, buffers.getDeviceBindings().data());
+    bool status = context->executeV2(buffers.getDeviceBindings().data());
     if (!status)
     {
         return false;
@@ -479,7 +479,6 @@ SampleMNISTAPIParams initializeSampleParams(const samplesCommon::Args& args)
         params.dataDirs = args.dataDirs;
     }
     params.inputTensorNames.push_back("data");
-    params.batchSize = 1;
     params.outputTensorNames.push_back("prob");
     params.dlaCore = args.useDLACore;
     params.int8 = args.runInInt8;

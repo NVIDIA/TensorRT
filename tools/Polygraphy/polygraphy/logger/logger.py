@@ -308,7 +308,7 @@ class Logger(object):
             self._log_file.write(message + "\n")
             self._log_file.flush()
 
-        print(message)
+        print(message, file=sys.stdout if severity < Logger.CRITICAL else sys.stderr)
 
     def backtrace(self, depth=0, limit=None, severity=ERROR):
         limit = limit if limit is not None else (3 - self.severity // 10) * 2  # Info provides 1 stack frame
@@ -373,7 +373,7 @@ class Logger(object):
         return ret
 
     def module_info(self, module, name=None, severity=VERBOSE):
-        G_LOGGER.log(self._str_from_module_info(module, name), severity=severity, mode=LogMode.ONCE)
+        self.log(self._str_from_module_info(module, name), severity=severity, mode=LogMode.ONCE)
 
     def log_exception(self, func):
         """

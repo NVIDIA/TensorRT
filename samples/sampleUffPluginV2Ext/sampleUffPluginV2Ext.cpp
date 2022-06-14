@@ -236,7 +236,6 @@ public:
         {
             networkConfig->setFlag(BuilderFlag::kINT8);
         }
-        networkConfig->setFlag(BuilderFlag::kSTRICT_TYPES);
         if (gArgs.useDLACore >= 0)
         {
             networkConfig->setDLACore(gArgs.useDLACore);

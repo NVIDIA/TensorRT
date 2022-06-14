@@ -33,9 +33,9 @@ public:
 
     SequenceProperties() = default;
 
-    virtual int getStartSequenceId() = 0;
+    virtual int32_t getStartSequenceId() = 0;
 
-    virtual int getEndSequenceId() = 0;
+    virtual int32_t getEndSequenceId() = 0;
 
     virtual ~SequenceProperties() = default;
 };

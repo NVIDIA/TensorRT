@@ -40,7 +40,8 @@ public:
      *
      * \return the actual number of samples read
      */
-    virtual int read(int samplesToRead, int maxInputSequenceLength, int* hInputData, int* hActualInputSequenceLengths)
+    virtual int32_t read(int32_t samplesToRead, int32_t maxInputSequenceLength, int32_t* hInputData,
+        int32_t* hActualInputSequenceLengths)
         = 0;
 
     /**

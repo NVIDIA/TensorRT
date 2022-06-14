@@ -46,7 +46,7 @@ public:
     /**
      * \brief get the size of the attention vector
      */
-    virtual int getAttentionSize() = 0;
+    virtual int32_t getAttentionSize() = 0;
 
     ~Attention() override = default;
 };

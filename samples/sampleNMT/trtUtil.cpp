@@ -21,7 +21,7 @@
 
 namespace nmtSample
 {
-int inferTypeToBytes(nvinfer1::DataType t)
+int32_t inferTypeToBytes(nvinfer1::DataType t)
 {
     switch (t)
     {
@@ -32,17 +32,17 @@ int inferTypeToBytes(nvinfer1::DataType t)
     return 0;
 }
 
-int getVolume(nvinfer1::Dims dims)
+int32_t getVolume(nvinfer1::Dims dims)
 {
-    return std::accumulate(dims.d, dims.d + dims.nbDims, 1, std::multiplies<int>());
+    return std::accumulate(dims.d, dims.d + dims.nbDims, 1, std::multiplies<int32_t>());
 }
 
-std::vector<float> resizeWeights(int rows, int cols, int rowsNew, int colsNew, const float* memory)
+std::vector<float> resizeWeights(int32_t rows, int32_t cols, int32_t rowsNew, int32_t colsNew, const float* memory)
 {
     std::vector<float> result(rowsNew * colsNew);
-    for (int row = 0; row < rows; row++)
+    for (int32_t row = 0; row < rows; row++)
     {
-        for (int col = 0; col < cols; col++)
+        for (int32_t col = 0; col < cols; col++)
         {
             result[row * colsNew + col] = memory[row * cols + col];
         }

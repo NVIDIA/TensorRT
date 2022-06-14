@@ -159,7 +159,7 @@ The IResizeLayer implements the resize operation on an input tensor.
     ```bash
     export TRT_DATADIR=/usr/src/tensorrt/data
     pushd $TRT_DATADIR/mnist
-    pip install Pillow
+    pip3 install Pillow
     python3 download_pgms.py
     popd
     ```
@@ -170,12 +170,12 @@ The IResizeLayer implements the resize operation on an input tensor.
 
 2.  Run the sample.
     ```bash
-    sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+    ./sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
     ```
 
     For example:
     ```bash
-    sample_dynamic_reshape --datadir $TRT_DATADIR/char-rnn --fp16
+    ./sample_dynamic_reshape --datadir $TRT_DATADIR/char-rnn --fp16
     ```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

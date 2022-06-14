@@ -65,7 +65,7 @@ def get_layer_class_mapping():
         except AttributeError:
             if config.INTERNAL_CORRECTNESS_CHECKS:
                 G_LOGGER.warning(
-                    "Could not find one or more of layer type: {:} or layer class: {:}".format(layer_type, layer_cls)
+                    "Could not find layer type: {:} or layer class: {:}".format(layer_type, layer_cls)
                 )
         else:
             layer_class_mapping[layer_type] = layer_cls
@@ -109,6 +109,9 @@ def get_layer_class_mapping():
     try_add("CONDITION", "IConditionLayer")
     try_add("CONDITIONAL_INPUT", "IIfConditionalInputLayer")
     try_add("CONDITIONAL_OUTPUT", "IIfConditionalOutputLayer")
+    try_add("ASSERTION", "IAssertionLayer")
+    try_add("SCATTER", "IScatterLayer")
+    try_add("EINSUM", "IEinsumLayer")
 
     return layer_class_mapping
 

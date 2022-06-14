@@ -31,7 +31,8 @@ using namespace nvinfer1::plugin;
 typedef enum
 {
     NCHW = 0,
-    NC4HW = 1
+    NC4HW = 1,
+    NC32HW = 2
 } DLayout_t;
 
 pluginStatus_t allClassNMS(cudaStream_t stream, int num, int num_classes, int num_preds_per_class, int top_k,
@@ -91,7 +92,22 @@ size_t normalizePluginWorkspaceSize(bool acrossSpatial, int C, int H, int W);
 pluginStatus_t normalizeInference(cudaStream_t stream, cublasHandle_t handle, bool acrossSpatial, bool channelShared,
     int N, int C, int H, int W, float eps, const void* scale, const void* inputData, void* outputData, void* workspace);
 
-pluginStatus_t scatterNDInference(cudaStream_t stream, int* outputDims, int nOutputDims, int sliceRank, int nRows, int rowSize, int CopySize, int sizeOfElementInBytes, const void* index, const void* updates, const void* data, void* output, void* workspace);
+
+pluginStatus_t scatterNDInference( 
+    cudaStream_t stream,
+    int* outputDims,
+    int nOutputDims,
+    int sliceRank,        
+    int nRows,
+    int rowSize,
+    int CopySize,
+    int sizeOfElementInBytes,  
+    const void* index,
+    const void* updates,
+    const void* data,
+    void* output,
+    void* workspace);
+
 
 pluginStatus_t priorBoxInference(cudaStream_t stream, PriorBoxParameters param, int H, int W, int numPriors,
     int numAspectRatios, const void* minSize, const void* maxSize, const void* aspectRatios, void* outputData);
@@ -186,7 +202,8 @@ pluginStatus_t roiInference(cudaStream_t stream,
     const int poolingH, // Output feature map H
     const int poolingW, // Output feature map W
     const float spatialScale, const DataType tRois, const void* rois, const DataType tFeatureMap,
-    const DLayout_t lFeatureMap, const void* featureMap, const DataType tTop, const DLayout_t lTop, void* top);
+    const DLayout_t lFeatureMap, const void* featureMap, const DataType tTop, const DLayout_t lTop, void* top, 
+    size_t deviceSmemSize);
 
 // ROI FORWARD
 pluginStatus_t roiForward(cudaStream_t stream,
@@ -205,7 +222,8 @@ pluginStatus_t RPROIInferenceFused(cudaStream_t stream, int N, int A, int C, int
     int featureStride, int preNmsTop, int nmsMaxOut, float iouThreshold, float minBoxSize, float spatialScale,
     const float* imInfo, const float* anchors, DataType tScores, DLayout_t lScores, const void* scores,
     DataType tDeltas, DLayout_t lDeltas, const void* deltas, DataType tFeatureMap, DLayout_t lFeatureMap,
-    const void* featureMap, void* workspace, DataType tRois, void* rois, DataType tTop, DLayout_t lTop, void* top);
+    const void* featureMap, void* workspace, DataType tRois, void* rois, DataType tTop, DLayout_t lTop, void* top,
+    size_t deviceSmemSize);
 
 // GENERATE ANCHORS CPU
 pluginStatus_t generateAnchors_cpu(

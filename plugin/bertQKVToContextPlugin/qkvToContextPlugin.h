@@ -23,6 +23,7 @@
 
 #include "NvInferPlugin.h"
 #include "cublas_v2.h"
+#include "zeroPadding2d.h"
 #include <string>
 #include <vector>
 
@@ -255,6 +256,7 @@ private:
     std::string mNamespace;
 
     std::unique_ptr<MHARunner> dispatcher;
+    std::unique_ptr<QkvPaddingRunner> patcher;
 
     int mS;
     int mB;

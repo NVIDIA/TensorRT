@@ -274,6 +274,7 @@ int QKVToContextInterleavedPlugin::enqueue(const PluginTensorDesc* inputDesc, co
 
 QKVToContextInterleavedPluginCreator::QKVToContextInterleavedPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("hidden_size", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("num_heads", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("dq_probs", nullptr, PluginFieldType::kFLOAT32, 1));
@@ -311,17 +312,17 @@ IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(const char* name, 
         if (field_name.compare("hidden_size") == 0)
         {
             hiddenSize = *static_cast<const int*>(fc->fields[i].data);
-            gLogVerbose << "Building hiddenSize: " << hiddenSize << std::endl;
+            BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
         }
         if (field_name.compare("num_heads") == 0)
         {
             numHeads = *static_cast<const int*>(fc->fields[i].data);
-            gLogVerbose << "Building numHeads: " << numHeads << std::endl;
+            BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
         }
         if (field_name.compare("dq_probs") == 0)
         {
             dqProbs = *static_cast<const float*>(fc->fields[i].data);
-            gLogVerbose << "Building dqProbs: " << dqProbs << std::endl;
+            BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
         }
     }
 

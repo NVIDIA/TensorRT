@@ -2,8 +2,10 @@
 cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 project(ClipPlugin LANGUAGES CXX CUDA)
 
-# Enable all compile warnings
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-long-long -pedantic -Wno-deprecated-declarations")
+if(NOT MSVC)
+  # Enable all compile warnings
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-long-long -pedantic -Wno-deprecated-declarations")
+endif()
 
 # Sets variable to a value if variable is unset.
 macro(set_ifndef var val)
@@ -14,9 +16,11 @@ macro(set_ifndef var val)
 endmacro()
 
 # -------- CONFIGURATION --------
-set_ifndef(TRT_LIB /usr/lib/x86_64-linux-gnu)
-set_ifndef(TRT_INCLUDE /usr/include/x86_64-linux-gnu)
-set_ifndef(CUDA_INC_DIR /usr/local/cuda/include)
+if(NOT MSVC)
+  set_ifndef(TRT_LIB /usr/lib/x86_64-linux-gnu)
+  set_ifndef(TRT_INCLUDE /usr/include/x86_64-linux-gnu)
+  set_ifndef(CUDA_INC_DIR /usr/local/cuda/include)
+endif()
 
 # Find dependencies:
 message("\nThe following variables are derived from the values of the previous variables unless provided explicitly:\n")
@@ -26,6 +30,8 @@ find_library(_NVINFER_LIB nvinfer HINTS ${TRT_LIB} PATH_SUFFIXES lib lib64)
 set_ifndef(NVINFER_LIB ${_NVINFER_LIB})
 
 # -------- BUILDING --------
+
+add_compile_definitions(TENSORRT_BUILD_LIB)
 
 # Add include directories
 include_directories(${CUDA_INC_DIR} ${TRT_INCLUDE} ${CMAKE_SOURCE_DIR}/plugin/)

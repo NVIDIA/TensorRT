@@ -29,7 +29,8 @@ BenchmarkWriter::BenchmarkWriter()
 {
 }
 
-void BenchmarkWriter::write(const int* hOutputData, int actualOutputSequenceLength, int actualInputSequenceLength)
+void BenchmarkWriter::write(
+    const int32_t* hOutputData, int32_t actualOutputSequenceLength, int32_t actualInputSequenceLength)
 {
     ++mSampleCount;
     mInputTokenCount += actualInputSequenceLength;
@@ -44,7 +45,7 @@ void BenchmarkWriter::initialize()
 void BenchmarkWriter::finalize()
 {
     std::chrono::duration<float> sec = std::chrono::high_resolution_clock::now() - mStartTS;
-    int totalTokenCount = mInputTokenCount + mOutputTokenCount;
+    int32_t totalTokenCount = mInputTokenCount + mOutputTokenCount;
     sample::gLogInfo << mSampleCount << " sequences generated in " << sec.count() << " seconds, "
                      << (mSampleCount / sec.count()) << " samples/sec" << std::endl;
     sample::gLogInfo << totalTokenCount << " tokens processed (source and destination), "

@@ -59,7 +59,7 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
     ```bash
     export TRT_DATADIR=/usr/src/tensorrt/data
     pushd $TRT_DATADIR/mnist
-    pip install Pillow
+    pip3 install Pillow
     python3 download_pgms.py
     popd
     ```
@@ -70,12 +70,12 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
 
 2. Run the sample to perform inference on the digit:
     ```bash
-	sample_mnist [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
-	```
+    ./sample_mnist [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
+    ```
 
     For example:
     ```bash
-    sample_mnist --datadir $TRT_DATADIR/mnist --fp16
+    ./sample_mnist --datadir $TRT_DATADIR/mnist --fp16
     ```
 
 	This sample reads three Caffe files to build the network:
@@ -90,7 +90,7 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
 
 	This sample can be run in FP16 and INT8 modes as well.
 
-	**NOTE:** By default, the sample expects these files to be in either the `data/samples/mnist/` or `data/mnist/` directories. The list of default directories can be changed by adding one or more paths with `--datadir=/new/path/` as a command line argument.
+	**Note:** By default, the sample expects these files to be in either the `data/samples/mnist/` or `data/mnist/` directories. The list of default directories can be changed by adding one or more paths with `--datadir=/new/path/` as a command line argument.
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following; ASCII rendering of the input image with digit 3:
     ```

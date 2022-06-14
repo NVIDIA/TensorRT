@@ -24,7 +24,6 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleGoogleNet
     sampleINT8
     sampleINT8API
-    sampleMLP
     sampleMNIST
     sampleMNISTAPI
     sampleNMT
@@ -37,8 +36,7 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleUffPluginV2Ext
     sampleUffSSD
     sampleOnnxMnistCoordConvAC
-    trtexec
-)
+    trtexec)
 
 foreach(SAMPLE_ITER ${OPENSOURCE_SAMPLES_LIST})
     add_subdirectory(${SAMPLE_ITER})

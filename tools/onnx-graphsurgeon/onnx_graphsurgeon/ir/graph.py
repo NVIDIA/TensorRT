@@ -107,6 +107,7 @@ class Graph(object):
             outputs (Sequence[Tensor]): A list of graph output Tensors.
             name (str): The name of the graph. Defaults to "onnx_graphsurgeon_graph".
             doc_string (str): A doc_string for the graph. Defaults to "".
+            opset (int): The ONNX opset to use when exporting this graph.
         """
         self.nodes = misc.default_value(nodes, [])
         self.inputs = list(misc.default_value(inputs, []))
@@ -117,7 +118,7 @@ class Graph(object):
 
         self.doc_string = misc.default_value(doc_string, "")
         self.opset = misc.default_value(opset, Graph.DEFAULT_OPSET)
-        self.import_domains = misc.default_value(import_domains, None)
+        self.import_domains = import_domains
         # Printing graphs can be very expensive
         G_LOGGER.ultra_verbose(lambda: "Created Graph: {:}".format(self))
         # For layer() function
@@ -414,12 +415,23 @@ class Graph(object):
 
         def add_to_tensor_map(tensor):
             if not tensor.is_empty():
-                if check_duplicates and tensor.name in tensor_map and not (tensor_map[tensor.name] is tensor):
-                    G_LOGGER.critical(
-                        "Found distinct tensors that share the same name:\n[id: {:}] {:}\n[id: {:}] {:}".format(
-                            id(tensor_map[tensor.name]), tensor_map[tensor.name], id(tensor), tensor
+                if tensor.name in tensor_map and not (tensor_map[tensor.name] is tensor):
+                    msg = "Found distinct tensors that share the same name:\n[id: {:}] {:}\n[id: {:}] {:}\n".format(
+                        id(tensor_map[tensor.name]),
+                        tensor_map[tensor.name],
+                        id(tensor),
+                        tensor,
+                    )
+                    msg += (
+                        "Note: Producer node(s) of first tensor:\n{:}\nProducer node(s) of second tensor:\n{:}".format(
+                            tensor_map[tensor.name].inputs,
+                            tensor.inputs,
                         )
                     )
+
+                    if check_duplicates:
+                        G_LOGGER.critical(msg)
+                    G_LOGGER.warning(msg)
 
                 tensor_map[tensor.name] = tensor
 
@@ -481,6 +493,81 @@ class Graph(object):
         PARTITIONING_MODES = [None, "basic", "recursive"]
         if partitioning not in PARTITIONING_MODES:
             G_LOGGER.critical("Argument for parameter 'partitioning' must be one of: {:}".format(PARTITIONING_MODES))
+
+        # First perform shape tensor cast elision on the graph prior to other constant folding
+        # Search for Cast(s) (from int -> float) -> intermediate operator (with float constants) -> Cast(s) (back to int)
+        # This pattern is problematic for TensorRT since these operations may be performed on Shape Tensors, which
+        # are not allowed to be floating point type. Attempt to fold the pattern here
+        VALID_CAST_ELISION_OPS = ["Add", "Sub", "Mul", "Div", "Max", "Min", "Equal", "Greater", "Less", "Concat"]
+
+        def run_cast_elision(node):
+            import onnx
+
+            if node.op not in VALID_CAST_ELISION_OPS:
+                return
+
+            # Get list of input nodes
+            inp_casts = [
+                inp_node
+                for inp_tensor in node.inputs
+                for inp_node in inp_tensor.inputs
+                if inp_node.op == "Cast" and inp_node.attrs["to"] == 1
+            ]
+
+            # No cast nodes found, return early
+            if not inp_casts:
+                return
+
+            # Ensure that all input cast nodes are casting from the same type
+            final_type = None
+            for inp in inp_casts:
+                curr_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[inp.inputs[0].dtype]
+                final_type = final_type or curr_type
+                if final_type != curr_type:
+                    return
+
+            # Check validity and get list of output nodes
+            out_casts = []
+
+            for out_tensor in node.outputs:
+                for out_node in out_tensor.outputs:
+                    if out_node.op != "Cast" or out_node.attrs["to"] not in [6, 7]:
+                        # Can exit early if any of the output nodes are not valid casts
+                        return
+                    out_casts.append(out_node)
+                    # Check that all final cast types are the same.
+                    curr_type = out_node.attrs["to"]
+                    if final_type != curr_type:
+                        return
+
+            # If all checks passed - update constant values.
+            for inp in node.inputs:
+                if isinstance(inp, Constant):
+                    inp.values = inp.values.astype(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[final_type])
+
+            # "Remove" casts nodes by changing I/O node operators to Identity. Update corresponding tensor dtypes as well
+            def replace_with_identity(cast_node, change_dtype):
+                cast_node.op = "Identity"
+                cast_node.attrs = {}
+                getattr(cast_node, change_dtype)[0].dtype = onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[final_type]
+                G_LOGGER.debug("Cast node {:} elided".format(cast_node.name))
+
+            for inp in inp_casts:
+                replace_with_identity(inp, change_dtype="outputs")
+
+            for out in out_casts:
+                replace_with_identity(out, change_dtype="inputs")
+
+        # Perform shape tensor cast elision:
+        if fold_shapes:
+            G_LOGGER.debug("Performing shape tensor cast elision in {:}".format(self.name))
+            try:
+                for node in self.nodes:
+                    run_cast_elision(node)
+            except Exception as err:
+                if not error_ok:
+                    raise err
+                G_LOGGER.warning("'{:}' routine failed with: {:}".format("Shape tensor cast elision", err))
 
         G_LOGGER.debug("Folding constants in {:}".format(self.name))
 
@@ -799,12 +886,15 @@ class Graph(object):
                     the string to generate a name. It will append an index to the end of the provided string
                     to attempt to avoid duplicate tensor names, but since this doesn't guarantee that the name will
                     be unique, you should try to ensure that the string provided is as unique as possible.
+                    To avoid problems with duplicate names, you can generate names yourself and provide ``Tensor`` s.
             - ``numpy.ndarray``:
                     If a NumPy array is provided, this function will generate a Constant tensor
                     using the name prefix: "onnx_graphsurgeon_constant"
             - ``Union[List[Number], Tuple[Number]]``:
                     If a list or tuple of numbers (int or float) is provided, this function will
-                    generate a Constant tensor using the name prefix: "onnx_graphsurgeon_lst_constant"
+                    generate a Constant tensor using the name prefix: "onnx_graphsurgeon_lst_constant".
+                    The values of the tensor will be a 1D array containing the specified values.
+                    The datatype will be either `np.float32` or `np.int64`.
 
         Args:
             inputs (List[Union[Tensor, str, numpy.ndarray]]): The list of inputs
@@ -899,6 +989,7 @@ class Graph(object):
             name=copy.copy(self.name),
             doc_string=copy.copy(self.doc_string),
             opset=copy.copy(self.opset),
+            import_domains=self.import_domains,
         )
 
     def __str__(self):

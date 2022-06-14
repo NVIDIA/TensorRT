@@ -37,6 +37,16 @@
 
 #define TRT_UNUSED (void)
 
+#define BERT_PRINT_DEBUG_MSG 0
+
+#if BERT_PRINT_DEBUG_MSG
+#define BERT_DEBUG_MSG(msg) (gLogVerbose << (msg) << std::endl)
+#define BERT_DEBUG_VALUE(key, value) (gLogVerbose << key << value << std::endl)
+#else
+#define BERT_DEBUG_MSG(msg) TRT_UNUSED (msg)
+#define BERT_DEBUG_VALUE(key, value) TRT_UNUSED (key); TRT_UNUSED (value)
+#endif
+
 using half = __half;
 using namespace nvinfer1::plugin;
 
@@ -316,14 +326,14 @@ struct WeightsWithOwnership : public nvinfer1::Weights
 
             if (src.type == nvinfer1::DataType::kFLOAT)
             {
-                gLogVerbose << "Float Weights(Host) => Float Array(Host)\n";
+                BERT_DEBUG_MSG("Float Weights(Host) => Float Array(Host)");
                 std::copy_n(static_cast<const float*>(src.values), src.count, destBuf);
             }
             else
             {
                 assert(src.type == nvinfer1::DataType::kHALF);
 
-                gLogVerbose << "Half Weights(Host) => Float Array(Host)\n";
+                BERT_DEBUG_MSG("Half Weights(Host) => Float Array(Host)");
                 const auto s = static_cast<const half*>(src.values);
                 auto d = static_cast<float*>(const_cast<void*>(this->values));
 
@@ -340,14 +350,14 @@ struct WeightsWithOwnership : public nvinfer1::Weights
 
             if (src.type == nvinfer1::DataType::kHALF)
             {
-                gLogVerbose << "Half Weights(Host) => Half Array(Host)\n";
+                BERT_DEBUG_MSG("Half Weights(Host) => Half Array(Host)");
                 std::copy_n(static_cast<const half*>(src.values), src.count, destBuf);
             }
             else
             {
                 assert(src.type == nvinfer1::DataType::kFLOAT);
 
-                gLogVerbose << "Float Weights(Host) => Half Array(Host)\n";
+                BERT_DEBUG_MSG("Float Weights(Host) => Half Array(Host)");
                 const auto s = static_cast<const float*>(src.values);
                 auto d = static_cast<half*>(const_cast<void*>(this->values));
 
@@ -395,12 +405,12 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, float* destDev)
     size_t nbBytes = src.count * wordSize;
     if (src.type == nvinfer1::DataType::kFLOAT)
     {
-        gLogVerbose << "Float Weights(Host) => Float Array(Device)" << std::endl;
+        BERT_DEBUG_MSG("Float Weights(Host) => Float Array(Device)");
         CUASSERT(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
     }
     else
     {
-        gLogVerbose << "Half Weights(Host) => Float Array(Device)" << std::endl;
+        BERT_DEBUG_MSG("Half Weights(Host) => Float Array(Device)");
         std::vector<float> tmp(src.count);
         const half* values = reinterpret_cast<const half*>(src.values);
 
@@ -419,12 +429,12 @@ inline void convertAndCopyToDevice(const nvinfer1::Weights& src, half* destDev)
     size_t nbBytes = src.count * wordSize;
     if (src.type == nvinfer1::DataType::kHALF)
     {
-        gLogVerbose << "Half Weights(Host) => Half Array(Device)" << std::endl;
+        BERT_DEBUG_MSG("Half Weights(Host) => Half Array(Device)");
         CUASSERT(cudaMemcpy(destDev, src.values, nbBytes, cudaMemcpyHostToDevice));
     }
     else
     {
-        gLogVerbose << "Float Weights(Host) => Half Array(Device)" << std::endl;
+        BERT_DEBUG_MSG("Float Weights(Host) => Half Array(Device)");
         std::vector<half> tmp(src.count);
         const float* values = reinterpret_cast<const float*>(src.values);
 
@@ -442,22 +452,22 @@ inline nvinfer1::DataType fieldTypeToDataType(const nvinfer1::PluginFieldType ft
     {
     case nvinfer1::PluginFieldType::kFLOAT32:
     {
-        gLogVerbose << "PluginFieldType is Float32" << std::endl;
+        BERT_DEBUG_MSG("PluginFieldType is Float32");
         return nvinfer1::DataType::kFLOAT;
     }
     case nvinfer1::PluginFieldType::kFLOAT16:
     {
-        gLogVerbose << "PluginFieldType is Float16" << std::endl;
+        BERT_DEBUG_MSG("PluginFieldType is Float16");
         return nvinfer1::DataType::kHALF;
     }
     case nvinfer1::PluginFieldType::kINT32:
     {
-        gLogVerbose << "PluginFieldType is Int32" << std::endl;
+        BERT_DEBUG_MSG("PluginFieldType is Int32");
         return nvinfer1::DataType::kINT32;
     }
     case nvinfer1::PluginFieldType::kINT8:
     {
-        gLogVerbose << "PluginFieldType is Int8" << std::endl;
+        BERT_DEBUG_MSG("PluginFieldType is Int8");
         return nvinfer1::DataType::kINT8;
     }
     default: throw std::invalid_argument("No corresponding datatype for plugin field type");

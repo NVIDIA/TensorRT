@@ -8,6 +8,7 @@
     * [Building the engine](#building-the-engine)
     * [Running the engine](#running-the-engine)
     * [Verifying the output](#verifying-the-output)
+    * [Int8 precision](#int8-precision)
     * [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
@@ -109,6 +110,12 @@ Lastly, overlapped predictions have to be removed by the non-maximum suppression
 
 After all of the above work, the bounding boxes are available in terms of the class number, the confidence score (probability), and four coordinates. They are drawn in the output PPM images using the `writePPMFileWithBBox` function.
 
+### Int8 precision
+
+`RPNROIPlugin` has four inputs (`bbox confidence`, `bbox offset`, `feature map` and `image info`) and two outputs (`feature map` and `rois`). This plugin supports `feature map` fp32/int8 I/O, and only supports fp32 for other inputs and outputs. Per tensor dynamic range file located at `data/faster-rcnn` is required for int8 precision. Each line in this file contains a tensor name (the same with layer name) and a dynamic range value. The dynamic range value means the abs of a tensor boundary value.
+
+Because one output `rois` of this plugin is marked as network's output, TensorRT requires all inputs and outputs of this plugin to run on fp32 precision. When enabling int8 precision, `addIdentity()` is added after `rois` to remove this requirement. 
+
 ### TensorRT API layers and ops
 
 In this sample, the following layers are used.  For more information about these layers, see the [TensorRT Developer Guide: Layers](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#layers) documentation.
@@ -134,21 +141,24 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 [SoftMax layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#softmax-layer)
 The SoftMax layer applies the SoftMax function on the input tensor along an input dimension specified by the user.
 
+[Identity Layer](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#identity-layer)
+The Identity Layer implements the identity operation.
+
 ## Preparing sample data
 
 1. Set `$TRT_DATADIR` to point to the sample data directory.
 
 2.  Download the [faster_rcnn_models.tgz](https://dl.dropboxusercontent.com/s/o6ii098bu51d139/faster_rcnn_models.tgz) dataset.
-    ```
+    ```bash
     export TRT_DATADIR=/usr/src/tensorrt/data
     mkdir -p $TRT_DATADIR/faster-rcnn
     wget --no-check-certificate https://dl.dropboxusercontent.com/s/o6ii098bu51d139/faster_rcnn_models.tgz?dl=0 -O $TRT_DATADIR/faster-rcnn/faster-rcnn.tgz
     ```
 
 3.  Extract the dataset into the `data/faster-rcnn` directory.
-	```
+    ```bash
     tar zxvf $TRT_DATADIR/faster-rcnn/faster-rcnn.tgz -C $TRT_DATADIR/faster-rcnn --strip-components=1 --exclude=ZF_*
-	```
+    ```
 
 ## Running the sample
 
@@ -156,8 +166,9 @@ The SoftMax layer applies the SoftMax function on the input tensor along an inpu
 
 2.  Run the sample to generate characters based on the trained model:
     ```bash
-	sample_fasterRCNN --datadir=$TRT_DATADIR/faster-rcnn
+    ./sample_fasterRCNN --datadir=$TRT_DATADIR/faster-rcnn
     ```
+
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	```
 	Sample output

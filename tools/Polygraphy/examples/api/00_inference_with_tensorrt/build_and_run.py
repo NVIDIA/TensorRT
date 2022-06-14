@@ -29,7 +29,7 @@ def main():
     #
     # NOTE: `build_engine` is a *callable* that returns an engine, not the engine itself.
     #   To get the engine directly, you can use the immediately evaluated functional API.
-    #   See eexamples/api/06_immediate_eval_api for details.
+    #   See examples/api/06_immediate_eval_api for details.
     build_engine = EngineFromNetwork(
         NetworkFromOnnxPath("identity.onnx"), config=CreateConfig(fp16=True)
     )  # Note that config is an optional argument.

@@ -1,4 +1,4 @@
-# Object Detection And Instance Segmentations With A TensorFlow MasK R-CNN Network
+# Object Detection And Instance Segmentations With A TensorFlow Mask R-CNN Network
 
 **Table Of Contents**
 - [Description](#description)
@@ -120,7 +120,7 @@ Switch back to the TensorRT container/environment for running the sample.
 2. Run the sample to perform object detection and object mask prediction.
 
     ```bash
-    sample_uff_maskRCNN --datadir=<path/to/data> --fp16 --batch N
+    ./sample_uff_maskRCNN --datadir=<path/to/data> --fp16 --batch N
     ```
 
     For example:

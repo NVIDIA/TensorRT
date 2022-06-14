@@ -299,9 +299,9 @@ void EfficientNMSPlugin::configurePlugin(
         }
         else
         {
-            ASSERT(in[0].desc.dims.d[2] == mParam.numClasses);
-            ASSERT(in[0].desc.dims.d[3] == 4);
             mParam.shareLocation = (in[0].desc.dims.d[2] == 1);
+            ASSERT(in[0].desc.dims.d[2] == mParam.numClasses || mParam.shareLocation);
+            ASSERT(in[0].desc.dims.d[3] == 4);
             mParam.numBoxElements = in[0].desc.dims.d[1] * in[0].desc.dims.d[2] * in[0].desc.dims.d[3];
         }
         mParam.numAnchors = in[0].desc.dims.d[1];
@@ -330,9 +330,10 @@ void EfficientNMSPlugin::configurePlugin(
 size_t EfficientNMSPlugin::getWorkspaceSize(
     const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
 {
-    EfficientNMSParameters p = mParam;
-    p.batchSize = inputs[0].dims.d[0];
-    return EfficientNMSWorkspaceSize(p);
+    int batchSize = inputs[1].dims.d[0];
+    int numScoreElements = inputs[1].dims.d[1] * inputs[1].dims.d[2];
+    int numClasses = inputs[1].dims.d[2];
+    return EfficientNMSWorkspaceSize(batchSize, numScoreElements, numClasses, mParam.datatype);
 }
 
 int EfficientNMSPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,

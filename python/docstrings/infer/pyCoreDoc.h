@@ -40,8 +40,8 @@ To implement a custom logger, ensure that you explicitly instantiate the base cl
 
 :ivar min_severity: :class:`Logger.Severity` This minimum required severity of messages for the logger to log them.
 
-Note that although a logger is passed on creation to each instance of a :class:`Builder` or :class:`Runtime` interface, the logger is internally considered a singleton, and thus
-multiple instances of :class:`Runtime` and/or :class:`Builder` must all use the same logger.
+The logger used to create an instance of IBuilder, IRuntime or IRefitter is used for all objects created through that interface.
+The logger should be valid until all objects created are released.
 )trtdoc";
 
 constexpr const char* log = R"trtdoc(
@@ -62,8 +62,6 @@ Logger for the :class:`Builder`, :class:`ICudaEngine` and :class:`Runtime` .
 
 :ivar min_severity: :class:`Logger.Severity` This minimum required severity of messages for the logger to log them.
 
-Note that although a logger is passed on creation to each instance of a :class:`Builder` or :class:`Runtime` interface, the logger is internally considered a singleton, and thus
-multiple instances of :class:`Runtime` and/or :class:`Builder` must all use the same logger.
 )trtdoc";
 
 constexpr const char* log = R"trtdoc(
@@ -76,6 +74,11 @@ Logs a message to `stderr` .
 
 namespace SeverityDoc
 {
+constexpr const char* descr = R"trtdoc(
+    Indicates the severity of a message. The values in this enum are also accessible in the :class:`ILogger` directly.
+    For example, ``tensorrt.ILogger.INFO`` corresponds to ``tensorrt.ILogger.Severity.INFO`` .
+)trtdoc";
+
 constexpr const char* internal_error = R"trtdoc(
     Represents an internal error. Execution is unrecoverable.
 )trtdoc";
@@ -400,6 +403,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar all_binding_shapes_specified: :class:`bool` Whether all dynamic dimensions of input tensors have been specified by calling :func:`set_binding_shape` . Trivially true if network has no dynamically shaped input tensors.
     :ivar all_shape_inputs_specified: :class:`bool` Whether values for all input shape tensors have been specified by calling :func:`set_shape_input` . Trivially true if network has no input shape bindings.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
+    :ival enqueue_emits_profile: :class:`bool` Whether enqueue emits layer timing to the profiler. The default value is :class:`True`. If set to :class:`False`, enqueue will be asynchronous if there is a profiler attached. An extra method :func:`IExecutionContext::report_to_profiler()` needs to be called to obtain the profiling data and report to the profiler attached.
 )trtdoc";
 
 constexpr const char* execute = R"trtdoc(
@@ -548,6 +552,19 @@ constexpr const char* set_optimization_profile_async = R"trtdoc(
 
     :returns: :class:`True` if the optimization profile was set successfully
 )trtdoc";
+
+constexpr const char* report_to_profiler = R"trtdoc(
+    Calculate layer timing info for the current optimization profile in IExecutionContext and update the profiler after one iteration of inference launch.
+
+    If the enqueue_emits_profiler flag was set to true, the enqueue function will calculate layer timing implicitly if a profiler is provided. There is no need to call this function.
+    If the enqueue_emits_profiler flag was set to false, the enqueue function will record the CUDA event timers if a profiler is provided. But it will not perform the layer timing calculation. This function needs to be called explicitly to calculate layer timing for the previous inference launch.
+
+    In the CUDA graph launch scenario, it will record the same set of CUDA events as in regular enqueue functions if the graph is captured from an :class:`IExecutionContext` with profiler enabled. This function needs to be called after graph launch to report the layer timing info to the profiler.
+
+    Profiling CUDA graphs is only available from CUDA 11.1 onwards.
+
+    :returns: :class:`True` if the call succeeded, else :class:`False` (e.g. profiler not provided, in CUDA graph capture mode, etc.)
+)trtdoc";
 } // namespace IExecutionContextDoc
 
 namespace ICudaEngineDoc
@@ -568,7 +585,8 @@ constexpr const char* descr = R"trtdoc(
     :ivar num_optimization_profiles: :class:`int` The number of optimization profiles defined for this engine. This is always at least 1.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar engine_capability: :class:`EngineCapability` The engine capability. See :class:`EngineCapability` for details.
-    :ivar tactic_sources: :class:`int` The tactic sources required by this engine
+    :ivar tactic_sources: :class:`int` The tactic sources required by this engine.
+    :ivar profiling_verbosity: The profiling verbosity the builder config was set to when the engine was built.
 )trtdoc";
 
 constexpr const char* get_binding_index = R"trtdoc(
@@ -778,6 +796,12 @@ constexpr const char* get_binding_vectorized_dim = R"trtdoc(
     :arg index: The binding index.
 )trtdoc";
 
+constexpr const char* create_engine_inspector = R"trtdoc(
+    Create an :class:`IEngineInspector` which prints out the layer information of an engine or an execution context.
+
+    :returns: The :class:`IEngineInspector`.
+)trtdoc";
+
 } // namespace ICudaEngineDoc
 
 namespace BuilderFlagDoc
@@ -830,12 +854,15 @@ constexpr const char* DLA = R"trtdoc(DLA core)trtdoc";
 
 namespace ProfilingVerbosityDoc
 {
-constexpr const char* descr = R"trtdoc(Profiling verbosity in NVTX annotations)trtdoc";
+constexpr const char* descr = R"trtdoc(Profiling verbosity in NVTX annotations and the engine inspector)trtdoc";
 
-constexpr const char* DEFAULT = R"trtdoc(Register layer names in NVTX message field)trtdoc";
-constexpr const char* NONE = R"trtdoc(Turn off NVTX traces)trtdoc";
-constexpr const char* VERBOSE
-    = R"trtdoc(Register layer names in NVTX message field and register layer detail in NVTX JSON payload field)trtdoc";
+constexpr const char* LAYER_NAMES_ONLY = R"trtdoc(Print only the layer names. This is the default setting.)trtdoc";
+constexpr const char* DETAILED
+    = R"trtdoc(Print detailed layer information including layer names and layer parameters.)trtdoc";
+constexpr const char* NONE = R"trtdoc(Do not print any layer information.)trtdoc";
+
+constexpr const char* DEFAULT = R"trtdoc(DEPRECATED. Same as LAYER_NAMES_ONLY.)trtdoc";
+constexpr const char* VERBOSE = R"trtdoc(DEPRECATED. Same as DETAILED.)trtdoc";
 } // namespace ProfilingVerbosityDoc
 
 namespace TacticSourceDoc
@@ -886,6 +913,13 @@ constexpr const char* DLA_STANDALONE
     = R"trtdoc(DLA Standalone: TensorRT flow with restrictions targeting external, to TensorRT, DLA runtimes. See DLA documentation for list of supported layers and formats. This flow supports only DeviceType::kDLA.)trtdoc";
 
 } // namespace EngineCapabilityDoc
+
+namespace LayerInformationFormatDoc
+{
+constexpr const char* descr = R"trtdoc(The format in which the IEngineInspector prints the layer information.)trtdoc";
+constexpr const char* ONELINE = R"trtdoc(Print layer information in one line per layer.)trtdoc";
+constexpr const char* JSON = R"trtdoc(Print layer information in JSON format.)trtdoc";
+} // namespace LayerInformationFormatDoc
 
 namespace ITimingCacheDoc
 {
@@ -1013,7 +1047,7 @@ constexpr const char* set_device_type = R"trtdoc(
     default DeviceType set in the builder.
 
     The DeviceType for a layer must be compatible with the safety flow (if specified). For example a layer
-    cannot be marked for DLA execution while the builder is configured for kSAFETY.
+    cannot be marked for DLA execution while the builder is configured for kSAFE_GPU.
 
 
     :arg layer: The layer to set the DeviceType of
@@ -1117,6 +1151,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar gpu_allocator: :class:`IGpuAllocator` The GPU allocator to be used by the :class:`Builder` . All GPU
         memory acquired will use this allocator. If set to ``None``, the default allocator will be used.
+    :ivar logger: :class:`ILogger` The logger provided when creating the refitter.
 )trtdoc";
 
 constexpr const char* init = R"trtdoc(
@@ -1177,13 +1212,16 @@ constexpr const char* is_network_supported = R"trtdoc(
     the network falls within the constraints of the builder configuration based on the
     :class:`EngineCapability` , :class:`BuilderFlag` , and :class:`DeviceType` .
 
-    :returns: ``True`` if the network is within the scope of the restrictions specified by the builder config, ``False`` otherwise.
+    :returns: ``True`` if network is within the scope of the restrictions specified by the builder config, ``False`` otherwise.
         This function reports the conditions that are violated to the registered :class:`ErrorRecorder` .
 
     NOTE: This function will synchronize the cuda stream returned by ``config.profile_stream`` before returning.
 
 )trtdoc";
 
+constexpr const char* reset = R"trtdoc(
+    Resets the builder state to default values.
+)trtdoc";
 } // namespace BuilderDoc
 
 namespace RuntimeDoc
@@ -1194,6 +1232,10 @@ constexpr const char* descr = R"trtdoc(
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar gpu_allocator: :class:`IGpuAllocator` The GPU allocator to be used by the :class:`Runtime` . All GPU memory
         acquired will use this allocator. If set to None, the default allocator will be used (Default: cudaMalloc/cudaFree).
+    :ivar DLA_core: :class:`int` The DLA core that the engine executes on. Must be between 0 and N-1 where N is the number of available DLA cores.
+    :ivar num_DLA_cores: :class:`int` The number of DLA engines available to this builder.
+    :ivar logger: :class:`ILogger` The logger provided when creating the refitter.
+
 )trtdoc";
 
 constexpr const char* init = R"trtdoc(
@@ -1210,12 +1252,54 @@ constexpr const char* deserialize_cuda_engine = R"trtdoc(
 
 } // namespace RuntimeDoc
 
+namespace RuntimeInspectorDoc
+{
+constexpr const char* descr = R"trtdoc(
+    An engine inspector which prints out the layer information of an engine or an execution context.
+    The engine or the context must be set before get_layer_information() or get_engine_information() can be called.
+
+    The amount of printed information depends on the profiling verbosity setting of the builder config when the engine is built.
+    By default, the profiling verbosity is set to ProfilingVerbosity.LAYER_NAMES_ONLY, and only layer names will be printed.
+    If the profiling verbosity is set to ProfilingVerbosity.DETAILED, layer names and layer parameters will be printed.
+    If the profiling verbosity is set to ProfilingVerbosity.NONE, no layer information will be printed.
+
+    :ivar engine: :class:`ICudaEngine` Set or get the engine currently being inspected.
+    :ivar context: :class:`IExecutionContext` Set or get context currently being inspected.
+    :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
+)trtdoc";
+
+constexpr const char* get_layer_information = R"trtdoc(
+    Get a string describing the information about a specific layer in the current engine or the execution context.
+
+    :arg layer_index: The index of the layer. It must lie in [0, engine.num_layers].
+    :arg format: :class:`LayerInformationFormat` The format the layer information should be printed in.
+
+    :returns: A string describing the information about a specific layer in the current engine or the execution context.
+)trtdoc";
+
+constexpr const char* get_engine_information = R"trtdoc(
+    Get a string describing the information about all the layers in the current engine or the execution context.
+
+    :arg format: :class:`LayerInformationFormat` The format the layer information should be printed in.
+
+    :returns: A string describing the information about all the layers in the current engine or the execution context.
+)trtdoc";
+
+constexpr const char* clear_inspection_source = R"trtdoc(
+    Clear the inspection srouce.
+
+    :returns: A boolean indicating whether the action succeeds.
+)trtdoc";
+
+} // namespace RuntimeInspectorDoc
+
 namespace RefitterDoc
 {
 constexpr const char* descr = R"trtdoc(
     Updates weights in an :class:`ICudaEngine` .
 
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
+    :ivar logger: :class:`ILogger` The logger provided when creating the refitter.
 )trtdoc";
 
 constexpr const char* init = R"trtdoc(
@@ -1317,6 +1401,7 @@ constexpr const char* get_tensors_with_dynamic_range = R"trtdoc(
 
     :returns: The names of tensors with refittable dynamic ranges.
 )trtdoc";
+
 } // namespace RefitterDoc
 
 namespace AllocatorFlagDoc
@@ -1380,6 +1465,16 @@ constexpr const char* reallocate = R"trtdoc(
     :arg new_size: The new memory size required.
 
     :returns: The address of the reallocated memory
+)trtdoc";
+
+constexpr const char* deallocate = R"trtdoc(
+    A callback implemented by the application to handle release of GPU memory.
+
+    TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.
+
+    :arg memory: The memory address of the memory to release.
+
+    :returns: True if the acquired memory is released successfully.
 )trtdoc";
 
 } // namespace GpuAllocatorDoc

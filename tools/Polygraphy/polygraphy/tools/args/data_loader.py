@@ -14,7 +14,10 @@
 # limitations under the License.
 #
 
+import numbers
+
 from polygraphy import mod, util
+from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.script import Script, make_invocable, make_invocable_if_nondefault, safe
@@ -115,7 +118,26 @@ class DataLoaderArgs(BaseArgs):
 
         self.int_range = omit_none_tuple(tup=(args_util.get(args, "int_min"), args_util.get(args, "int_max")))
         self.float_range = omit_none_tuple(tup=(args_util.get(args, "float_min"), args_util.get(args, "float_max")))
+        if self.int_range or self.float_range:
+            G_LOGGER.warning(
+                "The --int-min/--int-max and --float-min/--float-max options are deprecated.\n"
+                "Please use `--val-range` instead, which allows you to specify per-input data ranges."
+            )
+
         self.val_range = args_util.parse_dict_with_default(args_util.get(args, "val_range"), cast_to=tuple)
+        if self.val_range is not None:
+            for name, vals in self.val_range.items():
+                if len(vals) != 2:
+                    G_LOGGER.critical(
+                        "In --val-range, for input: {:}, expected to receive exactly 2 values, but received {:}.\n"
+                        "Note: Option was parsed as: input: {:}, range: {:}".format(name, len(vals), name, vals)
+                    )
+
+                if any(not isinstance(elem, numbers.Number) for elem in vals):
+                    G_LOGGER.critical(
+                        "In --val-range, for input: {:}, one or more elements of the range could not be parsed as a number.\n"
+                        "Note: Option was parsed as: input: {:}, range: {:}".format(name, name, vals)
+                    )
 
         self.iterations = args_util.get(args, "iterations")
 
@@ -125,6 +147,8 @@ class DataLoaderArgs(BaseArgs):
 
     def _add_to_script(self, script, user_input_metadata_str=None):
         needs_invoke = False
+        using_random_data = False
+
         if self.data_loader_script:
             script.add_import(imports=["mod"], frm="polygraphy")
             data_loader = make_invocable(
@@ -140,6 +164,7 @@ class DataLoaderArgs(BaseArgs):
                 data_loader=Script.DATA_LOADER_NAME,
             )
         else:
+            using_random_data = True
             if user_input_metadata_str is None and self.model_args is not None and self.model_args.input_shapes:
                 user_input_metadata_str = self.model_args.input_shapes
 
@@ -157,6 +182,9 @@ class DataLoaderArgs(BaseArgs):
             )
             if data_loader:
                 script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")
+
+        if using_random_data != self.is_using_random_data():
+            G_LOGGER.internal_error("is_using_random_data() reported a false positive!")
 
         return script.set_data_loader(data_loader), needs_invoke
 
@@ -195,3 +223,12 @@ class DataLoaderArgs(BaseArgs):
         if needs_invoke:
             data_loader = data_loader()
         return data_loader
+
+    def is_using_random_data(self):
+        """
+        Whether this data loader will randomly generate data rather than use real data.
+
+        Returns:
+            bool
+        """
+        return not self.data_loader_script and not self.load_inputs

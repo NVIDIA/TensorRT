@@ -32,6 +32,13 @@ namespace IInt8CalibratorDoc
 constexpr const char* descr = R"trtdoc(
     Application-implemented interface for calibration. Calibration is a step performed by the builder when deciding suitable scale factors for 8-bit inference. It must also provide a method for retrieving representative images which the calibration process can use to examine the distribution of activations. It may optionally implement a method for caching the calibration result for reuse on subsequent runs.
 
+    To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :
+    ::
+
+        class MyCalibrator(trt.IInt8Calibrator):
+            def __init__(self):
+                trt.IInt8Calibrator.__init__(self)
+
     :ivar batch_size: :class:`int` The batch size used for calibration batches.
     :ivar algorithm: :class:`CalibrationAlgoType` The algorithm used by this calibrator.
 )trtdoc";
@@ -112,6 +119,13 @@ constexpr const char* descr = R"trtdoc(
     Extends the :class:`IInt8Calibrator` class.
     This calibrator requires user parameterization, and is provided as a fallback option if the other calibrators yield poor results.
 
+    To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :
+    ::
+
+        class MyCalibrator(trt.IInt8LegacyCalibrator):
+            def __init__(self):
+                trt.IInt8LegacyCalibrator.__init__(self)
+
     :ivar quantile: :class:`float` The quantile (between 0 and 1) that will be used to select the region maximum when the quantile method is in use. See the user guide for more details on how the quantile is used.
     :ivar regression_cutoff: :class:`float` The fraction (between 0 and 1) of the maximum used to define the regression cutoff when using regression to determine the region maximum. See the user guide for more details on how the regression cutoff is used
 )trtdoc";
@@ -147,6 +161,14 @@ namespace IInt8EntropyCalibratorDoc
 constexpr const char* descr = R"trtdoc(
     Extends the :class:`IInt8Calibrator` class.
 
+    To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :
+    ::
+
+        class MyCalibrator(trt.IInt8EntropyCalibrator):
+            def __init__(self):
+                trt.IInt8EntropyCalibrator.__init__(self)
+
+
     This is the Legacy Entropy calibrator. It is less complicated than the legacy calibrator and produces better results.
 )trtdoc";
 
@@ -162,6 +184,13 @@ namespace IInt8EntropyCalibrator2Doc
 constexpr const char* descr = R"trtdoc(
     Extends the :class:`IInt8Calibrator` class.
 
+    To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :
+    ::
+
+        class MyCalibrator(trt.IInt8EntropyCalibrator2):
+            def __init__(self):
+                trt.IInt8EntropyCalibrator2.__init__(self)
+
     This is the preferred calibrator. This is the required calibrator for DLA, as it supports per activation tensor scaling.
 )trtdoc";
 
@@ -176,6 +205,13 @@ namespace IInt8MinMaxCalibratorDoc
 {
 constexpr const char* descr = R"trtdoc(
     Extends the :class:`IInt8Calibrator` class.
+
+    To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :
+    ::
+
+        class MyCalibrator(trt.IInt8MinMaxCalibrator):
+            def __init__(self):
+                trt.IInt8MinMaxCalibrator.__init__(self)
 
     This is the preferred calibrator for NLP tasks for all backends. It supports per activation tensor scaling.
 )trtdoc";

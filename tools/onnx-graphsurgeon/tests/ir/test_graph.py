@@ -25,7 +25,7 @@ from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
 from onnx_graphsurgeon.util.misc import SynchronizedList
-from onnx_models import const_foldable
+from onnx_models import const_foldable, shape_cast_elision
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
@@ -98,8 +98,7 @@ def if_op(self, cond, then_graph, else_graph):
 # Generates a graph where an outer node has no outputs except
 # within the subgraph. ONNX-GS should recognize that the node
 # is being used, and should not remove it during cleanup().
-@pytest.fixture
-def nested_graph():
+def make_nested_graph():
     inp = Variable("input")
     id_out = Variable("id_out")
     identity = Node(op="Identity", inputs=[inp], outputs=[id_out])
@@ -118,7 +117,12 @@ def nested_graph():
     nested_out = Variable("nested_out")
     nested_node = Node(op="Nested", attrs={"body": subgraph}, inputs=[inp], outputs=[nested_out])
 
-    yield Graph(nodes=[identity, nested_node], inputs=[inp], outputs=[nested_out])
+    return Graph(nodes=[identity, nested_node], inputs=[inp], outputs=[nested_out])
+
+
+@pytest.fixture
+def nested_graph():
+    yield make_nested_graph()
 
 
 class TestBasic(object):
@@ -130,6 +134,34 @@ class TestBasic(object):
         for idx in range(num_names):
             names.add(graph._generate_name("name"))
         assert len(names) == 100
+
+    def test_equal(self, nested_graph):
+        assert nested_graph == nested_graph
+
+    def test_equal_inputs_unequal(self):
+        g0 = make_nested_graph()
+        g1 = make_nested_graph()
+
+        g0.inputs.append(Variable("test"))
+
+        assert not (g0 == g1)
+
+    def test_equal_outputs_unequal(self):
+        g0 = make_nested_graph()
+        g1 = make_nested_graph()
+
+        g0.outputs.append(Variable("test"))
+
+        assert not (g0 == g1)
+
+    def test_equal_nested_unequal(self):
+        g0 = make_nested_graph()
+        g1 = make_nested_graph()
+
+        # Changing the nested subgraph should make the graphs unequal
+        g0.nodes[1].inputs[0].name = "subgraph_inp_modified"
+
+        assert not (g0 == g1)
 
 
 class TestRegister(object):
@@ -283,6 +315,17 @@ class TestTensors(object):
 
         with pytest.raises(OnnxGraphSurgeonException):
             graph.tensors(check_duplicates=True)
+
+    def test_tensors_with_duplicates_check_disabled(self):
+        inputs = [Variable(name="x")]
+        outputs = [Variable(name="x")]  # Distinct tensors with the same name
+        nodes = [
+            Node(op="Add", name="Test", inputs=inputs, outputs=outputs),
+        ]
+        graph = Graph(nodes=nodes, inputs=inputs, outputs=outputs)
+
+        # This should *not* throw
+        graph.tensors(check_duplicates=False)
 
 
 def toposort_linear_graph():
@@ -562,6 +605,27 @@ class TestCleanup(object):
 
 
 class TestCopy(object):
+    def test_basic(self):
+        graph = Graph(
+            nodes=[Node(op="Test")],
+            inputs=[Variable("test")],
+            outputs=[Variable("test")],
+            name="test-name",
+            doc_string="test-docstring",
+            import_domains=["fake-import-domain"],
+            opset=-1,
+        )
+        new_graph = graph.copy()
+
+        assert new_graph == graph
+        assert new_graph.nodes == graph.nodes
+        assert new_graph.inputs == graph.inputs
+        assert new_graph.outputs == graph.outputs
+        assert new_graph.name == graph.name
+        assert new_graph.doc_string == graph.doc_string
+        assert new_graph.import_domains == graph.import_domains
+        assert new_graph.opset == graph.opset
+
     def test_copy(self):
         def make_graph():
             graph, _ = toposort_multi_tier_output_graph()
@@ -1001,6 +1065,16 @@ class TestFoldConstants(object):
         assert graph.nodes[0].op == "If"
         assert len(then_graph.nodes) == 1
         assert len(else_graph.nodes) == 2
+
+    def test_cast_elision(self):
+        graph = gs.import_onnx(shape_cast_elision().load())
+        new_graph = graph.fold_constants()
+        no_casts = True
+
+        for node in new_graph.nodes:
+            no_casts &= node.op != "Cast"
+
+        assert no_casts
 
 
 class TestIO(object):

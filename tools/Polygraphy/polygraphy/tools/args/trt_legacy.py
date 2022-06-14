@@ -13,11 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+
 from polygraphy import constants, mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
-from polygraphy.tools.script import make_invocable
+from polygraphy.tools.script import assert_identifier, inline, make_invocable, safe
 
 
 @mod.export()
@@ -49,6 +51,7 @@ class TrtLegacyArgs(BaseArgs):
 
     def register(self, maker):
         from polygraphy.tools.args.model import ModelArgs
+        from polygraphy.tools.args.data_loader import DataLoaderArgs
         from polygraphy.tools.args.onnx.loader import OnnxLoaderArgs
         from polygraphy.tools.args.tf.loader import TfLoaderArgs
         from polygraphy.tools.args.trt.config import TrtConfigArgs
@@ -69,18 +72,33 @@ class TrtLegacyArgs(BaseArgs):
             self.trt_engine_save_args = maker
         if isinstance(maker, TrtRunnerArgs):
             self.trt_runner_args = maker
+        if isinstance(maker, DataLoaderArgs):
+            self.data_loader_args = maker
 
     def check_registered(self):
         assert self.model_args is not None, "ModelArgs is required!"
         assert self.trt_engine_loader_args is not None, "TrtEngineLoaderArgs is required!"
 
     def parse(self, args):
-        self.trt_outputs = args_util.get(args, "trt_outputs")
+        self.trt_outputs = args_util.get_outputs(args, "trt_outputs")
         self.caffe_model = args_util.get(args, "caffe_model")
         self.batch_size = args_util.get(args, "batch_size")
         self.save_uff = args_util.get(args, "save_uff")
         self.uff_order = args_util.get(args, "uff_order")
         self.preprocessor = args_util.get(args, "preprocessor")
+
+        self.calibration_cache = args_util.get(args, "calibration_cache")
+        calib_base = args_util.get(args, "calibration_base_class")
+        self.calibration_base_class = None
+        if calib_base is not None:
+            calib_base = safe(assert_identifier(calib_base))
+            self.calibration_base_class = inline(safe("trt.{:}", inline(calib_base)))
+
+        self.quantile = args_util.get(args, "quantile")
+        self.regression_cutoff = args_util.get(args, "regression_cutoff")
+
+        self.use_dla = args_util.get(args, "use_dla")
+        self.allow_gpu_fallback = args_util.get(args, "allow_gpu_fallback")
 
     def add_to_script(self, script):
         script.add_import(imports=["TrtLegacyRunner"], frm="polygraphy.backend.trt_legacy")
@@ -133,6 +151,25 @@ class TrtLegacyArgs(BaseArgs):
                 make_invocable("LoadNetworkFromUff", loader_name, uff_order=self.uff_order), "uff_network_loader"
             )
 
+        calibrator = None
+        if (
+            self.trt_config_args.int8 and self.data_loader_args is not None
+        ):  # We cannot do calibration if there is no data loader.
+            script.add_import(imports=["Calibrator"], frm="polygraphy.backend.trt")
+            script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")
+            data_loader_name = self.data_loader_args.add_data_loader(script)
+            if self.calibration_base_class:
+                script.add_import(imports=["tensorrt as trt"])
+
+            calibrator = make_invocable(
+                "Calibrator",
+                data_loader=data_loader_name if data_loader_name else inline(safe("DataLoader()")),
+                cache=self.calibration_cache,
+                BaseClass=self.calibration_base_class,
+                quantile=self.quantile,
+                regression_cutoff=self.regression_cutoff,
+            )
+
         runner_str = make_invocable(
             "TrtLegacyRunner",
             network_loader=loader_name,
@@ -144,6 +181,10 @@ class TrtLegacyArgs(BaseArgs):
             save_engine=self.trt_engine_save_args.path,
             layerwise=self.trt_outputs == constants.MARK_ALL,
             plugins=self.trt_engine_loader_args.plugins,
+            int8=self.trt_config_args.int8,
+            calibrator=calibrator,
+            use_dla=self.use_dla,
+            allow_gpu_fallback=self.allow_gpu_fallback,
         )
 
         script.add_runner(runner_str)

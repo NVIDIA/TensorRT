@@ -68,11 +68,15 @@ documentation.
 
 ## Changelog
 
-October 2020  
-Add v2 plugin that supports variable sequence length.  
+September 2021
+Add sequence length 512 support in v2 plugin
+Add head size 32 support when sequence length is 128, 256 or 512 in v2 plugin
+
+October 2020
+Add v2 plugin that supports variable sequence length.
 Add v3 plugin that supports int8 interleaved variable sequence length.
 
-November 2019  
+November 2019
 This is the first release of this `README.md` file.
 
 

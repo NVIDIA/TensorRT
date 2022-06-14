@@ -20,6 +20,8 @@
 #include "NvInferLegacyDims.h"
 #include "NvInferRuntimeCommon.h"
 
+// @cond SuppressDoxyWarnings
+
 namespace nvinfer1
 {
 
@@ -29,14 +31,20 @@ class IAlgorithmContext;
 class IAlgorithmIOInfo;
 class IAlgorithmSelector;
 class IAlgorithmVariant;
+class IAssertionLayer;
 class IBuilderConfig;
 class IConcatenationLayer;
+class IIfConditional;
+class IConditionLayer;
+class IIfConditionalOutputLayer;
+class IIfConditionalInputLayer;
 class IConstantLayer;
 class IConvolutionLayer;
 class ICudaEngine;
 class IDeconvolutionLayer;
 class IDequantizeLayer;
 class IDimensionExpr;
+class IEinsumLayer;
 class IElementWiseLayer;
 class IExecutionContext;
 class IFillLayer;
@@ -44,6 +52,7 @@ class IFullyConnectedLayer;
 class IGatherLayer;
 class IHostMemory;
 class IIdentityLayer;
+class IIfConditional;
 class IInt8Calibrator;
 class IIteratorLayer;
 class ILayer;
@@ -69,11 +78,13 @@ class IReduceLayer;
 class IResizeLayer;
 class IRNNv2Layer;
 class IScaleLayer;
+class IScatterLayer;
 class ISelectLayer;
 class IShapeLayer;
 class IShuffleLayer;
 class ISliceLayer;
 class ISoftMaxLayer;
+class IEngineInspector;
 class ITensor;
 class ITimingCache;
 class ITopKLayer;
@@ -90,6 +101,8 @@ enum class DimensionOperation : int32_t;
 enum class ElementWiseOperation : int32_t;
 enum class EngineCapability : int32_t;
 enum class FillOperation : int32_t;
+enum class GatherMode : int32_t;
+enum class LayerInformationFormat : int32_t;
 enum class LayerType : int32_t;
 enum class LoopOutput : int32_t;
 enum class MatrixOperation : int32_t;
@@ -109,6 +122,7 @@ enum class RNNGateType : int32_t;
 enum class RNNInputMode : int32_t;
 enum class RNNOperation : int32_t;
 enum class ScaleMode : int32_t;
+enum class ScatterMode : int32_t;
 enum class SliceMode : int32_t;
 enum class TensorLocation : int32_t;
 enum class TopKOperation : int32_t;
@@ -175,6 +189,7 @@ public:
     virtual void setGpuAllocator(IGpuAllocator* allocator) noexcept = 0;
     virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
+    virtual ILogger* getLogger() const noexcept = 0;
 };
 
 class VRefitter : public VRoot
@@ -193,6 +208,7 @@ public:
     virtual bool setNamedWeights(const char* name, Weights weights) noexcept = 0;
     virtual int32_t getMissingWeights(int32_t size, const char** weightsNames) noexcept = 0;
     virtual int32_t getAllWeights(int32_t size, const char** weightsNames) noexcept = 0;
+    virtual ILogger* getLogger() const noexcept = 0;
 };
 
 class VOptimizationProfile : public VRoot
@@ -247,6 +263,8 @@ public:
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
     virtual bool hasImplicitBatchDimension() const noexcept = 0;
     virtual TacticSources getTacticSources() const noexcept = 0;
+    virtual ProfilingVerbosity getProfilingVerbosity() const noexcept = 0;
+    virtual IEngineInspector* createEngineInspector() const noexcept = 0;
 };
 
 class VExecutionContext : public VRoot
@@ -278,6 +296,20 @@ public:
     virtual bool executeV2(void* const* bindings) noexcept = 0;
     virtual bool enqueueV2(void* const* bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept = 0;
     virtual bool setOptimizationProfileAsync(int32_t profileIndex, cudaStream_t stream) noexcept = 0;
+    virtual void setEnqueueEmitsProfile(bool enqueueEmitsProfile) noexcept = 0;
+    virtual bool getEnqueueEmitsProfile() const noexcept = 0;
+    virtual bool reportToProfiler() const noexcept = 0;
+};
+
+class VEngineInspector : public VRoot
+{
+public:
+    virtual bool setExecutionContext(IExecutionContext const* context) noexcept = 0;
+    virtual IExecutionContext const* getExecutionContext() const noexcept = 0;
+    virtual AsciiChar const* getLayerInformation(int32_t layerIndex, LayerInformationFormat format) noexcept = 0;
+    virtual AsciiChar const* getEngineInformation(LayerInformationFormat format) noexcept = 0;
+    virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
+    virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
 };
 
 class VTensor : public VRoot
@@ -501,6 +533,8 @@ public:
     virtual int32_t getGatherAxis() const noexcept = 0;
     virtual void setNbElementWiseDims(int32_t k) noexcept = 0;
     virtual int32_t getNbElementWiseDims() const noexcept = 0;
+    virtual void setMode(GatherMode mode) noexcept = 0;
+    virtual GatherMode getMode() const noexcept = 0;
 };
 
 class VRNNv2Layer : public VRoot
@@ -706,8 +740,47 @@ public:
     virtual void setName(const char* name) noexcept = 0;
     virtual const char* getName() const noexcept = 0;
 };
+
+class VConditionalBoundaryLayer : public VRoot
+{
+public:
+    virtual IIfConditional* getConditional() const noexcept = 0;
+};
+
+class VConditionLayer : public VRoot
+{
+public:
+};
+
+class VConditionalInputLayer : public VRoot
+{
+public:
+};
+
+class VConditionalOutputLayer : public VRoot
+{
+public:
+};
+
+class VIfConditional : public VRoot
+{
+public:
+    virtual IConditionLayer* setCondition(ITensor& tensor) noexcept = 0;
+    virtual IIfConditionalInputLayer* addInput(ITensor& tensor) noexcept = 0;
+    virtual IIfConditionalOutputLayer* addOutput(ITensor& trueTensor, ITensor& falseTensor) noexcept = 0;
+    virtual void setName(const char* name) noexcept = 0;
+    virtual const char* getName() const noexcept = 0;
+};
+
 class VSelectLayer : public VRoot
 {
+};
+
+class VAssertionLayer : public VRoot
+{
+public:
+    virtual void setMessage(const char* message) noexcept = 0;
+    virtual const char* getMessage() const noexcept = 0;
 };
 
 class VFillLayer : public VRoot
@@ -735,6 +808,22 @@ class VDequantizeLayer : public VRoot
 public:
     virtual int32_t getAxis() const noexcept = 0;
     virtual void setAxis(int32_t axis) noexcept = 0;
+};
+
+class VScatterLayer : public VRoot
+{
+public:
+   virtual void setMode(ScatterMode mode) noexcept = 0;
+   virtual ScatterMode getMode() const noexcept = 0;
+   virtual void setAxis(int32_t axis) noexcept = 0;
+   virtual int32_t getAxis() const noexcept = 0;
+}; // class VScatterLayer
+
+class VEinsumLayer : public VRoot
+{
+public:
+    virtual bool setEquation(const char* equation) noexcept = 0;
+    virtual const char* getEquation() const noexcept = 0;
 };
 
 class VNetworkDefinition : public VRoot
@@ -814,6 +903,11 @@ public:
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
     virtual IDequantizeLayer* addDequantize(ITensor& input, ITensor& scale) noexcept = 0;
     virtual IQuantizeLayer* addQuantize(ITensor& input, ITensor& scale) noexcept = 0;
+    virtual IGatherLayer* addGatherV2(ITensor& data, ITensor& indices, GatherMode mode) noexcept = 0;
+    virtual IIfConditional* addIfConditional() noexcept = 0;
+    virtual IScatterLayer* addScatter(ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode) noexcept = 0;
+    virtual IEinsumLayer* addEinsum(ITensor* const* inputs, int32_t nbInputs, const char* equation) noexcept = 0;
+    virtual IAssertionLayer* addAssertion(ITensor& condition, const char* message) noexcept = 0;
 };
 
 class VAlgorithmIOInfo : public VRoot
@@ -929,11 +1023,13 @@ public:
     virtual bool platformHasTf32() const noexcept = 0;
     virtual nvinfer1::IHostMemory* buildSerializedNetwork(INetworkDefinition& network, IBuilderConfig& config) noexcept
         = 0;
-    virtual bool isNetworkSupported(INetworkDefinition const& network, IBuilderConfig const& config) const noexcept
-        = 0;
+    virtual bool isNetworkSupported(INetworkDefinition const& network, IBuilderConfig const& config) const noexcept = 0;
+    virtual ILogger* getLogger() const noexcept = 0;
 };
 
 } // namespace apiv
 } // namespace nvinfer1
+
+// @endcond
 
 #endif // NV_INFER_RUNTIME_IMPL_H

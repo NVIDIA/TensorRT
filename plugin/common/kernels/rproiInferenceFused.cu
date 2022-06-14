@@ -44,7 +44,8 @@ pluginStatus_t RPROIInferenceFused(cudaStream_t stream,
                                   void* rois,
                                   const DataType t_top,
                                   const DLayout_t l_top,
-                                  void* top)
+                                  void* top,
+                                  size_t deviceSmemSize)
 {
     if (imInfo == NULL || anchors == NULL || scores == NULL || deltas == NULL || featureMap == NULL || workspaces == NULL || rois == NULL || top == NULL)
     {
@@ -94,7 +95,8 @@ pluginStatus_t RPROIInferenceFused(cudaStream_t stream,
                           featureMap,
                           t_top,
                           l_top,
-                          top);
+                          top,
+                          deviceSmemSize);
     ASSERT_FAILURE(status == STATUS_SUCCESS);
 
     return STATUS_SUCCESS;

@@ -28,7 +28,6 @@ import common
 
 TRT_LOGGER = trt.Logger()
 
-
 def get_engine(onnx_file_path, engine_file_path):
     """Attempts to load a serialized engine if available, otherwise builds a new TensorRT engine and saves it."""
     def build_engine():
@@ -96,19 +95,21 @@ def main():
     cw, cc, qw, qc = get_inputs(context, query)
 
     # Do inference with TensorRT
-    refit_weights = np.load("Parameter576_B_0.npy")
-    fake_weights = np.ones_like(refit_weights)
+    weights_names = ["Parameter576_B_0", "W_0"]
+    refit_weights_dict = {name : np.load("{}.npy".format(name)) for name in weights_names}
+    fake_weights_dict = {name : np.ones_like(weights) for name, weights in refit_weights_dict.items()}
     engine = get_engine(onnx_file_path, engine_file_path)
     refitter = trt.Refitter(engine, TRT_LOGGER)
-    context = engine.create_execution_context()
 
-    for weights, answer_correct in [(fake_weights, False), (refit_weights, True)]:
+    for weights_dict, answer_correct in [(fake_weights_dict, False), (refit_weights_dict, True)]:
         print("Refitting engine...")
         # To get a list of all refittable weights' names
         # in the network, use refitter.get_all_weights().
 
         # Refit named weights via set_named_weights
-        refitter.set_named_weights('Parameter576_B_0', weights)
+        for name in weights_names:
+            refitter.set_named_weights(name, weights_dict[name])
+
         # Get missing weights names. This should return empty
         # lists in this case.
         missing_weights = refitter.get_missing_weights()
@@ -126,7 +127,8 @@ def main():
         inputs[1].host = cc
         inputs[2].host = qw
         inputs[3].host = qc
-        trt_outputs = common.do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+        execution_context = engine.create_execution_context()
+        trt_outputs = common.do_inference_v2(execution_context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
 
         start = np.asscalar(trt_outputs[0])
         end = np.asscalar(trt_outputs[1])

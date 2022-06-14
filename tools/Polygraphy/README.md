@@ -5,11 +5,10 @@
 
 - [Introduction](#introduction)
 - [Installation](#installation)
-- [Usage](#usage)
+- [Command-line Toolkit](#command-line-toolkit)
+- [Python API](#python-api)
 - [Examples](#examples)
-- [Advanced](#advanced)
-    - [Using The Python API](#using-the-python-api)
-    - [Enabling Internal Correctness Checks](#enabling-internal-correctness-checks)
+- [How-To Guides](#how-to-guides)
 - [Contributing](#contributing)
 
 
@@ -43,7 +42,7 @@ Among other things, Polygraphy lets you:
 ### Installing Prebuilt Wheels
 
 ```bash
-python -m pip install colored polygraphy --index-url https://pypi.ngc.nvidia.com
+python -m pip install colored polygraphy --extra-index-url https://pypi.ngc.nvidia.com
 ```
 
 **NOTE:** *When using this method, the command-line toolkit will be installed into `${HOME}/.local/bin` by default.*
@@ -137,13 +136,17 @@ You can install the additional packages manually with:
 python -m pip install <package_name>
 ```
 
-## Usage
 
-Polygraphy includes a command-line interface, [`polygraphy`](./bin/polygraphy), which provides various tools.
-For usage information, run `polygraphy --help`
+## Command-line Toolkit
 
-For details on the various tools included in the Polygraphy toolkit, see the
-[tools directory](./polygraphy/tools).
+For details on the various tools included in the Polygraphy toolkit,
+see the [CLI User Guide](./polygraphy/tools).
+
+
+### Python API
+
+For more information on the Polygraphy Python API, including a high-level overview and the
+Python API reference documentation, see the [API directory](./polygraphy).
 
 
 ## Examples
@@ -151,27 +154,9 @@ For details on the various tools included in the Polygraphy toolkit, see the
 For examples of both the CLI and Python API, see the [examples directory](./examples).
 
 
-## Advanced
+## How-To Guides
 
-### Using The Python API
-
-For more information on the Polygraphy Python API, including a high-level overview and the
-Python API reference documentation, see the [API directory](./polygraphy).
-
-
-### Enabling Internal Correctness Checks
-
-Polygraphy includes various runtime checks for internal correctness, which are
-disabled by default. These checks can be enabled by setting the `POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS`
-environment variable to `1` or `polygraphy.config.INTERNAL_CORRECTNESS_CHECKS = True` in the Python API.
-A failure in this type of check indicates a bug in Polygraphy.
-
-When the checks are enabled, Polygraphy will ensure, for example, that loaders do not
-modify their state when they are called, and that runners will reset their state correctly in
-`deactivate()`.
-
-**NOTE:** *`POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS` only relates to checks that validate Polygraphy's*
-    *internal APIs. User input validation and public API checks are always enabled and cannot be disabled.*
+For how-to guides, see the [how-to guides directory](./how-to).
 
 
 ## Contributing

@@ -37,7 +37,7 @@ std::vector<PluginField> ProposalLayerPluginCreator::mPluginAttributes;
 
 ProposalLayerPluginCreator::ProposalLayerPluginCreator()
 {
-
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("prenms_topk", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("keep_topk", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));

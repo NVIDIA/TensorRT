@@ -86,6 +86,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+September 2021
+Updated the sample to use explicit batch network definition.
+
 March 2021
 Documented the Python version limitations.
 

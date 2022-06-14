@@ -335,6 +335,7 @@ IPluginV2Ext* FlattenConcat::clone() const noexcept
 
 FlattenConcatPluginCreator::FlattenConcatPluginCreator()
 {
+    mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("axis", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("ignoreBatch", nullptr, PluginFieldType::kINT32, 1));
 

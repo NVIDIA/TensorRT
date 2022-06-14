@@ -16,4 +16,4 @@
 from polygraphy import mod
 from polygraphy.exception import *
 
-mod.warn_deprecated("polygraphy.common.exception", "polygraphy.exception", remove_in="0.32.0")
+mod.warn_deprecated("polygraphy.common.exception", "polygraphy.exception", remove_in="0.34.0")

@@ -56,9 +56,16 @@ constexpr const char* RECURRENCE = R"trtdoc(Loop Recurrence layer)trtdoc";
 constexpr const char* ITERATOR = R"trtdoc(Loop Iterator layer)trtdoc";
 constexpr const char* LOOP_OUTPUT = R"trtdoc(Loop output layer)trtdoc";
 constexpr const char* SELECT = R"trtdoc(Select layer)trtdoc";
+constexpr const char* ASSERTION = R"trtdoc(Assertion layer)trtdoc";
 constexpr const char* FILL = R"trtdoc(Fill layer)trtdoc";
 constexpr const char* QUANTIZE = R"trtdoc(Quantize layer)trtdoc";
 constexpr const char* DEQUANTIZE = R"trtdoc(Dequantize layer)trtdoc";
+constexpr const char* SCATTER = R"trtdoc(Scatter layer)trtdoc";
+constexpr const char* CONDITION = R"trtdoc(If-conditional Condition layer)trtdoc";
+constexpr const char* CONDITIONAL_OUTPUT = R"trtdoc(If-conditional output layer)trtdoc";
+constexpr const char* CONDITIONAL_INPUT = R"trtdoc(If-conditional input layer)trtdoc";
+constexpr const char* EINSUM = R"trtdoc(Einsum layer)trtdoc";
+
 } // namespace LayerTypeDoc
 
 namespace TensorLocationDoc
@@ -563,9 +570,36 @@ constexpr const char* descr = R"trtdoc(
     A gather layer in an :class:`INetworkDefinition` .
 
     :ivar axis: :class:`int` The non-batch dimension axis to gather on. The axis must be less than the number of non-batch dimensions in the data input.
-    :ivar num_elementwise_dims: :class:`int` The number of leading dimensions of indices tensor to be handled elementwise. Must be 0 if there is an implicit batch dimension. It can be 0 or 1 if there is not an implicit batch dimension.
+    :ivar num_elementwise_dims: :class:`int` The number of leading dimensions of indices tensor to be handled elementwise. For `GatherMode::kDEFAULT`, it must be 0 if there is an implicit batch dimension. It can be 0 or 1 if there is not an implicit batch dimension. For `GatherMode::kND`, it can be between 0 and one less than rank(data). For `GatherMode::kELEMENT`, it must be 0.
+    :ivar mode: :class:`GatherMode` The gather mode.
 )trtdoc";
 } // namespace IGatherLayerDoc
+
+namespace ScatterModeDoc
+{
+constexpr const char* descr = R"trtdoc(The scatter mode to be done by the scatter layer.)trtdoc";
+
+constexpr const char* ELEMENT = R"trtdoc(Scatter Element mode)trtdoc";
+constexpr const char* ND = R"trtdoc(Scatter ND mode)trtdoc";
+} // namespace ScatterModeDoc
+
+namespace IScatterLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A Scatter layer as in :class:`INetworkDefinition`.
+    :ivar axis: axis to scatter on when using Scatter Element mode (ignored in ND mode)
+    :ivar mode: :class:`ScatterMode` The operation mode of the scatter.
+)trtdoc";
+} // namespace IScatterLayerDoc
+
+namespace GatherModeDoc
+{
+constexpr const char* descr = R"trtdoc(Controls how IGatherLayer gathers data)trtdoc";
+
+constexpr const char* DEFAULT = R"trtdoc(Similar to ONNX Gather. This is the default.)trtdoc";
+constexpr const char* ELEMENT = R"trtdoc(Similar to ONNX GatherElements.)trtdoc";
+constexpr const char* ND = R"trtdoc(Similar to ONNX GatherND.)trtdoc";
+} // namespace GatherModeDoc
 
 namespace RNNOperationDoc
 {
@@ -796,6 +830,8 @@ constexpr const char* CEIL = R"trtdoc(Ceiling)trtdoc";
 constexpr const char* FLOOR = R"trtdoc(Floor)trtdoc";
 constexpr const char* ERF = R"trtdoc(Gauss error function)trtdoc";
 constexpr const char* NOT = R"trtdoc(Not)trtdoc";
+constexpr const char* SIGN = R"trtdoc(Sign. If input > 0, output 1; if input < 0, output -1; if input == 0, output 0.)trtdoc";
+constexpr const char* ROUND = R"trtdoc(Round to nearest even for float datatype.)trtdoc";
 } // namespace UnaryOperationDoc
 
 namespace IUnaryLayerDoc
@@ -906,15 +942,11 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 
 constexpr const char* set_input = R"trtdoc(
-    Sets the input tensor for the given index. The index must be 0 for a static slice layer.
-    A static slice layer is converted to a dynamic slice layer by calling :func:`set_input` with an index > 0.
+    Sets the input tensor for the given index. The index must be 0 or 4 for a static slice layer.
+    A static slice layer is converted to a dynamic slice layer by calling :func:`set_input` with an index between 1 and 3.
     A dynamic slice layer cannot be converted back to a static slice layer.
 
-    For a dynamic slice layer, the values 0-3 are valid. If an index > 0 is specified, all values between
-    index 0 and that index must be dynamic tensors. The values larger than index can use static dimensions.
-    For example, if an index of two is specified, the stride tensor can be set via setStride, but the start tensor
-    must be specified via :func:`set_input` as both size and start are converted to dynamic tensors.
-    The indices in the dynamic case are as follows:
+    The indices are as follows:
 
     =====   ==================================================================================
     Index   Description
@@ -923,12 +955,11 @@ constexpr const char* set_input = R"trtdoc(
         1     The start tensor to begin slicing, N-dimensional for Data, and 1-D for Shape.
         2     The size tensor of the resulting slice, N-dimensional for Data, and 1-D for Shape.
         3     The stride of the slicing operation, N-dimensional for Data, and 1-D for Shape.
+        4     Value for the kFILL slice mode. Disallowed for other modes.
     =====   ==================================================================================
 
     If this function is called with a value greater than 0, then :attr:`num_inputs` changes
-    from 1 to index + 1. When converting from static to dynamic slice layer,
-    all unset tensors, between 1 and index + 1, are initialized to nullptr. It is an error to attempt to build
-    a network that has any nullptr inputs.
+    from 1 to index + 1.
 
     :arg index: The index of the input tensor.
     :arg tensor: The input tensor.
@@ -942,7 +973,10 @@ constexpr const char* descr = R"trtdoc(Controls how ISliceLayer handles out of b
 
 constexpr const char* DEFAULT
     = R"trtdoc(Fail with error when the coordinates are out of bounds. This is the default.)trtdoc";
-constexpr const char* WRAP = R"trtdoc(Coordinates wrap around periodically)trtdoc";
+constexpr const char* WRAP = R"trtdoc(Coordinates wrap around periodically.)trtdoc";
+constexpr const char* CLAMP = R"trtdoc(Out of bounds indices are clamped to bounds)trtdoc";
+constexpr const char* FILL = R"trtdoc(Use fill input value when coordinates are out of bounds.)trtdoc";
+constexpr const char* REFLECT = R"trtdoc(Coordinates reflect.)trtdoc";
 } // namespace SliceModeDoc
 
 namespace IShapeLayerDoc
@@ -1321,6 +1355,17 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 } // namespace ISelectLayerDoc
 
+namespace IAssertionLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    An assertion layer in an :class:`INetworkDefinition` .
+
+    This layer implements assertions. The input must be a boolean shape tensor. If any element of it is ``False``, a build-time or run-time error occurs. Asserting equality of input dimensions may help the optimizer.
+
+    :ivar message: :class:`string` Message to print if the assertion fails.
+)trtdoc";
+} // namespace IAssertionLayerDoc
+
 namespace FillOperationDoc
 {
 constexpr const char* descr = R"trtdoc(The tensor fill operations that may performed by an Fill layer.)trtdoc";
@@ -1488,6 +1533,123 @@ constexpr const char* descr = R"trtdoc(
 
 )trtdoc";
 } // namespace IDequantizeLayerDoc
+
+namespace IIfConditionalBoundaryLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    :ivar conditional: :class:`IIfConditional` associated with this boundary layer.
+)trtdoc";
+} // namespace IIfConditionalBoundaryLayerDoc
+
+namespace IConditionLayerDoc
+{
+constexpr const char* descr = R"trtdoc(Describes the boolean condition of an if-conditional.)trtdoc";
+} // namespace IConditionLayerDoc
+
+namespace IIfConditionalInputLayerDoc
+{
+constexpr const char* descr = R"trtdoc(Describes kinds of if-conditional inputs.)trtdoc";
+} // namespace IIfConditionalInputLayerDoc
+
+namespace IIfConditionalOutputLayerDoc
+{
+constexpr const char* descr = R"trtdoc(Describes kinds of if-conditional outputs.)trtdoc";
+} // namespace IIfConditionalOutputLayerDoc
+
+namespace IIfConditionalDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Helper for constructing conditionally-executed subgraphs.
+
+    An If-conditional conditionally executes (lazy evaluation) part of the network according
+    to the following pseudo-code:
+
+    .. code-block:: none
+
+        If condition is true Then:
+            output = trueSubgraph(trueInputs);
+        Else:
+            output = falseSubgraph(falseInputs);
+        Emit output
+
+    Condition is a 0D boolean tensor (representing a scalar).
+    trueSubgraph represents a network subgraph that is executed when condition is evaluated to True.
+    falseSubgraph represents a network subgraph that is executed when condition is evaluated to False.
+
+    The following constraints apply to If-conditionals:
+    - Both the trueSubgraph and falseSubgraph must be defined.
+    - The number of output tensors in both subgraphs is the same.
+    - The type and shape of each output tensor from true/false subgraphs are the same.
+
+)trtdoc";
+
+constexpr const char* set_condition = R"trtdoc(
+    Set the condition tensor for this If-Conditional construct.
+
+    The ``condition`` tensor must be a 0D data tensor (scalar) with type DataType::kBOOL.
+
+    :param condition: The condition tensor that will determine which subgraph to execute.
+
+    :returns: The :class:`IConditionLayer` , or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr const char* add_output = R"trtdoc(
+    Make an output for this if-conditional, based on the given tensors.
+
+    Each output layer of the if-conditional represents a single output of either the true-subgraph or the
+    false-subgraph of the if-conditional, depending on which subgraph was executed.
+
+    :param true_subgraph_output: The output of the subgraph executed when this conditional's condition input evaluates to true.
+    :param false_subgraph_output: The output of the subgraph executed when this conditional's condition input evaluates to false.
+
+    :returns: The :class:`IIfConditionalOutputLayer` , or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr const char* add_input = R"trtdoc(
+    Make an input for this if-conditional, based on the given tensor.
+
+    :param input: An input to the conditional that can be used by either or both of the conditional’s subgraphs.
+)trtdoc";
+
+} // namespace IIfConditionalDoc
+
+namespace IEinsumLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    An Einsum layer in an :class:`INetworkDefinition` .
+
+    This layer implements a summation over the elements of the inputs along dimensions specified by the equation parameter, based on the Einstein summation convention.
+    The layer can have one or more inputs of rank >= 0. All the inputs must be of same data type. This layer supports all TensorRT data types except trt.bool.
+    There is one output tensor of the same type as the input tensors. The shape of output tensor is determined by the equation.
+
+    The equation specifies ASCII lower-case letters for each dimension in the inputs in the same order as the dimensions, separated by comma for each input.
+    The dimensions labeled with the same subscript must match or be broadcastable.
+    Repeated subscript labels in one input take the diagonal.
+    Repeating a label across multiple inputs means that those axes will be multiplied.
+    Omitting a label from the output means values along those axes will be summed.
+    In implicit mode, the indices which appear once in the expression will be part of the output in increasing alphabetical order.
+    In explicit mode, the output can be controlled by specifying output subscript labels by adding an arrow (‘->’) followed by subscripts for the output.
+    For example, “ij,jk->ik” is equivalent to “ij,jk”.
+    Ellipsis (‘...’) can be used in place of subscripts to broadcast the dimensions.
+    See the TensorRT Developer Guide for more details on equation syntax.
+
+    Many common operations can be expressed using the Einsum equation.
+    For example:
+    Matrix Transpose:             ij->ji
+    Sum:                          ij->
+    Matrix-Matrix Multiplication: ik,kj->ij
+    Dot Product:                  i,i->
+    Matrix-Vector Multiplication: ik,k->i
+    Batch Matrix Multiplication:  ijk,ikl->ijl
+    Batch Diagonal:               ...ii->...i
+
+    Note that TensorRT does not support ellipsis or diagonal operations.
+
+    :ivar equation: :class:`str` The Einsum equation of the layer.
+        The equation is a comma-separated list of subscript labels, where each label refers to a dimension of the corresponding tensor.
+
+)trtdoc";
+} // namespace IEinsumLayerDoc
 
 namespace INetworkDefinitionDoc
 {
@@ -1800,14 +1962,37 @@ constexpr const char* add_topk = R"trtdoc(
 )trtdoc";
 
 constexpr const char* add_gather = R"trtdoc(
-    Add a pooling layer to the network.
+    Add a gather layer to the network.
     See :class:`IGatherLayer` for more information.
 
     :arg input: The tensor to gather values from.
     :arg indices: The tensor to get indices from to populate the output tensor.
     :arg axis: The non-batch dimension axis in the data tensor to gather on.
 
-    :returns: The new pooling layer, or :class:`None` if it could not be created.
+    :returns: The new gather layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr const char* add_gather_v2 = R"trtdoc(
+    Add a gather layer to the network.
+    See :class:`IGatherLayer` for more information.
+
+    :arg input: The tensor to gather values from.
+    :arg indices: The tensor to get indices from to populate the output tensor.
+    :arg mode: The gather mode.
+
+    :returns: The new gather layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr const char* add_scatter = R"trtdoc(
+    Add a scatter layer to the network.
+    See :class:`IScatterLayer` for more information.
+
+    :arg data: The tensor to get default values from.
+    :arg indices: The tensor to get indices from to populate the output tensor.
+    :arg updates: The tensor to get values from to populate the output tensor.
+    :arg mode: operation mode see IScatterLayer for more info
+
+    :returns: The new Scatter layer, or :class:`None` if it could not be created.
 )trtdoc";
 
 constexpr const char* add_ragged_softmax = R"trtdoc(
@@ -1955,6 +2140,16 @@ constexpr const char* add_select = R"trtdoc(
     :returns: The new select layer, or :class:`None` if it could not be created.
 )trtdoc";
 
+constexpr const char* add_assertion = R"trtdoc(
+    Add a assertion layer.
+    See :class:`IAssertionLayer` for more information.
+
+    :arg condition: The condition tensor to the layer.
+    :arg message: The message to print if the assertion fails.
+
+    :returns: The new assertion layer, or :class:`None` if it could not be created.
+)trtdoc";
+
 constexpr const char* add_fill = R"trtdoc(
     Add a fill layer.
     See :class:`IFillLayer` for more information.
@@ -2075,6 +2270,24 @@ constexpr const char* add_dequantize = R"trtdoc(
 
     :returns: The new dequantization layer, or :class:`None` if it could not be created.
 )trtdoc";
+
+constexpr const char* add_if_conditional = R"trtdoc(
+    Adds an if-conditional to the network, which provides a way to specify subgraphs that will be conditionally executed using lazy evaluation.
+    See :class:`IIfConditional` for more information.
+
+    :returns: The new if-condtional, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr const char* add_einsum = R"trtdoc(
+    Adds an Einsum layer to the network.
+    See :class:`IEinsumLayer` for more information.
+
+    :arg inputs: The input tensors to the layer.
+    :arg equation: The Einsum equation of the layer.
+
+    :returns: the new Einsum layer, or :class:`None` if it could not be created.
+)trtdoc";
+
 } // namespace INetworkDefinitionDoc
 
 } // namespace tensorrt

@@ -20,18 +20,18 @@
 
 namespace nmtSample
 {
-LimitedSamplesDataReader::LimitedSamplesDataReader(int maxSamplesToRead, DataReader::ptr originalDataReader)
+LimitedSamplesDataReader::LimitedSamplesDataReader(int32_t maxSamplesToRead, DataReader::ptr originalDataReader)
     : gMaxSamplesToRead(maxSamplesToRead)
     , gOriginalDataReader(originalDataReader)
     , gCurrentPosition(0)
 {
 }
 
-int LimitedSamplesDataReader::read(
-    int samplesToRead, int maxInputSequenceLength, int* hInputData, int* hActualInputSequenceLengths)
+int32_t LimitedSamplesDataReader::read(
+    int32_t samplesToRead, int32_t maxInputSequenceLength, int32_t* hInputData, int32_t* hActualInputSequenceLengths)
 {
-    int limitedSmplesToRead = std::min(samplesToRead, std::max(gMaxSamplesToRead - gCurrentPosition, 0));
-    int samplesRead = gOriginalDataReader->read(
+    int32_t limitedSmplesToRead = std::min(samplesToRead, std::max(gMaxSamplesToRead - gCurrentPosition, 0));
+    int32_t samplesRead = gOriginalDataReader->read(
         limitedSmplesToRead, maxInputSequenceLength, hInputData, hActualInputSequenceLengths);
     gCurrentPosition += samplesRead;
     return samplesRead;

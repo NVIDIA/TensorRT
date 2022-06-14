@@ -17,6 +17,7 @@
 import ctypes
 import glob
 import os
+import sys
 import warnings
 
 
@@ -27,10 +28,40 @@ def try_load(library):
         pass
 
 
-# Try loading all packaged libraries
+# Try loading all packaged libraries. This is a nop if there are no libraries packaged.
 CURDIR = os.path.realpath(os.path.dirname(__file__))
 for lib in glob.iglob(os.path.join(CURDIR, "*.so*")):
     try_load(lib)
+
+
+# On Windows, we need to manually open the TensorRT libraries - otherwise we are unable to
+# load the bindings.
+def find_lib(name):
+    paths = os.environ["PATH"].split(os.path.pathsep)
+    for path in paths:
+        libpath = os.path.join(path, name)
+        if os.path.isfile(libpath):
+            return libpath
+
+    raise FileNotFoundError(
+        "Could not find: {:}. Is it on your PATH?\nNote: Paths searched were:\n{:}".format(name, paths)
+    )
+
+
+if sys.platform.startswith("win"):
+    # Order matters here because of dependencies
+    LIBRARIES = [
+        "nvinfer.dll",
+        "cublas64_##CUDA_MAJOR##.dll",
+        "cublasLt64_##CUDA_MAJOR##.dll",
+        "cudnn64_##CUDNN_MAJOR##.dll",
+        "nvinfer_plugin.dll",
+        "nvonnxparser.dll",
+        "nvparsers.dll",
+    ]
+
+    for lib in LIBRARIES:
+        ctypes.CDLL(find_lib(lib))
 
 
 from .tensorrt import *
@@ -40,9 +71,11 @@ __version__ = "##TENSORRT_VERSION##"
 
 # Provides Python's `with` syntax
 def common_enter(this):
-    warnings.warn("Context managers for TensorRT types are deprecated. "
-                  "Memory will be freed automatically when the reference count reaches 0.",
-                  DeprecationWarning)
+    warnings.warn(
+        "Context managers for TensorRT types are deprecated. "
+        "Memory will be freed automatically when the reference count reaches 0.",
+        DeprecationWarning,
+    )
     return this
 
 
@@ -56,7 +89,7 @@ def common_exit(this, exc_type, exc_value, traceback):
 
 # Logger does not have a destructor.
 ILogger.__enter__ = common_enter
-ILogger.__exit__ = lambda this, exc_type, exc_value, traceback : None
+ILogger.__exit__ = lambda this, exc_type, exc_value, traceback: None
 
 Builder.__enter__ = common_enter
 Builder.__exit__ = common_exit
@@ -92,6 +125,12 @@ IBuilderConfig.__enter__ = common_enter
 IBuilderConfig.__exit__ = common_exit
 
 
+# Add logger severity into the default implementation to preserve backwards compatibility.
+Logger.Severity = ILogger.Severity
+
+for attr, value in ILogger.Severity.__members__.items():
+    setattr(Logger, attr, value)
+
 # Computes the volume of an iterable.
 def volume(iterable):
     """
@@ -109,14 +148,15 @@ def volume(iterable):
 
 # Converts a TensorRT datatype to the equivalent numpy type.
 def nptype(trt_type):
-    '''
+    """
     Returns the numpy-equivalent of a TensorRT :class:`DataType` .
 
     :arg trt_type: The TensorRT data type to convert.
 
     :returns: The equivalent numpy type.
-    '''
+    """
     import numpy as np
+
     mapping = {
         float32: np.float32,
         float16: np.float16,
@@ -131,13 +171,13 @@ def nptype(trt_type):
 
 # Add a numpy-like itemsize property to the datatype.
 def _itemsize(trt_type):
-    '''
+    """
     Returns the size in bytes of this :class:`DataType` .
 
     :arg trt_type: The TensorRT data type.
 
     :returns: The size of the type.
-    '''
+    """
     mapping = {
         float32: 4,
         float16: 2,
@@ -147,5 +187,6 @@ def _itemsize(trt_type):
     }
     if trt_type in mapping:
         return mapping[trt_type]
+
 
 DataType.itemsize = property(lambda this: _itemsize(this))

@@ -82,7 +82,7 @@ EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(const std::string& name, co
     , mTokEmbDev(nullptr)
     , mPosEmbDev(nullptr)
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic deserialize." << std::endl;
+    BERT_DEBUG_MSG("EmbLayerNormPluginDynamic deserialize.");
 
     // Deserialize in the same order as serialization
     deserialize_value(&data, &length, &mType);
@@ -114,7 +114,7 @@ IPluginV2DynamicExt* EmbLayerNormPluginDynamic::clone() const noexcept
 {
     try
     {
-        gLogVerbose << "EmbLayerNormPluginDynamic clone." << std::endl;
+        BERT_DEBUG_MSG("EmbLayerNormPluginDynamic clone.");
 
         auto p = new EmbLayerNormPluginDynamic(
             mLayerName, mType, mMhaType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb, mUseFullMask);
@@ -250,7 +250,7 @@ bool EmbLayerNormPluginDynamic::supportsFormatCombination(
 void EmbLayerNormPluginDynamic::configurePlugin(
     const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs) noexcept
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic configurePlugin." << std::endl;
+    BERT_DEBUG_MSG("EmbLayerNormPluginDynamic configurePlugin.");
 
     // Validate input arguments
     assert(nbOutputs == 2);
@@ -428,7 +428,7 @@ int EmbLayerNormPluginDynamic::initialize() noexcept
 
 void EmbLayerNormPluginDynamic::terminate() noexcept
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic terminate." << std::endl;
+    BERT_DEBUG_MSG("EmbLayerNormPluginDynamic terminate.");
 }
 
 size_t EmbLayerNormPluginDynamic::getSerializationSize() const noexcept
@@ -469,7 +469,7 @@ void EmbLayerNormPluginDynamic::serialize(void* buffer) const noexcept
 
 void EmbLayerNormPluginDynamic::destroy() noexcept
 {
-    gLogVerbose << "EmbLayerNormPluginDynamic destroy." << std::endl;
+    BERT_DEBUG_MSG("EmbLayerNormPluginDynamic destroy.");
     // This gets called when the network containing plugin is destroyed
     mGammaDev.reset(nullptr);
     mBetaDev.reset(nullptr);
@@ -523,7 +523,7 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
 {
     try
     {
-        gLogVerbose << "EmbLayerNormPluginDynamic createPlugin." << std::endl;
+        BERT_DEBUG_MSG("EmbLayerNormPluginDynamic createPlugin.");
 
         bool output_fp16 = false;
         bool useFullMask = false;
@@ -538,7 +538,7 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
             std::string field_name(fc->fields[i].name);
             if (field_name.compare("bert_embeddings_layernorm_beta") == 0)
             {
-                gLogVerbose << "Building bert_embeddings_layernorm_beta..." << std::endl;
+                BERT_DEBUG_MSG("Building bert_embeddings_layernorm_beta...");
                 beta.values = fc->fields[i].data;
                 beta.count = fc->fields[i].length;
                 beta.type = fieldTypeToDataType(fc->fields[i].type);
@@ -546,7 +546,7 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
 
             if (field_name.compare("bert_embeddings_layernorm_gamma") == 0)
             {
-                gLogVerbose << "Building bert_embeddings_layernorm_gamma..." << std::endl;
+                BERT_DEBUG_MSG("Building bert_embeddings_layernorm_gamma...");
                 gamma.values = fc->fields[i].data;
                 gamma.count = fc->fields[i].length;
                 gamma.type = fieldTypeToDataType(fc->fields[i].type);
@@ -554,7 +554,7 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
 
             if (field_name.compare("bert_embeddings_word_embeddings") == 0)
             {
-                gLogVerbose << "Building bert_embeddings_word_embeddings..." << std::endl;
+                BERT_DEBUG_MSG("Building bert_embeddings_word_embeddings...");
                 word_emb.values = fc->fields[i].data;
                 word_emb.count = fc->fields[i].length;
                 word_emb.type = fieldTypeToDataType(fc->fields[i].type);
@@ -562,7 +562,7 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
 
             if (field_name.compare("bert_embeddings_token_type_embeddings") == 0)
             {
-                gLogVerbose << "Building bert_embeddings_token_type_embeddings..." << std::endl;
+                BERT_DEBUG_MSG("Building bert_embeddings_token_type_embeddings...");
                 tok_emb.values = fc->fields[i].data;
                 tok_emb.count = fc->fields[i].length;
                 tok_emb.type = fieldTypeToDataType(fc->fields[i].type);
@@ -570,20 +570,20 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
 
             if (field_name.compare("bert_embeddings_position_embeddings") == 0)
             {
-                gLogVerbose << "Building bert_embeddings_position_embeddings..." << std::endl;
+                BERT_DEBUG_MSG("Building bert_embeddings_position_embeddings...");
                 pos_emb.values = fc->fields[i].data;
                 pos_emb.count = fc->fields[i].length;
                 pos_emb.type = fieldTypeToDataType(fc->fields[i].type);
             }
             if (field_name.compare("output_fp16") == 0)
             {
-                gLogVerbose << "Building output_fp16..." << std::endl;
+                BERT_DEBUG_MSG("Building output_fp16...");
                 assert(fc->fields[i].type == PluginFieldType::kINT32);
                 output_fp16 = static_cast<const int*>(fc->fields[i].data)[0] != 0;
             }
             if (field_name.compare("full_mask") == 0)
             {
-                gLogVerbose << "Building full_mask..." << std::endl;
+                BERT_DEBUG_MSG("Building full_mask...");
                 assert(fc->fields[i].type == PluginFieldType::kINT32);
                 useFullMask = static_cast<const int*>(fc->fields[i].data)[0] != 0;
             }
@@ -591,11 +591,11 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(const char* name, cons
             {
                 mhaTypeId = *static_cast<const int*>(fc->fields[i].data);
                 ASSERT(mhaTypeId >= 0 && mhaTypeId <= 3);
-                gLogVerbose << "Building mha typeId: " << mhaTypeId << std::endl;
+                BERT_DEBUG_VALUE("Building mha typeId: ", mhaTypeId);
             }
         }
 
-        gLogVerbose << "Building the Plugin..." << std::endl;
+        BERT_DEBUG_MSG("Building the Plugin...");
         DataType mhaType = static_cast<DataType>(mhaTypeId);
         EmbLayerNormPluginDynamic* p
             = new EmbLayerNormPluginDynamic(name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, mhaType, beta,

@@ -31,6 +31,10 @@ def trt_config_args():
 
 
 class TestTrtConfigArgs(object):
+    def test_defaults(self, trt_config_args):
+        trt_config_args.parse_args([])
+        assert trt_config_args.workspace is None
+
     def test_create_config(self, trt_config_args):
         trt_config_args.parse_args([])
         builder, network = create_network()
@@ -44,6 +48,7 @@ class TestTrtConfigArgs(object):
             ("--int8", "INT8"),
             ("--fp16", "FP16"),
             ("--tf32", "TF32"),
+            ("--allow-gpu-fallback", "GPU_FALLBACK"),
         ],
     )
     def test_precision_flags(self, trt_config_args, arg, flag):
@@ -51,10 +56,35 @@ class TestTrtConfigArgs(object):
             pytest.skip("TF32 support was added in 7.1")
 
         trt_config_args.parse_args([arg])
-        builder, network = create_network()
 
+        builder, network = create_network()
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
             assert config.get_flag(getattr(trt.BuilderFlag, flag))
+
+    @pytest.mark.parametrize(
+        "workspace, expected",
+        [
+            ("16", 16),
+            ("1e9", 1e9),
+            ("2M", 2 << 20),
+        ],
+    )
+    def test_workspace(self, trt_config_args, workspace, expected):
+        trt_config_args.parse_args(["--workspace", workspace])
+        assert trt_config_args.workspace == expected
+
+        builder, network = create_network()
+        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+            assert config.max_workspace_size == expected
+
+    def test_dla(self, trt_config_args):
+        trt_config_args.parse_args(["--use-dla"])
+        assert trt_config_args.use_dla
+
+        builder, network = create_network()
+        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+            assert config.default_device_type == trt.DeviceType.DLA
+            assert config.DLA_core == 0
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="SAFETY_SCOPE was added in TRT 8")
     def test_restricted_flags(self, trt_config_args):

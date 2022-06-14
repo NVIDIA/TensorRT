@@ -26,12 +26,12 @@ from polygraphy.mod import util as mod_util
 _all_external_lazy_imports = set()
 
 # Sometimes the Python package name differs from the module name.
-_MODULE_TO_PKG_NAME = {
+_PKG_NAME_FROM_MODULE = {
     "tensorrt": "nvidia-tensorrt",
 }
 
 # Some packages need additional flags to install correctly.
-_MODULE_EXTRA_FLAGS = {
+_EXTRA_FLAGS_FOR_MODULE = {
     "tensorrt": ["--extra-index-url=https://pypi.ngc.nvidia.com"],
     "onnx_graphsurgeon": ["--extra-index-url=https://pypi.ngc.nvidia.com"],
 }
@@ -93,8 +93,8 @@ def lazy_import(name, log=True, version=None):
 
         def install_mod(raise_error=True):
             modname = name.split(".")[0]
-            pkg = _MODULE_TO_PKG_NAME.get(modname, modname)
-            extra_flags = _MODULE_EXTRA_FLAGS.get(modname, [])
+            pkg = _PKG_NAME_FROM_MODULE.get(modname, modname)
+            extra_flags = _EXTRA_FLAGS_FOR_MODULE.get(modname, [])
 
             if version == LATEST_VERSION:
                 extra_flags.append("--upgrade")
@@ -102,15 +102,12 @@ def lazy_import(name, log=True, version=None):
                 pkg += version
 
             cmd = config.INSTALL_CMD + [pkg] + extra_flags
-            G_LOGGER.info(
-                "{:} is required, but not installed. Attempting to install now.\n"
-                "Running: {:}".format(pkg, " ".join(cmd))
-            )
+            G_LOGGER.info("Running installation command: {:}".format(" ".join(cmd)))
             status = sp.run(cmd)
             if status.returncode != 0:
                 log_func = G_LOGGER.critical if raise_error else G_LOGGER.warning
                 log_func(
-                    "Could not automatically install required package: {:}. Please install it manually.".format(pkg)
+                    "Could not automatically install required module: {:}. Please install it manually.".format(pkg)
                 )
 
             mod = importlib.import_module(name)
@@ -119,15 +116,16 @@ def lazy_import(name, log=True, version=None):
         mod = None
         try:
             mod = importlib.import_module(name)
-        except:
+        except ImportError:
             if config.AUTOINSTALL_DEPS:
+                G_LOGGER.info("Module: '{:}' is required, but not installed. Attempting to install now.".format(name))
                 mod = install_mod()
             else:
                 G_LOGGER.critical(
-                    "Module: {:} is required but could not be imported.\n"
+                    "Module: '{:}' is required but could not be imported.\n"
                     "You can try setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables "
-                    "to allow Polygraphy to automatically install missing packages.\n"
-                    "Note that this may cause existing packages to be overwritten - hence, it may be "
+                    "to allow Polygraphy to automatically install missing modules.\n"
+                    "Note that this may cause existing modules to be overwritten - hence, it may be "
                     "desirable to use a Python virtual environment or container. ".format(name)
                 )
 
@@ -135,13 +133,13 @@ def lazy_import(name, log=True, version=None):
         if version is not None and hasattr(mod, "__version__") and not _version_ok(mod.__version__, version):
             if config.AUTOINSTALL_DEPS:
                 G_LOGGER.info(
-                    "Note: Package: '{name}' version {cur_ver} is installed, but version {rec_ver} is recommended.\n"
-                    "Upgrading...".format(name=name, cur_ver=mod.__version__, rec_ver=version)
+                    "Note: Module: '{name}' version '{cur_ver}' is installed, but version '{rec_ver}' is recommended.\n"
+                    "Attempting to upgrade now.".format(name=name, cur_ver=mod.__version__, rec_ver=version)
                 )
                 mod = install_mod(raise_error=False)  # We can try to use the other version if install fails.
             elif version != LATEST_VERSION:
                 G_LOGGER.warning(
-                    "Package: '{name}' version {cur_ver} is installed, but version {rec_ver} is recommended.\n"
+                    "Module: '{name}' version '{cur_ver}' is installed, but version '{rec_ver}' is recommended.\n"
                     "Consider installing the recommended version or setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your "
                     "environment variables to do so automatically. ".format(
                         name=name, cur_ver=mod.__version__, rec_ver=version

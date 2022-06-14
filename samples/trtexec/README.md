@@ -1,17 +1,18 @@
 # TensorRT Command-Line Wrapper: trtexec
 
 **Table Of Contents**
-- [Description](#description)
-- [Building `trtexec`](#building-trtexec)
-- [Using `trtexec`](#using-trtexec)
-    * [Example 1: Simple MNIST model from Caffe](#example-1-simple-mnist-model-from-caffe)
-    * [Example 2: Profiling a custom layer](#example-2-profiling-a-custom-layer)
-    * [Example 3: Running a network on DLA](#example-3-running-a-network-on-dla)
-    * [Example 4: Running an ONNX model with full dimensions and dynamic shapes](#example-4-running-an-onnx-model-with-full-dimensions-and-dynamic-shapes)
-    * [Example 5: Collecting and printing a timing trace](#example-5-collecting-and-printing-a-timing-trace)
-    * [Example 6: Tune throughput with multi-streaming](#example-6-tune-throughput-with-multi-streaming)
-- [Tool command line arguments](#tool-command-line-arguments)
-- [Additional resources](#additional-resources)
+- [TensorRT Command-Line Wrapper: trtexec](#tensorrt-command-line-wrapper-trtexec)
+  - [Description](#description)
+  - [Building `trtexec`](#building-trtexec)
+  - [Using `trtexec`](#using-trtexec)
+    - [Example 1: Simple MNIST model from Caffe](#example-1-simple-mnist-model-from-caffe)
+    - [Example 2: Profiling a custom layer](#example-2-profiling-a-custom-layer)
+    - [Example 3: Running a network on DLA](#example-3-running-a-network-on-dla)
+    - [Example 4: Running an ONNX model with full dimensions and dynamic shapes](#example-4-running-an-onnx-model-with-full-dimensions-and-dynamic-shapes)
+    - [Example 5: Collecting and printing a timing trace](#example-5-collecting-and-printing-a-timing-trace)
+    - [Example 6: Tune throughput with multi-streaming](#example-6-tune-throughput-with-multi-streaming)
+  - [Tool command line arguments](#tool-command-line-arguments)
+  - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
 - [Known issues](#known-issues)
@@ -19,7 +20,7 @@
 ## Description
 
 Included in the `samples` directory is a command line wrapper tool, called `trtexec`. `trtexec` is a tool to quickly utilize TensorRT without having to develop your own application. The `trtexec` tool has two main purposes:
--   It’s useful for benchmarking networks on random data.
+-   It’s useful for benchmarking networks on random or user-provided input data.
 -   It’s useful for generating serialized engines from models.
 
 **Benchmarking network** - If you have a model saved as a UFF file, ONNX file, or if you have a network description in a Caffe prototxt format, you can use the `trtexec` tool to test the performance of running inference on your network using TensorRT. The `trtexec` tool has many options for specifying inputs and outputs, iterations for performance timing, precision allowed, and other options.

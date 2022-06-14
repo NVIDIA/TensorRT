@@ -226,7 +226,7 @@ message DetectionOutputParameter {
 
 Due to the size of the SSD Caffe model, it is not included in the product bundle. Before you can run the sample, you’ll need to download the model, perform some configuration, and generate INT8 calibration batches.
 
-1.  Install require packages.
+1.  Install required packages.
     ```bash
     pip3 install -r $TRT_OSSPATH/samples/opensource/sampleSSD/requirements.txt
     ```
@@ -260,7 +260,7 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
     ```bash
     $TRT_OSSPATH/samples/opensource/sampleSSD/PrepareINT8CalibrationBatches.sh
     ```
-    **NOTE:** Do not move the batch files from the `$TRT_DATADIR/ssd/batches` directory.
+    **Note:** Do not move the batch files from the `$TRT_DATADIR/ssd/batches` directory.
 
     If you want to use a different dataset to generate INT8 batches, use the `batchPrepare.py` script and place the batch files in the `$TRT_DATADIR/ssd/batches` directory.
 
@@ -271,14 +271,13 @@ Due to the size of the SSD Caffe model, it is not included in the product bundle
 
 2. Run the sample to perform inference on the digit:
     ```bash
-    sample_ssd [-h] --datadir=<path/to/data> [--fp16] [--int8]
+    ./sample_ssd [-h] --datadir=<path/to/data> [--fp16] [--int8]
     ```
 
     For example:
     ```bash
-    sample_ssd --datadir $TRT_DATADIR/ssd --fp16
+    ./sample_ssd --datadir $TRT_DATADIR/ssd --fp16
     ```
-
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
     ```
     &&&& RUNNING TensorRT.sample_ssd # ./sample_ssd

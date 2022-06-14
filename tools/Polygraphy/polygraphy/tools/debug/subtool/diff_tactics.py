@@ -41,19 +41,27 @@ class DiffTactics(Tool):
             "By default, this tool will search for files in directories called 'good' and 'bad'",
             default="",
         )
-        parser.add_argument("--good", help="A directory containing good tactic replay files. ", default=None)
-        parser.add_argument("--bad", help="A directory containing bad tactic replay files. ", default=None)
+        parser.add_argument(
+            "--good",
+            help="A directory containing good tactic replay files or a single good tactic replay file. ",
+            default=None,
+        )
+        parser.add_argument(
+            "--bad",
+            help="A directory containing bad tactic replay files or a single bad tactic replay file. ",
+            default=None,
+        )
 
     def run(self, args):
         if args.dir is None and (args.good is None or args.bad is None):
             G_LOGGER.critical("Either `--dir`, or both `--good` and `--bad` must be specified.")
 
-        def load_tactics(dir):
+        def load_tactics(dirpath):
             """
             Load all tactic replays from the specified directory into a single dictionary.
 
             Args:
-                dir (str): Directory containing zero or more tactic replay files.
+                dirpath (str): Directory containing zero or more tactic replay files.
 
             Returns:
                 dict[str, Set[polygraphy.backend.trt.algorithm_selector.Algorithm]]:
@@ -68,7 +76,10 @@ class DiffTactics(Tool):
 
             tactics = defaultdict(set)
             replay_paths = []
-            for path in glob.iglob(os.path.join(dir, "**"), recursive=True):
+            search_paths = (
+                glob.iglob(os.path.join(dirpath, "**"), recursive=True) if os.path.isdir(dirpath) else [dirpath]
+            )
+            for path in search_paths:
                 replay = try_load_replay(path)
                 if replay is None:
                     G_LOGGER.verbose("{:} does not look like a tactic replay file, skipping.".format(path))

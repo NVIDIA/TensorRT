@@ -47,7 +47,22 @@ using namespace sample;
 using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using duration = std::chrono::duration<float>;
 
-void printPerformanceProfile(const ReportingOptions& reporting, const InferenceEnvironment& iEnv, std::ostream& os)
+bool printLayerInfo(const ReportingOptions& reporting, const InferenceEnvironment& iEnv)
+{
+    if (reporting.layerInfo)
+    {
+        sample::gLogInfo << "Layer Information:" << std::endl;
+        sample::gLogInfo << getLayerInformation(iEnv, nvinfer1::LayerInformationFormat::kONELINE) << std::flush;
+    }
+    if (!reporting.exportLayerInfo.empty())
+    {
+        std::ofstream os(reporting.exportLayerInfo, std::ofstream::trunc);
+        os << getLayerInformation(iEnv, nvinfer1::LayerInformationFormat::kJSON) << std::flush;
+    }
+    return true;
+}
+
+void printPerformanceProfile(const ReportingOptions& reporting, const InferenceEnvironment& iEnv)
 {
     if (reporting.profile)
     {
@@ -59,7 +74,7 @@ void printPerformanceProfile(const ReportingOptions& reporting, const InferenceE
     }
 }
 
-void printOutput(const ReportingOptions& reporting, const InferenceEnvironment& iEnv, std::ostream& os, int32_t batch)
+void printOutput(const ReportingOptions& reporting, const InferenceEnvironment& iEnv, int32_t batch)
 {
     if (reporting.output)
     {
@@ -145,23 +160,46 @@ int main(int argc, char** argv)
         samplesCommon::loadLibrary(pluginPath);
     }
 
+    if (options.build.safe && !sample::hasSafeRuntime())
+    {
+        sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
+        return sample::gLogger.reportFail(sampleTest);
+    }
+
+    if (!options.build.safe && options.build.consistency)
+    {
+        sample::gLogInfo << "Skipping consistency checker on non-safety mode." << std::endl;
+        options.build.consistency = false;
+    }
+
     InferenceEnvironment iEnv;
     TrtUniquePtr<INetworkDefinition> networkForRefit;
     Parser parserHoldingWeightsMem;
-    const time_point buildStartTime{std::chrono::high_resolution_clock::now()};
-    std::tie(iEnv.engine, networkForRefit, parserHoldingWeightsMem) = getEngineNetworkParserTuple(options.model, options.build, options.system, sample::gLogError);
-    const time_point buildEndTime{std::chrono::high_resolution_clock::now()};
-    if (iEnv.engine)
     {
-        sample::gLogInfo << "Engine " << (options.build.load ? "loaded" : "built")
-            << " in " << duration(buildEndTime - buildStartTime).count() << " sec." << std::endl;
+        // Scope the build phase so any held memory is released before moving to inference phase.
+        BuildEnvironment bEnv;
+        const time_point buildStartTime{std::chrono::high_resolution_clock::now()};
+        bool buildPass = getEngineBuildEnv(options.model, options.build, options.system, bEnv, sample::gLogError);
+        const time_point buildEndTime{std::chrono::high_resolution_clock::now()};
+
+        if (!buildPass)
+        {
+            sample::gLogError << "Engine set up failed" << std::endl;
+            return sample::gLogger.reportFail(sampleTest);
+        }
+
+        sample::gLogInfo << "Engine " << (options.build.load ? "loaded" : "built") << " in "
+                         << duration(buildEndTime - buildStartTime).count() << " sec." << std::endl;
+
+        std::swap(iEnv.engine, bEnv.engine);
+        std::swap(networkForRefit, bEnv.network);
+        std::swap(iEnv.serializedEngine, bEnv.serializedEngine);
+        parserHoldingWeightsMem = std::move(bEnv.parser);
+        std::swap(iEnv.safeEngine, bEnv.safeEngine);
     }
-    else
-    {
-        sample::gLogError << "Engine set up failed" << std::endl;
-        return sample::gLogger.reportFail(sampleTest);
-    }
-    if (iEnv.engine.get()->isRefittable())
+    iEnv.safe = options.build.safe;
+
+    if (!options.build.safe && iEnv.engine.get()->isRefittable())
     {
         if (options.reporting.refit)
         {
@@ -197,6 +235,15 @@ int main(int argc, char** argv)
         }
         return sample::gLogger.reportPass(sampleTest);
     }
+    else
+    {
+        // Release the serialized memory when not in use before allocating bindings in order to
+        // reduce memory usage.
+        iEnv.serializedEngine.reset();
+    }
+
+    printLayerInfo(options.reporting, iEnv);
+
     if (options.inference.skip)
     {
         return sample::gLogger.reportPass(sampleTest);
@@ -211,13 +258,14 @@ int main(int argc, char** argv)
         return sample::gLogger.reportFail(sampleTest);
     }
 
-    if ((options.reporting.profile || !options.reporting.exportProfile.empty()) && !options.inference.rerun)
+    const bool profilerEnabled = options.reporting.profile || !options.reporting.exportProfile.empty();
+    if (profilerEnabled && !options.inference.rerun)
     {
         iEnv.profiler.reset(new Profiler);
-        if (options.inference.graph)
+        if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
         {
             options.inference.graph = false;
-            sample::gLogWarning << "Profiler does not work when CUDA graph is enabled. Ignored --useCudaGraph flag "
+            sample::gLogWarning << "Graph profiling only works with CUDA 11.1 and beyond. Ignored --useCudaGraph flag "
                                    "and disabled CUDA graph."
                                 << std::endl;
         }
@@ -237,20 +285,28 @@ int main(int argc, char** argv)
         return sample::gLogger.reportFail(sampleTest);
     }
 
+    if (profilerEnabled && !options.inference.rerun)
+    {
+        sample::gLogWarning << "The network timing report will not be accurate due to extra synchronizations "
+                               "when profiler is enabled." << std::endl;
+        sample::gLogWarning << "Add --separateProfileRun to profile layer timing in a separate run."
+                            << std::endl;
+    }
+
     printPerformanceReport(trace, options.reporting, static_cast<float>(options.inference.warmup),
         options.inference.batch, sample::gLogInfo, sample::gLogWarning, sample::gLogVerbose);
-    printOutput(options.reporting, iEnv, sample::gLogInfo, options.inference.batch);
+    printOutput(options.reporting, iEnv, options.inference.batch);
 
-    if ((options.reporting.profile || !options.reporting.exportProfile.empty()) && options.inference.rerun)
+    if (profilerEnabled && options.inference.rerun)
     {
         auto* profiler = new Profiler;
         iEnv.profiler.reset(profiler);
         iEnv.context.front()->setProfiler(profiler);
-        if (options.inference.graph)
+        if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
         {
             options.inference.graph = false;
-            sample::gLogWarning << "Profiler does not work when CUDA graph is enabled. Ignored --useCudaGraph flag "
-                                   "and disabled CUDA graph in the second run with the profiler."
+            sample::gLogWarning << "Graph profiling only works with CUDA 11.1 and beyond. Ignored --useCudaGraph flag "
+                                   "and disabled CUDA graph."
                                 << std::endl;
         }
         if (!runInference(options.inference, iEnv, options.system.device, trace))
@@ -259,7 +315,7 @@ int main(int argc, char** argv)
             return sample::gLogger.reportFail(sampleTest);
         }
     }
-    printPerformanceProfile(options.reporting, iEnv, sample::gLogInfo);
+    printPerformanceProfile(options.reporting, iEnv);
 
     return sample::gLogger.reportPass(sampleTest);
 }

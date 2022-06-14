@@ -35,6 +35,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <unordered_map>
 
 using samplesCommon::SampleUniquePtr;
 
@@ -48,6 +49,7 @@ struct SampleFasterRCNNParams : public samplesCommon::CaffeSampleParams
 {
     int outputClsSize; //!< The number of output classes
     int nmsMaxOut;     //!< The maximum number of detection post-NMS
+    std::string dynamicRangeFileName; //!< The name of dynamic range file
 };
 
 //! \brief  The SampleFasterRCNN class implements the FasterRCNN sample
@@ -118,6 +120,16 @@ private:
     //!
     std::vector<int> nonMaximumSuppression(std::vector<std::pair<float, int>>& scoreIndex, float* bbox,
         const int classNum, const int numClasses, const float nmsThreshold);
+
+    //!
+    //! \brief Sets per-tensor DynamicRange for int8
+    //!
+    bool setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
+
+    //!
+    //! \brief Reads per-tensor DynamicRange for int8
+    //!
+    bool readPerTensorDynamicRangeValues(std::unordered_map<std::string, float>& dynamicRangeMap) const;
 };
 
 //!
@@ -208,11 +220,41 @@ void SampleFasterRCNN::constructNetwork(SampleUniquePtr<nvcaffeparser1::ICaffePa
 
     for (auto& s : mParams.outputTensorNames)
     {
-        network->markOutput(*blobNameToTensor->find(s.c_str()));
+        // when marking the plugin output rois as network output, TRT propagates the FP32 requirement
+        // from plugin output to plugin input, and finally only FP32 -> FP32 is selected.
+        // If we want to enable int8 for plugin, we should use addIdentity to break FP32 propagation.
+        if (mParams.int8 && s == "rois")
+        {
+            sample::gLogInfo << "Add an identity layer after the rois tensor to enable INT8 I/O plugin." << std::endl;
+            auto rois_old = blobNameToTensor->find(s.c_str());
+            rois_old->setName("rois_");
+            auto rois_new = network->addIdentity(*rois_old)->getOutput(0);
+            rois_new->setName(s.c_str());
+            network->markOutput(*rois_new); 
+        }
+        else
+        {
+            network->markOutput(*blobNameToTensor->find(s.c_str()));  
+        }
+
     }
 
     builder->setMaxBatchSize(mParams.batchSize);
     config->setMaxWorkspaceSize(16_MiB);
+
+    if (mParams.int8)
+    {
+        // Enable INT8 model. Required to set custom per tensor dynamic range or INT8 Calibration
+        config->setFlag(BuilderFlag::kINT8);
+        // Mark calibrator as null. As user provides dynamic range for each tensor, no calibrator is required
+        config->setInt8Calibrator(nullptr);
+        if (!setDynamicRange(network))
+        {
+            sample::gLogError << "Unable to set per tensor dynamic range. The sample will continue, "
+                            <<"but you may get wrong detection results. Please try FP32 precision." << std::endl;
+        }
+    }
+
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 }
 
@@ -270,6 +312,96 @@ bool SampleFasterRCNN::teardown()
     //! \note It is not safe to use any other part of the protocol buffers library after
     //! ShutdownProtobufLibrary() has been called.
     nvcaffeparser1::shutdownProtobufLibrary();
+    return true;
+}
+
+//!
+//! \brief Reads per tensor dyanamic range values
+//!
+bool SampleFasterRCNN::readPerTensorDynamicRangeValues(std::unordered_map<std::string, float>& dynamicRangeMap) const
+{
+    std::ifstream iDynamicRangeStream(locateFile(mParams.dynamicRangeFileName, mParams.dataDirs));
+    if (!iDynamicRangeStream)
+    {
+        sample::gLogError << "Could not find per tensor dynamic range file: " << mParams.dynamicRangeFileName << std::endl;
+        return false;
+    }
+
+    std::string line;
+    char delim = ':';
+    while (std::getline(iDynamicRangeStream, line))
+    {
+        std::istringstream iline(line);
+        std::string token;
+        std::getline(iline, token, delim);
+        std::string tensorName = token;
+        std::getline(iline, token, delim);
+        float dynamicRange = std::stof(token);
+        dynamicRangeMap[tensorName] = dynamicRange;
+    }
+    return true;
+}
+
+//!
+//! \brief  Sets custom dynamic range for network tensors
+//!
+bool SampleFasterRCNN::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+{
+    std::unordered_map<std::string, float> PerTensorDynamicRangeMap;
+    if (!readPerTensorDynamicRangeValues(PerTensorDynamicRangeMap))
+    {
+        return false;
+    }
+
+    sample::gLogInfo << "Setting Per Tensor Dynamic Range" << std::endl;
+    // set dynamic range for network input tensors
+    for (int i = 0; i < network->getNbInputs(); ++i)
+    {
+        std::string tName = network->getInput(i)->getName();
+        if (PerTensorDynamicRangeMap.find(tName) != PerTensorDynamicRangeMap.end())
+        {
+            if (!network->getInput(i)->setDynamicRange(
+                    -PerTensorDynamicRangeMap.at(tName), PerTensorDynamicRangeMap.at(tName)))
+            {
+                return false;
+            }
+        }
+    }
+    // set dynamic range for layer output tensors
+    for (int i = 0; i < network->getNbLayers(); ++i)
+    {
+        auto lyr = network->getLayer(i);
+        for (int j = 0, e = lyr->getNbOutputs(); j < e; ++j)
+        {
+            std::string tName = lyr->getOutput(j)->getName();
+            if (PerTensorDynamicRangeMap.find(tName) != PerTensorDynamicRangeMap.end())
+            {
+                if (!lyr->getOutput(j)->setDynamicRange(
+                        -PerTensorDynamicRangeMap.at(tName), PerTensorDynamicRangeMap.at(tName)))
+                {
+                    return false;
+                }
+            }
+            // special operation for this sample
+            // Convolution's output name is (Unnamed Layer*) [Convolution]_output.
+            // Dynamic ranges of these convolutions should be the same with relu's output.
+            else
+            {
+                if(i + 1 < network->getNbLayers())
+                {
+                    std::string nextTensorName = network->getLayer(i + 1)->getOutput(0)->getName();
+                    if (PerTensorDynamicRangeMap.find(nextTensorName) != PerTensorDynamicRangeMap.end())
+                    {
+                        if (!lyr->getOutput(j)->setDynamicRange(
+                                -PerTensorDynamicRangeMap.at(nextTensorName), PerTensorDynamicRangeMap.at(nextTensorName)))
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
     return true;
 }
 
@@ -509,6 +641,8 @@ SampleFasterRCNNParams initializeSampleParams(const samplesCommon::Args& args)
     params.outputTensorNames.push_back("cls_prob");
     params.outputTensorNames.push_back("rois");
     params.dlaCore = args.useDLACore;
+    params.int8 = args.runInInt8;
+    params.dynamicRangeFileName = "tensor_range.txt";
 
     params.outputClsSize = 21;
     params.nmsMaxOut
@@ -533,6 +667,7 @@ void printHelpInfo()
     std::cout << "--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
                  "where n is the number of DLA engines on the platform."
               << std::endl;
+    std::cout << "--int8  Enable int8 precision, in addition to fp32 (default = disabled)" << std::endl;
 }
 
 int main(int argc, char** argv)

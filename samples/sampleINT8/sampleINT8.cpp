@@ -73,13 +73,6 @@ public:
     bool build(DataType dataType);
 
     //!
-    //! \brief Checks if the platform supports the data type.
-    //!
-    //! \return Returns true if the platform supports the data type.
-    //!
-    bool isSupported(DataType dataType);
-
-    //!
     //! \brief Runs the TensorRT inference engine for this sample
     //!
     bool infer(std::vector<float>& score, int firstScoreBatch, int nbScoreBatches);
@@ -165,28 +158,6 @@ bool SampleINT8::build(DataType dataType)
     ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
     ASSERT(mInputDims.nbDims == 3);
-
-    return true;
-}
-
-//!
-//! \brief Checks if the platform supports the data type.
-//!
-//! \return Returns true if the platform supports the data type.
-//!
-bool SampleINT8::isSupported(DataType dataType)
-{
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
-    if (!builder)
-    {
-        return false;
-    }
-
-    if ((dataType == DataType::kINT8 && !builder->platformHasFastInt8())
-        || (dataType == DataType::kHALF && !builder->platformHasFastFp16()))
-    {
-        return false;
-    }
 
     return true;
 }
@@ -535,7 +506,7 @@ int main(int argc, char** argv)
 
         if (!sample.build(dataTypes[i]))
         {
-            if (!sample.isSupported(dataTypes[i]))
+            if (!samplesCommon::isDataTypeSupported(dataTypes[i]))
             {
                 sample::gLogWarning << "Skipping " << dataTypeNames[i]
                                     << " since the platform does not support this data type." << std::endl;

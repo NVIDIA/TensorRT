@@ -30,21 +30,21 @@ def is_dla():
 
 
 def get_requirements():
-    def get_version_range(envvar, needs_exact_minor=False):
-        vers = os.environ.get(envvar).replace("cuda-", "")
-        major, minor = map(int, vers.split("."))
-        if needs_exact_minor:
-            return ">={major}.{minor},<{major}.{minor_next}".format(major=major, minor=minor, minor_next=minor + 1)
-        else:
-            return ">={major},<{major_next}".format(major=major, major_next=major + 1)
+    def get_version_range():
+        def get_vers(var):
+            vers = os.environ.get(var).replace("cuda-", "")
+            major, minor = map(int, vers.split("."))
+            return major, minor
+
+        cuda_major, _ = get_vers("CUDA")
+        return "-cu{cuda_major}".format(cuda_major=cuda_major)
 
     if is_standalone():
         return [
-            "nvidia-cuda-runtime" + get_version_range("CUDA"),
-            "nvidia-cudnn" + get_version_range("CUDNN"),
-            "nvidia-cublas" + get_version_range("CUDA"),
-            "nvidia-cuda-nvrtc" + get_version_range("CUDA", needs_exact_minor=True),
-            ]
+            "nvidia-cuda-runtime" + get_version_range(),
+            "nvidia-cudnn" + get_version_range(),
+            "nvidia-cublas" + get_version_range(),
+        ]
     return []
 
 
@@ -63,14 +63,14 @@ setup(
     author="NVIDIA",
     license="Proprietary",
     classifiers=[
-        'License :: Other/Proprietary License',
-        'Intended Audience :: Developers',
-        'Programming Language :: Python :: 3',
+        "License :: Other/Proprietary License",
+        "Intended Audience :: Developers",
+        "Programming Language :: Python :: 3",
     ],
     packages=find_packages(),
     install_requires=get_requirements(),
     extras_require={"numpy": "numpy"},
-    package_data={'tensorrt': ["*.so*"]},
+    package_data={"tensorrt": ["*.so*", "*.pyd", "*.pdb"]},
     include_package_data=True,
     zip_safe=True,
 )

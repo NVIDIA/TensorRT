@@ -25,6 +25,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <unordered_map>
 #include <utility>
@@ -66,24 +67,23 @@
 
 bool gPrintComponentInfo = true;
 bool gFeedAttentionToInput = true;
-bool gInitializeDecoderFromEncoderHiddenStates = true;
 
-int gMaxBatchSize = 128;
-int gBeamWidth = 5;
-int gMaxInputSequenceLength = 150;
-int gMaxOutputSequenceLength = -1;
-int gMaxInferenceSamples = -1;
+int32_t gMaxBatchSize = 128;
+int32_t gBeamWidth = 5;
+int32_t gMaxInputSequenceLength = 150;
+int32_t gMaxOutputSequenceLength = -1;
+int32_t gMaxInferenceSamples = -1;
 std::string gDataWriterStr = "bleu";
 std::string gOutputTextFileName("translation_output.txt");
-int gMaxWorkspaceSize = 512_MiB;
+int32_t gMaxWorkspaceSize = 512_MiB;
 std::string gDataDirectory("data/samples/nmt/deen");
 bool gEnableProfiling = false;
 bool gAggregateProfiling = false;
 bool gFp16 = false;
 bool gVerbose = false;
 bool gInt8 = false;
-int gUseDLACore{-1};
-int gPadMultiple = 1;
+int32_t gUseDLACore{-1};
+int32_t gPadMultiple = 1;
 
 const std::string gSampleName = "TensorRT.sample_nmt";
 
@@ -124,9 +124,13 @@ nmtSample::DataReader::ptr getDataReader()
     auto reader = std::make_shared<nmtSample::TextReader>(textInput, vocabulary);
 
     if (gMaxInferenceSamples >= 0)
+    {
         return std::make_shared<nmtSample::LimitedSamplesDataReader>(gMaxInferenceSamples, reader);
+    }
     else
+    {
         return reader;
+    }
 }
 
 template <typename Component>
@@ -186,7 +190,7 @@ nmtSample::Likelihood::ptr getLikelihood()
 }
 
 nmtSample::BeamSearchPolicy::ptr getSearchPolicy(
-    int endSequenceId, nmtSample::LikelihoodCombinationOperator::ptr likelihoodCombinationOperator)
+    int32_t endSequenceId, nmtSample::LikelihoodCombinationOperator::ptr likelihoodCombinationOperator)
 {
     return std::make_shared<nmtSample::BeamSearchPolicy>(endSequenceId, likelihoodCombinationOperator, gBeamWidth);
 }
@@ -203,6 +207,7 @@ nmtSample::DataWriter::ptr getDataWriter()
     {
         std::remove(gOutputTextFileName.data());
         std::shared_ptr<std::ostream> textOutput(new std::ofstream(gOutputTextFileName));
+        // cppcheck-suppress incorrectStringBooleanError
         ASSERT(textOutput->good()
             && "Please contact system administrator if you have no permission to write the file "
                "translation_output.txt");
@@ -232,7 +237,7 @@ bool parseString(const char* arg, const char* name, std::string& value)
     return match;
 }
 
-bool parseInt(const char* arg, const char* name, int& value)
+bool parseInt(const char* arg, const char* name, int32_t& value)
 {
     size_t n = strlen(name);
     bool match = arg[0] == '-' && arg[1] == '-' && !strncmp(arg + 2, name, n) && arg[n + 2] == '=';
@@ -304,7 +309,7 @@ void printUsage()
         "  --padMultiple=N                      Specify multiple to pad out matrix dimensions to test performance\n");
 }
 
-bool parseNMTArgs(samplesCommon::Args& args, int argc, char* argv[])
+bool parseNMTArgs(samplesCommon::Args& args, int32_t argc, char* argv[])
 {
     if (argc < 1)
     {
@@ -313,7 +318,7 @@ bool parseNMTArgs(samplesCommon::Args& args, int argc, char* argv[])
     }
 
     bool showHelp = false;
-    for (int j = 1; j < argc; j++)
+    for (int32_t j = 1; j < argc; j++)
     {
         if (parseBool(argv[j], "help", showHelp, 'h'))
             continue;
@@ -396,7 +401,7 @@ nvinfer1::ICudaEngine* getEncoderEngine(
 
     auto stateSizes = encoder->getStateSizes();
     std::vector<nvinfer1::ITensor*> encoderInputStatesTensors(stateSizes.size());
-    for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "input_encoder_states_" << i;
@@ -406,7 +411,6 @@ nvinfer1::ICudaEngine* getEncoderEngine(
     }
 
     nvinfer1::ITensor* initializeDecoderIndicesTensor = nullptr;
-    if (gInitializeDecoderFromEncoderHiddenStates)
     {
         nvinfer1::Dims inputDims{1, {gBeamWidth}};
         initializeDecoderIndicesTensor
@@ -422,7 +426,7 @@ nvinfer1::ICudaEngine* getEncoderEngine(
     std::vector<nvinfer1::ITensor*> encoderOutputStatesTensors(stateSizes.size());
     encoder->addToModel(encoderNetwork, gMaxInputSequenceLength, inputEncoderEmbeddedTensor,
         actualInputSequenceLengthsTensor, &encoderInputStatesTensors[0], &memoryStatesTensor,
-        gInitializeDecoderFromEncoderHiddenStates ? &encoderOutputStatesTensors[0] : nullptr);
+        &encoderOutputStatesTensors[0]);
     memoryStatesTensor->setName("memory_states");
     encoderNetwork->markOutput(*memoryStatesTensor);
     memoryStatesTensor->setType(gFp16 ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT);
@@ -449,9 +453,8 @@ nvinfer1::ICudaEngine* getEncoderEngine(
         actualInputSequenceLengthsReplicatedTensor->setType(nvinfer1::DataType::kINT32);
     }
 
-    if (gInitializeDecoderFromEncoderHiddenStates)
     {
-        for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+        for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
         {
             ASSERT(encoderOutputStatesTensors[i] != nullptr);
 
@@ -469,7 +472,7 @@ nvinfer1::ICudaEngine* getEncoderEngine(
                 {
                     shuffleDims.nbDims = stateSizes[i].nbDims + 1;
                     shuffleDims.d[0] = 1;
-                    for (int j = 0; j < stateSizes[i].nbDims; ++j)
+                    for (int32_t j = 0; j < stateSizes[i].nbDims; ++j)
                     {
                         shuffleDims.d[j + 1] = stateSizes[i].d[j];
                     }
@@ -534,7 +537,7 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
     // Define inputs for the generator
     auto stateSizes = decoder->getStateSizes();
     std::vector<nvinfer1::ITensor*> decoderInputStatesTensors(stateSizes.size());
-    for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "input_decoder_states_" << i;
@@ -542,7 +545,7 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
         {
             statesDims.nbDims = stateSizes[i].nbDims + 1;
             statesDims.d[0] = gBeamWidth;
-            for (int j = 0; j < stateSizes[i].nbDims; ++j)
+            for (int32_t j = 0; j < stateSizes[i].nbDims; ++j)
             {
                 statesDims.d[j + 1] = stateSizes[i].d[j];
             }
@@ -612,7 +615,7 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
     decoder->addToModel(generatorNetwork,
         gFeedAttentionToInput ? inputDecoderEmbeddedConcatinatedWithAttentionTensor : inputDecoderEmbeddedTensor,
         &decoderInputStatesTensors[0], &outputDecoderDataTensor, &decoderOutputStatesTensors[0]);
-    for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "output_decoder_states_" << i;
@@ -684,7 +687,7 @@ nvinfer1::ICudaEngine* getGeneratorEngine(nmtSample::Embedder::ptr outputEmbedde
 }
 
 nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
-    const std::vector<nvinfer1::Dims>& decoderStateSizes, int attentionSize)
+    const std::vector<nvinfer1::Dims>& decoderStateSizes, int32_t attentionSize)
 {
     nvinfer1::IBuilder* shuffleBuilder = nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger());
     ASSERT(shuffleBuilder != nullptr);
@@ -708,7 +711,7 @@ nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
     ASSERT(sourceRayIndicesTensor != nullptr);
 
     std::vector<nvinfer1::ITensor*> previousOutputDecoderStatesTensors(decoderStateSizes.size());
-    for (int i = 0; i < static_cast<int>(decoderStateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(decoderStateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "previous_output_decoder_states_" << i;
@@ -716,7 +719,7 @@ nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
         {
             statesDims.nbDims = decoderStateSizes[i].nbDims + 1;
             statesDims.d[0] = gBeamWidth;
-            for (int j = 0; j < decoderStateSizes[i].nbDims; ++j)
+            for (int32_t j = 0; j < decoderStateSizes[i].nbDims; ++j)
             {
                 statesDims.d[j + 1] = decoderStateSizes[i].d[j];
             }
@@ -735,7 +738,7 @@ nvinfer1::ICudaEngine* getGeneratorShuffleEngine(
         ASSERT(previousOutputAttentionTensor != nullptr);
     }
 
-    for (int i = 0; i < static_cast<int>(decoderStateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(decoderStateSizes.size()); ++i)
     {
         auto gatherLayer
             = shuffleNetwork->addGather(*previousOutputDecoderStatesTensors[i], *sourceRayIndicesTensor, 0);
@@ -797,7 +800,7 @@ void processBindings(
     }
 }
 
-int main(int argc, char** argv)
+int32_t main(int32_t argc, char** argv)
 {
     auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
 
@@ -870,37 +873,38 @@ int main(int argc, char** argv)
 
     // A number of consistency checks between components
     ASSERT(alignment->getSourceStatesSize() == encoder->getMemoryStatesSize());
-    if (gInitializeDecoderFromEncoderHiddenStates)
     {
         std::vector<nvinfer1::Dims> encoderStateSizes = encoder->getStateSizes();
         ASSERT(stateSizes.size() == encoderStateSizes.size());
-        for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+        for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
             ASSERT(nmtSample::getVolume(stateSizes[i]) == nmtSample::getVolume(encoderStateSizes[i]));
     }
     ASSERT(projection->getOutputSize() == outputEmbedder->getInputDimensionSize());
 
     auto inputOriginalHostBuffer
-        = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize * gMaxInputSequenceLength);
-    auto inputHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize * gMaxInputSequenceLength);
-    auto inputOriginalSequenceLengthsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize);
-    auto inputSequenceLengthsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize);
-    auto maxOutputSequenceLengthsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize);
-    auto outputSequenceLengthsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize);
+        = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize * gMaxInputSequenceLength);
+    auto inputHostBuffer
+        = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize * gMaxInputSequenceLength);
+    auto inputOriginalSequenceLengthsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize);
+    auto inputSequenceLengthsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize);
+    auto maxOutputSequenceLengthsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize);
+    auto outputSequenceLengthsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize);
     auto outputCombinedLikelihoodHostBuffer
         = std::make_shared<nmtSample::PinnedHostBuffer<float>>(gMaxBatchSize * gBeamWidth);
     auto outputVocabularyIndicesHostBuffer
-        = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize * gBeamWidth);
+        = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
     auto outputRayOptionIndicesHostBuffer
-        = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize * gBeamWidth);
-    auto sourceRayIndicesHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize * gBeamWidth);
+        = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
+    auto sourceRayIndicesHostBuffer
+        = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
     auto sourceLikelihoodsHostBuffer = std::make_shared<nmtSample::PinnedHostBuffer<float>>(gMaxBatchSize * gBeamWidth);
 
     // Allocated buffers on GPU to be used as inputs and outputs for TenorRT
     auto inputEncoderDeviceBuffer
-        = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize * gMaxInputSequenceLength);
-    auto inputSequenceLengthsDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize);
+        = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize * gMaxInputSequenceLength);
+    auto inputSequenceLengthsDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize);
     auto inputSequenceLengthsReplicatedDeviceBuffer
-        = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize * gBeamWidth);
+        = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
     auto memoryStatesDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<float>>(
         gMaxBatchSize * gMaxInputSequenceLength * encoder->getMemoryStatesSize());
     auto attentionKeysDeviceBuffer
@@ -926,9 +930,9 @@ int main(int argc, char** argv)
     auto outputCombinedLikelihoodDeviceBuffer
         = std::make_shared<nmtSample::DeviceBuffer<float>>(gMaxBatchSize * gBeamWidth);
     auto outputRayOptionIndicesDeviceBuffer
-        = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize * gBeamWidth);
-    auto sourceRayIndicesDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize * gBeamWidth);
-    auto inputDecoderDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize * gBeamWidth);
+        = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
+    auto sourceRayIndicesDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
+    auto inputDecoderDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
     auto inputLikelihoodsDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<float>>(gMaxBatchSize * gBeamWidth);
 
     std::vector<nmtSample::DeviceBuffer<float>::ptr> zeroInputEncoderStatesDeviceBuffers;
@@ -956,30 +960,31 @@ int main(int argc, char** argv)
         CUDA_CHECK(cudaMemsetAsync(*zeroInputAttentionDeviceBuffer, 0,
             gMaxBatchSize * gBeamWidth * attention->getAttentionSize() * sizeof(float), stream));
     }
-    auto startSeqInputDecoderDeviceBuffer = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize * gBeamWidth);
+    auto startSeqInputDecoderDeviceBuffer
+        = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
     {
         auto startSeqInputDecoderHostBuffer
-            = std::make_shared<nmtSample::PinnedHostBuffer<int>>(gMaxBatchSize * gBeamWidth);
-        std::fill_n((int*) *startSeqInputDecoderHostBuffer, gMaxBatchSize * gBeamWidth,
+            = std::make_shared<nmtSample::PinnedHostBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
+        std::fill_n((int32_t*) *startSeqInputDecoderHostBuffer, gMaxBatchSize * gBeamWidth,
             outputSequenceProperties->getStartSequenceId());
         CUDA_CHECK(cudaMemcpyAsync(*startSeqInputDecoderDeviceBuffer, *startSeqInputDecoderHostBuffer,
-            gMaxBatchSize * gBeamWidth * sizeof(int), cudaMemcpyHostToDevice, stream));
+            gMaxBatchSize * gBeamWidth * sizeof(int32_t), cudaMemcpyHostToDevice, stream));
         CUDA_CHECK(cudaStreamSynchronize(stream));
     }
     auto zeroInitializeDecoderIndicesDeviceBuffer
-        = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize * gBeamWidth);
+        = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
     CUDA_CHECK(cudaMemsetAsync(
-        *zeroInitializeDecoderIndicesDeviceBuffer, 0, gMaxBatchSize * gBeamWidth * sizeof(int), stream));
+        *zeroInitializeDecoderIndicesDeviceBuffer, 0, gMaxBatchSize * gBeamWidth * sizeof(int32_t), stream));
     auto initialInputLikelihoodsDeviceBuffer
         = std::make_shared<nmtSample::DeviceBuffer<float>>(gMaxBatchSize * gBeamWidth);
     {
         auto likelihoodCombinationOperator = likelihood->getLikelihoodCombinationOperator();
         auto initialInputLikelihoodsHostBuffer
             = std::make_shared<nmtSample::PinnedHostBuffer<float>>(gMaxBatchSize * gBeamWidth);
-        for (int sampleId = 0; sampleId < gMaxBatchSize; ++sampleId)
+        for (int32_t sampleId = 0; sampleId < gMaxBatchSize; ++sampleId)
         {
             (*initialInputLikelihoodsHostBuffer)[sampleId * gBeamWidth] = likelihoodCombinationOperator->init();
-            for (int rayId = 1; rayId < gBeamWidth; ++rayId)
+            for (int32_t rayId = 1; rayId < gBeamWidth; ++rayId)
                 (*initialInputLikelihoodsHostBuffer)[sampleId * gBeamWidth + rayId]
                     = likelihoodCombinationOperator->smallerThanMinimalLikelihood();
         }
@@ -988,16 +993,16 @@ int main(int argc, char** argv)
         CUDA_CHECK(cudaStreamSynchronize(stream));
     }
     auto zeroReplicateLikelihoodsIndicesDeviceBuffer
-        = std::make_shared<nmtSample::DeviceBuffer<int>>(gMaxBatchSize * gBeamWidth);
+        = std::make_shared<nmtSample::DeviceBuffer<int32_t>>(gMaxBatchSize * gBeamWidth);
     CUDA_CHECK(cudaMemsetAsync(
-        *zeroReplicateLikelihoodsIndicesDeviceBuffer, 0, gMaxBatchSize * gBeamWidth * sizeof(int), stream));
+        *zeroReplicateLikelihoodsIndicesDeviceBuffer, 0, gMaxBatchSize * gBeamWidth * sizeof(int32_t), stream));
 
     // Create TensorRT engines
-    nvinfer1::ICudaEngine* encoderEngine = getEncoderEngine(inputEmbedder, encoder, alignment);
-    nvinfer1::ICudaEngine* generatorEngine
-        = getGeneratorEngine(outputEmbedder, decoder, alignment, context, attention, projection, likelihood);
-    nvinfer1::ICudaEngine* generatorShuffleEngine
-        = getGeneratorShuffleEngine(decoder->getStateSizes(), attention->getAttentionSize());
+    auto encoderEngine = std::unique_ptr<nvinfer1::ICudaEngine>(getEncoderEngine(inputEmbedder, encoder, alignment));
+    auto generatorEngine = std::unique_ptr<nvinfer1::ICudaEngine>(
+        getGeneratorEngine(outputEmbedder, decoder, alignment, context, attention, projection, likelihood));
+    auto generatorShuffleEngine = std::unique_ptr<nvinfer1::ICudaEngine>(
+        getGeneratorShuffleEngine(decoder->getStateSizes(), attention->getAttentionSize()));
 
     // Setup TensorRT bindings
     std::vector<void*> encoderBindings(encoderEngine->getNbBindings());
@@ -1007,7 +1012,7 @@ int main(int argc, char** argv)
     encBindingMap["actual_input_sequence_lengths_with_index_dim"] = *inputSequenceLengthsDeviceBuffer;
     encBindingMap["actual_input_sequence_lengths_replicated"] = *inputSequenceLengthsReplicatedDeviceBuffer;
     encBindingMap["initialize_decoder_indices"] = *zeroInitializeDecoderIndicesDeviceBuffer;
-    for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "input_encoder_states_" << i;
@@ -1018,21 +1023,20 @@ int main(int argc, char** argv)
     {
         encBindingMap["attention_keys"] = *attentionKeysDeviceBuffer;
     }
-    if (gInitializeDecoderFromEncoderHiddenStates)
     {
-        for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+        for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
         {
             std::stringstream ss;
             ss << "input_decoder_states_" << i;
             encBindingMap[ss.str()] = *inputDecoderStatesDeviceBuffers[i];
         }
     }
-    processBindings(encoderBindings, encBindingMap, encoderEngine);
+    processBindings(encoderBindings, encBindingMap, encoderEngine.get());
 
     std::vector<void*> generatorBindings(generatorEngine->getNbBindings());
     std::unordered_map<std::string, void*> genBindingMap;
     genBindingMap["input_decoder_data"] = *inputDecoderDeviceBuffer;
-    for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "input_decoder_states_" << i;
@@ -1044,7 +1048,7 @@ int main(int argc, char** argv)
     {
         genBindingMap["attention_keys"] = *attentionKeysDeviceBuffer;
     }
-    for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "output_decoder_states_" << i;
@@ -1060,37 +1064,28 @@ int main(int argc, char** argv)
     }
     genBindingMap["input_likelihoods"] = *inputLikelihoodsDeviceBuffer;
     genBindingMap["replicate_likelihoods_indices"] = *zeroReplicateLikelihoodsIndicesDeviceBuffer;
-    processBindings(generatorBindings, genBindingMap, generatorEngine);
+    processBindings(generatorBindings, genBindingMap, generatorEngine.get());
 
     std::vector<void*> generatorBindingsFirstStep = generatorBindings;
     std::unordered_map<std::string, void*> genBindingFirstStepMap;
     genBindingFirstStepMap["input_decoder_data"] = *startSeqInputDecoderDeviceBuffer;
-    if (!gInitializeDecoderFromEncoderHiddenStates)
-    {
-        for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
-        {
-            std::stringstream ss;
-            ss << "input_decoder_states_" << i;
-            genBindingFirstStepMap[ss.str()] = *zeroInputDecoderStatesDeviceBuffers[i];
-        }
-    }
     if (gFeedAttentionToInput)
     {
         genBindingFirstStepMap["input_attention"] = *zeroInputAttentionDeviceBuffer;
     }
     genBindingFirstStepMap["input_likelihoods"] = *initialInputLikelihoodsDeviceBuffer;
-    processBindings(generatorBindingsFirstStep, genBindingFirstStepMap, generatorEngine);
+    processBindings(generatorBindingsFirstStep, genBindingFirstStepMap, generatorEngine.get());
 
     std::vector<void*> generatorShuffleBindings(generatorShuffleEngine->getNbBindings());
     std::unordered_map<std::string, void*> genShuffleBindingMap;
     genShuffleBindingMap["source_ray_indices"] = *sourceRayIndicesDeviceBuffer;
-    for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "previous_output_decoder_states_" << i;
         genShuffleBindingMap[ss.str()] = *outputDecoderStatesDeviceBuffers[i];
     }
-    for (int i = 0; i < static_cast<int>(stateSizes.size()); ++i)
+    for (int32_t i = 0; i < static_cast<int32_t>(stateSizes.size()); ++i)
     {
         std::stringstream ss;
         ss << "input_decoder_states_" << i;
@@ -1101,12 +1096,13 @@ int main(int argc, char** argv)
         genShuffleBindingMap["previous_output_attention"] = *outputAttentionDeviceBuffer;
         genShuffleBindingMap["input_attention"] = *inputAttentionDeviceBuffer;
     }
-    processBindings(generatorShuffleBindings, genShuffleBindingMap, generatorShuffleEngine);
+    processBindings(generatorShuffleBindings, genShuffleBindingMap, generatorShuffleEngine.get());
 
     // Create Tensor RT contexts
-    nvinfer1::IExecutionContext* encoderContext = encoderEngine->createExecutionContext();
-    nvinfer1::IExecutionContext* generatorContext = generatorEngine->createExecutionContext();
-    nvinfer1::IExecutionContext* generatorShuffleContext = generatorShuffleEngine->createExecutionContext();
+    auto encoderContext = std::unique_ptr<nvinfer1::IExecutionContext>(encoderEngine->createExecutionContext());
+    auto generatorContext = std::unique_ptr<nvinfer1::IExecutionContext>(generatorEngine->createExecutionContext());
+    auto generatorShuffleContext
+        = std::unique_ptr<nvinfer1::IExecutionContext>(generatorShuffleEngine->createExecutionContext());
 
     std::vector<SimpleProfiler> profilers;
     if (gEnableProfiling)
@@ -1124,9 +1120,9 @@ int main(int argc, char** argv)
 
     dataWriter->initialize();
 
-    std::vector<int> outputHostBuffer;
+    std::vector<int32_t> outputHostBuffer;
     auto startDataRead = std::chrono::high_resolution_clock::now();
-    int inputSamplesRead = dataReader->read(
+    int32_t inputSamplesRead = dataReader->read(
         gMaxBatchSize, gMaxInputSequenceLength, *inputOriginalHostBuffer, *inputOriginalSequenceLengthsHostBuffer);
     if (gEnableProfiling)
         profilers[0].reportLayerTime("Data Read",
@@ -1134,7 +1130,7 @@ int main(int argc, char** argv)
                 .count());
     // Outer loop over batches of samples
     auto startLatency = std::chrono::high_resolution_clock::now();
-    int batchCount = 0;
+    int32_t batchCount = 0;
     while (inputSamplesRead > 0)
     {
         ++batchCount;
@@ -1143,21 +1139,23 @@ int main(int argc, char** argv)
         // The idea is that shorter input sequences gets translated faster so we can reduce batch size quickly for the
         // generator
         auto startBatchSort = std::chrono::high_resolution_clock::now();
-        std::vector<int> samplePositions(inputSamplesRead);
+        std::vector<int32_t> samplePositions(inputSamplesRead);
         {
-            std::vector<std::pair<int, int>> sequenceSampleIdAndLength(inputSamplesRead);
-            for (int sampleId = 0; sampleId < inputSamplesRead; ++sampleId)
+            std::vector<std::pair<int32_t, int32_t>> sequenceSampleIdAndLength(inputSamplesRead);
+            for (int32_t sampleId = 0; sampleId < inputSamplesRead; ++sampleId)
                 sequenceSampleIdAndLength[sampleId]
-                    = std::make_pair(sampleId, ((const int*) *inputOriginalSequenceLengthsHostBuffer)[sampleId]);
+                    = std::make_pair(sampleId, ((const int32_t*) *inputOriginalSequenceLengthsHostBuffer)[sampleId]);
             std::sort(sequenceSampleIdAndLength.begin(), sequenceSampleIdAndLength.end(),
-                [](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool { return a.second > b.second; });
-            for (int position = 0; position < inputSamplesRead; ++position)
+                [](const std::pair<int32_t, int32_t>& a, const std::pair<int32_t, int32_t>& b) -> bool {
+                    return a.second > b.second;
+                });
+            for (int32_t position = 0; position < inputSamplesRead; ++position)
             {
-                int sampleId = sequenceSampleIdAndLength[position].first;
-                ((int*) *inputSequenceLengthsHostBuffer)[position]
-                    = ((const int*) *inputOriginalSequenceLengthsHostBuffer)[sampleId];
-                std::copy_n(((const int*) *inputOriginalHostBuffer) + sampleId * gMaxInputSequenceLength,
-                    gMaxInputSequenceLength, ((int*) *inputHostBuffer) + position * gMaxInputSequenceLength);
+                int32_t sampleId = sequenceSampleIdAndLength[position].first;
+                ((int32_t*) *inputSequenceLengthsHostBuffer)[position]
+                    = ((const int32_t*) *inputOriginalSequenceLengthsHostBuffer)[sampleId];
+                std::copy_n(((const int32_t*) *inputOriginalHostBuffer) + sampleId * gMaxInputSequenceLength,
+                    gMaxInputSequenceLength, ((int32_t*) *inputHostBuffer) + position * gMaxInputSequenceLength);
                 samplePositions[sampleId] = position;
             }
         }
@@ -1167,12 +1165,12 @@ int main(int argc, char** argv)
                     .count());
 
         CUDA_CHECK(cudaMemcpyAsync(*inputEncoderDeviceBuffer, *inputHostBuffer,
-            inputSamplesRead * gMaxInputSequenceLength * sizeof(int), cudaMemcpyHostToDevice, stream));
+            inputSamplesRead * gMaxInputSequenceLength * sizeof(int32_t), cudaMemcpyHostToDevice, stream));
         CUDA_CHECK(cudaMemcpyAsync(*inputSequenceLengthsDeviceBuffer, *inputSequenceLengthsHostBuffer,
-            inputSamplesRead * sizeof(int), cudaMemcpyHostToDevice, stream));
+            inputSamplesRead * sizeof(int32_t), cudaMemcpyHostToDevice, stream));
 
         // Overlap host and device: Read data for the next batch while encode for this one is running
-        std::future<int> nextInputSamplesReadFuture = std::async(std::launch::async, [&]() {
+        std::future<int32_t> nextInputSamplesReadFuture = std::async(std::launch::async, [&]() {
             return dataReader->read(gMaxBatchSize, gMaxInputSequenceLength, *inputOriginalHostBuffer,
                 *inputOriginalSequenceLengthsHostBuffer);
         });
@@ -1184,22 +1182,22 @@ int main(int argc, char** argv)
         }
 
         // Limit output sequences length to input_sequence_length * 2
-        std::transform((const int*) *inputSequenceLengthsHostBuffer,
-            (const int*) *inputSequenceLengthsHostBuffer + inputSamplesRead, (int*) *maxOutputSequenceLengthsHostBuffer,
-            [](int i) {
-                int r = i * 2;
+        std::transform((const int32_t*) *inputSequenceLengthsHostBuffer,
+            (const int32_t*) *inputSequenceLengthsHostBuffer + inputSamplesRead,
+            (int32_t*) *maxOutputSequenceLengthsHostBuffer, [](int32_t i) {
+                int32_t r = i * 2;
                 if (gMaxOutputSequenceLength >= 0)
                     r = std::min(r, gMaxOutputSequenceLength);
                 return r;
             });
         searchPolicy->initialize(inputSamplesRead, *maxOutputSequenceLengthsHostBuffer);
-        int batchMaxOutputSequenceLength = *std::max_element(
-            (int*) *maxOutputSequenceLengthsHostBuffer, (int*) *maxOutputSequenceLengthsHostBuffer + inputSamplesRead);
+        int32_t batchMaxOutputSequenceLength = *std::max_element((int32_t*) *maxOutputSequenceLengthsHostBuffer,
+            (int32_t*) *maxOutputSequenceLengthsHostBuffer + inputSamplesRead);
         outputHostBuffer.resize(gMaxBatchSize * batchMaxOutputSequenceLength);
 
         // Inner loop over generator timesteps
-        int validSampleCount = searchPolicy->getTailWithNoWorkRemaining();
-        for (int outputTimestep = 0; (outputTimestep < batchMaxOutputSequenceLength) && (validSampleCount > 0);
+        int32_t validSampleCount = searchPolicy->getTailWithNoWorkRemaining();
+        for (int32_t outputTimestep = 0; (outputTimestep < batchMaxOutputSequenceLength) && (validSampleCount > 0);
              ++outputTimestep)
         {
             // Generator initialization and beam shuffling
@@ -1229,9 +1227,9 @@ int main(int argc, char** argv)
             CUDA_CHECK(cudaMemcpyAsync(*outputCombinedLikelihoodHostBuffer, *outputCombinedLikelihoodDeviceBuffer,
                 validSampleCount * gBeamWidth * sizeof(float), cudaMemcpyDeviceToHost, stream));
             CUDA_CHECK(cudaMemcpyAsync(*outputVocabularyIndicesHostBuffer, *inputDecoderDeviceBuffer,
-                validSampleCount * gBeamWidth * sizeof(int), cudaMemcpyDeviceToHost, stream));
+                validSampleCount * gBeamWidth * sizeof(int32_t), cudaMemcpyDeviceToHost, stream));
             CUDA_CHECK(cudaMemcpyAsync(*outputRayOptionIndicesHostBuffer, *outputRayOptionIndicesDeviceBuffer,
-                validSampleCount * gBeamWidth * sizeof(int), cudaMemcpyDeviceToHost, stream));
+                validSampleCount * gBeamWidth * sizeof(int32_t), cudaMemcpyDeviceToHost, stream));
 
             CUDA_CHECK(cudaStreamSynchronize(stream));
 
@@ -1246,12 +1244,12 @@ int main(int argc, char** argv)
                         .count());
 
             CUDA_CHECK(cudaMemcpyAsync(*sourceRayIndicesDeviceBuffer, *sourceRayIndicesHostBuffer,
-                validSampleCount * gBeamWidth * sizeof(int), cudaMemcpyHostToDevice, stream));
+                validSampleCount * gBeamWidth * sizeof(int32_t), cudaMemcpyHostToDevice, stream));
             CUDA_CHECK(cudaMemcpyAsync(*inputLikelihoodsDeviceBuffer, *sourceLikelihoodsHostBuffer,
                 validSampleCount * gBeamWidth * sizeof(float), cudaMemcpyHostToDevice, stream));
 
             validSampleCount = searchPolicy->getTailWithNoWorkRemaining();
-        } // for(int outputTimestep
+        } // for(int32_t outputTimestep
 
         auto startBacktrack = std::chrono::high_resolution_clock::now();
         searchPolicy->readGeneratedResult(
@@ -1262,12 +1260,12 @@ int main(int argc, char** argv)
                     .count());
 
         auto startDataWrite = std::chrono::high_resolution_clock::now();
-        for (int sampleId = 0; sampleId < inputSamplesRead; ++sampleId)
+        for (int32_t sampleId = 0; sampleId < inputSamplesRead; ++sampleId)
         {
-            int position = samplePositions[sampleId];
+            int32_t position = samplePositions[sampleId];
             dataWriter->write(&outputHostBuffer[0] + position * batchMaxOutputSequenceLength,
-                ((const int*) *outputSequenceLengthsHostBuffer)[position],
-                ((const int*) *inputSequenceLengthsHostBuffer)[position]);
+                ((const int32_t*) *outputSequenceLengthsHostBuffer)[position],
+                ((const int32_t*) *inputSequenceLengthsHostBuffer)[position]);
         }
         if (gEnableProfiling)
             profilers[0].reportLayerTime("Data Write",
@@ -1286,7 +1284,7 @@ int main(int argc, char** argv)
 
     dataWriter->finalize();
     float score
-        = gDataWriterStr == "bleu" ? static_cast<nmtSample::BLEUScoreWriter*>(dataWriter.get())->getScore() : -1.0f;
+        = gDataWriterStr == "bleu" ? static_cast<nmtSample::BLEUScoreWriter*>(dataWriter.get())->getScore() : -1.0F;
 
     if (gDataWriterStr == "benchmark")
     {
@@ -1304,21 +1302,15 @@ int main(int argc, char** argv)
         else
         {
             for (const auto& profiler : profilers)
+            {
                 sample::gLogInfo << profiler << std::endl;
+            }
         }
     }
 
-    encoderContext->destroy();
-    generatorContext->destroy();
-    generatorShuffleContext->destroy();
-
-    encoderEngine->destroy();
-    generatorEngine->destroy();
-    generatorShuffleEngine->destroy();
-
     cudaStreamDestroy(stream);
 
-    bool pass = gDataWriterStr != "bleu" || score >= 25.0f;
+    bool pass = gDataWriterStr != "bleu" || score >= 25.0F;
 
     return sample::gLogger.reportTest(sampleTest, pass);
 }

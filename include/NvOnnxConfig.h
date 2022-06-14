@@ -74,7 +74,7 @@ public:
     //!
     //! \brief Get the Model FileName.
     //!
-    //! \return Return the Model Filename, as a pointer to a NULL-terminated character sequence.
+    //! \return Return the Model Filename, as a null-terminated C-style string.
     //!
     //! \see setModelFileName()
     //!

@@ -23,10 +23,10 @@ and corresponding `TrtRunner`s for inference.
 import numpy as np
 from polygraphy.backend.trt import (
     CreateConfig,
-    NetworkFromOnnxPath,
     Profile,
     TrtRunner,
     engine_from_network,
+    network_from_onnx_path,
     save_engine,
 )
 from polygraphy.logger import G_LOGGER
@@ -34,6 +34,7 @@ from polygraphy.logger import G_LOGGER
 
 def main():
     # A Profile maps each input tensor to a range of shapes.
+    # The `add()` method can be used to add shapes for a single input.
     #
     # TIP: To save lines, calls to `add` can be chained:
     #     profile.add("input0", ...).add("input1", ...)
@@ -52,7 +53,10 @@ def main():
     ]
 
     # See examples/api/06_immediate_eval_api for details on immediately evaluated functional loaders like `engine_from_network`.
-    engine = engine_from_network(NetworkFromOnnxPath("dynamic_identity.onnx"), config=CreateConfig(profiles=profiles))
+    # Note that we can freely inter-mix lazy and immediately-evaluated loaders.
+    engine = engine_from_network(
+        network_from_onnx_path("dynamic_identity.onnx"), config=CreateConfig(profiles=profiles)
+    )
 
     # We'll save the engine so that we can inspect it with `inspect model`.
     # This should make it easy to see how the engine bindings are laid out.
