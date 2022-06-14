@@ -1,6 +1,6 @@
 # TensorRT OSS Release Changelog
 
-## [8.4.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-1) - 2022-06-17
+## [8.4.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-1) - 2022-06-14
 
 TensorRT OSS release corresponding to TensorRT 8.4.1.5 GA release.
 - Updates since [TensorRT 8.2.1 GA release](https://github.com/NVIDIA/TensorRT/releases/tag/8.2.1).
