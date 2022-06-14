@@ -41,7 +41,7 @@ To build the TensorRT-OSS components, you will first need the following software
   * [onnx](https://pypi.org/project/onnx/) 1.9.0
   * [onnxruntime](https://pypi.org/project/onnxruntime/) 1.8.0
   * [tensorflow-gpu](https://pypi.org/project/tensorflow/) >= 2.5.1
-  * [Pillow](https://pypi.org/project/Pillow/) >= 8.3.2
+  * [Pillow](https://pypi.org/project/Pillow/) >= 9.0.1
   * [pycuda](https://pypi.org/project/pycuda/) < 2021.1
   * [numpy](https://pypi.org/project/numpy/)
   * [pytest](https://pypi.org/project/pytest/)
