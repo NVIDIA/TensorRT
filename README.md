@@ -100,13 +100,13 @@ For Linux platforms, we recommend that you generate a docker container for build
 
     **Example: Ubuntu 20.04 on x86-64 with cuda-11.6.2 (default)**
     ```bash
-    ./docker/build.sh --file docker/ubuntu-18.04.Dockerfile --tag tensorrt-ubuntu18.04-cuda11.6
+    ./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda11.6
     ```
     **Example: CentOS/RedHat 7 on x86-64 with cuda-10.2**
     ```bash
     ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos7-cuda10.2 --cuda 10.2
     ```
-    **Example: Ubuntu 18.04 cross-compile for Jetson (aarch64) with cuda-11.4.2 (JetPack SDK)**
+    **Example: Ubuntu 20.04 cross-compile for Jetson (aarch64) with cuda-11.4.2 (JetPack SDK)**
     ```bash
     ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda11.4
     ```
