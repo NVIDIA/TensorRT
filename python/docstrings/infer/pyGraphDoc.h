@@ -91,7 +91,7 @@ constexpr const char* descr = R"trtdoc(
 constexpr const char* LINEAR = R"trtdoc(
     Row major linear format.
 
-    For a tensor with dimensions {N, C, H, W}, the W axis always has unit stride, and the stride of every other axis is at least the the product of of the next dimension times the next stride. the strides are the same as for a C array with dimensions [N][C][H][W].
+    For a tensor with dimensions {N, C, H, W}, the W axis always has unit stride, and the stride of every other axis is at least the product of the next dimension times the next stride. the strides are the same as for a C array with dimensions [N][C][H][W].
 )trtdoc";
 
 constexpr const char* CHW2 = R"trtdoc(

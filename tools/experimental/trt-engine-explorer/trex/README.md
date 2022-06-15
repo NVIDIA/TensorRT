@@ -12,7 +12,7 @@ The `trex` package design follows the Model View Controller (MVC) design pattern
 * An `EnginePlan` is constructed from three JSON files:
   * A plan-graph JSON file (mandatory) describes the engine plan in a JSON format.
   * A plan profiling file provides timing measurements in JSON format (optional; required only if you want to access timing information).
-  * A metadata JSON file which describes the hardware and software enviroments on which the engine is profiled. This file is optional but provides valuable information about the engine.
+  * A metadata JSON file which describes the hardware and software environments on which the engine is profiled. This file is optional but provides valuable information about the engine.
 
     ```
     plan = EnginePlan(

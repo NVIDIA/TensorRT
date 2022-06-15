@@ -298,7 +298,7 @@ void EfficientNMSPlugin::configurePlugin(
         mParam.numScoreElements = in[1].desc.dims.d[1] * in[1].desc.dims.d[2];
         mParam.numClasses = in[1].desc.dims.d[2];
 
-        // When pad per class is set, the total ouput boxes size may need to be reduced.
+        // When pad per class is set, the total output boxes size may need to be reduced.
         // This operation is also done in getOutputDimension(), but for dynamic shapes, the
         // numOutputBoxes param can't be set until the number of classes is fully known here.
         if (mParam.padOutputBoxesPerClass && mParam.numOutputBoxesPerClass > 0)

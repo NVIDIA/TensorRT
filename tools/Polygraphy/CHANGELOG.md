@@ -747,8 +747,8 @@ Dates are in YYYY-MM-DD format.
 - Added a passthrough loader, `LoadPlugins`, that can wrap any other loader, and load plugins
 
 ### Changed
-- `EngineFromNetwork` will no longer free the the builder, network and parser if they are provided directly (as opposed to via a loader).
-- `TrtRunner` will no longer free the the engine if it is provided directly (as opposed to via a loader).
+- `EngineFromNetwork` will no longer free the builder, network and parser if they are provided directly (as opposed to via a loader).
+- `TrtRunner` will no longer free the engine if it is provided directly (as opposed to via a loader).
 - All file saving arguments now take file paths instead of directories. This makes it easier to know exactly where each file is being written.
 - `compare_func` in `Comparator.compare_accuracy` now accepts a function that returns anything convertible to a boolean, rather than requiring a boolean.
 - `basic_compare_func` now will return information about required tolerances after `Comparator.compare_accuracy`.
