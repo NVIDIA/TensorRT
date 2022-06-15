@@ -365,7 +365,7 @@ public:
 }; // class IMirroredBuffer
 
 //!
-//! Class to have a seperate memory buffer for discrete device and host allocations.
+//! Class to have a separate memory buffer for discrete device and host allocations.
 //!
 class DiscreteMirroredBuffer : public IMirroredBuffer
 {

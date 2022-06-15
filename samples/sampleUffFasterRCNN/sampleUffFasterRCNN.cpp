@@ -515,7 +515,7 @@ void printHelpInfo()
     std::cout << "=== Required Arguments ===" << std::endl;
     std::cout << "--inputHeight[-H]       Specify the input height of the model." << std::endl;
     std::cout << "--inputWidth[-W]        Specify the input width of the model." << std::endl;
-    std::cout << "--inputImages[-I]       Comma-seperated list of input images to use for inference." << std::endl;
+    std::cout << "--inputImages[-I]       Comma-separated list of input images to use for inference." << std::endl;
     std::cout << "=== Optional Arguments ===" << std::endl;
     std::cout << "--help[-h]              Display help information and exit" << std::endl;
     std::cout << "--datadir[-d]           Specify path to a data directory, overriding "

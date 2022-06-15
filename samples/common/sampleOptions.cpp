@@ -1486,7 +1486,7 @@ void InferenceOptions::help(std::ostream& os)
           "  --streams=N                 Instantiate N engines to use concurrently (default = "            << defaultStreams << ")"  << std::endl <<
           "  --exposeDMA                 Serialize DMA transfers to and from device (default = disabled)."                           << std::endl <<
           "  --noDataTransfers           Disable DMA transfers to and from device (default = enabled)."                              << std::endl <<
-          "  --useManagedMemory          Use managed memory instead of seperate host and device allocations (default = disabled)."   << std::endl <<
+          "  --useManagedMemory          Use managed memory instead of separate host and device allocations (default = disabled)."   << std::endl <<
           "  --useSpinWait               Actively synchronize on GPU events. This option may decrease synchronization time but "
                                                                              "increase CPU usage and power (default = disabled)"     << std::endl <<
           "  --threads                   Enable multithreading to drive engines with independent threads (default = disabled)"       << std::endl <<
