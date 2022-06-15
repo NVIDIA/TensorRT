@@ -13,7 +13,7 @@ The QAT end-to-end workflow (TF2-to-ONNX) consists of the following steps:
 ## 1. Base requirements
 1. Install `tensorflow-quantization` toolkit.
 2. Install additional requirements: `pip install -r requirements.txt`.
-3. (Optional) Install TensorRT >= 8.4 EA for full workflow support (needed for `infer_engine.py`).
+3. (Optional) Install TensorRT for full workflow support (needed for `infer_engine.py`).
 
 **Note**: For CLI run, please go to the cloned repository's root directory and run `export PYTHONPATH=$PWD`, so that the `examples` folder is available for import.
 

@@ -57,8 +57,6 @@ _SUPPORTED_MODEL_NAMES = [
     "efficientnet_b3",
     "mobilenet_v1",
     "mobilenet_v2",
-    "inception_v3",
-    "inception_resnetv2"
 ]
 
 _NUM_CLASSES = 1000
