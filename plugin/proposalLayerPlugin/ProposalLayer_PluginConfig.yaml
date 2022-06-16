@@ -21,7 +21,7 @@ versions:
     attribute_options:
       prenms_topk:
         min: "0"
-        max: "=pinf"
+        max: "=1024"
       keep_topk:
         min: "0"
         max: "=pinf"
