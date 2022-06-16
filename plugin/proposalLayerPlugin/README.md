@@ -56,6 +56,13 @@ The number of anchors is capped at 1024 to support embedded devices with smaller
 To enable support for a device with higher memory, calls to `sortPerClass`, `PerClassNMS` and `KeepTopKGather` can be modified in `proposalRefineBatchClassNMS` ([maskRCNNKernels.cu](https://github.com/NVIDIA/TensorRT/blob/main/plugin/common/kernels/maskRCNNKernels.cu)).
 
 
+## Limitations
+
+The attribute `prenms_topk` is capped at 1024 to support embedded devices with smaller shared memory capacity.
+
+To enable support for a device with higher memory, calls to `sortPerClass`, `PerClassNMS` and `KeepTopKGather` can be modified in `proposalRefineBatchClassNMS` ([maskRCNNKernels.cu](https://github.com/NVIDIA/TensorRT/blob/main/plugin/common/kernels/maskRCNNKernels.cu)).
+
+
 ## Additional resources
 
 The following resources provide a deeper understanding of the `ProposalLayer` plugin:
