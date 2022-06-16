@@ -29,8 +29,18 @@ Each output has shape of `[2, H x W x mNumPriors x 4, 1]`. The first dimension h
 ## Parameters
 
 This plugin consists of the plugin creator class `GridAnchorPluginCreator` and the plugin class `GridAnchorGenerator`.
+
+`GridAnchorPluginCreator` creates instances of the `GridAnchorGenerator` and takes the following parameters as user input:
+| Type     | Parameter                | Description
+|----------|--------------------------|--------------------------------------------------------
+|`float`   |`minSize`                 |Scale of anchors corresponding to finest resolution with respect to the height of input image. It corresponds to the `s_min` of the SSD paper. Default value is `0.2F`.
+|`float`   |`maxSize`                 |Scale of anchors corresponding to coarsest resolution with respect to the height of input image. It corresponds to the `s_max` of the SSD paper. Default value is `0.95F`.
+|`float*`  |`aspectRatios`            |List of aspect ratios to place on each grid point.
+|`int*`    |`featureMapShapes`        |Shapes of the feature maps. If creating a `GridAnchorRect_TRT` plugin, this must be a list of size `numLayers * 2` where the height and width of each feature map is listed in order. If creating a `GridAnchor_TRT` plugin, this must be list of size `numLayers` where the height (or width) of each feature map is listed in order.
+|`float*`  |`variance`                |Variance for adjusting the prior boxes.
+|`int`     |`numLayers`               |Number of feature maps. Default value is `6`.
   
-The `GridAnchorGenerator` is created using `mNumLayers` and an array of `GridAnchorParameters` typed parameters that are parsed by the `GridAnchorPluginCreator`.  `GridAnchorParameters` consists of the following parameters:
+`GridAnchorGenerator`'s constructor takes `numLayers` and an array of `GridAnchorParameters` typed parameters. The corresponding `GridAnchorParameters` are created internally by `GridAnchorPluginCreator` (not the plugin user's responsibility). `GridAnchorParameters` consists of the following parameters:
 
 | Type     | Parameter                | Description
 |----------|--------------------------|--------------------------------------------------------
@@ -40,7 +50,7 @@ The `GridAnchorGenerator` is created using `mNumLayers` and an array of `GridAnc
 |`int`     |`numAspectRatios`         |Number of elements in aspectRatios.
 |`int`     |`H`                       |Height of feature map to generate anchors for.
 |`int`     |`W`                       |Width of feature map to generate anchors for.
-|`float`   |`variance`                |Variance for adjusting the prior boxes.
+|`float[4]`|`variance`                |Variance for adjusting the prior boxes.
 
 ### Example: Creating `GridAnchorGenerator` For An SSD Network
 
