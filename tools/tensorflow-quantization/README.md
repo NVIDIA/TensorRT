@@ -17,7 +17,7 @@ We follow NVIDIA's QAT recipe, which leads to optimal model acceleration with [T
 
 **Python** >= 3.8  
 **TensorFlow** >= 2.8  
-**tf2onnx** >= 1.10.0  
+**tf2onnx** >= 1.10.1
 **onnx-graphsurgeon**  
 **pytest**  
 **pytest-html**  
@@ -31,14 +31,14 @@ Latest TensorFlow 2.x [docker image](https://catalog.ngc.nvidia.com/orgs/nvidia/
 
 ```bash
 $ cd ~/
-$ git clone ssh://git@gitlab-master.nvidia.com:12051/TensorRT/Tools/tensorflow-quantization.git
+$ git clone https://github.com/NVIDIA/TensorRT.git
 $ docker pull nvcr.io/nvidia/tensorflow:22.03-tf2-py3
-$ docker run -it --runtime=nvidia --gpus all -v ~/tensorflow-quantization:/home/tensorflow-quantization nvcr.io/nvidia/tensorflow:22.03-tf2-py3 /bin/bash 
+$ docker run -it --runtime=nvidia --gpus all --net host -v ~/TensorRT/tools/tensorflow-quantization:/home/tensorflow-quantization nvcr.io/nvidia/tensorflow:22.03-tf2-py3 /bin/bash 
 ```
 After last command, you will be placed in `/workspace` directory inside the running docker container whereas `tensorflow-quantization` repo is mounted in `/home` directory.
 
 ```bash
-$ cd ~/home/tensorflow-quantization
+$ cd /home/tensorflow-quantization
 $ ./install.sh
 $ cd tests
 $ python3 -m pytest quantize_test.py -rP
@@ -49,8 +49,8 @@ If all tests pass, installation is successful.
 
 ```bash
 $ cd ~/
-$ git clone ssh://git@gitlab-master.nvidia.com:12051/TensorRT/Tools/tensorflow-quantization.git
-$ cd tensorflow-quantization
+$ git clone https://github.com/NVIDIA/TensorRT.git
+$ cd TensorRT/tools/tensorflow-quantization
 $ ./install.sh
 $ cd tests
 $ python3 -m pytest quantize_test.py -rP
