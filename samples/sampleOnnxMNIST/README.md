@@ -56,7 +56,7 @@ To build the engine, create the builder and pass a logger created for TensorRT w
 `IBuilder* builder = createInferBuilder(sample::gLogger);`
 
 To build the engine from the generated TensorRT network, issue the following call:
-`nvinfer1::ICudaEngine* engine = builder->buildCudaEngine(*network);`
+`nvinfer1::ICudaEngine* engine = builder->builder->buildEngineWithConfig(*network,config);`
 
 After you build the engine, verify that the engine is running properly by confirming the output is what you expected. The output format of this sample should be the same as the output of sampleMNIST.
 
