@@ -45,7 +45,7 @@ from NNDF.tensorrt_utils import TRTNativeRunner
 
 @use_cuda
 def decoder_inference(
-    BART_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=True, use_cache=True
+    BART_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=True, use_cache=True, past_key_values=None
 ):
     # This implementation is a bit ugly. Moving implementation of the model to check HFRunner would be cleaner.
     if isinstance(BART_decoder, TRTNativeRunner):
@@ -56,7 +56,8 @@ def decoder_inference(
 
     def decoder_stmt():
         BART_decoder(
-            input_ids=input_ids, encoder_hidden_states=encoder_last_hidden_state, use_cache=use_cache
+            input_ids=input_ids, encoder_hidden_states=encoder_last_hidden_state, use_cache=use_cache,
+            past_key_values=past_key_values
         )
 
     decoder_e2e_median_time = measure_python_inference_code(decoder_stmt, timing_profile)

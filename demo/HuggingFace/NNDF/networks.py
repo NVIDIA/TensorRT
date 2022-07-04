@@ -92,7 +92,7 @@ class Dims:
         Return:
             str: Returns a sequence dimension which Dims.SEQUENCE appended by dim_type.
         """
-        return Dims.SEQUENCE + dim_type
+        return Dims.SEQUENCE + "_" + dim_type
 
     def get_dims(self):
         """
@@ -121,10 +121,10 @@ class Dims:
         dynamic_axes = {}
         for k, v in self.encoding.items():
             encodings = []
-            for e in v:
+            for idx, e in enumerate(v):
                 if isinstance(e, str) and (e == self.BATCH or self.SEQUENCE in e):
-                    encodings.append(e)
-            dynamic_axes[k] = {c: v for c, v in enumerate(encodings)}
+                    encodings.append((idx, e))
+            dynamic_axes[k] = {idx: e for idx, e in encodings}
 
         return dynamic_axes
 

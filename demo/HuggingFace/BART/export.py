@@ -20,6 +20,9 @@ Contains logic that captures BART HuggingFace models into ONNX models.
 """
 
 from itertools import islice
+from json import encoder
+import os
+from collections import OrderedDict
 
 # tensorrt
 import tensorrt as trt
@@ -38,7 +41,7 @@ from transformers.modeling_outputs import Seq2SeqLMOutput
 # TRT-HuggingFace
 from BART.BARTModelConfig import BARTModelTRTConfig
 from NNDF.tensorrt_utils import clamp_weights_onnx_to_fp16_bounds, move_t5_cast_op
-from NNDF.networks import NetworkMetadata, Precision
+from NNDF.networks import NetworkMetadata, Precision, Dims
 from NNDF.logger import G_LOGGER
 from NNDF.models import (
     TRTEngineFile,
@@ -136,7 +139,6 @@ class BARTDecoderTorchFile(TorchModelFile):
             return ret
 
         def forward(self, input_ids, encoder_hidden_states, **kwargs):
-            # print(kwargs)
             decoder_outputs = self.decoder(
                 input_ids=input_ids,
                 encoder_hidden_states=encoder_hidden_states,
@@ -146,6 +148,11 @@ class BARTDecoderTorchFile(TorchModelFile):
             sequence_output = decoder_outputs[0]
             self.bias = self.bias.to(sequence_output.device)
             logits = self.lm_head(sequence_output) + self.bias
+
+            # temporary solution: force connection between encoder_hidden_states and outputs in KV cache mode, otherwise onnx.export elimiates it and cause inconsistency between non-KV cache & KV cache and also T5 & BART
+            if self.config.use_cache:
+                logits = logits.view(encoder_hidden_states.size(0),logits.size(1), logits.size(2)) # (batch_size, seq_len, vocab_size)
+
             if not kwargs.get("return_dict", False):
                 return (logits,) + decoder_outputs[1:]
 
@@ -238,14 +245,6 @@ class BARTDecoderConverter(ModelFileConverter):
             model.get_decoder(), model.lm_head, model.final_logits_bias, model.config
         )
 
-        # This code allows for huggingface compatible torch class to use onnx exporter
-        old_forward = decoder_with_lm_head_and_bias.forward
-        def _export_forward(*args, **kwargs):
-            result = old_forward(*args, **kwargs)
-            return result[0]
-
-        decoder_with_lm_head_and_bias.forward = _export_forward
-
         inputs = BARTModelTRTConfig.get_input_dims(network_metadata)["decoder"]
         outputs = BARTModelTRTConfig.get_output_dims(network_metadata)["decoder"]
 
@@ -256,22 +255,90 @@ class BARTDecoderConverter(ModelFileConverter):
         version_minor = int((torch.__version__).split('.')[1])
         if version_major < 1 or (version_major == 1 and version_minor < 11):
             opt_args['use_external_data_format'] = True
-        torch.onnx.export(
-            decoder_with_lm_head_and_bias,
-            (input_ids, simplified_encoder(input_ids)),
-            output_fpath,
-            export_params=True,
-            opset_version=12,
-            input_names=inputs.get_names(),
-            output_names=outputs.get_names(),
-            dynamic_axes={
-                **inputs.get_torch_dynamic_axis_encoding(),
-                **outputs.get_torch_dynamic_axis_encoding(),
-            },
-            training=False,
-            **opt_args
-        )
 
+        if not network_metadata.other.kv_cache:
+            # This code allows for huggingface compatible torch class to use onnx exporter
+            old_forward = decoder_with_lm_head_and_bias.forward
+            def _export_forward(*args, **kwargs):
+                result = old_forward(*args, **kwargs)
+                return result[0]
+            decoder_with_lm_head_and_bias.forward = _export_forward
+
+            torch.onnx.export(
+                decoder_with_lm_head_and_bias,
+                (input_ids, simplified_encoder(input_ids)),
+                output_fpath,
+                export_params=True,
+                opset_version=12,
+                input_names=inputs.get_names(),
+                output_names=outputs.get_names(),
+                dynamic_axes={
+                    **inputs.get_torch_dynamic_axis_encoding(),
+                    **outputs.get_torch_dynamic_axis_encoding(),
+                },
+                training=False,
+                **opt_args
+            )
+        else:
+            encoder_hidden_states = simplified_encoder(input_ids)
+            decoder_output = decoder_with_lm_head_and_bias(input_ids[:,:-1], encoder_hidden_states) # decoder output at t-1 step (logits, past_key_values from 0 to t-1)
+            past_key_values = decoder_output[1]
+
+            # This code allows for huggingface compatible torch class to use onnx exporter (change just before onnx.export)
+            old_forward = decoder_with_lm_head_and_bias.forward
+            def _export_forward(input_ids, encoder_hidden_states, past_key_values):
+                result = old_forward(input_ids, encoder_hidden_states, past_key_values=past_key_values)
+                return (result[0], result[1])
+            decoder_with_lm_head_and_bias.forward = _export_forward
+            
+            torch.onnx.export(
+                decoder_with_lm_head_and_bias,
+                (input_ids[:,-1:], encoder_hidden_states,past_key_values),
+                # (1) input_ids should be the t token (last one) while past_key_values is 0 to t-1 caches (2) since past_key_values is kwargs, ideally use "(input_ids[:,-1:], encoder_hidden_states, {"past_key_values": past_key_values})", but onnx.export seems to unable to take kwargs properly (although PyTorch 1.11 claims it supports already). Therefore, we need to wrap inside _export_forward() and make past_key_values indeed a kwargs
+                output_fpath,
+                export_params=True,
+                opset_version=12,
+                input_names=inputs.get_names(),
+                output_names=outputs.get_names(),
+                dynamic_axes={
+                    **inputs.get_torch_dynamic_axis_encoding(),
+                    **outputs.get_torch_dynamic_axis_encoding(),
+                },
+                training=False,
+                **opt_args
+            )
+
+            # dual-engine approach: also export non-kv onnx model. Note that this is different from the original "non-kv" model. This one traces the `use_cache` path and have present_key_values output
+            def _export_forward(input_ids, encoder_hidden_states, use_cache):
+                result = old_forward(input_ids, encoder_hidden_states, use_cache=use_cache)
+                return (result[0], result[1])
+            decoder_with_lm_head_and_bias.forward = _export_forward
+            
+            fpath_root, fpath_ext = os.path.splitext(output_fpath)
+            output_fpath_non_kv = fpath_root + '-non-kv' + fpath_ext
+
+            # inputs are same as non-kv model
+            # outputs are same as kv model
+            dict_inputs = inputs.get_dims()
+            dict_inputs_non_kv = OrderedDict({k: dict_inputs[k] for k in ["input_ids", "encoder_hidden_states"]})
+            inputs_non_kv = Dims(dict_inputs_non_kv)
+
+            torch.onnx.export(
+                decoder_with_lm_head_and_bias,
+                (input_ids[:,-1:], encoder_hidden_states, True),
+                output_fpath_non_kv,
+                export_params=True,
+                opset_version=12,
+                input_names=inputs_non_kv.get_names(),
+                output_names=outputs.get_names(),
+                dynamic_axes={
+                    **inputs_non_kv.get_torch_dynamic_axis_encoding(),
+                    **outputs.get_torch_dynamic_axis_encoding(),
+                },
+                training=False,
+                **opt_args
+            )
+        
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for BART")
             # move_t5_cast_op(output_fpath, output_fpath) # BART doesn't have T5's Add-Cast-Pow ordering issue

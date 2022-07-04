@@ -91,14 +91,35 @@ BARTBenchmarkingArgs = namedtuple("BARTBenchmarkingArgs", ["input_seq_len", "out
 class BARTModelTRTConfig(NNConfig):
 
     TARGET_MODELS = ["facebook/bart-base", "facebook/bart-large", "facebook/bart-large-cnn"]
-    # bart-base: 12-layer, 768-hidden, 16-heads, 139M parameters
-    # bart-large: 24-layer, 1024-hidden, 16-heads, 406M parameters
-    NUMBER_OF_LAYERS = {TARGET_MODELS[0]: 12, TARGET_MODELS[1]: 24, TARGET_MODELS[2]: 24} 
+    
+    # bart-base: 12-layer, 768-hidden, 139M parameters
+    # bart-large: 24-layer, 1024-hidden, 406M parameters
+    # in all bart variants, # of encoder layers and # of decoder layers are the same
+    NUMBER_OF_LAYERS = {
+        TARGET_MODELS[0]: 12, 
+        TARGET_MODELS[1]: 24, 
+        TARGET_MODELS[2]: 24,
+    } 
+    
+    # in all bart variants, # of heads in encoder and decoder are the same
+    NUMBER_OF_HEADS = {
+        TARGET_MODELS[0]: 12, 
+        TARGET_MODELS[1]: 16, 
+        TARGET_MODELS[2]: 16,
+    }
+
     MAX_SEQUENCE_LENGTH = {
         TARGET_MODELS[0]: 768,
         TARGET_MODELS[1]: 1024,
         TARGET_MODELS[2]: 1024,
     }
+
+    # encoder hidden size is not necessarily same as max sequence length. Separate for clarification
+    ENCODER_HIDDEN_SIZE = {
+        TARGET_MODELS[0]: 768,
+        TARGET_MODELS[1]: 1024,
+        TARGET_MODELS[2]: 1024,
+    } 
 
     # To achieve identical results with original HuggingFace implementation, the min_length in model config should be consistent with each model variant
     # see task-specific params in config.json of each variant model
@@ -180,13 +201,24 @@ class BARTModelTRTConfig(NNConfig):
                 "encoder_hidden_states": (
                     Dims.BATCH,
                     Dims.create_new_sequence_dim("encoder_hidden_length"),
-                    BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
+                    BARTModelTRTConfig.ENCODER_HIDDEN_SIZE[metadata.variant], # dim not containing string 'Dims.BATCH' or 'Dims.SEQUENCE' will be non-dynamic axis
                 ),
             }
         )
         if metadata.other.kv_cache:
-            decoder_inputs_dict["use_cache"] = ("boolean")
-            decoder_inputs_dict["past_key_values"] = (Dims.BATCH, "num_heads", Dims.SEQUENCE, "embedding_size_per_head") 
+            # for KV cache version, we need add per-layer KV cache inputs. `past_key_values` at each layer is (self-attention K, self-attention V, cross-attention K, cross-attention V)
+
+            # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
+            for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]) // 2):
+                # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep) 
+                self_attention_past_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("past_decoder_length"), "embedding_size_per_head")
+                decoder_inputs_dict[f"past_key_values.{i}.decoder.key"] = self_attention_past_kv_dims
+                decoder_inputs_dict[f"past_key_values.{i}.decoder.value"] = self_attention_past_kv_dims
+                
+                # encoder-decoder cross-attention KV cache (dim[0] & dim[2] are dynamic, but dim[2] is constant at each decoding timestep)
+                cross_attention_past_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("encoder_length"), "embedding_size_per_head") 
+                decoder_inputs_dict[f"past_key_values.{i}.encoder.key"] = cross_attention_past_kv_dims
+                decoder_inputs_dict[f"past_key_values.{i}.encoder.value"] = cross_attention_past_kv_dims
 
         decoder_inputs = Dims(decoder_inputs_dict)
 
@@ -206,16 +238,33 @@ class BARTModelTRTConfig(NNConfig):
         Returns:
             (Dict[str, Dims]): {"decoder": Dims, "encoder": Dims}
         """
-        decoder_outputs = Dims(
-            OrderedDict({"hidden_states": (Dims.BATCH, Dims.SEQUENCE)})
-        )
+        decoder_outputs_dict = OrderedDict(
+            {"hidden_states": (Dims.BATCH, Dims.SEQUENCE)})
+
+        if metadata.other.kv_cache:
+            # for KV cache version, we need add per-layer KV cache inputs. `past_key_values` at each layer is (self-attention K, self-attention V, cross-attention K, cross-attention V)
+            
+            # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
+            for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]) // 2):
+                # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep) 
+                self_attention_present_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("decoder_length"), "embedding_size_per_head")
+                decoder_outputs_dict[f"present_key_values.{i}.decoder.key"] = self_attention_present_kv_dims
+                decoder_outputs_dict[f"present_key_values.{i}.decoder.value"] = self_attention_present_kv_dims
+                
+                # encoder-decoder cross-attention KV cache (dim[0] & dim[2] are dynamic, but dim[2] is constant at each decoding timestep)
+                cross_attention_present_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("encoder_length"), "embedding_size_per_head") 
+                decoder_outputs_dict[f"present_key_values.{i}.encoder.key"] = cross_attention_present_kv_dims
+                decoder_outputs_dict[f"present_key_values.{i}.encoder.value"] = cross_attention_present_kv_dims
+
+        decoder_outputs = Dims(decoder_outputs_dict)
+
         encoder_outputs = Dims(
             OrderedDict(
                 {
                     "hidden_states": (
                         Dims.BATCH,
                         Dims.SEQUENCE,
-                        BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
+                        BARTModelTRTConfig.ENCODER_HIDDEN_SIZE[metadata.variant],
                     )
                 }
             )
