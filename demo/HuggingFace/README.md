@@ -98,7 +98,7 @@ python3 run.py run BART trt --variant facebook/bart-base --working-dir temp [--f
 For BART, use `--enable-kv-cache` option to get the same effect of HuggingFace's `use_cache` option. For encoder-decoder models, this option will use key & value cache in decoder for uni-directional self-attention and encoder-decoder cross-attention.
 
 ```python
-python3 run.py run BART frameworks --variant facebook/bart-base --working-dir temp --enable-kv-cache
+python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --working-dir temp --enable-kv-cache
 ```
 
 ## Testing

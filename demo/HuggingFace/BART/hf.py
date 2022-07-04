@@ -18,7 +18,7 @@
 """
 Obtain the benchmark timing and output from the original HuggingFace BART model.
 
-Usage: python3 hf.py --variant facebook/bart-base [--enable-kv-cache]
+Usage: python3 hf.py --variant facebook/bart-base [--enable-kv-cache] [--fp16]
 """
 
 import time 
@@ -28,12 +28,16 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--variant", help="Name of BART variant.")
 parser.add_argument("--enable-kv-cache", help="Bart enable KV cache", action="store_true", default=False)
+parser.add_argument("--fp16", help="Bart FP16", action="store_true", default=False)
+
 args = parser.parse_args()
 
 model = BartForConditionalGeneration.from_pretrained(args.variant) # facebook/bart-base, facebook/bart-large, facebook/bart-large-cnn
 tokenizer = BartTokenizer.from_pretrained(args.variant)
 model = model.to('cuda').eval()
 
+if args.fp16:
+    model = model.half()
 
 ARTICLE_TO_SUMMARIZE = (
     "NVIDIA TensorRT-based applications perform up to 36X faster than CPU-only platforms during inference, enabling developers to optimize neural network models trained on all major frameworks, calibrate for lower precision with high accuracy, and deploy to hyperscale data centers, embedded platforms, or automotive product platforms. TensorRT, built on the NVIDIA CUDA parallel programming model, enables developers to optimize inference by leveraging libraries, development tools, and technologies in CUDA-X for AI, autonomous machines, high performance computing, and graphics. With new NVIDIA Ampere Architecture GPUs, TensorRT also uses sparse tensor cores for an additional performance boost."

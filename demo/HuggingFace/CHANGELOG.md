@@ -20,7 +20,10 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
-# [1.2.?] - 2022-06-?
+# [1.2.3] - 2022-06-30
+- Added KV cache support for BART demo
+  
+# [1.2.2] - 2022-06-14
 - Added BART demo
 
 # [1.2.1] - 2022-05-20
