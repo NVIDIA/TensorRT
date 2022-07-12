@@ -106,6 +106,8 @@ class OnnxImporter(BaseImporter):
         onnx_node: onnx.NodeProto,
         tensor_map: "OrderedDict[str, Tensor]",
         subgraph_tensor_map: "OrderedDict[str, Tensor]",
+        opset,
+        import_domains: onnx.OperatorSetIdProto,
     ) -> Node:
         def attrs_to_dict(attrs):
             attr_dict = OrderedDict()
@@ -119,7 +121,10 @@ class OnnxImporter(BaseImporter):
                         processed = OnnxImporter.import_tensor(processed)
                     elif attr_str == "GRAPH":
                         processed = OnnxImporter.import_graph(
-                            processed, misc.combine_dicts(tensor_map, subgraph_tensor_map)
+                            processed,
+                            misc.combine_dicts(tensor_map, subgraph_tensor_map),
+                            opset=opset,
+                            import_domains=import_domains,
                         )
                     elif attr_str == "FLOATS" or attr_str == "INTS":
                         processed = list(processed)
@@ -266,7 +271,7 @@ class OnnxImporter(BaseImporter):
         G_LOGGER.verbose("Importing nodes")
         nodes = []  # List[Node]
         for onnx_node in onnx_graph.node:
-            node = OnnxImporter.import_node(onnx_node, tensor_map, subgraph_tensor_map)
+            node = OnnxImporter.import_node(onnx_node, tensor_map, subgraph_tensor_map, opset, import_domains)
             nodes.append(node)
 
         return Graph(

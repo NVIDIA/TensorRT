@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
+from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter, import_onnx
 import onnx_graphsurgeon as gs
 
 from onnx_models import identity_model
@@ -26,14 +26,14 @@ import onnx
 
 class TestApi(object):
     def setup_method(self):
-        self.imported_graph = OnnxImporter.import_graph(identity_model().load().graph)
+        self.imported_graph = import_onnx(identity_model().load())
 
     def test_import(self):
-        graph = gs.import_onnx(onnx.load(identity_model().path))
+        graph = gs.import_onnx(identity_model().load())
         assert graph == self.imported_graph
 
     def test_export(self):
         with tempfile.NamedTemporaryFile() as f:
             onnx_model = gs.export_onnx(self.imported_graph)
             assert onnx_model
-            assert OnnxImporter.import_graph(onnx_model.graph) == self.imported_graph
+            assert import_onnx(onnx_model) == self.imported_graph
