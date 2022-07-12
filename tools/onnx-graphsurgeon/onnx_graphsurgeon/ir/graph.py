@@ -512,7 +512,7 @@ class Graph(object):
             self
         """
         import onnxruntime as rt
-        from onnx_graphsurgeon.exporters.onnx_exporter import export_onnx
+        from onnx_graphsurgeon.exporters.onnx_exporter import export_onnx, dtype_to_onnx
 
         PARTITIONING_MODES = [None, "basic", "recursive"]
         if partitioning not in PARTITIONING_MODES:
@@ -531,7 +531,7 @@ class Graph(object):
             if node.op not in VALID_CAST_ELISION_OPS:
                 return
 
-            # Get list of input nodes
+            # Get list of input nodes that cast to float32
             inp_casts = [
                 inp_node
                 for inp_tensor in node.inputs
@@ -544,26 +544,29 @@ class Graph(object):
                 return
 
             # Ensure that all input cast nodes are casting from the same type
-            final_type = None
-            for inp in inp_casts:
-                curr_type = onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[inp.inputs[0].dtype]
-                final_type = final_type or curr_type
-                if final_type != curr_type:
-                    return
+            inp_dtypes = [dtype_to_onnx(inp_cast.inputs[0].dtype) for inp_cast in inp_casts]
+            if len(set(inp_dtypes)) != 1:
+                return
 
-            # Check validity and get list of output nodes
-            out_casts = []
+            final_type = inp_dtypes[0]
 
-            for out_tensor in node.outputs:
-                for out_node in out_tensor.outputs:
-                    if out_node.op != "Cast" or out_node.attrs["to"] not in [6, 7]:
-                        # Can exit early if any of the output nodes are not valid casts
-                        return
-                    out_casts.append(out_node)
-                    # Check that all final cast types are the same.
-                    curr_type = out_node.attrs["to"]
-                    if final_type != curr_type:
-                        return
+            # Get list of output nodes that cast to int32 or int64
+            out_casts = [
+                out_node
+                for out_tensor in node.outputs
+                for out_node in out_tensor.outputs
+                if out_node.op == "Cast" and out_node.attrs["to"] in [6, 7]
+            ]
+
+            # No cast node found on ouptuts, return early
+            if not out_casts:
+                return
+
+            # Ensure that all output cast nodes are casting to the same type and that this
+            # matches the original type before the inputs were casted.
+            out_dtypes = [out_cast.attrs["to"] for out_cast in out_casts]
+            if len(set(out_dtypes)) != 1 or out_dtypes[0] != final_type:
+                return
 
             # If all checks passed - update constant values.
             for inp in node.inputs:

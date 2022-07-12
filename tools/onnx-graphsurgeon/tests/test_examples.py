@@ -15,18 +15,18 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.logger.logger import G_LOGGER
-import onnx_graphsurgeon as gs
-
-import subprocess as sp
-import numpy as np
-import onnxruntime
-import tempfile
-import pytest
-import onnx
-import sys
 import os
+import subprocess as sp
+import sys
+import tempfile
 
+import numpy as np
+import onnx
+import onnx_graphsurgeon as gs
+import onnxruntime
+import pytest
+from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.util import misc
 
 ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), os.path.pardir))
 EXAMPLES_ROOT = os.path.join(ROOT_DIR, "examples")
@@ -76,7 +76,7 @@ def infer_model(path):
 
     feed_dict = {}
     for tensor in graph.inputs:
-        shape = tuple(dim if dim > 0 else 1 for dim in tensor.shape)
+        shape = tuple(dim if not misc.is_dynamic_dimension(dim) else 1 for dim in tensor.shape)
         feed_dict[tensor.name] = np.random.random_sample(size=shape).astype(tensor.dtype)
 
     output_names = [out.name for out in graph.outputs]

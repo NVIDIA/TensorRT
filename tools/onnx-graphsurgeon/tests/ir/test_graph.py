@@ -37,6 +37,11 @@ def shape(self, inp):
 
 
 @Graph.register()
+def cast(self, inp, to):
+    return self.layer(op="Cast", inputs=[inp], outputs=["cast_out"], attrs={"to": to})[0]
+
+
+@Graph.register()
 def constant(self, values):
     return self.layer(op="Constant", inputs=[], outputs=["constant_out"], attrs={"value": Constant("values", values)})[
         0
@@ -1176,13 +1181,18 @@ class TestFoldConstants(object):
 
     def test_cast_elision(self):
         graph = gs.import_onnx(shape_cast_elision().load())
-        new_graph = graph.fold_constants()
-        no_casts = True
+        graph.fold_constants()
+        assert not any(node.op == "Cast" for node in graph.nodes)
 
-        for node in new_graph.nodes:
-            no_casts &= node.op != "Cast"
+    def test_cast_elision_int64(self):
+        X = gs.Variable("X", dtype=np.int32, shape=(1,))
+        graph = Graph(inputs=[X])
+        casted_x = graph.cast(X, to=1)
+        add_out = graph.add(casted_x, casted_x)
+        graph.outputs = [graph.cast(add_out, to=6)]
 
-        assert no_casts
+        graph.fold_constants()
+        assert graph.nodes[0].op == "Identity"
 
 
 class TestIO(object):
