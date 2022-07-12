@@ -5,6 +5,7 @@ Dates are in YYYY-MM-DD format.
 ## v0.3.20 (2022-07-12)
 ### Fixed
 - Fixed a bug where shape tensor cast elision would sometimes fail when the Cast input had a type of int64.
+- Fixed a bug where opset information would not be propagated down to nested graphs.
 
 
 ## v0.3.19 (2022-04-13)

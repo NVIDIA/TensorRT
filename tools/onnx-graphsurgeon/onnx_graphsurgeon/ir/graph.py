@@ -161,7 +161,8 @@ class Graph(object):
         outputs_match = len(self.outputs) == len(other.outputs) and all(
             [out == other_out for out, other_out in zip(self.outputs, other.outputs)]
         )
-        return nodes_match and inputs_match and outputs_match
+        opset_matches = self.opset == other.opset and self.import_domains == other.import_domains
+        return nodes_match and inputs_match and outputs_match and opset_matches
 
     def node_ids(self):
         """
