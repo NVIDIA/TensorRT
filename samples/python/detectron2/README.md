@@ -34,7 +34,7 @@ aug = T.ResizeShortestEdge(
 )
 ```
 
-Export script takes `--sample-image` as one of the arguments. Such image is used to adjust input dimensions and dimensions of tensors for the rest of the network. This sample image has to be any image of 1344x1344 dimensions, contents of the image do not matter. Sample command:
+Export script takes `--sample-image` as one of the arguments. Such image is used to adjust input dimensions and dimensions of tensors for the rest of the network. This sample image has to be an image of 1344x1344 dimensions, which contains at least one detectable by model object. My recommendation is to upsample one of COCO dataset images to 1344x1344. Sample command:
 
 ```
 python detectron2/tools/deploy/export_model.py \
