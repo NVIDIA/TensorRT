@@ -2,5 +2,8 @@
 gcloud
 google-cloud-storage
 
+# Data loader
+Pillow
+
 # TensorRT: build/infer engine
 pycuda
