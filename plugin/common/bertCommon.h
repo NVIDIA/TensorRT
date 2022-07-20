@@ -89,7 +89,7 @@ inline int getSMVersion()
     PLUGIN_CHECK(cudaGetDevice(&device));
     cudaDeviceProp props;
     PLUGIN_CHECK(cudaGetDeviceProperties(&props, device));
-    return props.major * 10 + props.minor;
+    return nvinfer1::plugin::getTrtSMVersionDec(props.major, props.minor);
 }
 
 inline int getMHAMaskPackedSize(int smVersion, nvinfer1::DataType dataType, int sequenceLength)
