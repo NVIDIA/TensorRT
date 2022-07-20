@@ -18,8 +18,8 @@
 #include "qkvToContextInt8InterleavedPlugin.h"
 #include "NvInfer.h"
 #include "common/bertCommon.h"
+#include "common/plugin.h"
 #include "common/serialize.hpp"
-
 #include <cstring>
 #include <cuda.h>
 #include <iostream>
@@ -87,7 +87,7 @@ int QKVToContextInterleavedPlugin::getSMVersion() const noexcept
     PLUGIN_CHECK(cudaGetDevice(&device));
     cudaDeviceProp props;
     PLUGIN_CHECK(cudaGetDeviceProperties(&props, device));
-    return props.major * 10 + props.minor;
+    return getTrtSMVersionDec(props.major, props.minor);
 }
 
 // IPluginV2DynamicExt Methods
