@@ -1,5 +1,17 @@
 # TensorRT OSS Release Changelog
 
+## [22.07](https://github.com/NVIDIA/TensorRT/releases/tag/22.07) - 2022-07-21
+### Added
+- `polygraphy-trtexec-plugin` tool for Polygraphy
+- Multi-profile support for demoBERT
+- KV cache support for HF BART demo
+
+### Changed
+- Updated ONNX-GS to `v0.3.20`
+
+### Removed
+- None
+
 ## [8.4.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-1) - 2022-06-14
 
 TensorRT OSS release corresponding to TensorRT 8.4.1.5 GA release.
