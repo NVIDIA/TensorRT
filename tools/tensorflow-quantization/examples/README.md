@@ -51,31 +51,31 @@ Build the TensorRT engine and evaluate its latency and accuracy performances.
 Convert the ONNX model into a TensorRT engine (also obtains latency measurements):
 
 ```sh
-trtexec --onnx model_qat.onnx --int8 --saveEngine model_qat.engine -v
+trtexec --onnx=model_qat.onnx --int8 --saveEngine=model_qat.engine --verbose
 ```
 
 Arguments:
 * `--onnx`: Path to QAT onnx graph.
 * `--saveEngine`: Output filename of TensorRT engine.
-* `-v, --verbose`: Flag to enable verbose logging.
+* `--verbose`: Flag to enable verbose logging.
 
 #### 2.2. TensorRT Inference
 Obtain accuracy results on the validation dataset:
 
 ```sh
-python infer_engine.py --engine=<input_trt_engine> --data_dir=<path_to_tfrecord_val_data> -b=<batch_size>
+python infer_engine.py --engine=<path_to_trt_engine> --data_dir=<path_to_tfrecord_val_data> -b=<batch_size>
 ```
 
 Arguments:
 - `-e, --engine`: TensorRT engine filename (to load).
-- `-m, --model_name`: Name of the model, needed to choose the appropriate input pre-processing. Options={`resnet_v1` (default), `resnet_v2`, `efficientnet_b0`, `mobilenet_v1`, `mobilenet_v2`}.
+- `-m, --model_name`: Name of the model, needed to choose the appropriate input pre-processing. Options={`resnet_v1` (default), `resnet_v2`, `efficientnet_b0`, `efficientnet_b3`, `mobilenet_v1`, `mobilenet_v2`}.
 - `-d, --data_dir`: Path to directory of input images in **tfrecord format** (`data["validation"]`).
 - `-k, --top_k_value` (default=1): Value of `K` for the top-K predictions used in the accuracy calculation.
 - `-b, --batch_size` (default=1): Number of inputs to send in parallel (up to max batch size of engine).
 - `--log_file`: Filename to save logs.
 
 Outputs:
-- `.log` file: contains the engine's performance accuracy. 
+- `.log` file: contains the engine's performance accuracy.
 
 # Additional resources
 
