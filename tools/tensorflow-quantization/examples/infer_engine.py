@@ -188,8 +188,8 @@ def infer(
 
                     # Split 1-D output of length N*labels into 2-D array of (N, labels)
                     batch_outs = np.array(np.split(np.array(out.host), batch_size))
-                # Update test accuracy
-                test_accuracy.update_state(labels, batch_outs)
+                    # Update test accuracy
+                    test_accuracy.update_state(labels, batch_outs)
 
                 # Print final accuracy and save to log file
                 print("\n======================================\n")
