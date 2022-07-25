@@ -632,7 +632,7 @@ class BARTTRT(TRTInferenceCommand):
                 name=BARTModelTRTConfig.NETWORK_FULL_NAME,
                 runtime=full_e2e_median_runtime,
             ),
-        ],
+        ]
         models=NetworkModels(
             torch=None,
             onnx=list(onnx_fpaths.values()),
@@ -646,7 +646,7 @@ class BARTTRT(TRTInferenceCommand):
                     fpath=self.BART_trt_encoder_engine.fpath,
                 ),
             ],
-        ),
+        )
 
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
