@@ -20,7 +20,6 @@ import os
 import sys
 import tarfile
 
-import requests
 import tensorflow as tf
 import tensorrt as trt
 import graphsurgeon as gs
