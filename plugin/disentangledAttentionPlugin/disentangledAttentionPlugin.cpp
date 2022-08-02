@@ -97,16 +97,9 @@ nvinfer1::DimsExprs DisentangledAttentionPlugin::getOutputDimensions(
     int32_t index, nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
     nvinfer1::DimsExprs output;
-    if (kDISENTANGLED_VERSION == 1)
-    {
-        PLUGIN_ASSERT(nbInputs == 4); // 4 inputs
-        output = inputs[1]; // same as input[1] or input[3], i.e. index1 or index2
-    }
-    else if (kDISENTANGLED_VERSION == 2)
-    {
-        PLUGIN_ASSERT(nbInputs == 3); // 3 inputs
-        output = inputs[0];           // same as input[0], i.e. data0
-    }
+
+    PLUGIN_ASSERT(nbInputs == 3); // 3 inputs
+    output = inputs[0];           // same as input[0], i.e. data0
 
     PLUGIN_ASSERT(index < 1); // only one output
 
@@ -136,78 +129,92 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
     nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
-    if (kDISENTANGLED_VERSION == 1)
+
+#if kDISENTANGLED_VERSION == 1
+    nvinfer1::Dims dims0 = inputDesc[0].dims;
+    nvinfer1::Dims dims1 = inputDesc[1].dims;
+    nvinfer1::Dims dims2 = inputDesc[2].dims;
+    dim3 dimData0(dims0.d[0], dims0.d[1], dims0.d[2]);
+    dim3 dimData1(dims1.d[0], dims1.d[1], dims1.d[2]);
+    dim3 dimData2(dims2.d[0], dims2.d[1], dims2.d[2]);
+    dim3 dimResult(dimData0);
+
+    dim3 block_optimized(kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1);
+    dim3 grid_optimized((dimResult.z - 1) / kDISENTANGLED_TILESIZE_V1 + 1,
+        (dimResult.y - 1) / kDISENTANGLED_TILESIZE_V1 + 1, dimResult.x);
+
+    if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
     {
-        nvinfer1::Dims dims0 = inputDesc[0].dims;
-        nvinfer1::Dims dims1 = inputDesc[1].dims;
-        nvinfer1::Dims dims2 = inputDesc[2].dims;
-        nvinfer1::Dims dims3 = inputDesc[3].dims;
-        dim3 dimData1(dims0.d[0], dims0.d[1], dims0.d[2]);
-        dim3 dimIndex1(dims1.d[0], dims1.d[1], dims1.d[2]);
-        dim3 dimData2(dims2.d[0], dims2.d[1], dims2.d[2]);
-        dim3 dimIndex2(dims3.d[0], dims3.d[1], dims3.d[2]);
-        dim3 dimResult(dimIndex2);
-
-        dim3 block_optimized(kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY);
-        dim3 grid_optimized((dimResult.z - 1) / kDISENTANGLED_TILESIZE + 1,
-            (dimResult.y - 1) / kDISENTANGLED_TILESIZE + 1, dimResult.x);
-
-        __half const* data1 = static_cast<__half const*>(inputs[0]);
-        int32_t const* index1 = static_cast<int32_t const*>(inputs[1]);
-        __half const* data2 = static_cast<__half const*>(inputs[2]);
-        int32_t const* index2 = static_cast<int32_t const*>(inputs[3]);
-        __half* result = static_cast<__half*>(outputs[0]);
-
-        disentangled_kernel_wrapper_v1<__half>(data1, index1, data2, index2, result, dimData1, dimIndex1, dimData2,
-            dimIndex2, dimResult, block_optimized, grid_optimized, stream);
+        auto const* data0 = pointer_const_cast<float>(inputs[0]);
+        auto const* data1 = pointer_const_cast<float>(inputs[1]);
+        auto const* data2 = pointer_const_cast<float>(inputs[2]);
+        auto* result = pointer_cast<float>(outputs[0]);
+        disentangled_kernel_wrapper<float, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(data0, data1, data2,
+            result, dimData0, dimData1, dimData2, dimResult, mFactor, mSpan, block_optimized, grid_optimized, stream);
     }
-    else if (kDISENTANGLED_VERSION == 2)
+    else if (inputDesc[0].type == nvinfer1::DataType::kHALF)
     {
-        nvinfer1::Dims dims0 = inputDesc[0].dims;
-        nvinfer1::Dims dims1 = inputDesc[1].dims;
-        nvinfer1::Dims dims2 = inputDesc[2].dims;
-        dim3 dimData0(dims0.d[0], dims0.d[1], dims0.d[2]);
-        dim3 dimData1(dims1.d[0], dims1.d[1], dims1.d[2]);
-        dim3 dimData2(dims2.d[0], dims2.d[1], dims2.d[2]);
-        dim3 dimResult(dimData0);
-
-        dim3 block_optimized(kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY);
-        dim3 grid_optimized((dimResult.z - 1) / kDISENTANGLED_TILESIZE + 1,
-            (dimResult.y - 1) / kDISENTANGLED_TILESIZE + 1, dimResult.x);
-
-        if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
-        {
-            auto const* data0 = pointer_const_cast<float>(inputs[0]);
-            auto const* data1 = pointer_const_cast<float>(inputs[1]);
-            auto const* data2 = pointer_const_cast<float>(inputs[2]);
-            auto* result = pointer_cast<float>(outputs[0]);
-            disentangled_kernel_wrapper_v2<float, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(data0, data1, data2,
-                result, dimData0, dimData1, dimData2, dimResult, mFactor, mSpan, block_optimized, grid_optimized,
-                stream);
-        }
-        else if (inputDesc[0].type == nvinfer1::DataType::kHALF)
-        {
-            auto const* data0 = pointer_const_cast<__half>(inputs[0]);
-            auto const* data1 = pointer_const_cast<__half>(inputs[1]);
-            auto const* data2 = pointer_const_cast<__half>(inputs[2]);
-            auto* result = pointer_cast<__half>(outputs[0]);
-            __half factor = __float2half(mFactor);
-            disentangled_kernel_wrapper_v2<__half, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(data0, data1, data2,
-                result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized,
-                stream);
-        }
-        else if (inputDesc[0].type == nvinfer1::DataType::kINT8)
-        {
-            auto const* data0 = pointer_const_cast<int8_t>(inputs[0]);
-            auto const* data1 = pointer_const_cast<int8_t>(inputs[1]);
-            auto const* data2 = pointer_const_cast<int8_t>(inputs[2]);
-            auto* result = pointer_cast<int8_t>(outputs[0]);
-            int8_t factor = int8_t(mFactor);
-            disentangled_kernel_wrapper_v2<int8_t, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(data0, data1, data2,
-                result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized,
-                stream);
-        }
+        auto const* data0 = pointer_const_cast<__half>(inputs[0]);
+        auto const* data1 = pointer_const_cast<__half>(inputs[1]);
+        auto const* data2 = pointer_const_cast<__half>(inputs[2]);
+        auto* result = pointer_cast<__half>(outputs[0]);
+        __half factor = __float2half(mFactor);
+        disentangled_kernel_wrapper<__half, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(data0, data1, data2,
+            result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized, stream);
     }
+    else if (inputDesc[0].type == nvinfer1::DataType::kINT8)
+    {
+        auto const* data0 = pointer_const_cast<int8_t>(inputs[0]);
+        auto const* data1 = pointer_const_cast<int8_t>(inputs[1]);
+        auto const* data2 = pointer_const_cast<int8_t>(inputs[2]);
+        auto* result = pointer_cast<int8_t>(outputs[0]);
+        int8_t factor = int8_t(mFactor);
+        disentangled_kernel_wrapper<int8_t, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(data0, data1, data2,
+            result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized, stream);
+    }
+#elif kDISENTANGLED_VERSION == 2
+    nvinfer1::Dims dims0 = inputDesc[0].dims;
+    nvinfer1::Dims dims1 = inputDesc[1].dims;
+    nvinfer1::Dims dims2 = inputDesc[2].dims;
+    dim3 dimData0(dims0.d[0], dims0.d[1], dims0.d[2]);
+    dim3 dimData1(dims1.d[0], dims1.d[1], dims1.d[2]);
+    dim3 dimData2(dims2.d[0], dims2.d[1], dims2.d[2]);
+    dim3 dimResult(dimData0);
+
+    dim3 block_optimized(kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2);
+    dim3 grid_optimized((dimResult.z - 1) / kDISENTANGLED_TILESIZE_V2 + 1,
+        (dimResult.y - 1) / kDISENTANGLED_TILESIZE_V2 + 1, dimResult.x);
+
+    if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
+    {
+        auto const* data0 = pointer_const_cast<float>(inputs[0]);
+        auto const* data1 = pointer_const_cast<float>(inputs[1]);
+        auto const* data2 = pointer_const_cast<float>(inputs[2]);
+        auto* result = pointer_cast<float>(outputs[0]);
+        disentangled_kernel_wrapper<float, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(data0, data1, data2,
+            result, dimData0, dimData1, dimData2, dimResult, mFactor, mSpan, block_optimized, grid_optimized, stream);
+    }
+    else if (inputDesc[0].type == nvinfer1::DataType::kHALF)
+    {
+        auto const* data0 = pointer_const_cast<__half>(inputs[0]);
+        auto const* data1 = pointer_const_cast<__half>(inputs[1]);
+        auto const* data2 = pointer_const_cast<__half>(inputs[2]);
+        auto* result = pointer_cast<__half>(outputs[0]);
+        __half factor = __float2half(mFactor);
+        disentangled_kernel_wrapper<__half, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(data0, data1, data2,
+            result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized, stream);
+    }
+    else if (inputDesc[0].type == nvinfer1::DataType::kINT8)
+    {
+        auto const* data0 = pointer_const_cast<int8_t>(inputs[0]);
+        auto const* data1 = pointer_const_cast<int8_t>(inputs[1]);
+        auto const* data2 = pointer_const_cast<int8_t>(inputs[2]);
+        auto* result = pointer_cast<int8_t>(outputs[0]);
+        int8_t factor = int8_t(mFactor);
+        disentangled_kernel_wrapper<int8_t, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(data0, data1, data2,
+            result, dimData0, dimData1, dimData2, dimResult, factor, mSpan, block_optimized, grid_optimized, stream);
+    }
+#endif
 
     return cudaPeekAtLastError();
 }
@@ -276,70 +283,34 @@ IPluginV2DynamicExt* DisentangledAttentionPlugin::clone() const noexcept
 void DisentangledAttentionPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
     nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
-    if (kDISENTANGLED_VERSION == 1)
-    {
-        // inputs
-        PLUGIN_ASSERT(nbInputs == 4); // 4 inputs
 
-        // check for valid input dimensions
-        PLUGIN_ASSERT(in[0].desc.dims.nbDims == 3);
-        PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3);
-        PLUGIN_ASSERT(in[2].desc.dims.nbDims == 3);
-        PLUGIN_ASSERT(in[3].desc.dims.nbDims == 3);
+    // inputs
+    PLUGIN_ASSERT(nbInputs == 3); // 3 inputs
 
-        // check BN (batch_size * num_heads) dimension consistency
-        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[3].desc.dims.d[0]);
+    // check for valid input dimensions
+    PLUGIN_ASSERT(in[0].desc.dims.nbDims == 3);
+    PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3);
+    PLUGIN_ASSERT(in[2].desc.dims.nbDims == 3);
 
-        // check S (sequence_length) dimension consistency
-        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[3].desc.dims.d[1]);
-        PLUGIN_ASSERT(in[1].desc.dims.d[1] == in[1].desc.dims.d[2]);
-        PLUGIN_ASSERT(in[3].desc.dims.d[1] == in[3].desc.dims.d[2]);
+    // check BN (batch_size * num_heads) dimension consistency
+    PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
+    PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
 
-        // check K (2 * span) dimension consistency for in[0] and in[2]
-        PLUGIN_ASSERT(in[0].desc.dims.d[2] == 2 * mSpan);
-        PLUGIN_ASSERT(in[2].desc.dims.d[2] == 2 * mSpan);
+    // check S (sequence_length) dimension consistency
+    PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
+    PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
+    PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[0].desc.dims.d[2]);
 
-        // Outputs (same dimension as in[1])
-        PLUGIN_ASSERT(nbOutputs == 1);
-        PLUGIN_ASSERT(out[0].desc.dims.nbDims == 3);
-        PLUGIN_ASSERT(in[1].desc.dims.d[0] == out[0].desc.dims.d[0]);
-        PLUGIN_ASSERT(in[1].desc.dims.d[1] == out[0].desc.dims.d[1]);
-        PLUGIN_ASSERT(in[1].desc.dims.d[2] == out[0].desc.dims.d[2]);
-    }
-    else if (kDISENTANGLED_VERSION == 2)
-    {
-        // inputs
-        PLUGIN_ASSERT(nbInputs == 3); // 3 inputs
+    // check K (2 * span) dimension consistency for in[1] and in[2]
+    PLUGIN_ASSERT(in[1].desc.dims.d[2] == 2 * mSpan);
+    PLUGIN_ASSERT(in[2].desc.dims.d[2] == 2 * mSpan);
 
-        // check for valid input dimensions
-        PLUGIN_ASSERT(in[0].desc.dims.nbDims == 3);
-        PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3);
-        PLUGIN_ASSERT(in[2].desc.dims.nbDims == 3);
-
-        // check BN (batch_size * num_heads) dimension consistency
-        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
-
-        // check S (sequence_length) dimension consistency
-        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[1] == in[0].desc.dims.d[2]);
-
-        // check K (2 * span) dimension consistency for in[1] and in[2]
-        PLUGIN_ASSERT(in[1].desc.dims.d[2] == 2 * mSpan);
-        PLUGIN_ASSERT(in[2].desc.dims.d[2] == 2 * mSpan);
-
-        // Outputs (same dimension as in[0])
-        PLUGIN_ASSERT(nbOutputs == 1);
-        PLUGIN_ASSERT(out[0].desc.dims.nbDims == 3);
-        PLUGIN_ASSERT(in[0].desc.dims.d[0] == out[0].desc.dims.d[0]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[1] == out[0].desc.dims.d[1]);
-        PLUGIN_ASSERT(in[0].desc.dims.d[2] == out[0].desc.dims.d[2]);
-    }
+    // Outputs (same dimension as in[0])
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(out[0].desc.dims.nbDims == 3);
+    PLUGIN_ASSERT(in[0].desc.dims.d[0] == out[0].desc.dims.d[0]);
+    PLUGIN_ASSERT(in[0].desc.dims.d[1] == out[0].desc.dims.d[1]);
+    PLUGIN_ASSERT(in[0].desc.dims.d[2] == out[0].desc.dims.d[2]);
 }
 
 nvinfer1::DataType DisentangledAttentionPlugin::getOutputDataType(
