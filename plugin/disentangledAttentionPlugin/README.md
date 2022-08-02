@@ -15,10 +15,10 @@ This TensorRT plugin implements an efficient algorithm to perform the calculatio
 
 Unlike [BERT](https://arxiv.org/abs/1810.04805) where each word is represented by one vector that sums the content embedding and position embedding, [DeBERTa](https://arxiv.org/abs/2006.03654) design first proposed the concept of disentangled attention, which uses two vectors to encode content and position respectively and forms attention weights by summing disentangled matrices. Performance gap has been identified between the new attention scheme and the original self-attention, mainly due to extra indexing and gather opertaions. Major optimizations implemented in this plugin includes: (i) fusion of gather and pointwise operataions (ii) utilizing the pattern of relative position matrix and shortcuting out-of-boundary index calculation (iii) parallel index calculation. 
 
-This TensorRT plugin is primarily intended to be used together with DeBERTa network, but also applies to generic architectures that adopt disentangeld attention.
+This TensorRT plugin is primarily intended to be used together with DeBERTa network (with HuggingFace [DeBERTa](https://huggingface.co/docs/transformers/model_doc/deberta) and [DeBERTa-V2](https://huggingface.co/docs/transformers/model_doc/deberta-v2) implementation), but also applies to generic architectures that adopt disentangeld attention.
 
 ## Structure
-This plugin works for network with graph node named `DisentangledAttention_TRT`.
+This plugin works for network with graph node named `DisentangledAttention_TRT`. The corresponding graph modification script can be found under the `demo/DeBERTa` folder of TensorRT OSS.
 
 ### Input(s)
 This plugin takes three inputs:
@@ -67,12 +67,13 @@ This plugin generates one output.
 ## Additional Resources
 - [BERT](https://arxiv.org/abs/1810.04805)
 - [DeBERTa](https://arxiv.org/abs/2006.03654)
-- [DeBERTa HuggingFace Implementation](https://github.com/huggingface/transformers/tree/main/src/transformers/models/deberta_v2)
-
-
+- [DeBERTa HuggingFace Implementation](https://github.com/huggingface/transformers/tree/main/src/transformers/models/deberta)
+- [DeBERTa-V2 HuggingFace Implementation](https://github.com/huggingface/transformers/tree/main/src/transformers/models/deberta_v2)
+  
 ## License
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html)
 documentation.
 
 ## Changelog
-2022.04: This is the first release of this `README` file.
+- 2022.04: This is the first release of this `README` file.
+- 2022.07: Added log bucket for the relative position index calculation (since DeBERTa V2).

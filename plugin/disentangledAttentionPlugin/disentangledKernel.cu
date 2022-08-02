@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-
-#include <stdio.h>
-#include <cuda_fp16.h>
 #include "disentangledAttentionPlugin.h"
+#include <cuda_fp16.h>
+#include <stdio.h>
 
-#define IND(i,j,k,dim) ((i)*dim.y*dim.z + (j)*dim.z + (k)) // caveat: must use brackets around var name! otherwise IND(i,j+3,k,dim) = (i*dim.y*dim.z + j+3*dim.z + k)...
-
-#define TILE_DIM (32)
-#define BLOCK_ROWS (8)
+#define IND(i, j, k, dim)                                                                                              \
+    ((i) *dim.y * dim.z + (j) *dim.z + (k)) // caveat: must use brackets around var name! otherwise IND(i,j+3,k,dim) =
+                                            // (i*dim.y*dim.z + j+3*dim.z + k)...
 
 namespace nvinfer1
 {
@@ -31,94 +29,6 @@ namespace plugin
 {
 
 using namespace nvinfer1;
-
-/**
- * Fused kernel for Disentangled Attention design (first proposed in Microsoft DeBERTa), Version 1.
- *
- * @tparam TDataType type of the input data
- * @param data1 content-to-position ("c2p") attention QcKr^T
- * @param index1 c2p gather index
- * @param data2 position-to-content ("p2c") attention KcQr^T
- * @param index2 p2c gather index
- * @param result attention result
- * @param dimData1, dimIndex1, dimData2, dimIndex2, dimResult dimension of the tensors
- */
-template <typename TDataType = __half>
-__global__ void GatherAddGatherTranspose_fused(TDataType const* data1, int32_t const* index1, TDataType const* data2,
-    int32_t const* index2, TDataType* result, dim3 dimData1, dim3 dimIndex1, dim3 dimData2, dim3 dimIndex2,
-    dim3 dimResult)
-{
-    // map block to the output (result)
-    int32_t i;
-    int32_t j;
-    int32_t k;
-    int32_t c;
-    int32_t ty;
-    TDataType res1;
-    TDataType res2;
-
-    __shared__ TDataType T[TILE_DIM][TILE_DIM + 1]; // avoid bank conflict
-
-    // (i,j,k) location of data2 (transposed)
-    i = blockIdx.z;
-    j = blockIdx.x * TILE_DIM + threadIdx.y;
-    k = blockIdx.y * TILE_DIM + threadIdx.x;
-
-// gather data2
-#pragma unroll
-    for (c = 0, ty = 0; c < TILE_DIM / BLOCK_ROWS; c++, ty += BLOCK_ROWS)
-    {
-
-        if (j + ty - k <= -256)
-        {
-            res2 = data2[IND(i, j + ty, 511, dimData2)];
-        }
-        else if (j + ty - k >= 256)
-        {
-            res2 = data2[IND(i, j + ty, 0, dimData2)];
-        }
-        else
-        {
-            res2 = data2[IND(i, j + ty, index2[IND(i, j + ty, k, dimIndex2)], dimData2)];
-        }
-        T[ty + threadIdx.y][threadIdx.x] = res2;
-    }
-
-    __syncthreads();
-
-    // (i,j,k) location of data1 (non-transposed) and output. i unchanged
-    j = blockIdx.y * TILE_DIM + threadIdx.y;
-    k = blockIdx.x * TILE_DIM + threadIdx.x;
-
-// gather data1 + add + write
-#pragma unroll
-    for (c = 0, ty = 0; c < TILE_DIM / BLOCK_ROWS; c++, ty += BLOCK_ROWS)
-    {
-
-        if (j + ty - k <= -256)
-        {
-            res1 = data1[IND(i, j + ty, 0, dimData1)];
-        }
-        else if (j + ty - k >= 256)
-        {
-            res1 = data1[IND(i, j + ty, 511, dimData1)];
-        }
-        else
-        {
-            res1 = data1[IND(i, j + ty, index1[IND(i, j + ty, k, dimIndex1)], dimData1)];
-        }
-#if __CUDA_ARCH__ >= 530
-        // half precision arithmetics only supported >= sm_53
-        result[IND(i, j + ty, k, dimResult)]
-            = __hadd(T[threadIdx.x][ty + threadIdx.y], res1); // fused add (for non-transposed matrix 1, just fetch
-                                                              // element at the transposed location & add to the result)
-#else
-        // for < sm_53, workaround/fallback is convert to float and downconvert
-        result[IND(i, j + ty, k, dimResult)]
-            = __float2half(__half2float(T[threadIdx.x][ty + threadIdx.y]) + __half2float(res1));
-#endif
-    }
-}
 
 // template specialization for double/float
 template <typename TDataType,
@@ -183,7 +93,7 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
     TDataType const* data2, TDataType* result, dim3 dimData0, dim3 dimData1, dim3 dimData2, dim3 dimResult,
     TDataType factor, int32_t span)
 {
-    // TILE_DIM should be a multiple of BLOCK_ROWS
+    // Tile size should be a multiple of number of block rows
     assert(tBlockDimY * (tTileSize / tBlockDimY) == tTileSize);
 
     // map block to the output (result)
@@ -197,6 +107,15 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
     TDataType res2;
     TDataType res;
 
+#if kDISENTANGLED_VERSION == 2
+    int32_t bucket;
+    int32_t mid = span / 2;
+    int32_t index;
+    float tmp1 = logf(mid);
+    float tmp = (mid - 1) / (logf(dimResult.y - 1) - tmp1);
+    // tmp values are precomputed for re-use; must be at least float to ensure accuracy
+#endif
+
     __shared__ TDataType T[tTileSize][tTileSize + 1]; // +1 to avoid bank conflict
 
     // (i,j,k) location of data2 (transposed)
@@ -208,7 +127,8 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
 #pragma unroll
     for (c = 0, ty = 0; c < tTileSize / tBlockDimY; c++, ty += tBlockDimY)
     {
-
+#if kDISENTANGLED_VERSION == 1
+        // relative position -- version 1
         if (k - (j + ty) >= span)
         {
             res2 = data2[IND(i, j + ty, 2 * span - 1, dimData2)];
@@ -222,6 +142,26 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
             res2 = data2[IND(i, j + ty, k - (j + ty) + span, dimData2)]; // compute index on the fly
         }
         T[ty + threadIdx.y][threadIdx.x] = res2;
+#elif kDISENTANGLED_VERSION == 2
+        // relative position w/ log bucket -- version 2
+        if (k - (j + ty) >= -mid && k - (j + ty) <= mid)
+        {
+            // preserved region, (i - j) + span
+            bucket = k - (j + ty);
+        }
+        else
+        {
+            // log bucket region, bucket(i,j) + span
+            bucket = ceilf((logf(fabsf(k - (j + ty))) - tmp1) * tmp) + mid;
+            bucket = k - (j + ty) < 0 ? -bucket : bucket;
+        }
+        // clamp [0,2k]. Although this is guaranteed by equation, but numerically the floating precision can still break
+        // boundary
+        index = bucket + span;
+        index = min(max(0, index), 2 * span - 1);
+        res2 = data2[IND(i, j + ty, index, dimData2)];
+        T[ty + threadIdx.y][threadIdx.x] = res2;
+#endif
     }
 
     __syncthreads();
@@ -234,7 +174,8 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
 #pragma unroll
     for (c = 0, ty = 0; c < tTileSize / tBlockDimY; c++, ty += tBlockDimY)
     {
-
+#if kDISENTANGLED_VERSION == 1
+        // relative position -- version 1
         // for non-transposed matrix 1, just fetch element at the transposed location & add to the result)
         if (j + ty - k <= -span)
         {
@@ -248,6 +189,26 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
         {
             res1 = data1[IND(i, j + ty, j + ty - k + span, dimData1)]; // compute index on the fly
         }
+#elif kDISENTANGLED_VERSION == 2
+        // relative position w/ log bucket -- version 2
+        if (j + ty - k >= -mid && j + ty - k <= mid)
+        {
+            // preserved region, (i - j) + span
+            bucket = j + ty - k;
+        }
+        else
+        {
+            // log bucket region, bucket(i,j) + span
+            bucket = ceilf((logf(fabsf((j + ty) - k)) - tmp1) * tmp) + mid;
+            bucket = (j + ty) - k < 0 ? -bucket : bucket;
+        }
+        // clamp [0,2k]. Although this is guaranteed by equation, but numerically the floating precision can still break
+        // boundary
+        index = bucket + span;
+        index = min(max(0, index), 2 * span - 1);
+        res1 = data1[IND(i, j + ty, index, dimData1)];
+#endif
+
         // for non-tranposed matrix 0, same as matrix 1
         res0 = data0[IND(i, j + ty, k, dimData0)];
 
@@ -287,17 +248,8 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
     }
 }
 
-template <typename TDataType>
-void disentangled_kernel_wrapper_v1(TDataType const* data1, int32_t const* index1, TDataType const* data2,
-    int32_t const* index2, TDataType* result, dim3 dimData1, dim3 dimIndex1, dim3 dimData2, dim3 dimIndex2,
-    dim3 dimResult, dim3 block, dim3 grid, cudaStream_t stream)
-{
-    GatherAddGatherTranspose_fused<__half><<<grid, block, 0, stream>>>(
-        data1, index1, data2, index2, result, dimData1, dimIndex1, dimData2, dimIndex2, dimResult);
-}
-
 template <typename TDataType, int32_t tTileSize, int32_t tBlockDimY>
-void disentangled_kernel_wrapper_v2(TDataType const* data0, TDataType const* data1, TDataType const* data2,
+void disentangled_kernel_wrapper(TDataType const* data0, TDataType const* data1, TDataType const* data2,
     TDataType* result, dim3 dimData0, dim3 dimData1, dim3 dimData2, dim3 dimResult, TDataType factor, int32_t span,
     dim3 block, dim3 grid, cudaStream_t stream)
 {
@@ -305,22 +257,25 @@ void disentangled_kernel_wrapper_v2(TDataType const* data0, TDataType const* dat
         data0, data1, data2, result, dimData0, dimData1, dimData2, dimResult, factor, span);
 }
 
-template void disentangled_kernel_wrapper_v1<__half>(__half const*, int32_t const*, __half const*, int32_t const*,
-    __half*, dim3, dim3, dim3, dim3, dim3, dim3, dim3, cudaStream_t);
-
-template void disentangled_kernel_wrapper_v2<float, 32, 8>(
+template void disentangled_kernel_wrapper<float, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(
     float const*, float const*, float const*, float*, dim3, dim3, dim3, dim3, float, int32_t, dim3, dim3, cudaStream_t);
 
-template void disentangled_kernel_wrapper_v2<__half, 32, 8>(__half const*, __half const*, __half const*, __half*, dim3,
-    dim3, dim3, dim3, __half, int32_t, dim3, dim3, cudaStream_t);
+template void disentangled_kernel_wrapper<__half, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(__half const*,
+    __half const*, __half const*, __half*, dim3, dim3, dim3, dim3, __half, int32_t, dim3, dim3, cudaStream_t);
 
-template void disentangled_kernel_wrapper_v2<int8_t, 32, 8>(int8_t const*, int8_t const*, int8_t const*, int8_t*, dim3,
-    dim3, dim3, dim3, int8_t, int32_t, dim3, dim3, cudaStream_t);
+template void disentangled_kernel_wrapper<int8_t, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(int8_t const*,
+    int8_t const*, int8_t const*, int8_t*, dim3, dim3, dim3, dim3, int8_t, int32_t, dim3, dim3, cudaStream_t);
 
-#undef TILE_DIM
-#undef BLOCK_ROWS
+template void disentangled_kernel_wrapper<float, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(
+    float const*, float const*, float const*, float*, dim3, dim3, dim3, dim3, float, int32_t, dim3, dim3, cudaStream_t);
+
+template void disentangled_kernel_wrapper<__half, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(__half const*,
+    __half const*, __half const*, __half*, dim3, dim3, dim3, dim3, __half, int32_t, dim3, dim3, cudaStream_t);
+
+template void disentangled_kernel_wrapper<int8_t, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(int8_t const*,
+    int8_t const*, int8_t const*, int8_t*, dim3, dim3, dim3, dim3, int8_t, int32_t, dim3, dim3, cudaStream_t);
+
 #undef IND
 
-
 } /* plugin */
-} /* nvinfer1 */
+} // namespace nvinfer1
