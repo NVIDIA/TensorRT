@@ -1,0 +1,5 @@
+*.onnx
+*.engine
+*.profile
+
+**/__pycache__/
