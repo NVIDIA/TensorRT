@@ -8,6 +8,7 @@ This repository contains the Open Source Software (OSS) components of NVIDIA Ten
 * For business inquiries, please contact [researchinquiries@nvidia.com](mailto:researchinquiries@nvidia.com)
 * For press and other inquiries, please contact Hector Marinez at [hmarinez@nvidia.com](mailto:hmarinez@nvidia.com)
 
+Need enterprise support? NVIDIA global support is available for TensorRT with the [NVIDIA AI Enterprise software suite](https://www.nvidia.com/en-us/data-center/products/ai-enterprise/). Check out [NVIDIA LaunchPad](https://www.nvidia.com/en-us/launchpad/ai/ai-enterprise/) for free access to a set of hands-on labs with TensorRT hosted on NVIDIA infrastructure.
 
 # Build
 
