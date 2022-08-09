@@ -19,7 +19,7 @@
 Generate HuggingFace DeBERTa (V2) model with different configurations (e.g., sequence length, hidden size, No. of layers, No. of heads, etc.) and export in ONNX format
 
 Usage:
-    python deberta_pytorch2onnx.py [--filename xx.onnx]
+    python deberta_pytorch2onnx.py [--filename xx.onnx] [--variant microsoft/deberta-xx] [--seq-len xx]
 '''
 
 import os, time, argparse 
@@ -30,12 +30,26 @@ import torch, onnxruntime as ort, numpy as np
 parser = argparse.ArgumentParser(description="Generate HuggingFace DeBERTa (V2) model with different configurations and export in ONNX format. This will save the model under the same directory as 'deberta_seqxxx_hf.onnx'.")
 parser.add_argument('--filename', type=str, help='Path to the save the ONNX model')
 parser.add_argument('--variant', type=str, default=None, help='DeBERTa variant name. Such as microsoft/deberta-v3-xsmall')
+parser.add_argument('--seq-len', type=int, default=None, help='Specify maximum sequence length. Note: --variant and --seq-len cannot be used together. Pre-trained models have pre-defined sequence length')
 
 args = parser.parse_args()
 onnx_filename = args.filename
 model_variant = args.variant 
+sequence_length = args.seq_len
 
+assert not args.variant or (args.variant and not args.seq_len), "--variant and --seq-len cannot be used together!"
 assert torch.cuda.is_available(), "CUDA not available!"
+
+def randomize_model(model):
+    for module_ in model.named_modules(): 
+        if isinstance(module_[1],(torch.nn.Linear, torch.nn.Embedding)):
+            module_[1].weight.data.normal_(mean=0.0, std=model.config.initializer_range)
+        elif isinstance(module_[1], torch.nn.LayerNorm):
+            module_[1].bias.data.zero_()
+            module_[1].weight.data.fill_(1.0)
+        if isinstance(module_[1], torch.nn.Linear) and module_[1].bias is not None:
+            module_[1].bias.data.zero_()
+    return model
 
 def export():
     parent_dir = os.path.dirname(onnx_filename)
@@ -43,10 +57,9 @@ def export():
         os.makedirs(parent_dir)
         
     if model_variant is None:
-        # by default, use the tested model
-        # hyper params
+        # default model hyper-params
         batch_size = 1
-        seq_len = 2048
+        seq_len = 2048 if sequence_length is None else sequence_length
         max_position_embeddings = 512 if seq_len <= 512 else seq_len # maximum sequence length that this model might ever be used with. By default 512. otherwise error https://github.com/huggingface/transformers/issues/4542
         vocab_size = 128203
         hidden_size = 384
@@ -61,6 +74,7 @@ def export():
     
         deberta_config = DebertaV2Config(vocab_size=vocab_size, hidden_size=hidden_size, num_hidden_layers=layers, num_attention_heads=heads, intermediate_size=intermediate_size, type_vocab_size=type_vocab_size, max_position_embeddings=max_position_embeddings, relative_attention=relative_attention, max_relative_positions=max_relative_positions, pos_att_type=pos_att_type)
         deberta_model = DebertaV2ForSequenceClassification(deberta_config)
+        deberta_model = randomize_model(deberta_model)
     else:
         deberta_model = DebertaV2ForSequenceClassification.from_pretrained(model_variant)
         deberta_config = DebertaV2Config.from_pretrained(model_variant)

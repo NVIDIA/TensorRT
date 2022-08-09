@@ -13,14 +13,50 @@
 ***
 
 ## Background
-A performance gap has been observed between Google's [BERT](https://arxiv.org/abs/1810.04805) design and Microsoft's [DeBERTa](https://arxiv.org/abs/2006.03654) design. The main reason of the gap is the disentangled attention design in DeBERTa triples the attention computation over BERT's regular attention. In addition to the extra matrix multiplications, the disentangled attention design also involves indirect memory accesses during the gather operations. In this regard, a [TensorRT plugin](https://github.com/NVIDIA/TensorRT/tree/main/plugin/disentangledAttentionPlugin) has been implemented to optimize DeBERTa's disentangled attention module, which is built-in since TensorRT 8.4 GA release.
+A performance gap has been observed between Google's [BERT](https://arxiv.org/abs/1810.04805) design and Microsoft's [DeBERTa](https://arxiv.org/abs/2006.03654) design. The main reason of the gap is the disentangled attention design in DeBERTa triples the attention computation over BERT's regular attention. In addition to the extra matrix multiplications, the disentangled attention design also involves indirect memory accesses during the gather operations. In this regard, a [TensorRT plugin](https://github.com/NVIDIA/TensorRT/tree/main/plugin/disentangledAttentionPlugin) has been implemented to optimize DeBERTa's disentangled attention module, which is built-in since TensorRT 8.4 GA Update 2 (8.4.3) release.
 
 This DeBERTa demo includes code and scripts for (i) exporting ONNX model from PyTorch, (ii) modifying ONNX model by inserting the plugin nodes, (iii) model inference options with TensorRT `trtexec` executable, TensorRT Python API, or ONNX Runtime with TensorRT execution provider, and (iv) measuring the correctness and performance of the optimized model.
 
 The demo works with the [HuggingFace implementation](https://github.com/huggingface/transformers/tree/main/src/transformers/models/deberta_v2) of DeBERTa.
 
 ## Performance Benchmark
-TBD - Add some performance data here to show the plugin optimization
+Experiments of inference performance are measured on NVIDIA A100-80GB, T4, and V100-16GB, using TensorRT 8.2 GA Update 3 (8.2.4) and CUDA 11.4. The application-based model configuration is: sequence length = 512/1024/2048, hidden size = 384, intermediate size = 1536, number of layers = 12, number of attention heads = 6, maximum relative distance = 256, vocabulary size = 128K, batch size = 1, with randomly initialized weights. Numbers are average latency of 100 inference runs.
+
+| Sequence Length | Model Latency (ms)             | A100-80GB |    T4    | V100-16GB |
+| :-------------- | :----------------------------- | :-------: | :------: | :-------: |
+| 512             | PyTorch (FP32/TF32)            |   24.6    |   34.0   |   53.1    |
+|                 | PyTorch (FP16)                 |   22.6    |   20.6   |   43.5    |
+|                 | TensorRT (FP32/TF32)           |    4.3    |   12.3   |    5.6    |
+|                 | TensorRT (FP16)                |  **1.8**  |   6.1    |  **3.1**  |
+|                 | TensorRT w/ plugin (FP32/TF32) |    4.8    |   13.1   |    6.9    |
+|                 | TensorRT w/ plugin (FP16)      |    2.1    | **6.0**  |    4.2    |
+|                 |                                |           |          |           |
+| 1024            | PyTorch (FP32/TF32)            |   35.8    |   83.7   |   65.4    |
+|                 | PyTorch (FP16)                 |   35.6    |   52.9   |   59.4    |
+|                 | TensorRT (FP32/TF32)           |    8.8    |   34.7   |   12.8    |
+|                 | TensorRT (FP16)                |    3.7    |   18.4   |    7.4    |
+|                 | TensorRT w/ plugin (FP32/TF32) |    9.0    |   32.8   |   13.5    |
+|                 | TensorRT w/ plugin (FP16)      |  **3.3**  | **13.6** |  **6.8**  |
+|                 |                                |           |          |           |
+| 2048            | PyTorch (FP32/TF32)            |   84.8    |  263.1   |   236.3   |
+|                 | PyTorch (FP16)                 |   76.0    |  181.8   |   205.5   |
+|                 | TensorRT (FP32/TF32)           |   22.6    |  109.8   |   35.0    |
+|                 | TensorRT (FP16)                |   10.8    |   62.9   |   21.0    |
+|                 | TensorRT w/ plugin (FP32/TF32) |   21.2    |   95.7   |   35.6    |
+|                 | TensorRT w/ plugin (FP16)      |  **8.3**  | **44.6** | **18.1**  |
+
+In addition, a pre-trained model `microsoft/deberta-v3-xsmall` was tested, which configuration is similar to sequencen length = 512 model above:
+
+| Model Latency (ms)             | A100-80GB |   T4    | V100-16GB |
+| :----------------------------- | :-------: | :-----: | :-------: |
+| PyTorch (FP32/TF32)            |   28.9    |  39.2   |   57.1    |
+| PyTorch (FP16)                 |   26.3    |  24.8   |   47.9    |
+| TensorRT (FP32/TF32)           |    4.4    |  12.8   |    5.8    |
+| TensorRT (FP16)                |  **1.9**  |   6.4   |  **3.1**  |
+| TensorRT w/ plugin (FP32/TF32) |    4.8    |  13.6   |    6.9    |
+| TensorRT w/ plugin (FP16)      |    2.1    | **6.0** |    4.1    |
+
+Note that the performance gap between BERT's self-attention and DeBERTa's disentangled attention mainly comes from the additional `Gather` and `Transpose` operations in the attention design, and such gap becomes most significant when the maximum input sequence length is long (e.g., 2048). The fastest inference times are labeled as bold in the table above. In summary, for short sequence length applications, regular TensorRT inference should be sufficient, while for longer sequence length applications, the plugin optimizations can be utilized to further improve the inference latency. Also, to get maximum speedup, using FP16 precision is recommended.
 
 ## Environment Setup
 It is recommended to use docker for reproducing the following steps. Follow the setup steps in TensorRT OSS [README](https://github.com/NVIDIA/TensorRT#setting-up-the-build-environment) to build and launch the container and build OSS:
@@ -95,7 +131,7 @@ This will build and test the original and optimized DeBERTa models. `--build` to
 3. TensorRT optimization profile in `deberta_tensorrt_inference.py` is set by default for batch size of 1 usage. For batch usage, the optional and maximum profile should be changed.
 4. TensorRT engines are specific to the exact GPU device they were built on, as well as the platform and the TensorRT version. On the same machine, building is needed only once and the engine can be used for repeated testing.
 
-For `trtexec` test, it is recommended to used the [TensorRT NGC container](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tensorrt) where the executable is built-in. The DeBERTa plugin support is available since docker image `22.08-py3`, which contains TensorRT 8.4 GA pre-installed. For earlier images before `22.08`, skip this `trtexec` test.
+For `trtexec` test, it is recommended to used the [TensorRT NGC container](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tensorrt) where the executable is built-in. The DeBERTa plugin support is available since docker image `22.08-py3`, which contains TensorRT 8.4 GA Update 2 (8.4.3) pre-installed. For earlier images before `22.08`, skip this `trtexec` test.
 
 `trtexec` command for sequence length = 2048 model is given as an example:
 ```bash
@@ -115,7 +151,15 @@ python deberta_tensorrt_inference.py --onnx=./test/deberta_correctness_check_plu
 python deberta_tensorrt_inference.py --onnx=./test/deberta --correctness-check fp16
 ```
 
-Correctness check requires intermediate outputs from the model, thus it is necessary to modify the ONNX graph and add intermediate output nodes. The correctness check was added at the location of plugin outputs in each layer. The metric is average and maximum of the element-wise absolute error. Note that for FP16 precision with 10 significance bits, absolute error in the order of 1e-2 and 1e-3 is expected, and for FP32 precision with 23 significance bits, 1e-6 to 1e-7 is expected. Refer to [Machine Epsilon](https://en.wikipedia.org/wiki/Machine_epsilon) for details. 
+Correctness check requires intermediate outputs from the model, thus it is necessary to modify the ONNX graph and add intermediate output nodes. The correctness check was added at the location of plugin outputs in each layer. The metrics are average and maximum of the element-wise absolute error. Note that for FP16 precision with 10 significance bits, absolute error in the order of 1e-2 and 1e-3 is expected, and for FP32 precision with 23 significance bits, 1e-6 to 1e-7 is expected. Refer to [Machine Epsilon](https://en.wikipedia.org/wiki/Machine_epsilon) for details. 
+
+Example output for FP16 correctness check between original DeBERTa model and plugin optimized DeBERTa model:
+```bash
+[Layer 0 Element-wise Check] Avgerage absolute error: 2.152580e-03, Maximum absolute error: 3.010559e-02. 1e-2~1e-3 expected for FP16 (10 significance bits) and 1e-6~1e-7 expected for FP32 (23 significance bits)
+...
+...
+[Layer 12 Element-wise Check] Avgerage absolute error: 6.198883e-05, Maximum absolute error: 1.220703e-04. 1e-2~1e-3 expected for FP16 (10 significance bits) and 1e-6~1e-7 expected for FP32 (23 significance bits)
+```
 
 ## Optional Step: Model inference with ONNX Runtime and TensorRT Execution Provider (Python API)
 ```bash

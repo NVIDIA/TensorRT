@@ -297,9 +297,6 @@ def build_engine():
         profile.set_shape("attention_mask", (1,seq_len), (1,seq_len), (1,seq_len)) 
         config.add_optimization_profile(profile)
         
-        # workspace
-        config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 4096 * (1 << 20)) # after TRT version 8.4 only. For 8.2 and prior, it's config.max_workspace_size
-
         if TRT_VERSION >= 84:
             config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 4096 * (1 << 20)) # 4096 MiB, syntax after TRT 8.4
         else:
