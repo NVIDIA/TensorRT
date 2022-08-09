@@ -1,7 +1,7 @@
 # **Model Zoo Results**
 Results obtained on NVIDIA's A100 GPU and TensorRT 8.4.
 
-## [ResNet](https://gitlab-master.nvidia.com/sagshelke/tensorrt_qat/-/tree/main/examples/resnet)
+## [ResNet](https://github.com/NVIDIA/TensorRT/tree/main/tools/tensorflow-quantization/examples/resnet)
 ### ResNet50-v1
 
 | Model                 | Accuracy (%) | Latency (ms, bs=1) |
@@ -36,7 +36,7 @@ Results obtained on NVIDIA's A100 GPU and TensorRT 8.4.
 
 *QAT fine-tuning hyper-parameters: `bs=32` (`bs=64` was OOM).*
 
-## [MobileNet](https://gitlab-master.nvidia.com/sagshelke/tensorrt_qat/-/tree/main/examples/mobilenet)
+## [MobileNet](https://github.com/NVIDIA/TensorRT/tree/main/tools/tensorflow-quantization/examples/mobilenet)
 ### MobileNet-v1
 
 | Model                 | Accuracy (%) | Latency (ms, bs=1)  |
@@ -53,7 +53,7 @@ Results obtained on NVIDIA's A100 GPU and TensorRT 8.4.
 | PTQ (TensorRT)        | 70.87        | 0.30                  |
 | **QAT** (TensorRT)    | 71.62        | 0.30                  |
 
-## [EfficientNet](https://gitlab-master.nvidia.com/sagshelke/tensorrt_qat/-/tree/main/examples/efficientnet)
+## [EfficientNet](https://github.com/NVIDIA/TensorRT/tree/main/tools/tensorflow-quantization/examples/efficientnet)
 ### EfficientNet-B0
 | Model                 | Accuracy (%) | Latency (ms, bs=1) |
 |-----------------------|--------------|--------------------|
@@ -71,6 +71,15 @@ Results obtained on NVIDIA's A100 GPU and TensorRT 8.4.
 | **QAT** (TensorRT)    | 79.48        | 1.23               |
 
 *QAT fine-tuning hyper-parameters: `bs=32, ep20, lr=0.0001, steps_per_epoch=None`*.
+
+## [Inception](https://github.com/NVIDIA/TensorRT/tree/main/tools/tensorflow-quantization/examples/inception)
+### Inception-v3
+
+| Model                 | Accuracy (%) | Latency (ms, bs=1) |
+|-----------------------|--------------|--------------------|
+| Baseline (TensorFlow) | 77.86        | 9.01               |
+| PTQ (TensorRT)        | 77.73        | 0.82               |
+| **QAT** (TensorRT)    | 78.08        | 0.82               |
 
 ```{eval-rst}
 

@@ -30,6 +30,7 @@ MODELS_CLASSES_DICT = {
     "resnet_152v2": tf.keras.applications.ResNet152V2,
     "mobilenet_v1": tf.keras.applications.MobileNet,
     "mobilenet_v2": tf.keras.applications.MobileNetV2,
+    "inception_v3": tf.keras.applications.InceptionV3,
 }
 
 

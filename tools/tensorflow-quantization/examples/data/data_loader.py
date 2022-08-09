@@ -57,6 +57,7 @@ _SUPPORTED_MODEL_NAMES = [
     "efficientnet_b3",
     "mobilenet_v1",
     "mobilenet_v2",
+    "inception_v3",
 ]
 
 _NUM_CLASSES = 1000
@@ -68,20 +69,23 @@ _NUM_IMAGES = {
 _DEFAULT_IMAGE_SIZE = {
     "resnet_v1": 224,
     "resnet_v2": 299,
-    "mobilenet_v1": 224,
-    "mobilenet_v2": 224,
     "efficientnet_b0": 224,
     "efficientnet_b3": 300,
+    "mobilenet_v1": 224,
+    "mobilenet_v2": 224,
+    "inception_v3": 299,
 }
 _NUM_CHANNELS = 3
 _RESIZE_MIN = {
     "resnet_v1": 256,
     "resnet_v2": 342,
-    "mobilenet_v1": 256,
-    "mobilenet_v2": 256,
     "efficientnet_b0": 256,
     "efficientnet_b3": 342,
+    "mobilenet_v1": 256,
+    "mobilenet_v2": 256,
+    "inception_v3": 342,
 }
+
 
 def load_image_np(test_image, model_name: str = "resnet_v1"):
     # Image is loaded in NHWC format
@@ -91,6 +95,7 @@ def load_image_np(test_image, model_name: str = "resnet_v1"):
     image = _central_crop(image, _DEFAULT_IMAGE_SIZE[model_name], _DEFAULT_IMAGE_SIZE[model_name])
     image = preprocess_model_func(image, model_name)
     return image
+
 
 def get_filenames(
     data_dir: str,
@@ -226,6 +231,7 @@ def preprocess_image_record(record, min_size=256, image_height=224, image_width=
 
     return image, label
 
+
 def preprocess_model_func(image: tf.Tensor, model_name: str = "resnet_v1"):
 
     if model_name == "resnet_v1":
@@ -236,11 +242,14 @@ def preprocess_model_func(image: tf.Tensor, model_name: str = "resnet_v1"):
         return tf.keras.applications.mobilenet.preprocess_input(image)
     elif model_name == "mobilenet_v2":
         return tf.keras.applications.mobilenet_v2.preprocess_input(image)
+    elif model_name == "inception_v3":
+        return tf.keras.applications.inception_v3.preprocess_input(image)
     else:
         # efficientnet doesn't need specific pre-processing (included in the model itself).
         print("No further pre-processing found for {}".format(model_name))
 
     return image
+
 
 def load_data_tfrecord_tf(
     data_dir: str = "./data/imagenet",
