@@ -37,11 +37,12 @@ Model quantization, fine-tuning, and conversion to ONNX.
 
 Example models:
 
-| Model         | Task             | Script - QAT Workflow          |
-|---------------|------------------|--------------------------------|
-| ResNet        | Classification   | [resnet](resnet)               |
-| EfficientNet  | Classification   | [efficientnet](efficientnet)   |
-| MobileNet     | Classification   | [mobilenet](mobilenet)         |
+| Model         | Task             | Script - QAT Workflow        |
+|---------------|------------------|------------------------------|
+| ResNet        | Classification   | [resnet](resnet)             |
+| EfficientNet  | Classification   | [efficientnet](efficientnet) |
+| MobileNet     | Classification   | [mobilenet](mobilenet)       |
+| Inception     | Classification   | [inception](inception)       |
 > For each model's performance results, please refer to the toolkit's User Guide ("Model Zoo").
 
 ## Step 2: TensorRT deployment
@@ -75,7 +76,7 @@ Arguments:
 - `--log_file`: Filename to save logs.
 
 Outputs:
-- `.log` file: contains the engine's performance accuracy.
+- `.log` file: contains the engine's performance accuracy. 
 
 # Additional resources
 
