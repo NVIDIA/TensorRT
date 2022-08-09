@@ -341,3 +341,26 @@ class MobileNetQDQCase(CustomQDQInsertionCase):
         special_qspec.layers.extend(residual_cqdq_qspec.layers)
 
         return special_qspec
+
+
+class InceptionQDQCase(CustomQDQInsertionCase):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def info(self) -> str:
+        return (
+            "Returns all quantizable nodes in Inception-v3: "
+            "  1. MaxPool layers to trigger horizontal fusion in the output of Concat."
+        )
+
+    def case(
+        self, keras_model: tf.keras.Model, qspec: QuantizationSpec
+    ) -> QuantizationSpec:
+        special_qspec = QuantizationSpec()
+
+        # Use MaxPool QDQ Case
+        mp_cqdq = MaxPoolQDQCase()
+        mp_cqdq_qspec = mp_cqdq.case(keras_model, qspec)
+        special_qspec.layers.extend(mp_cqdq_qspec.layers)
+
+        return special_qspec
