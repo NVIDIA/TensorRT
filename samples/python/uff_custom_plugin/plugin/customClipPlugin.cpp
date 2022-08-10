@@ -71,6 +71,7 @@ ClipPlugin::ClipPlugin(const std::string name, const void* data, size_t length)
 
     mClipMin = readFromBuffer<float>(d);
     mClipMax = readFromBuffer<float>(d);
+    mInputVolume = readFromBuffer<size_t>(d);
 
     assert(d == (a + length));
 }
@@ -120,7 +121,7 @@ int ClipPlugin::enqueue(int batchSize, const void* const* inputs, void* const* o
 
 size_t ClipPlugin::getSerializationSize() const noexcept
 {
-    return 2 * sizeof(float);
+    return 2 * sizeof(float) + sizeof(mInputVolume);
 }
 
 void ClipPlugin::serialize(void* buffer) const noexcept
@@ -130,6 +131,7 @@ void ClipPlugin::serialize(void* buffer) const noexcept
 
     writeToBuffer(d, mClipMin);
     writeToBuffer(d, mClipMax);
+    writeToBuffer(d, mInputVolume);
 
     assert(d == a + getSerializationSize());
 }
