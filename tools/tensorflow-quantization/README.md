@@ -1,12 +1,12 @@
 # <span style="color:green"> **NVIDIA TensorFlow 2.x Quantization** </span>
 
 This TensorFlow 2.x Quantization toolkit quantizes (inserts Q/DQ nodes) TensorFlow 2.x Keras models for Quantization-Aware Training (QAT).
-We follow NVIDIA's QAT recipe, which leads to optimal model acceleration with [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html) on NVIDIA GPUs and hardware accelerators. 
+We follow NVIDIA's QAT recipe, which leads to optimal model acceleration with [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html) on NVIDIA GPUs and hardware accelerators.
 
 ### Features
 
 - Implements [NVIDIA Quantization](https://arxiv.org/pdf/2004.09602.pdf) recipe.
-- Supports fully automated or manual insertion of Quantization and DeQuantization (QDQ) nodes in the TensorFlow 2.x model with minimal code. 
+- Supports fully automated or manual insertion of Quantization and DeQuantization (QDQ) nodes in the TensorFlow 2.x model with minimal code.
 - Can easily to add support for new layers.
 - Quantization behavior can be set programmatically.
 - Implements automatic tests for popular architecture blocks such as residual and inception.
@@ -33,7 +33,7 @@ Latest TensorFlow 2.x [docker image](https://catalog.ngc.nvidia.com/orgs/nvidia/
 $ cd ~/
 $ git clone https://github.com/NVIDIA/TensorRT.git
 $ docker pull nvcr.io/nvidia/tensorflow:22.03-tf2-py3
-$ docker run -it --runtime=nvidia --gpus all --net host -v ~/TensorRT/tools/tensorflow-quantization:/home/tensorflow-quantization nvcr.io/nvidia/tensorflow:22.03-tf2-py3 /bin/bash 
+$ docker run -it --runtime=nvidia --gpus all --net host -v ~/TensorRT/tools/tensorflow-quantization:/home/tensorflow-quantization nvcr.io/nvidia/tensorflow:22.03-tf2-py3 /bin/bash
 ```
 After last command, you will be placed in `/workspace` directory inside the running docker container whereas `tensorflow-quantization` repo is mounted in `/home` directory.
 
@@ -68,7 +68,7 @@ TensorFlow 2.x Quantization toolkit [userguide](https://docs.nvidia.com/deeplear
 2. Only Functional and Sequential Keras models are supported. Original Keras layers are wrapped into quantized layers using TensorFlow's [clone_model](https://www.tensorflow.org/api_docs/python/tf/keras/models/clone_model) method, which doesn't support subclassed models.
 3. Saving the quantized version of a few layers may not be supported in `TensorFlow < 2.8`:
    - `DepthwiseConv2D` support was added in TF 2.8.
-   - `Conv2DTranspose` is not yet supported by TF (see the open bug [here](https://github.com/tensorflow/model-optimization/issues/964)). 
+   - `Conv2DTranspose` is not yet supported by TF (see the open bug [here](https://github.com/tensorflow/model-optimization/issues/964)) 
        However, there's a workaround if you do not need the TF2 SavedModel file and just the ONNX file:
        1. Implement `Conv2DTransposeQuantizeWrapper`. See our [userguide](https://docs.nvidia.com/deeplearning/tensorrt/tensorflow-quantization-toolkit/docs/docs/add_new_layer_support.html#example) for more information on how to do that.
        2. Convert the quantized Keras model to ONNX using our provided utility function `convert_keras_model_to_onnx`.
