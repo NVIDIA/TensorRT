@@ -328,8 +328,12 @@ const IBlobNameToTensor* CaffeParser::parseBuffers(const uint8_t* deployBuffer,
         mModel = std::unique_ptr<trtcaffe::NetParameter>(new trtcaffe::NetParameter);
         google::protobuf::io::ArrayInputStream modelStream(modelBuffer, modelLength);
         google::protobuf::io::CodedInputStream codedModelStream(&modelStream);
+#if GOOGLE_PROTOBUF_VERSION >= 3011000
+        codedModelStream.SetTotalBytesLimit(modelLength);
+#else
+        // Note: This WARs the very low default size limit (64MB)
         codedModelStream.SetTotalBytesLimit(modelLength, -1);
-
+#endif
         if (!mModel->ParseFromCodedStream(&codedModelStream))
         {
             RETURN_AND_LOG_ERROR(nullptr, "Could not parse model file");
@@ -625,7 +629,12 @@ IBinaryProtoBlob* CaffeParser::parseBinaryProto(const char* fileName) noexcept
 
     IstreamInputStream rawInput(&stream);
     CodedInputStream codedInput(&rawInput);
-    codedInput.SetTotalBytesLimit(INT_MAX, -1);
+#if GOOGLE_PROTOBUF_VERSION >= 3011000
+        codedInput.SetTotalBytesLimit(INT_MAX);
+#else
+        // Note: This WARs the very low default size limit (64MB)
+        codedInput.SetTotalBytesLimit(INT_MAX, -1);
+#endif
 
     trtcaffe::BlobProto blob;
     bool ok = blob.ParseFromCodedStream(&codedInput);
