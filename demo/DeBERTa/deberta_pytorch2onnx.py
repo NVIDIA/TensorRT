@@ -128,6 +128,7 @@ def export():
     # model size
     total_params = sum(param.numel() for param in deberta_model.parameters())
     print("Total # of params: ", total_params)
+    print("Maximum sequence length: ", seq_len)
 
 if __name__ == "__main__":
     export()

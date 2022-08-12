@@ -20,43 +20,52 @@ This DeBERTa demo includes code and scripts for (i) exporting ONNX model from Py
 The demo works with the [HuggingFace implementation](https://github.com/huggingface/transformers/tree/main/src/transformers/models/deberta_v2) of DeBERTa.
 
 ## Performance Benchmark
-Experiments of inference performance are measured on NVIDIA A100-80GB, T4, and V100-16GB, using TensorRT 8.2 GA Update 3 (8.2.4) and CUDA 11.4. The application-based model configuration is: sequence length = 512/1024/2048, hidden size = 384, intermediate size = 1536, number of layers = 12, number of attention heads = 6, maximum relative distance = 256, vocabulary size = 128K, batch size = 1, with randomly initialized weights. Numbers are average latency of 100 inference runs.
+Experiments of inference performance are measured on NVIDIA A100-80GB, T4, and V100-16GB, using TensorRT 8.4 GA Update 2 (8.4.3) + CUDA 11.6 and TensorRT 8.2 GA Update 3 (8.2.4) + CUDA 11.4. The application-based model configuration is: sequence length = 512/1024/2048, hidden size = 384, intermediate size = 1536, number of layers = 12, number of attention heads = 6, maximum relative distance = 256, vocabulary size = 128K, batch size = 1, with randomly initialized weights. Numbers are average latency of 100 inference runs.
 
-| Sequence Length | Model Latency (ms)             | A100-80GB |    T4    | V100-16GB |
-| :-------------- | :----------------------------- | :-------: | :------: | :-------: |
-| 512             | PyTorch (FP32/TF32)            |   24.6    |   34.0   |   53.1    |
-|                 | PyTorch (FP16)                 |   22.6    |   20.6   |   43.5    |
-|                 | TensorRT (FP32/TF32)           |    4.3    |   12.3   |    5.6    |
-|                 | TensorRT (FP16)                |  **1.8**  |   6.1    |  **3.1**  |
-|                 | TensorRT w/ plugin (FP32/TF32) |    4.8    |   13.1   |    6.9    |
-|                 | TensorRT w/ plugin (FP16)      |    2.1    | **6.0**  |    4.2    |
-|                 |                                |           |          |           |
-| 1024            | PyTorch (FP32/TF32)            |   35.8    |   83.7   |   65.4    |
-|                 | PyTorch (FP16)                 |   35.6    |   52.9   |   59.4    |
-|                 | TensorRT (FP32/TF32)           |    8.8    |   34.7   |   12.8    |
-|                 | TensorRT (FP16)                |    3.7    |   18.4   |    7.4    |
-|                 | TensorRT w/ plugin (FP32/TF32) |    9.0    |   32.8   |   13.5    |
-|                 | TensorRT w/ plugin (FP16)      |  **3.3**  | **13.6** |  **6.8**  |
-|                 |                                |           |          |           |
-| 2048            | PyTorch (FP32/TF32)            |   84.8    |  263.1   |   236.3   |
-|                 | PyTorch (FP16)                 |   76.0    |  181.8   |   205.5   |
-|                 | TensorRT (FP32/TF32)           |   22.6    |  109.8   |   35.0    |
-|                 | TensorRT (FP16)                |   10.8    |   62.9   |   21.0    |
-|                 | TensorRT w/ plugin (FP32/TF32) |   21.2    |   95.7   |   35.6    |
-|                 | TensorRT w/ plugin (FP16)      |  **8.3**  | **44.6** | **18.1**  |
+| Sequence Length | Model Latency (ms)             |           | TensorRT 8.4 GA Update 2 (8.4.3), CUDA 11.6 |           |           | TensorRT 8.2 GA Update 3 (8.2.4), CUDA 11.4 |           |
+| :-------------- | :----------------------------- | :-------: | :-----------------------------------------: | :-------: | :-------: | :-----------------------------------------: | :-------: |
+|                 |                                | A100-80GB |                     T4                      | V100-16GB | A100-80GB |                     T4                      | V100-16GB |
+| 512             | PyTorch (FP32/TF32)            |   23.7    |                    35.6                     |   53.1    |   24.6    |                    34.0                     |   53.1    |
+|                 | PyTorch (FP16)                 |   21.5    |                    22.7                     |   43.5    |   22.6    |                    20.6                     |   43.5    |
+|                 | TensorRT (FP32/TF32)           |    3.9    |                    12.4                     |    7.2    |    4.3    |                    12.3                     |    5.6    |
+|                 | TensorRT (FP16)                |  **1.6**  |                     6.2                     |  **3.9**  |  **1.8**  |                     6.1                     |  **3.1**  |
+|                 | TensorRT w/ plugin (FP32/TF32) |    4.3    |                    12.9                     |    6.9    |    4.8    |                    13.1                     |    6.9    |
+|                 | TensorRT w/ plugin (FP16)      |    1.9    |                   **5.6**                   |    4.0    |    2.1    |                   **6.0**                   |    4.2    |
+|                 |                                |           |                                             |           |           |                                             |           |
+| 1024            | PyTorch (FP32/TF32)            |   35.7    |                    82.8                     |   65.4    |   35.8    |                    83.7                     |   65.4    |
+|                 | PyTorch (FP16)                 |   35.1    |                    53.8                     |   59.4    |   35.6    |                    52.9                     |   59.4    |
+|                 | TensorRT (FP32/TF32)           |    8.3    |                    31.3                     |   15.7    |    8.8    |                    34.7                     |   12.8    |
+|                 | TensorRT (FP16)                |    3.8    |                    16.3                     |    8.3    |    3.7    |                    18.4                     |    7.4    |
+|                 | TensorRT w/ plugin (FP32/TF32) |    7.9    |                    31.1                     |   14.3    |    9.0    |                    32.8                     |   13.5    |
+|                 | TensorRT w/ plugin (FP16)      |  **2.8**  |                  **12.4**                   |  **7.3**  |  **3.3**  |                  **13.6**                   |  **6.8**  |
+|                 |                                |           |                                             |           |           |                                             |           |
+| 2048            | PyTorch (FP32/TF32)            |   84.8    |                    261.3                    |   236.3   |   84.8    |                    263.1                    |   236.3   |
+|                 | PyTorch (FP16)                 |   79.4    |                    178.2                    |   205.5   |   76.0    |                    181.8                    |   205.5   |
+|                 | TensorRT (FP32/TF32)           |   22.2    |                    109.1                    |   39.1    |   22.6    |                    109.8                    |   35.0    |
+|                 | TensorRT (FP16)                |   10.2    |                    56.2                     |   23.5    |   10.8    |                    62.9                     |   21.0    |
+|                 | TensorRT w/ plugin (FP32/TF32) |   20.4    |                    96.7                     |   38.6    |   21.2    |                    95.7                     |   35.6    |
+|                 | TensorRT w/ plugin (FP16)      |  **7.6**  |                  **44.1**                   | **21.0**  |  **8.3**  |                  **44.6**                   | **18.1**  |
 
-In addition, a pre-trained model `microsoft/deberta-v3-xsmall` was tested, which configuration is similar to sequencen length = 512 model above:
+In addition, a pre-trained model `microsoft/deberta-v3-xsmall` was tested, which configuration is similar to sequencen length = 512 model above. And `microsoft/deberta-v3-large` (sequence length = 512) performance on TensorRT 8.4 GA Update 2 (8.4.3) is also added from recent experiments.
 
-| Model Latency (ms)             | A100-80GB |   T4    | V100-16GB |
-| :----------------------------- | :-------: | :-----: | :-------: |
-| PyTorch (FP32/TF32)            |   28.9    |  39.2   |   57.1    |
-| PyTorch (FP16)                 |   26.3    |  24.8   |   47.9    |
-| TensorRT (FP32/TF32)           |    4.4    |  12.8   |    5.8    |
-| TensorRT (FP16)                |  **1.9**  |   6.4   |  **3.1**  |
-| TensorRT w/ plugin (FP32/TF32) |    4.8    |  13.6   |    6.9    |
-| TensorRT w/ plugin (FP16)      |    2.1    | **6.0** |    4.1    |
-
-Note that the performance gap between BERT's self-attention and DeBERTa's disentangled attention mainly comes from the additional `Gather` and `Transpose` operations in the attention design, and such gap becomes most significant when the maximum input sequence length is long (e.g., 2048). The fastest inference times are labeled as bold in the table above. In summary, for short sequence length applications, regular TensorRT inference should be sufficient, while for longer sequence length applications, the plugin optimizations can be utilized to further improve the inference latency. Also, to get maximum speedup, using FP16 precision is recommended.
+| Variant             | Model Latency (ms)             |           | TensorRT 8.4 GA Update 2 (8.4.3), CUDA 11.6 |           |           | TensorRT 8.2 GA Update 3 (8.2.4), CUDA 11.4 |           |
+| :------------------ | :----------------------------- | :-------: | :-----------------------------------------: | :-------: | :-------: | :-----------------------------------------: | :-------: |
+|                     |                                | A100-80GB |                     T4                      | V100-16GB | A100-80GB |                     T4                      | V100-16GB |
+| `deberta-v3-xsmall` | PyTorch (FP32/TF32)            |   30.1    |                    40.6                     |   57.1    |   28.9    |                    39.2                     |   57.1    |
+|                     | PyTorch (FP16)                 |   27.6    |                    26.3                     |   47.9    |   26.3    |                    24.8                     |   47.9    |
+|                     | TensorRT (FP32/TF32)           |    4.1    |                    12.4                     |    7.6    |    4.4    |                    12.8                     |    5.8    |
+|                     | TensorRT (FP16)                |    1.8    |                     6.2                     |  **3.7**  |  **1.9**  |                     6.4                     |  **3.1**  |
+|                     | TensorRT w/ plugin (FP32/TF32) |    4.3    |                    12.9                     |    7.7    |    4.8    |                    13.6                     |    6.9    |
+|                     | TensorRT w/ plugin (FP16)      |  **1.8**  |                   **5.6**                   |    4.7    |    2.1    |                   **6.0**                   |    4.1    |
+|                     |                                |           |                                             |           |           |                                             |           |
+| `deberta-v3-large`  | PyTorch (FP32/TF32)            |   51.6    |                    40.6                     |   100.0   |     -     |                      -                      |     -     |
+|                     | PyTorch (FP16)                 |   52.6    |                    26.3                     |   96.5    |     -     |                      -                      |     -     |
+|                     | TensorRT (FP32/TF32)           |   31.1    |                    112.4                    |   43.2    |     -     |                      -                      |     -     |
+|                     | TensorRT (FP16)                |    7.8    |                    35.0                     | **13.9**  |     -     |                      -                      |     -     |
+|                     | TensorRT w/ plugin (FP32/TF32) |   30.9    |                    110.8                    |   44.9    |     -     |                      -                      |     -     |
+|                     | TensorRT w/ plugin (FP16)      |  **7.3**  |                  **30.1**                   |   14.4    |     -     |                      -                      |     -     |
+-
+Note that the performance gap between BERT's self-attention and DeBERTa's disentangled attention mainly comes from the additional `Gather` and `Transpose` operations in the attention design, and such gap becomes most significant when the maximum input sequence length is long (e.g., 2048). The fastest inference times are labeled as bold in the table above. In summary, for short sequence length applications, regular TensorRT inference might be sufficient, while for longer sequence length applications, the plugin optimizations are preferred and can be utilized to further improve the inference latency. Also, to get maximum speedup, using FP16 precision for inference is recommended.
 
 ## Environment Setup
 It is recommended to use docker for reproducing the following steps. Follow the setup steps in TensorRT OSS [README](https://github.com/NVIDIA/TensorRT#setting-up-the-build-environment) to build and launch the container and build OSS:
@@ -64,7 +73,7 @@ It is recommended to use docker for reproducing the following steps. Follow the 
 **Example: Ubuntu 20.04 on x86-64 with cuda-11.6.2 (default)**
 ```bash
 # Download this TensorRT OSS repo
-git clone -b master https://github.com/nvidia/TensorRT TensorRT
+git clone -b main https://github.com/nvidia/TensorRT TensorRT
 cd TensorRT
 git submodule update --init --recursive
 
@@ -76,7 +85,7 @@ git submodule update --init --recursive
 ./docker/launch.sh --tag tensorrt-ubuntu20.04-cuda11.6 --gpus all
 
 ## now inside container
-# build OSS
+# build OSS (only required for pre-8.4.3 TensorRT versions)
 cd $TRT_OSSPATH
 mkdir -p build && cd build
 cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
@@ -93,13 +102,14 @@ pip install -r requirements.txt
 1. `sudo` password for Ubuntu build containers is 'nvidia'.
 2. The DeBERTa plugin is only built-in after TensorRT 8.4 GA Update 2 (8.4.3) release. For pre-8.4.3 versions, you need to build TensorRT OSS from source and link the shared libraries with TensorRT build.
 3. For ONNX Runtime deployment, the associated changes for the plugin are only built-in after 1.12 release. For pre-1.12 versions, you need to [build ONNX Runtime from source with TensorRT execution provider](https://onnxruntime.ai/docs/build/eps.html#tensorrt).
+4. TensorRT OSS docker container is designed for use cases when you need to build OSS repository from source. After TensorRT 8.4 GA Update 2 (8.4.3) release, the most convenient way is to use the corresponding `22.08-py3` docker image at [TensorRT NGC container](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tensorrt) when it is released, without the need to build from dockerfile. But for now, please follow the instructions above to use the OSS docker image.
 
 ## Step 1: PyTorch model to ONNX model
 ```bash
-python deberta_pytorch2onnx.py --filename ./test/deberta.onnx
+python deberta_pytorch2onnx.py --filename ./test/deberta.onnx [--variant microsoft/deberta-v3-xsmall] [--seq-len 2048]
 ```
 
-This will export the DeBERTa model from HuggingFace's DeBERTa-V2 implementation into ONNX format, with user given file name. Optionally, specify DeBERTa variant to export, such as `--variant microsoft/deberta-v3-xsmall`.
+This will export the DeBERTa model from HuggingFace's DeBERTa-V2 implementation into ONNX format, with user given file name. Optionally, specify DeBERTa variant to export, such as `--variant microsoft/deberta-v3-xsmall`, or specify the maximum sequence length configuration for testing, such as `--seq-len 2048`. Models specified by `--variant` are with pre-trained weights, while models specified by `--seq-len` are with randomly initialized weights. Note that `--variant` and `--seq-len` cannot be used together because pre-trained models have pre-defined max sequence length.
 
 ## Step 2: Modify ONNX model for TensorRT engine building
 ```bash
