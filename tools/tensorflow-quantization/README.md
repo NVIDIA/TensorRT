@@ -60,7 +60,7 @@ If all tests pass, installation is successful.
 
 ## Documentation
 
-TensorFlow 2.x Quantization toolkit [userguide](https://docs.nvidia.com/deeplearning/tensorrt/tensorflow-quantization-toolkit/docs/index.html).
+TensorFlow 2.x Quantization toolkit [user guide](https://docs.nvidia.com/deeplearning/tensorrt/tensorflow-quantization-toolkit/docs/index.html).
 
 ## Known limitations
 
@@ -70,7 +70,7 @@ TensorFlow 2.x Quantization toolkit [userguide](https://docs.nvidia.com/deeplear
    - `DepthwiseConv2D` support was added in TF 2.8.
    - `Conv2DTranspose` is not yet supported by TF (see the open bug [here](https://github.com/tensorflow/model-optimization/issues/964)) 
        However, there's a workaround if you do not need the TF2 SavedModel file and just the ONNX file:
-       1. Implement `Conv2DTransposeQuantizeWrapper`. See our [userguide](https://docs.nvidia.com/deeplearning/tensorrt/tensorflow-quantization-toolkit/docs/docs/add_new_layer_support.html#example) for more information on how to do that.
+       1. Implement `Conv2DTransposeQuantizeWrapper`. See our [user guide](https://docs.nvidia.com/deeplearning/tensorrt/tensorflow-quantization-toolkit/docs/docs/add_new_layer_support.html#example) for more information on how to do that.
        2. Convert the quantized Keras model to ONNX using our provided utility function `convert_keras_model_to_onnx`.
 
 ## Resources
