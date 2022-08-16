@@ -14,11 +14,11 @@
 
 ## Description
 
-This sample, sampleIOFormats, uses a Caffe model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md) and performs engine building and inference using TensorRT. The correctness of outputs is then compared to the golden reference. Specifically, it shows how to use APIs to explicitly specify I/O formats to `TensorFormat::kLINEAR` for Float32, and additionally `TensorFormat::kCHW2` and `TensorFormat::kHWC8` for Float16 and INT8 precision.
+This sample, sampleIOFormats, uses a Onnx model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md) and performs engine building and inference using TensorRT. The correctness of outputs is then compared to the golden reference. Specifically, it shows how to use APIs to explicitly specify input formats to `TensorFormat::kLINEAR` for Float32, and additionally `TensorFormat::kCHW2` and `TensorFormat::kHWC8` for Float16 and INT8 precision.
 
 ## How does this sample work?
 
-`ITensor::setAllowedFormats` is invoked to specify which format is expected to be supported. 
+`ITensor::setAllowedFormats` is invoked to specify which format is expected to be supported.
 
 	```
 	bool SampleIOFormats::build(int dataWidth)
@@ -26,7 +26,6 @@ This sample, sampleIOFormats, uses a Caffe model that was trained on the [MNIST 
 		...
 
 		network->getInput(0)->setAllowedFormats(static_cast<TensorFormats>(1 << static_cast<int>(mTensorFormat)));
-		network->getOutput(0)->setAllowedFormats(static_cast<TensorFormats>(1 << static_cast<int>(mTensorFormat)));
 		...
 	}
 	```
@@ -94,14 +93,17 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 ## Changelog
 
-Oct 2021
-Change names and topic from "reformat-free" to "I/O formats", because `BuilderFlag::kSTRICT_TYPES`
+**August 2022**
+- Migrated code from parsing a `caffe` model to an `onnx` model.
+
+**Oct 2021**
+- Change names and topic from "reformat-free" to "I/O formats", because `BuilderFlag::kSTRICT_TYPES`
 is deprecated. "Reformat-free I/O" (see `BuilderFlag::kDIRECT_IO`) is generally counterproductive
 and fragile, since it constrains the optimizer from choosing the fastest implementation,
 and depends upon what kernels are available on a particular target.
 
-June 2019
-This is the first release of the `README.md` file and sample.
+**June 2019**
+- This is the first release of the `README.md` file and sample.
 
 
 ## Known issues

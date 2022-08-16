@@ -20,7 +20,7 @@
 //!
 //! It demonstrates the usage of IAlgorithmSelector to cache the algorithms used in a network.
 //! It also shows the usage of IAlgorithmSelector::selectAlgorithms to define heuristics for selection of algorithms.
-//! It builds a TensorRT engine by importing a trained MNIST Caffe model and runs inference on an input image of a
+//! It builds a TensorRT engine by importing a trained MNIST ONNX model and runs inference on an input image of a
 //! digit.
 //! It can be run with the following command line:
 //! Command: ./sample_algorithm_selector [-h or --help] [-d=/path/to/data/dir or --datadir=/path/to/data/dir]
@@ -30,8 +30,9 @@
 #include "common.h"
 #include "logger.h"
 
-#include "NvCaffeParser.h"
 #include "NvInfer.h"
+#include "NvOnnxParser.h"
+#include "parserOnnxConfig.h"
 
 #include <algorithm>
 #include <cmath>
@@ -42,11 +43,11 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-
+using namespace nvinfer1;
 using samplesCommon::SampleUniquePtr;
 
-const std::string gSampleName = "TensorRT.sample_algorithm_selector";
-const std::string gCacheFileName = "AlgorithmCache.txt";
+std::string const gSampleName = "TensorRT.sample_algorithm_selector";
+std::string const gCacheFileName = "AlgorithmCache.txt";
 //!
 //! \brief Writes the default algorithm choices made by TensorRT into a file.
 //!
@@ -60,7 +61,7 @@ public:
     //! Writes all the possible choices to the selection buffer and returns the length of it.
     //! If BuilderFlag::kREJECT_EMPTY_ALGORITHMS is not set, just returning 0 forces default tactic selection.
     //!
-    int32_t selectAlgorithms(const nvinfer1::IAlgorithmContext& context, const nvinfer1::IAlgorithm* const* choices,
+    int32_t selectAlgorithms(nvinfer1::IAlgorithmContext const& context, const nvinfer1::IAlgorithm* const* choices,
         int32_t nbChoices, int32_t* selection) noexcept override
     {
         // TensorRT always provides more than zero number of algorithms in selectAlgorithms.
@@ -92,9 +93,9 @@ public:
             algorithmFile << algoChoices[i]->getAlgorithmVariant().getTactic() << "\n";
 
             // Write number of inputs and outputs.
-            const int32_t nbInputs = algoContexts[i]->getNbInputs();
+            int32_t const nbInputs = algoContexts[i]->getNbInputs();
             algorithmFile << nbInputs << "\n";
-            const int32_t nbOutputs = algoContexts[i]->getNbOutputs();
+            int32_t const nbOutputs = algoContexts[i]->getNbOutputs();
             algorithmFile << nbOutputs << "\n";
 
             // Write input and output formats.
@@ -109,7 +110,7 @@ public:
         algorithmFile.close();
     }
 
-    AlgorithmCacheWriter(const std::string& cacheFileName)
+    AlgorithmCacheWriter(std::string const& cacheFileName)
         : mCacheFileName(cacheFileName)
     {
     }
@@ -129,13 +130,13 @@ public:
     //!
     //! \details Use the map created from cache to select algorithms.
     //!
-    int32_t selectAlgorithms(const nvinfer1::IAlgorithmContext& algoContext,
+    int32_t selectAlgorithms(nvinfer1::IAlgorithmContext const& algoContext,
         const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbChoices, int32_t* selection) noexcept override
     {
         // TensorRT always provides more than zero number of algorithms in selectAlgorithms.
         ASSERT(nbChoices > 0);
 
-        const std::string layerName(algoContext.getName());
+        std::string const layerName(algoContext.getName());
         auto it = choiceMap.find(layerName);
 
         // The layerName can be used as a unique identifier for a layer.
@@ -174,9 +175,9 @@ public:
     {
         for (auto i = 0; i < nbAlgorithms; i++)
         {
-            const std::string layerName(algoContexts[i]->getName());
+            std::string const layerName(algoContexts[i]->getName());
             ASSERT(choiceMap.find(layerName) != choiceMap.end());
-            const auto& algoItem = choiceMap[layerName];
+            auto const& algoItem = choiceMap[layerName];
             ASSERT(algoItem.nbInputs == algoContexts[i]->getNbInputs());
             ASSERT(algoItem.nbOutputs == algoContexts[i]->getNbOutputs());
             ASSERT(algoChoices[i]->getAlgorithmVariant().getImplementation() == algoItem.implementation);
@@ -192,7 +193,7 @@ public:
         }
     }
 
-    AlgorithmCacheReader(const std::string& cacheFileName)
+    AlgorithmCacheReader(std::string const& cacheFileName)
     {
         //! Use the cache file to create a map of algorithm choices.
         std::ifstream algorithmFile(cacheFileName);
@@ -221,7 +222,7 @@ public:
             getline(algorithmFile, line);
             algoItem.nbOutputs = std::stoi(line);
 
-            const int32_t nbFormats = algoItem.nbInputs + algoItem.nbOutputs;
+            int32_t const nbFormats = algoItem.nbInputs + algoItem.nbOutputs;
             algoItem.formats.resize(nbFormats);
             for (int32_t i = 0; i < nbFormats; i++)
             {
@@ -248,7 +249,7 @@ private:
 
     //! The combination of implementation, tactic and input/output formats is unique to an algorithm,
     //! and can be used to check if two algorithms are same.
-    static bool areSame(const AlgorithmCacheItem& algoCacheItem, const IAlgorithm& algoChoice) noexcept
+    static bool areSame(AlgorithmCacheItem const& algoCacheItem, IAlgorithm const& algoChoice) noexcept
     {
         if (algoChoice.getAlgorithmVariant().getImplementation() != algoCacheItem.implementation
             || algoChoice.getAlgorithmVariant().getTactic() != algoCacheItem.tactic)
@@ -257,7 +258,7 @@ private:
         }
 
         // Loop over all the AlgorithmIOInfos to see if all of them match to the formats in algo item.
-        const auto nbFormats = algoCacheItem.nbInputs + algoCacheItem.nbOutputs;
+        auto const nbFormats = algoCacheItem.nbInputs + algoCacheItem.nbOutputs;
         for (auto j = 0; j < nbFormats; j++)
         {
             if (algoCacheItem.formats[j].first
@@ -284,13 +285,13 @@ public:
     //!
     //! \details Use the map created from cache to select algorithms.
     //!
-    int32_t selectAlgorithms(const nvinfer1::IAlgorithmContext& algoContext,
+    int32_t selectAlgorithms(nvinfer1::IAlgorithmContext const& algoContext,
         const nvinfer1::IAlgorithm* const* algoChoices, int32_t nbChoices, int32_t* selection) noexcept override
     {
         // TensorRT always provides more than zero number of algorithms in selectAlgorithms.
         ASSERT(nbChoices > 0);
 
-        const auto* it = std::min_element(
+        auto const* it = std::min_element(
             algoChoices, algoChoices + nbChoices, [](const nvinfer1::IAlgorithm* x, const nvinfer1::IAlgorithm* y) {
                 return x->getWorkspaceSize() < y->getWorkspaceSize();
             });
@@ -311,12 +312,12 @@ public:
 //!
 //! \brief  The SampleAlgorithmSelector class implements the SampleAlgorithmSelector sample.
 //!
-//! \details It creates the network using a trained Caffe MNIST classification model.
+//! \details It creates the network using a trained ONNX MNIST classification model.
 //!
 class SampleAlgorithmSelector
 {
 public:
-    SampleAlgorithmSelector(const samplesCommon::CaffeSampleParams& params)
+    SampleAlgorithmSelector(samplesCommon::OnnxSampleParams const& params)
         : mParams(params)
     {
     }
@@ -331,57 +332,51 @@ public:
     //!
     bool infer();
 
-    //!
-    //! \brief Used to clean up any state created in the sample class.
-    //!
-    bool teardown();
-
 private:
     //!
-    //! \brief uses a Caffe parser to create the MNIST Network and marks the output layers.
+    //! \brief uses a Onnx parser to create the MNIST Network and marks the output layers.
     //!
-    bool constructNetwork(
-        SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
-
+    bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+        SampleUniquePtr<nvonnxparser::IParser>& parser);
     //!
     //! \brief Reads the input and mean data, preprocesses, and stores the result in a managed buffer.
     //!
     bool processInput(
-        const samplesCommon::BufferManager& buffers, const std::string& inputTensorName, int inputFileIdx) const;
+        samplesCommon::BufferManager const& buffers, std::string const& inputTensorName, int32_t inputFileIdx) const;
 
     //!
     //! \brief Verifies that the output is correct and prints it.
     //!
-    bool verifyOutput(
-        const samplesCommon::BufferManager& buffers, const std::string& outputTensorName, int groundTruthDigit) const;
+    bool verifyOutput(samplesCommon::BufferManager const& buffers, std::string const& outputTensorName,
+        int32_t groundTruthDigit) const;
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network.
 
-    samplesCommon::CaffeSampleParams mParams; //!< The parameters for the sample.
+    samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
 
     nvinfer1::Dims mInputDims; //!< The dimensions of the input to the network.
-
-    SampleUniquePtr<nvcaffeparser1::IBinaryProtoBlob>
-        mMeanBlob; //!< the mean blob, which we need to keep around until build is done.
 };
 
 //!
 //! \brief Creates the network, configures the builder and creates the network engine.
 //!
-//! \details This function creates the MNIST network by parsing the caffe model and builds
+//! \details This function creates the MNIST network by parsing the ONNX model and builds
 //!          the engine that will be used to run MNIST (mEngine).
 //!
 //! \return true if the engine was created successfully and false otherwise.
 //!
 bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
 {
+
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
     }
+    auto const networkFlags = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(networkFlags));
     if (!network)
     {
         return false;
@@ -393,13 +388,15 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
         return false;
     }
 
-    auto parser = SampleUniquePtr<nvcaffeparser1::ICaffeParser>(nvcaffeparser1::createCaffeParser());
+    auto parser
+        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
     if (!parser)
     {
         return false;
     }
 
-    if (!constructNetwork(parser, network))
+    auto constructed = constructNetwork(builder, network, config, parser);
+    if (!constructed)
     {
         return false;
     }
@@ -453,7 +450,7 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
 
     ASSERT(network->getNbInputs() == 1);
     mInputDims = network->getInput(0)->getDimensions();
-    ASSERT(mInputDims.nbDims == 3);
+    ASSERT(mInputDims.nbDims == 4);
 
     return true;
 }
@@ -462,10 +459,11 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
 //! \brief Reads the input and mean data, preprocesses, and stores the result in a managed buffer.
 //!
 bool SampleAlgorithmSelector::processInput(
-    const samplesCommon::BufferManager& buffers, const std::string& inputTensorName, int inputFileIdx) const
+    samplesCommon::BufferManager const& buffers, std::string const& inputTensorName, int32_t inputFileIdx) const
 {
-    const int inputH = mInputDims.d[1];
-    const int inputW = mInputDims.d[2];
+
+    int32_t const inputH = mInputDims.d[2];
+    int32_t const inputW = mInputDims.d[3];
 
     // Read a random digit file.
     srand(unsigned(time(nullptr)));
@@ -474,7 +472,7 @@ bool SampleAlgorithmSelector::processInput(
 
     // Print ASCII representation of digit.
     sample::gLogInfo << "Input:\n";
-    for (int i = 0; i < inputH * inputW; i++)
+    for (int32_t i = 0; i < inputH * inputW; i++)
     {
         sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
     }
@@ -482,9 +480,9 @@ bool SampleAlgorithmSelector::processInput(
 
     float* hostInputBuffer = static_cast<float*>(buffers.getHostBuffer(inputTensorName));
 
-    for (int i = 0; i < inputH * inputW; i++)
+    for (int32_t i = 0; i < inputH * inputW; i++)
     {
-        hostInputBuffer[i] = float(fileData[i]);
+        hostInputBuffer[i] = 1.0F - static_cast<float>(fileData[i]) / 255.0F;
     }
 
     return true;
@@ -494,25 +492,31 @@ bool SampleAlgorithmSelector::processInput(
 //! \brief Verifies that the output is correct and prints it.
 //!
 bool SampleAlgorithmSelector::verifyOutput(
-    const samplesCommon::BufferManager& buffers, const std::string& outputTensorName, int groundTruthDigit) const
+    samplesCommon::BufferManager const& buffers, std::string const& outputTensorName, int32_t groundTruthDigit) const
 {
-    const float* prob = static_cast<const float*>(buffers.getHostBuffer(outputTensorName));
+    float* prob = static_cast<float*>(buffers.getHostBuffer(outputTensorName));
+    int32_t constexpr kDIGITS = 10;
 
-    // Print histogram of the output distribution.
+    std::for_each(prob, prob + kDIGITS, [](float& n) { n = exp(n); });
+
+    float const sum = std::accumulate(prob, prob + kDIGITS, 0.F);
+
+    std::for_each(prob, prob + kDIGITS, [sum](float& n) { n = n / sum; });
+
+    auto max_ele = std::max_element(prob, prob + kDIGITS);
+
+    float const val = *max_ele;
+
+    int32_t const idx = max_ele - prob;
+
+    // Print histogram of the output probability distribution.
     sample::gLogInfo << "Output:\n";
-    float val{0.0F};
-    int idx{0};
-    const int kDIGITS = 10;
-
-    for (int i = 0; i < kDIGITS; i++)
+    for (int32_t i = 0; i < kDIGITS; i++)
     {
-        if (val < prob[i])
-        {
-            val = prob[i];
-            idx = i;
-        }
-
-        sample::gLogInfo << i << ": " << std::string(int(std::floor(prob[i] * 10 + 0.5F)), '*') << "\n";
+        sample::gLogInfo << " Prob " << i << "  " << std::fixed << std::setw(5) << std::setprecision(4) << prob[i]
+                         << " "
+                         << "Class " << i << ": " << std::string(int32_t(std::floor(prob[i] * 10 + 0.5f)), '*')
+                         << std::endl;
     }
     sample::gLogInfo << std::endl;
 
@@ -520,54 +524,35 @@ bool SampleAlgorithmSelector::verifyOutput(
 }
 
 //!
-//! \brief Uses a caffe parser to create the MNIST Network and marks the
+//! \brief Uses an ONNX parser to create the MNIST Network and marks the
 //!        output layers.
 //!
 //! \param network Pointer to the network that will be populated with the MNIST network.
 //!
 //! \param builder Pointer to the engine builder.
 //!
-bool SampleAlgorithmSelector::constructNetwork(
-    SampleUniquePtr<nvcaffeparser1::ICaffeParser>& parser, SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+bool SampleAlgorithmSelector::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
+    SampleUniquePtr<nvonnxparser::IParser>& parser)
 {
-    const nvcaffeparser1::IBlobNameToTensor* blobNameToTensor = parser->parse(
-        mParams.prototxtFileName.c_str(), mParams.weightsFileName.c_str(), *network, nvinfer1::DataType::kFLOAT);
-
-    for (auto& s : mParams.outputTensorNames)
-    {
-        network->markOutput(*blobNameToTensor->find(s.c_str()));
-    }
-
-    // add mean subtraction to the beginning of the network.
-    nvinfer1::Dims inputDims = network->getInput(0)->getDimensions();
-    mMeanBlob
-        = SampleUniquePtr<nvcaffeparser1::IBinaryProtoBlob>(parser->parseBinaryProto(mParams.meanFileName.c_str()));
-    nvinfer1::Weights meanWeights{nvinfer1::DataType::kFLOAT, mMeanBlob->getData(), inputDims.d[1] * inputDims.d[2]};
-    // For this sample, a large range based on the mean data is chosen and applied to the head of the network.
-    // After the mean subtraction occurs, the range is expected to be between -127 and 127, so the rest of the network
-    // is given a generic range.
-    // The preferred method is use scales computed based on a representative data set
-    // and apply each one individually based on the tensor. The range here is large enough for the
-    // network, but is chosen for example purposes only.
-    float maxMean
-        = samplesCommon::getMaxValue(static_cast<const float*>(meanWeights.values), samplesCommon::volume(inputDims));
-
-    auto* mean = network->addConstant(nvinfer1::Dims3(1, inputDims.d[1], inputDims.d[2]), meanWeights);
-    if (!mean->getOutput(0)->setDynamicRange(-maxMean, maxMean))
+    auto parsed = parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
+        static_cast<int32_t>(sample::gLogger.getReportableSeverity()));
+    if (!parsed)
     {
         return false;
     }
-    if (!network->getInput(0)->setDynamicRange(-maxMean, maxMean))
+
+    if (mParams.fp16)
     {
-        return false;
+        config->setFlag(BuilderFlag::kFP16);
     }
-    auto* meanSub = network->addElementWise(*network->getInput(0), *mean->getOutput(0), ElementWiseOperation::kSUB);
-    if (!meanSub->getOutput(0)->setDynamicRange(-maxMean, maxMean))
+    if (mParams.int8)
     {
-        return false;
+        config->setFlag(BuilderFlag::kINT8);
+        samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
     }
-    network->getLayer(0)->setInput(0, *meanSub->getOutput(0));
-    samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
+
+    samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
     return true;
 }
@@ -581,7 +566,7 @@ bool SampleAlgorithmSelector::constructNetwork(
 bool SampleAlgorithmSelector::infer()
 {
     // Create RAII buffer manager object.
-    samplesCommon::BufferManager buffers(mEngine, mParams.batchSize);
+    samplesCommon::BufferManager buffers(mEngine);
 
     auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
@@ -591,11 +576,12 @@ bool SampleAlgorithmSelector::infer()
 
     // Pick a random digit to try to infer.
     srand(time(NULL));
-    const int digit = rand() % 10;
+    int32_t const digit = rand() % 10;
 
     // Read the input data into the managed buffers.
     // There should be just 1 input tensor.
     ASSERT(mParams.inputTensorNames.size() == 1);
+
     if (!processInput(buffers, mParams.inputTensorNames[0], digit))
     {
         return false;
@@ -608,7 +594,7 @@ bool SampleAlgorithmSelector::infer()
     buffers.copyInputToDeviceAsync(stream);
 
     // Asynchronously enqueue the inference work
-    if (!context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr))
+    if (!context->enqueueV2(buffers.getDeviceBindings().data(), stream, nullptr))
     {
         return false;
     }
@@ -625,28 +611,15 @@ bool SampleAlgorithmSelector::infer()
     // There should be just one output tensor.
     ASSERT(mParams.outputTensorNames.size() == 1);
     bool outputCorrect = verifyOutput(buffers, mParams.outputTensorNames[0], digit);
-
     return outputCorrect;
-}
-
-//!
-//! \brief Used to clean up any state created in the sample class.
-//!
-bool SampleAlgorithmSelector::teardown()
-{
-    //! Clean up the libprotobuf files as the parsing is complete.
-    //! \note It is not safe to use any other part of the protocol buffers library after
-    //! ShutdownProtobufLibrary() has been called.
-    nvcaffeparser1::shutdownProtobufLibrary();
-    return true;
 }
 
 //!
 //! \brief Initializes members of the params struct using the command line args
 //!
-samplesCommon::CaffeSampleParams initializeSampleParams(const samplesCommon::Args& args)
+samplesCommon::OnnxSampleParams initializeSampleParams(samplesCommon::Args const& args)
 {
-    samplesCommon::CaffeSampleParams params;
+    samplesCommon::OnnxSampleParams params;
     if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths.
     {
         params.dataDirs.push_back("data/mnist/");
@@ -657,15 +630,14 @@ samplesCommon::CaffeSampleParams initializeSampleParams(const samplesCommon::Arg
         params.dataDirs = args.dataDirs;
     }
 
-    params.prototxtFileName = locateFile("mnist.prototxt", params.dataDirs);
-    params.weightsFileName = locateFile("mnist.caffemodel", params.dataDirs);
-    params.meanFileName = locateFile("mnist_mean.binaryproto", params.dataDirs);
-    params.inputTensorNames.push_back("data");
     params.batchSize = 1;
-    params.outputTensorNames.push_back("prob");
     params.dlaCore = args.useDLACore;
     params.int8 = args.runInInt8;
     params.fp16 = args.runInFp16;
+
+    params.onnxFileName = "mnist.onnx";
+    params.inputTensorNames.push_back("Input3");
+    params.outputTensorNames.push_back("Plus214_Output_0");
 
     return params;
 }
@@ -689,7 +661,7 @@ void printHelpInfo()
     std::cout << "--fp16          Run in FP16 mode.\n";
 }
 
-int main(int argc, char** argv)
+int32_t main(int32_t argc, char** argv)
 {
     samplesCommon::Args args;
     bool argsOK = samplesCommon::parseArgs(args, argc, argv);
@@ -709,7 +681,7 @@ int main(int argc, char** argv)
 
     sample::Logger::reportTestStart(sampleTest);
 
-    samplesCommon::CaffeSampleParams params = initializeSampleParams(args);
+    samplesCommon::OnnxSampleParams params = initializeSampleParams(args);
 
     // Write Algorithm Cache.
     SampleAlgorithmSelector sampleAlgorithmSelector(params);
@@ -761,11 +733,6 @@ int main(int argc, char** argv)
         {
             return sample::Logger::reportFail(sampleTest);
         }
-    }
-
-    if (!sampleAlgorithmSelector.teardown())
-    {
-        return sample::Logger::reportFail(sampleTest);
     }
 
     return sample::Logger::reportPass(sampleTest);

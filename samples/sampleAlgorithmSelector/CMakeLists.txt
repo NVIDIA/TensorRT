@@ -19,6 +19,6 @@ SET(SAMPLE_SOURCES
      sampleAlgorithmSelector.cpp
 )
 
-set(SAMPLE_PARSERS "caffe")
+set(SAMPLE_PARSERS "onnx")
 
 include(../CMakeSamplesTemplate.txt)
