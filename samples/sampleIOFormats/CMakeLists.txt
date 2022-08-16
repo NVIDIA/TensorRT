@@ -18,6 +18,6 @@ SET(SAMPLE_SOURCES
     sampleIOFormats.cpp
 )
 
-set(SAMPLE_PARSERS "caffe")
+set(SAMPLE_PARSERS "onnx")
 
 include(../CMakeSamplesTemplate.txt)

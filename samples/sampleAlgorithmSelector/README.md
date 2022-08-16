@@ -1,11 +1,13 @@
 # Algorithm Selection API usage example based off sampleMNIST in TensorRT
 
 **Table Of Contents**
+
 - [Description](#description)
 - [How does this sample work?](#how-does-this-sample-work)
+	- [Setup the algorithm selectors](#setup-the-algorithm-selectors)
 - [Preparing sample data](#preparing-sample-data)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+	- [Sample `--help` options](#sample---help-options)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -13,19 +15,18 @@
 
 ## Description
 
-This sample, sampleAlgorithmSelector, shows an example of how to use the algorithm selection API based on sampleMNIST (
-[documentation](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#mnist_sample)).
+This sample, sampleAlgorithmSelector, shows an example of how to use the algorithm selection API based on sampleOnnxMNIST ([documentation](https://docs.nvidia.com/deeplearning/tensorrt/sample-support-guide/index.html#onnx_mnist_sample)).
 
 This sample demonstrates the usage of `IAlgorithmSelector` to deterministically build TRT engines.
 It also shows the usage of `IAlgorithmSelector::selectAlgorithms` to define heuristics for selection of algorithms.
 
 ## How does this sample work?
 
-This sample uses a Caffe model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md).
+This sample uses a Onnx model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md).
 
 Specifically, this sample performs the following steps:
-- Performs the basic setup and initialization of TensorRT using the Caffe parser
-- [Imports a trained Caffe model using Caffe parser](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#import_caffe_c)
+- Performs the basic setup and initialization of TensorRT using the Onnx parser
+- [Imports a trained Onnx model using Onnx parser](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#import_onnx_c)
 - Preprocesses the input and stores the result in a managed buffer
 - [Sets up three instances of algorithm selector](#setup-the-algorithm-selectors)
 - [Builds three engines using the algorithm selectors](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#build_engine_c)
@@ -38,7 +39,7 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
 1. AlgorithmCacheWriter - Uses `IAlgorithmSelector::reportAlgorithms` to write TensorRT's default algorithm choices to a file "AlgorithmChoices.txt".
 2. AlgorithmCacheReader - Uses `IAlgorithmSelector::selectAlgorithms` to replicate algorithm choices from the file "AlgorithmChoices.txt" and verifies the choices using `IAlgorithmSelector::reportAlgorithms`.
 3. MinimumWorkspaceAlgorithmSelector - Uses `IAlgorithmSelector::selectAlgorithms` to select algorithms with minimum workspace requirements.
- 
+
 ## Preparing sample data
 
 1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
@@ -63,15 +64,7 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
     ./sample_algorithm_selector --datadir $TRT_DATADIR/mnist --fp16
     ```
 
-	This sample reads three Caffe files to build the network:
-	-   `mnist.prototxt` 
-	The prototxt file that contains the network design.
-
-	-   `mnist.caffemodel`
-	The model file which contains the trained weights for the network.
-
-	-   `mnist_mean.binaryproto`
-	The binaryproto file which contains the means.
+	This sample reads the `mnist.onnx` file to build the network:
 
 	This sample can be run in FP16 and INT8 modes as well.
 
@@ -112,24 +105,23 @@ To verify whether the engine is operating correctly, this sample picks a 28x28 i
 	@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 	[I] Output:
-	0:
-	1:
-	2:
-	3: **********
-	4:
-	5:
-	6:
-	7:
-	8:
-	9:
+	Prob 1  0.0000 Class 1:
+	Prob 2  0.0000 Class 2:
+	Prob 3  1.0000 Class 3: **********
+	Prob 4  0.0000 Class 4:
+	Prob 5  0.0000 Class 5:
+	Prob 6  0.0000 Class 6:
+	Prob 7  0.0000 Class 7:
+	Prob 8  0.0000 Class 8:
+	Prob 9  0.0000 Class 9:
 
 	&&&& PASSED TensorRT.sample_algorithm_selector # ./sample_algorithm_selector
 	```
 
 	This output shows that the sample ran successfully; `PASSED`.
- 
 
-### Sample --help options
+
+### Sample `--help` options
 
 To see the full list of available options and their descriptions, use the `-h` or `--help` command line option. For example:
 ```
@@ -159,8 +151,11 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
-November 2019
-This `README.md` file was recreated, updated and reviewed.
+**August 2022**
+- Migrated code from parsing a `caffe` model to an `onnx` model.
+
+**November 2019**
+- This `README.md` file was recreated, updated and reviewed.
 
 # Known issues
 
