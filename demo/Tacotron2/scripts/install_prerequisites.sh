@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-pip3 install numba==0.48 torch==1.9.1
+pip3 install numba==0.48 resampy==0.3.1 torch==1.9.1
 pip3 install -r requirements.txt
 echo "nvidia" | sudo -S apt-get install -y libsndfile1
 
