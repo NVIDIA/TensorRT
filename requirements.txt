@@ -1,9 +1,13 @@
-onnx==1.10.2
+onnx==1.10.2; python_version<"3.10"
+onnx==1.12.0; python_version=="3.10"
 tensorflow-gpu==2.9.1; (platform_machine=="x86_64" and sys.platform=="linux")
-onnxruntime==1.8.1
+onnxruntime==1.8.1; python_version<"3.10"
+onnxruntime==1.12.1; python_version=="3.10"
 -f https://download.pytorch.org/whl/cu113/torch_stable.html
-torch==1.10.2+cu113
-torchvision==0.11.3
+torch==1.10.2+cu113; python_version<"3.10"
+torch==1.11.0+cu113; python_version=="3.10"
+torchvision==0.11.3; python_version<"3.10"
+torchvision==0.12.0; python_version=="3.10"
 Pillow
 numpy
 pycuda<2021.1
