@@ -1,5 +1,25 @@
 # TensorRT OSS Release Changelog
 
+## [22.08](https://github.com/NVIDIA/TensorRT/releases/tag/22.08) - 2022-08-16
+
+Updated TensorRT version to 8.4.2 - see the [TensorRT 8.4.2 release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-2) for more information
+
+### Changed
+- Updated default protobuf version to 3.20.x
+- Updated ONNX-TensorRT submodule version to `22.08` tag
+- Updated `sampleIOFormats` and `sampleAlgorithmSelector` to use `ONNX` models over `Caffe`
+
+### Fixes
+- Fixed missing serialization member in custom `ClipPlugin` plugin used in `uff_custom_plugin` sample
+- Fixed various Python import issues
+
+### Added
+- Added new DeBERTA demo
+- Added version 2 for `disentangledAttentionPlugin` to support DeBERTA v2
+
+### Removed
+- None
+
 ## [22.07](https://github.com/NVIDIA/TensorRT/releases/tag/22.07) - 2022-07-21
 ### Added
 - `polygraphy-trtexec-plugin` tool for Polygraphy
