@@ -579,7 +579,7 @@ public:
         if (!skipTransfers)
         {
             record(EventType::kINPUT_S, StreamType::kINPUT);
-            mBindings.transferInputToDevice(getStream(StreamType::kINPUT));
+            setInputData(false);
             record(EventType::kINPUT_E, StreamType::kINPUT);
             wait(EventType::kINPUT_E, StreamType::kCOMPUTE); // Wait for input DMA before compute
         }
@@ -597,7 +597,7 @@ public:
         {
             wait(EventType::kCOMPUTE_E, StreamType::kOUTPUT); // Wait for compute before output DMA
             record(EventType::kOUTPUT_S, StreamType::kOUTPUT);
-            mBindings.transferOutputToHost(getStream(StreamType::kOUTPUT));
+            fetchOutputData(false);
             record(EventType::kOUTPUT_E, StreamType::kOUTPUT);
         }
 
@@ -641,14 +641,24 @@ public:
         getStream(StreamType::kINPUT).wait(gpuStart);
     }
 
-    void setInputData()
+    void setInputData(bool sync)
     {
         mBindings.transferInputToDevice(getStream(StreamType::kINPUT));
+        // additional sync to avoid overlapping with inference execution.
+        if (sync)
+        {
+            getStream(StreamType::kINPUT).synchronize();
+        }
     }
 
-    void fetchOutputData()
+    void fetchOutputData(bool sync)
     {
         mBindings.transferOutputToHost(getStream(StreamType::kOUTPUT));
+        // additional sync to avoid overlapping with inference execution.
+        if (sync)
+        {
+            getStream(StreamType::kOUTPUT).synchronize();
+        }
     }
 
 private:
@@ -841,7 +851,7 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
             streamId, inference, *iEnv.template getContext<ContextType>(streamId), *iEnv.bindings[streamId]);
         if (inference.skipTransfers)
         {
-            iteration->setInputData();
+            iteration->setInputData(true);
         }
         iStreams.emplace_back(iteration);
     }
@@ -862,7 +872,7 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
     {
         for (auto& s : iStreams)
         {
-            s->fetchOutputData();
+            s->fetchOutputData(true);
         }
     }
 
