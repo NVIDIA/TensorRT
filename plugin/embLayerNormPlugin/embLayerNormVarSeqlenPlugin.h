@@ -29,21 +29,18 @@ namespace bert
 {
 
 template <typename T>
-int32_t embSkipLayerNormHFace(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, int32_t const* inputIds,
-    int32_t const* tokenIds, int32_t const* cuSeqlens, float const* beta, float const* gamma, const T* wordEmb,
-    const T* posEmb, const T* tokEmb, int32_t const wordSize, int32_t const tokSize, T* output);
+int32_t embSkipLayerNormHFace(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, int32_t ** inputIds, int32_t const nbLookupTables,
+    float const* beta, float const* gamma, T** idsEmb, int32_t * , T* output);
 
 template <typename T>
-int32_t embSkipLayerNormMTron(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, int32_t const* inputIds,
-    int32_t const* tokenIds, int32_t const* cuSeqlens, float const* beta, float const* gamma, const T* wordEmb,
-    const T* posEmb, const T* tokEmb, int32_t const wordSize, int32_t const tokSize, T* output, T* skip);
+int32_t embSkipLayerNormMTron(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, int32_t ** inputIds, int32_t const nbLookupTables,
+    float const* beta, float const* gamma, T** idsEmb, int32_t * , T* output, T* skip);
 
 class EmbLayerNormVarSeqlenPluginBase : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     EmbLayerNormVarSeqlenPluginBase(std::string const& name, nvinfer1::DataType const type,
-        nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& word_emb,
-        nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb);
+        nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, const std::vector<nvinfer1::Weights>& ids_emb);
 
     EmbLayerNormVarSeqlenPluginBase(std::string const& name, void const* data, size_t length);
 
@@ -76,27 +73,21 @@ protected:
 
     bert::cuda_unique_ptr<float> mGammaDev;
     bert::cuda_unique_ptr<float> mBetaDev;
-    bert::cuda_unique_ptr<void> mWordEmbDev;
-    bert::cuda_unique_ptr<void> mTokEmbDev;
-    bert::cuda_unique_ptr<void> mPosEmbDev;
+    std::vector<void* >mIdsEmbDev;
     size_t mLd; // leading dim = hidden size
-    size_t mWordVocabSize;
-    size_t mPosVocabSize;
-    size_t mTokVocabSize;
+    std::vector<int32_t> mIdsVocabSize;
     bert::WeightsWithOwnership mBeta;
     bert::WeightsWithOwnership mGamma;
-    bert::WeightsWithOwnership mWordEmb;
-    bert::WeightsWithOwnership mTokEmb;
-    bert::WeightsWithOwnership mPosEmb;
+    std::vector<nvinfer1::Weights> mIdsEmb_;
     nvinfer1::DataType mType;
+    int32_t nbLookupTables_;
 };
 
 class EmbLayerNormVarSeqlenPluginHFace : public EmbLayerNormVarSeqlenPluginBase
 {
 public:
     EmbLayerNormVarSeqlenPluginHFace(std::string const& name, nvinfer1::DataType const type,
-        nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& word_emb,
-        nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb);
+        nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, const std::vector<nvinfer1::Weights>& ids_emb);
 
     EmbLayerNormVarSeqlenPluginHFace(std::string const& name, void const* data, size_t length);
 
@@ -124,8 +115,7 @@ class EmbLayerNormVarSeqlenPluginMTron : public EmbLayerNormVarSeqlenPluginBase
 {
 public:
     EmbLayerNormVarSeqlenPluginMTron(std::string const& name, nvinfer1::DataType const type,
-        nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& word_emb,
-        nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb);
+        nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, const std::vector<nvinfer1::Weights>& ids_emb);
 
     EmbLayerNormVarSeqlenPluginMTron(std::string const& name, void const* data, size_t length);
 
