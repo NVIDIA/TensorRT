@@ -537,7 +537,7 @@ def validate_quantized_model(
 
     # Validate QDQ node placements in ONNX file
     expected_qdq_insertion = get_expected_qdq_insertion(
-        nn_model_original,
+        tf.keras.models.clone_model(nn_model_original),
         qspec_test=copy.deepcopy(qspec),
         quantization_mode=quantization_mode,
         custom_qdq_cases=custom_qdq_cases,

@@ -154,34 +154,31 @@ class ResidualConnectionQDQCase(CustomQDQInsertionCase):
                 """
                 layer_parents = utils.find_my_predecessors(keras_model, layer.name)
 
-                # Collect all inputs with BN or Conv
+                # Collect the non-quantizable input (1 branch with Conv pattern)
                 input_indices_convs = []
-                contains_efficientnet_convs = False
                 for i, l_parent_info in enumerate(layer_parents):
                     l_parent_class = l_parent_info["class"]
+                    l_parent_layer = l_parent_info["layer"]
+                    # Check that the input is a Conv pattern
                     if (
                             is_parent_type(l_parent_class, class_type="Conv")
                             or is_parent_pattern(l_parent_info, pattern=["BatchNorm", "Conv"])
-                    ):
-                        input_indices_convs.append(i)
-                    if (
-                            is_parent_pattern(l_parent_info, pattern=["Activation", "BatchNorm", "Conv"])
+                            or is_parent_pattern(l_parent_info, pattern=["Activation", "BatchNorm", "Conv"])
                             or is_parent_pattern(l_parent_info, pattern=["Dropout", "Activation", "BatchNorm", "Conv"])
                     ):
-                        input_indices_convs.append(i)
-                        contains_efficientnet_convs = True
+                        # Check that it's not a residual branch (input does not have more than 1 outbound node)
+                        if hasattr(l_parent_layer, 'outbound_nodes'):
+                            num_outbound_nodes = len(getattr(l_parent_layer, 'outbound_nodes'))
+                            if num_outbound_nodes == 1:
+                                # Branch without QDQ branch is chosen
+                                input_indices_convs.append(i)
+                                break
 
                 # Default behavior: add QDQ in all inputs except 1 with Conv/BN
                 input_indices = list(range(0, len(layer_parents)))
                 if len(input_indices_convs) > 0:
-                    # Don't quantize one of the Conv-pattern branches. The question here is which branch?
-                    if not contains_efficientnet_convs:
-                        # If there are no EfficientNet Conv-patterns found, delete the last index of a known
-                        #   Conv-pattern, since that's usually the non-residual branch.
-                        index_to_delete = input_indices_convs[-1]
-                    else:
-                        # If there ARE EfficientNet Conv-patterns found, delete the first index (non-residual branch).
-                        index_to_delete = input_indices_convs[0]
+                    # Don't quantize one of the Conv pattern branches.
+                    index_to_delete = input_indices_convs[-1]
                     del input_indices[index_to_delete]
                 if len(input_indices) > 0:
                     res_qspec.add(
