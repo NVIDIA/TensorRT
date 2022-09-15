@@ -84,10 +84,10 @@ class TensorQuantizer(nn.Module):
         self._if_quant = if_quant
         self._if_clip = False
         self._if_calib = if_calib
-
+        self.register_buffer('learned_amax',torch.tensor(1))
         if quant_desc.amax is not None:
             self.register_buffer('_amax', torch.tensor(quant_desc.amax))
-
+        
         # Clip module consumes a lot of memory, so only create it if learn_amax is True
         if self._learn_amax:
             init_amax = quant_desc.amax if quant_desc.amax is not None else 1.
@@ -272,7 +272,7 @@ class TensorQuantizer(nn.Module):
             amax = quant_utils.reduce_amax(inputs, axis=reduce_axis, keepdims=True).detach()
         if self._scale_amax is not None:
             amax = amax.detach() * self._scale_amax
-
+        self.learned_amax = amax
         return amax
 
     def _fb_fake_quant(self, inputs, amax):
