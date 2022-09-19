@@ -74,8 +74,11 @@ RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/
 RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
 
 # Install CUDA cross compile toolchain
-RUN dpkg -i /pdk_files/cuda-repo-cross-aarch64*.deb /pdk_files/cuda-repo-ubuntu*_amd64.deb \
-    && apt-get update \
+RUN dpkg -i /pdk_files/cuda-repo-cross-aarch64*.deb /pdk_files/cuda-repo-ubuntu*_amd64.deb 
+RUN cp /var/cuda-repo-cross-aarch64-ubuntu2004-11-4-local/cuda-045251B2-keyring.gpg  /usr/share/keyrings/
+RUN cp /var/cuda-repo-ubuntu2004-11-4-local/cuda-3231754F-keyring.gpg /usr/share/keyrings/
+
+RUN apt-get update \
     && apt-get install -y cuda-cross-aarch64 \
     && rm -rf /var/lib/apt/lists/*
 
