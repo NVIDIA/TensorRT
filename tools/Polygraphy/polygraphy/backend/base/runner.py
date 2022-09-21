@@ -140,7 +140,7 @@ class BaseRunner:
 
         Attributes:
             inference_time (float):
-                    The time required to run inference.
+                    The time required to run inference in seconds.
                     Derived classes should set this so that performance metrics are accurate.
 
         Returns:
@@ -157,9 +157,7 @@ class BaseRunner:
             input_metadata = self.get_input_metadata()
             G_LOGGER.verbose(f"Runner input metadata is: {input_metadata}")
 
-            util.check_dict_contains(
-                feed_dict, input_metadata.keys(), dict_name="feed_dict", log_func=G_LOGGER.critical
-            )
+            util.check_sequence_contains(feed_dict.keys(), input_metadata.keys(), name="feed_dict", items_name="inputs")
 
             for name, inp in feed_dict.items():
                 meta = input_metadata[name]
@@ -178,7 +176,7 @@ class BaseRunner:
     @func.constantmethod
     def last_inference_time(self):
         """
-        Returns the total inference time required during the last call to ``infer()``.
+        Returns the total inference time in seconds required during the last call to ``infer()``.
 
         Must be called only after ``activate()`` and before ``deactivate()``.
 
@@ -187,7 +185,7 @@ class BaseRunner:
         """
         if self.inference_time is None:
             msg = f"{self.name:35} | `inference_time` was not set. Inference time will be incorrect! "
-            msg += ("To correctly compare runtimes, please set the `inference_time` attribute in `infer_impl()`",)
+            msg += "To correctly compare runtimes, please set the `inference_time` attribute in `infer_impl()`"
 
             G_LOGGER.internal_error(msg)
             G_LOGGER.warning(msg, mode=LogMode.ONCE)

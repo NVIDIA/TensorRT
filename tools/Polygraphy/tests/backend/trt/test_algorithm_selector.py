@@ -116,7 +116,7 @@ FakeAlgorithm = namedtuple("FakeAlgorithm", ["algorithm_variant", "io_info"])
 FakeAlgorithm.get_algorithm_io_info = lambda this, index: this.io_info[index]
 
 FakeAlgorithmVariant = namedtuple("FakeAlgorithmVariant", ["implementation", "tactic"])
-FakeAlgorithmIOInfo = namedtuple("FakeAlgorithmIOInfo", ["tensor_format", "dtype"])
+FakeAlgorithmIOInfo = namedtuple("FakeAlgorithmIOInfo", ["tensor_format", "dtype", "strides"])
 
 
 def fake_context(name):
@@ -124,11 +124,11 @@ def fake_context(name):
 
 
 def fake_algo(implementation=6, tactic=0, io=None):
-    io_info = [FakeAlgorithmIOInfo(tensor_format=trt.TensorFormat.LINEAR, dtype=trt.float32)] * 2
+    io_info = [FakeAlgorithmIOInfo(tensor_format=trt.TensorFormat.LINEAR, dtype=trt.float32, strides=(4, 5, 6))] * 2
     if io:
         io_info = []
-        for fmt, dtype in io:
-            io_info.append(FakeAlgorithmIOInfo(tensor_format=fmt, dtype=dtype))
+        for fmt, dtype, strides in io:
+            io_info.append(FakeAlgorithmIOInfo(tensor_format=fmt, dtype=dtype, strides=strides))
 
     trt_algo = FakeAlgorithm(algorithm_variant=FakeAlgorithmVariant(implementation, tactic), io_info=io_info)
     return trt_algo
@@ -197,10 +197,16 @@ class TestReplayer:
         [
             fake_algo(2),
             fake_algo(tactic=2),
-            fake_algo(io=[(trt.TensorFormat.CHW32, trt.float32), (trt.TensorFormat.LINEAR, trt.float32)]),
-            fake_algo(io=[(trt.TensorFormat.LINEAR, trt.int8), (trt.TensorFormat.LINEAR, trt.float32)]),
-            fake_algo(io=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.CHW32, trt.float32)]),
-            fake_algo(io=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.LINEAR, trt.int32)]),
+            fake_algo(
+                io=[(trt.TensorFormat.CHW32, trt.float32, (1, 2)), (trt.TensorFormat.LINEAR, trt.float32, (1, 2))]
+            ),
+            fake_algo(io=[(trt.TensorFormat.LINEAR, trt.int8, (1, 2)), (trt.TensorFormat.LINEAR, trt.float32, (1, 2))]),
+            fake_algo(
+                io=[(trt.TensorFormat.LINEAR, trt.float32, (1, 2)), (trt.TensorFormat.CHW32, trt.float32, (1, 2))]
+            ),
+            fake_algo(
+                io=[(trt.TensorFormat.LINEAR, trt.float32, (1, 2)), (trt.TensorFormat.LINEAR, trt.int32, (1, 2))]
+            ),
         ],
     )
     def test_different_algo_fails(self, replay, algo):

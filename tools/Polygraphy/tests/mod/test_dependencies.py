@@ -111,8 +111,8 @@ class TestAutoinstallDeps:
         ],
     )
     def test_can_automatically_install_deps(self, poly_venv, cmd):
-        if "--trt" in cmd and mod.version(trt.__version__) < mod.version("7.0"):
-            pytest.skip("TRT 6 container has an old version of CUDA")
+        # WAR an issue with newer versions of protobuf and ONNX
+        poly_venv.run([poly_venv.python, "-m", "pip", "install", "protobuf==3.19.4", "onnx==1.10.0"])
 
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
         cmd = [poly_venv.python, *POLYGRAPHY_CMD] + cmd
@@ -142,7 +142,38 @@ class TestAutoinstallDeps:
             [
                 poly_venv.python,
                 "-c",
-                f"from polygraphy import mod; colored = mod.lazy_import('colored', version='{new_ver}'); print(colored.__version__)",
+                f"from polygraphy import mod; colored = mod.lazy_import('colored{new_ver}'); print(colored.__version__)",
+            ]
+        )
+        assert _version_ok(get_colored_version(), expected)
+
+    # Make sure the `requires` parameter of `lazy_import` functions as we expect.
+    @pytest.mark.parametrize("preinstall", [True, False])
+    @pytest.mark.parametrize(
+        "new_ver, expected",
+        [
+            ("==1.4.2", "==1.4.2"),
+        ],
+    )
+    def test_can_automatically_install_requirements(self, poly_venv, new_ver, expected, preinstall):
+        poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
+
+        def get_colored_version():
+            return poly_venv.installed_packages()["colored"].version
+
+        if preinstall:
+            poly_venv.run([poly_venv.python, "-m", "pip", "install", "colored==1.4.0"])
+            assert get_colored_version() == "1.4.0"
+
+        # Insert our own preferred version to make sure it upgrades.
+        poly_venv.run(
+            [
+                poly_venv.python,
+                "-c",
+                f"from polygraphy import mod; "
+                f"requests = mod.lazy_import('requests', requires=['colored{new_ver}']); "
+                f"requests.__version__; "
+                f"import colored; print(colored.__version__)",
             ]
         )
         assert _version_ok(get_colored_version(), expected)
@@ -199,6 +230,9 @@ class TestAutoinstallDeps:
 
     # We can import inner modules, and Polygraphy should still autoinstall the outermost one.
     def test_can_install_for_nested_import(self, poly_venv):
+        # WAR an issue with newer versions of protobuf and ONNX
+        poly_venv.run([poly_venv.python, "-m", "pip", "install", "protobuf==3.19.4", "onnx==1.10.0"])
+
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
 
         poly_venv.run(
@@ -227,10 +261,12 @@ class TestAutoinstallDeps:
             "onnx.shape_inference",
             "onnx",
             "onnxmltools",
+            "onnxruntime.tools.symbolic_shape_infer",
             "onnxruntime",
             "tensorflow",
             "tensorrt",
             "tf2onnx",
+            "uff",
         ]
         if sys.version_info < (3, 8):
             expected.append("importlib_metadata")

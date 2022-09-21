@@ -2,6 +2,29 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.1.4 (2022-09-01)
+- Validated using Python 3.8.
+- Added more tests.
+- Added support for engine shapes profiles.
+- Added `KNOWN_ISSUES.md`.
+- Added `trex/excel_summary.py` which adds an API to generate an Excel summary spreadsheet with worksheets generated from several `trex.report_card` reports.
+- Added `set_table_display_backend` to provide user control over the backend library displaying tables in notebooks.
+- Graph rendering:
+  - Add exportng of engine graph to ONNX format for viewing with Netron.
+  - Refactor `graphing.py` and change the engine-graph rendering API: added fine control of rendering options.
+  - Reformat layers: optionally render Origin attribute.
+  - Constant layers: optionally display.
+  - Convolution layers: optionally display activation details.
+  - Elementwise layers: optionally display operations code.
+- Utilities:
+  - Add GPU clocks locking and power-limiter context manager: `utils/config_gpu.py`.
+  - Add simple GPU context manager and activate when profiling.
+  - Script `process_engine.py` will now lock the GPU and memory clocks to maximum frequency by default during engine profiling and release the clocks when done.
+- Notebooks:
+  - Added `report_card_reformat_overview()` - This is a pull-down of several views showing what are roles/functions of Reformat layers in the model.
+  - Added `report_card_draw_plan_graph_extended()` - displays a set of widgets to control graph rendering options.
+- Small bug fixes.
+
 ## v0.1.2 (2022-06-01)
 - Graph rendering:
   - Add timing information to engine graph nodes.

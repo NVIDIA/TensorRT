@@ -58,6 +58,7 @@ def dynamic_identity_engine():
 
 def check_lines_match(actual, expected, should_check_line=lambda x: True):
     print(f"Actual output:\n{actual}")
+    print(f"Expected output:\n{expected}")
 
     actual = [line for line in actual.splitlines() if "Loading" not in line and "[V]" not in line]
     expected = expected.splitlines()
@@ -72,6 +73,11 @@ def check_lines_match(actual, expected, should_check_line=lambda x: True):
             assert acline == exline
 
 
+# Format:
+#   model_name
+#   show_options
+#   expected_output
+#   additional_options
 ONNX_CASES = [
     [
         "identity",
@@ -90,6 +96,7 @@ ONNX_CASES = [
 
             ---- 1 Node(s) ----
         """,
+        [],
     ],
     [
         "identity",
@@ -112,6 +119,7 @@ ONNX_CASES = [
                 {x [dtype=float32, shape=(1, 1, 2, 2)]}
                  -> {y [dtype=float32, shape=(1, 1, 2, 2)]}
         """,
+        [],
     ],
     [
         "identity_with_initializer",
@@ -134,6 +142,7 @@ ONNX_CASES = [
                 {Initializer | X [dtype=float32, shape=(2, 2)]}
                  -> {Y [dtype=float32, shape=(2, 2)]}
         """,
+        [],
     ],
     [
         "identity_with_initializer",
@@ -158,6 +167,7 @@ ONNX_CASES = [
                 {Initializer | X [dtype=float32, shape=(2, 2)]}
                  -> {Y [dtype=float32, shape=(2, 2)]}
         """,
+        [],
     ],
     [
         "add_with_dup_inputs",
@@ -181,6 +191,7 @@ ONNX_CASES = [
                  inp [dtype=float32, shape=(4, 4)]}
                  -> {add_out_0 [dtype=float32, shape=()]}
         """,
+        [],
     ],
     [
         "tensor_attr",
@@ -202,6 +213,7 @@ ONNX_CASES = [
             Node 0    |  [Op: Constant]
                 {} -> {const_out [dtype=float32, shape=(14, 14)]}
         """,
+        [],
     ],
     [
         "tensor_attr",
@@ -225,6 +237,7 @@ ONNX_CASES = [
                 ---- Attributes ----
                 value = Tensor: [dtype=float32, shape=[14, 14]]
         """,
+        [],
     ],
     [
         "tensor_attr",
@@ -262,6 +275,7 @@ ONNX_CASES = [
                      [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.]
                      [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.]]
         """,
+        [],
     ],
     [
         "scan",
@@ -312,6 +326,7 @@ ONNX_CASES = [
 
                 num_scan_inputs = 1
         """,
+        [],
     ],
     [
         "dim_param",
@@ -334,6 +349,70 @@ ONNX_CASES = [
                 {Input:0 [dtype=float32, shape=('dim0', 16, 128)]}
                  -> {Output:0 [dtype=float32, shape=('dim0', 16, 128)]}
         """,
+        [],
+    ],
+    [
+        "ext_weights",
+        ["layers", "weights"],
+        r"""
+        [E] Failed to load weights.
+            Note: Error was: [Errno 2] No such file or directory: 'ext_weights.data'
+        [I] ==== ONNX Model ====
+            Name: onnx_graphsurgeon | ONNX Opset: 11
+
+            ---- 1 Graph Input(s) ----
+            {input [dtype=float32, shape=(1, 3)]}
+
+            ---- 1 Graph Output(s) ----
+            {output [dtype=float32, shape=(1, 3)]}
+
+            ---- 3 Initializer(s) ----
+            Initializer | a [dtype=float32, shape=[1, 3]] | Values:
+                <error: failed to load weights>
+
+            Initializer | b [dtype=float32, shape=[1, 3]] | Values:
+                <error: failed to load weights>
+
+            Initializer | d [dtype=float32, shape=[1, 3]] | Values:
+                <error: failed to load weights>
+
+            ---- 3 Node(s) ----
+            Node 0    |  [Op: Add]
+                {Initializer | a [dtype=float32, shape=(1, 3)],
+                 Initializer | b [dtype=float32, shape=(1, 3)]}
+                 -> {c}
+
+            Node 1    |  [Op: Add]
+                {c,
+                 Initializer | d [dtype=float32, shape=(1, 3)]}
+                 -> {e}
+
+            Node 2    |  [Op: Add]
+                {input [dtype=float32, shape=(1, 3)],
+                 e}
+                 -> {output [dtype=float32, shape=(1, 3)]}
+        """,
+        ["--ignore-external-data"],
+    ],
+    # Ensure shapes without dim_param or dim_value set are treated as dynamic
+    [
+        "inp_dim_val_not_set",
+        [],
+        r"""
+        [I] ==== ONNX Model ====
+            Name:  | ONNX Opset: 13
+
+            ---- 1 Graph Input(s) ----
+            {X [dtype=float32, shape=(-1, -1, -1)]}
+
+            ---- 1 Graph Output(s) ----
+            {Y [dtype=float32, shape=(-1, -1, -1)]}
+
+            ---- 0 Initializer(s) ----
+
+            ---- 1 Node(s) ----
+        """,
+        [],
     ],
 ]
 
@@ -450,13 +529,15 @@ ENGINE_CASES = [
 class TestInspectModel:
     @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: f"{case[0]}-{case[1]}")
     def test_onnx(self, case, poly_inspect):
-        model, show, expected = case
-        status = poly_inspect(["model", ONNX_MODELS[model].path, "--show"] + show)
+        model, show, expected, additional_opts = case
+        status = poly_inspect(
+            ["model", ONNX_MODELS[model].path] + (["--show"] + show if show else []) + additional_opts
+        )
 
         expected = dedent(expected).strip()
         actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
 
-        check_lines_match(actual, expected)
+        check_lines_match(actual, expected, should_check_line=lambda line: "Note: Error was:" not in line)
 
     @pytest.mark.parametrize("model", ["identity", "scan", "tensor_attr"])
     def test_trt_sanity(self, run_inspect_model, model):
@@ -464,9 +545,6 @@ class TestInspectModel:
 
         if model == "tensor_attr" and mod.version(trt.__version__) < mod.version("7.2"):
             pytest.skip("Models with constant outputs were not supported before 7.2")
-
-        if model == "scan" and mod.version(trt.__version__) < mod.version("7.0"):
-            pytest.skip("Scan was not supported until 7.0")
 
         run_inspect_model([ONNX_MODELS[model].path, "--display-as=trt"])
 
@@ -494,14 +572,19 @@ class TestInspectModel:
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported for TRT 8.0 and older")
     @pytest.mark.parametrize("case", ENGINE_CASES, ids=lambda case: f"{case[0]}")
+    @pytest.mark.flaky(max_runs=3)
     def test_trt_engine(self, case, dynamic_identity_engine, poly_inspect):
         show, expected = case
-        status = poly_inspect(["model", dynamic_identity_engine, "--show"] + show)
+        status = poly_inspect(["model", dynamic_identity_engine] + (["--show"] + show if show else []))
 
         expected = dedent(expected).strip()
         actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
 
-        check_lines_match(actual, expected, should_check_line=lambda exline: "Tactic =" not in exline)
+        check_lines_match(
+            actual,
+            expected,
+            should_check_line=lambda exline: "Tactic =" not in exline and "Device Memory" not in exline,
+        )
 
     def test_tf_sanity(self, run_inspect_model):
         pytest.importorskip("tensorflow")
@@ -525,10 +608,13 @@ class TestInspectData:
 
 TACTIC_REPLAY_CASES = [
     [
-        "identity",
+        "pow_scalar",
         r"""
-        [I] Layer: node_of_y
-                Algorithm: (Implementation: -2147483642, Tactic: 0) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT'),)
+
+        [I] Layer: (Unnamed Layer* 0) [Shuffle]
+                Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '()'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1,)'),)
+            Layer: node_of_z
+                Algorithm: (Implementation: 2147483651, Tactic: 1) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1,)'), ('TensorFormat.LINEAR', 'DataType.FLOAT', '(1,)')) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1,)'),)
         """,
     ],
 ]
@@ -584,6 +670,7 @@ class TestCapability:
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.0"), reason="supports_model API not available before TRT 8.0"
     )
+    @pytest.mark.script_launch_mode("subprocess")
     @pytest.mark.parametrize("case", TEST_CAPABILITY_CASES, ids=lambda case: case[0])
     def test_capability(self, case, poly_inspect):
         model, expected_files, expected_summary = case

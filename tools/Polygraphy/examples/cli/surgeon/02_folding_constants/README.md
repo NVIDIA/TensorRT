@@ -28,6 +28,12 @@ where `a`, `b`, and `d` are constants:
 
     ![./folded.png](./folded.png)
 
+    *TIP: Sometimes, models include operations like `Tile` or `ConstantOfShape`, that may*
+        *generate large constant tensors. Folding these can bloat the model size*
+        *to an undesirable degree. You can use the `--fold-size-threshold` to control*
+        *the maximum size, in bytes, for which to fold tensors. Any nodes that generate*
+        *tensors over this limit will not be folded, but instead computed at runtime.*
+
 2. **[Optional]** You can use `inspect model` to confirm whether it looks correct:
 
     ```bash

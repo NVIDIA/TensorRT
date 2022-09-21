@@ -2,25 +2,180 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.42.1 (2022-09-07)
+### Changed
+- Updated Polygraphy's TensorRT algorithm selectors to keep track of strides in addition to
+    tensor formats and data types.
+
+### Fixed
+- Fixed a bug where marking output tensors in a TensorRT network containing layers with omitted
+    optional inputs would raise an exception.
+
+
+## v0.42.0 (2022-09-01)
+### Added
+- Added a `SetTensorDatatypes` loader and corresponding `--tensor-datatypes` command-line flag
+    to allow for setting per-tensor data types in TensorRT networks.
+- Added a `direct_io` parameter to `CreateConfig` and corresponding `--direct-io` command-line flag.
+- Added a `SetTensorFormats` loader and corresponding `--tensor-formats` command-line flag
+    to allow for setting per-tensor `allowed_formats` in TensorRT networks.
+- Added an *experimental*, *untested* API, `FormattedArray` to allow `TrtRunner` to support
+    vectorized formats. This API will be documented, tested, and improved in a future release.
+    Until then, use with caution!
+
+### Changed
+- Updated `InferShapes` to use ONNX-Runtime's shape inference utilities where possible,
+    as they are more performant and memory efficient than the ONNX shape inference utilities.
+    This new behavior, which is on by default, can be disabled by setting `allow_onnxruntime=False`,
+    or the `--no-onnxruntime-shape-inference` CLI option.
+
+### Fixed
+- Fixed a bug in `inspect model` where dimensions of ONNX tensors without `dim_value` or `dim_param`
+    set would be shown as `0`s instead of `-1`s.
+
+### Removed
+- Removed the `explicit_precision` parameter from TensorRT network loaders.
+
+
+## v0.41.1 (2022-08-25)
+### Changed
+- Updated `surgeon extract` and `debug reduce` to no longer attempt to retrieve values for all intermediate
+    tensors when running fallback shape inference. Instead, only the minimum required tensors
+    are retrieved. This greatly reduces the memory requirements for large models where fallback shape
+    inference is required.
+
+### Fixed
+- Fixed a bug where the logger would display incorrect file paths and line numbers when `line_info`
+    was enabled.
+
+
+## v0.41.0 (2022-08-24)
+### Added
+- Added a [new example](./examples/api/08_working_with_run_results_manually/) showing how to work with `RunResults` using the API.
+- Added a `size_threshold` option in `FoldConstants` and corersponding `--fold-size-threshold` CLI option,
+    which allows for skipping constant folding on operations which would generate constants larger than
+    the provided threshold.
+- Added support for data-dependent shapes with TensorRT 8.5 by updating `TrtRunner`
+    to use the new `execute_async_v3` and related APIs when possible.
+
+### Changed
+- Updated the `Calibrator` with a `set_input_metadata()` method and deprecated the `input_metadata`
+    parameter in `reset()`.
+- Updated `CreateConfig` to no longer implicitly `reset()` the calibrator.
+    Resetting is only required if the calibrator is used across multiple different networks.
+- Updated `EngineFromNetwork` and related loaders to set input metadata on Polygraphy calibrators.
+    This way, metadata is set even when using a TensorRT `IBuilderConfig` created outside Polygraphy.
+
+### Removed
+- Removed support for ONNX-GraphSurgeon `0.3.20` and older in `FoldConstants`.
+- Removed support for TensorRT 6.0 and earlier.
+
+
+## v0.40.4 (2022-08-17)
+### Changed
+- Updated the logger to perform less processing on messages to speed up logging.
+
+### Fixed
+- Fixed an issue where `ctrl-C` would be caught and ignored by TensorRT's logger.
+    Polygraphy will now generate a `SIGTERM` signal when a `KeyboardInterrupt` is triggered.
+
+
+## v0.40.3 (2022-08-17)
+### Added
+- Added a `SetLayerPrecisions` loader to set layer compute precisions in TensorRT networks
+    and corresponding `--layer-precisions` CLI option.
+- Added an `ignore_external_data` option to `OnnxFromPath` and corresponding `--ignore-external-data` option
+    so that it's still possible to manipulate the model to some degree if external weights are missing.
+
+### Changed
+- Updated Polygraphy's TensorRT logger implementation for TensorRT 8.0 and newer to redirect to
+    the Polygraphy global logger. This enables Polygraphy logging features like colored output
+    and redirection to a log file.
+
+
+## v0.40.2 (2022-08-12)
+### Fixed
+- Fixed a bug where the context manager created by `G_LOGGER.verbosity()` would not correctly
+    revert the logging verbosity to its original value.
+
+
+## v0.40.1 (2022-08-08)
+### Added
+- Added per-path logging verbosity settings and a corresponding `--verbosity` command-line option.
+- Added an `infinities_compare_equal` parameter to `CompareFunc.simple()` as well as corresponding
+    `--infinities-compare-equal` command-line flag, to allow matching infinite
+    values in outputs to have an absdiff of 0 for the purpose of comparison.
+
+### Changed
+- Updated the `max_workspace_size` option in `CreateConfig` to match the default behavior of TensorRT
+    instead of defaulting to 16 MiB.
+
+
+## v0.40.0 (2022-07-29)
+### Added
+- Added a TensorRT `engine_capability` parameter to `CreateConfig()` and
+    corresponding `--engine-capability` option to `polygraphy convert`.
+
+### Changed
+- Updated `CompareFunc.simple()` to cast unsigned and low-precision arrays to signed, higher precisions.
+    This prevents underflows/overflows during difference computations.
+- Updated `copy_to` and `copy_from` in `cuda.DeviceView` and `cuda.DeviceArray` to no longer implicitly resize
+    the host and device buffers.
+- Updated `debug reduce` to automatically remove unused graph inputs to create more minimal models.
+- Updated `func.extend()` to provide a mechanism to accept the input parameters of the extended
+    function as parameters to the decorated function (see the docstring for details).
+
+### Removed
+- Removed various deprecated APIs:
+    - `fold_constant` parameter in `OnnxFromTfGraph` (removed in the underlying library, `tf2onnx`)
+    - `obey_precision_constraints` in `backend.trt.CreateConfig` (replaced by `precision_constraints`)
+    - `basic_compare_func` in `CompareFunc` (replaced by `CompareFunc.simple`)
+    - `topk_func` in `PostprocessFunc` (replaced by `PostprocessFunc.top_k`)
+    - `axis` parameter in `top_k` (`axis` can be specified as part of the `k` parameter)
+    - `--mode` option in `inspect model` (replaced by `--show`)
+
+
+## v0.39.0 (2022-07-01)
+### Added
+- Added a `preview_features` parameter to `CreateConfig` and corresponding `--preview-features` argument
+    to CLI tools to enable TensorRT preview features.
+
+
+## v0.38.1 (2022-06-22)
+
+### Added
+- Added support for building refittable engines in Polygraphy.
+    Setting the `refittable` parameter of `CreateConfig` or passing in the `--refittable` flag
+    enables building refittable engines.
+
+### Changed
+- Passing in a nonexistent file to Polygraphy's `--load-timing-cache` option or the
+  `load_timing_cache` parameter of `CreateConfig` is no longer a fatal error.
+  Polygraphy will now warn the user and fall back to using an empty timing cache.
+
+### Fixed
+- Fixed broken links in documentation.
+
+
 ## v0.38.0 (2022-05-24)
 ### Added
 - Added an `optimization_profile` parameter to the constructor of `TrtRunner` to allow for setting an optimization profile index
     whenver the runner is activated.
 - Added an `--optimization-profile` argument to CLI tools to allow for setting the optimization profile to use for inference.
-- Rewrote examples on [comparing frameworks](/examples/cli/run/01_comparing_frameworks) and
-  [comparing across runs](/examples/cli/run/02_comparing_across_runs) to provide more detailed use cases and tips.
+- Rewrote examples on [comparing frameworks](./examples/cli/run/01_comparing_frameworks) and
+  [comparing across runs](./examples/cli/run/02_comparing_across_runs) to provide more detailed use cases and tips.
 - Added new examples:
-  - An [example](/examples/cli/run/07_checking_nan_inf) on how to use the `run` subtool's `--validate` flag to
+  - An [example](./examples/cli/run/07_checking_nan_inf) on how to use the `run` subtool's `--validate` flag to
     check for intermediate NaN/infinity outputs,
-  - An [example](/examples/cli/run/08_adding_precision_constraints) on how to selectively constrain
+  - An [example](./examples/cli/run/08_adding_precision_constraints) on how to selectively constrain
     layer precisions in a model using Polygraphy network scripts,
-  - An [example](/examples/cli/convert/04_converting_models_to_fp16) on how to use the `convert` subtool's `--fp-to-fp16` flag
+  - An [example](./examples/cli/convert/04_converting_models_to_fp16) on how to use the `convert` subtool's `--fp-to-fp16` flag
     to convert an ONNX model to fp16.
-- Added an extensibility interface for `polygraphy run` along with a [new example](/examples/dev/02_extending_polygraphy_run/)
+- Added an extensibility interface for `polygraphy run` along with a [new example](./examples/dev/02_extending_polygraphy_run/)
     demonstrating how to write an extension module.
 - Added `--load-debug-replay` and `--save-debug-replay` options to various `debug` subtools.
     This allows you to save your progress when debugging and resume from that point later.
-- Added a [how-to guide](/how-to/work_with_reduced_precision.md) on working with reduced precision optimizations using Polygraphy.
+- Added a [how-to guide](./how-to/work_with_reduced_precision.md) on working with reduced precision optimizations using Polygraphy.
 
 ### Changed
 - The `fold_constant` parameter in `OnnxFromTfGraph` has been deprecated since the corresponding parameter in `tf2onnx` was removed,

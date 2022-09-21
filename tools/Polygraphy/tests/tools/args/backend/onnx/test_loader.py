@@ -32,7 +32,7 @@ from tests.tools.args.helper import ArgGroupTestHelper
 def _check_ext_weights_model(model):
     assert len(model.graph.node) == 3
     for init in model.graph.initializer:
-        assert init
+        assert init.data_location != 1
 
 
 class TestOnnxLoaderArgs:
@@ -51,31 +51,53 @@ class TestOnnxLoaderArgs:
         model = arg_group.load_onnx()
         _check_ext_weights_model(model)
 
-    def test_shape_inference(self):
+    def test_ignore_external_data(self):
+        arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])
+        model = ONNX_MODELS["ext_weights"]
+        arg_group.parse_args([model.path, "--ignore-external-data"])
+        model = arg_group.load_onnx()
+        assert all(init.data_location == 1 for init in model.graph.initializer)
+
+    @pytest.mark.parametrize("allow_onnxruntime", [True, False])
+    def test_shape_inference(self, allow_onnxruntime):
         # When using shape inference, we should load directly from the path
         arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])
         model = ONNX_MODELS["identity"]
-        arg_group.parse_args([model.path, "--shape-inference"])
+        arg_group.parse_args(
+            [model.path, "--shape-inference"] + (["--no-onnxruntime-shape-inference"] if not allow_onnxruntime else [])
+        )
 
         assert arg_group.must_use_onnx_loader()
 
         script = Script()
         arg_group.add_to_script(script)
 
-        expected_loader = f"InferShapes({repr(model.path)})"
+        expected_loader = (
+            f"InferShapes({repr(model.path)})"
+            if allow_onnxruntime
+            else f"InferShapes({repr(model.path)}, allow_onnxruntime=False)"
+        )
         assert expected_loader in str(script)
 
-    def test_shape_inference_ext_data(self):
+    @pytest.mark.parametrize("allow_onnxruntime", [True, False])
+    def test_shape_inference_ext_data(self, allow_onnxruntime):
         arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])
         model = ONNX_MODELS["ext_weights"]
-        arg_group.parse_args([model.path, "--external-data-dir", model.ext_data, "--shape-inference"])
+        arg_group.parse_args(
+            [model.path, "--external-data-dir", model.ext_data, "--shape-inference"]
+            + (["--no-onnxruntime-shape-inference"] if not allow_onnxruntime else [])
+        )
 
         assert arg_group.must_use_onnx_loader()
 
         script = Script()
         arg_group.add_to_script(script)
 
-        expected_loader = f"InferShapes({repr(model.path)}, external_data_dir={repr(model.ext_data)})"
+        expected_loader = (
+            f"InferShapes({repr(model.path)}, external_data_dir={repr(model.ext_data)})"
+            if allow_onnxruntime
+            else f"InferShapes({repr(model.path)}, external_data_dir={repr(model.ext_data)}, allow_onnxruntime=False)"
+        )
         assert expected_loader in str(script)
 
         model = arg_group.load_onnx()
@@ -84,13 +106,13 @@ class TestOnnxLoaderArgs:
 
 class TestOnnxSaveArgs:
     def test_defaults(self):
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs()])
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
         arg_group.parse_args([])
         assert arg_group.size_threshold is None
 
     def test_external_data(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs()])
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
         with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
             arg_group.parse_args(
                 ["-o", path.name, "--save-external-data", data.name, "--external-data-size-threshold=0"]
@@ -102,7 +124,7 @@ class TestOnnxSaveArgs:
 
     def test_size_threshold(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs()])
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
         with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
             arg_group.parse_args(
                 ["-o", path.name, "--save-external-data", data.name, "--external-data-size-threshold=1024"]
@@ -114,7 +136,7 @@ class TestOnnxSaveArgs:
 
     def test_no_all_tensors_to_one_file(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs()])
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
         with tempfile.TemporaryDirectory() as outdir:
             path = os.path.join(outdir, "model.onnx")
             arg_group.parse_args(
@@ -141,7 +163,7 @@ class TestOnnxSaveArgs:
         ],
     )
     def test_size_threshold_parsing(self, arg, expected):
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs()])
+        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
         arg_group.parse_args(["--external-data-size-threshold", arg])
         assert arg_group.size_threshold == expected
 
@@ -156,3 +178,11 @@ class TestOnnxShapeInferenceArgs:
 
         arg_group.parse_args(["--force-fallback-shape-inference"])
         assert not arg_group.do_shape_inference
+
+    @pytest.mark.parametrize("allow_onnxruntime", [True, False])
+    def test_no_onnxruntime_shape_inference(self, allow_onnxruntime):
+        arg_group = ArgGroupTestHelper(
+            OnnxInferShapesArgs(default=True, allow_force_fallback=True), deps=[DataLoaderArgs()]
+        )
+        arg_group.parse_args([] if allow_onnxruntime else ["--no-onnxruntime-shape-inference"])
+        assert arg_group.allow_onnxruntime == (None if allow_onnxruntime else False)

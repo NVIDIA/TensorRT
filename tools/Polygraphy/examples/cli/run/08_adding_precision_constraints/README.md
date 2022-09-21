@@ -52,7 +52,7 @@ If FP16 tactics are selected for the `Add` or `Sub` layers, this should fail for
 ### Using A Network Script To Constrain Precisions
 
 The below section assumes you have read through the example on
-[Defining a TensorRT Network or Config Manually](/examples/cli/run/04_defining_a_tensorrt_network_or_config_manually)
+[Defining a TensorRT Network or Config Manually](../../../../examples/cli/run/04_defining_a_tensorrt_network_or_config_manually)
 and have a basic understanding of how to use the [TensorRT Python API](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/).
 
 First, run ONNX-Runtime on the model to generate reference inputs and golden outputs:
@@ -89,8 +89,8 @@ polygraphy run constrained_network.py --precision-constraints prefer \
 
 ## See Also
 
-* [Working with Reduced Precision](/how-to/work_with_reduced_precision.md) for a more general guide on how to debug
+* [Working with Reduced Precision](../../../../how-to/work_with_reduced_precision.md) for a more general guide on how to debug
   reduced precision optimizations using Polygraphy.
-* [Defining a TensorRT Network or Config Manually](/examples/cli/run/04_defining_a_tensorrt_network_or_config_manually) for
+* [Defining a TensorRT Network or Config Manually](../../../../examples/cli/run/04_defining_a_tensorrt_network_or_config_manually) for
   instructions on how to create network script templates.
 * [TensorRT Python API Reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/)

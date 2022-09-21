@@ -22,7 +22,9 @@ class Build(BaseCheckerSubtool):
     r"""
     Repeatedly build an engine to isolate faulty tactics.
 
-    `debug build` follows the same general process as other `debug` subtools.
+    `debug build` follows the same general process as other `debug` subtools (refer to the help output
+    of the `debug` tool for more background information and details).
+
     Specifically, it does the following during each iteration:
 
     1. Builds a TensorRT engine and saves it in the current directory as `polygraphy_debug.engine` by default.

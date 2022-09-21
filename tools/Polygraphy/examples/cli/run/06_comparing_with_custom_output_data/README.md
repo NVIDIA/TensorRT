@@ -36,3 +36,8 @@ and seamlessly load it into Polygraphy for comparison.
         --load-inputs custom_inputs.json \
         --load-outputs custom_outputs.json
     ```
+
+## Further Reading
+
+For details on how to access and work with the outputs stored in `RunResults` objects
+using the Python API, refer to [API example 08](../../../api/08_working_with_run_results_manually/).

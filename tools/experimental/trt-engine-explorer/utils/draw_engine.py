@@ -32,7 +32,7 @@ import shutil
 
 
 def draw_engine(engine_json_fname: str):
-    graphviz_is_installed =  shutil.which("dot") is not None
+    graphviz_is_installed = shutil.which("dot") is not None
     if not graphviz_is_installed:
         print("graphviz is required but it is not installed.\n")
         print("To install on Ubuntu:")

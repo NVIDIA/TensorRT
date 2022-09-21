@@ -211,7 +211,7 @@ def export(funcify=False, func_name=None):
 
 def warn_deprecated(name, use_instead, remove_in, module_name=None, always_show_warning=False):
 
-    if config.INTERNAL_CORRECTNESS_CHECKS and version(polygraphy.__version__) >= version(remove_in):
+    if version(polygraphy.__version__) >= version(remove_in):
         G_LOGGER.internal_error(f"{name} should have been removed in version: {remove_in}")
 
     full_obj_name = f"{module_name}.{name}" if module_name else name

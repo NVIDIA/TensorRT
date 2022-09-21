@@ -24,7 +24,7 @@ from polygraphy.tools.args.backend.trt.loader import TrtLoadPluginsArgs, TrtSave
 from polygraphy.tools.args.base import BaseRunnerArgs
 from polygraphy.tools.args.comparator.data_loader import DataLoaderArgs
 from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.script import assert_identifier, inline, make_invocable, safe
+from polygraphy.tools.script import inline_identifier, inline, make_invocable, safe
 
 
 @mod.export()
@@ -82,8 +82,7 @@ class TrtLegacyRunnerArgs(BaseRunnerArgs):
         calib_base = args_util.get(args, "calibration_base_class")
         self.calibration_base_class = None
         if calib_base is not None:
-            calib_base = safe(assert_identifier(calib_base))
-            self.calibration_base_class = inline(safe("trt.{:}", inline(calib_base)))
+            self.calibration_base_class = inline(safe("trt.{:}", inline_identifier(calib_base)))
 
         self.quantile = args_util.get(args, "quantile")
         self.regression_cutoff = args_util.get(args, "regression_cutoff")
@@ -152,7 +151,7 @@ class TrtLegacyRunnerArgs(BaseRunnerArgs):
             script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")
             data_loader_name = self.arg_groups[DataLoaderArgs].add_to_script(script)
             if self.calibration_base_class:
-                script.add_import(imports=["tensorrt as trt"])
+                script.add_import(imports="tensorrt", imp_as="trt")
 
             calibrator = make_invocable(
                 "Calibrator",

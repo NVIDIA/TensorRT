@@ -34,6 +34,7 @@ see `this page <https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy/po
     exception/toc
     func/toc
     json/toc
+    logger/toc
     mod/toc
 
 .. toctree::

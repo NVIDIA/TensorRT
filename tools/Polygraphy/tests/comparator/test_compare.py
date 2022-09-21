@@ -23,6 +23,36 @@ from polygraphy.logger import G_LOGGER
 
 
 class TestSimpleCompareFunc:
+    @pytest.mark.parametrize(
+        "values0, values1, dtype, expected_max_absdiff, expected_max_reldiff",
+        [
+            ([0], [1], np.uint8, 1, 1.0),
+            ([1], [0], np.uint8, 1, np.inf),
+            ([0], [1], np.uint16, 1, 1.0),
+            ([1], [0], np.uint16, 1, np.inf),
+            ([0], [1], np.uint32, 1, 1.0),
+            ([1], [0], np.uint32, 1, np.inf),
+            ([25], [30], np.int8, 5, 5.0 / 30.0),
+            ([25], [30], np.float16, 5, np.array([5.0], dtype=np.float32) / np.array([30.0], dtype=np.float32)),
+        ],
+    )
+    # Low precision arrays should be casted to higher precisions to avoid overflows/underflows.
+    def test_low_precision_comparison(self, values0, values1, dtype, expected_max_absdiff, expected_max_reldiff):
+        iter_result0 = IterationResult(outputs={"output": np.array(values0, dtype=dtype)})
+        iter_result1 = IterationResult(outputs={"output": np.array(values1, dtype=dtype)})
+
+        compare_func = CompareFunc.simple()
+        acc = compare_func(iter_result0, iter_result1)
+
+        comp_result = acc["output"]
+        assert comp_result.max_absdiff == expected_max_absdiff
+        assert comp_result.max_absdiff == comp_result.mean_absdiff
+        assert comp_result.max_absdiff == comp_result.median_absdiff
+
+        assert comp_result.max_reldiff == expected_max_reldiff
+        assert comp_result.max_reldiff == comp_result.mean_reldiff
+        assert comp_result.max_reldiff == comp_result.median_reldiff
+
     def test_can_compare_bool(self):
         iter_result0 = IterationResult(outputs={"output": np.zeros((4, 4), dtype=bool)})
         iter_result1 = IterationResult(outputs={"output": np.ones((4, 4), dtype=bool)})
@@ -44,8 +74,8 @@ class TestSimpleCompareFunc:
         # With default tolerances, out1 is wrong for the second result.
         compare_func = CompareFunc.simple()
         acc = compare_func(iter_result0, iter_result1)
-        assert acc[OUT0_NAME]
-        assert not acc[OUT1_NAME]
+        assert bool(acc[OUT0_NAME])
+        assert not bool(acc[OUT1_NAME])
 
         # But with custom tolerances, it should pass.
         tols = {
@@ -59,8 +89,8 @@ class TestSimpleCompareFunc:
             compare_func = CompareFunc.simple(rtol=tols)
 
         acc = compare_func(iter_result0, iter_result1)
-        assert acc[OUT0_NAME]
-        assert acc[OUT1_NAME]
+        assert bool(acc[OUT0_NAME])
+        assert bool(acc[OUT1_NAME])
 
     @pytest.mark.parametrize("mode", ["abs", "rel"])
     def test_per_output_tol_fallback(self, mode):
@@ -72,8 +102,8 @@ class TestSimpleCompareFunc:
         iter_result1 = IterationResult(outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS + 1})
 
         acc = CompareFunc.simple()(iter_result0, iter_result1)
-        assert not acc[OUT0_NAME]
-        assert not acc[OUT1_NAME]
+        assert not bool(acc[OUT0_NAME])
+        assert not bool(acc[OUT1_NAME])
 
         # Do not specify tolerance for OUT0_NAME - it should fail with fallback tolerance
         tols = {
@@ -86,8 +116,8 @@ class TestSimpleCompareFunc:
             compare_func = CompareFunc.simple(rtol=tols)
 
         acc = compare_func(iter_result0, iter_result1)
-        assert not acc[OUT0_NAME]
-        assert acc[OUT1_NAME]
+        assert not bool(acc[OUT0_NAME])
+        assert bool(acc[OUT1_NAME])
 
     @pytest.mark.parametrize("mode", ["abs", "rel"])
     def test_default_tol_in_map(self, mode):
@@ -108,7 +138,7 @@ class TestSimpleCompareFunc:
             compare_func = CompareFunc.simple(rtol=tols)
 
         acc = compare_func(iter_result0, iter_result1)
-        assert acc[OUT0_NAME]
+        assert bool(acc[OUT0_NAME])
 
     @pytest.mark.parametrize(
         "shape",
@@ -221,6 +251,15 @@ class TestSimpleCompareFunc:
         res1 = IterationResult(outputs={"output": np.array([val1], dtype=np.float32)})
 
         assert not CompareFunc.simple(check_error_stat=check_error_stat)(res0, res1)["output"]
+
+    @pytest.mark.parametrize("infinities_compare_equal", (False, True))
+    @pytest.mark.parametrize("val", (np.inf, -np.inf))
+    def test_infinities_compare_equal(self, infinities_compare_equal, val):
+        res0 = IterationResult(outputs={"output": np.array([val], dtype=np.float32)})
+        res1 = IterationResult(outputs={"output": np.array([val], dtype=np.float32)})
+
+        cf = CompareFunc.simple(infinities_compare_equal=infinities_compare_equal)
+        assert bool(cf(res0, res1)["output"]) == infinities_compare_equal
 
 
 class TestIndicesCompareFunc:

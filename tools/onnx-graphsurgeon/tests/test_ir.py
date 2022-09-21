@@ -17,9 +17,10 @@
 
 
 import numpy as np
+import onnx
 import pytest
 from onnx_graphsurgeon.ir.node import Node
-from onnx_graphsurgeon.ir.tensor import Constant, Variable
+from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
@@ -336,3 +337,14 @@ class TestTensorIO(object):
         t0.inputs += [n0]
         assert len(t0.inputs) == 1
         assert t0.inputs[0] == n0
+
+
+class TestLazyValues(object):
+    def test_basic(self):
+        shape = (1, 5, 5)
+        onnx_tensor = onnx.helper.make_tensor_value_info("test", onnx.TensorProto.FLOAT, shape)
+        values = LazyValues(onnx_tensor)
+
+        assert values.dtype == np.float32
+        assert tuple(values.shape) == shape
+        assert values.nbytes == 100

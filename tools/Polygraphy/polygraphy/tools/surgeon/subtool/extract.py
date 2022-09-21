@@ -45,7 +45,7 @@ class Extract(BaseSurgeonSubtool):
                 "Has no effect if fallback shape inference is not run",
             ),
             DataLoaderArgs(),
-            OnnxInferShapesArgs(default=False, allow_force_fallback=True),
+            OnnxInferShapesArgs(allow_force_fallback=True),
             OnnxLoadArgs(outputs_opt_prefix=False),
             OnnxSaveArgs(output_opt_required=True),
         ]
@@ -128,10 +128,10 @@ class Extract(BaseSurgeonSubtool):
         )
         if missing_meta_tensors(input_metadata, output_metadata) and not skip_shape_inference:
             G_LOGGER.info(
-                "Running ONNX shape inference to derive shapes and/or data types for `auto` arguments.\n"
+                "Running shape inference to derive shapes and/or data types for `auto` arguments.\n"
                 "To avoid this, you can specify the shapes and data types explicitly."
             )
-            model = onnx_backend.infer_shapes(model)
+            model = self.arg_groups[OnnxInferShapesArgs].infer_shapes(model, force=True)
             graph, input_metadata, output_metadata = load_graph_and_io_meta(model)
 
         missing_tensors = missing_meta_tensors(input_metadata, output_metadata)
@@ -140,19 +140,19 @@ class Extract(BaseSurgeonSubtool):
             # Returns a TensorMetadata for all tensors in the graph.
             if not self.arg_groups[OnnxInferShapesArgs].force_fallback:
                 G_LOGGER.warning(
-                    f"Some tensor shapes or dtypes are missing in the model. Note: Tensors with missing information:\n{missing_tensors}\nWill run inference to determine shapes. This may cause some dynamic dimensions to become static.\nTo avoid this, please provide metadata on the command-line. "
+                    f"Some tensor shapes or dtypes are missing in the model. Note: Tensors with missing information:\n{missing_tensors}"
+                    "\nWill run inference to determine shapes. This may cause some dynamic dimensions to become static."
+                    "\nTo avoid this, please provide metadata on the command-line. "
                 )
             else:
                 G_LOGGER.info("Forcing fallback shape inference. This will cause dynamic dimensions to become static.")
 
-            _, layerwise_meta = self.arg_groups[OnnxInferShapesArgs].fallback_inference(model)
+            _, layerwise_meta = self.arg_groups[OnnxInferShapesArgs].fallback_inference(
+                model, outputs=list(input_metadata.keys()) + list(output_metadata.keys())
+            )
 
             def update_meta_from_layerwise(meta, user_meta, set_shapes=True):
                 for name in meta:
-                    user_dtype, user_shape = None, None
-                    if name in user_meta:
-                        user_dtype, user_shape = user_meta[name].dtype, user_meta[name].shape
-
                     # Choose between what the user set, what's in the model, and what
                     # fallback shape inference said.
                     def choose_meta(user, model, fallback):
@@ -160,11 +160,14 @@ class Extract(BaseSurgeonSubtool):
                             return user or fallback
                         return user or model or fallback
 
-                    if name in layerwise_meta:
-                        meta[name].dtype = choose_meta(user_dtype, meta[name].dtype, layerwise_meta[name].dtype)
-                        if set_shapes:
-                            meta[name].shape = choose_meta(user_shape, meta[name].shape, layerwise_meta[name].shape)
-                        G_LOGGER.verbose(f"Updated tensor: {name} metadata to: {meta[name]}")
+                    user_dtype, user_shape = None, None
+                    if name in user_meta:
+                        user_dtype, user_shape = user_meta[name].dtype, user_meta[name].shape
+
+                    meta[name].dtype = choose_meta(user_dtype, meta[name].dtype, layerwise_meta[name].dtype)
+                    if set_shapes:
+                        meta[name].shape = choose_meta(user_shape, meta[name].shape, layerwise_meta[name].shape)
+                    G_LOGGER.verbose(f"Updated tensor: {name} metadata to: {meta[name]}")
                 return meta
 
             input_metadata = update_meta_from_layerwise(input_metadata, user_input_metadata)

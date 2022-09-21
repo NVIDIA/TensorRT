@@ -16,13 +16,13 @@
 #
 
 from polygraphy import mod, util
-from polygraphy.logger.logger import G_LOGGER
+from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
-from polygraphy.tools.args.base import BaseArgs
-from polygraphy.tools.args.model import ModelArgs
 from polygraphy.tools.args.backend.onnx.loader import OnnxLoadArgs
 from polygraphy.tools.args.backend.trt.config import TrtConfigArgs
-from polygraphy.tools.script import make_invocable
+from polygraphy.tools.args.base import BaseArgs
+from polygraphy.tools.args.model import ModelArgs
+from polygraphy.tools.script import inline_identifier, inline, make_invocable, make_invocable_if_nondefault_kwargs, safe
 
 
 @mod.export()
@@ -69,7 +69,9 @@ class TrtLoadNetworkArgs(BaseArgs):
         - OnnxLoadArgs: if allow_onnx_loading == True
     """
 
-    def __init__(self, allow_custom_outputs: bool = None, allow_onnx_loading: bool = None):
+    def __init__(
+        self, allow_custom_outputs: bool = None, allow_onnx_loading: bool = None, allow_tensor_formats: bool = None
+    ):
         """
         Args:
             allow_custom_outputs (bool):
@@ -78,18 +80,16 @@ class TrtLoadNetworkArgs(BaseArgs):
             allow_onnx_loading (bool):
                     Whether to allow parsing networks from an ONNX model.
                     Defaults to True.
+            allow_tensor_formats (bool):
+                    Whether to allow tensor formats and related options to be set.
+                    Defaults to False.
         """
         super().__init__()
         self._allow_custom_outputs = util.default(allow_custom_outputs, True)
         self._allow_onnx_loading = util.default(allow_onnx_loading, True)
+        self._allow_tensor_formats = util.default(allow_tensor_formats, False)
 
     def add_parser_args_impl(self):
-        self.group.add_argument(
-            "--explicit-precision",
-            help="[DEPRECATED] Enable explicit precision mode",
-            action="store_true",
-            default=None,
-        )
         if self._allow_custom_outputs:
             self.group.add_argument(
                 "--trt-outputs",
@@ -104,6 +104,38 @@ class TrtLoadNetworkArgs(BaseArgs):
                 nargs="+",
                 default=None,
             )
+
+        self.group.add_argument(
+            "--layer-precisions",
+            help="Compute precision to use for each layer. This should be specified on a per-layer basis, using the format: "
+            "--layer-precisions <layer_name>:<layer_precision>. Precision values come from the TensorRT data type aliases, like "
+            "float32, float16, int8, bool, etc. For example: --layer-precisions example_layer:float16 other_layer:int8. "
+            "When this option is provided, you should also set --precision-constraints to either 'prefer' or 'obey'. ",
+            nargs="+",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--tensor-dtypes",
+            "--tensor-datatypes",
+            help="Data type to use for each tensor. This should be specified on a per-tensor basis, using the format: "
+            "--tensor-datatypes <tensor_name>:<tensor_datatype>. Data type values come from the TensorRT data type aliases, like "
+            "float32, float16, int8, bool, etc. For example: --tensor-datatypes example_tensor:float16 other_tensor:int8. ",
+            nargs="+",
+            default=None,
+        )
+
+        if self._allow_tensor_formats:
+            self.group.add_argument(
+                "--tensor-formats",
+                help="Formats to allow for each tensor. This should be specified on a per-tensor basis, using the format: "
+                "--tensor-formats <tensor_name>:[<tensor_formats>,...]. Format values come from the `trt.TensorFormat` enum "
+                "and are case-insensitve. "
+                "For example: --tensor-formats example_tensor:[linear,chw4] other_tensor:[chw16]. ",
+                nargs="+",
+                default=None,
+            )
+
         self.group.add_argument(
             "--trt-network-func-name",
             help="When using a trt-network-script instead of other model types, this specifies the name "
@@ -119,20 +151,48 @@ class TrtLoadNetworkArgs(BaseArgs):
             outputs (List[str]): Names of output tensors.
             exclude_outputs (List[str]): Names of tensors which should be unmarked as outputs.
             trt_network_func_name (str): The name of the function in a custom network script that creates the network.
+            layer_precisions (Dict[str, str]): Layer names mapped to their desired compute precision, in string form.
+            tensor_datatypes (Dict[str, str]): Tensor names mapped to their desired data types, in string form.
+            tensor_formats (Dict[str, List[str]]): Tensor names mapped to their desired formats, in string form.
         """
         self.outputs = args_util.get_outputs(args, "trt_outputs")
 
-        self.explicit_precision = args_util.get(args, "explicit_precision")
-        if self.explicit_precision is not None:
-            mod.warn_deprecated("--explicit-precision", use_instead=None, remove_in="0.42.0", always_show_warning=True)
-
         self.exclude_outputs = args_util.get(args, "trt_exclude_outputs")
         self.trt_network_func_name = args_util.get(args, "trt_network_func_name")
+
+        layer_precisions = args_util.parse_dict_with_default(
+            args_util.get(args, "layer_precisions"), allow_empty_key=False
+        )
+        self.layer_precisions = None
+        if layer_precisions is not None:
+            self.layer_precisions = {
+                name: inline(safe("trt.{}", inline_identifier(value))) for name, value in layer_precisions.items()
+            }
+
+        tensor_datatypes = args_util.parse_dict_with_default(
+            args_util.get(args, "tensor_dtypes"), allow_empty_key=False
+        )
+        self.tensor_datatypes = None
+        if tensor_datatypes is not None:
+            self.tensor_datatypes = {
+                name: inline(safe("trt.{}", inline_identifier(value))) for name, value in tensor_datatypes.items()
+            }
+
+        tensor_formats = args_util.parse_dict_with_default(args_util.get(args, "tensor_formats"), allow_empty_key=False)
+        self.tensor_formats = None
+        if tensor_formats is not None:
+            self.tensor_formats = {
+                name: [inline(safe("trt.TensorFormat.{}", inline_identifier(value.upper()))) for value in values]
+                for name, values in tensor_formats.items()
+            }
 
     def add_to_script_impl(self, script):
         model_file = self.arg_groups[ModelArgs].path
         model_type = self.arg_groups[ModelArgs].model_type
         outputs = args_util.get_outputs_for_script(script, self.outputs)
+
+        if any(arg is not None for arg in [self.layer_precisions, self.tensor_datatypes, self.tensor_formats]):
+            script.add_import(imports="tensorrt", imp_as="trt")
 
         if model_type == "trt-network-script":
             script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
@@ -147,29 +207,37 @@ class TrtLoadNetworkArgs(BaseArgs):
                     script, disable_custom_outputs=True, serialize_model=True
                 )
                 loader_str = make_invocable(
-                    "NetworkFromOnnxBytes",
-                    self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, onnx_loader),
-                    explicit_precision=self.explicit_precision,
+                    "NetworkFromOnnxBytes", self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, onnx_loader)
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
             else:
                 script.add_import(imports=["NetworkFromOnnxPath"], frm="polygraphy.backend.trt")
                 loader_str = make_invocable(
-                    "NetworkFromOnnxPath",
-                    self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, model_file),
-                    explicit_precision=self.explicit_precision,
+                    "NetworkFromOnnxPath", self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, model_file)
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
         else:
             G_LOGGER.internal_error("Loading from ONNX is not enabled and a network script was not provided!")
 
-        MODIFY_NETWORK = "ModifyNetworkOutputs"
-        modify_network_str = make_invocable(
-            MODIFY_NETWORK, loader_name, outputs=outputs, exclude_outputs=self.exclude_outputs
+        def add_loader_if_nondefault(loader, name, **kwargs):
+            loader_str = make_invocable_if_nondefault_kwargs(loader, loader_name, **kwargs)
+            if loader_str is not None:
+                script.add_import(imports=[loader], frm="polygraphy.backend.trt")
+                return script.add_loader(loader_str, name)
+            return loader_name
+
+        loader_name = add_loader_if_nondefault(
+            "ModifyNetworkOutputs", "set_network_outputs", outputs=outputs, exclude_outputs=self.exclude_outputs
         )
-        if str(modify_network_str) != str(make_invocable(MODIFY_NETWORK, loader_name)):
-            script.add_import(imports=[MODIFY_NETWORK], frm="polygraphy.backend.trt")
-            loader_name = script.add_loader(modify_network_str, "modify_network")
+        loader_name = add_loader_if_nondefault(
+            "SetLayerPrecisions", "set_layer_precisions", layer_precisions=self.layer_precisions
+        )
+        loader_name = add_loader_if_nondefault(
+            "SetTensorDatatypes", "set_tensor_datatypes", tensor_datatypes=self.tensor_datatypes
+        )
+        loader_name = add_loader_if_nondefault(
+            "SetTensorFormats", "set_tensor_formats", tensor_formats=self.tensor_formats
+        )
 
         return loader_name
 
@@ -316,12 +384,7 @@ class TrtLoadEngineArgs(BaseArgs):
 
         network_loader_name = network_name
         if network_loader_name is None:
-            if TrtLoadNetworkArgs not in self.arg_groups:
-                G_LOGGER.internal_error("TrtNetworkLoaderArgs is required for engine building!")
             network_loader_name = self.arg_groups[TrtLoadNetworkArgs].add_to_script(script)
-
-        if TrtConfigArgs not in self.arg_groups:
-            G_LOGGER.internal_error("TrtConfigArgs is required for engine building!")
 
         script.add_import(imports=["EngineFromNetwork"], frm="polygraphy.backend.trt")
         config_loader_name = self.arg_groups[TrtConfigArgs].add_to_script(script)

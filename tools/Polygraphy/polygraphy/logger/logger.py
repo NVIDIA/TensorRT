@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import copy
 import enum
 import inspect
 import os
@@ -59,15 +60,15 @@ class LoggerIndent:
 class LoggerVerbosity:
     def __init__(self, logger, severity):
         self.logger = logger
-        self.old_severity = self.logger.severity
-        self.severity = severity
+        self.old_severity = copy.copy(self.logger.module_severity)
+        self.module_severity = severity
 
     def __enter__(self):
-        self.logger.severity = self.severity
+        self.logger.module_severity = self.module_severity
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.logger.severity = self.old_severity
+        self.logger.module_severity = self.old_severity
 
 
 class LogMode(enum.IntEnum):
@@ -81,17 +82,85 @@ class LogMode(enum.IntEnum):
     """Log the message only once. The same message will not be logged again."""
 
 
+class SeverityTrie:
+    """
+    A trie that represents per-path logging verbosities.
+    """
+
+    def _split_path(self, path):
+        # Leading or duplicate slashes can create empty elements in the path components. We ignore those.
+        return list(filter(lambda x: x, path.split(os.path.sep)))
+
+    def __init__(self, severity_dict):
+        assert "" in severity_dict, "severity_dict must include default severity!"
+
+        self.trie = {}
+        for path, severity in severity_dict.items():
+            cur_dict = self.trie
+            for path_component in self._split_path(path):
+                if path_component not in cur_dict:
+                    cur_dict[path_component] = {}
+                cur_dict = cur_dict[path_component]
+            cur_dict[""] = severity
+
+        # Skip path checking if we don't have any path entries.
+        self.has_non_default_entries = len(self.trie) > 1
+
+    def get(self, path=None):
+        """
+        Get the logging verbosity for the given path.
+
+        Args:
+            path (str): The path
+
+        Returns:
+            int: The logging verbosity.
+        """
+        default_severity = self.trie[""]
+        if path is None or not self.has_non_default_entries:
+            return default_severity
+
+        cur_dict = self.trie
+
+        def get_value(dct):
+            return dct.get("", default_severity)
+
+        for path_component in self._split_path(path):
+            if path_component not in cur_dict:
+                return get_value(cur_dict)
+            cur_dict = cur_dict[path_component]
+        return get_value(cur_dict)
+
+    def __str__(self):
+        return str(self.trie)
+
+
 class Logger:
+    """
+    Global logging interface. Do **not** construct a logger manually.
+    Instead, use ``G_LOGGER``, the global logger.
+    """
+
     ULTRA_VERBOSE = -20  # Cast it into the flames!
+    """Enable unreasonably verbose messages and above"""
     SUPER_VERBOSE = -10
+    """Enable extremely verbose messages and above"""
     EXTRA_VERBOSE = 0
+    """Enable extra verbose messages and above"""
     VERBOSE = 10
+    """Enable verbose messages and above"""
     INFO = 20
+    """Enable informative messages and above"""
     START = 22
+    """Enable messages indicating when a task is started and above"""
     FINISH = 28
+    """Enable messages indicating when a task is finished and above"""
     WARNING = 30
+    """Enable only warning messages and above"""
     ERROR = 40
+    """Enable only error messages and above"""
     CRITICAL = 50
+    """Enable only critical/fatal error messages and above"""
 
     SEVERITY_LETTER_MAPPING = {
         ULTRA_VERBOSE: "[U]",
@@ -121,11 +190,16 @@ class Logger:
 
     def __init__(self, severity=INFO, colors=True, letter=True, timestamp=False, line_info=False):
         """
-        Logger.
-
         Args:
-            severity (Logger.Severity):
-                    Messages below this severity are ignored.
+            severity (Union[int, Dict[str, int]]):
+                    Severity below which messages will be ignored.
+                    This can be specified on a per-submodule/file basis by providing a dictionary of paths to
+                    logging severities. In this case, use the ``""`` to indicate the default severity.
+                    Paths should be relative to the `polygraphy/` directory.
+                    For example, `polygraphy/backend` can be specified with just `backend/`.
+                    For example: ``{"": G_LOGGER.INFO, "backend/trt": G_LOGGER.VERBOSE}``
+                    This is converted to a ``SeverityTrie`` on assignment.
+                    Defaults to G_LOGGER.INFO.
             colors (bool):
                     Whether to use colored output.
                     Defaults to True.
@@ -138,22 +212,31 @@ class Logger:
             line_info (bool):
                     Whether to include file and line number information in the logging output.
                     Defaults to False.
-            log_file (str):
-                    Path to a log file to write logging output from Polygraphy.
-                    This will not include logging messages from libraries used by Polygraphy, like
-                    TensorRT or ONNX-Runtime.
         """
-        self._severity = severity
-        self._log_path = None
-        self._log_file = None
         self.logging_indent = 0
-        self.root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
         self.once_logged = set()
         self.colors = colors
         self.letter = letter
         self.timestamp = timestamp
         self.line_info = line_info
         self.logger_callbacks = []
+        self.log_file = None
+        """
+        Path to a log file to write logging output from Polygraphy.
+        This will not include logging messages from libraries used by Polygraphy, like
+        TensorRT or ONNX-Runtime.
+        """
+        self.module_severity = severity
+        """
+        Severity below which messages will be ignored.
+        This can be specified on a per-submodule/file basis by providing a dictionary of paths to
+        logging severities. In this case, use the ``""`` to indicate the default severity.
+        Paths should be relative to the `polygraphy/` directory.
+        For example, `polygraphy/backend` can be specified with just `backend/`.
+        For example: ``{"": G_LOGGER.INFO, "backend/trt": G_LOGGER.VERBOSE}``
+        This is converted to a ``SeverityTrie`` on assignment.
+        Defaults to G_LOGGER.INFO.
+        """
 
     @property
     def log_file(self):
@@ -162,21 +245,68 @@ class Logger:
     @log_file.setter
     def log_file(self, value):
         self._log_path = value
-        dir_path = os.path.dirname(self._log_path)
-        if dir_path:
-            dir_path = os.path.realpath(dir_path)
-            os.makedirs(dir_path, exist_ok=True)
-        self._log_file = open(self._log_path, "w")
+        self._log_file = None
+        if self._log_path:
+            dir_path = os.path.dirname(self._log_path)
+            if dir_path:
+                dir_path = os.path.realpath(dir_path)
+                os.makedirs(dir_path, exist_ok=True)
+            self._log_file = open(self._log_path, "w")
+
+    @property
+    def module_severity(self):
+        return self._module_severity
+
+    @module_severity.setter
+    def module_severity(self, value):
+        if isinstance(value, SeverityTrie):
+            self._module_severity = value
+        else:
+            if not isinstance(value, dict):
+                value = {"": value}
+            if "" not in value:
+                value[""] = Logger.INFO
+            self._module_severity = SeverityTrie(value)
+
+        self._run_callbacks()
 
     @property
     def severity(self):
-        return self._severity
+        print(
+            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.45.0. Use `module_severity` instead"
+        )
+        return self._module_severity.get()
 
     @severity.setter
     def severity(self, value):
-        self._severity = value
+        print(
+            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.45.0. Use `module_severity` instead"
+        )
+        self.module_severity = value
+
+    def module_path(self, path):
+        """
+        Converts a given path to a path relative to the Polygraphy root module.
+        If the path is not part of the Polygraphy module, returns a path relative to the common prefix.
+
+        Args:
+            path (str): The path
+
+        Returns:
+            str: The path relative to the Polygraphy root module or common prefix.
+        """
+        import polygraphy
+
+        module_root_dir = polygraphy.__path__[0]
+        file_path = os.path.relpath(path, module_root_dir)
+        if os.pardir in file_path:
+            common_path_len = len(os.path.commonpath([module_root_dir, path]))
+            file_path = path[common_path_len:].lstrip(os.path.sep)
+        return file_path
+
+    def _run_callbacks(self):
         for callback in self.logger_callbacks:
-            callback(self._severity)
+            callback(self._module_severity)
 
     def register_callback(self, callback):
         """
@@ -184,9 +314,10 @@ class Logger:
         The callback is guaranteed to be called at least once in the register_callback function.
 
         Args:
-            callback (Callable(Logger.Severity)): A callback that accepts the current logger severity.
+            callback (Callable(SeverityTrie)):
+                    A callback that accepts the current logger severity trie.
         """
-        callback(self._severity)
+        callback(self._module_severity)
         self.logger_callbacks.append(callback)
 
     def indent(self, level=1):
@@ -203,8 +334,12 @@ class Logger:
         Returns a context manager that temporarily changes the severity of the logger for its duration.
 
         Args:
-            severity (Logger.Severity):
-                    The severity to set the logger to. Defaults to Logger.CRITICAL, which will suppress all messages.
+            severity (Union[int, Dict[str, int]]):
+                    Severity below which messages will be ignored.
+                    This can be specified on a per-submodule/file basis by providing a dictionary of paths to
+                    logging severities. In this case, use the ``""`` to indicate the default severity.
+                    For example: ``{"": G_LOGGER.INFO, "backend/trt": G_LOGGER.VERBOSE}``
+                    Defaults to Logger.CRITICAL, which will suppress all messages.
         """
         return LoggerVerbosity(self, severity)
 
@@ -215,7 +350,7 @@ class Logger:
         Args:
             message (Union[str, Callable() -> str]):
                     A string or callable which returns a string of the message to log.
-            severity (Logger.Severity):
+            severity (int):
                     The severity with which to log this message. If the severity is less than
                     the logger's current severity, the message is suppressed. Provided callables
                     will not be called in that case.
@@ -231,32 +366,29 @@ class Logger:
                     logged, but the logger will recover and resume execution.
                     When False, the logger will re-raise the exception.
         """
-        from polygraphy import constants, config
+        from polygraphy import config, constants
 
-        def process_message(message, stack_depth):
+        def get_rel_file_path_and_lineno():
+            file_path = sys._getframe(stack_depth).f_code.co_filename
+            line_no = sys._getframe(stack_depth).f_lineno
+            # If we can't get a valid path, keep walking the stack until we can.
+            new_stack_depth = stack_depth
+            while not os.path.exists(file_path) and new_stack_depth > 0:
+                new_stack_depth -= 1
+                file_path = sys._getframe(new_stack_depth).f_code.co_filename
+                line_no = sys._getframe(new_stack_depth).f_lineno
+
+            return self.module_path(file_path), line_no
+
+        def process_message(message, file_path, line_no):
             def get_prefix():
-                def get_line_info():
-                    adjusted_stack_depth = stack_depth
-                    adjusted_stack_depth += 2
-                    module = inspect.getmodule(sys._getframe(adjusted_stack_depth))
-                    # Handle logging from the top-level of a module.
-                    if not module:
-                        adjusted_stack_depth -= 1
-                        module = inspect.getmodule(sys._getframe(adjusted_stack_depth))
-                    filename = module.__file__
-                    filename = os.path.relpath(filename, self.root_dir)
-                    # If the file is not located in polygraphy, use its basename instead.
-                    if os.pardir in filename:
-                        filename = os.path.basename(filename)
-                    return f"[{filename}:{sys._getframe(adjusted_stack_depth).f_lineno}] "
-
                 prefix = ""
                 if self.letter:
                     prefix += Logger.SEVERITY_LETTER_MAPPING[severity] + " "
                 if self.timestamp:
                     prefix += f"({time.strftime('%X')}) "
                 if self.line_info:
-                    prefix += get_line_info()
+                    prefix += f"[{file_path}:{line_no}] "
                 return prefix
 
             def apply_indentation(prefix, message):
@@ -277,13 +409,20 @@ class Logger:
             message = apply_indentation(prefix, message)
             return apply_color(f"{prefix}{message}")
 
+        file_path, line_no = None, None
+        if self.line_info or self.module_severity.has_non_default_entries:
+            file_path, line_no = get_rel_file_path_and_lineno()
+
         def should_log(message):
-            should = severity >= self._severity
-            if should and mode == LogMode.ONCE:
+            if severity < self.module_severity.get(file_path):
+                return False
+
+            if mode == LogMode.ONCE:
                 message_hash = hash(message)
-                should &= message_hash not in self.once_logged
+                if message_hash in self.once_logged:
+                    return False
                 self.once_logged.add(message_hash)
-            return should
+            return True
 
         if not should_log(message):
             return
@@ -297,7 +436,6 @@ class Logger:
                 message = f"<Error while logging this message: {str(err)}>"
 
         message = str(message)
-        message = message.replace("\t", constants.TAB)
 
         # Use the warnings module in correctness checking mode so all warnings are
         # visible in the test result summary.
@@ -306,7 +444,7 @@ class Logger:
 
             warnings.warn(message)
 
-        message = process_message(message, stack_depth=stack_depth)
+        message = process_message(message, file_path, line_no)
 
         if self._log_file is not None:
             self._log_file.write(message + "\n")
@@ -315,38 +453,144 @@ class Logger:
         print(message, file=sys.stdout if severity < Logger.CRITICAL else sys.stderr)
 
     def backtrace(self, depth=0, limit=None, severity=ERROR):
-        limit = limit if limit is not None else (3 - self.severity // 10) * 2  # Info provides 1 stack frame
+        limit = (
+            limit if limit is not None else (3 - self.module_severity.get() // 10) * 2
+        )  # Info provides 1 stack frame
         limit = max(limit, 0)
-        self.log(" ".join(traceback.format_stack(f=sys._getframe(depth + 2), limit=limit)), severity=severity)
+        frame = sys._getframe(depth + 2)
+        self.log(" ".join(traceback.format_stack(f=frame, limit=limit)), severity=severity)
 
     def ultra_verbose(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with ULTRA_VERBOSE severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.ULTRA_VERBOSE, mode=mode, stack_depth=3, error_ok=True)
 
     def super_verbose(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with SUPER_VERBOSE severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.SUPER_VERBOSE, mode=mode, stack_depth=3, error_ok=True)
 
     def extra_verbose(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with EXTRA_VERBOSE severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.EXTRA_VERBOSE, mode=mode, stack_depth=3, error_ok=True)
 
     def verbose(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with VERBOSE severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.VERBOSE, mode=mode, stack_depth=3, error_ok=True)
 
     def info(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with INFO severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.INFO, mode=mode, stack_depth=3)
 
     def start(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with START severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.START, mode=mode, stack_depth=3)
 
     def finish(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with FINISH severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.FINISH, mode=mode, stack_depth=3)
 
     def warning(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with WARNING severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.WARNING, mode=mode, stack_depth=3)
 
     def error(self, message, mode=LogMode.EACH):
+        """
+        Logs a message to stdout with ERROR severity.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+        """
         self.log(message, Logger.ERROR, mode=mode, stack_depth=3)
 
     def critical(self, message):
+        """
+        Logs a message to stdout with CRITICAL severity and raises an exception.
+
+        Args:
+            message (Union[str, Callable() -> str]):
+                    A string or callable which returns a string of the message to log.
+            mode (LogMode):
+                    Controls how the message is logged.
+                    See LogMode for details.
+
+        Raises:
+            PolygraphyException
+        """
         self.log(message, Logger.CRITICAL, stack_depth=3)
         from polygraphy.exception import PolygraphyException
 
@@ -355,11 +599,13 @@ class Logger:
     def internal_error(self, message):
         from polygraphy import config
 
-        if config.INTERNAL_CORRECTNESS_CHECKS:
-            self.log(message, Logger.CRITICAL, stack_depth=3)
-            from polygraphy.exception import PolygraphyInternalException
+        if not config.INTERNAL_CORRECTNESS_CHECKS:
+            return
 
-            raise PolygraphyInternalException(message)
+        self.log(message, Logger.CRITICAL, stack_depth=3)
+        from polygraphy.exception import PolygraphyInternalException
+
+        raise PolygraphyInternalException(message)
 
     def _str_from_module_info(self, module, name=None):
         ret = ""
@@ -371,13 +617,14 @@ class Logger:
             except:
                 pass
 
-        try_append(lambda: name or f"Loaded Module: {module.__name__:<18}")
+        try_append(lambda: name or f"Loaded Module: {module.__name__}")
         try_append(lambda: f" | Version: {module.__version__}")
         try_append(lambda: f" | Path: {list(map(os.path.realpath, module.__path__))}")
         return ret
 
     def module_info(self, module, name=None, severity=VERBOSE):
-        self.log(self._str_from_module_info(module, name), severity=severity, mode=LogMode.ONCE)
+        message = self._str_from_module_info(module, name)
+        self.log(message, severity=severity, stack_depth=3, mode=LogMode.ONCE)
 
     def log_exception(self, func):
         """
@@ -401,8 +648,8 @@ class Logger:
         return wrapped
 
 
-global G_LOGGER
 G_LOGGER = Logger()
+"""The global logger. Use this instead of constructing a logger"""
 
 # For backwards compatibility
 G_LOGGER.exit = G_LOGGER.critical

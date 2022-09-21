@@ -192,3 +192,28 @@ def test_atomic_open():
 
     # Make sure the lock file is written to the correct path and not removed automatically.
     assert os.path.exists(outfile.name + ".lock")
+
+
+def test_make_contiguous():
+    arr = np.transpose(np.ones(shape=(5, 10), dtype=np.float32))
+    assert not util.is_contiguous(arr)
+
+    arr = util.make_contiguous(arr)
+    assert util.is_contiguous(arr)
+
+
+class TestMakeRepr:
+    def test_basic(self):
+        assert util.make_repr("Example", 1, x=2) == ("Example(1, x=2)", False, False)
+
+    def test_default_args(self):
+        assert util.make_repr("Example", None, None, x=2) == ("Example(None, None, x=2)", True, False)
+
+    def test_empty_args_are_default(self):
+        assert util.make_repr("Example", x=2) == ("Example(x=2)", True, False)
+
+    def test_default_kwargs(self):
+        assert util.make_repr("Example", 1, 2, x=None, y=None) == ("Example(1, 2)", False, True)
+
+    def test_empty_kwargs_are_default(self):
+        assert util.make_repr("Example", 1, 2) == ("Example(1, 2)", False, True)

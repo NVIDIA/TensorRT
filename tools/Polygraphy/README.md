@@ -119,6 +119,10 @@ To enable this behavior, set the `POLYGRAPHY_AUTOINSTALL_DEPS` environment varia
     *packages. The default installation command, which is `python -m pip install`, can be overriden by setting*
     *the `POLYGRAPHY_INSTALL_CMD` environment variable, or setting `polygraphy.config.INSTALL_CMD` using the Python API.*
 
+If you'd like Polygraphy to prompt you before automatically installing or
+upgrading pacakges, set the `POLYGRAPHY_ASK_BEFORE_INSTALL` environment variable to `1`
+or `polygraphy.config.ASK_BEFORE_INSTALL = True` using the Python API.
+
 #### Installing Manually
 
 Each `backend` directory includes a `requirements.txt` file that specifies the minimum set of packages

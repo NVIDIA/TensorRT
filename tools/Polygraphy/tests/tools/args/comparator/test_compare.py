@@ -15,33 +15,15 @@
 # limitations under the License.
 #
 
+
+import numpy as np
 import pytest
+from polygraphy.comparator import IterationResult
 from polygraphy.exception import PolygraphyException
-from polygraphy.tools.args import (
-    ComparatorCompareArgs,
-    CompareFuncIndicesArgs,
-    CompareFuncSimpleArgs,
-    ComparatorPostprocessArgs,
-)
+from polygraphy.tools.args import ComparatorCompareArgs, CompareFuncIndicesArgs, CompareFuncSimpleArgs
+from polygraphy.tools.args import util as args_util
 from polygraphy.tools.script import Script
 from tests.tools.args.helper import ArgGroupTestHelper
-
-
-class TestComparatorPostprocess:
-    @pytest.mark.parametrize(
-        "args, expected",
-        [
-            (["top-6", "out0:top-1", "out1:top-3"], {"": 6, "out0": 1, "out1": 3}),
-            (["top-6,axis=-1", "out0:top-1,axis=2"], {"": (6, -1), "out0": (1, 2)}),
-        ],
-    )
-    def test_postprocess(self, args, expected):
-        arg_group = ArgGroupTestHelper(
-            ComparatorPostprocessArgs(),
-        )
-        arg_group.parse_args(["--postprocess"] + args)
-
-        assert list(arg_group.postprocess.values())[0] == expected
 
 
 class TestCompareFuncSimple:
@@ -76,6 +58,19 @@ class TestCompareFuncSimple:
         with pytest.raises(PolygraphyException, match="Invalid choice"):
             arg_group = ArgGroupTestHelper(CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs()])
             arg_group.parse_args(["--check-error-stat"] + args)
+
+    @pytest.mark.parametrize("val", (np.inf, -np.inf))
+    def test_infinities_compare_equal(self, val):
+        arg_group = ArgGroupTestHelper(CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs()])
+        arg_group.parse_args([f"--infinities-compare-equal"])
+
+        assert arg_group.infinities_compare_equal
+
+        res0 = IterationResult(outputs={"output": np.array([val], dtype=np.float32)})
+        res1 = IterationResult(outputs={"output": np.array([val], dtype=np.float32)})
+
+        cf = args_util.run_script(arg_group.add_to_script)
+        assert bool(cf(res0, res1)["output"])
 
 
 class TestCompareFuncIndices:

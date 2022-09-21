@@ -92,10 +92,13 @@ class TestCalibrator:
     def test_calibrator_data_and_ordering_correct(self):
         def generate_multidata(num_batches):
             for _ in range(num_batches):
+                shape = (4, 5)
                 yield {
-                    "x0": np.zeros((4, 5), dtype=np.float32),
-                    "x1": cuda.DeviceArray(dtype=np.float32).copy_from(np.ones((4, 5), dtype=np.float32)),
-                    "x2": cuda.DeviceArray(dtype=np.float32).copy_from(np.ones((4, 5), dtype=np.float32) * 2).ptr,
+                    "x0": np.zeros(shape, dtype=np.float32),
+                    "x1": cuda.DeviceArray(shape=shape, dtype=np.float32).copy_from(np.ones(shape, dtype=np.float32)),
+                    "x2": cuda.DeviceArray(shape=shape, dtype=np.float32)
+                    .copy_from(np.ones(shape, dtype=np.float32) * 2)
+                    .ptr,
                 }
 
         NUM_BATCHES = 2
@@ -213,7 +216,7 @@ class TestCalibrator:
 
             # Ensure that now the calibrator will read from the cache when reset
             calibrator.reset()
-            assert not calibrator.has_cached_scales
+            assert calibrator.cache_contents is None
             assert len(calibrator.read_calibration_cache()) == get_file_size(cache.name)
 
         self.check_calibrator_cleanup(calibrator)
@@ -268,7 +271,8 @@ class TestCalibrator:
     def test_calibrator_checks_input_metadata(self, expected_meta, meta, should_pass):
         data = [{name: np.ones(shape=shape, dtype=dtype) for name, (dtype, shape) in meta.items()}]
         calibrator = Calibrator(data)
-        calibrator.reset(expected_meta)
+        calibrator.set_input_metadata(expected_meta)
 
         with calibrator:
             assert (calibrator.get_batch(list(expected_meta.keys())) is not None) == should_pass
+        self.check_calibrator_cleanup(calibrator)

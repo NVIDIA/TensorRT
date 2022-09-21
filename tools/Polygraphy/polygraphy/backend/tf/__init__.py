@@ -5,15 +5,16 @@ from polygraphy.backend.tf.runner import *
 def register_logger_callback():
     from polygraphy.logger import G_LOGGER
 
-    def set_tf_logging_level(sev):
+    def set_tf_logging_level(severity_trie):
         import os
         from polygraphy import mod
 
-        tf = mod.lazy_import("tensorflow", version="<2.0")
+        tf = mod.lazy_import("tensorflow<2.0")
 
         if not mod.has_mod("tensorflow"):
             return
 
+        sev = severity_trie.get(G_LOGGER.module_path(os.path.dirname(__file__)))
         if sev > G_LOGGER.WARNING:
             tf_sev = tf.compat.v1.logging.ERROR
             tf_logging_level = "3"

@@ -49,7 +49,7 @@ polygraphy run dynamic_identity.onnx --trt --fp16 --onnxrt \
 >>>
 :warning: Getting acceptable accuracy with INT8 precision typically requires an additional calibration step:
 see the [developer guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#working-with-int8)
-and instructions on [how to do calibration](/examples/cli/convert/01_int8_calibration_in_tensorrt)
+and instructions on [how to do calibration](../../../../examples/cli/convert/01_int8_calibration_in_tensorrt)
 with Polygraphy on the command line.
 >>>
 
@@ -125,23 +125,23 @@ engine due to differences in timing, layer fusion choices, and format
 constraints, which can hide the failure.  In that case, you may have to use a
 more sophisticated approach to bisect the failing model and generate a reduced
 test case that reproduces the error. See [Reducing Failing ONNX
-Models](/examples/cli/debug/02_reducing_failing_onnx_models) for a tutorial on
+Models](../../../../examples/cli/debug/02_reducing_failing_onnx_models) for a tutorial on
 how to do this with Polygraphy.
 
 ## Further Reading
 
 * In some cases you may need to do comparisons across multiple Polygraphy runs
   (for example, when comparing the output of a pre-built TensorRT engine or
-  [Polygraphy network script](/examples/cli/run/04_defining_a_tensorrt_network_or_config_manually)
-  against ONNX-Runtime). See [Comparing Across Runs](/examples/cli/run/02_comparing_across_runs) for a tutorial on how to
+  [Polygraphy network script](../../../../examples/cli/run/04_defining_a_tensorrt_network_or_config_manually)
+  against ONNX-Runtime). See [Comparing Across Runs](../../../../examples/cli/run/02_comparing_across_runs) for a tutorial on how to
   accomplish this.
 
 * For more details on working with dynamic shapes in TensorRT:
-  * See [Dynamic Shapes in TensorRT](/examples/cli/convert/03_dynamic_shapes_in_tensorrt/) for how to specify
+  * See [Dynamic Shapes in TensorRT](../../../../examples/cli/convert/03_dynamic_shapes_in_tensorrt/) for how to specify
     optimization profiles for use with the engine using the Polygraphy CLI
-  * See [TensorRT and Dynamic Shapes](/examples/api/07_tensorrt_and_dynamic_shapes/) for details on
+  * See [TensorRT and Dynamic Shapes](../../../../examples/api/07_tensorrt_and_dynamic_shapes/) for details on
     how to do this with the Polygraphy API
 
 * For details on how to supply real input data, see [Comparing with Custom Input Data](../05_comparing_with_custom_input_data/).
 
-* See [Debugging TensorRT Accuracy Issues](/how-to/debug_accuracy.md) for a broader tutorial on how to debug accuracy failures using Polygraphy.
+* See [Debugging TensorRT Accuracy Issues](../../../../how-to/debug_accuracy.md) for a broader tutorial on how to debug accuracy failures using Polygraphy.

@@ -178,6 +178,7 @@ def plotly_bar2(
     showlegend: bool=False,
     xaxis_title: str=None,
     yaxis_title: str=None,
+    do_show: bool=True,
 ):
     def categorical_color(df, color) -> bool:
         if df[color].dtype in [float, int]:
@@ -239,7 +240,9 @@ def plotly_bar2(
 
     if use_slider:
         fig.update_xaxes(rangeslider_visible=True)
-    fig.show()
+    if do_show:
+        fig.show()
+    return fig
 
 
 def rotate_columns(df: pd.DataFrame):
@@ -323,7 +326,8 @@ def plotly_hist(
     values_col: str,
     xaxis_title: str,
     color: str,
-    colormap=None
+    colormap=None,
+    do_show: bool=True,
 ):
     """Draw a histogram diagram."""
 
@@ -334,7 +338,9 @@ def plotly_hist(
         template="simple_white",
         color_discrete_map=colormap)
     fig.update_layout(xaxis={"title": xaxis_title}, bargap=0.05)
-    fig.show()
+    if do_show:
+        fig.show()
+    return fig
 
 
 def plotly_pie(
@@ -342,7 +348,8 @@ def plotly_pie(
     title: str,
     values: str,
     names: str,
-    colormap: Dict[str,str]=None
+    colormap: Dict[str,str]=None,
+    do_show: bool=True,
 ):
     """Draw a pie diagram."""
 
@@ -358,14 +365,17 @@ def plotly_pie(
     fig.update_traces(
         hoverinfo='label+percent', textinfo='value', textfont_size=20,)
     fig.update_layout(title=title, title_x=0.5, font_size=20,)
-    fig.show()
+    if do_show:
+        fig.show()
+    return fig
 
 
 def plotly_pie2(
     title: str,
     charts: list,
     max_cols: int=3,
-    colormap: Dict[str,str]=None
+    colormap: Dict[str,str]=None,
+    do_show: bool=True,
 ):
     """Draw a pie diagram."""
 
@@ -405,4 +415,6 @@ def plotly_pie2(
         hole=0.4,
         textposition='inside',)
     fig.update_layout(title=main_title, title_x=0.5, font_size=20,)
-    fig.show()
+    if do_show:
+        fig.show()
+    return fig

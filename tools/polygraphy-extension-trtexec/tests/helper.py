@@ -25,9 +25,13 @@ TEST_DIR = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 
 # Paramaters to run test on when testing trtexec args mapping
 TRTEXEC_PATH_PARAMS = ["trtexec"]
+TRTEXEC_EXPORT_TIMES_PARAMS = ["times.json"]
+TRTEXEC_EXPORT_OUTPUT_PARAMS = ["output.json"]
+TRTEXEC_EXPORT_PROFILE_PARAMS = ["profile.json"]
+TRTEXEC_EXPORT_LAYER_INFO_PARAMS = ["layer_info.json"]
 
 def poly_run(args):
-    """ 
+    """
     Helper function to run the `polygraphy run` command with nececssary args
     """
     cmd_args = ["polygraphy", "run"] + args

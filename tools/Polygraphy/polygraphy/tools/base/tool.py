@@ -20,9 +20,9 @@ from textwrap import dedent
 
 import polygraphy
 from polygraphy import mod
-from polygraphy.logger.logger import G_LOGGER
+from polygraphy.logger import G_LOGGER
+from polygraphy.tools.args import LoggerArgs
 from polygraphy.tools.args.base import ArgGroups
-from polygraphy.tools.args.logger import LoggerArgs
 
 
 @mod.export()

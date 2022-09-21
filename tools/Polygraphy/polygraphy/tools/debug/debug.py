@@ -36,8 +36,10 @@ class Debug(Tool):
         b. Prompting you. If no `--check` command is provided, the subtool will prompt you in an interactive fashion
             to report whether the iteration passed or failed.
 
-    Artifacts to track can be specified with `--artifacts`. When the iteration fails,
+    Per-iteration artifacts to track can be specified with `--artifacts`. When the iteration fails,
     they are moved into the `bad` directory and otherwise into the `good` directory.
+    Artifacts can be any file or directory. This can be used, for example, to sort logs or
+    TensorRT tactic replay files, or even the per-iteration output (usually a TensorRT engine or ONNX model).
 
     By default, if the status code of the `--check` command is non-zero, the iteration is considered a failure.
     You can optionally use additional command-line options to control what counts as a failure in a more fine-grained way.
@@ -47,7 +49,7 @@ class Debug(Tool):
         * `--fail-returncode` lets you specify a status code to count as a failure, excluding all other non-zeros status
             codes.
 
-    Most subtools also provide a replay mechanism where a 'debug replay' file containing information about the
+    Most subtools also provide a replay mechanism where a 'replay file' containing information about the
     status of each iteration is saved after each iteration. This can then be loaded during subsequent debugging commands
     in order to quickly resume debugging from the same point.
 

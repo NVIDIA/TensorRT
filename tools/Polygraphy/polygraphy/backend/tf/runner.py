@@ -24,7 +24,7 @@ from polygraphy.backend.base import BaseRunner
 from polygraphy.backend.tf import util as tf_util
 from polygraphy.logger import G_LOGGER
 
-tf = mod.lazy_import("tensorflow", version="<2.0")
+tf = mod.lazy_import("tensorflow<2.0")
 
 
 @mod.export()

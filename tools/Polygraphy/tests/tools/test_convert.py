@@ -21,8 +21,8 @@ import onnx
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util
-from polygraphy.backend.common.loader import BytesFromPath
-from polygraphy.backend.trt.loader import EngineFromBytes
+from polygraphy.backend.common import BytesFromPath
+from polygraphy.backend.trt import EngineFromBytes
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
 

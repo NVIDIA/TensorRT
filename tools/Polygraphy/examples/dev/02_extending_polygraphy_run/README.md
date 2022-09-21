@@ -4,7 +4,7 @@
 
 `polygraphy run` allows you to run inference with multiple backends, including TensorRT and ONNX-Runtime, and compare outputs.
 While it does provide mechanisms to load and compare against custom outputs from unsupported backends,
-adding support for the backend via an extension module allows it integrate more seamlessly,
+adding support for the backend via an extension module allows it to be integrated more seamlessly,
 providing a better user experience.
 
 In this example, we'll create an extension module for `polygraphy run` called `polygraphy_reshape_destroyer`,
@@ -84,12 +84,21 @@ It is recommended that you read these files in the following order:
 
     Install the wheel:
 
+    <!-- Polygraphy Test
+        *NOTE: For tests, 'protobuf==3.19.4 onnx==1.10.0' is required to work around compatibility*
+            *breakages in more recent versions of protobuf*
+        ```bash
+        python3 -m pip install protobuf==3.19.4 onnx==1.10.0
+        ```
+     Polygraphy Test -->
+
     ```bash
     python3 -m pip install extension_module/dist/polygraphy_reshape_destroyer-0.0.1-py3-none-any.whl \
         --extra-index-url https://pypi.ngc.nvidia.com
     ```
 
-    *TIP: If you make changes to the example extension module, you can update your installed version with:*
+    *TIP: If you make changes to the example extension module, you can update your installed version by*
+    *rebuilding (by following step 1) and then running:*
 
     ```bash
     python3 -m pip install extension_module/dist/polygraphy_reshape_destroyer-0.0.1-py3-none-any.whl \

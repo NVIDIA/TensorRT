@@ -20,104 +20,374 @@ This file contains code to generate graph diagrams for an engine-plan.
 """
 
 
-from ast import Call
-import warnings
 import os
 import re
+from enum import Enum
 from graphviz import Digraph
-from typing import Callable, NamedTuple, List
+from typing import Callable, NamedTuple, List, Dict
+from dataclasses import dataclass, field
 from .engine_plan import EnginePlan
 from .layer import Layer
 from .activations import Activation
 from .plotting import precision_colormap, layer_colormap
 
 
-class Region(NamedTuple):
-    id: int
-    tensor: Activation
-    is_user: bool
-    should_display: bool
+class PortDesc(NamedTuple):
+    """A port identifies a specific layer input or output."""
+    layer_name: str
+    port: int
 
 
 class Edge(NamedTuple):
-    src: str
-    dst: str
-    tensor: Activation
-    region_gen: int = None
+    """An edge in a PlanGraph graph.
 
-
-class RegionGenerations:
-    """A memory region may have several generations, where each generation
-    represents a consumable state of the region.
+    The src and dst are names of engine layers or regions.
     """
-    def __init__(self, plan):
-        """
-        A P event represents some layer writing to (producing part of) a memory
-        region.
-        A C event represents some layer reading from (consuming part of) a
-        memory region.
+    src: PortDesc
+    dst: PortDesc
+    tensor: Activation
+    region_gen: int
 
-        A region_story is a map from region name to the list of C/P events on
-        that region.
-        """
-        story = {}
-        for layer in plan.layers:
-            for inp in layer.inputs:
-                story.setdefault(inp.name, []).append(('C', layer.name))
-            for outp in layer.outputs:
-                story.setdefault(outp.name, []).append(('P', layer.name))
 
-        # Create region generations.
+@dataclass
+class RegionGeneration:
+    """Represents one generation of a memory Region.
 
-        # Each time we switch between C events and P events we create a new
-        # Region generation.
-        regions_gens = {}
-        for region, region_evts in story.items():
-            # A List of region generations.
-            # Each generation is a list of C/P events.
-            generations = [list()]
-            current_gen = 0
-            last = 'P'
-            for evt in region_evts:
-                if evt[0] != last:
-                    last = evt[0]
-                    if evt[0] == 'P':
-                        current_gen += 1
-                        generations.append(list())
-                generations[current_gen].append(evt)
-            regions_gens[region] = generations
-        self.regions_gens = regions_gens
+    Regions represent activation memory buffers or graph inputs and outputs.
+    Each generation represents a consumable state of the memory region.
+    """
+    tensor: Activation
+    id: int
+    is_user: bool = False
+    is_forked: bool = False
+    writers: List[PortDesc] = field(default_factory=list)
+    readers: List[PortDesc] = field(default_factory=list)
 
-    def lookup_region_gen(self, layer_name: str, region_name: str):
-        """Lookup the generation of a Region, given a layer name.
 
-        If a layer produces or consumes the Region, we return the corresponding
-        Region generation.
-        """
+class Region:
+    """Represents a memory region.
+
+    Regions represent activation memory buffers or graph inputs and outputs.
+    Each generation represents a consumable state of the memory region.
+    """
+    def __init__(self):
+        self.__generations: List[RegionGeneration] = list()
+        self.name: str = None
+
+    @property
+    def generations(self):
+        return self.__generations
+
+    def add_generation(self, tensor: Activation):
+        self.name = self.name or tensor.name
+        gen_id = len(self.generations)
+        self.__generations.append(
+            RegionGeneration(tensor, gen_id))
+
+    def nb_generations(self):
+        return len(self.__generations)
+
+    def __update_shape(self, tensor: Activation, generation: int):
+        if tensor.size_bytes > self.__generations[generation].tensor.size_bytes:
+                self.__generations[generation].tensor = tensor
+
+    def add_writer(self, gen_id: int, writer: PortDesc, tensor: Activation):
+        self.__generations[gen_id].writers.append(writer)
+        self.__update_shape(tensor, gen_id)
+
+    def add_reader(self, gen_id: int, reader: PortDesc, tensor: Activation):
+        self.__generations[gen_id].readers.append(reader)
+        self.__update_shape(tensor, gen_id)
+        if gen_id > 0:
+            self.__update_shape(tensor, gen_id-1)
+
+    def writers(self, gen_id: int=None):
         try:
-            region_gens = self.regions_gens[region_name]
+            if gen_id is not None:
+                return self.__generations[gen_id].writers
+            # Return a list of writers from all generations
+            writers = []
+            for generation in self.__generations:
+                writers.extend(generation.writers)
+            return writers
         except KeyError:
-            # A KeyError can happen if we have a disconneted graph.
-            return -1
-        for gen_id, gen in enumerate(region_gens):
-            for evt in gen:
-                if evt[1] == layer_name:
-                    return gen_id
-        # Assume for now that this is OK - it's probably a Constant
-        # layer that produced this region.
-        return 0
+            return []
 
-    def nb_generations(self, region_name: str):
-        region_gens = self.regions_gens[region_name]
-        return len(region_gens)
+    def readers(self, gen_id: int=None):
+        try:
+            if gen_id is not None:
+                return self.__generations[gen_id].readers
+            # Return a list of readers from all generations
+            readers = []
+            for generation in self.__generations:
+                readers.extend(generation.readers)
+            return readers
+        except KeyError:
+            return []
 
-    def debug_generation(self):
-        for r, generations in self.regions_gens.items():
-            for g in generations:
-                print(r, g)
+    def is_placeholder(self) -> bool:
+        return len(self.generations) > 1
 
-    def create_id(self, region_id:int , region_generation: int):
-        return region_id + 100000 * region_generation
+
+def regions_factory(plan: EnginePlan) -> List[Region]:
+    """This method processes an EnginePlan instance to create a Region dictionary"""
+    class RegionMemOp(Enum):
+        """
+        A WRITE event represents some layer writing to a memory region.
+        A READ event represents some layer reading from a memory region.
+        """
+        WRITE = 1
+        READ = 2
+    class RegionEvent(NamedTuple):
+        """A region read/write event performed by a layer"""
+        owner_layer: str
+        # input port for WRITE event; output port for READ event.
+        port: int
+        mem_op: RegionMemOp
+        tensor: Activation
+
+    def set_is_user(region: Region):
+        n_generations = len(region.generations)
+        for gen_id, generation in enumerate(region.generations):
+            nb_writers = len(generation.writers)
+            nb_readers = len(generation.readers)
+            is_binding = region_name in plan.bindings
+            if gen_id == n_generations - 1:
+                # If marked as a network binding and this is last generation, we always display.
+                generation.is_user = is_binding
+            else:
+                generation.is_user = is_binding and (nb_readers==0 or nb_writers==0)
+
+    def set_is_forked(region: Region):
+        for generation in region.generations:
+            nb_writers = len(generation.writers)
+            nb_readers = len(generation.readers)
+            generation.is_forked = nb_writers > 1 or nb_readers>1
+
+    # A region_story is a map from region name to the list of read/write
+    # events on that region.
+    story = {}
+    for layer in plan.layers:
+        for port, inp in enumerate(layer.inputs):
+            story.setdefault(inp.name, []).append(
+                RegionEvent(layer.name, port, RegionMemOp.READ, inp))
+        for port, outp in enumerate(layer.outputs):
+            story.setdefault(outp.name, []).append(
+                RegionEvent(layer.name, port, RegionMemOp.WRITE, outp))
+
+    # Create region generations: each generation is a list of read/write events.
+    # Every time there's a switch between read events and write events we
+    # create a new RegionGeneration.
+    regions: List[Region] = []
+    for region_name, region_evts in story.items():
+        region = Region()
+        current_gen = -1
+        previous_mem_op = None
+        for evt in region_evts:
+            if evt.mem_op != previous_mem_op:
+                if evt.mem_op == RegionMemOp.WRITE or not previous_mem_op:
+                    # A new region generation.
+                    current_gen += 1
+                    region.add_generation(evt.tensor)
+            evt_layer = PortDesc(evt.owner_layer, evt.port)
+            if evt.mem_op == RegionMemOp.WRITE:
+                region.add_writer(current_gen, evt_layer, evt.tensor)
+            else:
+                region.add_reader(current_gen, evt_layer, evt.tensor)
+            previous_mem_op = evt.mem_op
+        set_is_user(region)
+        set_is_forked(region)
+        regions.append(region)
+    return regions
+
+
+def make_memory_node_name(region: Region, generation: RegionGeneration) -> str:
+    if generation.is_user:
+        return region.name
+    return ".".join((region.name, str(generation.id)))
+
+
+class LayerNode(object):
+    """A graph node representing an engine layer."""
+    def __init__(self, layer: Layer):
+        self.layer: Layer = layer
+
+
+class MemoryNode(NamedTuple):
+    """MemoryNode instances represent activation memory buffers, or graph inputs/outputs.
+
+    Most (memory) Regions have only a single generation and they can be considered
+    as simple activation buffers. These are not added to the PlanGraph unless
+    `include_regions` is true.
+    When a Region has several generations, we unravel the Region and each generation
+    is represented by one MemoryNode. This is done in order to make the
+    graph easier to understand and to remove circular edges.
+    """
+    name: str
+    tensor: Activation
+    region_gen: int
+    is_user: bool
+
+
+class PlanGraph(object):
+    """View of a TensorRT plan as a data-dependencies graph.
+
+    A PlanGraph describes the plan layers' data-dependencies. It is represented
+    using two types of nodes and an edge list.
+
+    layer_nodes represent engine execution layers.
+    memory_nodes represent memory buffers.
+    edges_list is a list of edges that have either LayerNode or MemoryNode endpoints.
+    """
+    def __init__(self,
+        plan: EnginePlan,
+        include_regions: bool=False,
+        include_constants: bool=False,
+        include_forking_regions: bool=False,
+    ):
+        self.include_regions = include_regions
+        self.include_constants = include_constants
+        self.include_forking_regions = include_forking_regions
+        self.regions = regions_factory(plan)
+
+        # These lists will be populated by __create_graph
+        self._edges_list: List[Edge] = []
+        self._layers_nodes: List[Layer] = []
+        self._memory_nodes: List[MemoryNode] = []
+        self.__create_graph(plan)
+
+    # PlanGraph interface
+    @property
+    def edges_list(self): return self._edges_list
+
+    @property
+    def layers_nodes(self): return self._layers_nodes
+
+    @property
+    def memory_nodes(self): return self._memory_nodes
+
+    def __create_graph(self, plan: EnginePlan):
+        self.__add_layer_nodes(plan)
+        self.__add_memory_nodes(plan)
+        self.__add_inter_region_edges()
+
+    def __add_layer_nodes(self, plan):
+        self._layers_nodes = [LayerNode(layer) for layer in plan.all_layers]
+
+    def __add_constant_node(self, region: Region, generation: RegionGeneration, constants_producers):
+        assert not generation.writers
+
+        is_user = generation.is_user
+        activation_name = make_memory_node_name(region, generation)
+        constant = constants_producers[activation_name]
+        if self.include_regions:
+            self._edges_list.append(Edge(
+                PortDesc(constant.name, 0),
+                PortDesc(activation_name, 0),
+                generation.tensor,
+                 generation.id))
+            self.__add_egress_edges(region, generation)
+            # Add a memory node (represents a region generation that we chose to display)
+            self._memory_nodes.append(
+                MemoryNode(activation_name, generation.tensor, generation.id, is_user))
+        else:
+            self.__connect_writer_to_all_readers(PortDesc(constant.name, 0), generation)
+
+    def __add_memory_nodes(self, plan):
+        constants_outputs = [const.outputs[0].name for const in plan.constants]
+        constants_producers = {const.outputs[0].name + ".0": const for const in plan.constants}
+        for region in self.regions:
+            is_constant = region.name in constants_outputs
+            if is_constant and not self.include_constants:
+                continue
+            for generation in region.generations:
+                include_region = self.should_include_region(region, generation, is_constant)
+                if not include_region:
+                    # Bypass a region and connect the region writers to the region readers.
+                    self.__add_region_bypass_edges(generation)
+                    continue
+                if is_constant:
+                    self.__add_constant_node(region, generation, constants_producers)
+                else:
+                    self.__add_memory_node(region, generation)
+
+    def __add_memory_node(self, region, generation):
+        # Add an activation node (represents a region generation that we chose to display)
+        is_user = generation.is_user
+        node_name = make_memory_node_name(region, generation)
+        self._memory_nodes.append(MemoryNode(node_name, generation.tensor, generation.id, is_user))
+        self.__add_ingress_edges(region, generation)
+        self.__add_egress_edges(region, generation)
+
+    def __add_region_bypass_edges(self, generation: RegionGeneration):
+        for writer in generation.writers:
+            writer_port = None if generation.is_user else writer.port
+            writer_desc = PortDesc(writer.layer_name, writer_port)
+            self.__connect_writer_to_all_readers(writer_desc, generation)
+
+    def __add_ingress_edges(self, region: Region, generation: RegionGeneration):
+        node_name = make_memory_node_name(region, generation)
+        node_port = None if generation.is_user else 0
+        for writer in generation.writers:
+            self._edges_list.append(Edge(
+                PortDesc(writer.layer_name, writer.port),
+                PortDesc(node_name, node_port),
+                generation.tensor,
+                generation.id))
+
+    def __add_egress_edges(self, region: Region, generation: RegionGeneration):
+        activation_name = make_memory_node_name(region, generation)
+        activation_port = None if generation.is_user else 0
+        self.__connect_writer_to_all_readers(
+            PortDesc(activation_name, activation_port),
+            generation)
+
+    def __connect_writer_to_all_readers(
+        self, writer_desc: PortDesc, generation: RegionGeneration):
+        for reader in generation.readers:
+            self._edges_list.append(Edge(
+                writer_desc,
+                PortDesc(reader.layer_name, reader.port),
+                generation.tensor,
+                generation.id))
+
+    def __add_inter_region_edges(self):
+        """Add edges connecting the different generations of a region."""
+        for region in self.regions:
+            if len(region.generations) == 1:
+                continue
+            prev_generation = region.generations[0]
+            for gen_id in range(1, len(region.generations)):
+                curr_generation = region.generations[gen_id]
+                self._edges_list.append(Edge(
+                        PortDesc(make_memory_node_name(region, prev_generation), 0),
+                        PortDesc(make_memory_node_name(region, curr_generation), 0),
+                        curr_generation.tensor,
+                        gen_id))
+                prev_generation = curr_generation
+
+    def should_include_region(self,
+        region:Region,
+        generation:RegionGeneration,
+        is_constant: bool
+    ) -> bool:
+        nb_gens = region.nb_generations()
+        is_user = generation.is_user
+        is_forked = self.include_forking_regions and generation.is_forked
+        include = self.include_regions or is_user or nb_gens > 1 or is_forked
+        return (self.include_constants and is_constant) or (not is_constant and include)
+
+
+"""
+Graphviz DOT file format
+"""
+
+
+latency_types = (
+    # Place default type in first entry.
+    'avg_time',
+    'median_time',
+    'time')
 
 
 def render_dot(dot_graph: Digraph, engine_name: str, output_format: str):
@@ -129,20 +399,22 @@ def render_dot(dot_graph: Digraph, engine_name: str, output_format: str):
     return output_fname
 
 
-def node_label_simple(
+def layer_node_renderer_simple(
     layer: Layer,
     latency: float,
-    display_layer_name: bool=True,
+    display_layer_names: bool=True,
     expand_layer_details: bool=False,
+    stack_layer_names: bool=True,
 ) -> str:
-    return f"{layer.name}\\n{layer.type}"
+    return f"{layer.name}\\n{layer.type}" if display_layer_names else f"{layer.type}"
 
 
-def node_label_keras(
+def layer_node_renderer_keras(
     layer: Layer,
     latency: float,
-    display_layer_name: bool=True,
+    display_layer_names: bool=True,
     expand_layer_details: bool=False,
+    stack_layer_names: bool=True,
 ) -> str:
     """Keras-style node label formatting."""
 
@@ -152,7 +424,7 @@ def node_label_keras(
             io_desc_str += str(t.shape)
         return io_desc_str
 
-    label =  f"{layer.name}\\n" if display_layer_name else ""
+    label =  f"{layer.name}\\n" if display_layer_names else ""
     label += f"{layer.type}"
     label += "|{input:|output:}|{{"
     label += add_io(layer.inputs)
@@ -162,11 +434,23 @@ def node_label_keras(
     return label
 
 
-def node_label_tbl(
+def layer_node_highlighter(node_id: str, highlighted_layers_ids: List[int]
+) -> Dict:
+    """Highlight a layer node.
+
+    Create a yellow hailo around the node.
+    """
+    should_highlight = highlighted_layers_ids and node_id in highlighted_layers_ids
+    formatting = {'penwidth': str(6), 'color': 'yellow'}
+    return formatting if should_highlight else {}
+
+
+def layer_node_configurable_renderer(
     layer: Layer,
     latency: float,
-    display_layer_name: bool=True,
+    display_layer_names: bool=True,
     expand_layer_details: bool=False,
+    stack_layer_names: bool=True,
 ) -> str:
     def clean_layer_name(layer_name: str):
         layer_name = layer_name.replace("||", "\|\|")
@@ -207,25 +491,61 @@ def node_label_tbl(
         except KeyError:
             pass
 
+    def handle_pwgen_act(layer: Layer, rows: List[str]):
+        handled = False
+        if layer.type != "Convolution":
+            return handled
+        try:
+            subtype = layer.raw_dict['ParameterSubType']
+            if subtype == 'PointWiseExpression':
+                handled = True
+                ops = layer.raw_dict['PointWiseExpressionOperations']
+                for op in ops:
+                    prefix = "const auto"
+                    op_str = op[len(prefix):]
+                    HoneyDew = "#F0FFF0"
+                    rows.append((op_str, HoneyDew))
+        except KeyError:
+            pass
+        return handled
+
     def handle_conv_deconv(layer: Layer, rows: List[str]):
         if layer.type not in ("Convolution", "Deconvolution"):
             return
         try:
             if len(layer.inputs) == 2:
-                rows.append(("Incident Add", "lightblue"))
+                rows.append(("Conv(input0) + input1", "lightblue"))
             act = layer.raw_dict['Activation']
             if act is not None and act != 'NONE':
-                rows.append((act, "lightblue"))
+                handled = False
+                if act == 'GENERIC':
+                    handled = handle_pwgen_act(layer, rows)
+                if not handled:
+                    rows.append((act, "lightblue"))
         except KeyError:
             pass
 
-    layer_name = clean_layer_name(layer.name)
-    layer_type = f"{layer.type} ({latency} ms)"
-    rows = [(layer_type,)]
-    if display_layer_name:
-        parts = layer_name.split('+')
-        for p in parts:
-            rows.append((p,))
+    def handle_reformat(layer: Layer, rows: List[str]):
+        if layer.type != "Reformat":
+            return
+        rows.append((layer.raw_dict['Origin'], None))
+
+    def add_node_name(layer: Layer, rows: List[str], stack_layer_names: bool):
+        layer_name = clean_layer_name(layer.name) if display_layer_names else ""
+        if stack_layer_names:
+            # This is layer name "stacking": splitting on '+' and stacking in several rows
+            parts = layer_name.split('+')
+            for p in parts:
+                rows.append((p,))
+        else:
+            rows.append((layer_name,))
+
+    rows = [(f"{layer.type}",)]
+    if latency:
+        rows.append((f"{latency} ms",))
+    if display_layer_names:
+        add_node_name(layer, rows, stack_layer_names)
+    handle_reformat(layer, rows)
     if expand_layer_details:
         handle_pwgen(layer, rows)
         handle_conv_deconv(layer, rows)
@@ -248,155 +568,14 @@ def parse_operation(op):
     return opname, args, output
 
 
-class PlanGraph(object):
-    """This is a base-class for representing TensorRT plans as renderable graphs"""
-    def __init__(self,
-        plan: EnginePlan,
-        display_regions: bool=False
-    ):
-        self.plan = plan
-        self.display_regions = display_regions
-        self.regions_dict = {}
-        self.regions_generations = RegionGenerations(plan)
-        self.edges_list = []
-        self.__create_graph(plan)
-
-    def __create_graph(self, plan: EnginePlan):
-        region_id = len(plan.all_layers)
-        for layer_id, layer in enumerate(plan.all_layers):
-            for inp in layer.inputs:
-                region_id = self.handle_region(layer_id, layer, inp, region_id, is_input=True)
-            for outp in layer.outputs:
-                region_id = self.handle_region(layer_id, layer, outp, region_id, is_input=False)
-        for edge in self.edges_list:
-            self.add_edge(edge.src, edge.dst, edge.tensor, edge.region_gen)
-
-        for layer_id, layer in enumerate(plan.all_layers):
-            try:
-                latency = plan.df[plan.df['Name'] == layer.name]['latency.avg_time'].iloc[0]
-            except (KeyError, IndexError):
-                # Constants layer
-                latency = 0
-            self.add_layer_node(layer_id, layer, latency, node_labeler=node_label_tbl)
-
-        for generations in self.regions_dict.values():
-            for r in generations:
-                if r.should_display:
-                    self.add_region_node(r.id, r.tensor, r.is_user)
-        self.check_consistency()
-
-    def check_consistency(self):
-        # Verify that every output is either an output binding, or an input
-        # of another layer.
-        for region_name, region in self.regions_dict.items():
-            nb_prods = self._nb_producers(self.plan.all_layers, region_name)
-            nb_cons = self._nb_consumers(self.plan.all_layers, region_name)
-            is_user = region_name in self.plan.bindings# or nb_cons==0 or nb_prod==0
-            if not is_user and nb_cons == 0:
-                warnings.warn(f"Region {region_name} is neither a binding nor a layer input.")
-            if not is_user and nb_prods == 0:
-                warnings.warn(f"Region {region_name} is neither a binding nor a layer output.")
-
-    def find_producers(self, layers, region_name):
-        producers = []
-        for i,l in enumerate(self.plan.all_layers):
-            for o in l.outputs:
-                if o.name == region_name:
-                    producers.append((i, l.name))
-        return producers
-
-    def _nb_producers(self, layers, inp_name):
-        return len(self.find_producers(layers, inp_name))
-
-    def _nb_consumers(self, layers, region_name):
-        consumers = []
-        for id,l in enumerate(self.plan.all_layers):
-            for i in l.inputs:
-                if i.name == region_name:
-                    consumers.append((i, region_name))
-        return len(consumers)
-
-    def should_display_region(self, region_name: str, display_regions: bool) -> bool:
-        nb_gens = self.regions_generations.nb_generations(region_name)
-        nb_prod = self._nb_producers(self.plan.all_layers, region_name)
-        nb_cons = self._nb_consumers(self.plan.all_layers, region_name)
-        is_user = region_name in self.plan.bindings or nb_cons==0 or nb_prod==0
-        add = is_user or display_regions or nb_gens > 1 or nb_prod > 1
-        return add
-
-    def new_region(
-        self,
-        tensor:Activation,
-        region_id:int,
-        is_user: bool,
-        should_display: bool
-    ) -> int:
-        self.regions_dict[tensor.name] = [Region(region_id, tensor, is_user, should_display)]
-        region_id += 1
-        return region_id
-
-    def handle_region(
-        self,
-        layer_id:int,
-        layer: Layer,
-        tensor: Activation,
-        region_id: int,
-        is_input: bool
-    ) -> int:
-        region_gen = self.regions_generations.lookup_region_gen(layer.name, tensor.name)
-        if region_gen == -1:
-            should_display = True
-            is_new_region = True
-        else:
-            should_display = self.should_display_region(tensor.name, self.display_regions)
-            is_new_region = tensor.name not in self.regions_dict
-        is_user = tensor.name in self.plan.bindings
-        is_new_generation = (not is_new_region
-                            and (region_gen+1) > len(self.regions_dict[tensor.name]))
-        if is_new_region:
-            region_id = self.new_region(tensor, region_id, is_user, should_display)
-        elif is_new_generation:
-            self.add_generation(tensor, region_gen, is_user, region_id)
-        region = self.regions_dict[tensor.name][region_gen]
-        if should_display:
-            _from = str(region.id) if is_input else str(layer_id)
-            _to = str(layer_id) if is_input else str(region.id)
-            self.edges_list.append(Edge(
-                _from, _to, tensor))
-        elif is_input:
-            producers = self.find_producers(self.plan.all_layers, tensor.name)
-            for producer in producers:
-                self.edges_list.append(Edge(
-                    str(producer[0]),
-                    str(layer_id), tensor))
-        return region_id
-
-    def add_region_node(self, id: int, tensor: Activation, is_user: bool):
-        pass
-
-    def add_layer_node(self, node_id: int, layer: Layer, latency: float, node_labeler: Callable):
-        pass
-
-    def add_edge(self, src, end, tensor, region_gen):
-        pass
-
-    def add_generation(self, tensor: Activation, region_gen: int, is_user: bool, region_id):
-        new_region_id = self.regions_generations.create_id(region_id, region_gen+1)
-        self.regions_dict[tensor.name].append(Region(new_region_id, tensor, is_user, True))
-
-        # Add an edge between the previous and current region generations
-        previous_gen_region = self.regions_dict[tensor.name][region_gen-1]
-        self.edges_list.append(Edge(
-            str(previous_gen_region.id),
-            str(new_region_id),
-            tensor, region_gen=region_gen))
-
-
 def precision_formatter(layer: Layer):
     """Format Dot nodes by layer precision"""
-    formatting = {'style': 'filled',
+    formatting = {'shape': 'Mrecord',
+                  'style': 'filled',
                   'tooltip': layer.tooltip(),
-                  'fillcolor': precision_colormap[layer.precision]}
+                  'fillcolor': precision_colormap[layer.precision],
+                  'color': 'lightgray',
+                  'fontname': 'Helvetica',}
     return formatting
 
 
@@ -419,98 +598,190 @@ def layer_type_formatter(layer: Layer):
     except KeyError:
         layer_color = "#E5E7E9"
 
-    formatting = {'style': 'filled',
+    formatting = {'shape': 'Mrecord',
+                  'style': 'filled',
                   'tooltip': layer.tooltip(),
                   'fillcolor': layer_color,
-                  'color': 'white',}
+                  'color': 'lightgray',
+                  'fontname': 'Helvetica'}
     return formatting
 
 
-def tensor_precision_formatter(tensor: Activation):
-    """Format Dot edges by tensor precision"""
-    formatting = {
-        'color': precision_colormap[tensor.precision],
-        'tooltip': str(tensor.shape)}
-    return formatting
-
-
-def region_precision_formatter(tensor: Activation):
+def region_precision_formatter(tensor: Activation, is_user: bool):
     """Format Dot edges by region precision"""
     formatting = {
-        'style': 'filled' if tensor.is_user else 'dashed',
-        'tooltip': str(tensor.shape),
+        'style': 'filled' if is_user else 'dashed',
+        # Hover popup text
+        'tooltip': tensor.name,
         'penwidth': '3',
-        'color': precision_colormap[tensor.precision]}
+        'color': precision_colormap[tensor.precision],
+        'fontname': 'Helvetica'}
     return formatting
 
-class DotGraph(PlanGraph):
-    """This class converts TensorRT plans to Graphviz DOT graphs"""
+
+layer_layer_node_formatters = {
+    "layer_type": layer_type_formatter,
+    "precision_formatter": precision_formatter,
+}
+
+layer_node_renderers = {
+    "Minimal": layer_node_renderer_simple,
+    "Keras": layer_node_renderer_keras,
+    "Configurable": layer_node_configurable_renderer,
+}
+
+
+def get_latency(plan: EnginePlan, layer: Layer, latency_type) -> float:
+    try:
+        latency = plan.df[plan.df['Name'] == layer.name][f"latency.{latency_type}"].iloc[0]
+    except (KeyError, IndexError):
+        # Constant layer or no latency data.
+        latency = 0
+    return latency
+
+def get_dot_id(layer_name: str) -> str:
+    return layer_name.replace(":", "###") # f"l_{dot_node_id}"
+
+class DotGraph(object):
+    """This class converts a TensorRT plan into Graphviz DOT graphs"""
     def __init__(self,
         plan: EnginePlan,
-        node_formatter: Callable,
+        layer_node_formatter: Callable,
+        layer_node_highlighter: Callable=layer_node_highlighter,
+        layer_node_renderer: Callable=layer_node_configurable_renderer,
         region_formatter: Callable=region_precision_formatter,
         display_layer_names: bool=True,
+        stack_layer_names: bool=True,
         display_regions: bool=False,
+        display_forking_regions: bool=False,
         expand_layer_details: bool=False,
+        display_constants: bool=False,
+        display_latency: bool=True,
+        latency_type: str='avg_time',
+        display_region_reuse: bool=False,
+        display_region_names: bool=False,
+        display_edge_name: bool=False,
+        display_edge_details: bool=True,
+        highlight_layers: list=None,
     ):
+        plan_graph = PlanGraph(
+            plan, display_regions, display_constants, display_forking_regions)
         self.dot = Digraph()
-        self.node_formatter = node_formatter
+        self.layer_node_formatter = layer_node_formatter
+        self.layer_node_highlighter = layer_node_highlighter
+        self.layer_node_renderer = layer_node_renderer
         self.region_formatter = region_formatter
         self.expand_layer_details = expand_layer_details
-        super().__init__(plan, display_regions)
+        self.display_layer_names = display_layer_names
+        self.stack_layer_names = stack_layer_names
+        self.display_latency = display_latency
+        self.latency_type = latency_type if latency_type in latency_types else latency_types[0]
+        self.display_region_reuse = display_region_reuse
+        self.render_region_reuse_edges = False
+        self.display_region_names = display_region_names
+        self.display_edge_name = display_edge_name
+        self.display_edge_details = display_edge_details
+        # Get the node names of the layers to highlight
+        self.highlighted_layers_ids = None
+        if highlight_layers:
+            highlight_layers_name = plan.df['Name'].iloc[highlight_layers].to_list()
+            self.highlighted_layers_ids = [get_dot_id(name) for name in highlight_layers_name]
 
-    def add_region_node(self, id: int, tensor: Activation, is_user: bool):
-        tensor.is_user = is_user
-        formatter = self.region_formatter(tensor)
-        self.dot.node(
-            str(id),
-            f"{tensor.name}\n{tensor.tooltip()}",
-            shape='rectangle',
-            fillcolor='gray' if is_user else None,
-            fontname="Helvetica",
-            **formatter)
+        node_name_2_node_id = {}
+        self.__add_dot_region_nodes(plan_graph, node_name_2_node_id)
+        self.__add_dot_layer_nodes(plan, plan_graph, node_name_2_node_id)
 
-    def add_layer_node(
-        self, node_id: int, layer: Layer, latency: float, node_labeler: Callable
+
+        for edge in plan_graph.edges_list:
+            src_id = node_name_2_node_id[edge.src.layer_name]
+            dst_id = node_name_2_node_id[edge.dst.layer_name]
+            self.__create_dot_edge(src_id, dst_id, edge.tensor, edge.region_gen)
+
+    def __add_dot_region_nodes(self, plan_graph, node_name_2_node_id):
+        dot_node_id = 0
+        for mem_node in plan_graph.memory_nodes:
+            node_name_2_node_id[mem_node.name] = dot_id = get_dot_id(mem_node.name)
+            self.__create_dot_region_node(dot_id, mem_node.tensor, mem_node.is_user, mem_node.region_gen)
+            dot_node_id += 1
+
+    def __add_dot_layer_nodes(self, plan, plan_graph, node_name_2_node_id):
+        for layer_node in plan_graph.layers_nodes:
+            layer = layer_node.layer
+            latency = get_latency(plan, layer, self.latency_type)
+            if not layer.type == 'Constant' or plan_graph.include_constants:
+                dot_id = get_dot_id(layer.name)
+                node_name_2_node_id[layer.name] = dot_id
+                self.__create_dot_layer_node(
+                    dot_id, layer, latency, layer_node_renderer=self.layer_node_renderer)
+
+    def __create_dot_region_node(self, node_id: str, tensor: Activation, is_user: bool, gen: int):
+        formatter = self.region_formatter(tensor, is_user)
+        is_minimal = False
+        if is_minimal and not is_user:
+            self.dot.node(
+                str(node_id),
+                label="",
+                shape='diamond',
+                height=".2", width=".2",
+                **formatter)
+        else:
+            desc = tensor.name if (self.display_region_names or is_user) else ""
+            if self.display_region_reuse and gen > 0:
+                desc = f"{desc} (gen={gen})"
+            desc = f"{desc}\n{tensor.tooltip()}" if desc else tensor.tooltip()
+            self.dot.node(
+                str(node_id),
+                desc,
+                shape='rectangle',
+                fillcolor='gray' if is_user else None,
+                **formatter)
+
+    def __create_dot_layer_node(
+        self, node_id: str, layer: Layer, latency: float, layer_node_renderer: Callable
     ):
-        formatting = self.node_formatter(layer)
-
+        formatting = self.layer_node_formatter(layer)
+        formatting.update(self.layer_node_highlighter(node_id, self.highlighted_layers_ids))
         self.dot.node(
             str(node_id),
-            node_labeler(layer, latency, expand_layer_details=self.expand_layer_details),
-            shape='Mrecord',
-            fontname="Helvetica", **formatting)
+            layer_node_renderer(
+                layer,
+                latency if (self.display_latency and latency) else None,
+                expand_layer_details=self.expand_layer_details,
+                display_layer_names=self.display_layer_names,
+                stack_layer_names=self.stack_layer_names),
+                **formatting)
 
-    def add_edge(self, src, end, tensor, region_gen):
+    def __create_dot_edge(self, src, end, tensor, region_gen):
         def generation_color(gen: int, line_color: str) -> str:
             edge_color = ""
-            for i in range(gen):
-                edge_color += f"{line_color}:white:"
+            if self.render_region_reuse_edges:
+                for _ in range(gen):
+                    edge_color += f"{line_color}:white:"
             edge_color += f"{line_color}"
             return edge_color
 
         edge_color = precision_colormap[tensor.precision]
+
         if region_gen:
             edge_color = generation_color(region_gen, edge_color)
-            desc = tensor.tooltip()
-        else:
-            desc = tensor.tooltip()
-        self.dot.edge(src, end, desc, color=edge_color)
+        desc = []
+        if self.display_edge_name:
+            desc.append(tensor.name)
+        if self.display_edge_details:
+            desc.append(tensor.tooltip())
+        desc_str = "\n".join(desc)
+        self.dot.edge(src, end, desc_str, color=edge_color)
 
 
-def to_dot(plan: EnginePlan,
-           node_formatter: Callable,
-           region_formatter: Callable=region_precision_formatter,
-           display_layer_names: bool=True,
-           display_regions: bool=False,
-           display_constants: bool=False,
-           expand_layer_details: bool=False) -> Digraph:
+def to_dot(*args, **kwargs) -> Digraph:
     """Convert plan-graph to dot format"""
-    g = DotGraph(
-        plan, node_formatter, region_formatter,
-        display_layer_names, display_regions, expand_layer_details)
+    g = DotGraph(*args, **kwargs)
     return g.dot
 
+
+"""
+ONNX file format
+"""
 
 import onnx
 
@@ -534,55 +805,84 @@ def make_onnx_tensor(tensor):
             tensor.shape)
     return t
 
-class OnnxGraph(PlanGraph):
-    def __init__(self,
-        plan: EnginePlan,
-        display_layer_names: bool=True,
-        display_regions: bool=False,
-    ):
+class OnnxGraph(object):
+    def __init__(self, plan: EnginePlan, display_forking_regions: bool):
+        def get_adjacency_lists():
+            inputs_map, outputs_map = {}, {}
+            layer_nodes_names = [node.layer.name for node in self.plan_graph.layers_nodes]
+            for edge in self.plan_graph.edges_list:
+                if edge.src.port != None and edge.dst.port != None:
+                    if False and edge.src.layer_name in layer_nodes_names and edge.dst.layer_name in layer_nodes_names:
+                        edge_name = edge.tensor.name
+                    else:
+                        edge_name = f"{edge.src.layer_name}:{edge.src.port}##{edge.dst.layer_name}:{edge.dst.port}"
+                elif edge.src.port != None:
+                    edge_name = edge.dst.layer_name
+                else:
+                    edge_name = edge.src.layer_name
+                try:
+                    outputs_map[edge.src.layer_name].append(edge_name)
+                except KeyError:
+                    outputs_map[edge.src.layer_name] = list((edge_name,))
+
+                try:
+                    inputs_map[edge.dst.layer_name].append(edge_name)
+                except KeyError:
+                    inputs_map[edge.dst.layer_name] = list((edge_name,))
+            return inputs_map, outputs_map
+
+        def add_layer_nodes():
+            for layer_id, layer_node in enumerate(self.plan_graph.layers_nodes):
+                layer = layer_node.layer
+                try:
+                    self.__add_layer_node(layer_id, layer, inputs_map[layer.name], outputs_map[layer.name])
+                except KeyError:
+                    # Graph inputs/outputs (bindings) will not have an entry in the inputs_map or outputs_map
+                    pass
+
+        def add_memory_nodes():
+            for mem_node in self.plan_graph.memory_nodes:
+                is_user = mem_node.is_user
+                if not is_user:
+                    self.__add_region_node(
+                        mem_node.region_gen, mem_node.name, is_user,
+                        inputs_map[mem_node.name], outputs_map[mem_node.name])
+
+
+        def add_graph_inputs_outputs():
+            # Graph inputs/outputs handling
+            g_inputs, g_outputs = plan.get_bindings()
+            for inp in g_inputs:
+                graph_inputs.append(make_onnx_tensor(inp))
+            for outp in g_outputs:
+                graph_outputs.append(make_onnx_tensor(outp))
+
+        def finalize_onnx_graph():
+            graph_def = onnx.helper.make_graph(
+                self.onnx_nodes,
+                'test-model',
+                graph_inputs,
+                graph_outputs)
+            self.onnx_model = onnx.helper.make_model(
+                graph_def, producer_name='nvidia-trex')
+
         self.onnx_nodes = []
-        self.graph_inputs, self.graph_outputs = [], []
-        self.regions_inputs = dict()
-        self.regions_outputs = dict()
+        graph_inputs, graph_outputs = [], []
         self.plan = plan
+        self.plan_graph = PlanGraph(plan, include_forking_regions=display_forking_regions)
 
-        for layer in plan.layers:
-            for inp in layer.inputs:
-                if inp.name in self.plan.bindings:
-                    self.graph_inputs.append(make_onnx_tensor(inp))
-            for outp in layer.outputs:
-                if outp.name in self.plan.bindings:
-                    self.graph_outputs.append(make_onnx_tensor(outp))
+        inputs_map, outputs_map = get_adjacency_lists()
+        add_memory_nodes()
+        add_layer_nodes()
+        add_graph_inputs_outputs()
+        finalize_onnx_graph()
 
-        super().__init__(plan, display_regions)
-        graph_def = onnx.helper.make_graph(
-            self.onnx_nodes,
-            'test-model',
-            self.graph_inputs,
-            self.graph_outputs)
-        self.model_def = onnx.helper.make_model(
-            graph_def, producer_name='engine2onnx')
-
-    def add_region_node(self, id: int, tensor: Activation, is_user: bool):
-        if is_user:
-            # In the ONNX programming model we create
-            # bindings when we create the graph.
-            return
-        try:
-            inputs = self.regions_inputs[tensor.name]
-        except:
-            print(f"Did not find input {id}")
-            inputs = None
-        try:
-            outputs = self.regions_outputs[tensor.name]
-        except:
-            print(f"Did not find output {id}")
-            outputs = None
-        name = str(id)
-        node_def = onnx.helper.make_node("Region", inputs, outputs, name)
+    def __add_region_node(self, gen: int, region_name: str, is_user: bool, inputs, outputs):
+        assert not is_user
+        node_def = onnx.helper.make_node("Region", inputs, outputs, region_name)
         self.onnx_nodes.append(node_def)
 
-    def add_layer_node(self, node_id: int, layer: Layer, node_labeler: Callable):
+    def __add_layer_node(self, node_id: int, layer: Layer, inputs, outputs):
         def get_type(layer):
             op_type = layer.type
             # Convert Op Type to onnx.ai namepsace because
@@ -604,34 +904,10 @@ class OnnxGraph(PlanGraph):
                     node_def.attribute.extend([onnx.helper.make_attribute(key, value)])
 
         op_type = get_type(layer)
-        name = layer.name
-
-        print(f"adding node {node_id} - {layer.name}")
-
-        # Find layer id
-        inputs, outputs = [], []
-        for edge in self.edges_list:
-            if edge.src == str(node_id):
-                outputs.append(edge.tensor.name)
-            if edge.dst == str(node_id):
-                inputs.append(edge.tensor.name)
+        if op_type == 'Constant':
+            return
 
         # Find inputs to layer id, outputs
-        node_def = onnx.helper.make_node(op_type, inputs, outputs, name)
+        node_def = onnx.helper.make_node(op_type, inputs, outputs, layer.name)
         add_attributes(layer.raw_dict, node_def)
         self.onnx_nodes.append(node_def)
-
-    def add_edge(self, src, end, tensor, region_gen):
-        if True:
-            edge = f"{src}_to_{end}"
-            edge = tensor.name
-            try:
-                self.regions_inputs[tensor.name].append(edge)
-            except KeyError:
-                self.regions_inputs[tensor.name] = [edge,]
-
-            try:
-                self.regions_outputs[tensor.name].append(end)
-            except KeyError:
-                self.regions_outputs[tensor.name] = [end,]
-
