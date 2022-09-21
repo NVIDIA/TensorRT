@@ -10,7 +10,7 @@ to achieve acceptable accuracy.
 
 You can easily check whether the generated engine satisfies accuracy
 requirements by comparing the resulting engine against ONNX-Runtime using
-Polygraphy.  See [Comparing Frameworks](/examples/cli/run/01_comparing_frameworks) for more detailed
+Polygraphy.  See [Comparing Frameworks](../examples/cli/run/01_comparing_frameworks) for more detailed
 instructions on how to do this.
 
 ### Sanity-checking for FP16 limitations
@@ -18,7 +18,7 @@ instructions on how to do this.
 If you are using `--trt --fp16` and accuracy is not acceptable, you can
 sanity-check whether this might be a limitation with using the model in reduced
 precision (and not a TensorRT-specific issue) by running the same model in FP16
-using ONNX-Runtime.  Refer to [Converting ONNX Models to FP16](/examples/cli/convert/04_converting_models_to_fp16)
+using ONNX-Runtime.  Refer to [Converting ONNX Models to FP16](../examples/cli/convert/04_converting_models_to_fp16)
 for instructions on generating a model for comparison and validating its
 outputs. If running the model in FP16 fails in ONNX-Runtime, then you will likely need to
 adjust the model or add precision constraints as described below in order to
@@ -28,13 +28,13 @@ achieve acceptable accuracy.
 
 If the output comparison fails, the next step is generally to isolate the
 problematic layer(s) in the model contributing to the accuracy failure. See
-[How to Debug Accuracy](/how-to/debug_accuracy.md) for techniques on how to do this.
+[How to Debug Accuracy](../how-to/debug_accuracy.md) for techniques on how to do this.
 
 ## Overriding precision constraints
 
 Once you've identified the problematic layer(s), the next step is to override
 precision constraints for those layers to FP32 to see if accuracy recovers. See
-the example on [Overriding Precision Constraints]() for details on how to use
+the example on [Overriding Precision Constraints](../examples/cli/run/08_adding_precision_constraints) for details on how to use
 Polygraphy to experiment with different precision constraints.
 
 ## Other options

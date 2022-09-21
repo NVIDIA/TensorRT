@@ -20,10 +20,3 @@ class TestConstants:
         from polygraphy import constants
 
         assert (constants.INTERNAL_CORRECTNESS_CHECKS, constants.AUTOINSTALL_DEPS)
-
-
-class TestCompareFunc:
-    def test_basic_compare_func(self):
-        from polygraphy.comparator import CompareFunc
-
-        CompareFunc.basic_compare_func(atol=1, rtol=1)

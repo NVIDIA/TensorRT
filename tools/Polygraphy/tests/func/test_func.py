@@ -139,6 +139,23 @@ class TestExtend:
 
             y()
 
+    @pytest.mark.parametrize("args_mode", ["kwargs", "args", "mixed"])
+    def test_extend_forward_parameters(self, args_mode):
+        def x(x_arg0, x_arg1):
+            return x_arg0 + x_arg1
+
+        @func.extend(x)
+        def y(x_arg0, x_arg1, x_ret):
+            assert x_ret == x_arg0 + x_arg1
+
+        if args_mode == "kwargs":
+            assert y(x_arg0=2, x_arg1=1) == 3
+        elif args_mode == "args":
+            assert y(2, 1) == 3
+        else:
+            assert args_mode == "mixed"
+            assert y(2, x_arg1=1) == 3
+
 
 class TestConstantMethod:
     def test_cannot_modify_attrs(self):

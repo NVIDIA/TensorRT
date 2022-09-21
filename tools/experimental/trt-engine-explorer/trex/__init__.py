@@ -28,5 +28,6 @@ from trex.graphing import *
 from trex.interactive import *
 from trex.report_card import *
 from trex.compare_engines import *
+from trex.excel_summary import *
 
-__version__ = "0.1.2"
+__version__ = "0.1.4"

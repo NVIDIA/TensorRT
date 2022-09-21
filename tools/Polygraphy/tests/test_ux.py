@@ -51,12 +51,10 @@ class TestReadme:
                 assert requests.get(link).status_code == 200
             else:
                 assert os.path.pathsep * 2 not in link, "Duplicate slashes break links in GitHub"
-                if link.startswith('/'):
-                    # GFM links which start with '/' are relative to the root of the repository
-                    # See examples in https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#images
-                    link_abs_path = os.path.abspath(os.path.join(ROOT_DIR, link.lstrip('/')))
-                else:
-                    link_abs_path = os.path.abspath(os.path.join(readme_dir, link))
+                # NOTE: We cannot use repo-root-relative links in Markdown since Polygraphy is also
+                # a subfolder of the OSS repo.
+                assert not link.startswith('/')
+                link_abs_path = os.path.abspath(os.path.join(readme_dir, link))
                 assert os.path.exists(
                     link_abs_path
                 ), f"In README: '{readme}', link: '{link}' does not exist. Note: Full path was: '{link_abs_path}'"

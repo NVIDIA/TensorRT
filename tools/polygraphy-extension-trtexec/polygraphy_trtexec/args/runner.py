@@ -23,7 +23,7 @@ The argument group implements the standard `BaseRunnerArgs` interface, which inh
 
 import polygraphy
 from polygraphy import mod
-from polygraphy.tools.args import ModelArgs, TrtConfigArgs, TrtLoadPluginsArgs, TrtSaveEngineArgs, util as args_util
+from polygraphy.tools.args import ModelArgs, TrtConfigArgs, TrtLoadPluginsArgs, TrtLoadNetworkArgs, TrtSaveEngineArgs, util as args_util
 from polygraphy.tools.args.base import BaseRunnerArgs
 from polygraphy.tools.script import make_invocable
 
@@ -137,6 +137,30 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
             type=int,
         )
 
+        self.group.add_argument(
+            "--trtexec-export-times",
+            help="Write the timing results in a json file",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--trtexec-export-output",
+            help="Write the output tensors to a json file",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--trtexec-export-profile",
+            help="Write the profile information per layer in a json file",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--trtexec-export-layer-info",
+            help="Write the layer information of the engine in a json file",
+            default=None,
+        )
+
         # Optional
 
         self.group.add_argument(
@@ -209,19 +233,6 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         )
 
         self.group.add_argument(
-            "--layer-precisions",
-            help=""" Control per-layer precision constraints. Effective only when precisionConstraints is set to
-                              "obey" or "prefer". (default = none)
-                              The specs are read left-to-right, and later ones override earlier ones. "*" can be used as a
-                              layerName to specify the default precision for all the unspecified layers.
-                              Per-layer precision spec ::= layerPrecision[","spec]
-                                                  layerPrecision ::= layerName":"precision
-                                                  precision ::= "fp32"|"fp16"|"int32"|"int8"
-                """,
-            default=None,
-        )
-
-        self.group.add_argument(
             "--layer-output-types",
             help="""Control per-layer output type constraints. Effective only when precisionConstraints is set to
                               "obey" or "prefer". (default = none)"
@@ -239,7 +250,7 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         """
         Parses command-line arguments and populates the following attributes:
         """
-        
+
         # Required options
         self.trtexec_path = args_util.get(args, "trtexec_path")
         self.use_cuda_graph = args_util.get(args, "use_cuda_graph")
@@ -254,6 +265,10 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         self.no_data_transfers = args_util.get(args, "no_data_transfers")
         self.trtexec_warmup = args_util.get(args, "trtexec_warmup")
         self.trtexec_iterations = args_util.get(args, "trtexec_iterations")
+        self.trtexec_export_times = args_util.get(args, "trtexec_export_times")
+        self.trtexec_export_output = args_util.get(args, "trtexec_export_output")
+        self.trtexec_export_profile = args_util.get(args, "trtexec_export_profile")
+        self.trtexec_export_layer_info = args_util.get(args, "trtexec_export_layer_info")
 
         # Optional options
         self.use_spin_wait = args_util.get(args, "use_spin_wait")
@@ -266,7 +281,6 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         self.separate_profile_run = args_util.get(args, "separate_profile_run")
         self.trtexec_no_builder_cache = args_util.get(args, "trtexec_no_builder_cache")
         self.trtexec_profiling_verbosity = args_util.get(args, "trtexec_profiling_verbosity")
-        self.layer_precisions = args_util.get(args, "layer_precisions")
         self.layer_output_types = args_util.get(args, "layer_output_types")
 
     def add_to_script_impl(self, script):
@@ -275,8 +289,8 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         input_shapes = self.arg_groups[ModelArgs].input_shapes or None
 
         profile_dicts = self.arg_groups[TrtConfigArgs].profile_dicts
-        tf32 = self.arg_groups[TrtConfigArgs].tf32        
-        fp16 = self.arg_groups[TrtConfigArgs].fp16        
+        tf32 = self.arg_groups[TrtConfigArgs].tf32
+        fp16 = self.arg_groups[TrtConfigArgs].fp16
         int8 = self.arg_groups[TrtConfigArgs].int8
         allow_gpu_fallback = self.arg_groups[TrtConfigArgs].allow_gpu_fallback
         precision_constraints = self.arg_groups[TrtConfigArgs].precision_constraints
@@ -288,6 +302,9 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
             refit = None
 
         plugins = self.arg_groups[TrtLoadPluginsArgs].plugins
+        layer_precisions = self.arg_groups[TrtLoadNetworkArgs].layer_precisions
+        if layer_precisions:
+            layer_precisions = {layer:str(precision) for (layer, precision) in layer_precisions.items()}
 
         save_engine = self.arg_groups[TrtSaveEngineArgs].path
 
@@ -295,8 +312,8 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         script.add_import(imports=["TrtexecRunner"], frm="polygraphy_trtexec.backend")
         # Add the Trtexec runner using the `Script.add_runner()` API.
         script.add_runner(make_invocable(
-            "TrtexecRunner", 
-            model_path=model_path, 
+            "TrtexecRunner",
+            model_path=model_path,
             model_type=model_type,
 
             trtexec_path = self.trtexec_path,
@@ -312,7 +329,11 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
             no_data_transfers=self.no_data_transfers,
             trtexec_warmup=self.trtexec_warmup,
             trtexec_iterations=self.trtexec_iterations,
-            
+            trtexec_export_times=self.trtexec_export_times,
+            trtexec_export_output=self.trtexec_export_output,
+            trtexec_export_profile=self.trtexec_export_profile,
+            trtexec_export_layer_info=self.trtexec_export_layer_info,
+
             # Optional
             use_spin_wait=self.use_spin_wait,
             threads=self.threads,
@@ -325,7 +346,6 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
             separate_profile_run=self.separate_profile_run,
             trtexec_no_builder_cache=self.trtexec_no_builder_cache,
             trtexec_profiling_verbosity=self.trtexec_profiling_verbosity,
-            layer_precisions=self.layer_precisions,
             layer_output_types=self.layer_output_types,
 
             input_shapes=input_shapes,
@@ -337,6 +357,7 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
             precision_constraints=precision_constraints,
             workspace=workspace,
             use_dla=use_dla,
+            layer_precisions=layer_precisions,
             plugins=plugins,
             save_engine=save_engine,
             ))

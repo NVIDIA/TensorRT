@@ -19,9 +19,11 @@ import contextlib
 import importlib
 import os
 import subprocess as sp
-from typing import List
 import sys
+import warnings
+from typing import List
 
+from polygraphy import constants
 from polygraphy.mod import util as mod_util
 
 # Tracks all of Polygraphy's lazy imports, excluding internal ones.
@@ -39,7 +41,7 @@ _EXTRA_FLAGS_FOR_MODULE = {
 }
 
 
-LATEST_VERSION = "latest"
+LATEST_VERSION = "==latest"
 """Indicates that the latest version of the package is preferred in lazy_import"""
 
 
@@ -60,7 +62,12 @@ def _version_ok(ver, preferred):
 
 
 def lazy_import(
-    name: str, log: bool = None, version: str = None, pkg_name: str = None, install_flags: List[str] = None
+    name: str,
+    log: bool = None,
+    version: str = None,
+    pkg_name: str = None,
+    install_flags: List[str] = None,
+    requires: List[str] = None,
 ):
     """
     Lazily import a module.
@@ -71,11 +78,13 @@ def lazy_import(
 
     Args:
         name (str):
-                The name of the module.
+                The name of the module and optionally the preferred version of the package,
+                formatted as a version string. For example, ``'example_module>=0.5.0'`` or ``'example_module==1.8.0'``.
         log (bool):
                 Whether to log information about the module.
                 Defaults to True.
         version (str):
+                [DEPRECATED - use `name` instead]
                 The preferred version of the package, formatted as a version string.
                 For example, ``'>=0.5.0'`` or ``'==1.8.0'``. Use ``LATEST_VERSION`` to
                 indicate that the latest version of the package is preferred.
@@ -85,27 +94,52 @@ def lazy_import(
         install_flags (List[str]):
                 Additional flags to provide to the installation command.
                 Used only if automatic installation of dependencies is enabled.
+        requires (List[str]):
+                Additional dependencies required by the module which are *not* specified as dependencies.
+                This parameter should only be required when a module does not correctly specify dependencies.
+                Defaults to [].
 
     Returns:
         LazyModule:
                 A lazily loaded module. When an attribute is first accessed,
                 the module will be imported.
     """
+    VERSION_CHARS = ["=", ">", "<"]
     assert (
-        version is None or version == LATEST_VERSION or any(version.startswith(char) for char in ["=", ">", "<"])
+        version is None or version == LATEST_VERSION or any(version.startswith(char) for char in VERSION_CHARS)
     ), "version must be formatted as a version string!"
+
+    if version is not None:
+        warnings.warn(
+            "The version parameter in lazy_import is deprecated and will be removed in v0.45.0.\n"
+            "The version can instead be specified as part of the package name.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
+    log = True if log is None else log
+    requires = [] if requires is None else requires
+
+    def split_name_version(inp):
+        version_char_indices = [inp.index(char) for char in VERSION_CHARS if char in inp]
+        if not version_char_indices:
+            return inp, None
+
+        min_index = min(version_char_indices)
+        return inp[:min_index], inp[min_index:]
+
+    name, version = split_name_version(name) if version is None else (name, version)
+    all_required_mods = list(map(split_name_version, requires)) + [(name, version)]
 
     if "polygraphy" not in name:
         _all_external_lazy_imports.add(name)
-
-    log = True if log is None else log
 
     def import_mod():
         from polygraphy import config
         from polygraphy.logger import G_LOGGER, LogMode
 
-        def install_mod(raise_error=True):
-            modname = name.split(".")[0]
+        def install_mod(install_name, install_version, raise_error=True):
+            modname = install_name.split(".")[0]
             pkg = pkg_name if pkg_name is not None else _PKG_NAME_FROM_MODULE.get(modname, modname)
             extra_flags = install_flags if install_flags is not None else _EXTRA_FLAGS_FOR_MODULE.get(modname, [])
 
@@ -116,25 +150,25 @@ def lazy_import(
             if config.ASK_BEFORE_INSTALL:
                 res = None
                 while res not in ["y", "n"]:
-                    res = input(f"Automatically install '{pkg}' (version: {version or 'any'}) ([Y]/n)? ")
+                    res = input(f"Automatically install '{pkg}' (version: {install_version or 'any'}) ([Y]/n)? ")
                     res = res.strip()[:1].lower() or "y"
 
                 if res == "n":
                     fail()
 
-            if version == LATEST_VERSION:
+            if install_version == LATEST_VERSION:
                 extra_flags.append("--upgrade")
-            elif version is not None:
-                pkg += version
+            elif install_version is not None:
+                pkg += install_version
 
             cmd = config.INSTALL_CMD + [pkg] + extra_flags
             G_LOGGER.info(f"Running installation command: {' '.join(cmd)}")
             status = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
             if status.returncode != 0:
-                G_LOGGER.error(f"Error during installation:\n\t{status.stderr.decode()}")
+                G_LOGGER.error(f"Error during installation:\n{constants.TAB}{status.stderr.decode()}")
                 fail()
 
-            mod = importlib.import_module(name)
+            mod = importlib.import_module(install_name)
             return mod
 
         mod = None
@@ -142,25 +176,40 @@ def lazy_import(
             mod = importlib.import_module(name)
         except ImportError as err:
             if config.AUTOINSTALL_DEPS:
-                G_LOGGER.info(f"Module: '{name}' is required, but not installed. Attempting to install now.")
-                mod = install_mod()
+                for install_name, install_version in all_required_mods:
+                    G_LOGGER.info(
+                        f"Module: '{install_name}' is required, but not installed. Attempting to install now."
+                    )
+                    mod = install_mod(install_name, install_version)
             else:
                 G_LOGGER.critical(
-                    f"Module: '{name}' is required but could not be imported.\nNote: Error was: {err}\nYou can set POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables to allow Polygraphy to automatically install missing modules.\n"
+                    f"Module: '{name}' is required but could not be imported.\nNote: Error was: {err}\n"
+                    f"You can set POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables to allow "
+                    f"Polygraphy to automatically install missing modules.\n"
                 )
 
         # Auto-upgrade if necessary
-        if version is not None and hasattr(mod, "__version__") and not _version_ok(mod.__version__, version):
-            if config.AUTOINSTALL_DEPS:
-                G_LOGGER.info(
-                    f"Note: Module: '{name}' version '{mod.__version__}' is installed, but version '{version}' is recommended.\nAttempting to upgrade now."
-                )
-                mod = install_mod(raise_error=False)  # We can try to use the other version if install fails.
-            elif version != LATEST_VERSION:
-                G_LOGGER.warning(
-                    f"Module: '{name}' version '{mod.__version__}' is installed, but version '{version}' is recommended.\nConsider installing the recommended version or setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables to do so automatically. ",
-                    mode=LogMode.ONCE,
-                )
+        for install_name, install_version in all_required_mods:
+            if (
+                install_version is not None
+                and hasattr(mod, "__version__")
+                and not _version_ok(mod.__version__, install_version)
+            ):
+                if config.AUTOINSTALL_DEPS:
+                    G_LOGGER.info(
+                        f"Note: Module: '{install_name}' version '{mod.__version__}' is installed, but version '{install_version}' is required.\n"
+                        f"Attempting to upgrade now."
+                    )
+                    # We can try to use the other version if install fails, so this is non-fatal.
+                    mod = install_mod(install_name, install_version, raise_error=False)
+                elif install_version != LATEST_VERSION:
+                    G_LOGGER.error(
+                        f"Module: '{install_name}' version '{mod.__version__}' is installed, but version '{install_version}' is required.\n"
+                        f"Please install the required version or set POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables "
+                        f"to allow Polygraphy to do so automatically.\n"
+                        f"Attempting to continue with the currently installed version of this module, but note that this may cause errors!",
+                        mode=LogMode.ONCE,
+                    )
 
         if log:
             G_LOGGER.module_info(mod)
@@ -207,6 +256,11 @@ def autoinstall(lazy_mod):
         lazy_mod (LazyModule):
                 A lazy module, like that returned by ``lazy_import``.
     """
+    from polygraphy import config
+
+    if not config.AUTOINSTALL_DEPS:
+        return
+
     try:
         # It doesn't matter which attribute we try to get as any call to `__getattr__` will
         # trigger the automatic installation.

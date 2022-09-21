@@ -68,6 +68,25 @@ def extend(extend_func):
     If `y` returns something other than ``None``, then its return value will be
     provided to the caller, and the return value of ``x`` will be discarded.
 
+    In some cases, it may be necessary to access the parameters of ``x``.
+    If ``y`` takes all of ``x``'s parameters prior to its usual parameters
+    (which are the return values of ``x``), then all arguments to ``x`` will be
+    forwarded to ``y``.
+    Note that if ``x`` modifies its arguments in place, then ``y`` will see the modified
+    arguments, `not` the original ones.
+    For example:
+    ::
+
+        def x(x_arg):
+            return x_arg + 1
+
+        def y(x_arg, x_ret):
+            # `y` can now see both the input argument as well as the return value of `x`
+            assert x_ret == x_arg + 1
+
+        assert y(5) == 6
+
+
     NOTE: This function will automatically unpack tuples returned by the function
     being extended. Thus, the following implementation of ``x`` would behave just like
     the one mentioned above:
@@ -76,6 +95,8 @@ def extend(extend_func):
         def x(a0, a1, a2):
             ret = (rv0, rv1)
             return ret # Tuple will be unpacked, and `y` still sees 2 parameters
+
+    NOTE: The decorated function must not use variadic parameters like ``*args`` or ``**kwargs``.
 
     Args:
         extend_func (Callable): A callable to extend.
@@ -87,12 +108,18 @@ def extend(extend_func):
             extend_func_retval = extend_func(*args, **kwargs)
             extend_func_ret_tuple = make_iterable(extend_func_retval)
 
-            func_args = inspect.signature(func).parameters
+            func_params = inspect.signature(func).parameters
             # Special case for when the extended function does not return anything
-            if len(func_args) == 0 and len(extend_func_ret_tuple) == 1 and extend_func_ret_tuple[0] is None:
+            if len(func_params) == 0 and len(extend_func_ret_tuple) == 1 and extend_func_ret_tuple[0] is None:
                 func_retval = func()
-            elif len(extend_func_ret_tuple) == len(func_args):
+            elif len(extend_func_ret_tuple) == len(func_params):
                 func_retval = func(*extend_func_ret_tuple)
+            elif len(func_params) == len(extend_func_ret_tuple) + len(args) + len(kwargs):
+                # We need to turn `extend_func_ret_tuple` into keyword arguments so that it can
+                # be ordered after `**kwargs`.
+                ret_arg_names = [param.name for param in list(func_params.values())[-len(extend_func_ret_tuple) :]]
+                ret_kwargs = dict(zip(ret_arg_names, extend_func_ret_tuple))
+                func_retval = func(*args, **kwargs, **ret_kwargs)
             else:
 
                 def try_get_name(fn):
@@ -102,7 +129,9 @@ def extend(extend_func):
                         return fn
 
                 G_LOGGER.critical(
-                    f"Function: {try_get_name(func)} accepts {len(func_args)} parameter(s), but needs to accept {len(extend_func_ret_tuple)} parameter(s) from: {try_get_name(extend_func)} instead.\nNote: Parameters should be: {tuple(map(type, extend_func_ret_tuple))}"
+                    f"Function: {try_get_name(func)} accepts {len(func_params)} parameter(s), "
+                    f"but needs to accept {len(extend_func_ret_tuple)} parameter(s) from: {try_get_name(extend_func)} instead."
+                    f"\nNote: Parameters should be: {tuple(map(type, extend_func_ret_tuple))}"
                 )
 
             if func_retval is not None:

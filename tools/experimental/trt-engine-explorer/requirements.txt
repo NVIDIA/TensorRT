@@ -16,3 +16,4 @@ jupyterlab
 jupyter-dash
 pytest
 dtale==2.2.0
+xlsxwriter

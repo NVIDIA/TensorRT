@@ -68,6 +68,13 @@ def is_dynamic_shape(shape):
     return any(is_dynamic_dimension(dim) for dim in shape)
 
 
+def volume(obj):
+    vol = 1
+    for elem in obj:
+        vol *= elem
+    return vol
+
+
 # Special type of list that synchronizes contents with another list.
 # Concrete example: Assume some node, n, contains an input tensor, t. If we remove t from n.inputs,
 # we also need to remove n from t.outputs. To avoid having to do this manually, we use SynchronizedList,

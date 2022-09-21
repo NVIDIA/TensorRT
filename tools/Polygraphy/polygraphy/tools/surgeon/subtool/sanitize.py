@@ -14,14 +14,142 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy import mod
+from polygraphy import mod, util
+from polygraphy.logger import G_LOGGER
 from polygraphy.tools import util as tools_util
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
+from polygraphy.tools.args import util as args_util
+from polygraphy.tools.args.base import BaseArgs
+from polygraphy.tools.script import make_invocable
 from polygraphy.tools.surgeon.subtool.base import BaseSurgeonSubtool
 
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
 gs = mod.lazy_import("onnx_graphsurgeon")
+
+
+class ConstFoldArgs(BaseArgs):
+    """
+    Constant Folding: folding constants
+
+    Depends on:
+        OnnxInferShapesArgs
+    """
+
+    def add_parser_args_impl(self):
+        self.group.add_argument(
+            "--fold-constants",
+            help="Fold constants in the graph by computing subgraphs whose values "
+            "are not dependent on runtime inputs.",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
+            "--num-passes",
+            "--num-const-fold-passes",
+            help="The number of constant folding passes to run. "
+            "Sometimes, subgraphs that compute tensor shapes may not be foldable in a single pass. "
+            "If not specified, Polygraphy will automatically determine the number of passes required. ",
+            type=int,
+            default=None,
+            dest="num_const_fold_passes",
+        )
+        self.group.add_argument(
+            "--partitioning",
+            help="Controls how to partition the graph during constant folding: {{"
+            "'basic': Partition the graph so failures in one part do not affect other parts, "
+            "'recursive': In addition to partitioning the graph, partition partitions where needed}} ",
+            choices=["basic", "recursive"],
+            default=None,
+        )
+        self.group.add_argument(
+            "--no-fold-shapes",
+            help="Disable folding Shape nodes and subgraphs that operate on shapes",
+            dest="fold_shapes",
+            default=None,
+            action="store_false",
+        )
+        self.group.add_argument(
+            "--no-per-pass-shape-inference",
+            help="Disable shape inference between passes of constant folding",
+            dest="per_pass_shape_inference",
+            default=None,
+            action="store_false",
+        )
+        self.group.add_argument(
+            "--fold-size-threshold",
+            help="""
+            The maximum per-tensor size threshold, in bytes, for which to apply constant folding.
+            Any nodes generating tensors larger than this size will not be folded away.
+            For example, some models may apply ops like `Tile` or `Expand` to constants, which can
+            result in very large tensors. Rather than pre-computing those constants and bloating
+            the model size, it may be desirable to skip folding them and allow them to be computed
+            at runtime.
+            Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively.
+            For example, `--fold-size-threshold 16M` is equivalent to `--fold-size-threshold 16777216`.
+            """,
+            default=None,
+        )
+
+    def parse_impl(self, args):
+        """
+        Parses command-line arguments and populates the following attributes:
+
+        Attributes:
+            fold_constants (bool): Whether to apply constant folding.
+            num_passes (int): The number of constant folding passes to apply.
+            partitioning (str): The partitioning mode to use when constant folding.
+            fold_shapes (bool): Whether to allow shape folding.
+            per_pass_shape_inference (bool): Whether to apply shape inference between constant folding passes.
+            size_threshold (int): The threshold in bytes over which to avoid folding constants.
+        """
+        self.fold_constants = args_util.get(args, "fold_constants")
+        self.num_passes = args_util.get(args, "num_const_fold_passes")
+        self.partitioning = args_util.get(args, "partitioning")
+        self.fold_shapes = args_util.get(args, "fold_shapes")
+        self.per_pass_shape_inference = args_util.get(args, "per_pass_shape_inference")
+        self.size_threshold = args_util.parse_num_bytes(args_util.get(args, "fold_size_threshold"))
+
+        if not self.fold_constants:
+            for arg in [
+                "num_const_fold_passes",
+                "partitioning",
+                "fold_shapes",
+                "per_pass_shape_inference",
+                "fold_size_threshold",
+            ]:
+                val = args_util.get(args, arg)
+                if val is not None:
+                    G_LOGGER.warning(
+                        f"Argument: '--{arg.replace('_', '-')}' will be ignored since constant folding is not enabled.\n"
+                        "This argument is only valid when the `--fold-constants` option is provided."
+                    )
+
+    def add_to_script_impl(self, script, loader_name):
+        if not self.fold_constants:
+            return loader_name
+
+        script.add_import(imports=["FoldConstants"], frm="polygraphy.backend.onnx")
+        loader_name = script.add_loader(
+            make_invocable(
+                "FoldConstants",
+                loader_name,
+                num_passes=self.num_passes,
+                do_shape_inference=self.arg_groups[OnnxInferShapesArgs].do_shape_inference
+                if self.per_pass_shape_inference is not False  # since `None` indicates default value
+                else False,
+                fold_shapes=self.fold_shapes,
+                partitioning=self.partitioning,
+                size_threshold=self.size_threshold,
+                allow_onnxruntime_shape_inference=self.arg_groups[OnnxInferShapesArgs].allow_onnxruntime,
+            ),
+            "fold_constants",
+        )
+        return loader_name
+
+    def fold(self, model):
+        loader = args_util.run_script(self.add_to_script, model)
+        return util.invoke_if_callable(loader)[0]
 
 
 class Sanitize(BaseSurgeonSubtool):
@@ -44,50 +172,10 @@ class Sanitize(BaseSurgeonSubtool):
             OnnxInferShapesArgs(default=True, allow_force_fallback=True),
             OnnxLoadArgs(outputs_opt_prefix=""),
             OnnxSaveArgs(allow_shape_inference=True, output_opt_required=True),
+            ConstFoldArgs(),
         ]
 
     def add_parser_args(self, parser):
-        const_fold_args = parser.add_argument_group("Constant Folding", "Options for folding constants")
-        const_fold_args.add_argument(
-            "--fold-constants",
-            help="Fold constants in the graph by computing subgraphs whose values "
-            "are not dependent on runtime inputs.",
-            action="store_true",
-            default=None,
-        )
-        const_fold_args.add_argument(
-            "--num-passes",
-            "--num-const-fold-passes",
-            help="The number of constant folding passes to run. "
-            "Sometimes, subgraphs that compute tensor shapes may not be foldable in a single pass. "
-            "If not specified, Polygraphy will automatically determine the number of passes required. ",
-            type=int,
-            default=None,
-            dest="num_const_fold_passes",
-        )
-        const_fold_args.add_argument(
-            "--partitioning",
-            help="Controls how to partition the graph during constant folding: {{"
-            "'basic': Partition the graph so failures in one part do not affect other parts, "
-            "'recursive': In addition to partitioning the graph, partition partitions where needed}} ",
-            choices=["basic", "recursive"],
-            default=None,
-        )
-        const_fold_args.add_argument(
-            "--no-fold-shapes",
-            help="Disable folding Shape nodes and subgraphs that operate on shapes",
-            dest="fold_shapes",
-            default=True,
-            action="store_false",
-        )
-        const_fold_args.add_argument(
-            "--no-per-pass-shape-inference",
-            help="Disable shape inference between passes of constant folding",
-            dest="per_pass_shape_inference",
-            default=True,
-            action="store_false",
-        )
-
         parser.add_argument(
             "--cleanup",
             help="Run dead layer removal on the graph. This is generally not required if other options are set. ",
@@ -130,23 +218,14 @@ class Sanitize(BaseSurgeonSubtool):
             return model, rerun_shape_inference
 
         def do_model_processing(model):
-            if args.fold_constants:
-                model = onnx_backend.fold_constants(
-                    model,
-                    num_passes=args.num_const_fold_passes,
-                    do_shape_inference=self.arg_groups[OnnxInferShapesArgs].do_shape_inference
-                    if args.per_pass_shape_inference
-                    else False,
-                    fold_shapes=args.fold_shapes,
-                    partitioning=args.partitioning,
-                )
+            model = self.arg_groups[ConstFoldArgs].fold(model)
             return model
 
         model = super().load_model()
         model, rerun_shape_inference = do_graph_processing(model)
 
-        if rerun_shape_inference and self.arg_groups[OnnxInferShapesArgs].do_shape_inference:
-            model = onnx_backend.infer_shapes(model)
+        if rerun_shape_inference:
+            model = self.arg_groups[OnnxInferShapesArgs].infer_shapes(model)
 
         model = do_model_processing(model)
         super().save_model(model)

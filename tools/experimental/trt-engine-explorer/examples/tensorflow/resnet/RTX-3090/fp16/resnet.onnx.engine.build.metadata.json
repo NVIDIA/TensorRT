@@ -1,0 +1,1 @@
+{"model_options": {"Format": "ONNX", "Model": "/home/nvidia/PycharmProjects/trt-engine-explorer-tfqatexample/examples/tensorflow/resnet/generated/resnet.onnx"}, "build_options": {"Max batch": "explicit batch", "Memory Pools": "workspace", "minTiming": "1", "avgTiming": "8", "Precision": "FP32+FP16"}}

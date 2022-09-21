@@ -62,6 +62,16 @@ def matmul(self, a, b, **kwargs):
     return self.layer(op="MatMul", inputs=[a, b], outputs=["matmul_out"], **kwargs)[0]
 
 
+@gs.Graph.register()
+def tile(self, inp, repeats):
+    return self.layer(op="Tile", inputs=[inp, repeats], outputs=["tile_out"])[0]
+
+
+@gs.Graph.register()
+def nonzero(self, inp):
+    return self.layer(op="NonZero", inputs=[inp], outputs=["nonzero_out"])[0]
+
+
 def save(graph, model_name):
     path = os.path.join(CURDIR, model_name)
     print(f"Writing: {path}")
@@ -171,6 +181,7 @@ make_dup_input()
 #       Reshape
 #         |
 #        out
+#
 def make_no_op_reshape():
     DTYPE = np.float32
     SHAPE = (4, 4)
@@ -201,6 +212,7 @@ make_no_op_reshape()
 #  MatMul
 #   |
 #  out
+#
 def make_needs_constraints():
     SIZE = 256
 
@@ -225,3 +237,43 @@ def make_needs_constraints():
 
 
 make_needs_constraints()
+
+# Generates a model that will become very large when constant-folded
+#
+#   inp
+#    |
+#  Tile
+#    |
+#   out
+#
+def make_constant_fold_bloater():
+    graph = gs.Graph()
+    # Input is 1MiB, tiled to 10MiB
+    out = graph.tile(np.ones(shape=(1024, 256), dtype=np.float32), repeats=np.array([1, 10]))
+    out.dtype = np.float32
+    graph.outputs = [out]
+
+    save(graph, "constant_fold_bloater.onnx")
+
+
+make_constant_fold_bloater()
+
+# Generate a model with a data-dependent shape
+#
+#    inp
+#     |
+#   NonZero
+#     |
+#    out
+def make_nonzero():
+    inp = gs.Variable("input", shape=(4,), dtype=np.int64)
+
+    graph = gs.Graph(inputs=[inp])
+    out = graph.nonzero(inp)
+    out.dtype = np.int64
+    graph.outputs = [out]
+
+    save(graph, "nonzero.onnx")
+
+
+make_nonzero()

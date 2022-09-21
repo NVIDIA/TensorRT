@@ -34,8 +34,15 @@ def onnx_model_sanity_check(poly_run):
     return onnx_model_sanity_check_impl
 
 
-def was_shape_inference_run(status):
-    return "ONNX Shape Inference completed successfully" in (status.stdout + status.stderr)
+def was_shape_inference_run(status, model):
+    logging_correct = "Shape inference completed successfully" in (status.stdout + status.stderr)
+
+    has_shape = True
+    model = onnx.load(model)
+    for val in model.graph.value_info:
+        has_shape &= val.type.tensor_type.HasField("shape")
+
+    return logging_correct and has_shape
 
 
 class TestSurgeonExtract:
@@ -45,7 +52,7 @@ class TestSurgeonExtract:
                 [ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--inputs", "X:auto:auto"]
             )
             onnx_model_sanity_check(outmodel.name)
-            assert not was_shape_inference_run(status)
+            assert not was_shape_inference_run(status, outmodel.name)
 
     def test_onnx_shape_inference_if_no_metadata(self, poly_surgeon_extract, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
@@ -59,7 +66,7 @@ class TestSurgeonExtract:
                 ]
             )
             onnx_model_sanity_check(outmodel.name)
-            assert was_shape_inference_run(status)
+            assert was_shape_inference_run(status, outmodel.name)
 
     def test_fallback_shape_inference_no_onnx_shape_inference(self, poly_surgeon_extract, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
@@ -76,7 +83,7 @@ class TestSurgeonExtract:
                 ]
             )
             onnx_model_sanity_check(outmodel.name)
-            assert not was_shape_inference_run(status)
+            assert not was_shape_inference_run(status, outmodel.name)
 
     def test_force_fallback_shape_inference_will_override_model_shapes(
         self, poly_surgeon_extract, onnx_model_sanity_check
@@ -270,8 +277,15 @@ class TestSurgeonSanitize:
     @pytest.mark.parametrize("no_per_pass_shape_inf", [None, "--no-per-pass-shape-inference"])
     @pytest.mark.parametrize("fold_shapes", [None, "--no-fold-shapes"])
     @pytest.mark.parametrize("partitioning", [None, "basic", "recursive"])
+    @pytest.mark.parametrize("no_onnxruntime_shape_inference", [None, "--no-onnxruntime-shape-inference"])
     def test_fold_constants(
-        self, poly_surgeon, no_per_pass_shape_inf, partitioning, fold_shapes, onnx_model_sanity_check
+        self,
+        poly_surgeon,
+        no_per_pass_shape_inf,
+        partitioning,
+        fold_shapes,
+        onnx_model_sanity_check,
+        no_onnxruntime_shape_inference,
     ):
         with util.NamedTemporaryFile() as outmodel:
             cmd = ["sanitize", ONNX_MODELS["const_foldable"].path, "-o", outmodel.name, "--fold-constants"]
@@ -281,7 +295,13 @@ class TestSurgeonSanitize:
                 cmd += ["--partitioning", partitioning]
             if no_per_pass_shape_inf:
                 cmd += [no_per_pass_shape_inf]
-            poly_surgeon(cmd)
+            if no_onnxruntime_shape_inference:
+                cmd += [no_onnxruntime_shape_inference]
+            status = poly_surgeon(cmd)
+
+            assert ("Inferring shapes in the model with `onnxruntime.tools.symbolic_shape_infer`" in status.stdout) == (
+                no_onnxruntime_shape_inference is None
+            )
 
             onnx_model_sanity_check(outmodel.name)
             model = onnx.load(outmodel.name)
@@ -443,4 +463,34 @@ class TestSurgeonSanitize:
                 assert tensor.shape is not None
             assert tuple(graph.outputs[0].shape) == (1, 2, 1, 1)
 
-            assert not was_shape_inference_run(status)
+            assert not was_shape_inference_run(status, outmodel.name)
+
+    @pytest.mark.parametrize(
+        "size_threshold, expect_folding",
+        [
+            ("10M", True),
+            ("9.99M", False),
+        ],
+    )
+    def test_size_threshold(self, poly_surgeon, size_threshold, expect_folding, onnx_model_sanity_check):
+        with util.NamedTemporaryFile() as outmodel:
+            poly_surgeon(
+                [
+                    "sanitize",
+                    ONNX_MODELS["constant_fold_bloater"].path,
+                    "-o",
+                    outmodel.name,
+                    "--fold-constants",
+                    "--fold-size-threshold",
+                    size_threshold,
+                ]
+            )
+
+            onnx_model_sanity_check(outmodel.name)
+            model = onnx.load(outmodel)
+
+            if expect_folding:
+                assert len(model.graph.node) == 0
+            else:
+                assert len(model.graph.node) == 1
+                assert model.graph.node[0].op_type == "Tile"

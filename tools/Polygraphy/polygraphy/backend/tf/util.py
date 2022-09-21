@@ -20,7 +20,7 @@ from polygraphy import mod, util
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER
 
-tf = mod.lazy_import("tensorflow", version="<2.0")
+tf = mod.lazy_import("tensorflow<2.0")
 
 
 def load_graph(path):

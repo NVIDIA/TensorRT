@@ -18,8 +18,7 @@ import glob
 import os
 from collections import OrderedDict, defaultdict
 
-from polygraphy import util
-from polygraphy import mod
+from polygraphy import constants, mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.base import Tool
 
@@ -114,6 +113,6 @@ class DiffTactics(Tool):
             G_LOGGER.info("Found potentially bad tactics:")
             for name, algo_set in potential_bad_tactics.items():
                 algo_set_str = list(map(str, algo_set))
-                G_LOGGER.info(f"Layer: {name}\n\tAlgorithms: {algo_set_str}")
+                G_LOGGER.info(f"Layer: {name}\n{constants.TAB}Algorithms: {algo_set_str}")
         else:
             G_LOGGER.info("Could not determine potentially bad tactics. Try generating more tactic replay files?")

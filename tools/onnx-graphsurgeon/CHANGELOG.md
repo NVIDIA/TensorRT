@@ -2,6 +2,43 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.3.24 (2022-08-31)
+### Fixed
+- Fixed a bug where `fold_constants` would not work at all when `onnxruntime` was not installed.
+    Now, `fold_constants` can still partially fold the graph even when `onnxruntime` is not available.
+
+
+## v0.3.23 (2022-08-24)
+### Fixed
+- Fixed a bug in `fold_constants` where shape tensor cast elision would not work correctly
+    if one input of a binary op was produced by a constant node and had a data type that
+    differed from that of the other input prior to the cast.
+    For example, a pattern like this would have previously failed, but now works as expected:
+    ```
+    inp (int32)            Constant
+        |                     |
+    Cast (to=float32)   constant_out (float32)
+                   \       /
+                      Sub
+                       |
+                 Cast (to=int32)
+    ```
+- Fixed a bug where shape-tensor cast elision would invalidate the graph if the original
+    casted inputs were being used as graph outputs or by other nodes.
+
+
+## v0.3.22 (2022-08-22)
+### Changed
+- Updated `fold_constants` to issue clearer warnings and avoid evaluating tensors which exceed
+    the size threshold.
+
+
+## v0.3.21 (2022-08-19)
+### Added
+- Added a `size_threshold` option in `fold_constants` which allows for disabling constant folding
+    for nodes which would generate tensors larger than the given size.
+
+
 ## v0.3.20 (2022-07-12)
 ### Fixed
 - Fixed a bug where shape tensor cast elision would sometimes fail when the Cast input had a type of int64.

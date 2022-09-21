@@ -165,7 +165,7 @@ def __fix_output_precision(df: pd.DataFrame):
 
 
 
-def fix_df(df: pd.DataFrame):
+def fix_df(df: pd.DataFrame) -> pd.DataFrame:
     """One-time preprocessing of the DF.
 
     Performed only on DF construction.
@@ -186,7 +186,7 @@ def clean_io(df: pd.DataFrame):
         df.loc[index, 'Outputs'] = outputs[0].format
 
 
-def filter_by_layer(df: pd.DataFrame, layer_type: str):
+def filter_by_layer(df: pd.DataFrame, layer_type: str) -> pd.DataFrame:
     copy_cols = ['Name', 'type', 'precision', 'tactic',
                  'latency.pct_time', 'latency.avg_time',
                  'total_io_size_bytes', 'total_footprint_bytes',
@@ -227,7 +227,7 @@ def filter_by_layer(df: pd.DataFrame, layer_type: str):
     return layers
 
 
-def change_col_order(df: pd.DataFrame):
+def change_col_order(df: pd.DataFrame) -> pd.DataFrame:
     """Change the dataframe columns-order (place common fields earlier)"""
     cols = df.columns.to_list()
     common_cols = list(('Name', 'type', 'Inputs', 'Outputs', 'latency.avg_time',
@@ -246,7 +246,7 @@ def drop_columns(df: pd.DataFrame, columns: list):
             pass
 
 
-def clean_df(df: pd.DataFrame, inplace=True):
+def clean_df(df: pd.DataFrame, inplace=True) -> pd.DataFrame:
     clean_io(df)
     columns = set([col for col_list in layer_attributes.keys() for col in col_list])
     drop_columns(df, columns)
@@ -254,7 +254,7 @@ def clean_df(df: pd.DataFrame, inplace=True):
     return df
 
 
-def clean_for_display(df: pd.DataFrame):
+def clean_for_display(df: pd.DataFrame) -> pd.DataFrame:
     """Prepare the dataframe for display"""
     df = clean_df(df.copy(), inplace=True)
     df = change_col_order(df)

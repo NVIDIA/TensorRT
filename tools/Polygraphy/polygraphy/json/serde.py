@@ -21,11 +21,10 @@ import io
 import json
 from collections import OrderedDict
 
-from polygraphy import config, constants, mod
+from polygraphy import config, constants, mod, util
 from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
-util = mod.lazy_import("polygraphy.util.util")
 
 TYPE_STRING_PREFIX = "__polygraphy_encoded_"
 
@@ -186,14 +185,15 @@ class Decoder(BaseCustomImpl):
 
 
 NUMPY_REGISTRATION_SUCCESS = False
+COMMON_REGISTRATION_SUCCESS = False
 
 
-def try_register_numpy_json(func):
+def try_register_common_json(func):
     """
-    Decorator that attempts to register JSON encode/decode methods
-    for numpy arrays if NumPy is available and the methods have not already been registered.
+    Decorator that attempts to register common JSON encode/decode methods
+    if the methods have not already been registered.
 
-    This needs to be attempted multiple times because numpy may become available in the
+    This needs to be attempted multiple times because dependencies may become available in the
     middle of execution - for example, if using dependency auto-installation.
     """
 
@@ -232,13 +232,24 @@ def try_register_numpy_json(func):
                 return list(arr.values())[0]  # For backwards compatibility
 
             NUMPY_REGISTRATION_SUCCESS = True
+
+        global COMMON_REGISTRATION_SUCCESS
+        if not COMMON_REGISTRATION_SUCCESS:
+            # Pull in some common types so that we can get their associated serialization/deserialization
+            # functions. This allows the user to avoid importing these manually.
+            # Note: We can only do this here for submodules with no external dependencies.
+            # That means, for example, nothing from `backend/` can be imported here.
+            from polygraphy.common import FormattedArray
+            from polygraphy.comparator import RunResults
+
+            COMMON_REGISTRATION_SUCCESS = True
         return func(*args, **kwargs)
 
     return wrapped
 
 
 @mod.export()
-@try_register_numpy_json
+@try_register_common_json
 def to_json(obj):
     """
     Encode an object to JSON.
@@ -252,7 +263,7 @@ def to_json(obj):
 
 
 @mod.export()
-@try_register_numpy_json
+@try_register_common_json
 def from_json(src):
     """
     Decode a JSON string to an object.
@@ -270,7 +281,7 @@ def from_json(src):
 
 
 @mod.export()
-@try_register_numpy_json
+@try_register_common_json
 def save_json(obj, dest, description=None):
     """
     Encode an object as JSON and save it to a file.
@@ -285,7 +296,7 @@ def save_json(obj, dest, description=None):
 
 
 @mod.export()
-@try_register_numpy_json
+@try_register_common_json
 def load_json(src, description=None):
     """
     Loads a file and decodes the JSON contents.

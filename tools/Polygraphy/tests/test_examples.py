@@ -23,33 +23,97 @@ from typing import List
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod
+from polygraphy import mod, util
 
 from tests.helper import ROOT_DIR
 
 EXAMPLES_ROOT = os.path.join(ROOT_DIR, "examples")
 
-IGNORE_START_MARKER = "<!-- Polygraphy Test: Ignore Start -->"
-IGNORE_STOP_MARKER = "<!-- Polygraphy Test: Ignore End -->"
 
-# Marks an entire block as being expected to fail. Currently, this is only applied to
-# entire blocks, not individual commands.
-XFAIL_START_MARKER = "<!-- Polygraphy Test: XFAIL Start -->"
-XFAIL_STOP_MARKER = "<!-- Polygraphy Test: XFAIL End -->"
+class Marker:
+    def __init__(self, matches_start_func=None, matches_end_func=None):
+        self.matches_start = util.default(matches_start_func, lambda line: line == self.start)
+        self.matches_end = util.default(matches_end_func, lambda line: line == self.end)
+
+    @staticmethod
+    def from_name(name):
+        return Marker(
+            matches_start_func=lambda line: line == f"<!-- Polygraphy Test: {name} Start -->",
+            matches_end_func=lambda line: line == f"<!-- Polygraphy Test: {name} End -->",
+        )
+
+
+VALID_MARKERS = {
+    # For command markers, the start marker may be annotated with a language tag, e.g. ```py, so an exact match is too strict.
+    "command": Marker(matches_start_func=lambda line: "```" in line, matches_end_func=lambda line: line == "```"),
+    # Marks an entire block to be ignored by the tests.
+    "ignore": Marker.from_name("Ignore"),
+    # Marks an entire block as being expected to fail.
+    "xfail": Marker.from_name("XFAIL"),
+}
+
+
+class MarkerTracker:
+    """
+    Keeps track of active markers in the current README on a line-by-line basis.
+    """
+
+    def __init__(self, readme):
+        self.readme = readme
+        self.active_markers = set()
+        self.entering_markers = set()  # The markers that we are currently entering
+        self.exiting_markers = set()  # The markers that we are currently exiting
+
+    def __enter__(self):
+        self.file = open(self.readme, "r")
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.file.close()
+
+    def __iter__(self):
+        for line in self.file.readlines():
+            stripped_line = line.strip()
+            self.entering_markers.clear()
+            self.exiting_markers.clear()
+
+            for marker in VALID_MARKERS.values():
+                if not self.is_in(marker) and marker.matches_start(stripped_line):
+                    self.active_markers.add(marker)
+                    self.entering_markers.add(marker)
+                elif marker.matches_end(stripped_line):
+                    self.active_markers.remove(marker)
+                    self.exiting_markers.add(marker)
+
+            yield line.rstrip()
+
+    def is_in(self, marker):
+        """
+        Whether we are currently on a line between the specified start and end marker.
+        This will always return False for a line containing the marker itself.
+        """
+        return marker in self.active_markers and not (self.entering(marker) or self.exiting(marker))
+
+    def entering(self, marker):
+        return marker in self.entering_markers
+
+    def exiting(self, marker):
+        return marker in self.exiting_markers
 
 
 class CommandBlock:
-    def __init__(self, lines, xfail):
-        self.lines = lines
+    def __init__(self, xfail):
         self.xfail = xfail
         self.content = None
 
     def add(self, line):
-        self.lines.append(line)
+        if self.content is None:
+            self.content = line
+        else:
+            self.content += f"\n{line}"
 
-    def flatten(self):
-        # Remove start/end markers, i.e. ```, from block.
-        self.content = dedent("\n".join(self.lines[1:-1]))
+    def __str__(self):
+        return dedent(self.content)
 
 
 # Extract any ``` blocks from the README
@@ -62,34 +126,17 @@ def load_command_blocks_from_readme(readme) -> List[CommandBlock]:
         assert "## Running The Example" in contents, "All example READMEs should have a 'Running The Example' section!"
 
     cmd_blocks = []
-    with open(readme, "r") as f:
-        in_command_block = False
-        should_ignore = False
-        xfail = False
-        block = []
-        for line in f.readlines():
-            if line.strip() == IGNORE_START_MARKER:
-                should_ignore = True
-            elif line.strip() == IGNORE_STOP_MARKER:
-                should_ignore = False
-
-            if should_ignore:
+    with MarkerTracker(readme) as tracker:
+        for line in tracker:
+            if tracker.is_in(VALID_MARKERS["ignore"]):
                 continue
 
-            if line.strip() == XFAIL_START_MARKER:
-                xfail = True
-            elif line.strip() == XFAIL_STOP_MARKER:
-                xfail = False
-
-            if not in_command_block and "```" in line:
-                block = CommandBlock([line.rstrip()], xfail=xfail)
-                in_command_block = True
-            elif in_command_block:
-                block.add(line.rstrip())
-                if "```" in line:
-                    in_command_block = False
-                    block.flatten()
-                    cmd_blocks.append(copy.copy(block))
+            if tracker.entering(VALID_MARKERS["command"]):
+                current_block = CommandBlock(xfail=tracker.is_in(VALID_MARKERS["xfail"]))
+            elif tracker.exiting(VALID_MARKERS["command"]):
+                cmd_blocks.append(copy.copy(current_block))
+            elif tracker.is_in(VALID_MARKERS["command"]):
+                current_block.add(line)
 
     return cmd_blocks
 
@@ -126,7 +173,7 @@ class Example:
 
     def run(self, cmd_block, sandboxed_install_run):
         # Remove whitespace args and escaped newlines
-        command = [arg for arg in cmd_block.content.strip().split(" ") if arg.strip() and arg != "\\\n"]
+        command = [arg for arg in str(cmd_block).strip().split(" ") if arg.strip() and arg != "\\\n"]
         status = sandboxed_install_run(command, cwd=self.path)
 
         cmd_print = f"Note: Command was: {' '.join(command)}"
@@ -158,10 +205,10 @@ API_EXAMPLES = [
     Example(["api", "05_using_tensorrt_network_api"]),
     Example(["api", "06_immediate_eval_api"], artifact_names=["identity.engine"]),
     Example(["api", "07_tensorrt_and_dynamic_shapes"], artifact_names=["dynamic_identity.engine"]),
+    Example(["api", "08_working_with_run_results_manually"], artifact_names=["outputs.json"]),
 ]
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
 @pytest.mark.parametrize("example", API_EXAMPLES, ids=lambda case: str(case))
 @pytest.mark.script_launch_mode("subprocess")
 def test_api_examples(example, sandboxed_install_run):
@@ -202,7 +249,7 @@ CLI_EXAMPLES = [
             ["cli", "convert", "02_deterministic_engine_builds_in_tensorrt"],
             artifact_names=["0.engine", "1.engine", "replay.json"],
         ),
-        marks=pytest.mark.serial,
+        marks=[pytest.mark.serial, pytest.mark.flaky(max_runs=2)],
     ),
     Example(["cli", "convert", "03_dynamic_shapes_in_tensorrt"], artifact_names=["dynamic_identity.engine"]),
     Example(
@@ -280,7 +327,6 @@ if mod.has_mod("tensorflow"):
     CLI_INSPECT_EXAMPLES.append(Example(["cli", "inspect", "04_inspecting_a_tensorflow_graph"]))
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
 @pytest.mark.parametrize("example", CLI_INSPECT_EXAMPLES, ids=lambda case: str(case))
 @pytest.mark.script_launch_mode("subprocess")
 def test_cli_inspect_examples(example, sandboxed_install_run):
@@ -294,7 +340,7 @@ def test_cli_inspect_examples(example, sandboxed_install_run):
 
     # Last block should be the expected output, and last command should generate it.
     with example as blocks:
-        command_blocks, expected_output = blocks[:-1], blocks[-1].content
+        command_blocks, expected_output = blocks[:-1], str(blocks[-1])
         for cmd_block in command_blocks:
             actual_output = example.run(cmd_block, sandboxed_install_run).stdout
 

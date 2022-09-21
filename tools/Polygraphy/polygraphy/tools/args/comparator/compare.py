@@ -73,6 +73,13 @@ class CompareFuncSimpleArgs(BaseArgs):
             nargs="+",
             default=None,
         )
+        self.group.add_argument(
+            "--infinities-compare-equal",
+            help="If set, then any matching +-inf values in outputs will have an absdiff of 0. "
+            "Otherwise, by default they will have an absdiff of NaN.",
+            action="store_true",
+            default=None,
+        )
 
     def parse_impl(self, args):
         """
@@ -83,11 +90,13 @@ class CompareFuncSimpleArgs(BaseArgs):
             rtol (Dict[str, float]): Per-tensor relative tolerance.
             atol (Dict[str, float]): Per-tensor absolute tolerance.
             check_error_stat (str): The error metric to check.
+            infinities_compare_equal (bool): Whether to allow +-inf to compare as equal.
         """
         self.no_shape_check = args_util.get(args, "no_shape_check")
         self.rtol = args_util.parse_dict_with_default(args_util.get(args, "rtol"))
         self.atol = args_util.parse_dict_with_default(args_util.get(args, "atol"))
         self.check_error_stat = args_util.parse_dict_with_default(args_util.get(args, "check_error_stat"))
+        self.infinities_compare_equal = args_util.get(args, "infinities_compare_equal")
 
         # Without this early check, failure would only happen after inference, which is clearly not desirable.
         if self.check_error_stat:
@@ -108,6 +117,7 @@ class CompareFuncSimpleArgs(BaseArgs):
             check_shapes=False if self.no_shape_check else None,
             fail_fast=self.arg_groups[ComparatorCompareArgs].fail_fast,
             check_error_stat=self.check_error_stat,
+            infinities_compare_equal=self.infinities_compare_equal,
         )
         compare_func = None
         if compare_func_str:

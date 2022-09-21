@@ -30,7 +30,7 @@ tf = pytest.importorskip("tensorflow")
 class TestLoggerCallbacks:
     @pytest.mark.parametrize("sev", G_LOGGER.SEVERITY_LETTER_MAPPING.keys())
     def test_set_severity(self, sev):
-        G_LOGGER.severity = sev
+        G_LOGGER.module_severity = sev
 
 
 class TestFrozenGraphLoader:

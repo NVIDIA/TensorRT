@@ -16,10 +16,11 @@
 #
 import argparse
 
+from polygraphy import constants
 from polygraphy.tools.args import (
     ModelArgs,
-    OnnxLoadArgs,
     OnnxFromTfArgs,
+    OnnxLoadArgs,
     TfLoadArgs,
     TrtLoadNetworkArgs,
     TrtLoadPluginsArgs,
@@ -55,7 +56,7 @@ class TrtNetwork(Tool):
     def run(self, args):
         script = Script(summary="Creates a TensorRT Network using the Network API.", always_create_runners=False)
         script.add_import(imports=["func"], frm="polygraphy")
-        script.add_import(imports=["tensorrt as trt"])
+        script.add_import(imports="tensorrt", imp_as="trt")
 
         if self.arg_groups[ModelArgs].path is not None:
             loader_name = self.arg_groups[TrtLoadNetworkArgs].add_to_script(script)
@@ -67,6 +68,8 @@ class TrtNetwork(Tool):
 
         script.append_suffix(safe("@func.extend({:})", inline(loader_name)))
         script.append_suffix(safe("def load_network({:}):", inline(params)))
-        script.append_suffix(safe("\tpass # TODO: Set up the network here. This function should not return anything."))
+        script.append_suffix(
+            safe(f"{constants.TAB}pass # TODO: Set up the network here. This function should not return anything.")
+        )
 
         script.save(args.output)

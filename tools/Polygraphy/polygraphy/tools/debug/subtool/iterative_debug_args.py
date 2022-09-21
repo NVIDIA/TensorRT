@@ -223,7 +223,8 @@ class ArtifactSortArgs(BaseArgs):
             "--artifacts-dir",
             metavar="DIR",
             dest="artifacts_dir",
-            help="The directory in which to move artifacts and sort them into 'good' and 'bad'. ",
+            help="The directory in which to move artifacts and sort them into 'good' and 'bad'. "
+            "Defaults to a directory named `polygraphy_artifacts` in the current directory. ",
             default="polygraphy_artifacts",
         )
 
@@ -605,9 +606,9 @@ class IterativeDebugArgs(BaseArgs):
                     duration_in_sec = time.time() - start_time
                     if iter_success:
                         num_passed += 1
-                        G_LOGGER.finish(f"PASSED | Iteration {index} | Duration {duration_in_sec}s")
+                        G_LOGGER.finish(f"PASSED | Iteration {index + 1} | Duration {duration_in_sec}s")
                     else:
-                        G_LOGGER.error(f"FAILED | Iteration {index} | Duration {duration_in_sec}s")
+                        G_LOGGER.error(f"FAILED | Iteration {index + 1} | Duration {duration_in_sec}s")
 
                 # We must include the suffix in the debug replay key to disambiguate
                 debug_replay_key = f"_N{index}" + (("_" + suffix) if suffix else "")

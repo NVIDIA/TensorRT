@@ -151,12 +151,12 @@ to TensorRT's `kVERBOSE` logging mode.
 
 To set the verbosity of the logger, use:
 ```py
-G_LOGGER.severity = severity
+G_LOGGER.module_severity = severity
 ```
 
 For example:
 ```py
-G_LOGGER.severity = G_LOGGER.EXTRA_VERBOSE
+G_LOGGER.module_severity = G_LOGGER.EXTRA_VERBOSE
 ```
 
 

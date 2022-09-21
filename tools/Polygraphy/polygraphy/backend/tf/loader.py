@@ -22,7 +22,7 @@ from polygraphy.backend.base import BaseLoader
 from polygraphy.backend.tf import util as tf_util
 from polygraphy.logger import G_LOGGER
 
-tf = mod.lazy_import("tensorflow", version="<2.0")
+tf = mod.lazy_import("tensorflow<2.0")
 
 
 @mod.export(funcify=True)
@@ -377,9 +377,7 @@ class SaveGraph(BaseLoader):
                 if node.op == "TRTEngineOp":
                     engine = node.attr["serialized_segment"].s
                     if self.engine_dir is not None:
-                        util.save_file(
-                            contents=engine, dest=os.path.join(self.engine_dir, f"segment-{segment_number}")
-                        )
+                        util.save_file(contents=engine, dest=os.path.join(self.engine_dir, f"segment-{segment_number}"))
                     segment_number += 1
 
         return graph, outputs

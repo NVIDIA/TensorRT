@@ -63,8 +63,9 @@ def make_algo():
     return Algorithm(
         implementation=4,
         tactic=5,
-        inputs=[(trt.TensorFormat.LINEAR, trt.float32)],
-        outputs=[(trt.TensorFormat.LINEAR, trt.float32)],
+        # Should work even if strides are not set
+        inputs=[(trt.TensorFormat.LINEAR, trt.float32, (1, 2)), (trt.TensorFormat.LINEAR, trt.float32)],
+        outputs=[(trt.TensorFormat.LINEAR, trt.float32, (2, 3))],
     )
 
 

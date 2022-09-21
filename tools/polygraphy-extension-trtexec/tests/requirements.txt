@@ -1,5 +1,5 @@
 colored
-polygraphy==0.38.0
+polygraphy==0.40.3
 onnx==1.10.0
 onnxruntime==1.10.0
 protobuf==3.19.4

@@ -30,14 +30,21 @@ from polygraphy.tools.args import (
     TrtSaveEngineArgs,
 )
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool.iterative_debug_args import IterativeDebugArgs, ArtifactSortArgs, CheckCmdArgs
+from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs
 
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
 trt = mod.lazy_import("tensorrt")
 
 
 class BaseCheckerSubtool(Tool):
-    def __init__(self, name, precision_constraints_default=None, allow_no_artifacts_warning=True, allow_until_opt=None, allow_debug_replay=None):
+    def __init__(
+        self,
+        name,
+        precision_constraints_default=None,
+        allow_no_artifacts_warning=True,
+        allow_until_opt=None,
+        allow_debug_replay=None,
+    ):
         super().__init__(name)
         self._precision_constraints_default = precision_constraints_default
         self._allow_no_artifacts_warning = allow_no_artifacts_warning
@@ -48,7 +55,11 @@ class BaseCheckerSubtool(Tool):
         return [
             CheckCmdArgs(),
             ArtifactSortArgs(allow_no_artifacts_warning=self._allow_no_artifacts_warning),
-            IterativeDebugArgs(iter_art_opt_default="polygraphy_debug.engine", allow_until_opt=self._allow_until_opt, allow_debug_replay=self._allow_debug_replay),
+            IterativeDebugArgs(
+                iter_art_opt_default="polygraphy_debug.engine",
+                allow_until_opt=self._allow_until_opt,
+                allow_debug_replay=self._allow_debug_replay,
+            ),
             ModelArgs(model_opt_required=True, input_shapes_opt_name=False),
             OnnxInferShapesArgs(),
             OnnxLoadArgs(outputs_opt_prefix=False),

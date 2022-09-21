@@ -47,7 +47,7 @@ class RunnerSelectArgs(BaseArgs):
 
             name, opt = arg_group.get_name_opt()
             extra_help = arg_group.get_extra_help_text()
-            # Use opt as the kay since it's guaranteed to be unique.
+            # Use opt as the key since it's guaranteed to be unique.
             self._opt_to_group_map[opt] = arg_group
             self.group.add_argument(
                 f"--{opt}",

@@ -170,8 +170,10 @@ def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=Non
                 Defaults to `cast()`.
         sep (str):
                 The separator between the key and value strings.
+                Defaults to ":".
         allow_empty_key (bool):
                 Whether empty keys should be allowed.
+                Defaults to True.
     Returns:
         Dict[str, obj]: The mapping.
     """
@@ -194,7 +196,7 @@ def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=Non
 
 
 @mod.deprecate(
-    remove_in="0.42.0",
+    remove_in="0.45.0",
     use_instead=": as a separator and write shapes in the form [dim0,...,dimN]",
     name="Using , as a separator",
 )
@@ -293,8 +295,8 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
         new_style.append(arg)
 
     G_LOGGER.warning(
-        "The old shape syntax is deprecated and will be removed in a future version of Polygraphy\n"
-        "See the CHANGELOG for the motivation behind this deprecation.",
+        "The old shape syntax is deprecated and will be removed in Polygraphy 0.45.0\n"
+        "See the CHANGELOG entry for v0.32.0 for the motivation behind this deprecation.",
         mode=LogMode.ONCE,
     )
     G_LOGGER.warning(f"Instead of: '{' '.join(meta_args)}', use: '{' '.join(new_style)}'\n")

@@ -21,26 +21,9 @@ import tempfile
 import pytest
 import tensorrt as trt
 from polygraphy import mod
+from polygraphy.logger import G_LOGGER
 from tests.helper import get_file_size, is_file_non_empty
-from tests.models.meta import ONNX_MODELS, TF_MODELS
-
-
-@pytest.fixture(params=["none", "basic", "attrs", "full"])
-def poly_inspect_model_deprecated(request, poly_inspect):
-    return lambda additional_opts: poly_inspect(["model"] + [f"--mode={request.param}"] + additional_opts)
-
-
-class TestInspectModelDeprecated:
-    def test_model_onnx(self, poly_inspect_model_deprecated):
-        poly_inspect_model_deprecated([ONNX_MODELS["identity"].path])
-
-    def test_model_trt_sanity(self, poly_inspect_model_deprecated):
-        poly_inspect_model_deprecated([ONNX_MODELS["identity"].path, "--display-as=trt"])
-
-    def test_model_tf_sanity(self, poly_inspect_model_deprecated):
-        pytest.importorskip("tensorflow")
-
-        poly_inspect_model_deprecated([TF_MODELS["identity"].path, "--model-type=frozen"])
+from tests.models.meta import ONNX_MODELS
 
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
@@ -61,7 +44,13 @@ def test_timing_cache(poly_run):
         total_cache_size = get_file_size(total_cache)
 
         # The total cache should be larger than either of the individual caches.
-        assert total_cache_size > const_foldable_cache_size and total_cache_size > identity_cache_size
+        assert total_cache_size >= const_foldable_cache_size and total_cache_size >= identity_cache_size
         # The total cache should also be smaller than or equal to the sum of the individual caches since
         # header information should not be duplicated.
         assert total_cache_size <= (const_foldable_cache_size + identity_cache_size)
+
+
+def test_logger_severity():
+    assert G_LOGGER.severity == G_LOGGER.module_severity.get()
+    with G_LOGGER.verbosity():
+        assert G_LOGGER.severity == G_LOGGER.CRITICAL

@@ -59,50 +59,64 @@ def find_str_in_iterable(name, seq, index=None):
 
 
 @mod.export()
-def check_dict_contains(dct, keys, check_missing=True, dict_name=None, log_func=None):
+def check_sequence_contains(
+    sequence, items, name=None, items_name=None, log_func=None, check_missing=None, check_extra=None
+):
     """
-    Checks that a dictionary contains the provided keys and also
-    that it does not contain any extra items and issues warnings
+    Checks that a sequence contains the provided items and also
+    that it does not contain any extra items and issues warnings/errors
     otherwise.
 
     Args:
-        dct (Dict[Any, Any]):
-                The dictionary to check.
-        keys (Sequence[Any]):
-                The keys that should be in the dictionary.
+        sequence (Sequence[Any]):
+                The sequence to check.
+        items (Sequence[Any]):
+                The items that should be in the sequence.
 
-        check_missing (bool):
-                Whether to check for missing keys in the dictionary.
-                Defaults to True.
-        dict_name (str):
-                The name to use instead of "the dictionary" when
-                displaying warnings.
+        name (str):
+                The name to use for the sequence displaying warnings/errors.
+                Defaults to "the sequence".
+        items_name (str):
+                The name to use for items in the sequence displaying warnings/errors.
+                Defaults to "items".
         log_func (Logger.method):
                 The logging method to use to display warnings/errors.
-                Defaults to G_LOGGER.warning.
+                Defaults to G_LOGGER.critical.
+        check_missing (bool):
+                Whether to check for missing items in the sequence.
+                Defaults to True.
+        check_extra (bool):
+                Whether to check for extra items in the sequence.
+                Defaults to True.
 
     Returns:
-        bool: Whether the dictionary contains exactly the specified keys.
+        Tuple[Sequence[Any], Sequence[Any]]:
+                The missing and extra items respectively
     """
-    log_func = default(log_func, G_LOGGER.warning)
-    dict_name = default(dict_name, "the dictionary")
+    check_missing = default(check_missing, True)
+    check_extra = default(check_extra, True)
+    log_func = default(log_func, G_LOGGER.critical)
+    name = default(name, "the sequence")
+    items_name = default(items_name, "items")
 
-    feed_names = set(dct.keys())
-    keys = set(keys)
-    missing_in_dct = (keys - feed_names) if check_missing else False
-    extra_in_dct = feed_names - keys
+    sequence = set(sequence)
+    items = set(items)
 
-    if missing_in_dct:
+    missing = items - sequence
+    if check_missing and missing:
         log_func(
-            f"Some keys are missing in {dict_name}: {missing_in_dct}.\nNote: Expected keys are: {keys}, but keys provided were: {feed_names}"
+            f"The following {items_name} were not found in {name}: {missing}.\n"
+            f"Note: All {items_name} are: {items}, but {items_name} provided were: {sequence}"
         )
 
-    if extra_in_dct:
+    extra = sequence - items
+    if check_extra and extra:
         log_func(
-            f"Extra keys in {dict_name}: {extra_in_dct}.\nNote: Expected keys are: {keys}, but keys provided were: {feed_names}"
+            f"Extra {items_name} in {name}: {extra}.\n"
+            f"Note: All {items_name} are: {items}, but {items_name} provided were: {sequence}"
         )
 
-    return not extra_in_dct and not missing_in_dct
+    return missing, extra
 
 
 @mod.export()
@@ -768,6 +782,61 @@ def try_match_shape(arr, shape):
     return arr
 
 
+@mod.export()
+def is_contiguous(array):
+    """
+    Checks whether the provided NumPy array is contiguous in memory.
+
+    Args:
+        array (np.ndarray): The NumPy array.
+
+    Returns:
+        bool: Whether the array is contiguous in memory.
+    """
+    return array.flags["C_CONTIGUOUS"]
+
+
+@mod.export()
+def make_contiguous(array):
+    """
+    Makes a NumPy array contiguous if it's not already.
+
+    Args:
+        array (np.ndarray): The NumPy array.
+
+    Returns:
+        np.ndarray: The contiguous NumPy array.
+    """
+    if not is_contiguous(array):
+        return np.ascontiguousarray(array)
+    return array
+
+
+@mod.export()
+def resize_buffer(buffer, shape):
+    """
+    Resizes the provided buffer and makes it contiguous in memory,
+    possibly reallocating the buffer.
+
+    Args:
+        buffer (np.ndarray): The buffer to resize.
+        shape (Sequence[int]): The desired shape of the buffer.
+
+    Returns:
+        np.ndarray: The resized buffer, possibly reallocated.
+    """
+    if shape != buffer.shape:
+        try:
+            buffer.resize(shape, refcheck=False)
+        except ValueError as err:
+            G_LOGGER.warning(
+                f"Could not resize host buffer to shape: {shape}. "
+                f"Allocating a new buffer instead.\nNote: Error was: {err}"
+            )
+            buffer = np.empty(shape, dtype=np.dtype(buffer.dtype))
+    return make_contiguous(buffer)
+
+
 ##
 ## Logging Utilities
 ##
@@ -807,7 +876,7 @@ def indent_block(block, level=1):
     Returns:
         str: The indented block.
     """
-    tab = "\t" * level
+    tab = f"{constants.TAB}" * level
     sep = f"\n{tab}"
     return tab + sep.join(str(block).splitlines())
 
@@ -827,17 +896,23 @@ def make_repr(type_str, *args, **kwargs):
                 The name of the type to create a representation for.
 
     Returns:
-        Tuple[str, bool]:
-                A tuple including the ``__repr__`` string and a boolean
-                indicating whether all the arguments were default (i.e. None).
+        Tuple[str, bool, bool]:
+                A tuple including the ``__repr__`` string and two booleans
+                indicating whether all the positional and keyword arguments were default
+                (i.e. None) respectively.
     """
-    all_args = list(map(repr, args))
+    processed_args = list(map(repr, args))
 
+    processed_kwargs = []
     for key, val in filter(lambda t: t[1] is not None, kwargs.items()):
-        all_args.append(f"{key}={repr(val)}")
+        processed_kwargs.append(f"{key}={repr(val)}")
 
-    repr_str = f"{type_str}({', '.join(all_args)})"
-    return repr_str, all(arg == repr(None) for arg in all_args)
+    repr_str = f"{type_str}({', '.join(processed_args + processed_kwargs)})"
+
+    def all_default(arg_list):
+        return all(arg == repr(None) for arg in arg_list)
+
+    return repr_str, all_default(processed_args), all_default(processed_kwargs)
 
 
 ##

@@ -17,14 +17,16 @@
 
 import math
 
-from polygraphy import mod, util
+from polygraphy import constants, mod, util
+from polygraphy.common import TensorMetadata
+from polygraphy.comparator import IterationResult
 from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.tools import util as tools_util
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, IterativeDebugArgs, CheckCmdArgs
+from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs
 
-gs = mod.lazy_import("onnx_graphsurgeon")
+gs = mod.lazy_import("onnx_graphsurgeon>=0.3.6")
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
 
@@ -131,7 +133,9 @@ class Reduce(Tool):
     r"""
     [EXPERIMENTAL] Reduce a failing ONNX model to the minimum set of nodes that cause the failure.
 
-    `debug reduce` follows the same general process as other `debug` subtools.
+    `debug reduce` follows the same general process as other `debug` subtools (refer to the help output
+    of the `debug` tool for more background information and details).
+
     Specifically, it does the following during each iteration:
 
     1. Generates a successively smaller subgraph of a given ONNX model and saves it in the
@@ -229,32 +233,37 @@ class Reduce(Tool):
             model = gs.export_onnx(
                 tools_util.override_input_shapes(onnx_backend.gs_from_onnx(model), user_input_metadata)
             )
-            if self.arg_groups[OnnxInferShapesArgs].do_shape_inference:
-                model = onnx_backend.infer_shapes(model)
+            model = self.arg_groups[OnnxInferShapesArgs].infer_shapes(model)
 
         # Lower Constant nodes into Constant tensors
         # If we don't do this, the outputs of Constant nodes may be incorrectly marked
         #   as variable inputs. Further, fallback shape inference does not apply to Constant nodes.
         GRAPH = onnx_util.lower_constant_nodes(onnx_backend.gs_from_onnx(model))
 
-        _layerwise_outputs = None
-        _layerwise_meta = None
-        # Get metadata inferred by fallback shape inference. If fallback shape inference was
-        # never run, then this function runs it.
-        def layerwise(model, include_data=False):
-            nonlocal _layerwise_outputs, _layerwise_meta
-            if _layerwise_outputs is None or _layerwise_meta is None:
-                G_LOGGER.info(
-                    "Running inference with ONNX-Runtime to determine metadata for intermediate tensors.\n"
-                    "This will cause intermediate models to have static shapes."
-                )
-                with G_LOGGER.indent():
-                    _layerwise_outputs, _layerwise_meta = self.arg_groups[OnnxInferShapesArgs].fallback_inference(model)
-            return _layerwise_outputs if include_data else _layerwise_meta
+        fallback_outputs = IterationResult()
+        fallback_metadata = TensorMetadata()
+
+        # Loads tensor values and metadata from fallback inference.
+        # This must be called prior to accessing fallback_metadata or fallback_outputs
+        def load_tensors_from_fallback(names):
+            nonlocal fallback_outputs, fallback_metadata
+
+            if all((name in fallback_metadata and name in fallback_outputs) for name in names):
+                return
+
+            G_LOGGER.info(
+                "Running inference with ONNX-Runtime to determine metadata for intermediate tensors.\n"
+                "This will cause intermediate models to have static shapes."
+            )
+            with G_LOGGER.indent():
+                new_outputs, new_meta = self.arg_groups[OnnxInferShapesArgs].fallback_inference(model, outputs=names)
+            fallback_outputs.update(new_outputs)
+            fallback_metadata.update(new_meta)
 
         if self.arg_groups[OnnxInferShapesArgs].force_fallback:
             G_LOGGER.info("Freezing shapes in the model according to values determined by fallback shape inference")
-            onnx_util.set_shapes_from_layerwise_meta(GRAPH, layerwise(model))
+            load_tensors_from_fallback(constants.MARK_ALL)
+            onnx_util.set_shapes_from_layerwise_meta(GRAPH, fallback_metadata)
 
         if any(util.is_shape_dynamic(inp.shape) for inp in GRAPH.inputs):
             G_LOGGER.warning(
@@ -279,47 +288,67 @@ class Reduce(Tool):
             G_LOGGER.warning(
                 "This model includes shape operations, which may cause issues while reducing.\n"
                 "You may want to freeze the input shapes and fold the shape operations away with:\n"
-                "\t`polygraphy surgeon sanitize --override-input-shapes <shapes> --fold-constants [--force-fallback-shape-inference]`\n"
+                f"{constants.TAB}`polygraphy surgeon sanitize --override-input-shapes <shapes> --fold-constants [--force-fallback-shape-inference]`\n"
                 "You only need to use `--force-fallback-shape-inference` if ONNX shape inference is unable to infer shapes."
             )
 
-        def fix_graph(graph, model):
+        def cleanup(graph):
+            # NOTE: remove_unused_graph_inputs can break nodes containing subgraphs, so we disallow
+            # recursing subgraphs in `cleanup()`. `debug reduce` only reduces the outer
+            # graph so running `cleanup()` over nested subgraphs has no benefit anyway.
+            graph.cleanup(recurse_subgraphs=False, remove_unused_graph_inputs=True)
+            return graph
+
+        def fix_graph(graph):
             """
             Fix the graph so it is valid ONNX.
             """
 
-            def fix_tensor_metadata(tensors, fix_shape=True):
+            def get_tensor_names_needing_fallback(tensors, fix_shape=True):
+                return [tensor.name for tensor in tensors if (not tensor.shape and fix_shape) or not tensor.dtype]
+
+            load_tensors_from_fallback(
+                get_tensor_names_needing_fallback(graph.inputs)
+                + get_tensor_names_needing_fallback(graph.outputs, fix_shape=False)
+            )
+
+            def fix_tensor_metadata(tensors):
                 for tensor in tensors:
-                    if not tensor.shape and fix_shape:
-                        tensor.shape = layerwise(model)[tensor.name].shape
-                    if not tensor.dtype:
-                        tensor.dtype = layerwise(model)[tensor.name].dtype
+                    # If a tensor is not in `fallback_metadata`, it means it doesn't require metadata to be updated.
+                    if tensor.name in fallback_metadata:
+                        tensor.shape = tensor.shape or fallback_metadata[tensor.name].shape
+                        tensor.dtype = tensor.dtype or fallback_metadata[tensor.name].dtype
 
             fix_tensor_metadata(graph.inputs)
-            fix_tensor_metadata(graph.outputs, fix_shape=False)
+            fix_tensor_metadata(graph.outputs)
 
             # If we're marking inputs, there may be cases where some other inputs are required - for
             # example, if the model is branchy. If, after cleanup(), there are any Variable tensors in
             # the graph without inputs, we'll replace them with constants and fold them away.
             tensor_map = graph.tensors()
-            needs_const_fold = False
-            for tensor in tensor_map.values():
+            tensors_to_freeze = []  # Names of tensors we need to freeze in the model.
+            for name, tensor in tensor_map.items():
                 if isinstance(tensor, gs.Variable) and not tensor.inputs and tensor not in graph.inputs:
-                    needs_const_fold = True
-                    if self.arg_groups[DataLoaderArgs].is_using_random_data():
-                        G_LOGGER.warning(
-                            "This model includes multiple branches/paths. In order to continue reducing, one branch needs to be folded away.\n"
-                            "Please ensure that you have provided a data loader argument directly to `debug reduce` (i.e. prior to `--check`) "
-                            "if your `--check` command is using a non-default data loader.\n"
-                            "Not doing so may result in false negatives!\n",
-                            mode=LogMode.ONCE,
-                        )
-                    G_LOGGER.info(f"Freezing tensor: {tensor} to eliminate branches.")
-                    tensor.to_constant(layerwise(model, include_data=True)[tensor.name])
+                    tensors_to_freeze.append(name)
 
-            if needs_const_fold:
+            if tensors_to_freeze and self.arg_groups[DataLoaderArgs].is_using_random_data():
+                G_LOGGER.warning(
+                    "This model includes multiple branches/paths. In order to continue reducing, one branch needs to be folded away.\n"
+                    "Please ensure that you have provided a data loader argument directly to `debug reduce` (i.e. prior to `--check`) "
+                    "if your `--check` command is using a non-default data loader.\n"
+                    "Not doing so may result in false negatives!\n",
+                    mode=LogMode.ONCE,
+                )
+
+            load_tensors_from_fallback(tensors_to_freeze)
+            for name in tensors_to_freeze:
+                tensor = tensor_map[name]
+                G_LOGGER.info(f"Freezing tensor: {tensor} to eliminate branches.")
+                tensor.to_constant(fallback_outputs[name])
+
+            if tensors_to_freeze:
                 G_LOGGER.verbose("Folding constants to remove extraneous subgraphs")
-                graph.fold_constants().cleanup()
+                graph = cleanup(graph.fold_constants())
 
             return graph
 
@@ -349,7 +378,7 @@ class Reduce(Tool):
         # filter_const indicates whether to filter out constant tensors before updating graph I/O.
         # debug_replay is used to provide the debug_replay from previous iterations to subsequent iterations.
         #   Without this, the debug_replay would only contain entries for the final call to `bisect_io`.
-        def bisect_io(graph, model, marker, attr, filter_const=True, debug_replay=None):
+        def bisect_io(graph, marker, attr, filter_const=True, debug_replay=None):
             G_LOGGER.start(f"Reducing model {attr}")
 
             def make_iter_art():
@@ -358,9 +387,9 @@ class Reduce(Tool):
                 with G_LOGGER.indent():
                     io_list = list(getattr(iter_graph.nodes[marker.node_index], attr))
                     mark_io(iter_graph, attr, io_list, filter_const)
-                    iter_graph.cleanup()
+                    cleanup(iter_graph)
                     self.arg_groups[OnnxSaveArgs].save_onnx(
-                        gs.export_onnx(fix_graph(iter_graph, model)),
+                        gs.export_onnx(fix_graph(iter_graph)),
                         self.arg_groups[IterativeDebugArgs].iter_artifact_path,
                     )
 
@@ -408,24 +437,22 @@ class Reduce(Tool):
         if args.reduce_outputs:
             out_marker = MarkerType(len(bad_graph.nodes))
             bad_outputs, good_outputs, debug_replay = bisect_io(
-                bad_graph, model, out_marker, attr="outputs", filter_const=False, debug_replay=debug_replay
+                bad_graph, out_marker, attr="outputs", filter_const=False, debug_replay=debug_replay
             )
-            bad_graph = mark_io(bad_graph, "outputs", lookup_tensors(bad_graph, bad_outputs)).cleanup()
+            bad_graph = cleanup(mark_io(bad_graph, "outputs", lookup_tensors(bad_graph, bad_outputs)))
             if good_graph is not None:
                 good_graph = mark_io(
                     good_graph, "outputs", lookup_tensors(good_graph, good_outputs)
                 )  # Defer cleanup where possible.
-            # Export the model with the reduced outputs so that reducing inputs is faster.
-            model = gs.export_onnx(fix_graph(bad_graph, model))
 
         # == Phase 2 ==
 
         if args.reduce_inputs:
             in_marker = MarkerType(len(bad_graph.nodes), invert=True)
             bad_inputs, good_inputs, debug_replay = bisect_io(
-                bad_graph, model, in_marker, attr="inputs", debug_replay=debug_replay
+                bad_graph, in_marker, attr="inputs", debug_replay=debug_replay
             )
-            bad_graph = mark_io(bad_graph, "inputs", lookup_tensors(bad_graph, bad_inputs)).cleanup()
+            bad_graph = cleanup(mark_io(bad_graph, "inputs", lookup_tensors(bad_graph, bad_inputs)))
             if good_graph is not None:
                 good_graph = mark_io(
                     good_graph, "inputs", lookup_tensors(good_graph, good_inputs)
@@ -433,7 +460,7 @@ class Reduce(Tool):
 
         # == Write Bad Model ==
 
-        reduced_model = gs.export_onnx(fix_graph(bad_graph, model))
+        reduced_model = gs.export_onnx(fix_graph(bad_graph))
 
         if self.arg_groups[OnnxSaveArgs].path:
             num_reduced_nodes = len(reduced_model.graph.node)
@@ -453,7 +480,7 @@ class Reduce(Tool):
         # == Write Good Model ==
 
         if good_graph is not None:
-            min_good_model = gs.export_onnx(fix_graph(good_graph.cleanup(), model))
+            min_good_model = gs.export_onnx(fix_graph(cleanup(good_graph)))
             if min_good_model == reduced_model:
                 G_LOGGER.warning(
                     "Could not find a minimal model close in size to the reduced model that does not cause a failure."

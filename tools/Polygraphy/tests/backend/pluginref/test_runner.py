@@ -27,7 +27,7 @@ from tests.models.meta import ONNX_MODELS
 class TestLoggerCallbacks:
     @pytest.mark.parametrize("sev", G_LOGGER.SEVERITY_LETTER_MAPPING.keys())
     def test_set_severity(self, sev):
-        G_LOGGER.severity = sev
+        G_LOGGER.module_severity = sev
 
 
 class TestPluginRefRunner:
@@ -57,9 +57,9 @@ class TestPluginRefRunner:
     @pytest.mark.parametrize(
         "names, err",
         [
-            (["fake-input", "x"], "Extra keys in"),
-            (["fake-input"], "Some keys are missing"),
-            ([], "Some keys are missing"),
+            (["fake-input", "x"], "Extra inputs in"),
+            (["fake-input"], "The following inputs were not found"),
+            ([], "The following inputs were not found"),
         ],
     )
     def test_error_on_wrong_name_feed_dict(self, names, err):

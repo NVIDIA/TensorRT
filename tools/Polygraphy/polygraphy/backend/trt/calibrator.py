@@ -35,10 +35,13 @@ def Calibrator(
     Args:
         data_loader (Sequence[OrderedDict[str, Union[numpy.ndarray, DeviceView, int]]]):
             A generator or iterable that yields a dictionary that maps input names to NumPy
-            arrays, Polygraphy DeviceViews, or GPU pointers.
+            arrays, Polygraphy DeviceViews, or GPU pointers. If NumPy arrays or DeviceViews
+            are provided, the calibrator will check the data types and shapes if possible
+            to ensure that they match those expected by the model.
 
             In case you don't know details about the inputs ahead of time, you can access the
-            `input_metadata` property in your data loader, which will be set to an ``TensorMetadata`` instance.
+            `input_metadata` property in your data loader, which will be set to a ``TensorMetadata``
+            instance by Polygraphy APIs like ``CreateConfig`` and ``EngineFromNetwork``.
             Note that this does not work for generators or lists.
 
             The number of calibration batches is controlled by the number of items supplied
@@ -80,38 +83,57 @@ def Calibrator(
             self.data_loader = data_loader
             self._cache = cache
             self.device_buffers = OrderedDict()
+            self.input_metadata = None
             self.reset()
             G_LOGGER.verbose(f"Created calibrator [cache={self._cache}]")
 
             self.batch_size = util.default(batch_size, 1)
 
+            self.is_polygraphy_calibrator = True
             # The function that constructed this instance
             self.make_func = Calibrator
 
-        def reset(self, input_metadata=None):
+        def set_input_metadata(self, input_metadata):
             """
-            Reset this calibrator for reuse.
-            The calibrator will clear any dynamic ranges cached from previous calibration runs, and will
-            attempt to rewind the data loader (note that generators cannot be rewound).
+            Sets the input metadata for the calibrator.
+
+            This is passed along to the data loader and is also used for
+            input data type and shape checks.
+
+            NOTE: This generally does not need to be called manually if the calibrator is being used
+            with Polygraphy's loaders, like ``CreateConfig`` or ``EngineFromNetwork``.
 
             Args:
                 input_metadata (TensorMetadata):
                         Mapping of input names to their data types and shapes.
-                        Passed along to the data loader if provided. Generally should not be required
-                        unless using Polygraphy's included `DataLoader` for this calibrator.
+                        Passed along to the data loader if provided. This is required if
+                        using Polygraphy's included `DataLoader` to provide calibration data,
+                        or if data type and shape checking is desired.
             """
             self.input_metadata = input_metadata
             if input_metadata is not None:
                 with contextlib.suppress(AttributeError):
                     self.data_loader.input_metadata = input_metadata
 
+        def reset(self, input_metadata=None):
+            """
+            Reset this calibrator for reuse.
+
+            The calibrator will clear any dynamic ranges cached from previous calibration runs, and will
+            attempt to rewind the data loader (note that generators cannot be rewound).
+
+            Typically, this is only required if the same calibrator is used for multiple different networks.
+            """
             # Attempt to reset data loader
             self.data_loader_iter = iter(self.data_loader)
             self.num_batches = 0
 
             # Make sure calibrator will check the cache again when reset.
             self.cache_contents = None
-            self.has_cached_scales = False
+
+            if input_metadata is not None:
+                mod.warn_deprecated("input_metadata parameter", "set_input_metadata", remove_in="0.45.0")
+                self.set_input_metadata(input_metadata)
 
         def get_batch_size(self):
             return self.batch_size
@@ -130,7 +152,12 @@ def Calibrator(
             else:
                 self.num_batches += 1
 
-            util.check_dict_contains(buffers, names, dict_name="calibration data", log_func=G_LOGGER.critical)
+            util.check_sequence_contains(
+                buffers.keys(),
+                names,
+                name="calibration input data provided by the data loader",
+                items_name="inputs",
+            )
 
             def check_buffer(name, buffer):
                 if self.input_metadata is None:
@@ -164,12 +191,15 @@ def Calibrator(
                         self.device_buffers[name] = cuda.DeviceArray(shape=buf.shape, dtype=buf.dtype)
                         G_LOGGER.verbose(f"Allocated: {self.device_buffers[name]}")
 
+                    self.device_buffers[name].resize(buf.shape)
+                    buf = util.make_contiguous(buf)
                     ptrs.append(self.device_buffers[name].copy_from(buf).ptr)
                 elif isinstance(buf, int):
                     ptrs.append(buf)
                 else:
                     G_LOGGER.critical(
-                        f"Calibration data loader provided an unrecognized type: {type(buf).__name__} for input: {name}.\nPlease provide either a NumPy array, Polygraphy DeviceView, or GPU pointer. "
+                        f"Calibration data loader provided an unrecognized type: {type(buf).__name__} for input: {name}."
+                        "\nPlease provide either a NumPy array, Polygraphy DeviceView, or GPU pointer. "
                     )
 
             return ptrs
@@ -195,8 +225,7 @@ def Calibrator(
                     G_LOGGER.error(f"Could not read from calibration cache: {self._cache}\nNote: Error was: {err}")
                     return None
 
-            # Only attempt to read from the cache once.
-            if self.has_cached_scales:
+            if self.cache_contents is not None:
                 return self.cache_contents
 
             self.cache_contents = load_from_cache()
@@ -209,14 +238,11 @@ def Calibrator(
                         mode=LogMode.ONCE,
                     )
                 self.cache_contents = None
-            else:
-                self.has_cached_scales = True
 
             return self.cache_contents
 
         def write_calibration_cache(self, cache):
             self.cache_contents = cache.tobytes()
-            self.has_cached_scales = True
 
             if self._cache is None:
                 return
