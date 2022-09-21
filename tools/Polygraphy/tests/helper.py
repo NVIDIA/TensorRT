@@ -49,17 +49,15 @@ def is_file_non_empty(path):
     return not is_file_empty(path)
 
 
-def time_func(func, warm_up=10, iters=50):
+def time_func(func, warm_up=50, iters=200):
     for _ in range(warm_up):
         func()
 
-    total = 0
+    start = time.time()
     for _ in range(iters):
-        start = time.time()
         func()
-        end = time.time()
-        total += end - start
-    return total / float(iters)
+    end = time.time()
+    return (end - start) / float(iters)
 
 
 HAS_DLA = None

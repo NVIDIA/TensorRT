@@ -16,9 +16,12 @@
 #
 import contextlib
 import json
+import os
+import signal
 
 from polygraphy import config, mod, util
 from polygraphy.common import TensorMetadata
+from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER, LogMode
 
 trt = mod.lazy_import("tensorrt")
@@ -37,8 +40,36 @@ def get_trt_logger():
         trt.Logger: The TensorRT logger.
     """
     global TRT_LOGGER
+
+    LoggerType = trt.Logger
+    if mod.version(trt.__version__) >= mod.version("8.0"):
+
+        class CustomTrtLogger(trt.ILogger):
+            def __init__(self):
+                trt.ILogger.__init__(self)
+
+            def log(self, severity, msg):
+                try:
+                    log_func = {
+                        # This function cannot throw, so `critical` should not be used here!
+                        trt.Logger.INTERNAL_ERROR: G_LOGGER.error,
+                        trt.Logger.ERROR: G_LOGGER.error,
+                        # Reduce warning spam from TRT.
+                        trt.Logger.WARNING: lambda msg: G_LOGGER.warning(msg, mode=LogMode.ONCE),
+                        trt.Logger.INFO: G_LOGGER.verbose,
+                        trt.Logger.VERBOSE: G_LOGGER.extra_verbose,
+                    }.get(severity, G_LOGGER.super_verbose)
+
+                    log_func(msg)
+                except KeyboardInterrupt:
+                    # `log()` is `noexcept` so we need to convert exceptions to signals so that
+                    # ctrl-C will work as expected.
+                    os.kill(os.getpid(), signal.SIGTERM)
+
+        LoggerType = CustomTrtLogger
+
     if TRT_LOGGER is None:
-        TRT_LOGGER = trt.Logger()
+        TRT_LOGGER = LoggerType()
     return TRT_LOGGER
 
 
@@ -112,6 +143,10 @@ def get_layer_class_mapping():
     try_add("ASSERTION", "IAssertionLayer")
     try_add("SCATTER", "IScatterLayer")
     try_add("EINSUM", "IEinsumLayer")
+    try_add("GRID_SAMPLE", "IGridSampleLayer")
+    try_add("ONE_HOT", "IOneHotLayer")
+    try_add("NON_ZERO", "INonZeroLayer")
+    try_add("NMS", "INMSLayer")
 
     return layer_class_mapping
 
@@ -252,18 +287,15 @@ def str_from_network(network, show_layers=None, show_attrs=None, show_weights=No
     return util.indent_block(network_str, level=0)
 
 
-def _get_network_outputs(network):
-    return [network.get_output(index).name for index in range(network.num_outputs)]
-
-
-def check_outputs_not_found(not_found, available_outputs):
-    if not_found:
-        available_outputs = util.unique_list(available_outputs)
-        sep = "\n\t"
-        G_LOGGER.critical(
-            f"The following outputs were not found: {not_found}.\n"
-            f"Note: Available tensors:{sep}{sep.join(available_outputs)}"
-        )
+def get_all_tensors(network):
+    all_tensors = set()
+    for layer in network:
+        for i in range(layer.num_inputs):
+            all_tensors.add(layer.get_input(i))
+        for i in range(layer.num_outputs):
+            all_tensors.add(layer.get_output(i))
+    # Optional tensors that are omitted are reported as `None`s, so we need to exclude them.
+    return {t.name: t for t in all_tensors if t is not None}
 
 
 def mark_outputs(network, outputs):
@@ -274,24 +306,21 @@ def mark_outputs(network, outputs):
         network (trt.INetworkDefinition): The network in which to mark outputs.
         outputs (Sequence[str]): The names of tensors to mark as outputs.
     """
-    outputs = set(outputs)
-    all_outputs = []
-    for layer in network:
-        for index in range(layer.num_outputs):
-            tensor = layer.get_output(index)
-            all_outputs.append(tensor.name)
-            # Clear all old outputs
-            if tensor.is_network_output:
-                network.unmark_output(tensor)
+    outputs = util.unique_list(outputs)
 
-            if tensor.name in outputs:
-                if not tensor.is_network_output:
-                    G_LOGGER.ultra_verbose(f"Marking {tensor.name} as an output")
-                    network.mark_output(tensor)
+    tensor_map = get_all_tensors(network)
+    util.check_sequence_contains(
+        tensor_map.keys(), outputs, name="the network", items_name="outputs", check_extra=False
+    )
 
-    marked_outputs = set(_get_network_outputs(network))
-    not_found = outputs - marked_outputs
-    check_outputs_not_found(not_found, all_outputs)
+    for tensor in tensor_map.values():
+        # Clear all old outputs
+        if tensor.is_network_output:
+            network.unmark_output(tensor)
+
+    for name in outputs:
+        G_LOGGER.ultra_verbose(f"Marking {name} as an output")
+        network.mark_output(tensor_map[name])
 
 
 def mark_layerwise(network):
@@ -318,58 +347,91 @@ def mark_layerwise(network):
         if should_mark_layer:
             for index in range(layer.num_outputs):
                 tensor = layer.get_output(index)
-                outputs.append(tensor.name)
+                if tensor is not None:
+                    outputs.append(tensor.name)
 
     G_LOGGER.verbose(f"Marking {len(outputs)} tensors as outputs")
     mark_outputs(network, outputs)
 
 
 def unmark_outputs(network, outputs):
-    outputs = set(outputs)
+    outputs = util.unique_list(outputs)
 
-    unmarked_outputs = set()
-    for layer in network:
-        for index in range(layer.num_outputs):
-            tensor = layer.get_output(index)
-            if tensor.is_network_output and tensor.name in outputs:
-                network.unmark_output(tensor)
-                unmarked_outputs.add(tensor.name)
-    not_found = outputs - unmarked_outputs
-    check_outputs_not_found(not_found, _get_network_outputs(network))
+    tensor_map = get_all_tensors(network)
+    util.check_sequence_contains(
+        tensor_map.keys(), outputs, name="the network", items_name="outputs", check_extra=False
+    )
+
+    for name in outputs:
+        tensor = tensor_map[name]
+        if tensor.is_network_output:
+            network.unmark_output(tensor)
 
 
 def str_from_config(config):
-    config_str = (
-        f"{'Workspace':20} | {config.max_workspace_size} bytes ({config.max_workspace_size / 1024.0 ** 2:.2f} MiB)"
-    )
-    config_str += f"\n{'Precision':20} | "
-    with contextlib.suppress(AttributeError):
-        config_str += f"TF32: {config.get_flag(trt.BuilderFlag.TF32)}, "
-    config_str += f"FP16: {config.get_flag(trt.BuilderFlag.FP16)}, INT8: {config.get_flag(trt.BuilderFlag.INT8)}, "
+    # Check the default device type so that we can trigger this from the tests.
+    # On non-DLA platforms, config.DLA_core can never be set to anything other than -1,
+    # but default_device_type can be set to DLA..
+    using_dla = config.DLA_core >= 0 or config.default_device_type == trt.DeviceType.DLA
 
-    with contextlib.suppress(AttributeError):
-        config_str += f"Obey Precision Constraints: {config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)}, "
+    lines = []
 
-    config_str += f"Strict Types: {config.get_flag(trt.BuilderFlag.STRICT_TYPES)}"
+    def str_from_list(lst):
+        return "[" + ", ".join(lst) + "]"
 
+    def add_line(title, line):
+        lines.append((f"{title:{22}} | " + line).strip())
+
+    def get_enabled_enum_vals(EnumType, is_enabled):
+        # is_enabled is a Callable[[enum_val], bool] which reports whether to include the enum value.
+        return [name for name, enum_val in EnumType.__members__.items() if is_enabled(enum_val)]
+
+    # Flags
+    enabled_builder_flags = get_enabled_enum_vals(trt.BuilderFlag, lambda flag: config.get_flag(flag))
+    add_line("Flags", f"{str_from_list(enabled_builder_flags)}")
+
+    # Engine Capability
     with contextlib.suppress(AttributeError):
-        source_vals = [
-            val.name for val in trt.TacticSource.__members__.values() if (1 << int(val)) & config.get_tactic_sources()
+        add_line("Engine Capability", str(config.engine_capability))
+
+    # Memory Pools
+    with contextlib.suppress(AttributeError):
+        mem_pool_limits = [
+            f"{name}: {config.get_memory_pool_limit(pool_type) / float(1<<20):.2f} MiB"
+            for name, pool_type in trt.MemoryPoolType.__members__.items()
+            # Only show DLA memory pools when DLA is in use
+            if (not name.startswith("DLA") or using_dla)
         ]
-        config_str += f"\n{'Tactic Sources':20} | {source_vals}"
+        add_line("Memory Pools", f"{str_from_list(mem_pool_limits)}")
 
+    # Tactic Sources
     with contextlib.suppress(AttributeError):
-        config_str += f"\n{'Safety Restricted':20} | {config.get_flag(trt.BuilderFlag.SAFETY_SCOPE)}"
+        source_vals = get_enabled_enum_vals(trt.TacticSource, lambda val: (1 << int(val)) & config.get_tactic_sources())
+        add_line("Tactic Sources", f"{str_from_list(source_vals)}")
 
-    if config.default_device_type == trt.DeviceType.DLA:
-        config_str += (
-            f"\n{'DLA':20} | Core: {config.DLA_core}, GPU Fallback: {config.get_flag(trt.BuilderFlag.GPU_FALLBACK)}"
-        )
+    # DLA
+    if using_dla:
+        add_line("DLA", f"Default Device Type: {config.default_device_type}, Core: {config.DLA_core}")
 
+    # Profiling Verbosity
+    with contextlib.suppress(AttributeError):
+        add_line("Profiling Verbosity", f"{config.profiling_verbosity}")
+
+    # Optimization Profiles
+    if config.num_optimization_profiles > 1:  # Not particularly interesting unless there are multiple.
+        add_line("Optimization Profiles", f"{config.num_optimization_profiles} profile(s)")
+
+    # Preview Features
+    with contextlib.suppress(AttributeError):
+        feature_vals = get_enabled_enum_vals(trt.PreviewFeature, lambda val: config.get_preview_feature(val))
+        if feature_vals:
+            add_line("Preview Features", f"{str_from_list(feature_vals)}")
+
+    # Calibrator
     if config.int8_calibrator:
-        config_str += f"\n{'Calibrator':20} | {config.int8_calibrator}"
-    config_str += f"\n{'Profiles':20} | {config.num_optimization_profiles} profile(s)"
-    return config_str
+        add_line("Calibrator", f"{config.int8_calibrator}")
+
+    return "\n".join(lines)
 
 
 def check_profile(profile):
@@ -388,38 +450,93 @@ def str_from_tensor(tensor, is_shape_tensor):
     return ret
 
 
-def get_input_metadata_from_profile(profile, network):
+def get_input_metadata_from_network(network, profile=None):
     """
-    Returns metadata about the inputs based on the OPT values set in a profile.
+    Returns metadata about the inputs of a network, referring to the opt values
+    set in a profile if available.
 
     Args:
-        profile (trt.IOptimizationProfile):
-                The profile from which to retrieve input metada.
         network (trt.INetworkDefinition):
                 The network the profile applies to.
+
+
+        profile (trt.IOptimizationProfile):
+                The profile from which to retrieve input metadata.
 
     Returns:
         TensorMetadata:
                 A mapping of input names to their types and shapes.
                 Shapes are retrieved from the OPT values in the profile.
+
+    Raises:
+        PolygraphyException:
+                If the network has dynamic shapes or shape tensor inputs but no profile
+                was provided.
     """
     input_metadata = TensorMetadata()
     for index in range(network.num_inputs):
         tensor = network.get_input(index)
-        if tensor.is_shape_tensor:
-            shapes = profile.get_shape_input(tensor.name)
+        # Only access the profile if we actually need to.
+        # This way, this method works with static networks even without a profile set.
+        if not tensor.is_shape_tensor and not util.is_shape_dynamic(tensor.shape):
+            shape = tensor.shape
         else:
-            shapes = profile.get_shape(tensor.name)
+            if profile is None:
+                G_LOGGER.critical(
+                    f"Could not retrieve shape of tensor: {tensor.name} because it "
+                    + ("is a shape tensor" if tensor.is_shape_tensor else "has a dynamic shape")
+                    + " and no profile was provided. "
+                )
 
-        if tuple(shapes[0]) != tuple(shapes[2]):
-            G_LOGGER.warning(
-                "Will use `opt` shapes from profile 0 for calibration. "
-                "Note that even though `min` != `max` in this profile, calibration "
-                "will use fixed input shapes (this is not necessarily an issue)."
-            )
-        # Always use opt shape
-        input_metadata.add(name=tensor.name, dtype=np_dtype_from_trt(tensor.dtype), shape=shapes[1])
+            if tensor.is_shape_tensor:
+                min_shape, opt_shape, max_shape = profile.get_shape_input(tensor.name)
+            else:
+                min_shape, opt_shape, max_shape = profile.get_shape(tensor.name)
+
+            if tuple(min_shape) != tuple(max_shape):
+                G_LOGGER.warning(
+                    "Will use `opt` shapes from profile 0 for calibration. "
+                    "Note that even though `min` != `max` in this profile, calibration "
+                    "will use fixed input shapes. This is not necessarily an issue."
+                )
+            # Always use opt shape
+            shape = opt_shape
+        input_metadata.add(name=tensor.name, dtype=np_dtype_from_trt(tensor.dtype), shape=shape)
     return input_metadata
+
+
+# calib_profile parameter is used to bypass `get_calibration_profile()` to make this work on TRT 7.0 and older.
+def try_setup_polygraphy_calibrator(config, network, calib_profile=None):
+    """
+    Tries to call setup methods specific to Polygraphy calibrators.
+    Returns early if there is no calibrator or if it is not a Polygraphy calibrator.
+    """
+    calibrator = config.int8_calibrator
+    if calibrator is None or not (
+        hasattr(calibrator, "is_polygraphy_calibrator") and calibrator.is_polygraphy_calibrator
+    ):
+        # No calibrator or not a Polygraphy calibrator.
+        return
+
+    if calib_profile is None:
+        try:
+            calib_profile = config.get_calibration_profile()
+        except AttributeError:
+            G_LOGGER.extra_verbose("Cannot get calibration profile on TensorRT 7.0 and older.")
+            # Return early so we don't emit extraneous warnings on TRT 7.0 and older.
+            return
+
+    try:
+        input_metadata = get_input_metadata_from_network(network, calib_profile)
+    except PolygraphyException as err:
+        G_LOGGER.warning(
+            "Could not determine input_metadata to provide to the calibrator because no calibration profile is set. "
+            "Please either set a calibration profile in the config or call `calibrator.set_input_metadata()` manually. "
+            f"\nNote: Error was:\n{err}",
+            mode=LogMode.ONCE,
+        )
+    else:
+        calibrator.set_input_metadata(input_metadata)
 
 
 def add_binding_to_metadata(engine, binding, metadata, name_binding):
@@ -582,6 +699,7 @@ def get_active_profile_bindings(context):
     end_binding = start_binding + bindings_per_profile
 
     G_LOGGER.ultra_verbose(
-        f"Total # of Profiles: {context.engine.num_optimization_profiles}, Bindings Per Profile: {bindings_per_profile}, Active Profile: {active_profile}, Start Binding: {start_binding}, End Binding: {end_binding}"
+        f"Total # of Profiles: {context.engine.num_optimization_profiles}, Bindings Per Profile: {bindings_per_profile}, "
+        f"Active Profile: {active_profile}, Start Binding: {start_binding}, End Binding: {end_binding}"
     )
     return start_binding, end_binding

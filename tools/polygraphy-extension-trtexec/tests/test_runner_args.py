@@ -21,6 +21,7 @@ from polygraphy.tools.args import (
     ModelArgs,
     TrtConfigArgs,
     TrtLoadPluginsArgs,
+    TrtLoadNetworkArgs,
     TrtSaveEngineArgs,
 )
 from polygraphy.tools.script import Script
@@ -37,6 +38,7 @@ def trtexec_runner_args():
             ModelArgs(),
             TrtConfigArgs(),
             TrtLoadPluginsArgs(),
+            TrtLoadNetworkArgs(),
             TrtSaveEngineArgs(),
         ],
     )
@@ -68,7 +70,7 @@ class TestTrtexecRunnerArgs:
         script = Script()
         runners = args_util.run_script(trtexec_runner_args.add_to_script)
         assert runners[0].avg_runs == num_avg_runs
-    
+
     def test_best(self, trtexec_runner_args):
         trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--best"])
         assert trtexec_runner_args.best
@@ -94,7 +96,7 @@ class TestTrtexecRunnerArgs:
         script = Script()
         runners = args_util.run_script(trtexec_runner_args.add_to_script)
         assert runners[0].device == num_device
-    
+
     @pytest.mark.parametrize("num_streams", range(1, 4))
     def test_streams(self, trtexec_runner_args, num_streams):
         trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--streams={num_streams}"])
@@ -103,7 +105,7 @@ class TestTrtexecRunnerArgs:
         script = Script()
         runners = args_util.run_script(trtexec_runner_args.add_to_script)
         assert runners[0].streams == num_streams
-    
+
     @pytest.mark.parametrize("num_min_timing", range(1, 4))
     def test_min_timing(self, trtexec_runner_args, num_min_timing):
         trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--min-timing={num_min_timing}"])
@@ -137,7 +139,7 @@ class TestTrtexecRunnerArgs:
         script = Script()
         runners = args_util.run_script(trtexec_runner_args.add_to_script)
         assert runners[0].no_data_transfers
-    
+
     @pytest.mark.parametrize("num_warmup", range(100, 400, 100))
     def test_trtexec_warmup(self, trtexec_runner_args, num_warmup):
         trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--trtexec-warmup={num_warmup}"])
@@ -146,7 +148,7 @@ class TestTrtexecRunnerArgs:
         script = Script()
         runners = args_util.run_script(trtexec_runner_args.add_to_script)
         assert runners[0].trtexec_warmup == num_warmup
-    
+
     @pytest.mark.parametrize("num_iterations", range(100, 400, 100))
     def test_trtexec_iterations(self, trtexec_runner_args, num_iterations):
         trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--trtexec-iterations={num_iterations}"])
@@ -155,3 +157,39 @@ class TestTrtexecRunnerArgs:
         script = Script()
         runners = args_util.run_script(trtexec_runner_args.add_to_script)
         assert runners[0].trtexec_iterations == num_iterations
+
+    @pytest.mark.parametrize("trtexec_export_times_params", TRTEXEC_EXPORT_TIMES_PARAMS)
+    def test_trtexec_export_times(self, trtexec_runner_args, trtexec_export_times_params):
+        trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--trtexec-export-times={trtexec_export_times_params}"])
+        assert trtexec_runner_args.trtexec_export_times == trtexec_export_times_params
+
+        script = Script()
+        runners = args_util.run_script(trtexec_runner_args.add_to_script)
+        assert runners[0].trtexec_export_times == trtexec_export_times_params
+
+    @pytest.mark.parametrize("trtexec_export_output_params", TRTEXEC_EXPORT_OUTPUT_PARAMS)
+    def test_trtexec_export_output_params(self, trtexec_runner_args, trtexec_export_output_params):
+        trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--trtexec-export-output={trtexec_export_output_params}"])
+        assert trtexec_runner_args.trtexec_export_output == trtexec_export_output_params
+
+        script = Script()
+        runners = args_util.run_script(trtexec_runner_args.add_to_script)
+        assert runners[0].trtexec_export_output == trtexec_export_output_params
+
+    @pytest.mark.parametrize("trtexec_export_profile_params", TRTEXEC_EXPORT_PROFILE_PARAMS)
+    def test_trtexec_export_profile_params(self, trtexec_runner_args, trtexec_export_profile_params):
+        trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--trtexec-export-profile={trtexec_export_profile_params}"])
+        assert trtexec_runner_args.trtexec_export_profile == trtexec_export_profile_params
+
+        script = Script()
+        runners = args_util.run_script(trtexec_runner_args.add_to_script)
+        assert runners[0].trtexec_export_profile == trtexec_export_profile_params
+
+    @pytest.mark.parametrize("trtexec_export_layer_info_params", TRTEXEC_EXPORT_LAYER_INFO_PARAMS)
+    def test_trtexec_export_layer_info_params(self, trtexec_runner_args, trtexec_export_layer_info_params):
+        trtexec_runner_args.parse_args([ONNX_MODELS_PATH["identity"], f"--trtexec-export-layer-info={trtexec_export_layer_info_params}"])
+        assert trtexec_runner_args.trtexec_export_layer_info == trtexec_export_layer_info_params
+
+        script = Script()
+        runners = args_util.run_script(trtexec_runner_args.add_to_script)
+        assert runners[0].trtexec_export_layer_info == trtexec_export_layer_info_params

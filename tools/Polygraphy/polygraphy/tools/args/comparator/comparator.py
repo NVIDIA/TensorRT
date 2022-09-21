@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy import mod, util
+from polygraphy import constants, mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
+from polygraphy.tools.args.backend.runner_select import RunnerSelectArgs
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.comparator.compare import CompareFuncIndicesArgs, CompareFuncSimpleArgs
-from polygraphy.tools.args.comparator.postprocess import ComparatorPostprocessArgs
 from polygraphy.tools.args.comparator.data_loader import DataLoaderArgs
-from polygraphy.tools.args.backend.runner_select import RunnerSelectArgs
+from polygraphy.tools.args.comparator.postprocess import ComparatorPostprocessArgs
 from polygraphy.tools.script import inline, make_invocable, safe
 
 
@@ -202,9 +202,10 @@ class ComparatorCompareArgs(BaseArgs):
             script.add_import(imports=["RunResults"], frm="polygraphy.comparator")
             script.append_suffix(
                 safe(
-                    "\n# Load results\nfor load_output in {:}:\n\t{results}.extend(RunResults.load(load_output))",
+                    "\n# Load results\nfor load_output in {:}:\n{tab}{results}.extend(RunResults.load(load_output))",
                     self.load_outputs_paths,
                     results=results_name,
+                    tab=inline(safe(constants.TAB)),
                 )
             )
 

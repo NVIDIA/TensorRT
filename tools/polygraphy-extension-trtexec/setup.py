@@ -29,6 +29,7 @@ def main():
         version=polygraphy_trtexec.__version__,
         description="Polygraphy Trtexec: Extension to run on trtexec backend",
         long_description=open("README.md", "r", encoding="utf-8").read(),
+        long_description_content_type='text/markdown',
         url="https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy",
         author="NVIDIA",
         author_email="svc_tensorrt@nvidia.com",
@@ -38,7 +39,7 @@ def main():
         ],
         license="Apache 2.0",
         install_requires=[
-            "polygraphy",
+            "polygraphy>=0.42.1",
         ],
         packages=find_packages(exclude=("tests", "tests.*")),
         entry_points={

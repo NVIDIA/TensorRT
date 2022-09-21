@@ -1,3 +1,4 @@
+#!/bin/sh
 #
 # SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -15,18 +16,19 @@
 # limitations under the License.
 #
 
-import onnxruntime as onnxrt
-from polygraphy.tools.args import ModelArgs, OnnxLoadArgs, OnnxrtSessionArgs
-from tests.models.meta import ONNX_MODELS
-from tests.tools.args.helper import ArgGroupTestHelper
+
+# Use this script to process the ONNX files from resnet_example.py
+# and generate the engine + JSON files for exploration with TREx.
 
 
-class TestOnnxrtSessionArgs:
-    def test_execution_providers(self):
-        arg_group = ArgGroupTestHelper(OnnxrtSessionArgs(), deps=[ModelArgs(), OnnxLoadArgs()])
-        arg_group.parse_args([ONNX_MODELS["identity_identity"].path, "--providers", "cpu"])
-        sess = arg_group.load_onnxrt_session()
+SCRIPT=`realpath $0`
+SCRIPT_DIR=`dirname $SCRIPT`
+PROCESS_ENGINE=$SCRIPT_DIR/../../../utils/process_engine.py
+ONNX_DIR=$SCRIPT_DIR/generated
 
-        assert sess
-        assert isinstance(sess, onnxrt.InferenceSession)
-        assert sess.get_providers() == ["CPUExecutionProvider"]
+# Batch size = 32
+SHAPES='shapes=input_1:32x224x224x3'
+
+python3 $PROCESS_ENGINE $ONNX_DIR/resnet.onnx $ONNX_DIR/fp32 $SHAPES
+python3 $PROCESS_ENGINE $ONNX_DIR/resnet.onnx $ONNX_DIR/fp16 $SHAPES fp16
+python3 $PROCESS_ENGINE $ONNX_DIR/resnet-qat.onnx $ONNX_DIR/qat $SHAPES best

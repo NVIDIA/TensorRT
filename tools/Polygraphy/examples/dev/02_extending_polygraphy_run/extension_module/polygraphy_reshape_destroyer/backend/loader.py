@@ -27,8 +27,11 @@ from polygraphy import mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.logger import G_LOGGER
 
-# For any external dependencies besides `polygraphy`, you should use `mod.lazy_import`.
-# This will enable Polygraphy to automatically install the dependency at runtime if required.
+# For external dependencies besides `polygraphy` or any Polygraphy backends
+# (any backend besides `polygraphy.backend.base`), you should use `mod.lazy_import`.
+#
+# This will enable Polygraphy to automatically install dependencies at runtime if required, and
+# will avoid creating a hard dependency on external packages.
 #
 # NOTE: As the name implies, `lazy_import` does *not* import the module until the first time it is
 #       accessed. Thus, you should be careful to avoid an antipattern like:

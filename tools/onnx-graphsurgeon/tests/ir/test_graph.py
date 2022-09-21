@@ -18,12 +18,14 @@
 import copy
 
 import numpy as np
+import onnx
 import onnx_graphsurgeon as gs
 import pytest
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.util import misc
 from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
 from onnx_graphsurgeon.util.misc import SynchronizedList
 from onnx_models import const_foldable, shape_cast_elision
@@ -106,6 +108,13 @@ def if_op(self, cond, then_graph, else_graph):
     return self.layer(
         op="If", inputs=[cond], outputs=["if_out"], attrs={"then_branch": then_graph, "else_branch": else_graph}
     )[0]
+
+
+@gs.Graph.register()
+def tile(self, inp, repeats):
+    out = self.layer(op="Tile", inputs=[inp, repeats], outputs=["tile_out"])[0]
+    out.dtype = inp.dtype
+    return out
 
 
 # Generates a graph where an outer node has no outputs except
@@ -1181,18 +1190,182 @@ class TestFoldConstants(object):
 
     def test_cast_elision(self):
         graph = gs.import_onnx(shape_cast_elision().load())
-        graph.fold_constants()
+        graph.fold_constants().cleanup()
         assert not any(node.op == "Cast" for node in graph.nodes)
 
     def test_cast_elision_int64(self):
+        X = gs.Variable("X", dtype=np.int64, shape=(1,))
+        graph = Graph(inputs=[X])
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
+        add_out = graph.add(casted_x, casted_x)
+        graph.outputs = [graph.cast(add_out, to=onnx.TensorProto.DataType.INT64)]
+
+        graph.fold_constants().cleanup()
+        assert graph.nodes[0].op == "Add"
+
+    # Make sure we're lowering constant nodes before running cast elision
+    def test_cast_elision_with_constant_node(self):
+        inp = gs.Variable("inp", dtype=np.int64, shape=(1,))
+        graph = Graph(inputs=[inp])
+
+        casted_inp = graph.cast(inp, to=onnx.TensorProto.DataType.FLOAT)
+        add_out = graph.add(casted_inp, graph.constant(np.array([2], dtype=np.float32)))
+
+        casted_out = graph.cast(add_out, to=onnx.TensorProto.DataType.INT64)
+        casted_out.dtype = np.int64
+
+        graph.outputs = [casted_out]
+
+        graph.fold_constants().cleanup()
+        assert [node.op for node in graph.nodes] == ["Add"]
+
+        add_const_inp = graph.nodes[0].inputs[1]
+        assert isinstance(add_const_inp, Constant)
+        assert add_const_inp.dtype == np.int64  # Should have been casted to match dtype of other inputs.
+
+    # For a graph like:
+    #
+    #     inp
+    #      |
+    #    Cast
+    #      |
+    #    Add
+    #     |
+    #    Cast
+    #     |
+    #    out
+    #
+    # 1. We cannot remove the initial `Cast` if it is used outside the `Add` node
+    # 2. We cannot perform cast elision at all if the original output of the `Add` node is
+    #    used outside the subsequent `Cast` node.
+    #
+    @pytest.mark.parametrize("use_as_graph_output", [True, False], ids=["graph", ""])
+    @pytest.mark.parametrize("use_in_other_node", [True, False], ids=["node", ""])
+    # Whether to apply the effects of the first two parameters to the input `Cast` node or to the `Add` node.
+    @pytest.mark.parametrize("apply_to_input_cast", [True, False], ids=["input", "output"])
+    def test_cast_elision_multi_use_cast(self, use_as_graph_output, use_in_other_node, apply_to_input_cast):
         X = gs.Variable("X", dtype=np.int32, shape=(1,))
         graph = Graph(inputs=[X])
-        casted_x = graph.cast(X, to=1)
+        casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
         add_out = graph.add(casted_x, casted_x)
-        graph.outputs = [graph.cast(add_out, to=6)]
+        uncasted_x = graph.cast(add_out, to=onnx.TensorProto.DataType.INT32)
 
-        graph.fold_constants()
-        assert graph.nodes[0].op == "Identity"
+        graph.outputs = [uncasted_x]
+
+        mutli_use_tensor = casted_x if apply_to_input_cast else add_out
+        if use_in_other_node:
+            graph.outputs.append(graph.identity(mutli_use_tensor))
+
+        if use_as_graph_output:
+            graph.outputs.append(mutli_use_tensor)
+
+        print(graph)
+        graph.fold_constants().cleanup()
+        ops = [node.op for node in graph.nodes]
+        if use_as_graph_output or use_in_other_node:
+            if apply_to_input_cast:
+                assert graph.nodes[1].inputs[0] == X
+                assert graph.nodes[1].outputs[0] == uncasted_x
+                assert ops == ["Cast", "Add"] + (["Identity"] if use_in_other_node else [])
+            else:
+                assert ops == ["Cast", "Add", "Cast"] + (["Identity"] if use_in_other_node else [])
+        else:
+            assert ops == ["Add"]
+
+    @pytest.mark.parametrize(
+        # If layer1_num_bytes is larger than layer0_num_bytes, then it must be a multiple.
+        "size_threshold, layer0_num_bytes, layer0_should_fold, layer1_num_bytes, layer1_should_fold",
+        [
+            # No size threshold - everything should fold.
+            (
+                None,
+                2,
+                True,
+                4,
+                True,
+            ),
+            # Monotonically increasing but under size threshold - everything should fold.
+            (
+                8,
+                2,
+                True,
+                4,
+                True,
+            ),
+            # Increasing then decreasing, but under size threshold - everything should fold.
+            (
+                8,
+                2,
+                True,
+                1,
+                True,
+            ),
+            # All tensors over size threshold - nothing should fold.
+            (
+                1,
+                2,
+                False,
+                4,
+                False,
+            ),
+            # Second tensor over size threshold - only first tensor should fold.
+            (
+                3,
+                2,
+                True,
+                4,
+                False,
+            ),
+            # First tensor over size threshold - second tensor should still fold.
+            (
+                3,
+                4,
+                False,
+                2,
+                True,
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("push_into_subgraph", [True, False], ids=["subgraph", ""])
+    def test_folding_size_threshold(
+        self,
+        size_threshold,
+        layer0_num_bytes,
+        layer0_should_fold,
+        layer1_num_bytes,
+        layer1_should_fold,
+        push_into_subgraph,
+    ):
+        graph = Graph()
+
+        shape = (1,)
+
+        layer0_repeats = layer0_num_bytes // misc.volume(shape)
+        layer0 = graph.tile(np.ones(shape, dtype=np.int8), repeats=[layer0_repeats])
+        layer0.inputs[0].name = "Layer0"
+
+        if layer1_num_bytes > layer0_num_bytes:
+            layer1_repeats = layer1_num_bytes // layer0_num_bytes
+            layer1 = graph.tile(layer0, repeats=[layer1_repeats])
+        else:
+            layer1 = graph.slice(layer0, starts=[0], ends=[layer1_num_bytes])
+        layer1.inputs[0].name = "Layer1"
+
+        graph.outputs = [layer1]
+
+        # Make sure size_threshold option is propagated into subgraphs.
+        if push_into_subgraph:
+            cond = gs.Variable("cond", dtype=np.bool, shape=tuple())
+            outer_graph = Graph(inputs=[cond])
+            outer_graph.if_op(cond, then_graph=graph, else_graph=graph)
+
+            outer_graph.fold_constants(size_threshold=size_threshold)
+        else:
+            graph.fold_constants(size_threshold=size_threshold)
+
+        # When a tensor is folded, it is disconnected from its producer nodes
+        assert len(graph.nodes[0].outputs) == (0 if layer0_should_fold else 1)
+        assert len(graph.nodes[1].outputs) == (0 if layer1_should_fold else 1)
 
 
 class TestIO(object):

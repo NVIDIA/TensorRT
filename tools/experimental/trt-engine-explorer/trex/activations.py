@@ -93,10 +93,7 @@ class Activation:
         self.size_bytes = np.prod(self.shape) * self.data_size
 
     def tooltip(self):
-        tip = "\\n".join((
-            str(self.shape),
-            self.format,
-            ))
+        tip = "\\n".join((str(self.shape), self.format,))
         return tip
 
     def __repr__(self):

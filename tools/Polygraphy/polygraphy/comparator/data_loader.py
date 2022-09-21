@@ -182,7 +182,8 @@ class DataLoader:
             if is_shape_tensor(name, dtype):
                 buffer = np.array(shape, dtype=dtype)
                 G_LOGGER.info(
-                    f"Assuming {name} is a shape tensor. Setting input values to: {buffer}. If this is not correct, please set it correctly in 'input_metadata' or by providing --input-shapes",
+                    f"Assuming {name} is a shape tensor. Setting input values to: {buffer}. "
+                    "If these values are not correct, please set it correctly in 'input_metadata' or by providing --input-shapes",
                     mode=LogMode.ONCE,
                 )
             elif np.issubdtype(dtype, np.integer) or np.issubdtype(dtype, np.bool_):
@@ -241,8 +242,12 @@ class DataLoader:
 
         # Warn about unused val_range
         if not isinstance(self.val_range, tuple):
-            util.check_dict_contains(
-                self.val_range, list(self.input_metadata.keys()) + [""], check_missing=False, dict_name="val_range"
+            util.check_sequence_contains(
+                self.val_range.keys(),
+                list(self.input_metadata.keys()) + [""],
+                name="val_range",
+                log_func=G_LOGGER.warning,
+                check_missing=False,
             )
 
         return buffers

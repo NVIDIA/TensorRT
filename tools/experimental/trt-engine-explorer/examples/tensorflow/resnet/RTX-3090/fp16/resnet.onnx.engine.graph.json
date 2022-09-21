@@ -1,0 +1,2361 @@
+{"Layers": [{
+  "Name": "resnet50/conv1_conv/Conv2D__6",
+  "LayerType": "Shuffle",
+  "Inputs": [
+  {
+    "Name": "input_1",
+    "Dimensions": [32,224,224,3],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv1_conv/Conv2D__6:0",
+    "Dimensions": [32,3,224,224],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "ParameterType": "Shuffle",
+  "FirstTranspose": [0,3,1,2],
+  "Reshape": "nbDims=-1",
+  "SecondTranspose": [0,1,2,3],
+  "ZeroIsPlaceholder": 1,
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to Conv__435 + resnet50/conv1_relu/Relu",
+  "LayerType": "Reformat",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv1_conv/Conv2D__6:0",
+    "Dimensions": [32,3,224,224],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to Conv__435 + resnet50/conv1_relu/Relu",
+    "Dimensions": [32,3,224,224],
+    "Format/Datatype": "Channel major FP16 format where channel % 4 == 0"
+  }],
+  "ParameterType": "Reformat",
+  "Origin": "REFORMAT",
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "Conv__435 + resnet50/conv1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to Conv__435 + resnet50/conv1_relu/Relu",
+    "Dimensions": [32,3,224,224],
+    "Format/Datatype": "Channel major FP16 format where channel % 4 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv1_relu/Relu:0",
+    "Dimensions": [32,64,112,112],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [7,7],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [3,3],
+  "PostPadding": [3,3],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 9408},
+  "Bias": {"Type": "Half", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "trt_turing_cutlass_image_network_first_layer_hmma_fprop_f16f16f32_nhwc_nhwc_k64r7s7c4_stride2x2",
+  "TacticValue": "0xe2222883a6602489"
+},{
+  "Name": "resnet50/pool1_pad/Pad",
+  "LayerType": "Padding",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv1_relu/Relu:0",
+    "Dimensions": [32,64,112,112],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/pool1_pad/Pad:0",
+    "Dimensions": [32,64,114,114],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Slice",
+  "Start": [0,0,-1,-1],
+  "Size": [32,64,114,114],
+  "Stride": [1,1,1,1],
+  "Mode": "FILL",
+  "negativeInfinityPadding": 0,
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/pool1_pool/MaxPool",
+  "LayerType": "CudnnPooling",
+  "Inputs": [
+  {
+    "Name": "resnet50/pool1_pad/Pad:0",
+    "Dimensions": [32,64,114,114],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/pool1_pool/MaxPool:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Pooling",
+  "PoolingType": "MAX",
+  "WindowSize": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [2,2],
+  "BlendFactor": 0,
+  "AverageCountExcludesPadding": 1,
+  "TacticValue": "0xffffffffffffffff"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv2_block1_1_conv/Conv2D + resnet50/conv2_block1_1_relu/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/pool1_pool/MaxPool:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv2_block1_1_conv/Conv2D + resnet50/conv2_block1_1_relu/Relu",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv2_block1_1_conv/Conv2D + resnet50/conv2_block1_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv2_block1_1_conv/Conv2D + resnet50/conv2_block1_1_relu/Relu",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block1_1_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 4096},
+  "Bias": {"Type": "Half", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x32x32_stage4_warpsize4x1x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x8047bcfcebface4a"
+},{
+  "Name": "resnet50/conv2_block1_2_conv/Conv2D + resnet50/conv2_block1_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block1_1_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block1_2_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 36864},
+  "Bias": {"Type": "Half", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize256x64x32_stage3_warpsize4x1x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x0866ddee325d07a6"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv2_block1_3_conv/Conv2D",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block1_2_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv2_block1_3_conv/Conv2D",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv2_block1_3_conv/Conv2D",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv2_block1_3_conv/Conv2D",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block1_3_bn/FusedBatchNormV3:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 16384},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv2_block1_0_conv/Conv2D + resnet50/conv2_block1_add/add + resnet50/conv2_block1_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/pool1_pool/MaxPool:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  },
+  {
+    "Name": "resnet50/conv2_block1_3_bn/FusedBatchNormV3:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Output Tensor 0 to resnet50/conv2_block1_0_conv/Conv2D + resnet50/conv2_block1_add/add + resnet50/conv2_block1_out/Relu",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 16384},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x128x32_stage4_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0xa2121200e08f5391"
+},{
+  "Name": "Reformatting CopyNode for Output Tensor 0 to resnet50/conv2_block1_0_conv/Conv2D + resnet50/conv2_block1_add/add + resnet50/conv2_block1_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "Reformatted Output Tensor 0 to resnet50/conv2_block1_0_conv/Conv2D + resnet50/conv2_block1_add/add + resnet50/conv2_block1_out/Relu",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block1_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv2_block2_1_conv/Conv2D + resnet50/conv2_block2_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block1_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block2_1_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 16384},
+  "Bias": {"Type": "Half", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x32x32_stage4_warpsize4x1x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x8047bcfcebface4a"
+},{
+  "Name": "resnet50/conv2_block2_2_conv/Conv2D + resnet50/conv2_block2_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block2_1_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block2_2_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 36864},
+  "Bias": {"Type": "Half", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize256x64x32_stage3_warpsize4x1x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x0866ddee325d07a6"
+},{
+  "Name": "resnet50/conv2_block2_3_conv/Conv2D + resnet50/conv2_block2_add/add + resnet50/conv2_block2_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block2_2_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  },
+  {
+    "Name": "resnet50/conv2_block1_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block2_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 16384},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x128x64_stage3_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0xfd2247f786006d58"
+},{
+  "Name": "resnet50/conv2_block3_1_conv/Conv2D + resnet50/conv2_block3_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block2_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block3_1_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 16384},
+  "Bias": {"Type": "Half", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x32x32_stage4_warpsize4x1x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x8047bcfcebface4a"
+},{
+  "Name": "resnet50/conv2_block3_2_conv/Conv2D + resnet50/conv2_block3_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block3_1_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block3_2_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 36864},
+  "Bias": {"Type": "Half", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize256x64x32_stage3_warpsize4x1x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x0866ddee325d07a6"
+},{
+  "Name": "resnet50/conv2_block3_3_conv/Conv2D + resnet50/conv2_block3_add/add + resnet50/conv2_block3_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block3_2_relu/Relu:0",
+    "Dimensions": [32,64,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  },
+  {
+    "Name": "resnet50/conv2_block2_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Output Tensor 0 to resnet50/conv2_block3_3_conv/Conv2D + resnet50/conv2_block3_add/add + resnet50/conv2_block3_out/Relu",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 16384},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x128x64_stage3_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0xfd2247f786006d58"
+},{
+  "Name": "Reformatting CopyNode for Output Tensor 0 to resnet50/conv2_block3_3_conv/Conv2D + resnet50/conv2_block3_add/add + resnet50/conv2_block3_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "Reformatted Output Tensor 0 to resnet50/conv2_block3_3_conv/Conv2D + resnet50/conv2_block3_add/add + resnet50/conv2_block3_out/Relu",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv2_block3_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv3_block1_1_conv/Conv2D + resnet50/conv3_block1_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block3_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block1_1_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 128,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 32768},
+  "Bias": {"Type": "Half", "Count": 128},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_indexed_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize64x128x32_stage5_warpsize2x2x1_g1_tensor16x8x16",
+  "TacticValue": "0xafd1e8bf6bd3d638"
+},{
+  "Name": "resnet50/conv3_block1_2_conv/Conv2D + resnet50/conv3_block1_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block1_1_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block1_2_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 128,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 147456},
+  "Bias": {"Type": "Half", "Count": 128},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv3_block1_3_conv/Conv2D",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block1_2_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv3_block1_3_conv/Conv2D",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv3_block1_3_conv/Conv2D",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv3_block1_3_conv/Conv2D",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block1_3_bn/FusedBatchNormV3:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 65536},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 1 to resnet50/conv3_block1_0_conv/Conv2D + resnet50/conv3_block1_add/add + resnet50/conv3_block1_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block1_3_bn/FusedBatchNormV3:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 1 to resnet50/conv3_block1_0_conv/Conv2D + resnet50/conv3_block1_add/add + resnet50/conv3_block1_out/Relu",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv3_block1_0_conv/Conv2D + resnet50/conv3_block1_add/add + resnet50/conv3_block1_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv2_block3_out/Relu:0",
+    "Dimensions": [32,256,56,56],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  },
+  {
+    "Name": "Reformatted Input Tensor 1 to resnet50/conv3_block1_0_conv/Conv2D + resnet50/conv3_block1_add/add + resnet50/conv3_block1_out/Relu",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block1_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 131072},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv3_block2_1_conv/Conv2D + resnet50/conv3_block2_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block1_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block2_1_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 128,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 65536},
+  "Bias": {"Type": "Half", "Count": 128},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize64x128x32_stage5_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x5cf18273fea3db5c"
+},{
+  "Name": "resnet50/conv3_block2_2_conv/Conv2D + resnet50/conv3_block2_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block2_1_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block2_2_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 128,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 147456},
+  "Bias": {"Type": "Half", "Count": 128},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "resnet50/conv3_block2_3_conv/Conv2D + resnet50/conv3_block2_add/add + resnet50/conv3_block2_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block2_2_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  },
+  {
+    "Name": "resnet50/conv3_block1_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block2_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 65536},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv3_block3_1_conv/Conv2D + resnet50/conv3_block3_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block2_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block3_1_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 128,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 65536},
+  "Bias": {"Type": "Half", "Count": 128},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize64x128x32_stage5_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x5cf18273fea3db5c"
+},{
+  "Name": "resnet50/conv3_block3_2_conv/Conv2D + resnet50/conv3_block3_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block3_1_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block3_2_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 128,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 147456},
+  "Bias": {"Type": "Half", "Count": 128},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "resnet50/conv3_block3_3_conv/Conv2D + resnet50/conv3_block3_add/add + resnet50/conv3_block3_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block3_2_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  },
+  {
+    "Name": "resnet50/conv3_block2_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block3_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 65536},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv3_block4_1_conv/Conv2D + resnet50/conv3_block4_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block3_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block4_1_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 128,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 65536},
+  "Bias": {"Type": "Half", "Count": 128},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize64x128x32_stage5_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x5cf18273fea3db5c"
+},{
+  "Name": "resnet50/conv3_block4_2_conv/Conv2D + resnet50/conv3_block4_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block4_1_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block4_2_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 128,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 147456},
+  "Bias": {"Type": "Half", "Count": 128},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "resnet50/conv3_block4_3_conv/Conv2D + resnet50/conv3_block4_add/add + resnet50/conv3_block4_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block4_2_relu/Relu:0",
+    "Dimensions": [32,128,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  },
+  {
+    "Name": "resnet50/conv3_block3_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv3_block4_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 65536},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv4_block1_1_conv/Conv2D + resnet50/conv4_block1_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block4_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block1_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 131072},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize256x128x32_stage3_warpsize4x2x1_g1_tensor16x8x16_t1r1s1",
+  "TacticValue": "0x8e1e99c68a674ff4"
+},{
+  "Name": "resnet50/conv4_block1_2_conv/Conv2D + resnet50/conv4_block1_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block1_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block1_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 589824},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block1_3_conv/Conv2D",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block1_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block1_3_conv/Conv2D",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block1_3_conv/Conv2D",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block1_3_conv/Conv2D",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block1_3_bn/FusedBatchNormV3:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1024,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 1024},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 1 to resnet50/conv4_block1_0_conv/Conv2D + resnet50/conv4_block1_add/add + resnet50/conv4_block1_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block1_3_bn/FusedBatchNormV3:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 1 to resnet50/conv4_block1_0_conv/Conv2D + resnet50/conv4_block1_add/add + resnet50/conv4_block1_out/Relu",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block1_0_conv/Conv2D + resnet50/conv4_block1_add/add + resnet50/conv4_block1_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv3_block4_out/Relu:0",
+    "Dimensions": [32,512,28,28],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  },
+  {
+    "Name": "Reformatted Input Tensor 1 to resnet50/conv4_block1_0_conv/Conv2D + resnet50/conv4_block1_add/add + resnet50/conv4_block1_out/Relu",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Output Tensor 0 to resnet50/conv4_block1_0_conv/Conv2D + resnet50/conv4_block1_add/add + resnet50/conv4_block1_out/Relu",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 1024,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 524288},
+  "Bias": {"Type": "Half", "Count": 1024},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "Reformatting CopyNode for Output Tensor 0 to resnet50/conv4_block1_0_conv/Conv2D + resnet50/conv4_block1_add/add + resnet50/conv4_block1_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "Reformatted Output Tensor 0 to resnet50/conv4_block1_0_conv/Conv2D + resnet50/conv4_block1_add/add + resnet50/conv4_block1_out/Relu",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block1_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block2_1_conv/Conv2D + resnet50/conv4_block2_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block1_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block2_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x32_stage5_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x454d6448fb6e7fd1"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block2_2_conv/Conv2D + resnet50/conv4_block2_2_relu/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block2_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block2_2_conv/Conv2D + resnet50/conv4_block2_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block2_2_conv/Conv2D + resnet50/conv4_block2_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block2_2_conv/Conv2D + resnet50/conv4_block2_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block2_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 589824},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block2_3_conv/Conv2D + resnet50/conv4_block2_add/add + resnet50/conv4_block2_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block2_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block2_3_conv/Conv2D + resnet50/conv4_block2_add/add + resnet50/conv4_block2_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block2_3_conv/Conv2D + resnet50/conv4_block2_add/add + resnet50/conv4_block2_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block2_3_conv/Conv2D + resnet50/conv4_block2_add/add + resnet50/conv4_block2_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  },
+  {
+    "Name": "resnet50/conv4_block1_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block2_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1024,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 1024},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv4_block3_1_conv/Conv2D + resnet50/conv4_block3_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block2_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block3_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x32_stage5_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x454d6448fb6e7fd1"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block3_2_conv/Conv2D + resnet50/conv4_block3_2_relu/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block3_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block3_2_conv/Conv2D + resnet50/conv4_block3_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block3_2_conv/Conv2D + resnet50/conv4_block3_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block3_2_conv/Conv2D + resnet50/conv4_block3_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block3_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 589824},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block3_3_conv/Conv2D + resnet50/conv4_block3_add/add + resnet50/conv4_block3_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block3_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block3_3_conv/Conv2D + resnet50/conv4_block3_add/add + resnet50/conv4_block3_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block3_3_conv/Conv2D + resnet50/conv4_block3_add/add + resnet50/conv4_block3_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block3_3_conv/Conv2D + resnet50/conv4_block3_add/add + resnet50/conv4_block3_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  },
+  {
+    "Name": "resnet50/conv4_block2_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block3_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1024,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 1024},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv4_block4_1_conv/Conv2D + resnet50/conv4_block4_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block3_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block4_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x32_stage5_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x454d6448fb6e7fd1"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block4_2_conv/Conv2D + resnet50/conv4_block4_2_relu/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block4_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block4_2_conv/Conv2D + resnet50/conv4_block4_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block4_2_conv/Conv2D + resnet50/conv4_block4_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block4_2_conv/Conv2D + resnet50/conv4_block4_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block4_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 589824},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block4_3_conv/Conv2D + resnet50/conv4_block4_add/add + resnet50/conv4_block4_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block4_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block4_3_conv/Conv2D + resnet50/conv4_block4_add/add + resnet50/conv4_block4_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block4_3_conv/Conv2D + resnet50/conv4_block4_add/add + resnet50/conv4_block4_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block4_3_conv/Conv2D + resnet50/conv4_block4_add/add + resnet50/conv4_block4_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  },
+  {
+    "Name": "resnet50/conv4_block3_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block4_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1024,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 1024},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv4_block5_1_conv/Conv2D + resnet50/conv4_block5_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block4_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block5_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x32_stage5_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x454d6448fb6e7fd1"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block5_2_conv/Conv2D + resnet50/conv4_block5_2_relu/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block5_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block5_2_conv/Conv2D + resnet50/conv4_block5_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block5_2_conv/Conv2D + resnet50/conv4_block5_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block5_2_conv/Conv2D + resnet50/conv4_block5_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block5_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 589824},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block5_3_conv/Conv2D + resnet50/conv4_block5_add/add + resnet50/conv4_block5_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block5_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block5_3_conv/Conv2D + resnet50/conv4_block5_add/add + resnet50/conv4_block5_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block5_3_conv/Conv2D + resnet50/conv4_block5_add/add + resnet50/conv4_block5_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block5_3_conv/Conv2D + resnet50/conv4_block5_add/add + resnet50/conv4_block5_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  },
+  {
+    "Name": "resnet50/conv4_block4_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block5_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1024,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 1024},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv4_block6_1_conv/Conv2D + resnet50/conv4_block6_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block5_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block6_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x32_stage5_warpsize2x2x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x454d6448fb6e7fd1"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block6_2_conv/Conv2D + resnet50/conv4_block6_2_relu/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block6_1_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block6_2_conv/Conv2D + resnet50/conv4_block6_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block6_2_conv/Conv2D + resnet50/conv4_block6_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block6_2_conv/Conv2D + resnet50/conv4_block6_2_relu/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block6_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 256,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 589824},
+  "Bias": {"Type": "Half", "Count": 256},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x64x64_stage3_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x263a38afd75e3a43"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv4_block6_3_conv/Conv2D + resnet50/conv4_block6_add/add + resnet50/conv4_block6_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block6_2_relu/Relu:0",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block6_3_conv/Conv2D + resnet50/conv4_block6_add/add + resnet50/conv4_block6_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv4_block6_3_conv/Conv2D + resnet50/conv4_block6_add/add + resnet50/conv4_block6_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv4_block6_3_conv/Conv2D + resnet50/conv4_block6_add/add + resnet50/conv4_block6_out/Relu",
+    "Dimensions": [32,256,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  },
+  {
+    "Name": "resnet50/conv4_block5_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv4_block6_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1024,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 262144},
+  "Bias": {"Type": "Half", "Count": 1024},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv5_block1_1_conv/Conv2D + resnet50/conv5_block1_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block6_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block1_1_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 524288},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize256x64x32_stage3_warpsize4x1x1_g1_tensor16x8x16_t1r1s1",
+  "TacticValue": "0xd80cb0f3373aef38"
+},{
+  "Name": "resnet50/conv5_block1_2_conv/Conv2D + resnet50/conv5_block1_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block1_1_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block1_2_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 2359296},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize64x64x64_stage4_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x30e8a8d7a953e5e9"
+},{
+  "Name": "resnet50/conv5_block1_3_conv/Conv2D",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block1_2_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block1_3_bn/FusedBatchNormV3:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 2048,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 1048576},
+  "Bias": {"Type": "Half", "Count": 2048},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv5_block1_0_conv/Conv2D + resnet50/conv5_block1_add/add + resnet50/conv5_block1_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv4_block6_out/Relu:0",
+    "Dimensions": [32,1024,14,14],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  },
+  {
+    "Name": "resnet50/conv5_block1_3_bn/FusedBatchNormV3:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block1_out/Relu:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 2048,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 2097152},
+  "Bias": {"Type": "Half", "Count": 2048},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/conv5_block2_1_conv/Conv2D + resnet50/conv5_block2_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block1_out/Relu:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block2_1_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 1048576},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize256x64x32_stage3_warpsize4x1x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x3eda3b336995a6f0"
+},{
+  "Name": "resnet50/conv5_block2_2_conv/Conv2D + resnet50/conv5_block2_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block2_1_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block2_2_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 2359296},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize64x64x64_stage4_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x30e8a8d7a953e5e9"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv5_block2_3_conv/Conv2D + resnet50/conv5_block2_add/add + resnet50/conv5_block2_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block2_2_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv5_block2_3_conv/Conv2D + resnet50/conv5_block2_add/add + resnet50/conv5_block2_out/Relu",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 1 to resnet50/conv5_block2_3_conv/Conv2D + resnet50/conv5_block2_add/add + resnet50/conv5_block2_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block1_out/Relu:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 1 to resnet50/conv5_block2_3_conv/Conv2D + resnet50/conv5_block2_add/add + resnet50/conv5_block2_out/Relu",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv5_block2_3_conv/Conv2D + resnet50/conv5_block2_add/add + resnet50/conv5_block2_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv5_block2_3_conv/Conv2D + resnet50/conv5_block2_add/add + resnet50/conv5_block2_out/Relu",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  },
+  {
+    "Name": "Reformatted Input Tensor 1 to resnet50/conv5_block2_3_conv/Conv2D + resnet50/conv5_block2_add/add + resnet50/conv5_block2_out/Relu",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block2_out/Relu:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 2048,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 1048576},
+  "Bias": {"Type": "Half", "Count": 2048},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv5_block3_1_conv/Conv2D + resnet50/conv5_block3_1_relu/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block2_out/Relu:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv5_block3_1_conv/Conv2D + resnet50/conv5_block3_1_relu/Relu",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv5_block3_1_conv/Conv2D + resnet50/conv5_block3_1_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv5_block3_1_conv/Conv2D + resnet50/conv5_block3_1_relu/Relu",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block3_1_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 1048576},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize256x64x32_stage3_warpsize4x1x1_g1_tensor16x8x16_simple_t1r1s1",
+  "TacticValue": "0x3eda3b336995a6f0"
+},{
+  "Name": "resnet50/conv5_block3_2_conv/Conv2D + resnet50/conv5_block3_2_relu/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block3_1_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block3_2_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 512,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 2359296},
+  "Bias": {"Type": "Half", "Count": 512},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize64x64x64_stage4_warpsize2x2x1_g1_tensor16x8x16_t1r3s3_aACCESS",
+  "TacticValue": "0x30e8a8d7a953e5e9"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/conv5_block3_3_conv/Conv2D + resnet50/conv5_block3_add/add + resnet50/conv5_block3_out/Relu",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block3_2_relu/Relu:0",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 16 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv5_block3_3_conv/Conv2D + resnet50/conv5_block3_add/add + resnet50/conv5_block3_out/Relu",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/conv5_block3_3_conv/Conv2D + resnet50/conv5_block3_add/add + resnet50/conv5_block3_out/Relu",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/conv5_block3_3_conv/Conv2D + resnet50/conv5_block3_add/add + resnet50/conv5_block3_out/Relu",
+    "Dimensions": [32,512,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  },
+  {
+    "Name": "resnet50/conv5_block2_out/Relu:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/conv5_block3_out/Relu:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 2048,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 1048576},
+  "Bias": {"Type": "Half", "Count": 2048},
+  "HasSparseWeights": 0,
+  "Activation": "RELU",
+  "HasBias": 1,
+  "HasReLU": 1,
+  "TacticName": "ampere_h1688cudnn_128x128_ldg8_relu_exp_interior_nhwc_tn_v1",
+  "TacticValue": "0xfa5a19eb8211e798"
+},{
+  "Name": "resnet50/avg_pool/Mean",
+  "LayerType": "CaskPooling",
+  "Inputs": [
+  {
+    "Name": "resnet50/conv5_block3_out/Relu:0",
+    "Dimensions": [32,2048,7,7],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/avg_pool/Mean:0",
+    "Dimensions": [32,2048,1,1],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Pooling",
+  "PoolingType": "AVERAGE",
+  "WindowSize": [7,7],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "BlendFactor": 0,
+  "AverageCountExcludesPadding": 1,
+  "TacticName": "sm50_xmma_pooling_fw_4d_FP16FP32NHWC_Average_FastDiv_CAlign4",
+  "TacticValue": "0x56d7b61f084f251e"
+},{
+  "Name": "resnet50/predictions/MatMul",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "resnet50/avg_pool/Mean:0",
+    "Dimensions": [32,2048,1,1],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/predictions/MatMul_out_region",
+    "Dimensions": [32,1000,1,1],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1000,
+  "Groups": 1,
+  "Weights": {"Type": "Half", "Count": 2048000},
+  "Bias": {"Type": "Half", "Count": 1000},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm80_xmma_fprop_implicit_gemm_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize64x32x64_stage5_warpsize2x2x1_g1_tensor16x8x16_t1r1s1",
+  "TacticValue": "0x2aa016c86360697f"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to reshape_after_resnet50/predictions/MatMul",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "resnet50/predictions/MatMul_out_region",
+    "Dimensions": [32,1000,1,1],
+    "Format/Datatype": "Channel major FP16 format where channel % 8 == 0"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to reshape_after_resnet50/predictions/MatMul",
+    "Dimensions": [32,1000,1,1],
+    "Format/Datatype": "Row major linear FP16 format"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "reshape_after_resnet50/predictions/MatMul",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to reshape_after_resnet50/predictions/MatMul",
+    "Dimensions": [32,1000,1,1],
+    "Format/Datatype": "Row major linear FP16 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "resnet50/predictions/BiasAdd:0",
+    "Dimensions": [32,1000],
+    "Format/Datatype": "Row major linear FP16 format"
+  }],
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to resnet50/predictions/Softmax",
+  "LayerType": "Reformat",
+  "Inputs": [
+  {
+    "Name": "resnet50/predictions/BiasAdd:0",
+    "Dimensions": [32,1000],
+    "Format/Datatype": "Row major linear FP16 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/predictions/Softmax",
+    "Dimensions": [32,1000],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "ParameterType": "Reformat",
+  "Origin": "REFORMAT",
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "resnet50/predictions/Softmax",
+  "LayerType": "CudaSoftMax",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to resnet50/predictions/Softmax",
+    "Dimensions": [32,1000],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "Outputs": [
+  {
+    "Name": "predictions",
+    "Dimensions": [32,1000],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "ParameterType": "SoftMax",
+  "Axes": 2,
+  "HasLog": 0,
+  "TacticValue": "0x00000000000003e9"
+}],
+"Bindings": ["input_1"
+,"predictions"
+]}

@@ -74,7 +74,7 @@ class TestComparator:
         ]
 
         run_results = Comparator.run(runners)
-        compare_func = CompareFunc.simple(check_shapes=mod.version(trt.__version__) >= mod.version("7.0"))
+        compare_func = CompareFunc.simple(check_shapes=True)
         assert bool(Comparator.compare_accuracy(run_results, compare_func=compare_func))
         assert len(list(run_results.values())[0]) == 1  # Default number of iterations
 
@@ -82,7 +82,7 @@ class TestComparator:
         onnx_loader = ONNX_MODELS["identity"].loader
         run_results = Comparator.run([OnnxrtRunner(SessionFromOnnx(onnx_loader))], use_subprocess=True)
         # Output shape is (1, 1, 2, 2)
-        postprocessed = Comparator.postprocess(run_results, postprocess_func=PostprocessFunc.top_k(k=1, axis=-1))
+        postprocessed = Comparator.postprocess(run_results, postprocess_func=PostprocessFunc.top_k(k=(1, -1)))
         for _, results in postprocessed.items():
             for result in results:
                 for _, output in result.items():
@@ -140,6 +140,6 @@ class TestComparator:
         ]
 
         run_results = Comparator.run(runners)
-        compare_func = CompareFunc.simple(check_shapes=mod.version(trt.__version__) >= mod.version("7.0"))
+        compare_func = CompareFunc.simple(check_shapes=True)
         assert bool(Comparator.compare_accuracy(run_results, compare_func=compare_func))
         assert len(list(run_results.values())[0]) == 1  # Default number of iterations

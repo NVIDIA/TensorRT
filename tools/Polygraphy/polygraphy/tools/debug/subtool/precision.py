@@ -108,8 +108,11 @@ class LinearMarker(BaseMarker):
 
 class Precision(BaseCheckerSubtool):
     """
-    Iteratively mark layers to run in a higher precision to find a
-    compromise between performance and quality.
+    [EXPERIMENTAL] Iteratively mark layers to run in a higher precision to find a compromise between performance and quality.
+
+    `debug precision` follows the same general process as other `debug` subtools (refer to the help output
+    of the `debug` tool for more background information and details).
+
     Each iteration will generate an engine called 'polygraphy_debug.engine' in the current directory.
     """
 
@@ -169,7 +172,7 @@ class Precision(BaseCheckerSubtool):
         if self.arg_groups[ModelArgs].model_type == "engine":
             G_LOGGER.critical(
                 "The precision tool cannot work with engines, as they cannot be modified. "
-                "Please provide a different format, such as an ONNX or TensorFlow model."
+                "Please provide a different format, such as an ONNX model or TensorRT network script."
             )
 
         G_LOGGER.start(f"Using {self.precision} as higher precision")

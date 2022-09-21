@@ -23,6 +23,8 @@ This file contains interaction cells for the engine_report_card.ipynb notebook.
 
 
 from functools import partial
+import IPython.display
+from ipywidgets import widgets
 from .misc import group_count, group_sum_attr
 from .interactive import InteractiveDiagram, InteractiveDiagram_2
 from .notebook import display_df
@@ -32,11 +34,11 @@ from .graphing import *
 from .parser import read_timing_file
 
 
-def report_card_perf_overview(plan: EnginePlan):
-    """Display performance overview diagrams.
+def report_card_perf_overview(plan: EnginePlan) -> Dict[str, callable]:
+    """Prepare a dictionary of predefined performance queries.
 
-    Display a dropdown widget to choose between diagrams showing various
-    characteristics of the plan's convolution layers."""
+    Each query is implemented via a callable.
+    Returns a dictionary of query names mapped to query callables."""
     layer_types = group_count(plan.df, 'type')
     count_per_layer_type = partial(
         plotly_bar2,
@@ -138,7 +140,7 @@ def report_card_perf_overview(plan: EnginePlan):
         charts=precision_charts,
         colormap=precision_colormap)
 
-    def precision_per_type(title):
+    def precision_per_type(title, do_show: bool=True,):
         title = f"{title}\n({plan.name})"
         df = plan.df
         precision_sunburst = df.groupby(['type', 'precision']).count().reset_index()
@@ -150,7 +152,9 @@ def report_card_perf_overview(plan: EnginePlan):
             color_discrete_map=precision_colormap,
             color='precision')
         fig.update_layout(title=title, title_x=0.5, font_size=15,)
-        fig.show()
+        if do_show:
+            fig.show()
+        return fig
 
     dropdown_choices = {
         "Latency per layer (%)": latency_per_layer,
@@ -164,15 +168,24 @@ def report_card_perf_overview(plan: EnginePlan):
         "Precision per layer type": precision_per_type,
         "Precision rollup": precision_statistics,
     }
+    return dropdown_choices
 
-    return InteractiveDiagram_2(dropdown_choices, 'Diagram:')
 
-
-def report_card_convolutions_overview(convs: pd.DataFrame):
-    """Display convolution layer diagrams.
+def report_card_perf_overview_widget(plan: EnginePlan):
+    """Display performance overview diagrams.
 
     Display a dropdown widget to choose between diagrams showing various
-    characteristics of the plan's convolution layers"""
+    characteristics of the plan's convolution layers."""
+
+    dropdown_choices = report_card_perf_overview(plan)
+    InteractiveDiagram_2(dropdown_choices, 'Diagram:')
+
+
+def report_card_convolutions_overview(convs: pd.DataFrame) -> Dict[str, callable]:
+    """Prepare a dictionary of predefined queries on Convolution layers.
+
+    Each query is implemented via a callable.
+    Returns a dictionary of query names mapped to query callables."""
 
     latency_vs_ai_per_conv = partial(
         plotly_bar2,
@@ -233,13 +246,13 @@ def report_card_convolutions_overview(convs: pd.DataFrame):
         convs,
         values_col='attr.arithmetic_intensity',
         names_col='Name',
-        color='latency.pct_time')
+        color='attr.compute_efficiency')
     ai_vs_footprint_per_conv = partial(
         plotly_bar2,
         convs,
         values_col='attr.arithmetic_intensity',
         names_col='Name',
-        color='total_footprint_bytes')
+        color='attr.memory_efficiency')
     ce_vs_latency_per_conv = partial(
         plotly_bar2,
         convs,
@@ -279,6 +292,15 @@ def report_card_convolutions_overview(convs: pd.DataFrame):
         "Memory efficiency (color = latency)":
             me_vs_latency_per_conv,
     }
+    return dropdown_choices
+
+
+def report_card_convolutions_overview_widget(convs: pd.DataFrame):
+    """Display convolution layer diagrams.
+
+    Display a dropdown widget to choose between diagrams showing various
+    characteristics of the plan's convolution layers"""
+    dropdown_choices = report_card_convolutions_overview(convs)
     InteractiveDiagram_2(dropdown_choices, 'Diagram:')
 
 
@@ -305,49 +327,42 @@ def report_card_table_view(plan: EnginePlan):
 def report_card_memory_footprint(plan: EnginePlan):
     """Memory footprint diagrams"""
 
-    def render_diagram(choice, values_col, colormap):
-        if 'distribution' in choice:
-            plotly_hist(
-                plan.df,
-                f"{choice}",
-                values_col,
-                "Size (bytes)",
+    plotly_hist_wrap = partial(plotly_hist,
+                df=plan.df,
+                xaxis_title="Size (bytes)",
                 color='type',
-                colormap=colormap)
-        else:
-            plotly_bar2(
+                colormap=layer_colormap)
+
+    plotly_bar2_wrap = partial(plotly_bar2,
                 plan.df,
-                f"{choice}",
-                values_col,
-                "Name",
+                names_col="Name",
                 color='type',
-                colormap=colormap,
+                colormap=layer_colormap,
                 show_axis_ticks=(False, True))
 
     dropdown_choices = {
-        "Weights footprint per layer":
-            ('weights_size', layer_colormap),
-        "Activation footprint per layer":
-            ('total_io_size_bytes', layer_colormap),
-        "Total footprint per layer":
-            ('total_footprint_bytes', layer_colormap),
-        "Weights footprint distribution per layer":
-            ('weights_size', layer_colormap),
-        "Activations footprint distribution per layer":
-            ('total_io_size_bytes', layer_colormap),
-        "Total footprint distribution per layer":
-            ('total_footprint_bytes', layer_colormap),
+        "Weights footprint per layer": partial(plotly_bar2_wrap, values_col='weights_size'),
+        "Activation footprint per layer": partial(plotly_bar2_wrap, values_col='total_io_size_bytes'),
+        "Total footprint per layer": partial(plotly_bar2_wrap, values_col='total_footprint_bytes'),
+        "Weights footprint distribution per layer": partial(plotly_hist_wrap, values_col='weights_size'),
+        "Activations footprint distribution per layer": partial(plotly_hist_wrap, values_col='total_io_size_bytes'),
+        "Total footprint distribution per layer": partial(plotly_hist_wrap, values_col='total_footprint_bytes'),
     }
+    return dropdown_choices
 
-    InteractiveDiagram(render_diagram, dropdown_choices, 'Bar color')
+
+def report_card_memory_footprint_widget(plan: EnginePlan):
+    dropdown_choices = report_card_memory_footprint(plan)
+    InteractiveDiagram_2(dropdown_choices, 'Diagram:')
 
 
 def report_card_draw_plan_graph(plan: EnginePlan, engine_name: str):
     """Draw the plan graph (export to SVG)"""
-    def render_diagram(choice, formatter, display_regions, expand_layer_details):
+    def render_diagram(choice, formatter, display_regions, expand_layer_details, display_layer_names=True):
         graph = to_dot(plan, formatter,
             display_regions=display_regions,
-            expand_layer_details=expand_layer_details)
+            expand_layer_details=expand_layer_details,
+            display_layer_names=display_layer_names)
         render_dot(graph, engine_name, 'svg')
 
     # Color code nodes by precision or layer-type
@@ -356,6 +371,7 @@ def report_card_draw_plan_graph(plan: EnginePlan, engine_name: str):
         "Color nodes by type (detailed)": (layer_type_formatter, True, True),
         "Color nodes by precision": (precision_formatter, False, False),
         "Color nodes by precision (detailed)": (precision_formatter, True, True),
+        "Minimalistic": (layer_type_formatter, False, True, False),
     }
 
     InteractiveDiagram(render_diagram, dropdown_choices, 'Color formatting:')
@@ -406,7 +422,7 @@ def report_card_pointwise_lint(plan: EnginePlan):
     print(pws['per_op_latency'])
 
 
-def layer_latency_sunburst(df: pd.DataFrame, title: str):
+def layer_latency_sunburst(df: pd.DataFrame, title: str, do_show: bool=True):
     precision_sunburst = df.groupby(['type', 'latency.pct_time']).count().reset_index()
 
     fig = px.sunburst(
@@ -416,10 +432,13 @@ def layer_latency_sunburst(df: pd.DataFrame, title: str):
         color_discrete_map=layer_colormap,
         color='type')
     fig.update_layout(title=title, title_x=0.5, font_size=15,)
-    fig.show()
+    if do_show:
+        fig.show()
+        return None
+    return fig
 
 
-def plot_engine_timings(timing_json_file: str):
+def plot_engine_timings(timing_json_file: str, do_show: bool=True):
     """Plot the engine profiling timings"""
     latencies = read_timing_file(timing_json_file)
     samples = range(len(latencies))
@@ -432,7 +451,10 @@ def plot_engine_timings(timing_json_file: str):
         'yaxis_title': "Latency (ms)",
         'xaxis_title': "Timing Samples",
         'title_x': 0.5})
-    fig.show()
+    if do_show:
+        fig.show()
+        return None
+    return fig
 
 
 def report_card_gemm_MNK(plan: pd.DataFrame):
@@ -486,7 +508,7 @@ def report_card_efficiency_vs_latency_3d(plan: pd.DataFrame):
     convs = plan.get_layers_by_type('Convolution')
     fig = px.scatter_3d(
         convs,
-        x='attr.compute_efficiency', y='attr.memory_efficiency', z='latency.avg_time',
+        x='attr.compute_efficiency', y='attr.memory_efficiency', z='attr.arithmetic_intensity',
         color='total_footprint_bytes', size='latency.avg_time', size_max=18,
         opacity=0.7)
 
@@ -529,3 +551,152 @@ def report_card_perf_scatter(plan: pd.DataFrame):
     }
 
     InteractiveDiagram(render_scatter, dropdown_choices, 'Diagram')
+
+
+def report_card_reformat_overview(plan: EnginePlan):
+    """Bar diagrams showing how Reformat layers are used, by their origin"""
+    reformats = plan.get_layers_by_type('Reformat')
+    reformats_origins_cnt = group_count(reformats, 'attr.origin')
+    reformats_origins_cnt_widget = partial(
+        plotly_bar2,
+        df=reformats_origins_cnt,
+        values_col='count',
+        names_col='attr.origin',
+        color='attr.origin',
+        orientation='h',
+        show_axis_ticks=(True, True))
+
+    avg_time_by_origin = group_sum_attr(reformats, 'attr.origin', 'latency.avg_time')
+    avg_time_by_origin_widget = partial(
+        plotly_bar2,
+        df=avg_time_by_origin,
+        values_col='latency.avg_time',
+        names_col='attr.origin',
+        color='attr.origin',
+        orientation='h',
+        show_axis_ticks=(True, True))
+
+    pct_time_by_origin = group_sum_attr(reformats, 'attr.origin', 'latency.pct_time')
+    pct_time_by_origin_widget = partial(
+        plotly_bar2,
+        df=pct_time_by_origin,
+        values_col='latency.pct_time',
+        names_col='attr.origin',
+        color='attr.origin',
+        orientation='h',
+        show_axis_ticks=(True, True))
+
+    dropdown_choices = {
+        "Reformat - Count by origin": reformats_origins_cnt_widget,
+        "Reformat - Latency by origin": avg_time_by_origin_widget,
+        "Reformat - Percent latency by origin": pct_time_by_origin_widget,
+     }
+
+    return InteractiveDiagram_2(dropdown_choices, 'Diagram:')
+
+
+def report_card_draw_plan_graph_extended(plan, engine_name):
+    """Interactive widgets for configuring graph rendering options.
+    """
+    display_regions_widget = widgets.Checkbox(value=False, description="Regions: Render regions")
+    display_region_reuse_widget = widgets.Checkbox(value=True, description="Regions: Render regions reuse")
+    display_forking_regions_widget = widgets.Checkbox(value=True, description="Regions: Render forking regions")
+    display_region_names_widget = widgets.Checkbox(value=False, description="Regions: Render names")
+    display_layer_names_widget = widgets.Checkbox(value=False, description="Layers: Render names")
+    stack_layer_names_widget = widgets.Checkbox(value=True, description="Layers: Stack names")
+    expand_layer_details_widget = widgets.Checkbox(value=True, description="Layers: Expand layer details")
+    display_latency_widget = widgets.Checkbox(value=True, description="Layers: Render latency")
+    display_constants_widget = widgets.Checkbox(value=False, description="Graph: Render constant inputs")
+    display_edge_name_widget = widgets.Checkbox(value=False, description="Edges: Render names")
+    display_edge_details_widget = widgets.Checkbox(value=True, description="Edges: Render details")
+
+    latency_metric_choice_widget = widgets.Dropdown(
+                options=latency_types,
+                value=latency_types[0],
+                description="Latency metric",
+                disabled=False,
+            )
+
+    color_choice_widget = widgets.Dropdown(
+                options=["Layer Type", "Layer Precision"],
+                value="Layer Type",
+                description="Layers color",
+                disabled=False,
+            )
+
+    layer_node_renderers_widget = widgets.Dropdown(
+                options=[k for k in layer_node_renderers.keys()],
+                value="Configurable",
+                description="Layer renderer",
+                disabled=False,
+            )
+
+    svg_button = widgets.Button(description="Render SVG Graph")
+    onnx_button = widgets.Button(description="Render ONNX Graph")
+    output = widgets.Output()
+
+    ui = widgets.VBox([
+            widgets.HBox([
+                widgets.VBox([
+                    layer_node_renderers_widget,
+                    display_constants_widget,
+                ]),
+                widgets.VBox([
+                    color_choice_widget,
+                    display_latency_widget,
+                    latency_metric_choice_widget,
+                    expand_layer_details_widget,
+                    display_layer_names_widget,
+                    stack_layer_names_widget,
+                ]),
+                widgets.VBox([
+                    display_regions_widget,
+                    display_region_reuse_widget,
+                    display_forking_regions_widget,
+                    display_region_names_widget,
+                ]),
+                widgets.VBox([
+                    display_edge_name_widget,
+                    display_edge_details_widget,
+                ]),
+            ]),
+        widgets.HBox([
+            svg_button,
+            onnx_button]),
+        ])
+
+    @output.capture()
+    def on_svg_button_clicked(b):
+        IPython.display.clear_output(wait=True)
+        formatter = layer_type_formatter if color_choice_widget.value == "Layer Type" else precision_formatter
+        graph = to_dot(
+            plan,
+            formatter,
+            layer_node_renderer = layer_node_renderers[layer_node_renderers_widget.value],
+            display_regions=display_regions_widget.value,
+            expand_layer_details=expand_layer_details_widget.value,
+            display_layer_names=display_layer_names_widget.value,
+            stack_layer_names=stack_layer_names_widget.value,
+            display_constants=display_constants_widget.value,
+            display_latency=display_latency_widget.value,
+            latency_type=latency_metric_choice_widget.value,
+            display_region_reuse=display_region_reuse_widget.value,
+            display_region_names=display_region_names_widget.value,
+            display_forking_regions=display_forking_regions_widget.value,
+            display_edge_name=display_edge_name_widget.value,
+            display_edge_details=display_edge_details_widget.value,
+        )
+        print("DOT graph ready.\nGenerating SVG...  ", end="")
+        render_dot(graph, engine_name, 'svg')
+
+    def on_onnx_button_clicked(b):
+        fname = 'trex_model.onnx'
+        graph = OnnxGraph(plan, display_forking_regions=False )
+        onnx.save(graph.onnx_model, fname)
+        import netron
+        netron.start(fname, 8082)
+
+    IPython.display.display(output, ui)
+    svg_button.on_click(on_svg_button_clicked)
+    onnx_button.on_click(on_onnx_button_clicked)
+

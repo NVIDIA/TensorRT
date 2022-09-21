@@ -35,5 +35,9 @@ class TestTrtRunner:
             assert runner.no_data_transfers is None
             assert runner.trtexec_warmup is None
             assert runner.trtexec_iterations is None
+            assert runner.trtexec_export_times is None
+            assert runner.trtexec_export_output is None
+            assert runner.trtexec_export_profile is None
+            assert runner.trtexec_export_layer_info is None
             assert runner.is_active
         assert not runner.is_active

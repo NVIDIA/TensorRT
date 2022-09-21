@@ -46,7 +46,39 @@ class TestLoggerArgs:
         arg_group.parse_args([flag])
         logger = arg_group.get_logger()
 
-        assert logger.severity == sev
+        assert logger.module_severity.get() == sev
+
+    @pytest.mark.parametrize(
+        "option, expected_values",
+        [
+            (["--verbosity", "INFO"], {None: G_LOGGER.INFO, "backend/": G_LOGGER.INFO}),
+            # Test case-sensitivity
+            (["--verbosity", "info"], {None: G_LOGGER.INFO, "backend/": G_LOGGER.INFO}),
+            (
+                ["--verbosity", "INFO", "backend:VERBOSE"],
+                {None: G_LOGGER.INFO, "backend": G_LOGGER.VERBOSE, os.path.join("backend", "trt"): G_LOGGER.VERBOSE},
+            ),
+            (
+                ["--verbosity", "ULTRA_VERBOSE", "backend:VERBOSE"],
+                {
+                    None: G_LOGGER.ULTRA_VERBOSE,
+                    "backend": G_LOGGER.VERBOSE,
+                    os.path.join("backend", "trt"): G_LOGGER.VERBOSE,
+                },
+            ),
+            (
+                ["--verbosity", "backend/trt:VERBOSE"],
+                {None: G_LOGGER.INFO, "backend/": G_LOGGER.INFO, os.path.join("backend", "trt"): G_LOGGER.VERBOSE},
+            ),
+        ],
+    )
+    def test_per_path_verbosities(self, option, expected_values):
+        arg_group = ArgGroupTestHelper(LoggerArgs())
+        arg_group.parse_args(option)
+
+        logger = arg_group.get_logger()
+        for path, sev in expected_values.items():
+            assert logger.module_severity.get(path) == sev
 
     def test_logger_log_file(self):
         arg_group = ArgGroupTestHelper(LoggerArgs())

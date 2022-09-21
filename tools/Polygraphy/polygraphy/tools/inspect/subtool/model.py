@@ -62,8 +62,7 @@ class Model(Tool):
             dest="display_as",
         )
 
-        dispopts = parser.add_mutually_exclusive_group()
-        dispopts.add_argument(
+        parser.add_argument(
             "--show",
             help="Controls what is displayed: {{"
             "'layers': Display basic layer information like name, op, inputs, and outputs, "
@@ -71,34 +70,11 @@ class Model(Tool):
             "'weights': Display all weights in the model; if 'layers' is enabled, also shows per-layer constants"
             "}}. More than one option may be specified",
             choices=["layers", "attrs", "weights"],
-            nargs="*",
+            nargs="+",
             default=[],
-        )
-        dispopts.add_argument(
-            "--mode",
-            "--layer-info",
-            help="[DEPRECATED - use --show instead] Display layers: {{"
-            "'none': Display no layer information, "
-            "'basic': Display layer inputs and outputs, "
-            "'attrs': Display layer inputs, outputs and attributes, "
-            "'full': Display layer inputs, outputs, attributes, and weights"
-            "}}",
-            choices=["none", "basic", "attrs", "full"],
-            dest="mode",
-            default=None,
         )
 
     def run(self, args):
-        if args.mode:
-            mod.warn_deprecated("--mode", "--show", remove_in="0.40.0", always_show_warning=True)
-            args.show = {
-                "none": [],
-                "basic": ["layers"],
-                "attrs": ["layers", "attrs"],
-                "full": ["layers", "attrs", "weights"],
-            }[args.mode]
-            args.mode = None
-
         def show(aspect):
             return aspect in args.show
 

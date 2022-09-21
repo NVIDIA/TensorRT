@@ -17,7 +17,7 @@
 import argparse
 import copy
 
-from polygraphy import mod
+from polygraphy import constants, mod
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import (
@@ -202,7 +202,8 @@ class Run(Tool):
             "# Report Results\n"
             "cmd_run = {cmd}\n"
             "if not {success}:\n"
-            '\tG_LOGGER.critical(f"FAILED | Command: {{cmd_run}}")\n'
+            f"{constants.TAB}"
+            'G_LOGGER.critical(f"FAILED | Command: {{cmd_run}}")\n'
             'G_LOGGER.finish(f"PASSED | Command: {{cmd_run}}")\n',
             cmd=cmd_run,
             success=SUCCESS_VAR_NAME,

@@ -31,6 +31,7 @@ from polygraphy.util.format import DataFormat, FormatManager
 
 np = mod.lazy_import("numpy")
 trt = mod.lazy_import("tensorrt")
+uff = mod.lazy_import("uff")
 
 
 class LoadUffFile(BaseLoader):
@@ -57,11 +58,6 @@ class ConvertToUff(BaseLoader):
 
         save_uff (bool): Whether to write the generated UFF and corresponding PBTXT files.
         """
-        import uff
-        from polygraphy.backend.tf import util as tf_util
-
-        G_LOGGER.module_info(uff)
-
         graph, output_names = self.tf_loader()
         output_names = [name.split(":")[0] for name in output_names]
         # GraphDefs don't have names, so we have to name it something generic.
@@ -71,8 +67,8 @@ class ConvertToUff(BaseLoader):
         uff_model, input_nodes, _ = uff.from_tensorflow(
             graph.as_graph_def(),
             return_graph_info=True,
-            quiet=(G_LOGGER.severity > G_LOGGER.VERBOSE),
-            debug_mode=(G_LOGGER.severity == G_LOGGER.EXTRA_VERBOSE),
+            quiet=(G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__)) > G_LOGGER.VERBOSE),
+            debug_mode=(G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__)) == G_LOGGER.EXTRA_VERBOSE),
             text=self.uff_path,
             save_preprocessed=self.uff_path,
             output_filename=output_filename,
@@ -131,7 +127,7 @@ class ParseNetworkFromOnnxLegacy(BaseNetworkFromOnnx):
             onnx_loader (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
                     An ONNX model or a callable that returns one.
         """
-        super().__init__(explicit_precision=False, explicit_batch=False)
+        super().__init__(explicit_batch=False)
         self.onnx_loader = onnx_loader
 
     def call_impl(self):
@@ -328,7 +324,8 @@ class TrtLegacyRunner(BaseRunner):
                     config.set_flag(trt.BuilderFlag.INT8)
                     input_metadata = _input_metadata_from_network(network)
                     with contextlib.suppress(AttributeError):  # Polygraphy calibrator has a reset method
-                        self.calibrator.reset(input_metadata)
+                        self.calibrator.set_input_metadata(input_metadata)
+                        self.calibrator.reset()
                     config.int8_calibrator = self.calibrator
 
                 if self.use_dla:
@@ -383,7 +380,12 @@ class TrtLegacyRunner(BaseRunner):
 
     def infer_impl(self, feed_dict):
         start = time.time()
-        [self.input_buffers[name].device.copy_from(buffer, self.stream) for name, buffer in feed_dict.items()]
+
+        for name, buffer in feed_dict.items():
+            self.input_buffers[name].device.resize(buffer.shape)
+            buffer = util.make_contiguous(buffer)
+            self.input_buffers[name].device.copy_from(buffer, self.stream)
+
         # We will not run with smaller batch sizes than whatever the builder chose.
         bindings = [buf.device.ptr for buf in self.input_buffers.values()] + [
             buf.device.ptr for buf in self.output_buffers.values()
@@ -395,7 +397,8 @@ class TrtLegacyRunner(BaseRunner):
             G_LOGGER.critical("Model execution failed. Please see the log messages above for details")
 
         for out in self.output_buffers.values():
-            out.host = out.device.copy_to(out.host, self.stream)
+            out.host = util.resize_buffer(out.host, out.device.shape)
+            out.device.copy_to(out.host, self.stream)
 
         self.stream.synchronize()
         end = time.time()

@@ -17,11 +17,9 @@
 
 import copy
 from collections import OrderedDict
-from polygraphy.logger.logger import G_LOGGER
 
-from polygraphy import mod
-
-util = mod.lazy_import("polygraphy.util")
+from polygraphy import util
+from polygraphy.logger import G_LOGGER
 
 
 def TypedDict(key_type_func, value_type_func):

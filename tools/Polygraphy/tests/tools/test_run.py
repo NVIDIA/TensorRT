@@ -64,10 +64,6 @@ class TestTrtLegacy:
     def test_uff(self, poly_run):
         poly_run([TF_MODELS["identity"].path, "--trt-legacy"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) >= mod.version("7.0"), reason="Unsupported in TRT 7.0 and later")
-    def test_onnx(self, poly_run):
-        poly_run([ONNX_MODELS["identity"].path, "--trt-legacy"])
-
 
 class TestTrt:
     def test_basic(self, poly_run):
@@ -132,19 +128,15 @@ class TestTrt:
     def test_sparse_weights(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--trt", "--sparse-weights"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_input_shape(self, poly_run):
         poly_run([ONNX_MODELS["dynamic_identity"].path, "--trt", "--onnxrt", "--input-shapes", "X:[1,2,4,4]"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_dynamic_input_shape(self, poly_run):
         poly_run([ONNX_MODELS["dynamic_identity"].path, "--trt", "--onnxrt", "--input-shapes", "X:[1,2,-1,4]"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_dynamic_input_shape(self, poly_run):
         poly_run([ONNX_MODELS["dynamic_identity"].path, "--trt", "--onnxrt", "--input-shapes", "X,1x2x-1x4"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_explicit_profile(self, poly_run):
         poly_run(
             [
@@ -162,7 +154,6 @@ class TestTrt:
             ]
         )
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_explicit_profile_implicit_runtime_shape(self, poly_run):
         poly_run(
             [
@@ -178,7 +169,6 @@ class TestTrt:
             ]
         )
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_explicit_profile_opt_runtime_shapes_differ(self, poly_run):
         poly_run(
             [
@@ -196,7 +186,6 @@ class TestTrt:
             ]
         )
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     @pytest.mark.parametrize("optimization_profile", [None, 0, 1])
     def test_multiple_profiles(self, poly_run, optimization_profile):
         cmd = [
@@ -217,6 +206,9 @@ class TestTrt:
             "X:[1,2,4,4]",
             "--trt-max-shapes",
             "X:[1,2,4,4]",
+            # Input shapes
+            "--input-shapes",
+            "X:[1,2,4,4]" if optimization_profile == 1 else "X:[1,2,1,1]",
         ]
         if optimization_profile is not None:
             if mod.version(trt.__version__) <= mod.version("7.3"):
@@ -228,17 +220,14 @@ class TestTrt:
     def test_int8_calibration_cache(self, poly_run):
         with util.NamedTemporaryFile() as outpath:
             cmd = [ONNX_MODELS["identity"].path, "--trt", "--int8", "--calibration-cache", outpath.name]
-            if mod.version(trt.__version__) >= mod.version("7.0"):
-                cmd += ["--onnxrt"]
+            cmd += ["--onnxrt"]
             poly_run(cmd)
             assert is_file_non_empty(outpath.name)
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     @pytest.mark.parametrize("base_class", ["IInt8LegacyCalibrator", "IInt8EntropyCalibrator2"])
     def test_int8_calibration_base_class(self, poly_run, base_class):
         cmd = [ONNX_MODELS["identity"].path, "--trt", "--int8", "--calibration-base-class", base_class]
-        if mod.version(trt.__version__) >= mod.version("7.0"):
-            cmd += ["--onnxrt"]
+        cmd += ["--onnxrt"]
         poly_run()
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
@@ -259,7 +248,7 @@ class TestTrt:
             total_cache_size = get_file_size(total_cache)
 
             # The total cache should be larger than either of the individual caches.
-            assert total_cache_size > const_foldable_cache_size and total_cache_size > identity_cache_size
+            assert total_cache_size >= const_foldable_cache_size and total_cache_size >= identity_cache_size
             # The total cache should also be smaller than or equal to the sum of the individual caches since
             # header information should not be duplicated.
             assert total_cache_size <= (const_foldable_cache_size + identity_cache_size)
@@ -492,7 +481,6 @@ class TestOther:
             )  # Copy
             poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-input-data", infile0.name, infile1.name])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_runner_coexistence(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--trt"])
 
@@ -501,7 +489,6 @@ class TestPluginRef:
     def test_basic(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--pluginref"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     @pytest.mark.parametrize("model", ["identity", "instancenorm"])
     def test_ref_implementations(self, poly_run, model):
         poly_run([ONNX_MODELS[model].path, "--pluginref", "--onnxrt", "--trt"])

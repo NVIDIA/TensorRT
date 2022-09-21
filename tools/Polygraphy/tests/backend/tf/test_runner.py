@@ -50,9 +50,9 @@ class TestTfRunner:
     @pytest.mark.parametrize(
         "names, err",
         [
-            (["fake-input", "Input:0"], "Extra keys in"),
-            (["fake-input"], "Some keys are missing"),
-            ([], "Some keys are missing"),
+            (["fake-input", "Input:0"], "Extra inputs in"),
+            (["fake-input"], "The following inputs were not found"),
+            ([], "The following inputs were not found"),
         ],
     )
     def test_error_on_wrong_name_feed_dict(self, names, err):

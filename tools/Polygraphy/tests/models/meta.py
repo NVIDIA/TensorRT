@@ -155,4 +155,17 @@ ONNX_MODELS = {
     "add_with_dup_inputs": Model(
         path=model_path("add_with_dup_inputs.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
     ),
+    "needs_constraints": Model(
+        path=model_path("needs_constraints.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+        input_metadata=TensorMetadata().add("x", dtype=np.float32, shape=(1, 1, 256, 256)),
+    ),
+    "constant_fold_bloater": Model(
+        path=model_path("constant_fold_bloater.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+    ),
+    "nonzero": Model(path=model_path("nonzero.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
+    "inp_dim_val_not_set": Model(path=model_path("inp_dim_val_not_set.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented)
 }

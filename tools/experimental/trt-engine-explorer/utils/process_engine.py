@@ -34,6 +34,7 @@ import argparse
 import subprocess
 from typing import List, Dict, Tuple
 from parse_trtexec_log import parse_build_log, parse_profiling_log
+from config_gpu import GPUMonitor, GPUConfigurator, get_max_clocks
 
 
 def run_trtexec(trt_cmdline: List[str], build_log_file: str):
@@ -66,14 +67,16 @@ def build_engine_cmd(
     engine_path: str,
     timing_cache_path: str
 ) -> Tuple[List[str], str]:
+    graph_json_fname = f"{engine_path}.graph.json"
     cmd_line = ["trtexec",
         "--verbose",
         # nvtxMode=verbose is the same as profilingVerbosity=detailed, but backward-compatible
         "--nvtxMode=verbose",
         "--buildOnly",
-        "--workspace=1024",
+        "--workspace=8192",
         f"--onnx={onnx_path}",
         f"--saveEngine={engine_path}",
+        f"--exportLayerInfo={graph_json_fname}",
         f"--timingCacheFile={timing_cache_path}",
     ]
     append_trtexec_args(args.trtexec, cmd_line)
@@ -162,6 +165,23 @@ def get_engine_path(args: Dict, add_suffix: bool):
     return engine_path
 
 
+def get_gpu_config_args(args):
+    def freq_to_int(clk_freq: str, max_clk_freq: int):
+        use_max_freq = clk_freq == 'max'
+        clk_freq = max_clk_freq if use_max_freq else int(clk_freq)
+        clk_freq = min(max_clk_freq, clk_freq)
+        return clk_freq
+
+    dev = args.dev
+    power_limit = args.power_limit
+    dont_lock_clocks = args.dont_lock_clocks
+    # Parse frequencies arguments.
+    max_mem_clk_freq, max_compute_clk_freq = get_max_clocks(dev)
+    compute_clk_freq = freq_to_int(args.compute_clk_freq, max_compute_clk_freq)
+    mem_clk_freq = freq_to_int(args.memory_clk_freq, max_mem_clk_freq)
+    return power_limit, compute_clk_freq, mem_clk_freq, dev, dont_lock_clocks
+
+
 def profile_engine(
     args: Dict,
     timing_cache_path:str,
@@ -182,7 +202,10 @@ def profile_engine(
     print(" ".join(cmd_line))
     if args.print_only:
         return True
-    success = run_trtexec(cmd_line, profile_log_file)
+
+    with GPUMonitor(args.monitor), GPUConfigurator(*get_gpu_config_args(args)):
+        success = run_trtexec(cmd_line, profile_log_file)
+
     if success:
         print("\nSuccessfully profiled the engine.\n")
         profiling_md_json_fname = f"{engine_path}.profile.metadata.json"
@@ -249,13 +272,29 @@ def parse_args():
         default=None)
 
     # Optional arguments.
-    parser.add_argument('--print_only', action='store_true',
+    parser.add_argument('--memory-clk-freq',
+        default='max',
+        help="Set memory clock frequency (MHz)")
+    parser.add_argument('--compute-clk-freq',
+        default='max',
+        help="Set compute clock frequency (MHz)")
+    parser.add_argument('--power-limit', default=None, type=int, help="Set power limit")
+    parser.add_argument('--dev', default=0, help="GPU device ID")
+    parser.add_argument('--dont-lock-clocks',
+        action='store_true',
+        help="Do not lock the clocks. "
+             "If set, overrides --compute-clk-freq and --memory-clk-freq")
+    parser.add_argument('--monitor',
+        action='store_true',
+        help="Monitor GPU temperature, power, clocks and utilization while profiling.")
+
+    parser.add_argument('--print-only', action='store_true',
         help='print the command-line and exit')
-    parser.add_argument('--build_engine', '-b', action='store_true', default=None,
+    parser.add_argument('--build-engine', '-b', action='store_true', default=None,
         help='build the engine')
-    parser.add_argument('--profile_engine', '-p', action='store_true', default=None,
+    parser.add_argument('--profile-engine', '-p', action='store_true', default=None,
         help='profile the engine')
-    parser.add_argument('--draw_engine', '-d', action='store_true', default=None,
+    parser.add_argument('--draw-engine', '-d', action='store_true', default=None,
         help='draw the engine')
     args = parser.parse_args()
     return args

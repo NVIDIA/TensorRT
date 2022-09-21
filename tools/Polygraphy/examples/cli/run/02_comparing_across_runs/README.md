@@ -2,7 +2,7 @@
 
 ## Prerequisites
 For a general overview of how to use `polygraphy run` to compare the outputs of
-different frameworks, see the example on [Comparing Frameworks](/examples/cli/run/01_comparing_frameworks).
+different frameworks, see the example on [Comparing Frameworks](../../../../examples/cli/run/01_comparing_frameworks).
 
 ## Introduction
 
@@ -36,7 +36,7 @@ In this example, we'll demonstrate how to accomplish this with Polygraphy.
     ```
 
     The `--atol/--rtol/--check-error-stat` options all work the same as in the
-    [Comparing Frameworks](/examples/cli/run/01_comparing_frameworks) example:
+    [Comparing Frameworks](../../../../examples/cli/run/01_comparing_frameworks) example:
 
     ```bash
     polygraphy run identity.onnx --onnxrt \
@@ -62,3 +62,11 @@ and ONNX modles (if they have matching outputs).
     polygraphy run --trt identity.engine --model-type=engine \
         --load-inputs inputs.json --load-outputs run_0_outputs.json
     ```
+
+
+## Further Reading
+
+For details on how to access and work with the saved outputs
+using the Python API, refer to [API example 08](../../../api/08_working_with_run_results_manually/).
+
+For information on comparing against custom outputs, refer to [`run` example 06](../06_comparing_with_custom_output_data/).

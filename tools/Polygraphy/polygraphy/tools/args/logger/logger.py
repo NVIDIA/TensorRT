@@ -17,7 +17,7 @@
 from polygraphy import mod
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
-from polygraphy.tools.script import safe
+from polygraphy.tools.script import inline_identifier, inline, safe
 
 
 @mod.export()
@@ -42,6 +42,23 @@ class LoggerArgs(BaseArgs):
             default=0,
         )
 
+        self.group.add_argument(
+            "--verbosity",
+            help="The logging verbosity to use. Unlike the `-v` and `-q` options, "
+            "this option allows you to control per-path verbosity. "
+            "This option takes precedence over the `-v` and `-q` options. "
+            "Paths should be relative to the `polygraphy/` directory. "
+            "For example, `polygraphy/backend` can be specified with just `backend/`. "
+            "Verbosity values should come from Polygraphy's logging verbosities defined in "
+            "the `Logger` class and are case-insensitive. "
+            "For example: `--verbosity INFO` or `--verbosity verbose`. "
+            "To specify per-path verbosity, use the format: "
+            "`--verbosity <path>:<verbosity>`. For example: "
+            "`--verbosity backend/trt:INFO backend/trt/loader.py:VERBOSE`",
+            nargs="+",
+            default=None,
+        )
+
         self.group.add_argument("--silent", help="Disable all output", action="store_true", default=None)
         self.group.add_argument(
             "--log-format",
@@ -63,18 +80,45 @@ class LoggerArgs(BaseArgs):
         Parses command-line arguments and populates the following attributes:
 
         Attributes:
-            severity_level (int):
-                    The severity level the logger should be set to.
-                    A value >= 4 correspond to ULTRA_VERBOSE, while < -4 corresponds to CRITICAL.
-                    Any values in between map to intermediate severities.
             silent (bool): Whether to disable all logging output.
             log_format (List[str]): Formatting options for the logger.
             log_file (str): Path to a file where logging output should be written.
+            verbosity (Dict[str, str]):
+                    Per-path logging verbosities. A key of `""` represents the default verbosity.
         """
-        self.severity_level = args_util.get(args, "verbose") - args_util.get(args, "quiet")
         self.silent = args_util.get(args, "silent")
         self.log_format = args_util.get(args, "log_format", default=[])
         self.log_file = args_util.get(args, "log_file")
+
+        severity_level = args_util.get(args, "verbose") - args_util.get(args, "quiet")
+        if severity_level >= 4:
+            default_severity = "ULTRA_VERBOSE"
+        elif severity_level < -4:
+            default_severity = "CRITICAL"
+        else:
+            default_severity = {
+                3: "SUPER_VERBOSE",
+                2: "EXTRA_VERBOSE",
+                1: "VERBOSE",
+                0: None,
+                -1: "START",
+                -2: "FINISH",
+                -3: "WARNING",
+                -4: "ERROR",
+            }[severity_level]
+
+        self.verbosity = None
+        verbosity = args_util.parse_dict_with_default(args_util.get(args, "verbosity"))
+        if default_severity is not None:
+            if verbosity is not None:
+                verbosity[""] = default_severity
+            else:
+                verbosity = {"": default_severity}
+
+        if verbosity is not None:
+            self.verbosity = {}
+            for path, sev in verbosity.items():
+                self.verbosity[path] = inline(safe("G_LOGGER.{:}", inline_identifier(sev.upper())))
 
         # Enable logger settings immediately on parsing.
         self.get_logger()
@@ -85,27 +129,11 @@ class LoggerArgs(BaseArgs):
 
         logger_settings = []
 
-        if self.severity_level >= 4:
-            verbosity = "ULTRA_VERBOSE"
-        elif self.severity_level < -4:
-            verbosity = "CRITICAL"
-        else:
-            verbosity = {
-                3: "SUPER_VERBOSE",
-                2: "EXTRA_VERBOSE",
-                1: "VERBOSE",
-                0: None,
-                -1: "START",
-                -2: "FINISH",
-                -3: "WARNING",
-                -4: "ERROR",
-            }[self.severity_level]
-
-        if verbosity is not None:
-            logger_settings.append(f"G_LOGGER.severity = G_LOGGER.{verbosity}")
-
         if self.silent:
-            logger_settings.append("G_LOGGER.severity = G_LOGGER.CRITICAL")
+            logger_settings.append("G_LOGGER.module_severity = G_LOGGER.CRITICAL")
+        elif self.verbosity is not None:
+            # Need to escape braces of the dictionary so it's not treated as a format-string by `safe()`.
+            logger_settings.append(f"G_LOGGER.module_severity = {'{' + repr(self.verbosity) + '}'}")
 
         for fmt in self.log_format:
             if fmt == "no-colors":

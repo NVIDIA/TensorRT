@@ -77,18 +77,20 @@ def compare_engines_overview(plans: List[EnginePlan]):
 
     def latency_per_type(title):
         stacked_latencies_bars = partial(
-                stacked_bars,
-                title,
-                bar_names=engine_names,
-                df_list=time_by_type,
-                names_col='type',
-                values_col='latency.avg_time',
-                colormap=layer_colormap,
-                display_tbl=False,
-                xaxis_title="Engine",
-                yaxis_title="Latency (ms)")
+            stacked_bars,
+            title,
+            bar_names=engine_names,
+            df_list=time_by_type,
+            names_col='type',
+            values_col='latency.avg_time',
+            colormap=layer_colormap,
+            display_tbl=False,
+            xaxis_title="Engine",
+            yaxis_title="Latency (ms)")
 
         if have_throughput_data:
+            real_latency = [plan.performance_summary.get('Latency', [0]*5)[2] for plan in plans]
+
             # Display throughput scatter plot together with the latencies bars.
             fig = make_subplots(specs=[[{"secondary_y": True}]])
             stacked_latencies_bars(fig=fig)
@@ -97,8 +99,15 @@ def compare_engines_overview(plans: List[EnginePlan]):
                     x=engine_names,
                     y=throughtput,
                     name="Throughput (IPS)",
-                    marker=dict(size=12)),
+                    marker=dict(size=12, color='#FFBF00'),),
                 secondary_y=True)
+            fig.add_trace(
+                go.Scatter(
+                    x=engine_names,
+                    y=real_latency,
+                    name="Real Latency",
+                    marker=dict(size=12, color='#DE3163'),),
+                secondary_y=False)
             trex_base_layout(fig)
             fig.update_yaxes(title_text="Throughput (inferences / sec)", secondary_y=True)
             fig.show()
@@ -525,9 +534,16 @@ def compare_engines_layer_latencies(
 
         # Display a table comparison
         df = aligned_merge_plans(plan1, plan2, matched_indices_pairs)
-        if choice != 'All':
+        if choice not in ('All', 'Precision Mismatch', 'Tactic Mismatch'):
             df = df.query(f"type == \"{choice}\"")
+        if choice  == 'Precision Mismatch':
+            df = df[(df['in-p (1)'] != df['in-p (2)']) | (df['out-p (1)'] != df['out-p (2)'])]
+        if choice == 'Tactic Mismatch':
+            df = df[(df['tactic (1)'] != df['tactic (2)'])]
         print(f"Legend:\n\t1: {plan1.name}\n\t2: {plan2.name}")
+        print("\"in-p (1)\" are the input precisions of the layer in "
+             f"{plan1.name}. Similarly,")
+        print("\"out-p (2)\" are the output precisions of the layer in " + plan2.name)
         display_df(df, range_highlights=speedup_range_highlights(
             'speedup (2)', threshold))
 
@@ -539,14 +555,15 @@ def compare_engines_layer_latencies(
         print(f"Latencies:{latency_str(plan1.name, df1)}{latency_str(plan2.name, df2)}")
 
         d = {plan1.name: df1, plan2.name: df2}
-        plotly_bar2(title="Layer Latency Comparison",
+        plotly_bar2(title=f"Layer Latency Comparison (Layer Type={choice})",
             df=d,
             values_col='latency.avg_time',
             names_col='id',
             orientation='v',
             showlegend=True)
 
-    types = ['All'] + list(set(plan1.df['type'].tolist() + plan2.df['type'].tolist()))
+    types = ['All', 'Precision Mismatch', 'Tactic Mismatch']
+    types += list(set(plan1.df['type'].tolist() + plan2.df['type'].tolist()))
     dropdown_choices = {t: t for t in types}
     InteractiveDiagram(render_diagram, dropdown_choices, 'Dataframe')
 
@@ -594,4 +611,4 @@ def compare_engines_layer_details(
     matched_indices_pairs = match_layers(plan1, plan2, exact_matching=True)
     df = aligned_merge_plans(plan1, plan2, matched_indices_pairs)
     dropdown_choices = {f"{t}: {df.iloc[t]['type']}": t for t in range(len(df))}
-    InteractiveDiagram(render_diagram, dropdown_choices, 'Dataframe')
+    InteractiveDiagram(render_diagram, dropdown_choices, 'Choose Layer:')

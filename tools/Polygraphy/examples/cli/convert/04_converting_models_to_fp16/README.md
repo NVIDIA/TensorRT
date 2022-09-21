@@ -33,13 +33,13 @@ with reduced precision.
       --atol 0.001 --rtol 0.001
    ```
 4. **[Optional]** Check if any intermediate outputs of the FP16 model
-   contain NaN or infinity (see [Checking for Intermediate NaN or Infinities](/examples/cli/run/07_checking_nan_inf)):
+   contain NaN or infinity (see [Checking for Intermediate NaN or Infinities](../../../../examples/cli/run/07_checking_nan_inf)):
    ```bash
    polygraphy run --onnxrt identity_fp16.onnx --validate
    ```
 
 ## See Also
 
-* [Comparing Across Runs](/examples/cli/run/02_comparing_across_runs)
-* [Checking for Intermediate NaN or Infinities](/examples/cli/run/07_checking_nan_inf)
-* [Debugging TensorRT Accuracy Issues](/how-to/debug_accuracy.md)
+* [Comparing Across Runs](../../../../examples/cli/run/02_comparing_across_runs)
+* [Checking for Intermediate NaN or Infinities](../../../../examples/cli/run/07_checking_nan_inf)
+* [Debugging TensorRT Accuracy Issues](../../../../how-to/debug_accuracy.md)

@@ -128,8 +128,8 @@ class ModelArgs(BaseArgs):
             self.group.add_argument(
                 arg_name,
                 f"--{self._input_shapes_opt_name}",
-                help=f"{self._input_shapes_opt_doc}. Format: {arg_name}-shapes <name>:<shape>. "
-                f"For example: {arg_name}-shapes image:[1,3,224,224] other_input:[10]",
+                help=f"{self._input_shapes_opt_doc}. Format: {arg_name} <name>:<shape>. "
+                f"For example: {arg_name} image:[1,3,224,224] other_input:[10]",
                 nargs="+",
                 default=None,
                 dest="input_shapes",

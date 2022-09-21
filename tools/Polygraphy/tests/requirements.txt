@@ -1,9 +1,10 @@
 colored
 numpy
-onnx_graphsurgeon>=0.3.4
+onnx_graphsurgeon>=0.3.21
 onnx==1.10.0
 onnxmltools
 onnxruntime==1.10.0
+protobuf==3.19.4
 pytest
 pytest-console-scripts
 pytest-virtualenv
@@ -12,3 +13,5 @@ requests==2.25.1
 tensorflow<2.0; python_version<'3.8'
 tf2onnx
 wheel
+flaky==3.7.0
+sympy==1.9

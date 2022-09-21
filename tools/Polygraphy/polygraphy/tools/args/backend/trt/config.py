@@ -17,14 +17,14 @@
 import copy
 import os
 
-from polygraphy import mod, util
+from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.comparator.data_loader import DataLoaderArgs
 from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.script import assert_identifier, inline, make_invocable, make_invocable_if_nondefault, safe
+from polygraphy.tools.script import inline_identifier, inline, make_invocable, make_invocable_if_nondefault, safe
 
 
 def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
@@ -91,8 +91,8 @@ class TrtConfigArgs(BaseArgs):
 
     Depends on:
 
+        - DataLoaderArgs
         - ModelArgs: if allow_custom_input_shapes == True
-        - DataLoaderArgs: if allow_calibration == True
     """
 
     def __init__(
@@ -100,7 +100,8 @@ class TrtConfigArgs(BaseArgs):
         precision_constraints_default: bool = None,
         allow_random_data_calib_warning: bool = None,
         allow_custom_input_shapes: bool = None,
-        allow_calibration: bool = None,
+        allow_engine_capability: bool = None,
+        allow_tensor_formats: bool = None,
     ):
         """
         Args:
@@ -113,15 +114,19 @@ class TrtConfigArgs(BaseArgs):
             allow_custom_input_shapes (bool):
                     Whether to allow custom input shapes when randomly generating data.
                     Defaults to True.
-            allow_calibration (bool):
-                    Whether to allow INT8 calibration.
-                    Defaults to True.
+            allow_engine_capability (bool):
+                    Whether to allow engine capability to be specified.
+                    Defaults to False.
+            allow_tensor_formats (bool):
+                    Whether to allow tensor formats and related options to be set.
+                    Defaults to False.
         """
         super().__init__()
         self._precision_constraints_default = util.default(precision_constraints_default, "none")
         self._allow_random_data_calib_warning = util.default(allow_random_data_calib_warning, True)
         self._allow_custom_input_shapes = util.default(allow_custom_input_shapes, True)
-        self._allow_calibration = util.default(allow_calibration, True)
+        self._allow_engine_capability = util.default(allow_engine_capability, False)
+        self._allow_tensor_formats = util.default(allow_tensor_formats, False)
 
     def add_parser_args_impl(self):
         self.group.add_argument(
@@ -170,25 +175,6 @@ class TrtConfigArgs(BaseArgs):
             choices=("prefer", "obey", "none"),
             default=self._precision_constraints_default,
         )
-
-        if self._precision_constraints_default == "obey":
-            precision_constraints_group.add_argument(
-                "--no-obey-precision-constraints",
-                help="[DEPRECATED - use --precision-constraints] Disables enforcing precision constraints in TensorRT, allowing it to choose tactics outside the "
-                "layer precision set.",
-                action="store_false",
-                default=True,
-                dest="obey_precision_constraints",
-            )
-        else:
-            precision_constraints_group.add_argument(
-                "--obey-precision-constraints",
-                help="[DEPRECATED - use --precision-constraints] Enable enforcing precision constraints in TensorRT, forcing it to use tactics based on the "
-                "layer precision set, even if another precision is faster. Build fails if such an engine cannot be built.",
-                action="store_true",
-                default=None,
-                dest="obey_precision_constraints",
-            )
 
         precision_constraints_group.add_argument(
             "--strict-types",
@@ -252,7 +238,9 @@ class TrtConfigArgs(BaseArgs):
         self.group.add_argument(
             "--load-timing-cache",
             help="Path to load tactic timing cache. "
-            "Used to cache tactic timing information to speed up the engine building process. ",
+            "Used to cache tactic timing information to speed up the engine building process. "
+            "If the file specified by --load-timing-cache does not exist, Polygraphy will emit a warning and fall back to "
+            "using an empty timing cache.",
             default=None,
         )
 
@@ -301,6 +289,12 @@ class TrtConfigArgs(BaseArgs):
             dest="restricted",
         )
         self.group.add_argument(
+            "--refittable",
+            help="Enable the engine to be refitted with new weights after it is built.",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
             "--use-dla",
             help="[EXPERIMENTAL] Use DLA as the default device type",
             action="store_true",
@@ -320,9 +314,33 @@ class TrtConfigArgs(BaseArgs):
             "Format: `--pool-limit <pool_name>:<pool_limit> ...`. For example, `--pool-limit dla_local_dram:1e9 workspace:16777216`. "
             "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively. "
             "For example, `--pool-limit workspace:16M` is equivalent to `--pool-limit workspace:16777216`. ",
-            nargs="*",
+            nargs="+",
             default=None,
         )
+        self.group.add_argument(
+            "--preview-features",
+            dest="preview_features",
+            help="Preview features to enable. Values come from the names of the values "
+            "in the trt.PreviewFeature enum, and are case-insensitive.",
+            nargs="+",
+            default=None,
+        )
+
+        if self._allow_engine_capability:
+            self.group.add_argument(
+                "--engine-capability",
+                help="The desired engine capability. "
+                "Possible values come from the names of the values in the trt.EngineCapability enum and are case-insensitive.",
+                default=None,
+            )
+
+        if self._allow_tensor_formats:
+            self.group.add_argument(
+                "--direct-io",
+                help="Disallow reformatting layers at network input/output tensors which have user-specified formats.",
+                action="store_true",
+                default=None,
+            )
 
     def parse_impl(self, args):
         """
@@ -349,6 +367,8 @@ class TrtConfigArgs(BaseArgs):
             use_dla (bool): Whether to enable DLA.
             allow_gpu_fallback (bool): Whether to allow GPU fallback when DLA is enabled.
             memory_pool_limits (Dict[str, int]): Mapping of memory pool names to memory limits in bytes.
+            engine_capability (str): The desired engine capability.
+            direct_io (bool): Whether to disallow reformatting layers at network input/output tensors which have user-specified formats.
         """
         trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
         trt_max_shapes = args_util.get(args, "trt_max_shapes", default=[])
@@ -379,13 +399,6 @@ class TrtConfigArgs(BaseArgs):
         if self.precision_constraints == "none":
             self.precision_constraints = None
 
-        # XXX: Although --precision-constraints and --obey-precision-constraints are mutually exclusive options
-        # they may still both be set in args (due to the default being "obey" e.g. in the debug precision subtool).
-        # In that case, let the newer --precision-constraints flag take precedence.  This should go away once
-        # --obey-precision-constraints is removed.
-        if self.precision_constraints is None and args_util.get(args, "obey_precision_constraints"):
-            self.precision_constraints = "obey"
-
         self.strict_types = args_util.get(args, "strict_types")
         if self.strict_types is not None:
             mod.warn_deprecated(
@@ -396,13 +409,13 @@ class TrtConfigArgs(BaseArgs):
             )
 
         self.restricted = args_util.get(args, "restricted")
+        self.refittable = args_util.get(args, "refittable")
 
         self.calibration_cache = args_util.get(args, "calibration_cache")
         calib_base = args_util.get(args, "calibration_base_class")
         self.calibration_base_class = None
         if calib_base is not None:
-            calib_base = safe(assert_identifier(calib_base))
-            self.calibration_base_class = inline(safe("trt.{:}", inline(calib_base)))
+            self.calibration_base_class = inline(safe("trt.{:}", inline_identifier(calib_base)))
 
         self.quantile = args_util.get(args, "quantile")
         self.regression_cutoff = args_util.get(args, "regression_cutoff")
@@ -428,11 +441,9 @@ class TrtConfigArgs(BaseArgs):
         tactic_sources = args_util.get(args, "tactic_sources")
         self.tactic_sources = None
         if tactic_sources is not None:
-            self.tactic_sources = []
-            for source in tactic_sources:
-                source = safe(assert_identifier(source.upper()))
-                source_str = safe("trt.TacticSource.{:}", inline(source))
-                self.tactic_sources.append(inline(source_str))
+            self.tactic_sources = [
+                inline(safe("trt.TacticSource.{:}", inline_identifier(source.upper()))) for source in tactic_sources
+            ]
 
         self.trt_config_script = args_util.get(args, "trt_config_script")
         self.trt_config_func_name = args_util.get(args, "trt_config_func_name")
@@ -445,11 +456,27 @@ class TrtConfigArgs(BaseArgs):
         )
         self.memory_pool_limits = None
         if memory_pool_limits is not None:
-            self.memory_pool_limits = {}
-            for pool_type, pool_size in memory_pool_limits.items():
-                pool_type = safe(assert_identifier(pool_type.upper()))
-                pool_type_str = safe("trt.MemoryPoolType.{:}", inline(pool_type))
-                self.memory_pool_limits[inline(pool_type_str)] = pool_size
+            self.memory_pool_limits = {
+                inline(safe("trt.MemoryPoolType.{:}", inline_identifier(pool_type.upper()))): pool_size
+                for pool_type, pool_size in memory_pool_limits.items()
+            }
+
+        preview_features = args_util.get(args, "preview_features")
+        self.preview_features = None
+        if preview_features is not None:
+            self.preview_features = [
+                inline(safe("trt.PreviewFeature.{:}", inline_identifier(feature.upper())))
+                for feature in preview_features
+            ]
+
+        engine_capability = args_util.get(args, "engine_capability")
+        self.engine_capability = None
+        if engine_capability is not None:
+            self.engine_capability = inline(
+                safe("trt.EngineCapability.{:}", inline_identifier(engine_capability.upper()))
+            )
+
+        self.direct_io = args_util.get(args, "direct_io")
 
     def add_to_script_impl(self, script):
         profiles = []
@@ -460,7 +487,9 @@ class TrtConfigArgs(BaseArgs):
             profiles.append(profile_str)
         if profiles:
             script.add_import(imports=["Profile"], frm="polygraphy.backend.trt")
-            profiles = safe("[\n\t{:}\n]", inline(safe(",\n\t".join(profiles))))
+            profiles = safe(
+                "[\n{tab}{:}\n]", inline(safe(f",\n{constants.TAB}".join(profiles))), tab=inline(safe(constants.TAB))
+            )
             profile_name = script.add_loader(profiles, "profiles")
         else:
             profile_name = None
@@ -472,12 +501,12 @@ class TrtConfigArgs(BaseArgs):
                 "Calibration options will be ignored. Please set --int8 to enable calibration. "
             )
 
-        if self.int8 and self._allow_calibration:
+        if self.int8:
             script.add_import(imports=["Calibrator"], frm="polygraphy.backend.trt")
             script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")
             data_loader_name = self.arg_groups[DataLoaderArgs].add_to_script(script)
             if self.calibration_base_class:
-                script.add_import(imports=["tensorrt as trt"])
+                script.add_import(imports="tensorrt", imp_as="trt")
 
             if (
                 self.arg_groups[DataLoaderArgs].is_using_random_data()
@@ -508,8 +537,11 @@ class TrtConfigArgs(BaseArgs):
             script.add_import(imports=["TacticRecorder"], frm="polygraphy.backend.trt")
             algo_selector = make_invocable("TacticRecorder", record=self.save_tactics)
 
-        if self.tactic_sources is not None or self.memory_pool_limits is not None:
-            script.add_import(imports=["tensorrt as trt"])
+        if any(
+            arg is not None
+            for arg in [self.tactic_sources, self.memory_pool_limits, self.preview_features, self.engine_capability]
+        ):
+            script.add_import(imports="tensorrt", imp_as="trt")
 
         if self.trt_config_script is not None:
             script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
@@ -535,9 +567,13 @@ class TrtConfigArgs(BaseArgs):
                 use_dla=self.use_dla,
                 allow_gpu_fallback=self.allow_gpu_fallback,
                 memory_pool_limits=self.memory_pool_limits,
+                refittable=self.refittable,
+                preview_features=self.preview_features,
+                engine_capability=self.engine_capability,
+                direct_io=self.direct_io,
             )
             if config_loader_str is not None:
-                script.add_import(imports=["CreateConfig as CreateTrtConfig"], frm="polygraphy.backend.trt")
+                script.add_import(imports="CreateConfig", frm="polygraphy.backend.trt", imp_as="CreateTrtConfig")
 
         if config_loader_str is not None:
             config_loader_name = script.add_loader(config_loader_str, "create_trt_config")

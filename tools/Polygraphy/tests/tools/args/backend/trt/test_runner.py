@@ -39,7 +39,7 @@ def trt_runner_args():
         deps=[
             ModelArgs(),
             TrtLoadEngineArgs(),
-            OnnxLoadArgs(),
+            OnnxLoadArgs(allow_shape_inference=False),
             TrtConfigArgs(),
             TrtLoadPluginsArgs(),
             TrtLoadNetworkArgs(),

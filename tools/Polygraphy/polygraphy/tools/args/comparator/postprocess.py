@@ -35,7 +35,8 @@ class ComparatorPostprocessArgs(BaseArgs):
             "Format: --postprocess [<out_name>:]<func>. If no output name is provided, the function is applied to all outputs. "
             "For example: `--postprocess out0:top-5 out1:top-3` or `--postprocess top-5`. "
             "Available post-processing functions are: {{top-<K>[,axis=<axis>]: Takes the indices of the K highest values along "
-            "the specified axis (defaulting to the last axis), where K is an integer, e.g. top-5 or top-5,axis=1}}",
+            "the specified axis (defaulting to the last axis), where K is an integer. "
+            "For example: `--postprocess top-5` or `--postprocess top-5,axis=1`}}",
             nargs="+",
             default=None,
             dest="postprocess",

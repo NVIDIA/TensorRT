@@ -5,7 +5,9 @@
   * Arithmetic intensity
   * Tensor Core (TC) refresher
   * TC alignment requirements, tile quantization, wave quantization
+* [2-mins video on TensorCore Performance Guidance](https://youtu.be/i8-Jw48Cp8w)
 * [DL Performance Documentation](https://docs.nvidia.com/deeplearning/performance/index.html): recommendations that apply to most deep learning operations.
+* [Tips for Optimizing GPU Performance Using Tensor Cores](https://developer.nvidia.com/blog/optimizing-gpu-performance-tensor-cores/)
 
 ## Device Capabilities
 

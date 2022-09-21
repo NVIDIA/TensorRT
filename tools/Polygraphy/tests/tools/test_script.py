@@ -66,3 +66,25 @@ class TestScript:
     def test_invoke_if_nondefault_none_args(self):
         assert make_invocable_if_nondefault("Dummy", None) is None
         assert make_invocable_if_nondefault("Dummy", x=None) is None
+
+    def test_lazy_import(self):
+        script = Script()
+        script.add_import("numpy", imp_as="np")
+        assert "np = mod.lazy_import('numpy')" in str(script)
+
+    def test_import_from(self):
+        script = Script()
+        script.add_import("example", frm="mod")
+        assert "from mod import example" in str(script)
+
+    def test_import_duplicate_froms(self):
+        script = Script()
+        script.add_import("example", frm="mod")
+        script.add_import("also", frm="mod")
+        assert "from mod import also, example" in str(script)
+
+    def test_import_duplicate_froms_with_as(self):
+        script = Script()
+        script.add_import("example", frm="mod")
+        script.add_import("also", frm="mod", imp_as="temp")
+        assert "from mod import also as temp, example" in str(script)

@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import contextlib
 import sys
 
+import numpy as np
 import pytest
 import tensorrt as trt
 from polygraphy import constants, mod, util
@@ -37,9 +37,16 @@ from polygraphy.backend.trt import (
     network_from_onnx_bytes,
     network_from_onnx_path,
     onnx_like_from_network,
+    set_layer_precisions,
+    create_config,
+    set_tensor_datatypes,
+    set_tensor_formats,
+    create_network,
 )
+from polygraphy.common.struct import MetadataTuple
 from polygraphy.comparator import DataLoader
-from tests.helper import get_file_size, has_dla, is_file_non_empty
+from polygraphy.exception import PolygraphyException
+from tests.helper import get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
 
 ##
@@ -136,13 +143,6 @@ class TestOnnxNetworkLoader:
             assert not network.has_implicit_batch_dimension
             assert not network.has_explicit_precision
 
-    def test_loader_explicit_precision(self):
-        builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity"].loader, explicit_precision=True)
-        with builder, network, parser:
-            assert not network.has_implicit_batch_dimension
-            if mod.version(trt.__version__) < mod.version("8.0"):
-                assert network.has_explicit_precision
-
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.1.0.0"), reason="API was added in TRT 7.1")
 class TestNetworkFromOnnxPath:
@@ -151,13 +151,6 @@ class TestNetworkFromOnnxPath:
         with builder, network, parser:
             assert not network.has_implicit_batch_dimension
             assert not network.has_explicit_precision
-
-    def test_loader_explicit_precision(self):
-        builder, network, parser = network_from_onnx_path(ONNX_MODELS["identity"].path, explicit_precision=True)
-        with builder, network, parser:
-            assert not network.has_implicit_batch_dimension
-            if mod.version(trt.__version__) < mod.version("8.0"):
-                assert network.has_explicit_precision
 
 
 class TestModifyNetwork:
@@ -183,17 +176,15 @@ class TestModifyNetwork:
             assert network.num_outputs == 1
             assert network.get_output(0).name == "identity_out_0"
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_mark_shape_outputs(self, modifiable_reshape_network):
         builder, network, parser = modify_network_outputs(
             modifiable_reshape_network, outputs=["output", "reduce_prod_out_gs_2"]
         )
         with builder, network, parser:
             assert network.num_outputs == 2
-            assert network.get_output(0).name == "reduce_prod_out_gs_2"
-            assert network.get_output(0).is_shape_tensor
+            assert network.get_output(1).name == "reduce_prod_out_gs_2"
+            assert network.get_output(1).is_shape_tensor
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Unsupported for TRT 6")
     def test_unmark_shape_outputs(self, modifiable_reshape_network):
         builder, network, parser = modify_network_outputs(
             modifiable_reshape_network, outputs=constants.MARK_ALL, exclude_outputs=["reduce_prod_out_gs_2"]
@@ -201,245 +192,89 @@ class TestModifyNetwork:
         with builder, network, parser:
             assert network.num_outputs == 1
 
+    def test_mark_outputs_layer_with_optional_inputs(self):
+        builder, network = create_network()
+        with builder, network:
+            inp = network.add_input("input", shape=(1, 3, 224, 224), dtype=trt.float32)
+            slice_layer = network.add_slice(inp, (0, 0, 0, 0), (1, 3, 224, 224), (1, 1, 1, 1))
 
-class TestCreateConfig:
-    def test_defaults(self, identity_builder_network):
-        builder, network = identity_builder_network
-        loader = CreateConfig()
-        assert loader.timing_cache_path is None
+            # Set a tensor for `stride` to increment `num_inputs` so we have some inputs
+            # which are `None` in between.
+            slice_layer.set_input(3, inp)
+            assert slice_layer.num_inputs == 4
 
-        with loader(builder, network) as config:
-            assert config.max_workspace_size == 1 << 24
-            with contextlib.suppress(AttributeError):
-                assert not config.get_flag(trt.BuilderFlag.TF32)
-            with contextlib.suppress(AttributeError):
-                assert not config.get_flag(trt.BuilderFlag.SPARSE_WEIGHTS)
-            assert not config.get_flag(trt.BuilderFlag.FP16)
-            assert not config.get_flag(trt.BuilderFlag.INT8)
-            assert config.num_optimization_profiles == 1
-            assert config.int8_calibrator is None
-            with contextlib.suppress(AttributeError):
-                if mod.version(trt.__version__) >= mod.version("8.4"):
-                    assert config.get_tactic_sources() == 15
-                elif mod.version(trt.__version__) >= mod.version("8.0"):
-                    assert config.get_tactic_sources() == 7
-                else:
-                    assert config.get_tactic_sources() == 3
-            with contextlib.suppress(AttributeError):
-                assert not config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
+            slice = slice_layer.get_output(0)
+            slice.name = "Slice"
 
-    def test_workspace_size(self, identity_builder_network):
-        builder, network = identity_builder_network
-        loader = CreateConfig(max_workspace_size=0)
-        with loader(builder, network) as config:
-            assert config.max_workspace_size == 0
+            builder, network = modify_network_outputs((builder, network), outputs=["Slice"])
+            assert network.num_outputs == 1
+            assert network.get_output(0).name == "Slice"
+            assert network.get_output(0) == slice
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported before TRT 8.2")
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_obey_precision_constraints(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(obey_precision_constraints=flag)
-        with loader(builder, network) as config:
-            assert config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS) == flag
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported before TRT 8.2")
-    @pytest.mark.parametrize("flag", ["obey", "prefer", None])
-    def test_precision_constraints(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(precision_constraints=flag)
-        with loader(builder, network) as config:
-            obey_set = config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
-            prefer_set = config.get_flag(trt.BuilderFlag.PREFER_PRECISION_CONSTRAINTS)
-            if flag == "obey":
-                assert obey_set and not prefer_set
-            elif flag == "prefer":
-                assert not obey_set and prefer_set
-            else:
-                assert not obey_set and not prefer_set
+class TestSetLayerPrecisions:
+    def test_basic(self, modifiable_network):
+        builder, network, parser = set_layer_precisions(
+            modifiable_network,
+            layer_precisions={"onnx_graphsurgeon_node_1": trt.float16, "onnx_graphsurgeon_node_3": trt.int8},
+        )
+        with builder, network, parser:
+            assert network[0].precision == trt.float16
+            assert network[1].precision == trt.int8
 
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_strict_types(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(strict_types=flag)
-        with loader(builder, network) as config:
-            assert config.get_flag(trt.BuilderFlag.STRICT_TYPES) == flag
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0.0.0"), reason="API was added in TRT 8.0")
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_restricted(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(restricted=flag)
-        with loader(builder, network) as config:
-            assert config.get_flag(trt.BuilderFlag.SAFETY_SCOPE) == flag
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.1.0.0"), reason="API was added in TRT 7.1")
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_tf32(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(tf32=flag)
-        with loader(builder, network) as config:
-            assert config.get_flag(trt.BuilderFlag.TF32) == flag
-
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_fp16(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(fp16=flag)
-        with loader(builder, network) as config:
-            assert config.get_flag(trt.BuilderFlag.FP16) == flag
-
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_int8(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(int8=flag)
-        with loader(builder, network) as config:
-            assert config.get_flag(trt.BuilderFlag.INT8) == flag
-
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_allow_gpu_fallback(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(allow_gpu_fallback=flag)
-        with loader(builder, network) as config:
-            assert config.get_flag(trt.BuilderFlag.GPU_FALLBACK) == flag
-
-    @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.0"), reason="API was not available in 7.2 and older"
-    )
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_sparse_weights(self, identity_builder_network, flag):
-        builder, network = identity_builder_network
-        loader = CreateConfig(sparse_weights=flag)
-        with loader(builder, network) as config:
-            assert config.get_flag(trt.BuilderFlag.SPARSE_WEIGHTS) == flag
-
-    def test_use_dla(self, identity_builder_network):
-        builder, network = identity_builder_network
-        loader = CreateConfig(use_dla=True)
-        with loader(builder, network) as config:
-            assert config.default_device_type == trt.DeviceType.DLA
-            if has_dla():
-                assert config.DLA_core == 0
-
-    with contextlib.suppress(AttributeError):
-        if mod.version(trt.__version__) >= mod.version("8.0"):
-            TACTIC_SOURCES_CASES = [
-                (None, 7),  # By default, all sources are enabled.
-                ([], 0),
-                ([trt.TacticSource.CUBLAS], 1),
-                ([trt.TacticSource.CUBLAS_LT], 2),
-                ([trt.TacticSource.CUDNN], 4),
-                ([trt.TacticSource.CUBLAS, trt.TacticSource.CUBLAS_LT], 3),
-                ([trt.TacticSource.CUBLAS, trt.TacticSource.CUDNN], 5),
-                ([trt.TacticSource.CUBLAS_LT, trt.TacticSource.CUDNN], 6),
-                ([trt.TacticSource.CUDNN, trt.TacticSource.CUBLAS, trt.TacticSource.CUBLAS_LT], 7),
-            ]
-        else:
-            TACTIC_SOURCES_CASES = [
-                (None, 3),  # By default, all sources are enabled.
-                ([], 0),
-                ([trt.TacticSource.CUBLAS], 1),
-                ([trt.TacticSource.CUBLAS_LT], 2),
-                ([trt.TacticSource.CUBLAS, trt.TacticSource.CUBLAS_LT], 3),
-            ]
-
-        if mod.version(trt.__version__) >= mod.version("8.4"):
-            TACTIC_SOURCES_CASES[0] = (None, 15)
-            TACTIC_SOURCES_CASES.extend(
-                [
-                    (
-                        [
-                            trt.TacticSource.CUDNN,
-                            trt.TacticSource.CUBLAS,
-                            trt.TacticSource.CUBLAS_LT,
-                            trt.TacticSource.EDGE_MASK_CONVOLUTIONS,
-                        ],
-                        15,
-                    )
-                ]
+    def test_non_existent_layer(self, modifiable_network):
+        with pytest.raises(PolygraphyException, match="The following layers were not found"):
+            set_layer_precisions(
+                modifiable_network,
+                layer_precisions={"fake_layer": trt.float16},
             )
 
-        @pytest.mark.parametrize("sources, expected", TACTIC_SOURCES_CASES)
-        def test_tactic_sources(self, identity_builder_network, sources, expected):
-            builder, network = identity_builder_network
-            loader = CreateConfig(tactic_sources=sources)
-            with loader(builder, network) as config:
-                assert config.get_tactic_sources() == expected
 
-    def test_calibrator_metadata_set(self, identity_builder_network):
-        builder, network = identity_builder_network
-        calibrator = Calibrator(DataLoader())
-        loader = CreateConfig(int8=True, calibrator=calibrator)
-        with loader(builder, network) as config:
-            assert config.int8_calibrator
-            assert "x" in calibrator.data_loader.input_metadata
-
-    def test_multiple_profiles(self, identity_builder_network):
-        builder, network = identity_builder_network
-        profiles = [
-            Profile().add("x", (1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4)),
-            Profile().add("x", (1, 2, 4, 4), (1, 2, 8, 8), (1, 2, 16, 16)),
-        ]
-        loader = CreateConfig(profiles=profiles)
-        with loader(builder, network) as config:
-            assert config.num_optimization_profiles == 2
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
-    @pytest.mark.parametrize("path_mode", [True, False], ids=["path", "file-like"])
-    def test_timing_cache(self, identity_builder_network, path_mode):
-        builder, network = identity_builder_network
-        with util.NamedTemporaryFile() as cache:
-            loader = CreateConfig(load_timing_cache=cache.name if path_mode else cache)
-            with loader(builder, network) as config:
-                assert config.get_timing_cache()
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
-    def test_empty_timing_cache_when_default(self, identity_builder_network):
-        builder, network = identity_builder_network
-        loader = CreateConfig()
-        with loader(builder, network) as config:
-            cache = config.get_timing_cache()
-            with cache.serialize() as buffer:
-                cache_size = len(bytes(buffer))
-
-            cache.reset()
-            with cache.serialize() as buffer:
-                new_cache_size = len(bytes(buffer))
-            assert cache_size == new_cache_size
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
-    def test_profiling_verbosity(self, identity_builder_network):
-        builder, network = identity_builder_network
-        expected = trt.ProfilingVerbosity.NONE
-        loader = CreateConfig(profiling_verbosity=expected)
-        with loader(builder, network) as config:
-            assert config.profiling_verbosity == expected
-
-    with contextlib.suppress(AttributeError):
-        POOL_LIMITS = [
-            {trt.MemoryPoolType.WORKSPACE: 25},
-            {trt.MemoryPoolType.DLA_MANAGED_SRAM: 25},
-            {trt.MemoryPoolType.DLA_LOCAL_DRAM: 25},
-            {trt.MemoryPoolType.DLA_GLOBAL_DRAM: 25},
-            # Multiple limits
-            {
-                trt.MemoryPoolType.DLA_LOCAL_DRAM: 20,
-                trt.MemoryPoolType.DLA_GLOBAL_DRAM: 25,
-                trt.MemoryPoolType.WORKSPACE: 39,
+class TestSetTensorDatatypes:
+    def test_basic(self, modifiable_network):
+        builder, network, parser = set_tensor_datatypes(
+            modifiable_network,
+            tensor_datatypes={
+                "X": trt.float16,
+                "identity_out_0": trt.float32,
+                "identity_out_2": trt.float16,
             },
-        ]
-
-        @pytest.mark.skipif(
-            mod.version(trt.__version__) < mod.version("8.3"), reason="Unsupported for TRT versions prior to 8.3"
         )
-        @pytest.mark.parametrize("pool_limits", POOL_LIMITS)
-        def test_memory_pool_limits(self, pool_limits, identity_builder_network):
-            if any("dla" in key.name.lower() for key in pool_limits) and not has_dla():
-                pytest.skip("DLA is not available on this system")
+        with builder, network, parser:
+            assert network[0].get_input(0).dtype == trt.float16
+            assert network[0].get_output(0).dtype == trt.float32
+            assert network[1].get_input(0).dtype == trt.float32
+            assert network[1].get_output(0).dtype == trt.float16
 
-            builder, network = identity_builder_network
-            loader = CreateConfig(memory_pool_limits=pool_limits)
-            with loader(builder, network) as config:
-                for pool_type, pool_size in pool_limits.items():
-                    assert config.get_memory_pool_limit(pool_type) == pool_size
+    def test_non_existent_tensor(self, modifiable_network):
+        with pytest.raises(PolygraphyException, match="The following tensors were not found"):
+            set_tensor_datatypes(
+                modifiable_network,
+                tensor_datatypes={"fake_tensor": trt.float16},
+            )
+
+
+class TestSetTensorFormats:
+    def test_basic(self, modifiable_network):
+        builder, network, parser = set_tensor_formats(
+            modifiable_network,
+            tensor_formats={
+                "X": [trt.TensorFormat.LINEAR, trt.TensorFormat.CHW4],
+                "identity_out_2": [trt.TensorFormat.HWC8],
+            },
+        )
+        with builder, network, parser:
+            assert network[0].get_input(0).allowed_formats == (
+                1 << int(trt.TensorFormat.LINEAR) | 1 << int(trt.TensorFormat.CHW4)
+            )
+            assert network[1].get_output(0).allowed_formats == 1 << int(trt.TensorFormat.HWC8)
+
+    def test_non_existent_tensor(self, modifiable_network):
+        with pytest.raises(PolygraphyException, match="The following tensors were not found"):
+            set_tensor_formats(
+                modifiable_network,
+                tensor_formats={"fake_tensor": trt.float16},
+            )
 
 
 class TestEngineBytesFromNetwork:
@@ -465,13 +300,38 @@ class TestEngineFromNetwork:
         with loader():
             pass
 
-    def test_can_build_with_calibrator(self, identity_builder_network):
+    @pytest.mark.parametrize("use_config_loader, set_calib_profile", [(True, None), (False, False), (False, True)])
+    def test_can_build_with_calibrator(self, identity_builder_network, use_config_loader, set_calib_profile):
         builder, network = identity_builder_network
         calibrator = Calibrator(DataLoader())
-        create_config = CreateConfig(int8=True, calibrator=calibrator)
-        loader = EngineFromNetwork((builder, network), create_config)
+
+        def check_calibrator():
+            # CreateConfig and EngineFromNetwork should set the input metadata for the calibrator,
+            # which in turn should be passed to the data loader.
+            assert calibrator.input_metadata is not None
+            assert "x" in calibrator.data_loader.input_metadata
+            assert calibrator.data_loader.input_metadata["x"] == MetadataTuple(
+                shape=(1, 1, 2, 2), dtype=np.dtype(np.float32)
+            )
+
+        if use_config_loader:
+            config = create_config(builder, network, int8=True, calibrator=calibrator)
+            check_calibrator()
+        else:
+            config = builder.create_builder_config()
+            config.set_flag(trt.BuilderFlag.INT8)
+            config.int8_calibrator = calibrator
+            # Since this network has static shapes, we shouldn't need to set a calibration profile.
+            if set_calib_profile:
+                calib_profile = Profile().fill_defaults(network).to_trt(builder, network)
+                config.add_optimization_profile(calib_profile)
+                config.set_calibration_profile(calib_profile)
+
+        loader = EngineFromNetwork((builder, network), config)
         with loader():
             pass
+        check_calibrator()
+
         # Calibrator buffers should be freed after the build
         assert all([buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()])
 
@@ -511,7 +371,7 @@ class TestEngineFromNetwork:
             total_cache_size = get_file_size(total_cache.name)
 
             # The total cache should be larger than either of the individual caches.
-            assert total_cache_size > const_foldable_cache_size and total_cache_size > identity_cache_size
+            assert total_cache_size >= const_foldable_cache_size and total_cache_size >= identity_cache_size
             # The total cache should also be smaller than or equal to the sum of the individual caches since
             # header information should not be duplicated.
             assert total_cache_size <= (const_foldable_cache_size + identity_cache_size)

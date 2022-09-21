@@ -37,6 +37,7 @@ class EnginePlan:
         profiling_metadata_file: str=None,
         build_metadata_file: str=None,
         name: str=None,
+        profile_id: int=None,
     ):
         def path_leaf(path):
             head, tail = ntpath.split(path)
@@ -46,6 +47,7 @@ class EnginePlan:
             layers = [Layer(raw_layer) for raw_layer in raw_layers]
             self.layers = fold_no_ops(layers, self.bindings)
             self.all_layers = deepcopy(self.layers)
+            self.constants = [layer for layer in self.layers if layer.type == 'Constant']
             self.layers = [layer for layer in self.layers if layer.type != 'Constant']
             return raw_layers
 
@@ -58,21 +60,35 @@ class EnginePlan:
             return raw_perf
 
         def merge_profiling_data(graph_df, raw_perf):
+            def add_zero_perf(graph_df):
+                df = graph_df
+                df['latency.pct_time'] = [0] * len(df)
+                df['latency.avg_time'] = [0] * len(df)
+                df['latency.median_time'] = [0] * len(df)
+                df['latency.time'] = [0] * len(df)
+                return df
+
             if raw_perf is not None:
                 perf_df = pd.DataFrame.from_dict(raw_perf)
                 perf_df.drop(columns=['name'], inplace=True)
                 perf_df.rename(columns={
                     'percentage': 'latency.pct_time',
                     'averageMs': 'latency.avg_time',
+                    'medianMs': 'latency.median_time',
                     'timeMs': 'latency.time',
                     }, inplace=True)
-                df = graph_df.join(perf_df)
+                if len(graph_df) == len(perf_df):
+                    df = graph_df.join(perf_df)
+                else:
+                    warnings.warn(
+                        "Ignoring profiling data: The number of layers in the engine "
+                        "graph does not match the number of layers in the performance "
+                        "JSON.\n"
+                        "This can happen if you're not using the first shape-profile.")
+                    df = add_zero_perf(graph_df)
             else:
                 warnings.warn("Profiling data was not provided.")
-                df = graph_df
-                df['latency.pct_time'] = [0] * len(df)
-                df['latency.avg_time'] = [0] * len(df)
-                df['latency.time'] = [0] * len(df)
+                df = add_zero_perf(graph_df)
             return df
 
         def add_graph_summation_cols(df, layers):
@@ -100,7 +116,7 @@ class EnginePlan:
                 [avg_time for avg_time in self._df["latency.avg_time"]])
 
         self.name = name or path_leaf(graph_file)
-        raw_layers, self.bindings = import_graph_file(graph_file)
+        raw_layers, self.bindings = import_graph_file(graph_file, profile_id)
         raw_layers = create_layers(self, raw_layers)
 
         self._df = None
@@ -132,10 +148,14 @@ class EnginePlan:
     def get_bindings(self) -> Tuple[List[Activation], List[Activation]]:
         """Return a list of the inputs bindings and a list of the output bindings"""
         inputs, outputs = [], []
+        processed_names = []
         for layer in self.layers:
-            inputs += [inp for inp in layer.inputs if inp.name in self.bindings]
-            outputs += [outp for outp in layer.outputs if outp.name in self.bindings]
-        return inputs, outputs
+            # BUG HERE: inputs and outputs are counted mutiple times.
+            inputs += [inp for inp in layer.inputs if (inp.name in self.bindings and inp.name not in processed_names)]
+            processed_names += [inp.name for inp in layer.inputs if inp.name not in processed_names]
+            outputs += [outp for outp in layer.outputs if (outp.name in self.bindings and outp.name not in processed_names)]
+            processed_names += [outp.name for outp in layer.outputs if outp.name not in processed_names]
+        return list(set(inputs)), list(set(outputs))
 
     def summary(self):
         return print_summary(self)
@@ -145,9 +165,10 @@ def summary_dict(plan: EnginePlan):
     """Create a dictionary of important attributes of the engine plan."""
     MB_1 = 1024 * 1024
     bindings = plan.get_bindings()
-
+    nl = "\n\t\t"
     d = {
-        "Inputs": f"{bindings[0]}",
+        "Inputs": f"{nl.join([str(binding) for binding in bindings[0]])}",
+        "Outputs": f"{nl.join([str(binding) for binding in bindings[1]])}",
         "Average time": f"{plan.total_runtime:.3f} ms",
         "Layers": f"{len(plan.df)}",
         "Weights": f"{plan.total_weights_size / MB_1 :.1f} MB",
@@ -164,5 +185,7 @@ def print_summary(plan: EnginePlan):
     print_dict(summary_dict(plan))
     print("Device Properties:")
     print_dict(plan.device_properties)
+    print("Builder Configuration:")
+    print_dict(plan.builder_cfg)
     print("Performance Summary:")
     print_dict(plan.performance_summary)

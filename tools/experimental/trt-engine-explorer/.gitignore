@@ -113,3 +113,15 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Dot
+*.gv
+*.svg
+
+# Other trex artifacts
+*.xlsx
+*.engine
+*.ipynb
+*.png
+*.onnx
+

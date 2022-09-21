@@ -127,7 +127,7 @@ class Comparator:
                     )
 
                     G_LOGGER.extra_verbose(
-                        lambda: f"{active_runner.name:35} | Feeding inputs:\n{util.indent_block(feed_dict)}"
+                        lambda: f"{active_runner.name:35} | Feeding inputs:\n{util.indent_block(dict(feed_dict))}"
                     )
                     outputs = active_runner.infer(feed_dict=feed_dict)
 
@@ -143,7 +143,7 @@ class Comparator:
                         mode=LogMode.ONCE,
                     )
                     G_LOGGER.extra_verbose(
-                        lambda: f"{active_runner.name:35} | Inference Time: {runtime * 1000.0:.3f} ms | Received outputs:\n{util.indent_block(outputs)}"
+                        lambda: f"{active_runner.name:35} | Inference Time: {runtime * 1000.0:.3f} ms | Received outputs:\n{util.indent_block(dict(outputs))}"
                     )
 
                 total_runtime_ms = total_runtime * 1000.0
