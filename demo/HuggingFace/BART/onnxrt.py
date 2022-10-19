@@ -311,7 +311,8 @@ class BARTONNXRT(OnnxRTCommand):
 
         return NetworkMetadata(
             variant=frameworks_parsed_metadata.variant,
-            precision=Precision(fp16=args.fp16, tf32=args.tf32),
+            precision=Precision(fp16=args.fp16),
+            # precision=Precision(fp16=args.fp16, tf32=args.tf32),
             other=frameworks_parsed_metadata.other,
         )
 
