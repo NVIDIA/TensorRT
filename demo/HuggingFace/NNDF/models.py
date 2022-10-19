@@ -118,7 +118,7 @@ class ModelFileConverter:
             fp16=network_metadata.precision.fp16,
             max_workspace_size=result.DEFAULT_TRT_WORKSPACE_MB * 1024 * 1024,
             profiles=profiles,
-            precision_constraints=("obey" if result.use_obey_precision_constraints() else None),
+            # precision_constraints=("obey" if result.use_obey_precision_constraints() else None),
         )
 
         if G_LOGGER.level == G_LOGGER.DEBUG:
