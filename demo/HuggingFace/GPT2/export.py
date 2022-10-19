@@ -24,8 +24,13 @@ from itertools import tee
 # tensorrt
 import tensorrt as trt
 
+# onnx
+import onnx
+
 # polygraphy
+from polygraphy.backend.onnx import fold_constants
 from polygraphy.backend.trt import Profile
+
 
 # torch
 import torch
@@ -169,7 +174,13 @@ class GPT2Converter(ModelFileConverter):
                 **inputs.get_torch_dynamic_axis_encoding(),
                 **outputs.get_torch_dynamic_axis_encoding(),
             },
-            training=False,
+            # training=False,
             **opt_args
         )
+        # Sanitizing due to slice ops
+        onnx_model = onnx.load(output_fpath)
+        folded = fold_constants(onnx_model)
+        onnx.save(folded, output_fpath)
+
         return GPT2ONNXFile(output_fpath, network_metadata)
+        # return GPT2ONNXFile(output_fpath, network_metadata)

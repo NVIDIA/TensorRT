@@ -258,7 +258,7 @@ class T5DecoderConverter(ModelFileConverter):
                 **inputs.get_torch_dynamic_axis_encoding(),
                 **outputs.get_torch_dynamic_axis_encoding(),
             },
-            training=False,
+            # training=False,
             **opt_args
         )
         
@@ -330,7 +330,7 @@ class T5EncoderConverter(ModelFileConverter):
                 **inputs.get_torch_dynamic_axis_encoding(),
                 **outputs.get_torch_dynamic_axis_encoding(),
             },
-            training=False,
+            # training=False,
             **opt_args
         )
         

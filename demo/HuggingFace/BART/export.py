@@ -276,7 +276,7 @@ class BARTDecoderConverter(ModelFileConverter):
                     **inputs.get_torch_dynamic_axis_encoding(),
                     **outputs.get_torch_dynamic_axis_encoding(),
                 },
-                training=False,
+                # training=False,
                 **opt_args
             )
         else:
@@ -388,7 +388,7 @@ class BARTEncoderConverter(ModelFileConverter):
                 **inputs.get_torch_dynamic_axis_encoding(),
                 **outputs.get_torch_dynamic_axis_encoding(),
             },
-            training=False,
+            # training=False,
             **opt_args
         )
 
