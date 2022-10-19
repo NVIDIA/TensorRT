@@ -30,6 +30,7 @@ SQUAD_DIR="BERT/squad"
 ENGINE_NAME="engines/bert_mt_${MODEL_VARIANT}_${PRECISION}_bs${MAX_BATCH}_seqlen${SEQUENCE_LENGTH}_weight${WEIGHTS}_benchmark.engine"
 QAT_CHECKPOINT="models/fine-tuned/bert_pyt_statedict_megatron_sparse_int8qat_v21.03.0/bert_pyt_statedict_megatron_sparse_int8_qat"
 CUDAGRAPH_PERFBIN="build/perf"
+TIMING_CACHE_FILE="build_megatron.tcf"
 
 if [ "${PRECISION}" != "int8-qat" ]; then
     echo "Skipping: Megatron-BERT only supported for int8 (QAT)"
@@ -57,7 +58,7 @@ if [ ! -f ${ENGINE_NAME} ]; then
         PRECISION="int8"
         BUILDER_ARGS="--pickle ${QAT_CHECKPOINT}"
     fi;
-    BUILDER_ARGS="${BUILDER_ARGS} -o ${ENGINE_NAME} ${BATCH_SIZES} -s ${SEQUENCE_LENGTH} -c ${CHECKPOINTS_DIR} -v ${CHECKPOINTS_DIR}/vocab.txt --megatron"
+    BUILDER_ARGS="${BUILDER_ARGS} -tcf ${TIMING_CACHE_FILE} -o ${ENGINE_NAME} ${BATCH_SIZES} -s ${SEQUENCE_LENGTH} -c ${CHECKPOINTS_DIR} -v ${CHECKPOINTS_DIR}/vocab.txt --megatron"
     if [ "${WEIGHTS}" == "sparse" ]; then
         BUILDER_ARGS="${BUILDER_ARGS} --sp"
     fi;

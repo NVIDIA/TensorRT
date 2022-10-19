@@ -403,6 +403,7 @@ def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_
 
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network(explicit_batch_flag) as network, builder.create_builder_config() as builder_config:
         builder_config.max_workspace_size = workspace_size * (1024 * 1024)
+        builder_config.avg_timing_iterations = 8
         if config.use_fp16:
             builder_config.set_flag(trt.BuilderFlag.FP16)
         if config.use_int8:

@@ -30,6 +30,7 @@ ENGINE_NAME="engines/bert_${MODEL_VARIANT}_${PRECISION}_bs${MAX_BATCH}_seqlen${S
 # QAT Checkpoint - available only for BERT-Large
 QAT_CHECKPOINT="models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx"
 CUDAGRAPH_PERFBIN="build/perf"
+TIMING_CACHE_FILE="build.tcf"
 
 echo "==== Benchmarking BERT ${MODEL_VARIANT} ${PRECISION} SEQLEN ${SEQUENCE_LENGTH} on ${GPU_ARCH} ===="
 if [ ! -f ${ENGINE_NAME} ]; then
@@ -51,7 +52,7 @@ if [ ! -f ${ENGINE_NAME} ]; then
     else
         BUILDER_ARGS="-m ${CHECKPOINTS_DIR}/model.ckpt"
     fi;
-    BUILDER_ARGS="${BUILDER_ARGS} -o ${ENGINE_NAME} ${BATCH_SIZES} -s ${SEQUENCE_LENGTH} -c ${CHECKPOINTS_DIR} -v ${CHECKPOINTS_DIR}/vocab.txt --${PRECISION}"
+    BUILDER_ARGS="${BUILDER_ARGS} -tcf ${TIMING_CACHE_FILE} -o ${ENGINE_NAME} ${BATCH_SIZES} -s ${SEQUENCE_LENGTH} -c ${CHECKPOINTS_DIR} -v ${CHECKPOINTS_DIR}/vocab.txt --${PRECISION}"
     if [ "${PRECISION}" == "int8" ]; then
         BUILDER_ARGS="${BUILDER_ARGS} --fp16 --strict --calib-num 1"
         if [ "${GPU_ARCH}" == "Ampere" ] || [ "${GPU_ARCH}" == "Turing" ]; then
