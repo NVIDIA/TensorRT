@@ -91,7 +91,7 @@ git push -u origin <local-branch>:<remote-branch>
   * Exercise caution when selecting the source and target branches for the PR.
     Note that versioned releases of TensorRT OSS are posted to `release/` branches of the upstream repo.
   * Creation of a PR creation kicks off the code review process.
-  * Atleast one TensorRT engineer will be assigned for the review.
+  * At least one TensorRT engineer will be assigned for the review.
   * While under review, mark your PRs as work-in-progress by prefixing the PR title with [WIP].
 
 4. Since there is no CI/CD process in place yet, the PR will be accepted and the corresponding issue closed only after adequate testing has been completed, manually, by the developer and/or TensorRT engineer reviewing the code.

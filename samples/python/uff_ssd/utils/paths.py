@@ -121,7 +121,7 @@ class Paths(object):
             error = True
 
         if error:
-            print("An error occured when running the script.")
+            print("An error occurred when running the script.")
             sys.exit(1)
 
     def _verify_voc_paths(self):

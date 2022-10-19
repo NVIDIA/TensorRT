@@ -83,7 +83,7 @@ ssd_mobilenet_v2_320x320_coco17_tpu-8
     └── saved_model.pb
 ```
 
-**NOTE:** In order to proceed, you need to re-export the saved model. If you don't re-export the model with with **float_image_tensor** as input type, the conversion process will fail.
+**NOTE:** In order to proceed, you need to re-export the saved model. If you don't re-export the model with **float_image_tensor** as input type, the conversion process will fail.
 
 To re-export, run exporter_main_v2.py located in TFOD API:
 

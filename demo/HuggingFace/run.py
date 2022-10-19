@@ -158,7 +158,7 @@ class CompareAction(NetworkScriptAction):
 
         if len(compare_group) <= 1:
             G_LOGGER.error(
-                "Comparison command must have atleast two groups to compare to."
+                "Comparison command must have at least two groups to compare to."
             )
             exit()
 

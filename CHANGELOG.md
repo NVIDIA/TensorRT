@@ -202,7 +202,7 @@ TensorRT OSS release corresponding to TensorRT 8.2.1.8 GA release.
   - Specify default value for `precisionConstraints`
   - Fixed reporting of TensorRT build version in trtexec
   - Fixed `combineDescriptions` typo in trtexec/tracer.py
-  - Fixed usages of of `kDIRECT_IO`
+  - Fixed usages of `kDIRECT_IO`
 
 - Plugin updates
   - `EfficientNMS` plugin support extended to TF-TRT, and for clang builds.
