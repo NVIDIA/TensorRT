@@ -342,7 +342,26 @@ def extract_voc_data_if_needed():
     voc_archive_path = PATHS.get_data_file_path("samples/python/uff_ssd/VOCtest_06-Nov-2007.tar")
     print("Unpacking {}".format(voc_archive_path))
     with tarfile.open(voc_archive_path, "r") as tar:
-        tar.extractall(path=PATHS.get_workspace_dir_path())
+        def is_within_directory(directory, target):
+            
+            abs_directory = os.path.abspath(directory)
+            abs_target = os.path.abspath(target)
+        
+            prefix = os.path.commonprefix([abs_directory, abs_target])
+            
+            return prefix == abs_directory
+        
+        def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+        
+            for member in tar.getmembers():
+                member_path = os.path.join(path, member.name)
+                if not is_within_directory(path, member_path):
+                    raise Exception("Attempted Path Traversal in Tar File")
+        
+            tar.extractall(path, members, numeric_owner=numeric_owner) 
+            
+        
+        safe_extract(tar, path=PATHS.get_workspace_dir_path())
     print("Unpacking done!")
 
 
