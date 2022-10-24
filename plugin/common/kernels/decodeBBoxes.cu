@@ -278,7 +278,7 @@ __launch_bounds__(nthds_per_cta)
         else
         {
             // Unknown code type.
-            assert("Unknown Box decode code type");
+            assert(!"Unknown Box decode code type");
         }
         // Clip bounding box or not
         if (clip_bbox)
