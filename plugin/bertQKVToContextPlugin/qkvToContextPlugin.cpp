@@ -234,13 +234,13 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
         if (inMask->dims.d[1] != -1 && inMask->dims.d[1] != packedSize)
         {
             gLogError << "CustomEmbLayerNormPluginDynamic returned mask with pack size " << inMask->dims.d[1]
-                      << ", but " << QKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
+                      << ", but " << kQKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
                       << std::endl;
             return false;
         }
 
         // detect full mask and check that it was produced
-        return (inMask->type == DataType::kFLOAT) &&     // precision
+        return (inMask->type == DataType::kINT32) &&     // precision
             (inMask->format == TensorFormat::kLINEAR) && // format
             (inMask->dims.nbDims == 2) &&                // Bx2*maskSize
             (inMask->dims.d[0] == in->dims.d[BDIM]);

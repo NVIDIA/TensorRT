@@ -244,7 +244,7 @@ bool EmbLayerNormPluginDynamic::supportsFormatCombination(
             && desc.dims.d[SDIM] == prev.dims.d[SDIM] && desc.dims.d[3] == 1 && desc.dims.d[4] == 1;
     }
     // mask
-    return desc.type == DataType::kFLOAT;
+    return desc.type == DataType::kINT32;
 }
 
 void EmbLayerNormPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
@@ -298,7 +298,7 @@ void EmbLayerNormPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* i
     PLUGIN_ASSERT(inputs[1].desc.type == DataType::kINT32);
     PLUGIN_ASSERT(inputs[2].desc.type == DataType::kINT32);
     PLUGIN_ASSERT(outputs[0].desc.type == mType);
-    PLUGIN_ASSERT(outputs[1].desc.type == DataType::kFLOAT);
+    PLUGIN_ASSERT(outputs[1].desc.type == DataType::kINT32);
 }
 
 size_t EmbLayerNormPluginDynamic::getWorkspaceSize(
@@ -403,7 +403,7 @@ DataType EmbLayerNormPluginDynamic::getOutputDataType(
         PLUGIN_ASSERT(mType == DataType::kHALF || mType == DataType::kFLOAT);
         return mType;
     }
-    return DataType::kFLOAT;
+    return DataType::kINT32;
 }
 
 // IPluginV2 Methods
