@@ -16,7 +16,7 @@
  */
 
 #include "common/bboxUtils.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "cublas_v2.h"
 #include "cuda.h"
 #include <cub/cub.cuh>

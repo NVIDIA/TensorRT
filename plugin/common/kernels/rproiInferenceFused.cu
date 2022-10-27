@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 pluginStatus_t RPROIInferenceFused(cudaStream_t stream, const int N, const int A, const int C, const int H, const int W,

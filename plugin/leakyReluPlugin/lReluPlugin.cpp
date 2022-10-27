@@ -16,7 +16,7 @@
  */
 #include "lReluPlugin.h"
 #include "common/checkMacrosPlugin.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 
 using namespace nvinfer1;
 using nvinfer1::plugin::LReluPluginCreator;

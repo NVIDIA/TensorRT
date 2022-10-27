@@ -19,7 +19,7 @@
 #define _PILLAR_SCATTER_H_
 
 #include "NvInferPlugin.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include <cuda_runtime_api.h>
 #include <string>
 #include <vector>

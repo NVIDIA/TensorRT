@@ -17,7 +17,7 @@
 #ifndef TRT_NV_PLUGIN_FASTER_RCNN_H
 #define TRT_NV_PLUGIN_FASTER_RCNN_H
 
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "common/plugin.h"
 #include "cudnn.h"
 #include <vector>

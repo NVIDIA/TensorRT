@@ -16,7 +16,7 @@
  */
 #ifndef TRT_SCATTER_PLUGIN_H
 #define TRT_SCATTER_PLUGIN_H
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "common/plugin.h"
 #include "cudnn.h"
 #include <cublas_v2.h>

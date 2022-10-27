@@ -16,7 +16,7 @@
  */
 #ifndef TRT_REGION_PLUGIN_H
 #define TRT_REGION_PLUGIN_H
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "common/plugin.h"
 #include <iostream>
 #include <memory>

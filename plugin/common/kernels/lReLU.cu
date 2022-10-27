@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 
 template <unsigned nthdsPerCTA>
 __launch_bounds__(nthdsPerCTA) __global__

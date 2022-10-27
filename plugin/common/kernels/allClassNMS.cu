@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 #include "common/bboxUtils.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "cuda_fp16.h"
 #include <array>
 using namespace nvinfer1;

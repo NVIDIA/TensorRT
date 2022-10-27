@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 #include "NvInferPluginUtils.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "reducedMathPlugin.h"
 #include <iostream>
 

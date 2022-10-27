@@ -19,7 +19,7 @@
 #define PROPOSAL_PLUGIN_H
 
 #include "NvInferPlugin.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "common/plugin.h"
 #include <string>
 #include <vector>

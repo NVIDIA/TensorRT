@@ -16,7 +16,7 @@
  */
 #include "NvInfer.h"
 #include "common/bboxUtils.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 

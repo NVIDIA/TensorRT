@@ -109,19 +109,19 @@ void logError(const char* msg, const char* file, const char* fn, int line)
 void reportValidationFailure(char const* msg, char const* file, int line)
 {
     std::ostringstream stream;
-    stream << "Validation failed: " << msg << std::endl
-           << file << ':' << line << std::endl;
-    getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
+    stream << "Validation failed: " << msg << "\n" << file << ':' << line << "\n";
+    gLogError << stream.str().c_str() << std::endl;
 }
 
 // break-pointable
 void reportAssertion(const char* msg, const char* file, int line)
 {
     std::ostringstream stream;
-    stream << "Assertion failed: " << msg << std::endl
-           << file << ':' << line << std::endl
-           << "Aborting..." << std::endl;
-    getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
+    stream << "Assertion failed: " << msg << "\n"
+           << file << ':' << line << "\n"
+           << "Aborting..."
+           << "\n";
+    gLogError << stream.str().c_str() << std::endl;
     PLUGIN_CUASSERT(cudaDeviceReset());
     abort();
 }
