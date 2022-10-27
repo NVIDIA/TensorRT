@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "common/plugin.h"
 #include "cuda_fp16.h"
 #include <array>

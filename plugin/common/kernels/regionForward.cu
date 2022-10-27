@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 
 template <unsigned nthdsPerCTA>
 __launch_bounds__(nthdsPerCTA) __global__ void softmaxKernel(const float* input, const int n, const int batch,

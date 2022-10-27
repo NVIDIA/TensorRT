@@ -16,7 +16,7 @@
  */
 #include "common/bboxUtils.h"
 #include "common/cub_helper.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "cub/cub.cuh"
 #include <array>
 

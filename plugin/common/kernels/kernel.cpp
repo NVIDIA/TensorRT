@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "common/plugin.h"
 using namespace nvinfer1;
-size_t detectionInferenceWorkspaceSize(bool shareLocation, int N, int C1, int C2, int numClasses, int numPredsPerClass,
-    int topK, DataType DT_BBOX, DataType DT_SCORE)
+size_t detectionInferenceWorkspaceSize(bool shareLocation, int32_t N, int32_t C1, int32_t C2, int32_t numClasses,
+    int32_t numPredsPerClass, int32_t topK, DataType DT_BBOX, DataType DT_SCORE)
 {
     size_t wss[7];
     wss[0] = detectionForwardBBoxDataSize(N, C1, DT_BBOX);
@@ -37,8 +37,8 @@ namespace nvinfer1
 {
 namespace plugin
 {
-size_t detectionInferenceWorkspaceSize(bool shareLocation, int N, int C1, int C2, int numClasses, int numPredsPerClass,
-    int topK, DataType DT_BBOX, DataType DT_SCORE)
+size_t detectionInferenceWorkspaceSize(bool shareLocation, int32_t N, int32_t C1, int32_t C2, int32_t numClasses,
+    int32_t numPredsPerClass, int32_t topK, DataType DT_BBOX, DataType DT_SCORE)
 {
     size_t wss[7];
     wss[0] = detectionForwardBBoxDataSize(N, C1, DT_BBOX);

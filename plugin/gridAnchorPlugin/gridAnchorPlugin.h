@@ -17,7 +17,7 @@
 
 #ifndef TRT_GRID_ANCHOR_PLUGIN_H
 #define TRT_GRID_ANCHOR_PLUGIN_H
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "common/plugin.h"
 #include "cudnn.h"
 #include <cublas_v2.h>
