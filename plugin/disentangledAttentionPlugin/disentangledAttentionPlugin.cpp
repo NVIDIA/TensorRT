@@ -239,25 +239,12 @@ bool DisentangledAttentionPlugin::supportsFormatCombination(
     bool const consistentFloatPrecision
         = (inOut[pos].type == inOut[0].type); // all inputs & outputs should have the same precision type
 
-    // 3 inputs, 1 output
-    switch (pos)
-    {
-    case 0: 
-        return (inOut[pos].type == nvinfer1::DataType::kINT8 || inOut[pos].type == nvinfer1::DataType::kHALF || inOut[pos].type == nvinfer1::DataType::kFLOAT) && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR && consistentFloatPrecision; // linear means row-major ordering
-    case 1:
-        return (inOut[pos].type == nvinfer1::DataType::kINT8 || inOut[pos].type == nvinfer1::DataType::kHALF || inOut[pos].type == nvinfer1::DataType::kFLOAT) && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 2:
-        return (inOut[pos].type == nvinfer1::DataType::kINT8 || inOut[pos].type == nvinfer1::DataType::kHALF || inOut[pos].type == nvinfer1::DataType::kFLOAT) && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR && consistentFloatPrecision;
-    case 3:
-        return (inOut[pos].type == nvinfer1::DataType::kINT8 || inOut[pos].type == nvinfer1::DataType::kHALF || inOut[pos].type == nvinfer1::DataType::kFLOAT) && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR && consistentFloatPrecision;
-    }
-    // types: kFLOAT, kHALF, kINT32, kINT8
-    return false;
+    return (inOut[pos].type == nvinfer1::DataType::kINT8 || inOut[pos].type == nvinfer1::DataType::kHALF
+               || inOut[pos].type == nvinfer1::DataType::kFLOAT)
+        && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR && consistentFloatPrecision;
 }
 
-void DisentangledAttentionPlugin::terminate() noexcept
-{
-}
+void DisentangledAttentionPlugin::terminate() noexcept {}
 
 void DisentangledAttentionPlugin::destroy() noexcept
 {

@@ -214,15 +214,9 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
                 out_dim.d[1] = numOutputBoxes;
                 out_dim.d[2] = exprBuilder.constant(4);
             }
-            // detection_scores
-            else if (outputIndex == 2)
-            {
-                out_dim.nbDims = 2;
-                out_dim.d[0] = inputs[0].d[0];
-                out_dim.d[1] = numOutputBoxes;
-            }
-            // detection_classes
-            else if (outputIndex == 3)
+            // detection_scores: outputIndex == 2
+            // detection_classes: outputIndex == 3
+            else if (outputIndex == 2 || outputIndex == 3)
             {
                 out_dim.nbDims = 2;
                 out_dim.d[0] = inputs[0].d[0];

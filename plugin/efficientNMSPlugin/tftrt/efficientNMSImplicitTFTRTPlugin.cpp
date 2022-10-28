@@ -135,14 +135,9 @@ Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(int outputIndex, const
             out_dim.d[0] = mParam.numOutputBoxes;
             out_dim.d[1] = 4;
         }
-        // detection_scores
-        else if (outputIndex == 2)
-        {
-            out_dim.nbDims = 1;
-            out_dim.d[0] = mParam.numOutputBoxes;
-        }
-        // detection_classes
-        else if (outputIndex == 3)
+        // detection_scores: outputIndex == 2
+        // detection_classes: outputIndex == 3
+        else if (outputIndex == 2 || outputIndex == 3)
         {
             out_dim.nbDims = 1;
             out_dim.d[0] = mParam.numOutputBoxes;

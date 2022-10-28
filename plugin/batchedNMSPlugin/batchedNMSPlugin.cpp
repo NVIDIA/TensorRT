@@ -224,13 +224,7 @@ DimsExprs BatchedNMSDynamicPlugin::getOutputDimensions(
             out_dim.d[1] = exprBuilder.constant(param.keepTopK);
             out_dim.d[2] = exprBuilder.constant(4);
         }
-        // nmsed_scores
-        else if (outputIndex == 2)
-        {
-            out_dim.nbDims = 2;
-            out_dim.d[0] = inputs[0].d[0];
-            out_dim.d[1] = exprBuilder.constant(param.keepTopK);
-        }
+        // nmsed_scores, outputIndex == 2
         // nmsed_classes
         else
         {
