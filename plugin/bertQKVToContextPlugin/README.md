@@ -68,6 +68,9 @@ documentation.
 
 ## Changelog
 
+October 2022
+Add IGMMA/HGMMA sm90 fmha_v2 kernels
+
 August 2022
 Expose `use_int8_scale_max` plugin attribute (for versions 2 and 3 of the plugin). This allows users to enable/disable the usage of INT8 scale factors to optimize softmax MAX reduction.
 This optimization is applied always when `type_id==2` by default.
