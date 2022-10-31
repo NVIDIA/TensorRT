@@ -61,11 +61,9 @@ int EfficientNMSPlugin::getNbOutputs() const noexcept
         // ONNX NonMaxSuppression Compatibility
         return 1;
     }
-    else
-    {
-        // Standard Plugin Implementation
-        return 4;
-    }
+
+    // Standard Plugin Implementation
+    return 4;
 }
 
 int EfficientNMSPlugin::initialize() noexcept
@@ -135,16 +133,14 @@ nvinfer1::DataType EfficientNMSPlugin::getOutputDataType(
         // ONNX NMS uses an integer output
         return nvinfer1::DataType::kINT32;
     }
-    else
+
+    // On standard NMS, num_detections and detection_classes use integer outputs
+    if (index == 0 || index == 3)
     {
-        // On standard NMS, num_detections and detection_classes use integer outputs
-        if (index == 0 || index == 3)
-        {
-            return nvinfer1::DataType::kINT32;
-        }
-        // All others should use the same datatype as the input
-        return inputTypes[0];
+        return nvinfer1::DataType::kINT32;
     }
+    // All others should use the same datatype as the input
+    return inputTypes[0];
 }
 
 IPluginV2DynamicExt* EfficientNMSPlugin::clone() const noexcept
@@ -256,14 +252,13 @@ bool EfficientNMSPlugin::supportsFormatCombination(
         return (inOut[pos].type == DataType::kHALF || inOut[pos].type == DataType::kFLOAT)
             && (inOut[0].type == inOut[pos].type);
     }
-    else
+
+    PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
+    PLUGIN_ASSERT(nbOutputs == 4);
+    if (nbInputs == 2)
     {
-        PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
-        PLUGIN_ASSERT(nbOutputs == 4);
-        if (nbInputs == 2)
-        {
-            PLUGIN_ASSERT(0 <= pos && pos <= 5);
-        }
+        PLUGIN_ASSERT(0 <= pos && pos <= 5);
+    }
         if (nbInputs == 3)
         {
             PLUGIN_ASSERT(0 <= pos && pos <= 6);
@@ -279,7 +274,6 @@ bool EfficientNMSPlugin::supportsFormatCombination(
         // all other inputs/outputs: fp32 or fp16
         return (inOut[pos].type == DataType::kHALF || inOut[pos].type == DataType::kFLOAT)
             && (inOut[0].type == inOut[pos].type);
-    }
 }
 
 void EfficientNMSPlugin::configurePlugin(
@@ -387,21 +381,19 @@ int EfficientNMSPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginT
             return EfficientNMSInference(mParam, boxesInput, scoresInput, nullptr, nullptr, nullptr, nullptr, nullptr,
                 nmsIndicesOutput, workspace, stream);
         }
-        else
-        {
-            // Standard NMS Operation
-            const void* const boxesInput = inputs[0];
-            const void* const scoresInput = inputs[1];
-            const void* const anchorsInput = mParam.boxDecoder ? inputs[2] : nullptr;
 
-            void* numDetectionsOutput = outputs[0];
-            void* nmsBoxesOutput = outputs[1];
-            void* nmsScoresOutput = outputs[2];
-            void* nmsClassesOutput = outputs[3];
+        // Standard NMS Operation
+        void const* const boxesInput = inputs[0];
+        void const* const scoresInput = inputs[1];
+        void const* const anchorsInput = mParam.boxDecoder ? inputs[2] : nullptr;
 
-            return EfficientNMSInference(mParam, boxesInput, scoresInput, anchorsInput, numDetectionsOutput,
-                nmsBoxesOutput, nmsScoresOutput, nmsClassesOutput, nullptr, workspace, stream);
-        }
+        void* numDetectionsOutput = outputs[0];
+        void* nmsBoxesOutput = outputs[1];
+        void* nmsScoresOutput = outputs[2];
+        void* nmsClassesOutput = outputs[3];
+
+        return EfficientNMSInference(mParam, boxesInput, scoresInput, anchorsInput, numDetectionsOutput, nmsBoxesOutput,
+            nmsScoresOutput, nmsClassesOutput, nullptr, workspace, stream);
     }
     catch (const std::exception& e)
     {

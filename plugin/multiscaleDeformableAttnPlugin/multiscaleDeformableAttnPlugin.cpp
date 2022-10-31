@@ -80,16 +80,10 @@ bool MultiscaleDeformableAttnPlugin::supportsFormatCombination(
         {
             return (inOut[pos].type == nvinfer1::DataType::kINT32);
         }
-        else
-        {
-            return ((inOut[pos].type == inOut[0].type) &&
-                  ((inOut[pos].type == nvinfer1::DataType::kFLOAT) || (inOut[pos].type == nvinfer1::DataType::kHALF)));
-        }
+        return ((inOut[pos].type == inOut[0].type)
+            && ((inOut[pos].type == nvinfer1::DataType::kFLOAT) || (inOut[pos].type == nvinfer1::DataType::kHALF)));
     }
-    else
-    {
-        return false;
-    }
+    return false;
 }
 
 void MultiscaleDeformableAttnPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* inputs, int32_t nbInputs,

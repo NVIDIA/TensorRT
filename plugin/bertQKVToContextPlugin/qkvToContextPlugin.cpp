@@ -234,7 +234,7 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
         if (inMask->dims.d[1] != -1 && inMask->dims.d[1] != packedSize)
         {
             gLogError << "CustomEmbLayerNormPluginDynamic returned mask with pack size " << inMask->dims.d[1]
-                      << ", but " << kQKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
+                      << ", but " << QKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
                       << std::endl;
             return false;
         }

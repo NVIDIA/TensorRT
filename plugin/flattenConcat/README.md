@@ -149,7 +149,7 @@ The following parameters were used to create `FlattenConcat` instance:
 
 | Type             | Parameter                      | Description
 |------------------|--------------------------------|--------------------------------------------------------
-|`int`             |`concatAxis`                    |The dimension along which to concatenate. Currently only `concatAxis = 1` is supported.
+|`int`             |`axis`                          |The dimension along which to concatenate. Currently only `axis = 1` is supported.
 |`bool`            |`ignoreBatch`                   |Whether to ignore batch or not. Currently only `ignoreBatch = false` is supported.
 
 

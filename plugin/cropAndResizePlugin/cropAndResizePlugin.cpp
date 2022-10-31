@@ -275,10 +275,8 @@ bool CropAndResizePlugin::supportsFormat(DataType type, PluginFormat format) con
     {
         return true;
     }
-    else
-    {
-        return false;
-    }
+
+    return false;
 }
 
 bool CropAndResizeDynamicPlugin::supportsFormatCombination(
