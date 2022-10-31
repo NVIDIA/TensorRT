@@ -412,10 +412,8 @@ bool ProposalPlugin::supportsFormat(DataType type, PluginFormat format) const no
     {
         return true;
     }
-    else
-    {
-        return false;
-    }
+
+    return false;
 }
 
 bool ProposalDynamicPlugin::supportsFormatCombination(

@@ -144,48 +144,26 @@ int PillarScatterPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
 
         int status = -1;
 
-        if(inputType == nvinfer1::DataType::kHALF){
-            auto pillar_features_data = static_cast<const half *>(inputs[0]);
-            auto spatial_feature_data = static_cast<half *>(outputs[0]);
-            cudaMemsetAsync(spatial_feature_data, 0, batchSize*numFeatures*featureY*featureX * sizeof(half), stream);
-            status = pillarScatterKernelLaunch<half>(
-                batchSize,
-                maxPillarNum,
-                numFeatures,
-                pillar_features_data,
-                coords_data,
-                params_data,
-                featureX,
-                featureY,
-                spatial_feature_data,
-                stream
-                );
-            PLUGIN_ASSERT(status == STATUS_SUCCESS);
-            return status;
+        if (inputType == nvinfer1::DataType::kHALF)
+        {
+            auto pillar_features_data = static_cast<const half*>(inputs[0]);
+            auto spatial_feature_data = static_cast<half*>(outputs[0]);
+            cudaMemsetAsync(
+                spatial_feature_data, 0, batchSize * numFeatures * featureY * featureX * sizeof(half), stream);
+            status = pillarScatterKernelLaunch<half>(batchSize, maxPillarNum, numFeatures, pillar_features_data,
+                coords_data, params_data, featureX, featureY, spatial_feature_data, stream);
         }
-        else if(inputType == nvinfer1::DataType::kFLOAT){
-            auto pillar_features_data = static_cast<const float *>(inputs[0]);
-            auto spatial_feature_data = static_cast<float *>(outputs[0]);
-            cudaMemsetAsync(spatial_feature_data, 0, batchSize*numFeatures*featureY*featureX * sizeof(float), stream);
-            status = pillarScatterKernelLaunch<float>(
-                batchSize,
-                maxPillarNum,
-                numFeatures,
-                pillar_features_data,
-                coords_data,
-                params_data,
-                featureX,
-                featureY,
-                spatial_feature_data,
-                stream
-                );
-            PLUGIN_ASSERT(status == STATUS_SUCCESS);
-            return status;
+        else if (inputType == nvinfer1::DataType::kFLOAT)
+        {
+            auto const* pillar_features_data = static_cast<float const*>(inputs[0]);
+            auto* spatial_feature_data = static_cast<float*>(outputs[0]);
+            cudaMemsetAsync(
+                spatial_feature_data, 0, batchSize * numFeatures * featureY * featureX * sizeof(float), stream);
+            status = pillarScatterKernelLaunch<float>(batchSize, maxPillarNum, numFeatures, pillar_features_data,
+                coords_data, params_data, featureX, featureY, spatial_feature_data, stream);
         }
-        else{
-            PLUGIN_ASSERT(status == STATUS_SUCCESS);
-            return status;
-        }
+        PLUGIN_ASSERT(status == STATUS_SUCCESS);
+        return status;
     }
     catch (const std::exception& e)
     {

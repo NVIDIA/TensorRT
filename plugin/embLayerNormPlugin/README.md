@@ -50,7 +50,7 @@ The final output embedding is the sum of embeddings for the token, the segment a
 
 
 `maskIdx`
-embedded_input is an `int32` tensor with shape `[B,]` where `B` is batch size.
+embedded_input is an `int32` tensor with shape `[B, packSize]` where `B` is batch size, `packSize` is the packed mask size that depends on the sequence length.
 The maskIdx is a more compact representation of the input mask, consisting of the number of valid elements, assuming that the original mask was contiguous.
 
 
@@ -88,10 +88,10 @@ documentation.
 
 ## Changelog
 
-October 2020  
+October 2020
 Add V2 plugin that supports variable sequence length.
 
-November 2019  
+November 2019
 This is the first release of this `README.md` file.
 
 

@@ -46,8 +46,7 @@ versions:
         max: "=pinf, =pinf"
     attribute_options:
       out_dims:
-        min: "=1"
-        max: "=pinf"
+        from_shape: "W_1"
       type_id:
         - 0
         - 1

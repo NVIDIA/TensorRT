@@ -159,10 +159,8 @@ Dims RPROIPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInput
         return Dims3(1, params.nmsMaxOut, 4);
     }
     // Feature map of each ROI after ROI Pooling
-    else // pool5
-    {
-        return Dims4(params.nmsMaxOut, inputs[2].d[0], params.poolingH, params.poolingW);
-    }
+    // pool5
+    return Dims4(params.nmsMaxOut, inputs[2].d[0], params.poolingH, params.poolingW);
 }
 
 size_t RPROIPlugin::getWorkspaceSize(int maxBatchSize) const noexcept
