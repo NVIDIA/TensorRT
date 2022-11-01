@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=11.6.2
+ARG CUDA_VERSION=11.8.0
 ARG OS_VERSION=7
 
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-centos${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 8.4.3.1
+ENV TRT_VERSION 8.5.1.7
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account

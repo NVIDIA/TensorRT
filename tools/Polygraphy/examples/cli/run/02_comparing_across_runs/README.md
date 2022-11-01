@@ -67,6 +67,6 @@ and ONNX modles (if they have matching outputs).
 ## Further Reading
 
 For details on how to access and work with the saved outputs
-using the Python API, refer to [API example 08](../../../api/08_working_with_run_results_manually/).
+using the Python API, refer to [API example 08](../../../api/08_working_with_run_results_and_saved_inputs_manually/).
 
 For information on comparing against custom outputs, refer to [`run` example 06](../06_comparing_with_custom_output_data/).

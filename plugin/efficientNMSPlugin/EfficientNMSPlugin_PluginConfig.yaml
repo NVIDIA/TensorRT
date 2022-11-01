@@ -43,4 +43,11 @@ versions:
       box_coding:
        - 0
        - 1
+    attributes_required:
+      - score_threshold
+      - iou_threshold
+      - max_output_boxes
+      - background_class
+      - score_activation
+      - box_coding
 ...

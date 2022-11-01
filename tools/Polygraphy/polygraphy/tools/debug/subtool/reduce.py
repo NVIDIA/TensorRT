@@ -126,7 +126,7 @@ class BisectMarker(MarkerBase):
         return abs(self.good - self.bad) <= 1
 
     def remaining(self):
-        return int(math.log2(self.num_nodes) - self.iteration)
+        return int(math.ceil(math.log2(self.num_nodes)) - self.iteration)
 
 
 class Reduce(Tool):
@@ -154,7 +154,7 @@ class Reduce(Tool):
 
     NOTE: When your model includes dynamic input shapes, it is generally a good idea to tell `debug reduce` what
         shapes to use with the `--model-input-shapes` argument. Further, if your model uses shape operations,
-        you should freeze the input shapes and then fold the shape operations with:
+        you should freeze the input shapes and then fold the shape operations prior to running `debug reduce`:
             `polygraphy surgeon sanitize --fold-constants --override-input-shapes <static_input_shapes>`
 
     The typical usage of `debug reduce` is:
@@ -168,7 +168,7 @@ class Reduce(Tool):
     def __init__(self):
         super().__init__("reduce")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [
             CheckCmdArgs(),
             ArtifactSortArgs(allow_no_artifacts_warning=False),
@@ -180,7 +180,7 @@ class Reduce(Tool):
             DataLoaderArgs(),  # For fallback shape inference
         ]
 
-    def add_parser_args(self, parser):
+    def add_parser_args_impl(self, parser):
         parser.add_argument(
             "--min-good",
             "--minimal-good",
@@ -216,7 +216,10 @@ class Reduce(Tool):
             default="bisect",
         )
 
-    def run(self, args):
+    def show_start_end_logging_impl(self, args):
+        return True
+
+    def run_impl(self, args):
         if not self.arg_groups[OnnxSaveArgs].path and not args.min_good:
             G_LOGGER.critical(
                 "--output (where to write the reduced model) and/or "

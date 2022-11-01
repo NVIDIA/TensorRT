@@ -1,5 +1,36 @@
 # TensorRT OSS Release Changelog
 
+## [8.5.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1) - 2022-11-01
+
+TensorRT OSS release corresponding to TensorRT 8.5.1.7 GA release.
+- Updates since [TensorRT 8.4.1 GA release](https://github.com/NVIDIA/TensorRT/releases/tag/8.4.1).
+- Please refer to the [TensorRT 8.5.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1) for more information.
+
+Key Features and Updates:
+
+- Samples enhancements
+  - Added [sampleNamedDimensions](samples/sampleNamedDimensions) which works with named dimensions.
+  - Updated `sampleINT8API` and `introductory_parser_samples` to use `ONNX` models over `Caffe`/`UFF`
+  - Removed UFF/Caffe samples including `sampleMNIST`, `end_to_end_tensorflow_mnist`, `sampleINT8`, `sampleMNISTAPI`, `sampleUffMNIST`, `sampleUffPluginV2Ext`, `engine_refit_mnist`, `int8_caffe_mnist`, `uff_custom_plugin`, `sampleFasterRCNN`, `sampleUffFasterRCNN`, `sampleGoogleNet`, `sampleSSD`, `sampleUffSSD`, `sampleUffMaskRCNN` and `uff_ssd`.
+
+- Plugin enhancements
+  - Added [GridAnchorRectPlugin](plugin/gridAnchorPlugin) to support rectangular feature maps in gridAnchorPlugin.
+  - Added [ROIAlignPlugin](plugin/roiAlignPlugin) to support the ONNX operator [RoiAlign](https://github.com/onnx/onnx/blob/main/docs/Operators.md#RoiAlign). The ONNX parser will automatically route ROIAlign ops through the plugin.
+  - Added Hopper support for the [BERTQKVToContextPlugin](plugin/bertQKVToContextPlugin) plugin.
+  - Exposed the **use_int8_scale_max** attribute in the [BERTQKVToContextPlugin](plugin/bertQKVToContextPlugin) plugin to allow users to disable the by-default usage of INT8 scale factors to optimize softmax MAX reduction in versions 2 and 3 of the plugin.
+
+- ONNX-TensorRT changes
+  - Added support for operator [Reciprocal](https://github.com/onnx/onnx/blob/main/docs/Operators.md#Reciprocal).
+
+- Build containers
+  - Updated default cuda versions to `11.8.0`.
+
+- Tooling enhancements
+  - Updated [onnx-graphsurgeon](tools/onnx-graphsurgeon) to v0.3.25.
+  - Updated [Polygraphy](tools/Polygraphy) to v0.43.1.
+  - Updated [polygraphy-extension-trtexec](tool/polygraphy-extension-trtexec) to v0.0.8.
+  - Updated [Tensorflow Quantization Toolkit](tools/tensorflow-quantization) to v0.2.0.
+
 ## [22.08](https://github.com/NVIDIA/TensorRT/releases/tag/22.08) - 2022-08-16
 
 Updated TensorRT version to 8.4.2 - see the [TensorRT 8.4.2 release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-2) for more information

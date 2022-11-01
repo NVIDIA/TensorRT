@@ -16,6 +16,7 @@
 #
 
 import os
+from textwrap import dedent
 
 import pytest
 import tensorrt as trt
@@ -45,6 +46,42 @@ class TestTrtLoadNetworkArgs:
         with builder, network:
             assert network.num_outputs == 1
             assert network.get_output(0).name == "identity_out_0"
+
+    @pytest.mark.parametrize("func_name", ["postprocess", "custom_func"])
+    def test_postprocess_network(self, func_name):
+        arg_group = ArgGroupTestHelper(
+            TrtLoadNetworkArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False), TrtLoadPluginsArgs()]
+        )
+        script = dedent(
+            f"""
+            def {func_name}(network):
+                for layer in network:
+                    print(layer.name)
+                network.get_output(0).name = "modified_output"
+            """
+        )
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
+            f.write(script)
+            f.flush()
+            os.fsync(f.fileno())
+
+            if func_name == "postprocess":
+                pps_arg = f"{f.name}"
+            else:
+                pps_arg = f"{f.name}:{func_name}"
+
+            arg_group.parse_args(
+                [
+                    ONNX_MODELS["identity_identity"].path,
+                    "--trt-network-postprocess-script",
+                    pps_arg
+                ]
+            )
+
+            builder, network, _ = arg_group.load_network()
+            with builder, network:
+                assert network.num_outputs == 1
+                assert network.get_output(0).name == "modified_output"
 
     def test_set_layer_precisions(self):
         arg_group = ArgGroupTestHelper(

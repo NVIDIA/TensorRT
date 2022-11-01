@@ -16,7 +16,7 @@
  */
 
 #include "generateDetectionPlugin.h"
-#include "plugin.h"
+#include "common/plugin.h"
 #include <algorithm>
 #include <cuda_runtime_api.h>
 
@@ -69,34 +69,36 @@ IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(const char* name, con
     try
     {
         auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
-        const PluginField* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        PluginField const* fields = fc->fields;
+        plugin::validateRequiredAttributesExist({"num_classes", "keep_topk", "score_threshold", "iou_threshold"}, fc);
+
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "num_classes"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mNbClasses = *(static_cast<const int*>(fields[i].data));
+                mNbClasses = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "keep_topk"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mKeepTopK = *(static_cast<const int*>(fields[i].data));
+                mKeepTopK = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "score_threshold"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mScoreThreshold = *(static_cast<const float*>(fields[i].data));
+                mScoreThreshold = *(static_cast<float const*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mIOUThreshold = *(static_cast<const float*>(fields[i].data));
+                mIOUThreshold = *(static_cast<float const*>(fields[i].data));
             }
             if (!strcmp(attrName, "image_size"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                const auto dims = static_cast<const int32_t*>(fields[i].data);
+                const auto dims = static_cast<int32_t const*>(fields[i].data);
                 std::copy_n(dims, 3, image_size.d);
             }
         }

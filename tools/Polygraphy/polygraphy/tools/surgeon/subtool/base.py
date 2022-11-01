@@ -47,7 +47,7 @@ class BaseSurgeonSubtool(Tool):
     def run_impl(self, args):
         raise NotImplementedError("Subclasses must implement run_impl!")
 
-    def run(self, args):
+    def run_impl(self, args):
         def set_onnx_gs_logging_level(severity_trie):
             import os
 

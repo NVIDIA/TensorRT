@@ -14,8 +14,10 @@
 
 Some object detection neural networks such as Faster R-CNN and SSD use region proposal networks that require anchor boxes to generate predicted bounding boxes. This plugin is included in TensorRT and used in [sampleUffSSD](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#uffssd_sample) to run SSD.
   
-The `gridAnchorPlugin` generates anchor boxes (prior boxes) from the feature map in object detection models such as SSD. It generates anchor box coordinates `[x_min, y_min, x_max, y_max]` with variances (scaling factors) `[var_0, var_1, var_2, var_3]` for the downstream bounding box decoding steps. It uses a series of CUDA kernels in the `priorBoxLayer.cu` file to accelerate the process in TensorRT.
+The `gridAnchorPlugin` generates anchor boxes (prior boxes) from the feature map in object detection models such as SSD. It generates anchor box coordinates `[x_min, y_min, x_max, y_max]` with variances (scaling factors) `[var_0, var_1, var_2, var_3]` for the downstream bounding box decoding steps. It uses a series of CUDA kernels in the `gridAnchorLayer.cu` file to accelerate the process in TensorRT.
 
+If the feature maps are square, then the `GridAnchor_TRT` plugin should be used. If the feature maps
+are rectangular but non-square, then the `GridAnchorRect_TRT` plugin should be used.
 
 ### Structure
 
@@ -28,9 +30,10 @@ Each output has shape of `[2, H x W x mNumPriors x 4, 1]`. The first dimension h
 
 ## Parameters
 
-This plugin consists of the plugin creator class `GridAnchorPluginCreator` and the plugin class `GridAnchorGenerator`.
+The `GridAnchor_TRT` plugin consists of the plugin creator class `GridAnchorPluginCreator` and the plugin class `GridAnchorGenerator`.
+The `GridAnchorRect_TRT` plugin consists of the plugin creator class `GridAnchorRectPluginCreator` and the plugin class `GridAnchorGenerator`.
 
-`GridAnchorPluginCreator` creates instances of the `GridAnchorGenerator` and takes the following parameters as user input:
+`GridAnchorPluginCreator` and `GridAnchorPluginCreator` both take the following parameters as user input:
 | Type     | Parameter                | Description
 |----------|--------------------------|--------------------------------------------------------
 |`float`   |`minSize`                 |Scale of anchors corresponding to finest resolution with respect to the height of input image. It corresponds to the `s_min` of the SSD paper. Default value is `0.2F`.
@@ -61,12 +64,12 @@ minSize=0.2,
 maxSize=0.95,
 aspectRatios=[1.0, 2.0, 0.5, 3.0, 0.33],
 variance=[0.1, 0.1, 0.2, 0.2],
-featureMapShapes=[19, 19, 10, 10, 5, 5, 3, 3, 2, 2, 1, 1]
+featureMapShapes=[19, 10, 5, 3, 2, 1]
 ```
  
 The `GridAnchorGenerator` uses distinct `GridAnchorParameters` for each feature map to generate anchor boxes, therefore, it takes an array of `GridAnchorParameters` with a length of the number of feature maps (`mNumLayers`) to create the plugin. In the above example, we have 6 layers, the plugin needs an array of 6 `GridAnchorParameters` to create the plugin. In this particular example, all the `GridAnchorParameters` except for the first one in the array are the same according to the SSD model settings. After the plugin is created, each feature map, except for the first feature map, will have 5 + 1 anchor boxes, where 5 is the number of elements in `aspectRatios` and 1 is an additional default anchor box with an aspect ratio of 1.0. The first layer, as described in the [SSD: Single Shot MultiBox Detector paper](https://arxiv.org/pdf/1512.02325.pdf), has fewer number of anchor boxes. In our case, it was set to 3, in our code, `int numFirstLayerARs = 3`, and there will be no additional default anchor box of aspect ratio 1.0. The feature map shapes also supports rectangular inputs. The height and width of the feature maps are put in order in the list above.
-  
-**Note:** The above settings are slightly different to the original published SSD paper. In our code, we also assume the feature map shape is square.
+
+**Note:** The above settings are slightly different to the original published SSD paper.
 
 ## Additional resources
 

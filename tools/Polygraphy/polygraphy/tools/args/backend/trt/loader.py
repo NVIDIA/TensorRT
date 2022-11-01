@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import os
+
 from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
@@ -143,6 +145,18 @@ class TrtLoadNetworkArgs(BaseArgs):
             default="load_network",
         )
 
+        self.group.add_argument(
+            "--trt-network-postprocess-script","--trt-npps",
+            help="[EXPERIMENTAL] Specify a post-processing script to run on the parsed TensorRT network. The script file may "
+                 "optionally be suffixed with the name of the callable to be invoked.  For example: "
+                 "`--trt-npps process.py:do_something`. If no callable is specified, then by default "
+                 "Polygraphy uses the callable name `postprocess`. "
+                 "The callable is expected to take a named argument `network` of type `trt.INetworkDefinition`. "
+                 "Multiple scripts may be specified, in which case they are executed in the order given.",
+            nargs="+",
+            default=None
+        )
+
     def parse_impl(self, args):
         """
         Parses command-line arguments and populates the following attributes:
@@ -186,6 +200,18 @@ class TrtLoadNetworkArgs(BaseArgs):
                 for name, values in tensor_formats.items()
             }
 
+        pps = args_util.parse_tuple_list_with_default(args_util.get(args, "trt_network_postprocess_script"), treat_missing_sep_as_val=False)
+        if not pps:
+            pps = []
+
+        self.postprocess_scripts = []
+        for script_path, func in pps:
+            if not func:
+                func = "postprocess"
+            if not os.path.isfile(script_path):
+                G_LOGGER.warning(f"Could not find postprocessing script {script_path}")
+            self.postprocess_scripts.append((script_path, func))
+
     def add_to_script_impl(self, script):
         model_file = self.arg_groups[ModelArgs].path
         model_type = self.arg_groups[ModelArgs].model_type
@@ -219,12 +245,19 @@ class TrtLoadNetworkArgs(BaseArgs):
         else:
             G_LOGGER.internal_error("Loading from ONNX is not enabled and a network script was not provided!")
 
-        def add_loader_if_nondefault(loader, name, **kwargs):
+        def add_loader_if_nondefault(loader, result_var_name, **kwargs):
             loader_str = make_invocable_if_nondefault_kwargs(loader, loader_name, **kwargs)
             if loader_str is not None:
                 script.add_import(imports=[loader], frm="polygraphy.backend.trt")
-                return script.add_loader(loader_str, name)
+                return script.add_loader(loader_str, result_var_name)
             return loader_name
+
+        for i, (script_path, func_name) in enumerate(self.postprocess_scripts):
+            script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
+            pps = make_invocable("InvokeFromScript", script_path, name=func_name)
+            loader_name = add_loader_if_nondefault(
+                "PostprocessNetwork", f"postprocess_step_{i}", func=pps, name=f"{script_path}:{func_name}"
+            )
 
         loader_name = add_loader_if_nondefault(
             "ModifyNetworkOutputs", "set_network_outputs", outputs=outputs, exclude_outputs=self.exclude_outputs

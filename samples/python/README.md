@@ -33,9 +33,6 @@ name, the path, URL and checksum of the data files that are required by the samp
 To use the downloaded data files, integrate the code segment like below into
 the sample code, and obtain the path to the data file by passing the `path`
 as specified in the associated `download.yml` file of the sample.
-For example, to obtain path to the downloaded VOC dataset file of sample
-[uff_ssd](uff_ssd), use `getFilePath('samples/python/uff_ssd/VOCtest_06-Nov-2007.tar')`.
-The following example illustrates how to access the downloaded data in sample [uff_ssd](uff_ssd).
 
 ```py
 TRT_DATA_DIR = None

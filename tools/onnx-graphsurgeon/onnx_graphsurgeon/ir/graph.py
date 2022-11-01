@@ -16,6 +16,7 @@
 #
 
 import copy
+import numbers
 from collections import OrderedDict, defaultdict
 from typing import Sequence
 
@@ -477,6 +478,7 @@ class Graph(object):
         error_ok=True,
         flatten_subgraphs=True,
         size_threshold=None,
+        should_exclude_node=None,
     ):
         """
         Folds constants in-place in the graph. The graph must be topologically sorted prior to
@@ -524,11 +526,18 @@ class Graph(object):
                     the model size, it may be desirable to skip folding them and allow them to be computed
                     at runtime.
                     Defaults to None.
+            should_exclude_node (Callable[[gs.Node], bool]):
+                    A callable that accepts an onnx-graphsurgeon node from the graph and reports whether it should
+                    be excluded from folding. This is only called for nodes which are otherwise foldable.
+                    Note that preventing a node from being folded also prevents its consumers from being folded.
+                    Defaults to a callable that always returns False.
 
         Returns:
             self
         """
         from onnx_graphsurgeon.exporters.onnx_exporter import dtype_to_onnx, export_onnx
+
+        should_exclude_node = misc.default_value(should_exclude_node, lambda node: False)
 
         PARTITIONING_MODES = [None, "basic", "recursive"]
         if partitioning not in PARTITIONING_MODES:
@@ -654,6 +663,10 @@ class Graph(object):
 
         def update_foldable_outputs(graph_constants):
             def is_foldable(node):
+                NO_FOLD_OPS = ["QuantizeLinear", "DequantizeLinear", "DynamicQuantizeLinear"]
+                if node.op in NO_FOLD_OPS:
+                    return False
+
                 def all_tensors_const(tensors):
                     return all([t.name in graph_constants for t in tensors])
 
@@ -665,7 +678,8 @@ class Graph(object):
                     if isinstance(attr, Graph):
                         foreign_tensors = attr._foreign_tensors().values()
                         all_subgraph_foreign_tensors_const &= all_tensors_const(foreign_tensors)
-                return all_subgraph_foreign_tensors_const
+
+                return all_subgraph_foreign_tensors_const and not should_exclude_node(node)
 
             # Walks along the outputs of graph_constants to see if they can also be computed statically.
             # Since the graph is topologically sorted, this should find all constant nodes in the graph.
@@ -1053,8 +1067,11 @@ class Graph(object):
                     new_io.append(tensor)
                 elif isinstance(elem, np.ndarray):
                     new_io.append(Constant(name=self._generate_name("onnx_graphsurgeon_constant"), values=elem))
-                elif isinstance(elem, list) or isinstance(elem, tuple):
-                    dtype = np.float32 if any([isinstance(x, float) for x in elem]) else np.int64
+                elif isinstance(elem, list) or isinstance(elem, tuple) or isinstance(elem, numbers.Number):
+                    if isinstance(elem, list) or isinstance(elem, tuple):
+                        dtype = np.float32 if any([isinstance(x, float) for x in elem]) else np.int64
+                    else:
+                        dtype = np.float32 if isinstance(elem, float) else np.int64
                     arr = np.array(elem, dtype=dtype)
                     new_io.append(Constant(name=self._generate_name("onnx_graphsurgeon_lst_constant"), values=arr))
                 else:

@@ -128,7 +128,7 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
             (
                 CreateConfig(
                     memory_pool_limits={trt.MemoryPoolType.WORKSPACE: 16 << 20},
-                    preview_features=[trt.PreviewFeature.FASTER_DYNAMIC_SHAPES],
+                    preview_features=[trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
                 ),
                 """
                 Flags                  | []
@@ -136,7 +136,7 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                Preview Features       | [FASTER_DYNAMIC_SHAPES]
+                Preview Features       | [FASTER_DYNAMIC_SHAPES_0805]
                 """,
             ),
         ]

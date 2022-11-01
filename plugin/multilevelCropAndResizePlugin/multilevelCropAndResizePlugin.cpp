@@ -16,7 +16,7 @@
  */
 
 #include "multilevelCropAndResizePlugin.h"
-#include "plugin.h"
+#include "common/plugin.h"
 #include <algorithm>
 #include <cuda_runtime_api.h>
 
@@ -66,20 +66,22 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
 {
     try
     {
+        plugin::validateRequiredAttributesExist({"pooled_size"}, fc);
+
         auto imageSize = TLTMaskRCNNConfig::IMAGE_SHAPE;
         const PluginField* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "pooled_size"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mPooledSize = *(static_cast<const int*>(fields[i].data));
+                mPooledSize = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "image_size"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                const auto dims = static_cast<const int32_t*>(fields[i].data);
+                auto const dims = static_cast<int32_t const*>(fields[i].data);
                 std::copy_n(dims, 3, imageSize.d);
             }
         }

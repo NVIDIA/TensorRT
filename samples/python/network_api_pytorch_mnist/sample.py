@@ -21,7 +21,15 @@ import sys
 # This sample uses an MNIST PyTorch model to create a TensorRT Inference Engine
 import model
 import numpy as np
-import pycuda.autoinit
+
+# Use autoprimaryctx if available (pycuda >= 2021.1) to
+# prevent issues with other modules that rely on the primary
+# device context.
+try:
+    import pycuda.autoprimaryctx
+except ModuleNotFoundError:
+    import pycuda.autoinit
+
 import tensorrt as trt
 
 sys.path.insert(1, os.path.join(sys.path[0], ".."))

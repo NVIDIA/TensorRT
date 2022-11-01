@@ -37,4 +37,9 @@ versions:
       image_size:
         min: "0, 0, 0"
         max: "=pinf, =pinf, =pinf"
+    attributes_required:
+      - num_classes
+      - keep_topk
+      - score_threshold
+      - iou_threshold
 ...

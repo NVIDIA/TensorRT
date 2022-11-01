@@ -359,8 +359,8 @@ class TestTrtConfigArgs:
     )
     def test_preview_features(self, trt_config_args):
         # Flag should be case-insensitive
-        trt_config_args.parse_args(["--preview-features", "faster_DYnaMiC_Shapes"])
+        trt_config_args.parse_args(["--preview-features", "FASter_DYNAMIC_ShAPeS_0805"])
         builder, network = create_network()
 
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
-            assert config.get_preview_feature(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES)
+            assert config.get_preview_feature(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805)

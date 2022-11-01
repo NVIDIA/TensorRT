@@ -217,7 +217,11 @@ class CreateConfig(BaseLoader):
             if self.max_workspace_size is not None:
                 config.max_workspace_size = int(self.max_workspace_size)
 
-            layer_with_precisions = {layer.name: layer.precision.name for layer in network if layer.precision_is_set}
+            layer_with_precisions = {
+                layer.name: layer.precision.name
+                for layer in network
+                if layer.precision_is_set and not layer.type == trt.LayerType.SHAPE
+            }
             if self.precision_constraints == "obey":
                 try_set_flag("OBEY_PRECISION_CONSTRAINTS")
             elif self.precision_constraints == "prefer":

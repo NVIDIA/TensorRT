@@ -46,7 +46,7 @@
 #include "cuda_runtime_api.h"
 #include "logger.h"
 #include "sampleEngines.h"
-
+using namespace nvinfer1;
 using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_char_rnn";
@@ -282,6 +282,8 @@ private:
 //!
 bool SampleCharRNNBase::build()
 {
+    mWeightMap = SampleCharRNNBase::loadWeights(mParams.weightFileName);
+
     if (mParams.loadEngine.empty())
     {
         auto builder
@@ -307,8 +309,6 @@ bool SampleCharRNNBase::build()
         {
             return false;
         }
-
-        mWeightMap = SampleCharRNNBase::loadWeights(mParams.weightFileName);
 
         config->setFlag(BuilderFlag::kGPU_FALLBACK);
 

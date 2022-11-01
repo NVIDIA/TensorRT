@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 #include "common/kernel.h"
-
+using namespace nvinfer1;
 template <typename T>
 pluginStatus_t extractFgScores_gpu(cudaStream_t stream, int N, int A, int H, int W, const void* scores, void* fgScores)
 {

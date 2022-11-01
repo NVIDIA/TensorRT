@@ -40,6 +40,7 @@ size_t size(nvinfer1::DataType type)
     case nvinfer1::DataType::kINT8: return 1;
     case nvinfer1::DataType::kINT32: return 4;
     case nvinfer1::DataType::kBOOL: return 1;
+    case nvinfer1::DataType::kUINT8: return 1;
     }
     return -1;
 }
@@ -54,6 +55,7 @@ py::dtype nptype(nvinfer1::DataType type)
     case nvinfer1::DataType::kINT8: return py::dtype("i1");
     case nvinfer1::DataType::kINT32: return py::dtype("i4");
     case nvinfer1::DataType::kBOOL: return py::dtype("b1");
+    case nvinfer1::DataType::kUINT8: return py::dtype("u1");
     }
     return py::dtype("unknown");
 }
@@ -80,10 +82,14 @@ nvinfer1::DataType type(py::dtype const& type)
     {
         return nvinfer1::DataType::kBOOL;
     }
+    else if (type.is(py::dtype("u1")))
+    {
+        return nvinfer1::DataType::kUINT8;
+    }
     int32_t constexpr kBITS_PER_BYTE{8};
     std::stringstream ss{};
-    ss << "[TRT] [E] Could not implicitly convert NumPy data type: " << type.kind() << (type.itemsize() * kBITS_PER_BYTE)
-       << " to TensorRT.";
+    ss << "[TRT] [E] Could not implicitly convert NumPy data type: " << type.kind()
+       << (type.itemsize() * kBITS_PER_BYTE) << " to TensorRT.";
     std::cerr << ss.str() << std::endl;
     PY_ASSERT_VALUE_ERROR(false, ss.str());
     return nvinfer1::DataType::kFLOAT;

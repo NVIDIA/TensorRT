@@ -23,12 +23,13 @@
 #include <math.h>
 #include <stdio.h>
 
+using namespace nvinfer1;
 // This macro is to control shared memory usage. If set to 1, kernel loads the whole feature map
-// into shared memory for reuse; If set to 0, kernel loads data from global memory directly. 
+// into shared memory for reuse; If set to 0, kernel loads data from global memory directly.
 // Roi pooling performance is data dependent. You can test which value is better to your data.
-// If all bboxes are very small, 0 is recommended, otherwise, shared memory will load many unused 
+// If all bboxes are very small, 0 is recommended, otherwise, shared memory will load many unused
 // data; If bboxes have many overlaps, 1 is recommended to avoid duplicate loads.
-// 1 requires larger shared memory size. It may fail if it is larger than CUDA allowed per-block 
+// 1 requires larger shared memory size. It may fail if it is larger than CUDA allowed per-block
 // shared memory size upper bound. Then you have to use 0.
 #define ROIPOOLING_FEATURE_MAP_USE_SHMEM 1
 
@@ -253,18 +254,15 @@ struct roiFwdLaunchConfig
     bool inferOnly;
     roiFwd function;
 
-    roiFwdLaunchConfig(DataType t_rois,
-                       DataType t_featureMap,
-                       DLayout_t l_featureMap,
-                       DataType t_top,
-                       DLayout_t l_top,
-                       bool inferOnly)
+    roiFwdLaunchConfig(
+        DataType t_rois, DataType t_featureMap, DLayout_t l_featureMap, DataType t_top, DLayout_t l_top, bool inferOnly)
         : t_rois(t_rois)
         , t_featureMap(t_featureMap)
         , l_featureMap(l_featureMap)
         , t_top(t_top)
         , l_top(l_top)
         , inferOnly(inferOnly)
+        , function(nullptr)
     {
     }
 

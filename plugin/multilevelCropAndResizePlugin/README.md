@@ -34,7 +34,7 @@ The following parameters were used to create `MultilevelCropAndResize` instance:
 | Type             | Parameter                       | Description
 |------------------|---------------------------------|--------------------------------------------------------
 |`int`             |`pooled_size`                    | The spatial size of a feature area after ROIAlgin will be `[pooled_size, pooled_size]`  
-|`int[3]`             |`image_size`                    | The dimensions of the input image as CHW 
+|`int[3]`          |`image_size`                     | The size of the input image in CHW. Defaults to [3, 832, 1344]
 
 ## Additional resources
 

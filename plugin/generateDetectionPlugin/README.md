@@ -41,6 +41,7 @@ The following parameters were used to create `generateDetection` instance:
 |`int`               |`keep_topk`                         |Number of detections will be kept after NMS.  
 |`float`             |`score_threshold`                   |Confidence threshold value. This plugin will drop a detection if its class confidence(score) is under "score_threshold". 
 |`float`             |`iou_threshold`                     |IOU threshold value used in NMS.
+|`int[3]`            |`image_size`                        |Input image size in CHW. Defaults to [3,832,1344]
 
 ## Limitations
 

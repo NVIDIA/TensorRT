@@ -52,7 +52,7 @@ The parameters are defined below and consists of the following attributes:
 |`bool`    |`has_mask`                               |  1, 2                             |Whether to use the input_mask input.
 |`float`   |`dq_probs`                               |  1, 2, 3                          |inner layer scale factor when run in int8 precision, default 1.f/127.f.
 |`int`     |`var_seqlen`                             |  2                                |Whether to use variable sequence length (0: disable, 1: enable), default 0.
-
+|`int`     |`use_int8_scale_max`                     |  2, 3                             |Whether to use INT8 scale factors to optimize softmax MAX reduction. Only active when `type_id==2`. (0: disable, 1: enable), default 1.
 
 ## Additional resources
 
@@ -67,6 +67,10 @@ documentation.
 
 
 ## Changelog
+
+August 2022
+Expose `use_int8_scale_max` plugin attribute (for versions 2 and 3 of the plugin). This allows users to enable/disable the usage of INT8 scale factors to optimize softmax MAX reduction.
+This optimization is applied always when `type_id==2` by default.
 
 September 2021
 Add sequence length 512 support in v2 plugin

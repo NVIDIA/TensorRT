@@ -16,6 +16,7 @@
 #
 import argparse
 import copy
+from textwrap import dedent
 
 from polygraphy import constants, mod
 from polygraphy.exception import PolygraphyException
@@ -50,7 +51,7 @@ from polygraphy.tools.args import (
     TrtSaveEngineArgs,
 )
 from polygraphy.tools.base import Tool
-from polygraphy.tools.script import Script, inline, safe
+from polygraphy.tools.script import Script, safe
 
 try:
     # No need to lazy import since this is part of the standard library
@@ -108,7 +109,7 @@ class Run(Tool):
     def __init__(self):
         super().__init__("run")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         deps = [
             RunnerSelectArgs(),
             ModelArgs(guess_model_type_from_runners=True),
@@ -148,11 +149,17 @@ class Run(Tool):
                 f"Could not load extension modules since `importlib.metadata` and `importlib_metadata` are missing."
             )
         else:
-            plugins = entry_points.get(PLUGIN_ENTRY_POINT, [])
+            if isinstance(entry_points, dict):
+                # For compatibility with older versions of importlib_metadata
+                plugins = entry_points.get(PLUGIN_ENTRY_POINT, [])
+            else:
+                entry_points = entry_points.select(group=PLUGIN_ENTRY_POINT)
+                plugins = [entry_points[name] for name in entry_points.names]
+
             for plugin in plugins:
                 try:
-                    get_arg_groups = plugin.load()
-                    plugin_arg_groups = get_arg_groups()
+                    get_arg_groups_func = plugin.load()
+                    plugin_arg_groups = get_arg_groups_func()
                 except Exception as err:
                     G_LOGGER.warning(f"Failed to load plugin: {plugin.name}.\nNote: Error was:\n{err}")
                 else:
@@ -160,7 +167,7 @@ class Run(Tool):
                     self.loaded_plugins.append(plugin.name)
         return deps
 
-    def add_parser_args(self, parser):
+    def add_parser_args_impl(self, parser):
         parser.add_argument(
             "--gen",
             "--gen-script",
@@ -171,7 +178,11 @@ class Run(Tool):
             dest="gen_script",
         )
 
-    def run(self, args):
+    def show_start_end_logging_impl(self, args):
+        # No need to print start/end messages when we're just creating a script
+        return not args.gen_script
+
+    def run_impl(self, args):
         G_LOGGER.verbose(f"Loaded extension modules: {self.loaded_plugins}")
 
         if self.arg_groups[ModelArgs].path is None and self.arg_groups[RunnerSelectArgs].runners:
@@ -183,7 +194,7 @@ class Run(Tool):
         script = Script(
             summary=generate_summary(
                 self.arg_groups[ModelArgs].path,
-                self.arg_groups[RunnerSelectArgs].runners.values(),
+                list(self.arg_groups[RunnerSelectArgs].runners.values()),
                 self.arg_groups[ComparatorCompareArgs].load_outputs_paths,
             )
         )
@@ -195,17 +206,14 @@ class Run(Tool):
         RESULTS_VAR_NAME = self.arg_groups[ComparatorRunArgs].add_to_script(script)
         SUCCESS_VAR_NAME = self.arg_groups[ComparatorCompareArgs].add_to_script(script, results_name=RESULTS_VAR_NAME)
 
-        script.add_import(imports=["sys"])
-
-        cmd_run = inline(safe("' '.join(sys.argv)"))
+        script.add_import(imports=["PolygraphyException"], frm="polygraphy.exception")
         exit_status = safe(
-            "# Report Results\n"
-            "cmd_run = {cmd}\n"
-            "if not {success}:\n"
-            f"{constants.TAB}"
-            'G_LOGGER.critical(f"FAILED | Command: {{cmd_run}}")\n'
-            'G_LOGGER.finish(f"PASSED | Command: {{cmd_run}}")\n',
-            cmd=cmd_run,
+            dedent(
+                f"""
+                # Report Results
+                if not {{success}}:
+                {constants.TAB}raise PolygraphyException('FAILED')"""
+            ),
             success=SUCCESS_VAR_NAME,
         )
         script.append_suffix(exit_status)

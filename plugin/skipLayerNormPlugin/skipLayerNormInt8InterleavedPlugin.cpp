@@ -450,6 +450,8 @@ const PluginFieldCollection* SkipLayerNormInterleavedPluginBaseCreator::getField
 
 void buildBetaAndGamma(const PluginFieldCollection* fc, Weights& beta, Weights& gamma)
 {
+    plugin::validateRequiredAttributesExist({"beta", "gamma"}, fc);
+
     for (int32_t i = 0; i < fc->nbFields; i++)
     {
         std::string field_name(fc->fields[i].name);

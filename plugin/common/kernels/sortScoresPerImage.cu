@@ -20,6 +20,7 @@
 #include "cub/cub.cuh"
 #include <array>
 
+using namespace nvinfer1;
 template <typename T_SCORE>
 pluginStatus_t sortScoresPerImage_gpu(cudaStream_t stream, const int num_images, const int num_items_per_image,
     void* unsorted_scores, void* unsorted_bbox_indices, void* sorted_scores, void* sorted_bbox_indices, void* workspace,

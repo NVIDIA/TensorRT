@@ -69,6 +69,7 @@ class OnnxInferShapesArgs(BaseArgs):
         else:
             shape_infer_group.add_argument(
                 "--shape-inference",
+                "--do-shape-inference",
                 help="Enable ONNX shape inference when loading the model",
                 dest="do_shape_inference",
                 action="store_true",
@@ -397,8 +398,8 @@ class OnnxLoadArgs(BaseArgs):
     Depends on:
 
         - ModelArgs
-        - OnnxSaveArgs: if allow_saving == True
         - OnnxInferShapesArgs: if allow_shape_inference == True
+        - OnnxSaveArgs: if allow_saving == True
         - OnnxFromTfArgs: if allow_from_tf == True
     """
 
@@ -535,7 +536,7 @@ class OnnxLoadArgs(BaseArgs):
 
             loader_name = self.arg_groups[OnnxFromTfArgs].add_to_script(script)
         else:
-            G_LOGGER.critical(f"Model type: {model_type} is not supported.")
+            G_LOGGER.critical(f"Model type: {model_type} could not be converted to an ONNX model.")
 
         loader_name = self._add_modify_onnx_outputs(script, loader_name, disable_custom_outputs=disable_custom_outputs)
 

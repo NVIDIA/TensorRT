@@ -40,6 +40,9 @@ from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers.configuration_utils import PretrainedConfig
 from transformers.generation_utils import GenerationMixin
 
+# tensorrt
+from tensorrt import PreviewFeature
+
 # TRT-HuggingFace
 from NNDF.interface import TRTInferenceCommand
 from NNDF.networks import (
@@ -191,12 +194,12 @@ class GPT2Polygraphy(TRTInferenceCommand):
             input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE, (batch_size, input_seq_len))
 
         # get single decoder iteration inference timing profile
-        _, decoder_e2e_median_time = gpt2_inference(
+        _, decoder_e2e_time = gpt2_inference(
             self.gpt2_trt, input_ids, timing_profile,
         )
 
         # get complete decoder inference result and its timing profile
-        sample_output, full_e2e_median_runtime = full_inference_greedy(
+        sample_output, full_e2e_runtime = full_inference_greedy(
             self.gpt2_trt,
             input_ids,
             timing_profile,
@@ -206,14 +209,14 @@ class GPT2Polygraphy(TRTInferenceCommand):
         )
 
         # Prepare runtime results.
-        median_runtime = [
+        runtime = [
             NetworkRuntime(
                 name=GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
-                runtime=decoder_e2e_median_time,
+                runtime=decoder_e2e_time,
             ),
             NetworkRuntime(
                 name=GPT2ModelTRTConfig.NETWORK_FULL_NAME,
-                runtime=full_e2e_median_runtime,
+                runtime=full_e2e_runtime,
             ),
         ]
         models = NetworkModels(
@@ -229,7 +232,7 @@ class GPT2Polygraphy(TRTInferenceCommand):
 
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
-            return BenchmarkingResult(median_runtime=median_runtime, models=models)
+            return BenchmarkingResult(median_runtime=runtime, models=models)
 
         # Remove the padding and end tokens.
         semantic_outputs = tokenizer.decode(
@@ -243,7 +246,7 @@ class GPT2Polygraphy(TRTInferenceCommand):
             input=inference_input,
             output_tensor=sample_output,
             semantic_output=semantic_outputs,
-            median_runtime=median_runtime,
+            median_runtime=runtime,
             models=models,
         )
 
@@ -260,6 +263,7 @@ class GPT2Polygraphy(TRTInferenceCommand):
         batch_size: int = 1,
         args: object = None,
         benchmarking_mode: bool = False,
+        preview_dynamic_shapes: bool = False,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
 
         workspace = NNFolderWorkspace(
@@ -306,9 +310,15 @@ class GPT2Polygraphy(TRTInferenceCommand):
             else:
                 engine_tag = "bs{}-inseq{}-outseq{}".format(batch_size, args.input_seq_len, args.output_seq_len)
 
+            preview_features = []
+            if preview_dynamic_shapes:
+                preview_features = [PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
+                engine_tag += "-previewFasterDynamicShapes"
+
             self.gpt2_engine = GPT2ONNXFile(gpt2_onnx_fpath, metadata).as_trt_engine(
                 gpt2_onnx_fpath + engine_tag + ".engine",
                 profiles=profiles,
+                preview_features=preview_features
             )
             tfm_config = GPT2Config(
                 use_cache=metadata.other.kv_cache,
@@ -334,6 +344,8 @@ class GPT2Polygraphy(TRTInferenceCommand):
         return results
 
     def add_args(self, parser) -> None:
+        super().add_args(parser)
+
         # use the same args as frameworks.py
         self.frameworks_cmd.add_args(parser)
         polygraphy_group = parser.add_argument_group("polygraphy")

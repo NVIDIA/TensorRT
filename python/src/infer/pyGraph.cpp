@@ -124,6 +124,11 @@ namespace tensorrt
             return self.addFullyConnected(input, numOutputs, kernel, optionalWeights(bias));
         };
 
+        IGridSampleLayer* add_grid_sample(INetworkDefinition& self, ITensor& input, ITensor& grid)
+        {
+            return self.addGridSample(input, grid);
+        };
+
         static const auto add_scale = [](INetworkDefinition& self, ITensor& input, ScaleMode mode, Weights* shift, Weights* scale, Weights* power)
         {
             return self.addScale(input, mode, optionalWeights(shift), optionalWeights(scale), optionalWeights(power));
@@ -223,6 +228,8 @@ namespace tensorrt
         py::enum_<LayerType>(m, "LayerType", LayerTypeDoc::descr)
             .value("CONVOLUTION", LayerType::kCONVOLUTION, LayerTypeDoc::CONVOLUTION)
             .value("FULLY_CONNECTED", LayerType::kFULLY_CONNECTED, LayerTypeDoc::FULLY_CONNECTED)
+            .value("GRID_SAMPLE", LayerType::kGRID_SAMPLE, LayerTypeDoc::GRID_SAMPLE)
+            .value("NMS", LayerType::kNMS, LayerTypeDoc::NMS)
             .value("ACTIVATION", LayerType::kACTIVATION, LayerTypeDoc::ACTIVATION)
             .value("POOLING", LayerType::kPOOLING, LayerTypeDoc::POOLING)
             .value("LRN", LayerType::kLRN, LayerTypeDoc::LRN)
@@ -262,6 +269,8 @@ namespace tensorrt
             .value("CONDITIONAL_OUTPUT", LayerType::kCONDITIONAL_OUTPUT, LayerTypeDoc::CONDITIONAL_OUTPUT)
             .value("SCATTER", LayerType::kSCATTER, LayerTypeDoc::SCATTER)
             .value("EINSUM", LayerType::kEINSUM, LayerTypeDoc::EINSUM)
+            .value("ONE_HOT", LayerType::kONE_HOT, LayerTypeDoc::ONE_HOT)
+            .value("NON_ZERO", LayerType::kNON_ZERO, LayerTypeDoc::NON_ZERO)
         ; // LayerType
 
         // Bind to a Python enum called TensorLocation.
@@ -301,6 +310,8 @@ namespace tensorrt
             .def_property("allowed_formats", &ITensor::getAllowedFormats, &ITensor::setAllowedFormats)
             .def("set_dynamic_range", &ITensor::setDynamicRange, "min"_a, "max"_a, ITensorDoc::set_dynamic_range)
             .def("reset_dynamic_range", &ITensor::resetDynamicRange, ITensorDoc::reset_dynamic_range)
+            .def("set_dimension_name", &ITensor::setDimensionName, "index"_a, "name"_a, ITensorDoc::set_dimension_name)
+            .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
         ;
 
         py::class_<ILayer, std::unique_ptr<ILayer, py::nodelete>>(m, "ILayer", ILayerDoc::descr)
@@ -627,12 +638,19 @@ namespace tensorrt
             .def("set_input", &ISliceLayer::setInput, "index"_a, "tensor"_a, ISliceLayerDoc::set_input)
         ;
 
-        py::enum_<SliceMode>(m, "SliceMode", SliceModeDoc::descr)
-            .value("DEFAULT", SliceMode::kDEFAULT, SliceModeDoc::DEFAULT)
-            .value("WRAP", SliceMode::kWRAP, SliceModeDoc::WRAP)
-            .value("CLAMP", SliceMode::kCLAMP, SliceModeDoc::CLAMP)
-            .value("FILL", SliceMode::kFILL, SliceModeDoc::FILL)
-            .value("REFLECT", SliceMode::kREFLECT, SliceModeDoc::REFLECT)
+        py::enum_<InterpolationMode>(m, "InterpolationMode", InterpolationModeDoc::descr)
+            .value("NEAREST", InterpolationMode::kNEAREST, InterpolationModeDoc::NEAREST)
+            .value("LINEAR", InterpolationMode::kLINEAR, InterpolationModeDoc::LINEAR)
+            .value("CUBIC", InterpolationMode::kCUBIC, InterpolationModeDoc::CUBIC)
+        ;
+
+        py::enum_<SampleMode>(m, "SampleMode", SampleModeDoc::descr)
+            .value("STRICT_BOUNDS", SampleMode::kSTRICT_BOUNDS, SampleModeDoc::STRICT_BOUNDS)
+            .value("DEFAULT", SampleMode::kDEFAULT, SampleModeDoc::DEFAULT)
+            .value("WRAP", SampleMode::kWRAP, SampleModeDoc::WRAP)
+            .value("CLAMP", SampleMode::kCLAMP, SampleModeDoc::CLAMP)
+            .value("FILL", SampleMode::kFILL, SampleModeDoc::FILL)
+            .value("REFLECT", SampleMode::kREFLECT, SampleModeDoc::REFLECT)
         ;
 
         py::class_<IShapeLayer, ILayer, std::unique_ptr<IShapeLayer, py::nodelete>>(m, "IShapeLayer", IShapeLayerDoc::descr);
@@ -670,12 +688,6 @@ namespace tensorrt
 
         py::class_<IParametricReLULayer, ILayer, std::unique_ptr<IParametricReLULayer, py::nodelete>>(m, "IParametricReLULayer", IParametricReLULayerDoc::descr);
 
-        // Bind to a Python enum called ResizeMode.
-        py::enum_<ResizeMode>(m, "ResizeMode", ResizeModeDoc::descr)
-            .value("NEAREST", ResizeMode::kNEAREST, ResizeModeDoc::NEAREST)
-            .value("LINEAR", ResizeMode::kLINEAR, ResizeModeDoc::LINEAR)
-        ; // ResizeMode
-
         py::enum_<ResizeCoordinateTransformation>(m, "ResizeCoordinateTransformation", ResizeCoordinateTransformationDoc::descr)
             .value("ALIGN_CORNERS", ResizeCoordinateTransformation::kALIGN_CORNERS, ResizeCoordinateTransformationDoc::ALIGN_CORNERS)
             .value("ASYMMETRIC", ResizeCoordinateTransformation::kASYMMETRIC, ResizeCoordinateTransformationDoc::ASYMMETRIC)
@@ -700,7 +712,9 @@ namespace tensorrt
             .def_property("resize_mode", &IResizeLayer::getResizeMode, &IResizeLayer::setResizeMode)
             .def_property("coordinate_transformation", &IResizeLayer::getCoordinateTransformation, &IResizeLayer::setCoordinateTransformation)
             .def_property("selector_for_single_pixel", &IResizeLayer::getSelectorForSinglePixel, &IResizeLayer::setSelectorForSinglePixel)
-            .def_property("nearest_rounding", &IResizeLayer::getNearestRounding, &IResizeLayer::setNearestRounding )
+            .def_property("nearest_rounding", &IResizeLayer::getNearestRounding, &IResizeLayer::setNearestRounding)
+            .def_property("exclude_outside", &IResizeLayer::getExcludeOutside, &IResizeLayer::setExcludeOutside)
+            .def_property("cubic_coeff", &IResizeLayer::getCubicCoeff, &IResizeLayer::setCubicCoeff)
             .def("set_input", &IResizeLayer::setInput, "index"_a, "tensor"_a, IResizeLayerDoc::set_input)
         ;
 
@@ -753,9 +767,27 @@ namespace tensorrt
             .def_property("message", &IAssertionLayer::getMessage, &IAssertionLayer::setMessage);
         ;
 
+        py::class_<IGridSampleLayer, ILayer, std::unique_ptr<IGridSampleLayer, py::nodelete>>(m, "IGridSampleLayer", IGridSampleLayerDoc::descr)
+            .def_property("interpolation_mode", &IGridSampleLayer::getInterpolationMode, &IGridSampleLayer::setInterpolationMode)
+            .def_property("align_corners", &IGridSampleLayer::getAlignCorners, &IGridSampleLayer::setAlignCorners)
+            .def_property("sample_mode", &IGridSampleLayer::getSampleMode, &IGridSampleLayer::setSampleMode)
+        ;
+
+        py::enum_<BoundingBoxFormat>(m, "BoundingBoxFormat", BoundingBoxFormatDoc::descr)
+            .value("CORNER_PAIRS", BoundingBoxFormat::kCORNER_PAIRS, BoundingBoxFormatDoc::CORNER_PAIRS)
+            .value("CENTER_SIZES", BoundingBoxFormat::kCENTER_SIZES, BoundingBoxFormatDoc::CENTER_SIZES)
+        ;
+
+        py::class_<INMSLayer, ILayer, std::unique_ptr<INMSLayer, py::nodelete>>(m, "INMSLayer", INMSLayerDoc::descr)
+            .def_property("bounding_box_format", &INMSLayer::getBoundingBoxFormat, &INMSLayer::setBoundingBoxFormat)
+            .def_property("topk_box_limit", &INMSLayer::getTopKBoxLimit, &INMSLayer::setTopKBoxLimit)
+            .def("set_input", &INMSLayer::setInput, "index"_a, "tensor"_a, INMSLayerDoc::set_input)
+        ;
+
         py::enum_<FillOperation>(m, "FillOperation", FillOperationDoc::descr)
             .value("LINSPACE", FillOperation::kLINSPACE, FillOperationDoc::LINSPACE)
             .value("RANDOM_UNIFORM", FillOperation::kRANDOM_UNIFORM, FillOperationDoc::RANDOM_UNIFORM)
+            .value("RANDOM_NORMAL", FillOperation::kRANDOM_NORMAL, FillOperationDoc::RANDOM_NORMAL)
         ; // FillOperation
 
         py::class_<IFillLayer, ILayer, std::unique_ptr<IFillLayer, py::nodelete>>(m, "IFillLayer", IFillLayerDoc::descr)
@@ -788,6 +820,13 @@ namespace tensorrt
 
         py::class_<IEinsumLayer, ILayer, std::unique_ptr<IEinsumLayer, py::nodelete>>(m, "IEinsumLayer", IEinsumLayerDoc::descr)
             .def_property("equation", &IEinsumLayer::getEquation, &IEinsumLayer::setEquation)
+        ;
+
+        py::class_<IOneHotLayer, ILayer, std::unique_ptr<IOneHotLayer,py::nodelete>>(m, "IOneHotLayer", IOneHotLayerDoc::descr)
+            .def_property("axis", &IOneHotLayer::getAxis, &IOneHotLayer::setAxis)
+        ;
+
+        py::class_<INonZeroLayer, ILayer, std::unique_ptr<INonZeroLayer,py::nodelete>>(m, "INonZeroLayer", INonZeroLayerDoc::descr)
         ;
 
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
@@ -910,7 +949,12 @@ namespace tensorrt
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_assertion", &INetworkDefinition::addAssertion, "condition"_a, "message"_a,
                  INetworkDefinitionDoc::add_assertion, INetworkDefinitionDoc::add_assertion,
-                py::keep_alive<1, 0>{}, py::keep_alive<1, 3>{}, py::return_value_policy::reference_internal)
+                 py::return_value_policy::reference_internal)
+            .def("add_grid_sample", &INetworkDefinition::addGridSample, "input"_a, "grid"_a,
+                  INetworkDefinitionDoc::add_grid_sample, py::return_value_policy::reference_internal)
+            .def("add_nms", &INetworkDefinition::addNMS, "boxes"_a,
+                "scores"_a, "max_output_boxes_per_class"_a, INetworkDefinitionDoc::add_nms,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_fill", &INetworkDefinition::addFill, "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
             .def("add_quantize",  &INetworkDefinition::addQuantize, "input"_a, "scale"_a,
                 INetworkDefinitionDoc::add_quantize,
@@ -921,6 +965,11 @@ namespace tensorrt
             .def("add_if_conditional", &INetworkDefinition::addIfConditional, INetworkDefinitionDoc::add_if_conditional,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_einsum", lambdas::add_einsum, "inputs"_a, "equation"_a, INetworkDefinitionDoc::add_einsum,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_one_hot", &INetworkDefinition::addOneHot, "indices"_a, "values"_a, "depth"_a, "axis"_a,
+                INetworkDefinitionDoc::add_one_hot,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_non_zero", &INetworkDefinition::addNonZero, "input"_a, INetworkDefinitionDoc::add_non_zero,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
@@ -945,5 +994,8 @@ namespace tensorrt
             .def("__del__", &utils::doNothingDel<INetworkDefinition>)
         ;
 
+        //Aliasing deprecated enums
+        m.attr("ResizeMode") = m.attr("InterpolationMode");
+        m.attr("SliceMode") = m.attr("SampleMode");
     }
 } /* tensorrt */

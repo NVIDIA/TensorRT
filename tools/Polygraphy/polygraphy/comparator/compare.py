@@ -342,12 +342,6 @@ class CompareFunc:
                     sup.filter(RuntimeWarning)
                     comp_util.log_output_stats(reldiff, failed, "Relative Difference")
 
-            # Finally show summary.
-            if failed:
-                G_LOGGER.error(f"FAILED | Difference exceeds tolerance (rel={per_out_rtol}, abs={per_out_atol})")
-            else:
-                G_LOGGER.finish(f"PASSED | Difference is within tolerance (rel={per_out_rtol}, abs={per_out_atol})")
-
             G_LOGGER.extra_verbose(
                 f"Finished comparing: '{out0_name}' (dtype={out0.dtype}, shape={out0.shape}) [{runner0_name}] and '{out1_name}' (dtype={out1.dtype}, shape={out1.shape}) [{runner1_name}]"
             )
@@ -399,12 +393,12 @@ class CompareFunc:
                 per_out_rtol = util.value_or_from_dict(rtol, out0_name, default_rtol)
                 per_out_err_stat = util.value_or_from_dict(check_error_stat, out0_name, default_error_stat)
 
-                G_LOGGER.info(
-                    f"Tolerance: [abs={per_out_atol:.5g}, rel={per_out_rtol:.5g}] | Checking {per_out_err_stat} error"
-                )
-                G_LOGGER.extra_verbose(f"Note: Comparing {iter_result0.runner_name} vs. {iter_result1.runner_name}")
-
                 with G_LOGGER.indent():
+                    G_LOGGER.info(
+                        f"Tolerance: [abs={per_out_atol:.5g}, rel={per_out_rtol:.5g}] | Checking {per_out_err_stat} error"
+                    )
+                    G_LOGGER.extra_verbose(f"Note: Comparing {iter_result0.runner_name} vs. {iter_result1.runner_name}")
+
                     if check_shapes and output0.shape != output1.shape:
                         G_LOGGER.error(
                             f"Will not compare outputs of different shapes. Note: Output shapes are {output0.shape} and {output1.shape}."
@@ -414,11 +408,11 @@ class CompareFunc:
                             "attempt to compare values anyway.",
                             mode=LogMode.ONCE,
                         )
-                        match = False
+                        outputs_matched = False
                     else:
                         output1 = util.try_match_shape(output1, output0.shape)
                         output0 = output0.reshape(output1.shape)
-                        match = check_outputs_match(
+                        outputs_matched = check_outputs_match(
                             output0,
                             out0_name,
                             output1,
@@ -429,7 +423,18 @@ class CompareFunc:
                             runner0_name=iter_result0.runner_name,
                             runner1_name=iter_result1.runner_name,
                         )
-                    return match
+
+                    # Finally show summary.
+                    if not outputs_matched:
+                        G_LOGGER.error(
+                            f"FAILED | Output: '{out0_name}' | Difference exceeds tolerance (rel={per_out_rtol}, abs={per_out_atol})"
+                        )
+                    else:
+                        G_LOGGER.finish(
+                            f"PASSED | Output: '{out0_name}' | Difference is within tolerance (rel={per_out_rtol}, abs={per_out_atol})"
+                        )
+
+                return outputs_matched
 
             nonlocal find_output_func
             find_output_func = util.default(

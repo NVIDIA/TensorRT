@@ -48,7 +48,7 @@ def read_graph_file(graph_file: str) -> List:
         if not isinstance(layers, list):
             raise ValueError(err_msg)
         if not isinstance(layers[0], dict):
-            details_msg = "\nMake sure to enable detailed ProfilingVerbosity when building the engine."
+            details_msg = "\nMake sure to enable detailed ProfilingVerbosity."
             details_msg += "\nSee https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#engine-inspector"
             raise ValueError(err_msg + details_msg)
         return layers, bindings

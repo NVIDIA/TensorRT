@@ -1,0 +1,82 @@
+---
+name: ROIAlign_TRT
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    inputs:
+      - X
+      - rois
+      - batch_indices
+    outputs:
+      - Y
+    input_dims:
+      X: 4
+      rois: 2
+      batch_indices: 1
+    input_dim_constraints:
+      - "rois_1 == 4"
+      - "rois_0 == batch_indices_0"
+    output_dims:
+      Y: "X_0, X_1, output_height_0, output_width_0"
+    attributes:
+      - coordinate_transformation_mode
+      - mode
+      - output_height
+      - output_width
+      - sampling_ratio
+      - spatial_scale
+    attribute_types:
+      coordinate_transformation_mode: int32
+      mode: int32
+      output_height: int32
+      output_width: int32
+      sampling_ratio: int32
+      spatial_scale: float32
+    attribute_length:
+      coordinate_transformation_mode: 1
+      mode: 1
+      output_height: 1
+      output_width: 1
+      sampling_ratio: 1
+      spatial_scale: 1
+    attribute_options:
+      coordinate_transformation_mode:
+       - 0
+       - 1
+      mode:
+       - 0
+       - 1
+      output_height:
+        min: "0"
+        max: "=pinf"
+      output_width:
+        min: "0"
+        max: "=pinf"
+      sampling_ratio:
+        min: "=0"
+        max: "=pinf"
+      spatial_scale:
+        min: "0"
+        max: "=pinf"
+    attributes_required: []
+    abs_tol: 1e-4
+    rel_tol: 1e-4
+    golden_io_path: "plugin/roiAlignPlugin/ROIAlign_PluginGoldenIO.json"
+    configs:
+      aligned_false:
+        input_types:
+          X: float32
+          rois: float32
+          batch_indices: int32
+        attribute_options: []
+        output_types:
+          Y: float32
+      aligned_true:
+        input_types:
+          X: float32
+          rois: float32
+          batch_indices: int32
+        attribute_options: []
+        output_types:
+          Y: float32
+...

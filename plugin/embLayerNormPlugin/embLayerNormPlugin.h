@@ -105,6 +105,11 @@ private:
     bool mUseFullMask;
     nvinfer1::DataType mMhaType;
     int32_t mSM;
+
+    using IPluginV2::getOutputDimensions;
+    using IPluginV2::getWorkspaceSize;
+    using IPluginV2::enqueue;
+    using IPluginV2Ext::configurePlugin;
 };
 
 class EmbLayerNormPluginDynamicCreator : public nvinfer1::IPluginCreator

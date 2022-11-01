@@ -20,7 +20,6 @@
 
 #include "common/plugin.h"
 
-using namespace nvinfer1::plugin;
 namespace nvinfer1
 {
 namespace plugin

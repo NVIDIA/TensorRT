@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+using namespace nvinfer1;
 // CUB's bug workaround:
 // To work properly for large batch size CUB segmented sort needs ridiculous
 // workspace alignment.

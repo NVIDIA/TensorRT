@@ -114,7 +114,7 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
             with G_LOGGER.verbosity(G_LOGGER.CRITICAL):  # WAR for spam from TRT
                 is_shape_tensor = inp.is_shape_tensor
             if is_shape_tensor:
-                rank = inp.shape[0]
+                rank = inp.shape[0] if len(inp.shape) > 0 else 1
                 shape = (default_shape_value,) * rank
                 G_LOGGER.warning(
                     f"{trt_util.str_from_tensor(inp, is_shape_tensor)} | No values provided; "

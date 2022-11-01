@@ -147,9 +147,11 @@ struct BuildEnvironment
     {
     }
 
-    std::unique_ptr<INetworkDefinition> network;
-    //! Parser that creates the network. Must be declared *after* network, so that when
-    //! ~BuildEnvironment() executes, the parser is destroyed before the network is destroyed.
+    //! Do NOT adjust the declare sequence here: builder -> network -> parser.
+    //! So that when ~BuildEnvironment() executes, the destroy sequence is: parser -> network -> builder.
+    //! Else we will violates TRT object lifetime requirement in the developer guide.
+    std::unique_ptr<nvinfer1::IBuilder> builder;
+    std::unique_ptr<nvinfer1::INetworkDefinition> network;
     Parser parser;
     LazilyDeserializedEngine engine;
 };
@@ -172,9 +174,9 @@ Parser modelToNetwork(ModelOptions const& model, nvinfer1::INetworkDefinition& n
 //!
 //! \return boolean Return true if network and config were successfully set
 //!
-bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
-    INetworkDefinition& network, IBuilderConfig& config, std::ostream& err,
-    std::vector<std::vector<int8_t>>& sparseWeights);
+bool setupNetworkAndConfig(const BuildOptions& build, const SystemOptions& sys, nvinfer1::IBuilder& builder,
+    nvinfer1::INetworkDefinition& network, nvinfer1::IBuilderConfig& config, std::ostream& err,
+    std::vector<std::vector<char>>& sparseWeights);
 
 //!
 //! \brief Log refittable layers and weights of a refittable engine
@@ -200,13 +202,34 @@ bool saveEngine(nvinfer1::ICudaEngine const& engine, std::string const& fileName
 //!
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
-bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, SystemOptions const& sys, 
+bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, SystemOptions const& sys,
     BuildEnvironment& env, std::ostream& err);
 
 //!
-//! \brief Measure and report refit runtime.
+//! \brief Create a serialized network
 //!
-bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine, bool multiThreading);
+//! \return Pointer to a host memory for a serialized network
+//!
+nvinfer1::IHostMemory* networkToSerialized(const BuildOptions& build, const SystemOptions& sys,
+    nvinfer1::IBuilder& builder, nvinfer1::INetworkDefinition& network, std::ostream& err);
+
+//!
+//! \brief Tranfer model to a serialized network
+//!
+//! \return Pointer to a host memory for a serialized network
+//!
+nvinfer1::IHostMemory* modelToSerialized(
+    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+
+//!
+//! \brief Serialize network and save it into a file
+//!
+//! \return boolean Return true if the network was successfully serialized and saved
+//!
+bool serializeAndSave(
+    const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
+
+bool timeRefit(const nvinfer1::INetworkDefinition& network, nvinfer1::ICudaEngine& engine, bool multiThreading);
 
 //!
 //! \brief Set tensor scales from a calibration table
@@ -233,12 +256,14 @@ bool hasConsistencyChecker();
 //! \brief Create a consistency checker object if the dynamic library is loaded.
 //!
 nvinfer1::consistency::IConsistencyChecker* createConsistencyChecker(
-    nvinfer1::ILogger& logger, IHostMemory const* engine) noexcept;
+    nvinfer1::ILogger& logger, nvinfer1::IHostMemory const* engine) noexcept;
 
 //!
 //! \brief Run consistency check on serialized engine.
 //!
 bool checkSafeEngine(void const* serializedEngine, int32_t const engineSize);
+
+bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, BuildEnvironment& env, std::ostream& err);
 } // namespace sample
 
 #endif // TRT_SAMPLE_ENGINES_H

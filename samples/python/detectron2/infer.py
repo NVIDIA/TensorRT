@@ -20,9 +20,9 @@ import sys
 import argparse
 import numpy as np
 import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit
+from cuda import cuda
 from image_batcher import ImageBatcher
+from build_engine import _cuda_error_check
 from visualize import visualize_detections
 
 
@@ -61,13 +61,14 @@ class TensorRTInfer:
             size = np.dtype(trt.nptype(dtype)).itemsize
             for s in shape:
                 size *= s
-            allocation = cuda.mem_alloc(size)
+            allocation = _cuda_error_check(cuda.cuMemAlloc(size))
             binding = {
                 'index': i,
                 'name': name,
                 'dtype': np.dtype(trt.nptype(dtype)),
                 'shape': list(shape),
                 'allocation': allocation,
+                'size': size
             }
             self.allocations.append(allocation)
             if self.engine.binding_is_input(i):
@@ -112,10 +113,19 @@ class TensorRTInfer:
             outputs.append(np.zeros(shape, dtype))
 
         # Process I/O and execute the network.
-        cuda.memcpy_htod(self.inputs[0]['allocation'], np.ascontiguousarray(batch))
+        _cuda_error_check(
+            cuda.cuMemcpyHtoD(
+                self.inputs[0]['allocation'], 
+                np.ascontiguousarray(batch), 
+                self.inputs[0]['size']))
+
         self.context.execute_v2(self.allocations)
         for o in range(len(outputs)):
-            cuda.memcpy_dtoh(outputs[o], self.outputs[o]['allocation'])
+            _cuda_error_check(
+                cuda.cuMemcpyDtoH(
+                    outputs[o],
+                    self.outputs[o]['allocation'],
+                    self.outputs[o]['size']))
 
         # Process the results.
         nums = outputs[0]

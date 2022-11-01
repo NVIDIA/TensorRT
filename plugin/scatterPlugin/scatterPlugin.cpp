@@ -160,6 +160,7 @@ int32_t ScatterND::enqueue(const PluginTensorDesc* inputDesc, const PluginTensor
         elementSizeInBytes = 2;
         break;
     case DataType::kINT8:
+    case DataType::kUINT8:
     case DataType::kBOOL:
         elementSizeInBytes = 1;
         break;

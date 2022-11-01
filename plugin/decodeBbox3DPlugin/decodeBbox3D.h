@@ -19,8 +19,8 @@
 #define _DECODE_BBOX_3D_H_
 
 #include "NvInferPlugin.h"
-#include "bboxUtils.h"
-#include "kernel.h"
+#include "common/bboxUtils.h"
+#include "common/kernel.h"
 #include <cuda_runtime_api.h>
 #include <string>
 #include <vector>

@@ -28,15 +28,9 @@ class Surgeon(Tool):
     def __init__(self):
         super().__init__("surgeon")
 
-    def add_parser_args(self, parser):
-        subparsers = parser.add_subparsers(title="Surgical Instruments", dest="instrument")
-        subparsers.required = True
-
-        SURGEON_SUBTOOLS = [
+    def get_subtools_impl(self):
+        return "Surgical Instruments", [
             Extract(),
             Sanitize(),
             Insert(),
         ]
-
-        for subtool in SURGEON_SUBTOOLS:
-            subtool.setup_parser(subparsers)

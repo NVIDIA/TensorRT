@@ -20,7 +20,7 @@ import time
 from collections import OrderedDict, defaultdict
 
 import polygraphy
-from polygraphy import constants, util, mod
+from polygraphy import constants, mod, util
 from polygraphy.logger import G_LOGGER
 
 
@@ -431,14 +431,16 @@ class Script:
 
         Args:
             dest (file-like):
-                    A file-like object that defines ``write()``, ``isatty``, and has a ``name`` attribute.
+                    A file-like object that defines ``write()``, ``flush()``, ``isatty``, and has a ``name`` attribute.
         """
-        with dest:
-            dest.write(str(self))
+        path = dest.name
+        # Somehow, piping fools isatty, e.g. `polygraphy run --gen-script - | cat`
+        is_file = not dest.isatty() and path not in ["<stdout>", "<stderr>"]
 
-            path = dest.name
-            # Somehow, piping fools isatty, e.g. `polygraphy run --gen-script - | cat`
-            if not dest.isatty() and path not in ["<stdout>", "<stderr>"]:
-                G_LOGGER.info(f"Writing script to: {path}")
-                # Make file executable
-                os.chmod(path, os.stat(path).st_mode | 0o111)
+        dest.write(str(self))
+        dest.flush()
+
+        if is_file:
+            G_LOGGER.info(f"Writing script to: {path}")
+            # Make file executable
+            os.chmod(path, os.stat(path).st_mode | 0o111)

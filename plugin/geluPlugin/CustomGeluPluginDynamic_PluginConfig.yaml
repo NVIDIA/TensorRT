@@ -1,0 +1,51 @@
+---
+name: CustomGeluPluginDynamic
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    inputs:
+      - input
+    outputs:
+      - output
+    input_dims:
+      input: 5
+    input_dim_constraints:
+      - "input_2 == bias_2"
+    input_dim_range:
+      input:
+        min: "=1, =1, =1, =1, =1"
+        max: "=pinf, =pinf, =pinf, =1, =1"
+    supported_input_types:
+      - combination1:
+          input: float32
+      - combination2:
+          input: float16
+    output_dims:
+      output: “input_0, input_1, input_2, 1, 1”
+    attributes:
+      - type_id
+      - bias
+    attribute_types:
+      type_id: int32
+      bias: float32
+    attribute_dims:
+      type_id: 1
+      bias: 5
+    attribute_dim_range:
+      type_id:
+        min: "=1"
+        max: "=1"
+      bias:
+        min: "=1, =1, =1, =1, =1"
+        max: "=1, =1, =pinf, =1, =1"
+    attribute_options:
+      type_id:
+        - 0
+        - 1
+        - 2
+      bias:
+        min: "=ninf"
+        max: "=pinf"
+    attributes_required:
+      - type_id
+...

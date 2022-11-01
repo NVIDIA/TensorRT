@@ -170,7 +170,12 @@ class TestConvertToFp16:
         model = loader()
 
         assert original_model.graph.input[0].type.tensor_type.elem_type == 1 or not copy
-        assert model.graph.input[0].type.tensor_type.elem_type == 10
+        assert model.graph.input[0].type.tensor_type.elem_type == 1
+        assert model.graph.node[2].op_type == "Cast"
+        assert model.graph.node[0].op_type == "Identity"
+        assert model.graph.node[1].op_type == "Identity"
+        assert model.graph.node[3].op_type == "Cast"
+        assert model.graph.output[0].type.tensor_type.elem_type == 1
 
 
 class TestFoldConstants:

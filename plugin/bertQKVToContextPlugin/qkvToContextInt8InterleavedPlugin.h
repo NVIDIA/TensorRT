@@ -32,12 +32,14 @@ static constexpr int32_t kSM_TURING = 75;
 static constexpr int32_t kSM_AMPERE_100 = 80;
 static constexpr int32_t kSM_AMPERE_10X = 86;
 static constexpr int32_t kSM_AMPERE_10B = 87;
+static constexpr int32_t kSM_ADA_10X = 89;
+static constexpr int32_t kSM_HOPPER_100 = 90;
 
 class QKVToContextInterleavedPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     QKVToContextInterleavedPlugin(
-        const std::string name, const int hiddenSize, const int numHeads, const float dqProbs);
+        std::string const name, int const hiddenSize, int const numHeads, float const dqProbs, bool const useInt8ScaleMax);
 
     QKVToContextInterleavedPlugin(const std::string name, const void* data, size_t length);
 
@@ -92,6 +94,7 @@ private:
     const FusedMultiHeadAttentionXMMAKernelV2* mXmmaKernel;
 
     float mDqProbs;
+    bool mUseInt8ScaleMax{true};
 };
 
 class QKVToContextInterleavedPluginCreator : public nvinfer1::IPluginCreator

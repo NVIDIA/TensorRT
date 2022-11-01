@@ -78,7 +78,7 @@ class Insert(BaseSurgeonSubtool):
     def __init__(self):
         super().__init__("insert")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [
             OnnxNodeArgs(),
             ModelArgs(model_opt_required=True, input_shapes_opt_name=False, required_model_type="onnx"),

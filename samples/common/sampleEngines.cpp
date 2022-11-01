@@ -290,7 +290,7 @@ public:
     RndInt8Calibrator(int32_t batches, std::vector<int64_t>& elemCount, std::string const& cacheFile,
         nvinfer1::INetworkDefinition const& network, std::ostream& err);
 
-    ~RndInt8Calibrator()
+    ~RndInt8Calibrator() override
     {
         for (auto& elem : mInputDeviceBuffers)
         {
@@ -307,7 +307,7 @@ public:
 
     const void* readCalibrationCache(size_t& length) noexcept override;
 
-    virtual void writeCalibrationCache(const void*, size_t) noexcept override {}
+    void writeCalibrationCache(void const*, size_t) noexcept override {}
 
 private:
     int32_t mBatches{};
@@ -470,9 +470,7 @@ void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& laye
                                     << "operates on a shape tensor." << std::endl;
                 continue;
             }
-            if ((layer->getType() == nvinfer1::LayerType::kIDENTITY
-                    || layer->getType() == nvinfer1::LayerType::kSHUFFLE)
-                && layer->getNbInputs() >= 1 && layer->getInput(0)->getType() == nvinfer1::DataType::kINT32
+            if (layer->getNbInputs() >= 1 && layer->getInput(0)->getType() == nvinfer1::DataType::kINT32
                 && layer->getNbOutputs() >= 1 && layer->getOutput(0)->getType() == nvinfer1::DataType::kINT32)
             {
                 hasLayerPrecisionSkipped = true;
@@ -581,6 +579,19 @@ void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
     }
 }
 
+void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
+{
+    auto const setFlag = [&](PreviewFeature feat) {
+        int32_t featVal = static_cast<int32_t>(feat);
+        if (build.previewFeatures.find(featVal) != build.previewFeatures.end())
+        {
+            config.setPreviewFeature(feat, build.previewFeatures.at(featVal));
+        }
+    };
+    setFlag(PreviewFeature::kFASTER_DYNAMIC_SHAPES_0805);
+    setFlag(PreviewFeature::kDISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805);
+}
+
 } // namespace
 
 bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
@@ -642,6 +653,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             case DataType::kINT32:
             case DataType::kBOOL:
             case DataType::kHALF:
+            case DataType::kUINT8:
                 // Leave these as is.
                 break;
             case DataType::kFLOAT:
@@ -733,6 +745,22 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         }
     }
 
+    for (uint32_t i = 0, n = network.getNbOutputs(); i < n; i++)
+    {
+        auto* output = network.getOutput(i);
+        if (profile)
+        {
+            auto const dims = output->getDimensions();
+            // A shape tensor output with known static dimensions may have dynamic shape values inside it.
+            auto const isDynamicOutput = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; })
+                || output->isShapeTensor();
+            if (isDynamicOutput)
+            {
+                hasDynamicShapes = true;
+            }
+        }
+    }
+
     if (!hasDynamicShapes && !build.shapes.empty())
     {
         sample::gLogError << "Static model does not take explicit shapes since the shape of inference tensors will be "
@@ -767,6 +795,13 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     }
 
     setMemoryPoolLimits(config, build);
+
+    setPreviewFeatures(config, build);
+
+    if (build.heuristic)
+    {
+        config.setFlag(BuilderFlag::kENABLE_TACTIC_HEURISTIC);
+    }
 
     if (build.timingCacheMode == TimingCacheMode::kDISABLE)
     {
@@ -845,6 +880,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             try
             {
                 // Set dynamic ranges of int8 inputs / outputs to match scales loaded from calibration cache
+                // TODO http://nvbugs/3262234 Change the network validation so that this workaround can be removed
                 setTensorScalesFromCalibration(network, build.inputFormats, build.outputFormats, build.calibration);
             }
             catch (std::exception&)
@@ -1035,20 +1071,21 @@ bool networkToSerializedEngine(
 //!
 //! \brief Parse a given model, create a network and an engine.
 //!
-bool modelToBuildEnv(
-    const ModelOptions& model, BuildOptions const& build, SystemOptions const& sys, BuildEnvironment& env, std::ostream& err)
+bool modelToBuildEnv(const ModelOptions& model, BuildOptions const& build, SystemOptions const& sys,
+    BuildEnvironment& env, std::ostream& err)
 {
-    std::unique_ptr<IBuilder> builder{createInferBuilder(sample::gLogger.getTRTLogger())};
-    SMP_RETVAL_IF_FALSE(builder != nullptr, "Builder creation failed", false, err);
-    builder->setErrorRecorder(&gRecorder);
+    env.builder.reset(createInferBuilder(sample::gLogger.getTRTLogger()));
+    SMP_RETVAL_IF_FALSE(env.builder != nullptr, "Builder creation failed", false, err);
+    env.builder->setErrorRecorder(&gRecorder);
     auto networkFlags
         = (build.maxBatch) ? 0U : 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
 
-    env.network.reset(builder->createNetworkV2(networkFlags));
+    env.network.reset(env.builder->createNetworkV2(networkFlags));
     SMP_RETVAL_IF_FALSE(env.network != nullptr, "Network creation failed", false, err);
     env.parser = modelToNetwork(model, *env.network, err);
     SMP_RETVAL_IF_FALSE(env.parser.operator bool(), "Parsing model failed", false, err);
-    SMP_RETVAL_IF_FALSE(networkToSerializedEngine(build, sys, *builder, env, err), "Building engine failed", false, err);
+    SMP_RETVAL_IF_FALSE(
+        networkToSerializedEngine(build, sys, *env.builder, env, err), "Building engine failed", false, err);
     return true;
 }
 
@@ -1091,6 +1128,7 @@ std::pair<std::vector<std::string>, std::vector<WeightsRole>> getMissingLayerWei
     });
     return {layerNameStrs, weightsRoles};
 }
+} // namespace
 
 bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, BuildEnvironment& env, std::ostream& err)
 {
@@ -1113,7 +1151,6 @@ bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, Bui
 
     return true;
 }
-} // namespace
 
 void dumpRefittable(nvinfer1::ICudaEngine& engine)
 {
@@ -1194,7 +1231,19 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
     case LayerType::kCONSTANT:
     {
         auto const& layer = static_cast<const nvinfer1::IConstantLayer&>(l);
-        return {std::make_pair(WeightsRole::kCONSTANT, layer.getWeights())};
+        auto const weights = layer.getWeights();
+        switch (weights.type)
+        {
+        case DataType::kFLOAT:
+        case DataType::kHALF:
+        case DataType::kINT8:
+        case DataType::kINT32: return {std::make_pair(WeightsRole::kCONSTANT, weights)};
+        case DataType::kBOOL:
+        case DataType::kUINT8:
+            // Refit not supported for these types.
+            break;
+        }
+        break;
     }
     case LayerType::kCONVOLUTION:
     {
@@ -1220,42 +1269,46 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
         return {std::make_pair(WeightsRole::kSCALE, layer.getScale()),
             std::make_pair(WeightsRole::kSHIFT, layer.getShift())};
     }
-    case LayerType::kRNN_V2:
     case LayerType::kACTIVATION:
-    case LayerType::kPOOLING:
-    case LayerType::kLRN:
-    case LayerType::kSOFTMAX:
-    case LayerType::kSHUFFLE:
+    case LayerType::kASSERTION:
     case LayerType::kCONCATENATION:
-    case LayerType::kELEMENTWISE:
-    case LayerType::kPLUGIN:
-    case LayerType::kUNARY:
-    case LayerType::kPADDING:
-    case LayerType::kREDUCE:
-    case LayerType::kTOPK:
-    case LayerType::kGATHER:
-    case LayerType::kMATRIX_MULTIPLY:
-    case LayerType::kRAGGED_SOFTMAX:
-    case LayerType::kIDENTITY:
-    case LayerType::kPLUGIN_V2:
-    case LayerType::kSLICE:
-    case LayerType::kFILL:
-    case LayerType::kSHAPE:
-    case LayerType::kPARAMETRIC_RELU:
-    case LayerType::kRESIZE:
-    case LayerType::kTRIP_LIMIT:
-    case LayerType::kRECURRENCE:
-    case LayerType::kITERATOR:
-    case LayerType::kLOOP_OUTPUT:
-    case LayerType::kSELECT:
-    case LayerType::kQUANTIZE:
-    case LayerType::kDEQUANTIZE:
     case LayerType::kCONDITION:
     case LayerType::kCONDITIONAL_INPUT:
     case LayerType::kCONDITIONAL_OUTPUT:
-    case LayerType::kSCATTER:
+    case LayerType::kDEQUANTIZE:
     case LayerType::kEINSUM:
-    case LayerType::kASSERTION: return {};
+    case LayerType::kELEMENTWISE:
+    case LayerType::kFILL:
+    case LayerType::kGATHER:
+    case LayerType::kGRID_SAMPLE:
+    case LayerType::kIDENTITY:
+    case LayerType::kITERATOR:
+    case LayerType::kLOOP_OUTPUT:
+    case LayerType::kLRN:
+    case LayerType::kMATRIX_MULTIPLY:
+    case LayerType::kNMS:
+    case LayerType::kNON_ZERO:
+    case LayerType::kONE_HOT:
+    case LayerType::kPADDING:
+    case LayerType::kPARAMETRIC_RELU:
+    case LayerType::kPLUGIN:
+    case LayerType::kPLUGIN_V2:
+    case LayerType::kPOOLING:
+    case LayerType::kQUANTIZE:
+    case LayerType::kRAGGED_SOFTMAX:
+    case LayerType::kRECURRENCE:
+    case LayerType::kREDUCE:
+    case LayerType::kRESIZE:
+    case LayerType::kRNN_V2:
+    case LayerType::kSCATTER:
+    case LayerType::kSELECT:
+    case LayerType::kSHAPE:
+    case LayerType::kSHUFFLE:
+    case LayerType::kSLICE:
+    case LayerType::kSOFTMAX:
+    case LayerType::kTOPK:
+    case LayerType::kTRIP_LIMIT:
+    case LayerType::kUNARY: return {};
     }
     return {};
 }
@@ -1327,7 +1380,7 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
         return false;
     }
 
-    constexpr int32_t loop = 10;
+    constexpr int32_t loop = 5;
     time_point const refitStartTime{std::chrono::steady_clock::now()};
     {
         for (int32_t l = 0; l < loop; l++)

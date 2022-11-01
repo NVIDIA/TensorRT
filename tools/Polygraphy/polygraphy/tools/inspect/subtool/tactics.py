@@ -33,6 +33,6 @@ class Tactics(Tool):
     def add_parser_args(self, parser):
         parser.add_argument("tactic_replay", help="Path to a tactic replay file")
 
-    def run(self, args):
+    def run_impl(self, args):
         replay = algorithm_selector.TacticReplayData.load(args.tactic_replay)
         G_LOGGER.info(replay)

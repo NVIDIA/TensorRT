@@ -13,4 +13,6 @@ versions:
       negSlope:
         min: "=0"
         max: "=pinf"
+    attributes_required:
+      - negSlope
 ...

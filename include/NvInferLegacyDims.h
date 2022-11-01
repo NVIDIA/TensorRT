@@ -40,7 +40,7 @@ public:
     //! \brief Construct an empty Dims2 object.
     //!
     Dims2()
-        : Dims{2, {}}
+        : Dims2(0, 0)
     {
     }
 
@@ -51,8 +51,14 @@ public:
     //! \param d1 The second element.
     //!
     Dims2(int32_t d0, int32_t d1)
-        : Dims{2, {d0, d1}}
     {
+        nbDims = 2;
+        d[0] = d0;
+        d[1] = d1;
+        for (int32_t i{nbDims}; i < Dims::MAX_DIMS; ++i)
+        {
+            d[i] = 0;
+        }
     }
 };
 
@@ -127,14 +133,14 @@ public:
 //! \class Dims3
 //! \brief Descriptor for three-dimensional data.
 //!
-class Dims3 : public Dims
+class Dims3 : public Dims2
 {
 public:
     //!
     //! \brief Construct an empty Dims3 object.
     //!
     Dims3()
-        : Dims{3, {}}
+        : Dims3(0, 0, 0)
     {
     }
 
@@ -146,8 +152,10 @@ public:
     //! \param d2 The third element.
     //!
     Dims3(int32_t d0, int32_t d1, int32_t d2)
-        : Dims{3, {d0, d1, d2}}
+        : Dims2(d0, d1)
     {
+        nbDims = 3;
+        d[2] = d2;
     }
 };
 
@@ -155,14 +163,14 @@ public:
 //! \class Dims4
 //! \brief Descriptor for four-dimensional data.
 //!
-class Dims4 : public Dims
+class Dims4 : public Dims3
 {
 public:
     //!
     //! \brief Construct an empty Dims4 object.
     //!
     Dims4()
-        : Dims{4, {}}
+        : Dims4(0, 0, 0, 0)
     {
     }
 
@@ -175,8 +183,10 @@ public:
     //! \param d3 The fourth element.
     //!
     Dims4(int32_t d0, int32_t d1, int32_t d2, int32_t d3)
-        : Dims{4, {d0, d1, d2, d3}}
+        : Dims3(d0, d1, d2)
     {
+        nbDims = 4;
+        d[3] = d3;
     }
 };
 

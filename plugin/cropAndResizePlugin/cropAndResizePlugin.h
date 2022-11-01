@@ -24,8 +24,6 @@
 #include <string>
 #include <vector>
 
-using namespace nvinfer1::plugin;
-
 // One of the preferred ways of making TensorRT to be able to see
 // our custom layer requires extending IPluginV2Ext and BaseCreator classes.
 // For requirements for overriden functions, check TensorRT API docs.

@@ -44,17 +44,22 @@ class LoggerArgs(BaseArgs):
 
         self.group.add_argument(
             "--verbosity",
-            help="The logging verbosity to use. Unlike the `-v` and `-q` options, "
-            "this option allows you to control per-path verbosity. "
-            "This option takes precedence over the `-v` and `-q` options. "
-            "Paths should be relative to the `polygraphy/` directory. "
-            "For example, `polygraphy/backend` can be specified with just `backend/`. "
-            "Verbosity values should come from Polygraphy's logging verbosities defined in "
-            "the `Logger` class and are case-insensitive. "
-            "For example: `--verbosity INFO` or `--verbosity verbose`. "
-            "To specify per-path verbosity, use the format: "
-            "`--verbosity <path>:<verbosity>`. For example: "
-            "`--verbosity backend/trt:INFO backend/trt/loader.py:VERBOSE`",
+            help="""
+            The logging verbosity to use. Takes precedence over the `-v` and `-q` options,
+            and unlike them, allows you to control per-path verbosity.
+            Verbosity values should come from Polygraphy's logging verbosities defined in
+            the `Logger` class and are case-insensitive.
+            For example: `--verbosity INFO` or `--verbosity verbose`.
+            To specify per-path verbosity, use the format:
+            `<path>:<verbosity>`. For example:
+            `--verbosity backend/trt:INFO backend/trt/loader.py:VERBOSE`.
+            Paths should be relative to the `polygraphy/` directory.
+            For example, `polygraphy/backend` should be specified with just `backend`.
+            The most closely matching path is used to determine verbosity.
+            For example, with: `--verbosity warning backend:info backend/trt:verbose`,
+            a file under `polygraphy/comparator` would use `WARNING` verbosity, one under
+            `backend/onnx` would use `INFO`, and one under `backend/trt` would use `VERBOSE`.
+            """,
             nargs="+",
             default=None,
         )
@@ -71,7 +76,7 @@ class LoggerArgs(BaseArgs):
         self.group.add_argument(
             "--log-file",
             help="Path to a file where Polygraphy logging output should be written. "
-            "This will not include logging output from dependencies, like TensorRT or ONNX-Runtime. ",
+            "This may not include logging output from dependencies, like TensorRT or ONNX-Runtime. ",
             default=None,
         )
 

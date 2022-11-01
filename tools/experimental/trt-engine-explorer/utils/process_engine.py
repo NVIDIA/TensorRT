@@ -67,7 +67,6 @@ def build_engine_cmd(
     engine_path: str,
     timing_cache_path: str
 ) -> Tuple[List[str], str]:
-    graph_json_fname = f"{engine_path}.graph.json"
     cmd_line = ["trtexec",
         "--verbose",
         # nvtxMode=verbose is the same as profilingVerbosity=detailed, but backward-compatible
@@ -76,7 +75,6 @@ def build_engine_cmd(
         "--workspace=8192",
         f"--onnx={onnx_path}",
         f"--saveEngine={engine_path}",
-        f"--exportLayerInfo={graph_json_fname}",
         f"--timingCacheFile={timing_cache_path}",
     ]
     append_trtexec_args(args.trtexec, cmd_line)

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.inspect.subtool import Data, Model, Tactics, Capability
+from polygraphy.tools.inspect.subtool import Data, Model, Tactics, Capability, DiffTactics
 
 
 class Inspect(Tool):
@@ -26,16 +26,11 @@ class Inspect(Tool):
     def __init__(self):
         super().__init__("inspect")
 
-    def add_parser_args(self, parser):
-        subparsers = parser.add_subparsers(title="Inspection Subtools", dest="subtool")
-        subparsers.required = True
-
-        SUBTOOLS = [
+    def get_subtools_impl(self):
+        return "Inspection Subtools", [
             Model(),
             Data(),
             Tactics(),
-            Capability()
+            Capability(),
+            DiffTactics(),
         ]
-
-        for subtool in SUBTOOLS:
-            subtool.setup_parser(subparsers)

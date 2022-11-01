@@ -42,7 +42,7 @@ class Model(Tool):
     def __init__(self):
         super().__init__("model")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [
             ModelArgs(model_opt_required=True, input_shapes_opt_name=False),
             TfLoadArgs(allow_artifacts=False, allow_custom_outputs=False),
@@ -53,7 +53,7 @@ class Model(Tool):
             TrtLoadEngineArgs(),
         ]
 
-    def add_parser_args(self, parser):
+    def add_parser_args_impl(self, parser):
         parser.add_argument(
             "--convert-to",
             "--display-as",
@@ -74,7 +74,7 @@ class Model(Tool):
             default=[],
         )
 
-    def run(self, args):
+    def run_impl(self, args):
         def show(aspect):
             return aspect in args.show
 

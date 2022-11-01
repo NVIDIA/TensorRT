@@ -19,6 +19,7 @@
 #if CUDA_VERSION >= 10010
 
 #include <cstring>
+#include <set>
 #include <vector>
 
 #include "NvInfer.h"
@@ -53,6 +54,7 @@ EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(std::string const& name, Da
 {
     // Assuming Weights.count is the number of elements and not bytes
     PLUGIN_VALIDATE(beta.count == gamma.count);
+    PLUGIN_VALIDATE(mLd > 0U);
     PLUGIN_VALIDATE(wordEmb.count % mLd == 0);
     PLUGIN_VALIDATE(posEmb.count % mLd == 0);
     PLUGIN_VALIDATE(tokEmb.count % mLd == 0);
@@ -164,7 +166,7 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
         auto cms0 = exprBuilder.constant(unfusedMaskSize);
 
         // this code must match getMHAMaskPackedSize in bertCommon.h
-        bool const isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87);
+        bool const isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87 || mSM == kSM_89 ||mSM == kSM_90);
         bool const isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
         if (mUseFullMask || (isSmOK && isPrecisionOK))
         {
@@ -538,12 +540,21 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(char const* name, cons
 
         bool output_fp16 = false;
         bool useFullMask = false;
-        Weights beta;
-        Weights gamma;
-        Weights word_emb;
-        Weights pos_emb;
-        Weights tok_emb;
+        Weights beta{};     // required attribute - validateRequiredAttributesExist() will verify existence
+        Weights gamma{};    // required attribute - validateRequiredAttributesExist() will verify existence
+        Weights word_emb{}; // required attribute - validateRequiredAttributesExist() will verify existence
+        Weights pos_emb{};  // required attribute - validateRequiredAttributesExist() will verify existence
+        Weights tok_emb{};  // required attribute - validateRequiredAttributesExist() will verify existence
         int32_t mhaTypeId = 0;
+        std::set<std::string> const requiredAttributes{
+            "bert_embeddings_layernorm_beta",
+            "bert_embeddings_layernorm_gamma",
+            "bert_embeddings_word_embeddings",
+            "bert_embeddings_token_type_embeddings",
+            "bert_embeddings_position_embeddings",
+        };
+        plugin::validateRequiredAttributesExist(requiredAttributes, fc);
+
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
             std::string field_name(fc->fields[i].name);

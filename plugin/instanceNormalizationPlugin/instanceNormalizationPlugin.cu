@@ -21,6 +21,8 @@
 #include <stdexcept>
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
+using namespace instance_norm_impl;
 using nvinfer1::plugin::InstanceNormalizationPlugin;
 using nvinfer1::plugin::InstanceNormalizationPluginV2;
 using nvinfer1::plugin::InstanceNormalizationPluginCreator;
@@ -160,6 +162,8 @@ int32_t InstanceNormalizationPlugin::initialize() noexcept
         PLUGIN_CHECK_CUDA(cudaMalloc(&mDeviceBias, mNchan * sizeof(float)));
         PLUGIN_CHECK_CUDA(cudaMemcpy(mDeviceScale, &mHostScale[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
         PLUGIN_CHECK_CUDA(cudaMemcpy(mDeviceBias, &mHostBias[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
+
+        PLUGIN_CHECK_CUDA(cudaDriverGetVersion(&mCudaDriverVersion));
     }
     mInitialized = true;
 
@@ -301,7 +305,21 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
         //       overflows (NaNs) for fp32 data in some circumstances. The lower-
         //       performance CUDNN_BATCHNORM_SPATIAL should be used if this is not
         //       acceptable.
-        PLUGIN_CUDNNASSERT(cudnnBatchNormalizationForwardTraining(mCudnnHandle, CUDNN_BATCHNORM_SPATIAL_PERSISTENT,
+
+        cudnnBatchNormMode_t cudnnBatchNormMode = CUDNN_BATCHNORM_SPATIAL_PERSISTENT;
+
+        cudaStreamCaptureStatus streamStatus;
+        PLUGIN_CHECK_CUDA(cudaStreamIsCapturing(stream, &streamStatus));
+
+        if (streamStatus != cudaStreamCaptureStatusNone && mCudaDriverVersion < 11000)
+        {
+            gLogVerbose << "Using CUDNN_BATCHNORM_SPATIAL as a CUDA graph capture is in progress but the CUDA version "
+                           "may have issues with using CUDNN_BATCHNORM_SPATIAL_PERSISTENT"
+                        << std::endl;
+            cudnnBatchNormMode = CUDNN_BATCHNORM_SPATIAL;
+        }
+
+        PLUGIN_CUDNNASSERT(cudnnBatchNormalizationForwardTraining(mCudnnHandle, cudnnBatchNormMode,
             &alpha, &beta, mXDescriptor, x_ptr, mYDescriptor, y_ptr, mBDescriptor, d_scale, d_bias, 1., nullptr,
             nullptr, mEpsilon, nullptr, nullptr));
 
@@ -354,7 +372,22 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             //       overflows (NaNs) for fp32 data in some circumstances. The lower-
             //       performance CUDNN_BATCHNORM_SPATIAL should be used if this is not
             //       acceptable.
-            PLUGIN_CHECK_CUDNN(cudnnBatchNormalizationForwardTraining(mCudnnHandle, CUDNN_BATCHNORM_SPATIAL_PERSISTENT,
+
+            cudnnBatchNormMode_t cudnnBatchNormMode = CUDNN_BATCHNORM_SPATIAL_PERSISTENT;
+
+            cudaStreamCaptureStatus streamStatus;
+            PLUGIN_CHECK_CUDA(cudaStreamIsCapturing(stream, &streamStatus));
+
+            if (streamStatus != cudaStreamCaptureStatusNone && mCudaDriverVersion < 11000)
+            {
+                gLogVerbose
+                    << "Using CUDNN_BATCHNORM_SPATIAL as a CUDA graph capture is in progress but the CUDA version "
+                       "may have issues with using CUDNN_BATCHNORM_SPATIAL_PERSISTENT"
+                    << std::endl;
+                cudnnBatchNormMode = CUDNN_BATCHNORM_SPATIAL;
+            }
+
+            PLUGIN_CHECK_CUDNN(cudnnBatchNormalizationForwardTraining(mCudnnHandle, cudnnBatchNormMode,
                 &alpha, &beta, mXDescriptor, x_ptr, mYDescriptor, y_ptr, mBDescriptor, d_scale, d_bias, 1., nullptr,
                 nullptr, mEpsilon, nullptr, nullptr));
 

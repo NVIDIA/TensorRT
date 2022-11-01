@@ -15,18 +15,22 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool import Build, DiffTactics, Precision, Reduce, Repeat
+from polygraphy.tools.debug.subtool import Build, Precision, Reduce, Repeat
+
+# For backwards compatibility
+from polygraphy.tools.inspect.subtool import DiffTactics
 
 
 class Debug(Tool):
     r"""
     [EXPERIMENTAL] Debug a wide variety of model issues.
 
-    Most of the `debug` subtools work on the same general principles:
+    The `debug` subtools work on the same general principles:
 
     1. Iteratively perform some task that generates some output
     2. Evaluate the generated output to determine if it should be considered `good` or `bad`
     3. Sort any tracked artifacts into `good` and `bad` directories based on (2)
+    4. Make changes if required and then repeat the process
 
     The "some output" referred to in (1) is usually a model file and is written to the current
     directory by default during each iteration.
@@ -62,17 +66,11 @@ class Debug(Tool):
     def __init__(self):
         super().__init__("debug")
 
-    def add_parser_args(self, parser):
-        subparsers = parser.add_subparsers(title="Debug Subtools", dest="subtool")
-        subparsers.required = True
-
-        SUBTOOLS = [
+    def get_subtools_impl(self):
+        return "Debug Subtools", [
             Build(),
             Precision(),
-            DiffTactics(),
+            DiffTactics(_issue_deprecation_warning=True),
             Reduce(),
             Repeat(),
         ]
-
-        for subtool in SUBTOOLS:
-            subtool.setup_parser(subparsers)

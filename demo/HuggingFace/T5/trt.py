@@ -38,6 +38,9 @@ from transformers.modeling_outputs import Seq2SeqLMOutput
 from transformers.configuration_utils import PretrainedConfig
 from transformers.generation_utils import GenerationMixin
 
+# tensorrt
+from tensorrt import PreviewFeature
+
 # TRT-HuggingFace
 from NNDF.interface import TRTInferenceCommand
 from NNDF.networks import (
@@ -52,12 +55,14 @@ from NNDF.networks import (
 )
 
 from NNDF.tensorrt_utils import TRTNativeRunner
+from NNDF.torch_utils import expand_inputs_for_beam_search
 from NNDF.general_utils import NNFolderWorkspace
 from T5.frameworks import T5FHuggingFace
 from T5.T5ModelConfig import T5ModelTRTConfig, T5BenchmarkingArgs
-from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy
+from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy, full_inference_beam
 from T5.export import T5DecoderONNXFile, T5EncoderONNXFile, T5DecoderTRTEngine, T5EncoderTRTEngine
 from NNDF.models import TRTEngineFile
+from NNDF.logger import G_LOGGER
 
 class TRTHFRunner(TRTNativeRunner, GenerationMixin):
     """Runner that adds interop support for HF and HF provided greedy_search functions."""
@@ -183,25 +188,26 @@ class T5TRTDecoder(TRTHFRunner):
         trt_engine_file: str,
         network_metadata: NetworkMetadata,
         hf_config: PretrainedConfig,
-        batch_size: int = 1
+        batch_size: int = 1,
+        num_beams: int = 1,
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
         self.max_sequence_length = T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[network_metadata.variant]
 
         # We only have one profile to select so we can just grab the profile at the start of the class
-        self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size, sequence_length=1)
+        self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size * num_beams, sequence_length=1)
 
         self.input_types = {
             "input_ids": torch.int32,
             "encoder_hidden_states": torch.float32
         }
         self.input_shapes = {
-            "input_ids": (self.batch_size, self.max_sequence_length),
-            "encoder_hidden_states": (self.batch_size, self.max_sequence_length, self.max_sequence_length)
+            "input_ids": (self.batch_size * num_beams, self.max_sequence_length),
+            "encoder_hidden_states": (self.batch_size * num_beams, self.max_sequence_length, self.max_sequence_length)
         }
 
         self.output_shapes = {
-            "hidden_states": (self.batch_size, self.max_sequence_length, T5ModelTRTConfig.VOCAB_SIZE)
+            "hidden_states": (self.batch_size * num_beams, self.max_sequence_length, T5ModelTRTConfig.VOCAB_SIZE)
         }
         self.output_types = {
             "hidden_states": torch.float32
@@ -216,7 +222,7 @@ class T5TRTDecoder(TRTHFRunner):
         """Used to cache encoder hidden state runs across same encoder sessions"""
         self.persist_encoder_hidden_states = True
 
-        bs = self.batch_size
+        bs = encoder_hidden_states.shape[0] # in beam search mode, bs is batch_size * num_beams
         max_length = self.max_sequence_length
         encoder_length = TRTHFRunner.ENCODER_LENGTH
         if encoder_hidden_states.device == torch.device("cpu"):
@@ -234,7 +240,7 @@ class T5TRTDecoder(TRTHFRunner):
 
     def forward(self, input_ids, encoder_hidden_states, *args, **kwargs):
         # Get the batch size.
-        bs = self.batch_size
+        bs = input_ids.shape[0] # in beam search mode, bs is batch_size * num_beams
 
         # Get the maximum sequence length.
         max_length = self.max_sequence_length
@@ -334,6 +340,7 @@ class T5TRT(TRTInferenceCommand):
         inference_input: str,
         timing_profile: TimingProfile,
         batch_size: int = 1,
+        num_beams: int = 1,
         benchmarking_mode: bool = False,
         benchmarking_args: T5BenchmarkingArgs = None,
     ) -> Union[NetworkResult, BenchmarkingResult]:
@@ -349,39 +356,54 @@ class T5TRT(TRTInferenceCommand):
             output_seq_len = benchmarking_args.output_seq_len if benchmarking_args.output_seq_len > 0 else max_seq_len
             input_ids = torch.randint(0, T5ModelTRTConfig.VOCAB_SIZE, (batch_size, input_seq_len))
 
-        encoder_last_hidden_state, encoder_e2e_median_time = encoder_inference(
+        encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             self.t5_trt_encoder, input_ids, timing_profile
         )
-        _, decoder_e2e_median_time = decoder_inference(
+        _, decoder_e2e_time = decoder_inference(
             self.t5_trt_decoder,
-            input_ids,
-            encoder_last_hidden_state,
+            expand_inputs_for_beam_search(input_ids, num_beams) if num_beams > 1 else input_ids,
+            expand_inputs_for_beam_search(encoder_last_hidden_state, num_beams) if num_beams > 1 else encoder_last_hidden_state,
             timing_profile,
-        )
-        decoder_output_greedy, full_e2e_median_runtime = full_inference_greedy(
-            self.t5_trt_encoder,
-            self.t5_trt_decoder,
-            input_ids,
-            tokenizer,
-            timing_profile,
-            max_length=output_seq_len,
-            batch_size=batch_size,
-            early_stopping=(not benchmarking_mode),
         )
 
+        if num_beams == 1:
+            decoder_output, full_e2e_runtime = full_inference_greedy(
+                self.t5_trt_encoder,
+                self.t5_trt_decoder,
+                input_ids,
+                tokenizer,
+                timing_profile,
+                max_length=output_seq_len,
+                batch_size=batch_size,
+                early_stopping=(not benchmarking_mode),
+            )
+        else:
+            decoder_output, full_e2e_runtime = full_inference_beam(
+                self.t5_trt_encoder,
+                self.t5_trt_decoder,
+                input_ids,
+                tokenizer,
+                timing_profile,
+                num_beams=num_beams,
+                max_length=output_seq_len,
+                batch_size=batch_size,
+                use_cache=metadata.other.kv_cache,
+                early_stopping=(not benchmarking_mode),
+            )
+
         # Prepare runtime results.
-        median_runtime = [
+        runtime = [
             NetworkRuntime(
                 name=T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
-                runtime=decoder_e2e_median_time,
+                runtime=decoder_e2e_time,
             ),
             NetworkRuntime(
                 name=T5ModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME,
-                runtime=encoder_e2e_median_time,
+                runtime=encoder_e2e_time,
             ),
             NetworkRuntime(
                 name=T5ModelTRTConfig.NETWORK_FULL_NAME,
-                runtime=full_e2e_median_runtime,
+                runtime=full_e2e_runtime,
             ),
         ]
         models=NetworkModels(
@@ -401,11 +423,11 @@ class T5TRT(TRTInferenceCommand):
 
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
-            return BenchmarkingResult(median_runtime=median_runtime, models=models)
+            return BenchmarkingResult(median_runtime=runtime, models=models)
 
         # Remove the padding and end tokens.
         semantic_outputs = tokenizer.decode(
-            decoder_output_greedy[-1, :], skip_special_tokens=True
+            decoder_output[-1, :], skip_special_tokens=True
         )
 
         if isinstance(semantic_outputs, list):
@@ -415,7 +437,7 @@ class T5TRT(TRTInferenceCommand):
             input=inference_input,
             output_tensor=encoder_last_hidden_state,
             semantic_output=semantic_outputs,
-            median_runtime=median_runtime,
+            median_runtime=runtime,
             models=models,
         )
 
@@ -439,6 +461,8 @@ class T5TRT(TRTInferenceCommand):
         metadata: NetworkMetadata,
         hash_onnx_fpath: Dict[str, NetworkModel],
         batch_size: int,
+        num_beams: int,
+        preview_dynamic_shapes: bool,
         benchmarking_args: T5BenchmarkingArgs = None,
     ) -> None:
 
@@ -478,17 +502,19 @@ class T5TRT(TRTInferenceCommand):
             )
         ]
 
+        # for beam search, decoder engine's inputs are expanded `num_beams` times
+        # optimization profiles should be changed accordingly, but onnx models can be shared across greedy/beam because the first dim (batch size) is already a dynamic value, so no change needed in export.py
         decoder_profiles = [
             Profile().add(
                 "input_ids",
-                min=(batch_size, 1),
-                opt=(batch_size, opt_output_seq_len),
-                max=(batch_size, max_sequence_length),
+                min=(batch_size * num_beams, 1),
+                opt=(batch_size * num_beams, opt_output_seq_len),
+                max=(batch_size * num_beams, max_sequence_length),
             ).add(
                 "encoder_hidden_states",
-                min=(batch_size, 1, max_sequence_length),
-                opt=(batch_size, opt_input_seq_len, max_sequence_length),
-                max=(batch_size, max_sequence_length, max_sequence_length),
+                min=(batch_size * num_beams, 1, max_sequence_length),
+                opt=(batch_size * num_beams, opt_input_seq_len, max_sequence_length),
+                max=(batch_size * num_beams, max_sequence_length, max_sequence_length),
             )
         ]
 
@@ -498,17 +524,27 @@ class T5TRT(TRTInferenceCommand):
         else:
             engine_tag = "bs{}-inseq{}-outseq{}".format(batch_size, benchmarking_args.input_seq_len, benchmarking_args.output_seq_len)
 
+        if num_beams > 1:
+            engine_tag += "-beam{}".format(num_beams)
+            
+        preview_features = []
+        if preview_dynamic_shapes:
+            preview_features = [PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
+            engine_tag += "-previewFasterDynamicShapes"
+
         self.t5_trt_encoder_engine = T5EncoderONNXFile(
             encoder_onnx_fpath, metadata
         ).as_trt_engine(
-            encoder_onnx_fpath + "-{}.engine".format(engine_tag),
+            encoder_onnx_fpath + "-{}.engine".format(engine_tag).replace(f"-beam{num_beams}", ""), # encoder engine name not affected by beam search
             profiles=encoder_profiles,
+            preview_features=preview_features
         )
         self.t5_trt_decoder_engine = T5DecoderONNXFile(
             decoder_onnx_fpath, metadata
         ).as_trt_engine(
             decoder_onnx_fpath + "-{}.engine".format(engine_tag),
             profiles=decoder_profiles,
+            preview_features=preview_features
         )
 
         # Create T5TRTEncoder and T5TRTDecoder instances.
@@ -520,7 +556,7 @@ class T5TRT(TRTInferenceCommand):
             self.t5_trt_encoder_engine, metadata, tfm_config, batch_size=batch_size
         )
         self.t5_trt_decoder = T5TRTDecoder(
-            self.t5_trt_decoder_engine, metadata, tfm_config, batch_size=batch_size
+            self.t5_trt_decoder_engine, metadata, tfm_config, batch_size=batch_size, num_beams=num_beams
         )
 
 
@@ -537,6 +573,7 @@ class T5TRT(TRTInferenceCommand):
         batch_size: int = 1,
         args: object = None,
         benchmarking_mode: bool = False,
+        preview_dynamic_shapes: bool = False,
     ) -> Union[List[NetworkResult], BenchmarkingResult] :
 
         workspace = self._setup_workspace(metadata, working_directory)
@@ -553,18 +590,18 @@ class T5TRT(TRTInferenceCommand):
         results = []
         try:
             if not benchmarking_mode:
-                self._setup_engines(metadata, hash_onnx_fpath, batch_size)
+                self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes)
                 for ninput in network_input:
                     results.append(
                         self.execute_inference(
-                            metadata, hash_onnx_fpath, ninput, timing_profile, batch_size
+                            metadata, hash_onnx_fpath, ninput, timing_profile, batch_size, args.num_beams
                         )
                     )
             else:
                 benchmarking_args = T5BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
-                self._setup_engines(metadata, hash_onnx_fpath, batch_size, benchmarking_args)
+                self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes, benchmarking_args)
                 results = self.execute_inference(
-                    metadata, hash_onnx_fpath, None, timing_profile, batch_size, True, benchmarking_args
+                    metadata, hash_onnx_fpath, None, timing_profile, batch_size, args.num_beams, True, benchmarking_args
                 )
 
         finally:

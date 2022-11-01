@@ -3,7 +3,7 @@
 ## Introduction
 
 In some cases, we may want to run comparisons using custom input data.
-Polygraphy provides multiple ways to do so, which are detailed [here](../../../../polygraphy/tools/README.md#using-custom-input-data).
+Polygraphy provides multiple ways to do so, which are detailed [here](../../../../how-to/use_custom_input_data.md).
 
 In this example, we'll demonstrate 2 different approaches:
 

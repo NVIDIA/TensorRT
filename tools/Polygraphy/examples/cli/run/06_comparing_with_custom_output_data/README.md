@@ -40,4 +40,4 @@ and seamlessly load it into Polygraphy for comparison.
 ## Further Reading
 
 For details on how to access and work with the outputs stored in `RunResults` objects
-using the Python API, refer to [API example 08](../../../api/08_working_with_run_results_manually/).
+using the Python API, refer to [API example 08](../../../api/08_working_with_run_results_and_saved_inputs_manually/).

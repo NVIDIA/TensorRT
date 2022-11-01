@@ -25,7 +25,6 @@
 // This plugin provides CombinedNMS op compatibility for TF-TRT in Implicit Batch
 // mode for legacy back-compatibilty
 
-using namespace nvinfer1::plugin;
 namespace nvinfer1
 {
 namespace plugin

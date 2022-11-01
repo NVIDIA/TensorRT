@@ -19,7 +19,7 @@
 #include "common/nmsUtils.h"
 #include "cuda_runtime_api.h"
 #include "gatherNMSOutputs.h"
-
+using namespace nvinfer1;
 pluginStatus_t nmsInference(cudaStream_t stream, const int N, const int perBatchBoxesSize, const int perBatchScoresSize,
     const bool shareLocation, const int backgroundLabelId, const int numPredsPerClass, const int numClasses,
     const int topK, const int keepTopK, const float scoreThreshold, const float iouThreshold, const DataType DT_BBOX,

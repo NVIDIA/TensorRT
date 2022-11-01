@@ -20,6 +20,8 @@
 #include "cub/cub.cuh"
 #include <array>
 
+using namespace nvinfer1;
+
 inline __device__ __half add_fb(const __half& a, const __half& b)
 {
 #if __CUDA_ARCH__ >= 530

@@ -45,6 +45,10 @@ class SplitPlugin final : public nvinfer1::IPluginV2DynamicExt
     thrust::device_vector<int> _d_segment_offsets;
     thrust::device_vector<float*> _d_output_ptrs;
 
+    using IPluginV2::getOutputDimensions;
+    using IPluginV2::getWorkspaceSize;
+    using IPluginV2::enqueue;
+    using IPluginV2Ext::configurePlugin;
 protected:
     void deserialize(void const* serialData, size_t serialLength) noexcept
     {

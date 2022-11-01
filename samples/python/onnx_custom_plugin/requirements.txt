@@ -1,0 +1,11 @@
+nltk>=3.5
+onnx>=1.8.0
+wget>=3.2
+pycuda<2021.1; python_version<"3.7"
+pycuda; python_version>="3.7"
+numpy==1.18.1; python_version<"3.8" and platform_system == "Windows"
+numpy==1.19.4; python_version<"3.8" and platform_system != "Windows"
+numpy==1.23.2; python_version>="3.8"
+
+--extra-index-url https://pypi.ngc.nvidia.com
+onnx_graphsurgeon>=0.3.20

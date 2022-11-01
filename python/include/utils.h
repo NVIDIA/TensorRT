@@ -54,9 +54,9 @@ static const auto weights_to_numpy = [](nvinfer1::Weights const& self) {
     return py::array{nptype(self.type), self.count, self.values, py::cast(self)};
 };
 
-inline size_t volume(nvinfer1::Dims const& dims)
+inline int64_t volume(nvinfer1::Dims const& dims)
 {
-    return std::accumulate(dims.d, dims.d + dims.nbDims, 1, std::multiplies<int32_t>());
+    return std::accumulate(dims.d, dims.d + dims.nbDims, int64_t{1}, std::multiplies<int64_t>{});
 }
 
 // Method for calling the python function and returning the value (returned from python) used in cpp trampoline

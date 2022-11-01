@@ -19,4 +19,5 @@ versions:
       num_groups:
         min: "0"
         max: "=pinf"
+    attributes_required: []
 ...

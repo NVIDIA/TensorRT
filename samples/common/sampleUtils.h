@@ -23,6 +23,7 @@
 #include <memory>
 #include <numeric>
 #include <random>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -54,12 +55,10 @@ inline T roundUp(T m, T n)
     return ((m + n - 1) / n) * n;
 }
 
-int64_t volume(nvinfer1::Dims const& d);
-
 //! comps is the number of components in a vector. Ignored if vecDim < 0.
 int64_t volume(nvinfer1::Dims const& dims, nvinfer1::Dims const& strides, int32_t vecDim, int32_t comps, int32_t batch);
 
-int64_t volume(nvinfer1::Dims const& dims, int32_t vecDim, int32_t comps, int32_t batch);
+using samplesCommon::volume;
 
 nvinfer1::Dims toDims(std::vector<int32_t> const& vec);
 
@@ -70,10 +69,12 @@ template <typename T, typename std::enable_if<!std::is_integral<T>::value, int32
 void fillBuffer(void* buffer, int64_t volume, T min, T max);
 
 template <typename T>
-void dumpBuffer(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
-    Dims const& strides, int32_t vectorDim, int32_t spv);
+void dumpBuffer(void const* buffer, std::string const& separator, std::ostream& os, nvinfer1::Dims const& dims,
+    nvinfer1::Dims const& strides, int32_t vectorDim, int32_t spv);
 
 void loadFromFile(std::string const& fileName, char* dst, size_t size);
+
+std::vector<std::string> splitToStringVec(std::string const& option, char separator);
 
 bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings, bool isInput = true);
 
@@ -82,7 +83,7 @@ int32_t getCudaDriverVersion();
 int32_t getCudaRuntimeVersion();
 
 void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int8_t>>& sparseWeights);
-void sparsify(Weights const& weights, int32_t k, int32_t rs, std::vector<int8_t>& sparseWeights);
+void sparsify(nvinfer1::Weights const& weights, int32_t k, int32_t rs, std::vector<int8_t>& sparseWeights);
 
 // Walk the weights elements and overwrite (at most) 2 out of 4 elements to 0.
 template <typename T>

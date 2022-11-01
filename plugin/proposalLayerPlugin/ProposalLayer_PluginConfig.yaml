@@ -30,5 +30,9 @@ versions:
         max: "=pinf"
       image_size:
         min: "=3, 0, 0"
-        max: "=3, =1000, =1000" # dims 2 & 3 are capped to avoid timeout
+        max: "=3, =1024, =1024" # dims 2 & 3 are capped to avoid timeout
+    attributes_required:
+      - prenms_topk
+      - keep_topk
+      - iou_threshold
 ...

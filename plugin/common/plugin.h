@@ -22,6 +22,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -100,6 +101,32 @@ inline int32_t getTrtSMVersionDec(int32_t majorVersion, int32_t minorVersion)
 {
     return getTrtSMVersionDec(majorVersion * 10 + minorVersion);
 }
+
+// Check that all required field names are present in the PluginFieldCollection.
+// If not, throw a PluginError with a message stating which fields are missing.
+void validateRequiredAttributesExist(std::set<std::string> requiredFieldNames, PluginFieldCollection const* fc);
+
+template <typename Dtype>
+struct CudaBind
+{
+    size_t mSize;
+    void* mPtr;
+
+    CudaBind(size_t size)
+    {
+        mSize = size;
+        PLUGIN_CUASSERT(cudaMalloc(&mPtr, sizeof(Dtype) * mSize));
+    }
+
+    ~CudaBind()
+    {
+        if (mPtr != nullptr)
+        {
+            PLUGIN_CUASSERT(cudaFree(mPtr));
+            mPtr = nullptr;
+        }
+    }
+};
 
 } // namespace plugin
 } // namespace nvinfer1

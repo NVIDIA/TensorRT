@@ -31,4 +31,9 @@ versions:
       iou_threshold:
         min: "0"
         max: "=pinf"
+    attributes_required:
+      - num_classes
+      - keep_topk
+      - score_threshold
+      - iou_threshold
 ...

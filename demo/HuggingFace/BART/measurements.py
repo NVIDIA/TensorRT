@@ -34,14 +34,17 @@ from transformers.generation_stopping_criteria import (
     MaxLengthCriteria,
     StoppingCriteriaList,
 )
+from transformers.generation_beam_search import (
+    BeamSearchScorer,
+)
 
 from BART.BARTModelConfig import BARTModelTRTConfig
 
 # TRT-HuggingFace
 from NNDF.general_utils import measure_python_inference_code
-from NNDF.torch_utils import use_cuda
+from NNDF.torch_utils import use_cuda, expand_inputs_for_beam_search
 from NNDF.tensorrt_utils import TRTNativeRunner
-
+from NNDF.logger import G_LOGGER
 
 @use_cuda
 def decoder_inference(
@@ -60,17 +63,17 @@ def decoder_inference(
             past_key_values=past_key_values
         )
 
-    decoder_e2e_median_time = measure_python_inference_code(decoder_stmt, timing_profile)
+    decoder_e2e_time = measure_python_inference_code(decoder_stmt, timing_profile)
 
-    return (decoder_stmt(), decoder_e2e_median_time)
+    return (decoder_stmt(), decoder_e2e_time)
 
 
 @use_cuda
 def encoder_inference(BART_encoder, input_ids, timing_profile, use_cuda=True):
     encoder_stmt = lambda: BART_encoder(input_ids=input_ids)
-    encoder_e2e_median_time = measure_python_inference_code(encoder_stmt, timing_profile)
+    encoder_e2e_time = measure_python_inference_code(encoder_stmt, timing_profile)
 
-    return (encoder_stmt(), encoder_e2e_median_time)
+    return (encoder_stmt(), encoder_e2e_time)
 
 
 # Code specifically for Pythonic inference measurement used across all BART related scripts
@@ -82,14 +85,16 @@ def full_inference_greedy(
     tokenizer,
     timing_profile,
     max_length,
+    min_length=0,
     batch_size=1,
     use_cuda=True,
     early_stopping=True,
     use_cache=True
 ):
+    G_LOGGER.info("Running full inference with greedy decoding...")
+
     stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length)])
     no_repeat_ngram_size = BARTModelTRTConfig.NO_REPEAT_NGRAM_SIZE
-    min_length = BARTModelTRTConfig.MIN_OUTPUT_LENGTH[tokenizer.name_or_path] # instead of using metadata.variant (which require passing metadata), I just hacked here to get the variant name from tokenizer
     logits_processor = LogitsProcessorList([
         NoRepeatNGramLogitsProcessor(no_repeat_ngram_size), 
         MinLengthLogitsProcessor(min_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token)),
@@ -137,6 +142,102 @@ def full_inference_greedy(
         BART_decoder.set_return_device("cuda" if use_cuda else "cpu")
         measurement_function = _e2e_trt
 
-    full_e2e_median_time = measure_python_inference_code(measurement_function, timing_profile)
+    full_e2e_time = measure_python_inference_code(measurement_function, timing_profile)
 
-    return (measurement_function(), full_e2e_median_time)
+    return (measurement_function(), full_e2e_time)
+
+@use_cuda
+def full_inference_beam(
+    BART_encoder,
+    BART_decoder,
+    input_ids,
+    tokenizer,
+    timing_profile,
+    num_beams,
+    max_length,
+    min_length=0,
+    batch_size=1,
+    use_cuda=True,
+    early_stopping=True,
+    use_cache=True
+):
+
+    G_LOGGER.info(f"Running full inference with beam search (num_beams = {num_beams}) decoding...")
+
+    stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length)])
+    no_repeat_ngram_size = BARTModelTRTConfig.NO_REPEAT_NGRAM_SIZE
+    logits_processor = LogitsProcessorList([
+        NoRepeatNGramLogitsProcessor(no_repeat_ngram_size), 
+        MinLengthLogitsProcessor(min_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token)),
+        ForcedBOSTokenLogitsProcessor(tokenizer.convert_tokens_to_ids(tokenizer.bos_token)),
+        ForcedEOSTokenLogitsProcessor(max_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
+    ]) # by checking HuggingFace's generate() implementation carefully, the default logits processor for BART has no_repeat_ngram_size = 3 and forced_eos_token_id = 2. In this way we can get identical results with raw HuggingFace
+
+    decoder_input_ids = torch.full(
+        (batch_size, 1), tokenizer.convert_tokens_to_ids(tokenizer.eos_token), dtype=torch.int32
+    )
+    decoder_input_ids = expand_inputs_for_beam_search(decoder_input_ids, expand_size=num_beams)
+
+    if use_cuda:
+        decoder_input_ids = decoder_input_ids.to("cuda")
+    else:
+        decoder_input_ids = decoder_input_ids.to("cpu")
+
+    def _e2e():
+        with torch.no_grad():
+            # beam scorer must be reset before each beam search run, otherwise beam search will be skipped due to scorer cache
+            beam_scorer = BeamSearchScorer(
+                batch_size=batch_size,
+                num_beams=num_beams,
+                device="cuda" if use_cuda else "cpu",
+                do_early_stopping=early_stopping,
+            )
+
+            encoder_last_hidden_state = BART_encoder(input_ids=input_ids)
+            
+            encoder_last_hidden_state = expand_inputs_for_beam_search(encoder_last_hidden_state, expand_size=num_beams)
+
+            decoder_output_beam = BART_decoder.beam_search(
+                input_ids=decoder_input_ids,
+                beam_scorer=beam_scorer,
+                encoder_hidden_states=encoder_last_hidden_state,
+                stopping_criteria=stopping_criteria,
+                logits_processor=logits_processor,
+                use_cache=use_cache
+            )
+        return decoder_output_beam
+
+    # With e2e we can opt to bind inputs only once for hidden states for optimization
+    def _e2e_trt():
+        with torch.no_grad():
+            # beam scorer must be reset before each beam search run, otherwise beam search will be skipped due to scorer cache
+            beam_scorer = BeamSearchScorer(
+                batch_size=batch_size,
+                num_beams=num_beams,
+                device="cuda" if use_cuda else "cpu",
+                do_early_stopping=early_stopping,
+            )
+
+            encoder_last_hidden_state = BART_encoder(input_ids=input_ids)
+            
+            encoder_last_hidden_state = expand_inputs_for_beam_search(encoder_last_hidden_state, expand_size=num_beams)
+            
+            BART_decoder.set_encoder_hidden_states_for_inference_cycle(encoder_last_hidden_state)
+            decoder_output_beam = BART_decoder.beam_search(
+                input_ids=decoder_input_ids,
+                beam_scorer=beam_scorer,
+                encoder_hidden_states=encoder_last_hidden_state,
+                stopping_criteria=stopping_criteria,
+                logits_processor=logits_processor,
+                use_cache=use_cache
+            )
+        return decoder_output_beam
+
+    measurement_function = _e2e
+    if isinstance(BART_decoder, TRTNativeRunner):
+        BART_decoder.set_return_device("cuda" if use_cuda else "cpu")
+        measurement_function = _e2e_trt
+
+    full_e2e_time = measure_python_inference_code(measurement_function, timing_profile)
+
+    return (measurement_function(), full_e2e_time)

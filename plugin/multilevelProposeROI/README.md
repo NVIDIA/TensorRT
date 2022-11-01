@@ -49,6 +49,7 @@ The following parameters were used to create `MultilevelProposeROI` instance:
 |`int`              |`prenms_topk`                     |The number of ROIs which will be kept before NMS. 
 |`int`              |`keep_topk`                       |Number of detections will be kept after NMS.
 |`float`            |`iou_threshold`                   |IOU threshold value used in NMS.
+|`int[3]`           |`image_size`                      |Input image shape in CHW. Defaults to [3, 832, 1344]
 
 ## Limitations
 

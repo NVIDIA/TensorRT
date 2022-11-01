@@ -145,13 +145,17 @@ public:
     //!
     //! \brief Get the number of binding indices.
     //!
+    //! \return The number of binding indices.
+    //!
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getNbIOTensors.
+    //!
     //! \see getBindingIndex()
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual std::int32_t getNbBindings() const noexcept = 0;
+    TRT_DEPRECATED virtual std::int32_t getNbBindings() const noexcept = 0;
 
     //!
     //! \brief Retrieve the binding index for a named tensor.
@@ -167,13 +171,14 @@ public:
     //! \param name The tensor name.
     //! \return The binding index for the named tensor, or -1 if the name is not found.
     //!
-    //! \see getNbBindings()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by name-based methods. Use them instead of binding-index
+    //! based methods.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual std::int32_t getBindingIndex(AsciiChar const* const name) const noexcept = 0;
+    TRT_DEPRECATED virtual std::int32_t getBindingIndex(AsciiChar const* const name) const noexcept = 0;
 
     //!
     //! \brief Retrieve the name corresponding to a binding index.
@@ -183,13 +188,16 @@ public:
     //! \param bindingIndex The binding index.
     //! \return The name corresponding to the index, or nullptr if the index is out of range.
     //!
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by name-based methods. Use them instead of binding-index
+    //! based methods.
+    //!
     //! \see getBindingIndex()
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual AsciiChar const* getBindingName(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual AsciiChar const* getBindingName(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Determine whether a binding is an input binding.
@@ -197,13 +205,15 @@ public:
     //! \param bindingIndex The binding index.
     //! \return True if the index corresponds to an input binding and the index is in range.
     //!
-    //! \see getBindingIndex()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by tensorIOMode().
+    //!
+    //! \see safe::ICudaEngine::tensorIOMode()
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual bool bindingIsInput(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual bool bindingIsInput(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Get the dimensions of a binding.
@@ -211,13 +221,15 @@ public:
     //! \param bindingIndex The binding index.
     //! \return The dimensions of the binding if the index is in range, otherwise Dims()
     //!
-    //! \see getBindingIndex()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorShape().
+    //!
+    //! \see safe::ICudaEngine::getTensorShape()
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual Dims getBindingDimensions(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual Dims getBindingDimensions(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Determine the required data type for a buffer from its binding index.
@@ -225,13 +237,15 @@ public:
     //! \param bindingIndex The binding index.
     //! \return The type of the data in the buffer.
     //!
-    //! \see getBindingIndex()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorDataType().
+    //!
+    //! \see safe::ICudaEngine::getTensorDataType()
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual DataType getBindingDataType(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual DataType getBindingDataType(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Create an execution context.
@@ -279,13 +293,15 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
-    //! \see safe::ICudaEngine::getBindingVectorizedDim()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorBytesPerComponent().
+    //!
+    //! \see safe::ICudaEngine::getTensorBytesPerComponent()
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual std::int32_t getBindingBytesPerComponent(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual std::int32_t getBindingBytesPerComponent(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Return the number of components included in one element.
@@ -294,24 +310,30 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
-    //! \see safe::ICudaEngine::getBindingVectorizedDim()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorComponentsPerElement().
+    //!
+    //! \see safe::ICudaEngine::getTensorComponentsPerElement()
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual std::int32_t getBindingComponentsPerElement(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual std::int32_t getBindingComponentsPerElement(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Return the binding format.
     //!
     //! \param bindingIndex The binding Index.
     //!
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorFormat().
+    //!
+    //! \see safe::ICudaEngine::getTensorFormat()
+    //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual TensorFormat getBindingFormat(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual TensorFormat getBindingFormat(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Return the dimension index that the buffer is vectorized.
@@ -320,11 +342,15 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorVectorizedDim().
+    //!
+    //! \see safe::ICudaEngine::getTensorVectorizedDim()
+    //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual std::int32_t getBindingVectorizedDim(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual std::int32_t getBindingVectorizedDim(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Returns the name of the network associated with the engine.
@@ -383,6 +409,176 @@ public:
     ICudaEngine(ICudaEngine&&) = delete;
     ICudaEngine& operator=(ICudaEngine const&) & = delete;
     ICudaEngine& operator=(ICudaEngine&&) & = delete;
+
+    //!
+    //! \brief Get extent of an input or output tensor.
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return Extent of the tensor. Dims{-1, {}} will be returned if
+    //! (1) name is not the name of an input or output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual Dims getTensorShape(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Determine the required data type for a buffer from its tensor name.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return The type of the data in the buffer. DataType::kFLOAT will be returned if
+    //! (1) name is not the name of an input or output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual DataType getTensorDataType(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Determine whether a tensor is an input or output tensor.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return kINPUT if tensorName is an input, kOUTPUT if tensorName is an output, or kNONE if neither.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual TensorIOMode getTensorIOMode(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Return the number of bytes per component of an element.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return The vector component size. 0 will be returned if
+    //! (1) name is not the name of an input or output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit, or
+    //! (4) the tensor of given name is not vectorized.
+    //!
+    //! \see safe::ICudaEngine::getTensorVectorizedDim()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual std::int32_t getTensorBytesPerComponent(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Return the number of components included in one element.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return The vector component size. -1 will be returned if
+    //! (1) name is not the name of an input or output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit, or
+    //! (4) the tensor of given name is not vectorized.
+    //!
+    //! \see safe::ICudaEngine::getTensorVectorizedDim()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual std::int32_t getTensorComponentsPerElement(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Return the tensor format.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return The tensor format. TensorFormat::kLINEAR will be returned if
+    //! (1) name is not the name of an input or output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual TensorFormat getTensorFormat(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Return the dimension index along which buffer is vectorized.
+    //!
+    //! Specifically -1 is returned if scalars per vector is 1.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return The dimension index along which the buffer is vectorized. -1 will be returned if
+    //! (1) name is not the name of an input or output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit, or
+    //! (4) the tensor of given name is not vectorized.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual std::int32_t getTensorVectorizedDim(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Return the number of input and output tensors for the network from which the engine was built.
+    //!
+    //! \return The number of IO tensors.
+    //!
+    //! \see getIOTensorName()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual std::int32_t getNbIOTensors() const noexcept = 0;
+
+    //!
+    //! \brief Return the name of an IO tensor.
+    //!
+    //! If the index does not fall between 0 and getNbIOTensors()-1, the function will fail with an error code of ErrorCode::kINVALID_ARGUMENT(3) that is
+    //! emitted to the registered IErrorRecorder.
+    //!
+    //! \param index The value that falls between 0 and getNbIOTensors()-1.
+    //!
+    //! \return The name of an IO tensor. nullptr will be returned if the index does not fall between 0 and
+    //! getNbIOTensors()-1.
+    //!
+    //! \see getNbIOTensors()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual AsciiChar const* getIOTensorName(std::int32_t const index) const noexcept = 0;
 };
 
 //!
@@ -475,11 +671,15 @@ public:
     //!
     //! \param bindingIndex The binding index.
     //!
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorStrides().
+    //!
+    //! \see safe::IExecutionContext::getTensorStrides()
+    //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual Dims getStrides(std::int32_t const bindingIndex) const noexcept = 0;
+    TRT_DEPRECATED virtual Dims getStrides(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Set the ErrorRecorder for this interface.
@@ -528,15 +728,16 @@ public:
     //!
     //! \return True if the kernels were enqueued successfully.
     //!
-    //! \see safe::ICudaEngine::getBindingIndex()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by enqueueV3().
+    //!
+    //! \see safe::IExecutionContext::enqueueV3()
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: No
     //!
-    virtual bool enqueueV2(
-        void* const* const bindings, cudaStream_t const stream, cudaEvent_t* const inputConsumed) noexcept
-        = 0;
+    TRT_DEPRECATED virtual bool enqueueV2(
+        void* const* const bindings, cudaStream_t const stream, cudaEvent_t const* const inputConsumed) noexcept = 0;
 
     IExecutionContext() = default;
     virtual ~IExecutionContext() noexcept = default;
@@ -578,6 +779,163 @@ public:
     //!   - Thread-safe: Yes
     //!
     virtual FloatingPointErrorInformation* getErrorBuffer() const noexcept = 0;
+
+    //!
+    //! \brief Return the strides of the buffer for the given tensor name.
+    //!
+    //! The strides are in units of elements, not components or bytes.
+    //! For example, for TensorFormat::kHWC8, a stride of one spans 8 scalars.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return The strides of the buffer for the given tensor name. Dims{-1, {}} will be returned if
+    //! (1) name is not the name of an input or output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual Dims getTensorStrides(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Set memory address for given input tensor.
+    //!
+    //! An address defaults to nullptr.
+    //!
+    //! Before calling enqueueV3(), each input must have a non-null address.
+    //!
+    //! \param tensorName The name of an input tensor.
+    //! \param data The pointer (void const*) to the const data owned by the user.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //! \warning The pointer must have at least 256-byte alignment.
+    //!
+    //! \return True on success, false if
+    //! (1) name is not the name of an input tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit, or
+    //! (4) pointer to the const data is nullptr or not aligned.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
+    virtual bool setInputTensorAddress(AsciiChar const* tensorName, void const* data) noexcept = 0;
+
+    //!
+    //! \brief Set memory address for given output tensor.
+    //!
+    //! An address defaults to nullptr.
+    //!
+    //! Before calling enqueueV3(), each output must have a non-null address.
+    //!
+    //! \param tensorName The name of an output tensor.
+    //! \param data The pointer (void*) to the data owned by the user.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //! \warning The pointer must have at least 256-byte alignment.
+    //!
+    //! \return True on success. Return false if
+    //! (1) name is not the name of an output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit, or
+    //! (4) pointer to data is nullptr or not aligned.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
+    virtual bool setOutputTensorAddress(AsciiChar const* tensorName, void* data) noexcept = 0;
+
+    //!
+    //! \brief Mark input as consumed.
+    //!
+    //! Passing event==nullptr removes whatever event was set, if any.
+    //!
+    //! \param event The cuda event that is triggered after all input tensors have been consumed.
+    //!
+    //! \return True on success, false if error occurred.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
+    virtual bool setInputConsumedEvent(cudaEvent_t event) noexcept = 0;
+
+    //!
+    //! \brief Return the event associated with consuming the input.
+    //!
+    //! \return The cuda event, nullptr will be returned if the event is not set yet.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual cudaEvent_t getInputConsumedEvent() const noexcept = 0;
+
+    //!
+    //! \brief Get memory address for given input tensor.
+    //!
+    //! \param tensorName The name of an input tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return The memory address for the given input tensor. nullptr will be returned if
+    //! (1) name is not the name of an input tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit, or
+    //! (4) the memory address for the given input tensor is not set yet.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual void const* getInputTensorAddress(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Get memory address for given output tensor.
+    //!
+    //! \param tensorName The name of an output tensor.
+    //!
+    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
+    //! NULL terminated.
+    //!
+    //! \return Raw output data pointer (void*) for given output tensor, return nullptr if
+    //! (1) name is not the name of an output tensor, or
+    //! (2) name is nullptr, or
+    //! (3) name exceeds the string length limit, or
+    //! (4) the memory address for the given output tensor is not set yet.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual void* getOutputTensorAddress(AsciiChar const* tensorName) const noexcept = 0;
+
+    //!
+    //! \brief Asynchronously execute inference.
+    //!
+    //! Modifying or releasing memory that has been registered for the tensors before stream
+    //! synchronization or the event passed to setInputConsumedEvent has been being triggered results in undefined
+    //! behavior.
+    //!
+    //! \param stream A cuda stream on which the inference kernels will be enqueued.
+    //!
+    //! \return True on success, false if any execution error occurred.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual bool enqueueV3(cudaStream_t stream) noexcept = 0;
 };
 
 //!

@@ -39,6 +39,7 @@ from polygraphy.backend.trt import (
     onnx_like_from_network,
     set_layer_precisions,
     create_config,
+    postprocess_network,
     set_tensor_datatypes,
     set_tensor_formats,
     create_network,
@@ -210,6 +211,55 @@ class TestModifyNetwork:
             assert network.num_outputs == 1
             assert network.get_output(0).name == "Slice"
             assert network.get_output(0) == slice
+
+class TestPostprocessNetwork:
+    def test_basic(self, modifiable_network):
+        """Tests that the callback is actually invoked by Polygraphy."""
+        func_called = False
+        def func(network):
+            nonlocal func_called
+            func_called = True
+            assert isinstance(network, trt.INetworkDefinition)
+        builder, network, parser = postprocess_network(
+            modifiable_network, func)
+        assert func_called
+
+    def test_kwargs(self, modifiable_network):
+        """Tests that callbacks that use **kwargs work as expected."""
+        func_called = False
+        def func(**kwargs):
+            nonlocal func_called
+            func_called = True
+            assert isinstance(kwargs['network'], trt.INetworkDefinition)
+        builder, network, parser = postprocess_network(
+            modifiable_network, func)
+        assert func_called
+
+    def test_modify_network(self, modifiable_network):
+        """Tests that the network passed in is properly modified by the callback."""
+
+        # Performs the equivalent of set_layer_precisions
+        def func(network):
+            for layer in network:
+                if layer.name == "onnx_graphsurgeon_node_1":
+                    layer.precision = trt.float16
+                if layer.name == "onnx_graphsurgeon_node_3":
+                    layer.precision = trt.int8
+
+        builder, network, parser = postprocess_network(
+            modifiable_network, func)
+
+        with builder, network, parser:
+            assert network[0].precision == trt.float16
+            assert network[1].precision == trt.int8
+
+    def test_negative_non_callable(self, modifiable_network):
+        """Tests that PostprocessNetwork properly rejects `func` objects that
+           are not callable."""
+
+        with pytest.raises(PolygraphyException, match=r"Object .* is not a callable"):
+            builder, network, parser = postprocess_network(
+                modifiable_network, None)
 
 
 class TestSetLayerPrecisions:

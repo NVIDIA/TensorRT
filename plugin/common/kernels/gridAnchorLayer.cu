@@ -18,6 +18,8 @@
 #include "reducedMathPlugin.h"
 #include <iostream>
 
+using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 using nvinfer1::plugin::ReducedDivisor;
 template <unsigned nthdsPerCTA>
 __launch_bounds__(nthdsPerCTA) __global__ void gridAnchorKernel(const GridAnchorParameters param,
@@ -33,10 +35,12 @@ __launch_bounds__(nthdsPerCTA) __global__ void gridAnchorKernel(const GridAnchor
      * The coordinates calculated are scaled by the input image size.
      * Most of the coordinates will be in a range of [0, 1], except for the bounding box coordinates going outside of
      * the image Every coordinate will go back to the pixel coordinates in the input image if being multiplied by
-     * image_input_size Here we implicitly assumes the image input and feature map are square
+     * image_input_size.
      */
-    float anchorStride = (1.0 / param.H);
-    float anchorOffset = 0.5 * anchorStride;
+    float anchorStrideH = (1.0F / param.H);
+    float anchorStrideW = (1.0F / param.W);
+    float anchorOffsetH = 0.5F * anchorStrideH;
+    float anchorOffsetW = 0.5F * anchorStrideW;
 
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= dim)
@@ -48,8 +52,8 @@ __launch_bounds__(nthdsPerCTA) __global__ void gridAnchorKernel(const GridAnchor
     const int h = currIndex / param.W;
 
     // Center coordinates
-    float yC = h * anchorStride + anchorOffset;
-    float xC = w * anchorStride + anchorOffset;
+    float yC = h * anchorStrideH + anchorOffsetH;
+    float xC = w * anchorStrideW + anchorOffsetW;
 
     // x_min, y_min
     float xMin = xC - 0.5 * widths[arId];

@@ -14,15 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import argparse
-
 from polygraphy import constants
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, TrtConfigArgs
-from polygraphy.tools.base import Tool
 from polygraphy.tools.script import Script, inline, safe
+from polygraphy.tools.template.subtool.base import BaseTemplateTool
 
 
-class TrtConfig(Tool):
+class TrtConfig(BaseTemplateTool):
     """
     Generate a template script to create a TensorRT builder configuration.
     """
@@ -30,7 +28,7 @@ class TrtConfig(Tool):
     def __init__(self):
         super().__init__("trt-config")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [
             ModelArgs(model_opt_required=False),
             # For INT8 calibration
@@ -38,12 +36,7 @@ class TrtConfig(Tool):
             TrtConfigArgs(),
         ]
 
-    def add_parser_args(self, parser):
-        parser.add_argument(
-            "-o", "--output", help="Path to save the generated script.", type=argparse.FileType("w"), required=True
-        )
-
-    def run(self, args):
+    def run_impl(self, args):
         script = Script(summary="Creates a TensorRT Builder Configuration.", always_create_runners=False)
         script.add_import(imports=["func"], frm="polygraphy")
         script.add_import(imports="tensorrt", imp_as="trt")

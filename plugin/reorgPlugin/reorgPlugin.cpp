@@ -218,7 +218,8 @@ IPluginV2Ext* ReorgPluginCreator::createPlugin(const char* name, const PluginFie
         const PluginField* fields = fc->fields;
         PLUGIN_VALIDATE(fc->nbFields == 1);
         PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kINT32);
-        stride = static_cast<int>(*(static_cast<const int*>(fields[0].data)));
+        PLUGIN_VALIDATE(!strcmp(fields[0].name, "stride"));
+        stride = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[0].data)));
 
         PLUGIN_VALIDATE(stride > 0);
 

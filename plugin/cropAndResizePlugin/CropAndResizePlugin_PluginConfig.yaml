@@ -19,4 +19,7 @@ versions:
       crop_width:
         min: "0"
         max: "=pinf"
+    attributes_required:
+      - crop_height
+      - crop_width
 ...

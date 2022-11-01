@@ -94,7 +94,7 @@ class DataLoaderArgs(BaseArgs):
         custom_loader_group.add_argument(
             "--load-inputs",
             "--load-input-data",
-            help="[EXPERIMENTAL] Path(s) to load inputs. The file(s) should be a JSON-ified "
+            help="Path(s) to load inputs. The file(s) should be a JSON-ified "
             "List[Dict[str, numpy.ndarray]], i.e. a list where each element is the feed_dict for a single iteration. "
             "When this option is used, all other data loader arguments are ignored. ",
             default=[],

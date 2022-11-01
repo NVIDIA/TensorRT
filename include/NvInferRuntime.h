@@ -62,7 +62,7 @@ protected:
 //! operations that are safety certified and the resulting serialized engine can be executed with TensorRT's safe
 //! runtime APIs in the nvinfer1::safe namespace. EngineCapability::kDLA_STANDALONE provides a restricted subset of
 //! network operations that are DLA compatible and the resulting serialized engine can be executed using standalone
-//! DLA runtime APIs. See sampleNvmedia for an example of integrating NvMediaDLA APIs with TensorRT APIs.
+//! DLA runtime APIs. See sampleCudla for an example of integrating cuDLA APIs with TensorRT APIs.
 //!
 
 enum class EngineCapability : int32_t
@@ -73,7 +73,7 @@ enum class EngineCapability : int32_t
     //!
     kSTANDARD = 0,
 
-    //! \deprecated Use kSTANDARD. Deprecated in TensorRT 8.0.
+    //! \deprecated Deprecated in TensorRT 8.0. Superseded by kSTANDARD.
     kDEFAULT TRT_DEPRECATED_ENUM = kSTANDARD,
 
     //!
@@ -84,7 +84,7 @@ enum class EngineCapability : int32_t
     //! This flag is only supported in NVIDIA Drive(R) products.
     kSAFETY = 1,
 
-    //! \deprecated Use kSAFETY. Deprecated in TensorRT 8.0.
+    //! \deprecated Deprecated in TensorRT 8.0. Superseded by kSAFETY.
     kSAFE_GPU TRT_DEPRECATED_ENUM = kSAFETY,
 
     //!
@@ -94,7 +94,7 @@ enum class EngineCapability : int32_t
     //!
     kDLA_STANDALONE = 2,
 
-    //! \deprecated Use kDLA_STANDALONE. Deprecated in TensorRT 8.0.
+    //! \deprecated Deprecated in TensorRT 8.0. Superseded by kDLA_STANDALONE.
     kSAFE_DLA TRT_DEPRECATED_ENUM = kDLA_STANDALONE,
 };
 
@@ -165,7 +165,7 @@ public:
     //!
     //! Destroy the allocated memory.
     //!
-    //! \deprecated Use `delete` instead. Deprecated in TRT 8.0.
+    //! \deprecated Deprecated in TRT 8.0. Superseded by `delete`.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
@@ -547,7 +547,7 @@ private:
 //! \brief Application-implemented interface for profiling.
 //!
 //! When this class is added to an execution context, the profiler will be called once per layer for each invocation of
-//! executeV2()/enqueueV2().
+//! executeV2()/enqueueV2()/enqueueV3().
 //!
 //! It is not recommended to run inference with profiler enabled when the inference execution time is critical since the
 //! profiler may affect execution time negatively.
@@ -675,7 +675,7 @@ public:
     //!
     //! \brief Destroy this object.
     //!
-    //! \deprecated Use `delete` instead. Deprecated in TRT 8.0.
+    //! \deprecated Deprecated in TRT 8.0. Superseded by `delete`.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
@@ -811,6 +811,9 @@ public:
     //! * The number of weights is inconsistent with the layer’s original specification.
     //!
     //! Modifying the weights before method refit() completes will result in undefined behavior.
+    //!
+    //! \warning The string layerName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
     bool setWeights(char const* layerName, WeightsRole role, Weights weights) noexcept
     {
         return mImpl->setWeights(layerName, role, weights);
@@ -870,7 +873,7 @@ public:
     }
 
     //!
-    //! \deprecated Use `delete` instead. Deprecated in TRT 8.0.
+    //! \deprecated Deprecated in TRT 8.0. Superseded by `delete`.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
@@ -891,6 +894,9 @@ public:
     //! Returns false if there is no Int8 engine tensor derived from
     //! a network tensor of that name.  If successful, then getMissing
     //! may report that some weights need to be supplied.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
     bool setDynamicRange(char const* tensorName, float min, float max) noexcept
     {
         return mImpl->setDynamicRange(tensorName, min, max);
@@ -903,6 +909,8 @@ public:
     //!
     //! If the dynamic range was never set, returns the minimum computed during calibration.
     //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
     float getDynamicRangeMin(char const* tensorName) const noexcept
     {
         return mImpl->getDynamicRangeMin(tensorName);
@@ -914,6 +922,8 @@ public:
     //! \return Maximum of dynamic range.
     //!
     //! If the dynamic range was never set, returns the maximum computed during calibration.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
     float getDynamicRangeMax(char const* tensorName) const noexcept
     {
@@ -983,6 +993,9 @@ public:
     //! * The number of weights is inconsistent with the original specification.
     //!
     //! Modifying the weights before method refitCudaEngine() completes will result in undefined behavior.
+    //!
+    //! \warning The string name must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
     bool setNamedWeights(char const* name, Weights weights) noexcept
     {
         return mImpl->setNamedWeights(name, weights);
@@ -1144,6 +1157,8 @@ public:
     //!
     //! \warning If run on DLA, minimum, optimum, and maximum dimensions must to be the same.
     //!
+    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
     bool setDimensions(char const* inputName, OptProfileSelector select, Dims dims) noexcept
     {
         return mImpl->setDimensions(inputName, select, dims);
@@ -1153,6 +1168,8 @@ public:
     //! \brief Get the minimum / optimum / maximum dimensions for a dynamic input tensor.
     //!
     //! If the dimensions have not been previously set via setDimensions(), return an invalid Dims with nbDims == -1.
+    //!
+    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
     Dims getDimensions(char const* inputName, OptProfileSelector select) const noexcept
     {
@@ -1173,7 +1190,8 @@ public:
     //! i = 0, ..., nbValues - 1. Execution of the network must be valid for the optVals.
     //!
     //! Shape tensors are tensors that contribute to shape calculations in some way, and can contain
-    //! any int32_t values appropriate for the network. Examples:
+    //! any int32_t values appropriate for the network. Shape tensors of other data types (e.g. float) are not
+    //! supported. Examples:
     //!
     //! * A shape tensor used as the second input to IShuffleLayer can contain a -1 wildcard.
     //!   The corresponding minVal[i] should be -1.
@@ -1197,6 +1215,8 @@ public:
     //!
     //! \warning If run on DLA, minimum, optimum, and maximum shape values must to be the same.
     //!
+    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
     bool setShapeValues(
         char const* inputName, OptProfileSelector select, int32_t const* values, int32_t nbValues) noexcept
     {
@@ -1209,6 +1229,8 @@ public:
     //! This will return the number of shape values if setShapeValues() has been called before for this input tensor.
     //! Otherwise, return -1.
     //!
+    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
     int32_t getNbShapeValues(char const* inputName) const noexcept
     {
         return mImpl->getNbShapeValues(inputName);
@@ -1218,6 +1240,8 @@ public:
     //! \brief Get the minimum / optimum / maximum values for an input shape tensor.
     //!
     //! If the shape values have not been set previously with setShapeValues(), this returns nullptr.
+    //!
+    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
     int32_t const* getShapeValues(char const* inputName, OptProfileSelector select) const noexcept
     {
@@ -1235,7 +1259,7 @@ public:
     //!        that the target will be reached. This parameter is ignored for the first (default) optimization profile
     //!        that is defined.
     //!
-    //! \return true if the input is in the valid range (between 0 and 1 inclusive), else false
+    //! \return true if the input is in the valid range (between 0 and 1 inclusive), else false.
     //!
     bool setExtraMemoryTarget(float target) noexcept
     {
@@ -1244,6 +1268,10 @@ public:
 
     //!
     //! \brief Get the extra memory target that has been defined for this profile.
+    //!
+    //! This defaults to 1.0F.
+    //!
+    //! \return the valid value set by setExtraMemoryTarget or 1.0F.
     //!
     float getExtraMemoryTarget() const noexcept
     {
@@ -1259,7 +1287,8 @@ public:
     //! that the maximum dimensions are at least as large as the optimum dimensions. Some validation steps require
     //! knowledge of the network definition and are deferred to engine build time.
     //!
-    //! \return true if the optimization profile is valid and may be passed to an IBuilderConfig, else false
+    //!
+    //! \return true if the optimization profile is valid and may be passed to an IBuilderConfig, else false.
     //!
     bool isValid() const noexcept
     {
@@ -1276,24 +1305,35 @@ protected:
 //!
 //! \brief List of tactic sources for TensorRT.
 //!
-//! \see TacticSources, IBuilderConfig::setTacticSources(), IBuilderConfig::getTacticSources()
+//! \see TacticSources, IBuilderConfig::setTacticSources(), IBuilderConfig::getTacticSources(),
+//! PreviewFeature::kDISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805
 //!
 enum class TacticSource : int32_t
 {
+    //! cuBLAS tactics. Enabled by default.
     //! \note Disabling kCUBLAS will cause the cublas handle passed to plugins in attachToContext to be null.
-    kCUBLAS = 0,    //!< cuBLAS tactics.
-    kCUBLAS_LT = 1, //!< cuBLAS LT tactics
-    kCUDNN = 2,     //!< cuDNN tactics
+    kCUBLAS = 0,
+    //! cuBLAS LT tactics.
+    //! Enabled for x86 platforms and only enabled for non-x86 platforms when CUDA >= 11.0 by default.
+    kCUBLAS_LT = 1,
+    //! cuDNN tactics.  Enabled by default.
+    //! \note Disabling kCUDNN will cause the cuDNN handle passed to plugins in attachToContext to be null.
+    kCUDNN = 2,
 
     //! Enables convolution tactics implemented with edge mask tables. These tactics tradeoff memory for performance by
     //! consuming additional memory space proportional to the input size.
-    kEDGE_MASK_CONVOLUTIONS = 3
+    //! Enabled by default.
+    kEDGE_MASK_CONVOLUTIONS = 3,
+
+    //! Enables convolution tactics implemented with source-code JIT fusion. The engine building time may increase
+    //! when this is enabled. Enabled by default.
+    kJIT_CONVOLUTIONS = 4,
 };
 
 template <>
 constexpr inline int32_t EnumMax<TacticSource>() noexcept
 {
-    return 4;
+    return 5;
 } //!< Maximum number of tactic sources in TacticSource enum. \see TacticSource
 
 //!
@@ -1319,9 +1359,9 @@ enum class ProfilingVerbosity : int32_t
     kNONE = 1,             //!< Do not print any layer information.
     kDETAILED = 2,         //!< Print detailed layer information including layer names and layer parameters.
 
-    //! \deprecated Use kLAYER_NAMES_ONLY. Deprecated in TensorRT 8.0.
+    //! \deprecated Deprecated in TensorRT 8.0. Superseded by kLAYER_NAMES_ONLY.
     kDEFAULT TRT_DEPRECATED_ENUM = kLAYER_NAMES_ONLY,
-    //! \deprecated Use kDETAILED. Deprecated in TensorRT 8.0.
+    //! \deprecated Deprecated in TensorRT 8.0. Superseded by kDETAILED.
     kVERBOSE TRT_DEPRECATED_ENUM = kDETAILED
 };
 
@@ -1352,9 +1392,11 @@ public:
     //! If the engine has been built for K profiles, the first getNbBindings() / K bindings are used by profile
     //! number 0, the following getNbBindings() / K bindings are used by profile number 1 etc.
     //!
-    //! \see getBindingIndex();
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getNbIOTensors.
     //!
-    int32_t getNbBindings() const noexcept
+    //! \see getBindingIndex()
+    //!
+    TRT_DEPRECATED int32_t getNbBindings() const noexcept
     {
         return mImpl->getNbBindings();
     }
@@ -1372,11 +1414,17 @@ public:
     //! mangle the name by appending " [profile k]", as described for method getBindingName().
     //!
     //! \param name The tensor name.
-    //! \return The binding index for the named tensor, or -1 if the name is not found.
+    //! \return The binding index for the named tensor, or -1 if the provided name does not map to an input or output
+    //! tensor.
+    //!
+    //! \warning The string name must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by name-based methods. Use them instead of binding-index
+    //! based methods.
     //!
     //! \see getNbBindings() getBindingName()
     //!
-    int32_t getBindingIndex(char const* name) const noexcept
+    TRT_DEPRECATED int32_t getBindingIndex(char const* name) const noexcept
     {
         return mImpl->getBindingIndex(name);
     }
@@ -1394,9 +1442,12 @@ public:
     //! \param bindingIndex The binding index.
     //! \return The name corresponding to the index, or nullptr if the index is out of range.
     //!
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by name-based methods. Use them instead of binding-index
+    //! based methods.
+    //!
     //! \see getBindingIndex()
     //!
-    char const* getBindingName(int32_t bindingIndex) const noexcept
+    TRT_DEPRECATED char const* getBindingName(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingName(bindingIndex);
     }
@@ -1407,9 +1458,11 @@ public:
     //! \param bindingIndex The binding index.
     //! \return True if the index corresponds to an input binding and the index is in range.
     //!
-    //! \see getBindingIndex()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorIOMode().
     //!
-    bool bindingIsInput(int32_t bindingIndex) const noexcept
+    //! \see getTensorIOMode()
+    //!
+    TRT_DEPRECATED bool bindingIsInput(int32_t bindingIndex) const noexcept
     {
         return mImpl->bindingIsInput(bindingIndex);
     }
@@ -1432,11 +1485,28 @@ public:
     //! but for another optimization profile.  If that other profile specifies minimum
     //! dimensions [5,8] and maximum dimensions [5,9], getBindingDimensions(b') returns [5,-1].
     //!
-    //! \see getBindingIndex()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorShape().
     //!
-    Dims getBindingDimensions(int32_t bindingIndex) const noexcept
+    //! \see getTensorShape()
+    //!
+    TRT_DEPRECATED Dims getBindingDimensions(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingDimensions(bindingIndex);
+    }
+
+    //!
+    //! \brief Get shape of an input or output tensor.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \return shape of the tensor, with -1 in place of each dynamic runtime dimension,
+    //!         or Dims{-1, {}} if the provided name does not map to an input or output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    Dims getTensorShape(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorShape(tensorName);
     }
 
     //!
@@ -1445,11 +1515,28 @@ public:
     //! \param bindingIndex The binding index.
     //! \return The type of the data in the buffer.
     //!
-    //! \see getBindingIndex()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorDataType().
     //!
-    DataType getBindingDataType(int32_t bindingIndex) const noexcept
+    //! \see getTensorDataType()
+    //!
+    TRT_DEPRECATED DataType getBindingDataType(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingDataType(bindingIndex);
+    }
+
+    //!
+    //! \brief Determine the required data type for a buffer from its tensor name.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \return The type of the data in the buffer, or DataType::kFLOAT if the provided name does not map to an input or
+    //! output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    DataType getTensorDataType(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorDataType(tensorName);
     }
 
     //!
@@ -1515,7 +1602,7 @@ public:
     //!
     //! \brief Destroy this object;
     //!
-    //! \deprecated Use `delete` instead. Deprecated in TRT 8.0.
+    //! \deprecated Deprecated in TRT 8.0. Superseded by `delete`.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
@@ -1529,14 +1616,68 @@ public:
     //!
     //! This lets you know whether the binding should be a pointer to device or host memory.
     //!
-    //! \see ITensor::setLocation() ITensor::getLocation()
-    //!
     //! \param bindingIndex The binding index.
     //! \return The location of the bound tensor with given index.
     //!
-    TensorLocation getLocation(int32_t bindingIndex) const noexcept
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorLocation().
+    //!
+    //! \see ITensor::setLocation() ITensor::getLocation()
+    //! \see getTensorLocation()
+    //!
+    TRT_DEPRECATED TensorLocation getLocation(int32_t bindingIndex) const noexcept
     {
         return mImpl->getLocation(bindingIndex);
+    }
+
+    //!
+    //! \brief Get whether an input or output tensor must be on GPU or CPU.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \return TensorLocation::kDEVICE if tensorName must be on GPU, or TensorLocation::kHOST if on CPU, or
+    //! TensorLocation::kDEVICE if the provided name does not map to an input or output tensor.
+    //!
+    //! The location is established at build time. E.g. shape tensors inputs are typically required to be on the CPU.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    TensorLocation getTensorLocation(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorLocation(tensorName);
+    }
+
+    //!
+    //! \brief True if tensor is required as input for shape calculations or is output from shape calculations.
+    //!
+    //! Return true for either of the following conditions:
+    //!
+    //! * The tensor is a network input, and its value is required for IExecutionContext::getTensorShape()
+    //!   to return the shape of a network output.
+    //!
+    //! * The tensor is a network output, and inferShape() will compute its values.
+    //!
+    //! For example, if a network uses an input tensor "foo" as an addend to an IElementWiseLayer
+    //! that computes the "reshape dimensions" for IShuffleLayer, then isShapeInferenceIO("foo") == true.
+    //! If the network copies said input tensor "foo" to an output "bar", then
+    //! isShapeInferenceIO("bar") == true and IExecutionContext::inferShapes() will write to "bar".
+    //!
+    bool isShapeInferenceIO(char const* tensorName) const noexcept
+    {
+        return mImpl->isShapeInferenceIO(tensorName);
+    }
+
+    //!
+    //! \brief Determine whether a tensor is an input or output tensor.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \return kINPUT if tensorName is an input, kOUTPUT if tensorName is an output, or kNONE if neither.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    TensorIOMode getTensorIOMode(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorIOMode(tensorName);
     }
 
     //! \brief create an execution context without any device memory allocated
@@ -1575,11 +1716,31 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
-    //! \see ICudaEngine::getBindingVectorizedDim()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorBytesPerComponent().
     //!
-    int32_t getBindingBytesPerComponent(int32_t bindingIndex) const noexcept
+    //! \see getBindingVectorizedDim()
+    //! \see getTensorBytesPerComponent()
+    //!
+    TRT_DEPRECATED int32_t getBindingBytesPerComponent(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingBytesPerComponent(bindingIndex);
+    }
+
+    //!
+    //! \brief Return the number of bytes per component of an element, or -1 if the provided name does not map to an
+    //! input or output tensor.
+    //!
+    //! The vector component size is returned if getTensorVectorizedDim() != -1.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see getTensorVectorizedDim()
+    //!
+    int32_t getTensorBytesPerComponent(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorBytesPerComponent(tensorName);
     }
 
     //!
@@ -1589,11 +1750,30 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
-    //! \see ICudaEngine::getBindingVectorizedDim()
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorComponentsPerElement().
     //!
-    int32_t getBindingComponentsPerElement(int32_t bindingIndex) const noexcept
+    //! \see getBindingVectorizedDim()
+    //!
+    TRT_DEPRECATED int32_t getBindingComponentsPerElement(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingComponentsPerElement(bindingIndex);
+    }
+
+    //!
+    //! \brief Return the number of components included in one element, or -1 if the provided name does not map to an
+    //! input or output tensor.
+    //!
+    //! The number of elements in the vectors is returned if getTensorVectorizedDim() != -1.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see getTensorVectorizedDim()
+    //!
+    int32_t getTensorComponentsPerElement(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorComponentsPerElement(tensorName);
     }
 
     //!
@@ -1601,16 +1781,34 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
-    TensorFormat getBindingFormat(int32_t bindingIndex) const noexcept
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorFormat().
+    //!
+    //! \see getTensorFormat()
+    //!
+    TRT_DEPRECATED TensorFormat getBindingFormat(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingFormat(bindingIndex);
     }
 
     //!
-    //! \brief Return the human readable description of the tensor format.
+    //! \brief Return the binding format, or TensorFormat::kLINEAR if the provided name does not map to an input or
+    //! output tensor.
     //!
-    //! The description includes the order, vectorization, data type, strides,
-    //! and etc. Examples are shown as follows:
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    TensorFormat getTensorFormat(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorFormat(tensorName);
+    }
+
+    //!
+    //! \brief Return the human readable description of the tensor format, or nullptr if the provided name does not
+    //! map to an input or output tensor.
+    //!
+    //! The description includes the order, vectorization, data type, and strides.
+    //! Examples are shown as follows:
     //!   Example 1: kCHW + FP32
     //!     "Row major linear FP32 format"
     //!   Example 2: kCHW2 + FP16
@@ -1620,21 +1818,66 @@ public:
     //!
     //! \param bindingIndex The binding Index.
     //!
-    char const* getBindingFormatDesc(int32_t bindingIndex) const noexcept
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorFormatDesc().
+    //!
+    //! \see getTensorFormatDesc()
+    //!
+    TRT_DEPRECATED char const* getBindingFormatDesc(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingFormatDesc(bindingIndex);
     }
 
     //!
-    //! \brief Return the dimension index that the buffer is vectorized.
+    //! \brief Return the human readable description of the tensor format, or empty string if the provided name does not
+    //! map to an input or output tensor.
+    //!
+    //! The description includes the order, vectorization, data type, and strides.
+    //! Examples are shown as follows:
+    //!   Example 1: kCHW + FP32
+    //!     "Row major linear FP32 format"
+    //!   Example 2: kCHW2 + FP16
+    //!     "Two wide channel vectorized row major FP16 format"
+    //!   Example 3: kHWC8 + FP16 + Line Stride = 32
+    //!     "Channel major FP16 format where C % 8 == 0 and H Stride % 32 == 0"
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    char const* getTensorFormatDesc(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorFormatDesc(tensorName);
+    }
+
+    //!
+    //! \brief Return the dimension index that the buffer is vectorized, or -1 is the name is not found.
     //!
     //! Specifically -1 is returned if scalars per vector is 1.
     //!
     //! \param bindingIndex The binding Index.
     //!
-    int32_t getBindingVectorizedDim(int32_t bindingIndex) const noexcept
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorVectorizedDim().
+    //!
+    //! \see getTensorVectorizedDim()
+    //!
+    TRT_DEPRECATED int32_t getBindingVectorizedDim(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingVectorizedDim(bindingIndex);
+    }
+
+    //!
+    //! \brief Return the dimension index that the buffer is vectorized, or -1 if the provided name does not
+    //! map to an input or output tensor.
+    //!
+    //! Specifically -1 is returned if scalars per vector is 1.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    int32_t getTensorVectorizedDim(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorVectorizedDim(tensorName);
     }
 
     //!
@@ -1664,9 +1907,10 @@ public:
     }
 
     //!
-    //! \brief Get the minimum / optimum / maximum dimensions for a particular binding under an optimization profile.
+    //! \brief Get the minimum / optimum / maximum dimensions for a particular input binding under an optimization
+    //! profile.
     //!
-    //! \param bindingIndex The binding index, which must belong to the given profile,
+    //! \param bindingIndex The input binding index, which must belong to the given profile,
     //!        or be between 0 and bindingsPerProfile-1 as described below.
     //!
     //! \param profileIndex The profile index, which must be between 0 and getNbOptimizationProfiles()-1.
@@ -1685,9 +1929,34 @@ public:
     //!
     //! Otherwise the bindingIndex is considered invalid.
     //!
-    Dims getProfileDimensions(int32_t bindingIndex, int32_t profileIndex, OptProfileSelector select) const noexcept
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getProfileShape().
+    //!
+    //! \see getProfileShape()
+    //!
+    TRT_DEPRECATED Dims getProfileDimensions(
+        int32_t bindingIndex, int32_t profileIndex, OptProfileSelector select) const noexcept
     {
         return mImpl->getProfileDimensions(bindingIndex, profileIndex, select);
+    }
+
+    //!
+    //! \brief Get the minimum / optimum / maximum dimensions for an input tensor given its name under an optimization
+    //! profile.
+    //!
+    //! \param tensorName The name of an input tensor.
+    //!
+    //! \param profileIndex The profile index, which must be between 0 and getNbOptimizationProfiles()-1.
+    //!
+    //! \param select Whether to query the minimum, optimum, or maximum dimensions for this input tensor.
+    //!
+    //! \return The minimum / optimum / maximum dimensions for an input tensor in this profile.
+    //!         If the profileIndex is invalid or provided name does not map to an input tensor, return Dims{-1, {}}
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    Dims getProfileShape(char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept
+    {
+        return mImpl->getProfileShape(tensorName, profileIndex, select);
     }
 
     //!
@@ -1707,11 +1976,14 @@ public:
     //!         nullptr.
     //!
     //! For backwards compatibility with earlier versions of TensorRT, a bindingIndex that does not belong
-    //! to the profile is corrected as described for getProfileDimensions.
+    //! to the profile is corrected as described for getProfileDimensions().
     //!
-    //! \see ICudaEngine::getProfileDimensions
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getProfileShape(). Difference between Execution and shape
+    //! tensor is superficial since TensorRT 8.5.
     //!
-    int32_t const* getProfileShapeValues(
+    //! \see getProfileDimensions() getProfileShape()
+    //!
+    TRT_DEPRECATED int32_t const* getProfileShapeValues(
         int32_t profileIndex, int32_t inputIndex, OptProfileSelector select) const noexcept
     {
         return mImpl->getProfileShapeValues(profileIndex, inputIndex, select);
@@ -1746,9 +2018,11 @@ public:
     //! shows up in the engine's inputs.  For example, if an input tensor is used only
     //! as an input to IShapeLayer, only its shape matters and its values are irrelevant.
     //!
-    //! \see isExecutionBinding()
+    //! \deprecated Use name-based isShapeInferenceIO() instead to know whether a tensor is a shape tensor.
     //!
-    bool isShapeBinding(int32_t bindingIndex) const noexcept
+    //! \see isExecutionBinding() isShapeInferenceIO()
+    //!
+    TRT_DEPRECATED bool isShapeBinding(int32_t bindingIndex) const noexcept
     {
         return mImpl->isShapeBinding(bindingIndex);
     }
@@ -1760,9 +2034,12 @@ public:
     //! input of IShuffleLayer, then isExecutionBinding(i) is false, and a nullptr can be
     //! supplied for it when calling IExecutionContext::execute or IExecutionContext::enqueue.
     //!
-    //! \see isShapeBinding()
+    //! \deprecated No name-based equivalent replacement. Use getTensorLocation() instead to know the location of tensor
+    //! data. Distinction between execution binding and shape binding is superficial since TensorRT 8.5.
     //!
-    bool isExecutionBinding(int32_t bindingIndex) const noexcept
+    //! \see isShapeBinding() getTensorLocation()
+    //!
+    TRT_DEPRECATED bool isExecutionBinding(int32_t bindingIndex) const noexcept
     {
         return mImpl->isExecutionBinding(bindingIndex);
     }
@@ -1870,8 +2147,86 @@ public:
         return mImpl->createEngineInspector();
     }
 
+    //!
+    //! \brief Return number of IO tensors.
+    //!
+    //! It is the number of input and output tensors for the network from which the engine was built.
+    //! The names of the IO tensors can be discovered by calling getIOTensorName(i) for i in 0 to getNbIOTensors()-1.
+    //!
+    //! \see getIOTensorName()
+    //!
+    int32_t getNbIOTensors() const noexcept
+    {
+        return mImpl->getNbIOTensors();
+    }
+
+    //!
+    //! \brief Return name of an IO tensor.
+    //!
+    //! \param index value between 0 and getNbIOTensors()-1
+    //!
+    //! \see getNbIOTensors()
+    //!
+    char const* getIOTensorName(int32_t index) const noexcept
+    {
+        return mImpl->getIOTensorName(index);
+    }
+
 protected:
     apiv::VCudaEngine* mImpl;
+};
+
+//!
+//! \class IOutputAllocator
+//!
+//! \brief Callback from ExecutionContext::enqueueV3()
+//!
+//! Clients should override the method reallocateOutput.
+//!
+//! \see IExecutionContext::enqueueV3()
+//!
+class IOutputAllocator
+{
+public:
+    //!
+    //! \brief Return the API version of this IOutputAllocator.
+    //!
+    //! Do not override this method as it is used by the TensorRT library to maintain
+    //! backwards-compatibility with IOutputAllocator. The value will change if Nvidia
+    //! adds additional virtual methods to this class.
+    //!
+    virtual int32_t getInterfaceVersion() const noexcept
+    {
+        return 1;
+    }
+
+    //!
+    //! \brief Return a pointer to memory for an output tensor, or nullptr if memory cannot be allocated.
+    //!
+    //! \param tensorName name of the output tensor.
+    //! \param currentMemory points to the address set by IExectionContext::setTensorAddress.
+    //! \param size number of bytes required. Always positive, even for an empty tensor.
+    //! \param alignment required alignment of the allocation.
+    //!
+    //! \return A pointer to memory to use for the output tensor or nullptr.
+    //!
+    //! If currentMemory is known to be big enough, one option is to return currentMemory.
+    //!
+    //! To preallocate memory and have the engine fail if the preallocation is not big enough,
+    //! use IExecutionContext::setTensorAddress to set a pointer to the preallocated memory,
+    //! and have reallocateOutput return nullptr if that memory is not big enough.
+    //!
+    virtual void* reallocateOutput(char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept = 0;
+
+    //!
+    //! \brief Called by TensorRT when the shape of the output tensor is known.
+    //!
+    //! Called by TensorRT sometime between when it calls reallocateOutput and enqueueV3 returns.
+    //!
+    //! \param dims dimensions of the output
+    //! \param tensorName name of the tensor
+    //!
+    virtual void notifyShape(char const* tensorName, Dims const& dims) noexcept = 0;
 };
 
 //!
@@ -1924,7 +2279,7 @@ public:
     //!
     //! \param batchSize The batch size. This is at most the max batch size value supplied to the builder when the
     //! engine was built. If the network is created with NetworkDefinitionCreationFlag::kEXPLICIT_BATCH flag, please use
-    //! enqueueV2() instead, and this batchSize argument has no effect.
+    //! enqueueV3() instead, and this batchSize argument has no effect.
     //! \param bindings An array of pointers to input and output buffers for the network.
     //! \param stream A cuda stream on which the inference kernels will be enqueued.
     //! \param inputConsumed An optional event which will be signaled when the input buffers can be refilled with new
@@ -1955,7 +2310,7 @@ public:
     //! \brief Set the debug sync flag.
     //!
     //! If this flag is set to true, the engine will log the successful execution for each kernel during executeV2(). It
-    //! has no effect when using enqueueV2().
+    //! has no effect when using enqueueV2()/enqueueV3().
     //!
     //! \see getDebugSync()
     //!
@@ -2007,7 +2362,7 @@ public:
     //!
     //! \brief Destroy this object.
     //!
-    //! \deprecated Use `delete` instead. Deprecated in TRT 8.0.
+    //! \deprecated Deprecated in TRT 8.0. Superseded by `delete`.
     //!
     //! \warning Calling destroy on a managed pointer will result in a double-free error.
     //!
@@ -2020,6 +2375,8 @@ public:
     //! \brief Set the name of the execution context.
     //!
     //! This method copies the name string.
+    //!
+    //! \warning The string name must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
     //! \see getName()
     //!
@@ -2043,9 +2400,10 @@ public:
     //!
     //! The memory must be aligned with cuda memory alignment property (using cudaGetDeviceProperties()), and its size
     //! must be at least that returned by getDeviceMemorySize(). Setting memory to nullptr is acceptable if
-    //! getDeviceMemorySize() returns 0. If using enqueueV2() to run the network, the memory is in use from the invocation
-    //! of enqueueV2() until network execution is complete. If using executeV2(), it is in use until executeV2() returns.
-    //! Releasing or otherwise using the memory for other purposes during this time will result in undefined behavior.
+    //! getDeviceMemorySize() returns 0. If using enqueueV2()/enqueueV3() to run the network, the memory is in use from
+    //! the invocation of enqueueV2()/enqueueV3() until network execution is complete. If using executeV2(), it is in
+    //! use until executeV2() returns. Releasing or otherwise using the memory for other purposes during this time will
+    //! result in undefined behavior.
     //!
     //! \see ICudaEngine::getDeviceMemorySize() ICudaEngine::createExecutionContextWithoutDeviceMemory()
     //!
@@ -2068,11 +2426,34 @@ public:
     //!
     //! \param bindingIndex The binding index.
     //!
-    //! \see getBindingComponentsPerElement
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorStrides().
     //!
-    Dims getStrides(int32_t bindingIndex) const noexcept
+    //! \see getTensorStrides()
+    //!
+    TRT_DEPRECATED Dims getStrides(int32_t bindingIndex) const noexcept
     {
         return mImpl->getStrides(bindingIndex);
+    }
+
+    //!
+    //! \brief Return the strides of the buffer for the given tensor name.
+    //!
+    //! The strides are in units of elements, not components or bytes.
+    //! For example, for TensorFormat::kHWC8, a stride of one spans 8 scalars.
+    //!
+    //! Note that strides can be different for different execution contexts
+    //! with dynamic shapes.
+    //!
+    //! If the provided name does not map to an input or output tensor, or there are dynamic dimensions that have not
+    //! been set yet, return Dims{-1, {}}
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    Dims getTensorStrides(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorStrides(tensorName);
     }
 
 public:
@@ -2082,11 +2463,12 @@ public:
     //! \param profileIndex Index of the profile. It must lie between 0 and
     //!        getEngine().getNbOptimizationProfiles() - 1
     //!
-    //! The selected profile will be used in subsequent calls to executeV2() or enqueueV2().
+    //! The selected profile will be used in subsequent calls to executeV2()/enqueueV2()/enqueueV3().
     //!
     //! When an optimization profile is switched via this API, TensorRT may
-    //! enqueue GPU memory copy operations required to set up the new profile during the subsequent enqueueV2()
-    //! operations. To avoid these calls during enqueueV2(), use setOptimizationProfileAsync() instead.
+    //! enqueue GPU memory copy operations required to set up the new profile during the subsequent
+    //! enqueueV2()/enqueueV3() operations. To avoid these calls during enqueueV2()/enqueueV3(), use
+    //! setOptimizationProfileAsync() instead.
     //!
     //! If the associated CUDA engine has dynamic inputs, this method must be called at least once
     //! with a unique profileIndex before calling execute or enqueue (i.e. the profile index
@@ -2100,10 +2482,10 @@ public:
     //!
     //! setOptimizationProfile() must be called before calling setBindingDimensions() and
     //! setInputShapeBinding() for all dynamic input tensors or input shape tensors, which in
-    //! turn must be called before either executeV2() or enqueueV2().
+    //! turn must be called before executeV2()/enqueueV2()/enqueueV3().
     //!
     //! \warning This function will trigger layer resource updates on the next
-    //!          call of enqueueV2()/executeV2(), possibly resulting in performance bottlenecks.
+    //!          call of enqueueV2()/enqueueV3()/executeV2(), possibly resulting in performance bottlenecks.
     //!
     //! \return true if the call succeeded, else false (e.g. input out of range)
     //!
@@ -2123,7 +2505,7 @@ public:
     //!
     //! If the profile index has not been set yet (implicitly to 0 for the first execution context
     //! to be created, or explicitly for all subsequent contexts), an invalid value of -1 will be returned
-    //! and all calls to enqueueV2() or executeV2() will fail until a valid profile index has been set.
+    //! and all calls to enqueueV2()/enqueueV3()/executeV2() will fail until a valid profile index has been set.
     //!
     int32_t getOptimizationProfile() const noexcept
     {
@@ -2131,7 +2513,7 @@ public:
     }
 
     //!
-    //! \brief Set the dynamic dimensions of a binding
+    //! \brief Set the dynamic dimensions of an input binding.
     //!
     //! \param bindingIndex index of an input tensor whose dimensions must be compatible with
     //!        the network definition (i.e. only the wildcard dimension -1 can be replaced with a
@@ -2160,15 +2542,35 @@ public:
     //!         of the network input shapes, check whether the output binding has valid
     //!         dimensions using getBindingDimensions() on the output bindingIndex.
     //!
-    //! \see ICudaEngine::getBindingIndex
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by setInputShape().
     //!
-    bool setBindingDimensions(int32_t bindingIndex, Dims dimensions) noexcept
+    //! \see setInputShape()
+    //!
+    TRT_DEPRECATED bool setBindingDimensions(int32_t bindingIndex, Dims dimensions) noexcept
     {
         return mImpl->setBindingDimensions(bindingIndex, dimensions);
     }
 
     //!
-    //! \brief Get the dynamic dimensions of a binding
+    //! \brief Set shape of given input.
+    //!
+    //! \param tensorName The name of an input tensor.
+    //! \param dims The shape of an input tensor.
+    //!
+    //! \return True on success, false if the provided name does not map to an input tensor, or if some other error
+    //! occurred.
+    //!
+    //! Each dimension must agree with the network dimension unless the latter was -1.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    bool setInputShape(char const* tensorName, Dims const& dims) noexcept
+    {
+        return mImpl->setInputShape(tensorName, dims);
+    }
+
+    //!
+    //! \brief Get the dynamic dimensions of a binding.
     //!
     //! If the engine was built with an implicit batch dimension, same as ICudaEngine::getBindingDimensions.
     //!
@@ -2190,11 +2592,51 @@ public:
     //! For backwards compatibility with earlier versions of TensorRT, a bindingIndex that does not belong
     //! to the current profile is corrected as described for ICudaEngine::getProfileDimensions.
     //!
-    //! \see ICudaEngine::getProfileDimensions
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorShape().
     //!
-    Dims getBindingDimensions(int32_t bindingIndex) const noexcept
+    //! \see ICudaEngine::getProfileDimensions()
+    //! \see getTensorShape()
+    //!
+    TRT_DEPRECATED Dims getBindingDimensions(int32_t bindingIndex) const noexcept
     {
         return mImpl->getBindingDimensions(bindingIndex);
+    }
+
+    //!
+    //! \brief Return the shape of the given input or output.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! Return Dims{-1, {}} if the provided name does not map to an input or output tensor.
+    //! Otherwise return the shape of the input or output tensor.
+    //!
+    //! A dimension in an input tensor will have a -1 wildcard value if all the following are true:
+    //!  * setInputShape() has not yet been called for this tensor
+    //!  * The dimension is a runtime dimension that is not implicitly constrained to be a single value.
+    //!
+    //! A dimension in an output tensor will have a -1 wildcard value if the dimension depends
+    //! on values of execution tensors OR if all the following are true:
+    //!  * It is a runtime dimension.
+    //!  * setInputShape() has NOT been called for some input tensor(s) with a runtime shape.
+    //!  * setTensorAddress() has NOT been called for some input tensor(s) with isShapeInferenceIO() = true.
+    //!
+    //! An output tensor may also have -1 wildcard dimensions if its shape depends on values of tensors supplied to
+    //! enqueueV3().
+    //!
+    //! If the request is for the shape of an output tensor with runtime dimensions,
+    //! all input tensors with isShapeInferenceIO() = true should have their value already set,
+    //! since these values might be needed to compute the output shape.
+    //!
+    //! Examples of an input dimension that is implicitly constrained to a single value:
+    //! * The optimization profile specifies equal min and max values.
+    //! * The dimension is named and only one value meets the optimization profile requirements
+    //!   for dimensions with that name.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    Dims getTensorShape(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorShape(tensorName);
     }
 
     //!
@@ -2222,7 +2664,12 @@ public:
     //!         combinations of input shapes that lead to invalid output shapes. To confirm the correctness
     //!         of the network input shapes, check whether the output binding has valid
     //!         dimensions using getBindingDimensions() on the output bindingIndex.
-    bool setInputShapeBinding(int32_t bindingIndex, int32_t const* data) noexcept
+    //!
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by setInputTensorAddress() or setTensorAddress().
+    //!
+    //! \see setInputTensorAddress() setTensorAddress()
+    //!
+    TRT_DEPRECATED bool setInputShapeBinding(int32_t bindingIndex, int32_t const* data) noexcept
     {
         return mImpl->setInputShapeBinding(bindingIndex, data);
     }
@@ -2242,9 +2689,11 @@ public:
     //! before calling this method. The method will also fail if no valid optimization profile
     //! has been set for the current execution context, i.e. if getOptimizationProfile() returns -1.
     //!
-    //! \see isShapeBinding(bindingIndex)
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorAddress() or getOutputTensorAddress().
     //!
-    bool getShapeBinding(int32_t bindingIndex, int32_t* data) const noexcept
+    //! \see isShapeBinding() getTensorAddress() getOutputTensorAddress()
+    //!
+    TRT_DEPRECATED bool getShapeBinding(int32_t bindingIndex, int32_t* data) const noexcept
     {
         return mImpl->getShapeBinding(bindingIndex, data);
     }
@@ -2256,6 +2705,9 @@ public:
     //!         by calling setBindingDimensions().
     //!
     //! Trivially true if network has no dynamically shaped input tensors.
+    //!
+    //! Does not work with name-base interfaces eg. IExecutionContext::setInputShape(). Use
+    //! IExecutionContext::inferShapes() instead.
     //!
     //! \see setBindingDimensions(bindingIndex,dimensions)
     //!
@@ -2271,10 +2723,12 @@ public:
     //!
     //! Trivially true if network has no input shape bindings.
     //!
+    //! Does not work with name-base interfaces eg. IExecutionContext::setInputShape(). Use
+    //! IExecutionContext::inferShapes() instead.
+    //!
     //! \see isShapeBinding(bindingIndex)
     //!
     bool allInputShapesSpecified() const noexcept
-
     {
         return mImpl->allInputShapesSpecified();
     }
@@ -2343,7 +2797,9 @@ public:
     //!
     //! \return True if the kernels were enqueued successfully.
     //!
-    //! \see ICudaEngine::getBindingIndex() ICudaEngine::getMaxBatchSize()
+    //! \deprecated Superseded by enqueueV3(). Deprecated in TensorRT 8.5
+    //!
+    //! \see ICudaEngine::getBindingIndex() ICudaEngine::getMaxBatchSize() IExecutionContext::enqueueV3()
     //!
     //! \note Calling enqueueV2() with a stream in CUDA graph capture mode has a known issue. If dynamic shapes are
     //!       used, the first enqueueV2() call after a setInputShapeBinding() call will cause failure in stream capture
@@ -2353,7 +2809,7 @@ public:
     //!          results in undefined behavior. To perform inference concurrently in multiple streams, use one execution
     //!          context per stream.
     //!
-    bool enqueueV2(void* const* bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept
+    TRT_DEPRECATED bool enqueueV2(void* const* bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept
     {
         return mImpl->enqueueV2(bindings, stream, inputConsumed);
     }
@@ -2373,8 +2829,7 @@ public:
     //! application’s responsibility to guarantee that synchronization between
     //! the profile sync stream and the enqueue stream occurs.
     //!
-    //! The selected profile will be used in subsequent calls to executeV2() or
-    //! enqueueV2().
+    //! The selected profile will be used in subsequent calls to executeV2()/enqueueV2()/enqueueV3().
     //! If the associated CUDA engine has inputs with dynamic shapes, the
     //! optimization profile must be set with a unique profileIndex before
     //! calling execute or enqueue.
@@ -2388,10 +2843,10 @@ public:
     //! setOptimizationProfileAsync() must be called before calling
     //! setBindingDimensions() and setInputShapeBinding() for all dynamic input
     //! tensors or input shape tensors, which in turn must be called before
-    //! either executeV2() or enqueueV2().
+    //! executeV2()/enqueueV2()/enqueueV3().
     //!
     //! \warning This function will trigger layer resource updates on the next call of
-    //!          enqueueV2()/executeV2(), possibly resulting in performance bottlenecks.
+    //!          enqueueV2()/executeV2()/enqueueV3(), possibly resulting in performance bottlenecks.
     //!
     //! \warning Not synchronizing the stream used at enqueue with the stream
     //! used to set optimization profile asynchronously using this API will
@@ -2459,6 +2914,325 @@ public:
     bool reportToProfiler() const noexcept
     {
         return mImpl->reportToProfiler();
+    }
+
+    //!
+    //! \brief Set memory address for given input or output tensor.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //! \param data The pointer (void*) to the data owned by the user.
+    //!
+    //! \return True on success, false if error occurred.
+    //!
+    //! An address defaults to nullptr.
+    //! Pass data=nullptr to reset to the default state.
+    //!
+    //! Return false if the provided name does not map to an input or output tensor.
+    //!
+    //! If an input pointer has type (void const*), use setInputTensorAddress() instead.
+    //!
+    //! Before calling enqueueV3(), each input must have a non-null address and
+    //! each output must have a non-null address or an IOutputAllocator to set it later.
+    //!
+    //! If the TensorLocation of the tensor is kHOST, the pointer must point to a host buffer of sufficient size. For
+    //! shape tensors, the only supported data type is int32_t.
+    //! If the TensorLocation of the tensor is kDEVICE, the pointer must point to a device buffer of sufficient size and
+    //! alignment, or be nullptr if the tensor is an output tensor that will be allocated by IOutputAllocator.
+    //!
+    //! If getTensorShape(name) reports a -1 for any dimension of an output after all
+    //! input shapes have been set, then to find out
+    //! the dimensions, use setOutputAllocator() to associate an IOutputAllocator to
+    //! which the dimensions will be reported when known.
+    //!
+    //! Calling both setTensorAddress and setOutputAllocator() for the same output is allowed,
+    //! and can be useful for preallocating memory, and then reallocating if it's not big enough.
+    //!
+    //! The pointer must have at least 256-byte alignment.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see setInputTensorAddress() getTensorShape() setOutputAllocator() IOutputAllocator
+    //!
+    bool setTensorAddress(char const* tensorName, void* data) noexcept
+    {
+        return mImpl->setTensorAddress(tensorName, data);
+    }
+
+    //!
+    //! \brief Get memory address bound to given input or output tensor, or nullptr if the provided name does not map to
+    //! an input or output tensor.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //!
+    //! Use method getOutputTensorAddress() if a non-const pointer for an output tensor is required.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see getOutputTensorAddress()
+    //!
+    void const* getTensorAddress(char const* tensorName) const noexcept
+    {
+        return mImpl->getTensorAddress(tensorName);
+    }
+
+    //!
+    //! \brief Set memory address for given input.
+    //!
+    //! \param tensorName The name of an input tensor.
+    //! \param data The pointer (void const*) to the const data owned by the user.
+    //!
+    //! \return True on success, false if the provided name does not map to an input tensor, does not meet alignment
+    //! requirements, or some other error occurred.
+    //!
+    //! Input addresses can also be set using method setTensorAddress, which requires a (void*).
+    //!
+    //! See description of method setTensorAddress() for alignment and data type constraints.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see setTensorAddress()
+    //!
+    bool setInputTensorAddress(char const* tensorName, void const* data) noexcept
+    {
+        return mImpl->setInputTensorAddress(tensorName, data);
+    }
+
+    //!
+    //! \brief Get memory address for given output.
+    //!
+    //! \param tensorName The name of an output tensor.
+    //!
+    //! \return Raw output data pointer (void*) for given output tensor, or nullptr if the provided name does not map to
+    //! an output tensor.
+    //!
+    //! If only a (void const*) pointer is needed, an alternative is to call method getTensorAddress().
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see getTensorAddress()
+    //!
+    void* getOutputTensorAddress(char const* tensorName) const noexcept
+    {
+        return mImpl->getOutputTensorAddress(tensorName);
+    }
+
+    //!
+    //! \brief Run shape calculations.
+    //!
+    //! \param nbMaxNames Maximum number of names to write to tensorNames.
+    //!        When the return value is a positive value n and tensorNames != nullptr,
+    //!        the names of min(n,nbMaxNames) insufficiently specified input tensors are
+    //!        written to tensorNames.
+    //!
+    //! \param tensorNames Buffer in which to place names of insufficiently specified input tensors.
+    //!
+    //! \return 0 on success.
+    //!         Positive value n if n input tensors were not sufficiently specified.
+    //!         -1 for other errors.
+    //!
+    //! An input tensor is insufficiently specified if either of the following is true:
+    //!
+    //! * It has dynamic dimensions and its runtime dimensions have not yet
+    //!   been specified via IExecutionContext::setInputShape.
+    //!
+    //! * isShapeInferenceIO(t)=true and the tensor's address has not yet been set.
+    //!
+    //! If an output tensor has isShapeInferenceIO(t)=true and its address has been specified,
+    //! then its value is written.
+    //!
+    //! Returns -1 if tensorNames == nullptr and nbMaxNames != 0.
+    //! Returns -1 if nbMaxNames < 0.
+    //! Returns -1 if a tensor's dimensions are invalid, e.g. a tensor ends up with a negative dimension.
+    //!
+    int32_t inferShapes(int32_t nbMaxNames, char const** tensorNames) noexcept
+    {
+        return mImpl->inferShapes(nbMaxNames, tensorNames);
+    }
+
+    //!
+    //! \brief Mark input as consumed.
+    //!
+    //! \param event The cuda event that is triggered after all input tensors have been consumed.
+    //!
+    //! \warning The set event must be valid during the inferece.
+    //!
+    //! \return True on success, false if error occurred.
+    //!
+    //! Passing event==nullptr removes whatever event was set, if any.
+    //!
+    bool setInputConsumedEvent(cudaEvent_t event) noexcept
+    {
+        return mImpl->setInputConsumedEvent(event);
+    }
+
+    //!
+    //! \brief The event associated with consuming the input.
+    //!
+    //! \return The cuda event. Nullptr will be returned if the event is not set yet.
+    //!
+    cudaEvent_t getInputConsumedEvent() const noexcept
+    {
+        return mImpl->getInputConsumedEvent();
+    }
+
+    //!
+    //! \brief Set output allocator to use for output tensor of given name.
+    //! Pass nullptr to outputAllocator to unset.
+    //! The allocator is called by enqueueV3().
+    //!
+    //! \param tensorName The name of an output tensor.
+    //! \param outputAllocator IOutputAllocator for the tensors.
+    //!
+    //! \return True if success, false if the provided name does not map to an output or, if some other error occurred.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see enqueueV3() IOutputAllocator
+    //!
+    bool setOutputAllocator(char const* tensorName, IOutputAllocator* outputAllocator) noexcept
+    {
+        return mImpl->setOutputAllocator(tensorName, outputAllocator);
+    }
+
+    //!
+    //! \brief Get output allocator associated with output tensor of given name, or nullptr if the provided name does
+    //! not map to an output tensor.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see IOutputAllocator
+    //!
+    IOutputAllocator* getOutputAllocator(char const* tensorName) const noexcept
+    {
+        return mImpl->getOutputAllocator(tensorName);
+    }
+
+    //!
+    //! \brief Get upper bound on an output tensor's size, in bytes, based on
+    //! the current optimization profile and input dimensions.
+    //!
+    //! If the profile or input dimensions are not yet set, or the provided name
+    //! does not map to an output, returns -1.
+    //!
+    //! \param tensorName The name of an output tensor.
+    //!
+    //! \return Upper bound in bytes.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    int64_t getMaxOutputSize(char const* tensorName) const noexcept
+    {
+        return mImpl->getMaxOutputSize(tensorName);
+    }
+
+    //!
+    //! \brief Specify allocator to use for internal temporary storage.
+    //!
+    //! This allocator is used only by enqueueV3() for temporary storage whose size cannot be
+    //! predicted ahead of enqueueV3(). It is not used for output tensors, because memory
+    //! allocation for those is allocated by the allocator set by setOutputAllocator().
+    //! All memory allocated is freed by the time enqueueV3() returns.
+    //!
+    //! \param allocator pointer to allocator to use. Pass nullptr to revert to using TensorRT's
+    //!        default allocator.
+    //!
+    //! \return True on success, false if error occurred.
+    //!
+    //! \see enqueueV3() setOutputAllocator()
+    //!
+    bool setTemporaryStorageAllocator(IGpuAllocator* allocator) noexcept
+    {
+        return mImpl->setTemporaryStorageAllocator(allocator);
+    }
+
+    //!
+    //! \brief Get allocator set by setTemporaryStorageAllocator.
+    //!
+    //! Returns a nullptr if a nullptr was passed with setTemporaryStorageAllocator().
+    //!
+    IGpuAllocator* getTemporaryStorageAllocator() const noexcept
+    {
+        return mImpl->getTemporaryStorageAllocator();
+    }
+
+    //!
+    //! \brief Asynchronously execute inference.
+    //!
+    //! \param stream A cuda stream on which the inference kernels will be enqueued.
+    //!
+    //! \return True if the kernels were enqueued successfully, false otherwise.
+    //!
+    //! Modifying or releasing memory that has been registered for the tensors before stream
+    //! synchronization or the event passed to setInputConsumedEvent has been being triggered results in undefined
+    //! behavior.
+    //! Input tensor can be released after the setInputConsumedEvent whereas output tensors require stream
+    //! synchronization.
+    //!
+    bool enqueueV3(cudaStream_t stream) noexcept
+    {
+        return mImpl->enqueueV3(stream);
+    }
+
+    //! \brief Set the maximum size for persistent cache usage.
+    //!
+    //! This function sets the maximum persistent L2 cache that this execution context may use for activation caching.
+    //! Activation caching is not supported on all architectures - see "How TensorRT uses Memory" in the developer guide
+    //! for details
+    //!
+    //! \param size the size of persistent cache limitation in bytes.
+    //! The default is 0 Bytes.
+    //!
+    //! \see getPersistentCacheLimit
+    void setPersistentCacheLimit(size_t size) noexcept
+    {
+        mImpl->setPersistentCacheLimit(size);
+    }
+
+    //!
+    //! \brief Get the maximum size for persistent cache usage.
+    //!
+    //! \returns The size of the persistent cache limit
+    //!
+    //! \see setPersistentCacheLimit
+    size_t getPersistentCacheLimit() const noexcept
+    {
+        return mImpl->getPersistentCacheLimit();
+    }
+
+    //!
+    //! \brief Set the verbosity of the NVTX markers in the execution context.
+    //!
+    //! Building with kDETAILED verbosity will generally increase latency in enqueueV2/enqueueV3(). Call this method
+    //! to select NVTX verbosity in this execution context at runtime.
+    //!
+    //! The default is the verbosity with which the engine was built, and the verbosity may not be raised above that
+    //! level.
+    //!
+    //! This function does not affect how IEngineInspector interacts with the engine.
+    //!
+    //! \param verbosity The verbosity of the NVTX markers.
+    //!
+    //! \return True if the NVTX verbosity is set successfully. False if the provided verbosity level is higher than the
+    //! profiling verbosity of the corresponding engine.
+    //!
+    //! \see getNvtxVerbosity()
+    //! \see ICudaEngine::getProfilingVerbosity()
+    //!
+    bool setNvtxVerbosity(ProfilingVerbosity verbosity) noexcept
+    {
+        return mImpl->setNvtxVerbosity(verbosity);
+    }
+
+    //!
+    //! \brief Get the NVTX verbosity of the execution context.
+    //!
+    //! \return The current NVTX verbosity of the execution context.
+    //!
+    //! \see setNvtxVerbosity()
+    //!
+    ProfilingVerbosity getNvtxVerbosity() const noexcept
+    {
+        return mImpl->getNvtxVerbosity();
     }
 
 protected:
@@ -2555,7 +3329,7 @@ public:
     //!
     //! \see LayerInformationFormat
     //!
-    AsciiChar const* getLayerInformation(int32_t layerIndex, LayerInformationFormat format) const noexcept
+    char const* getLayerInformation(int32_t layerIndex, LayerInformationFormat format) const noexcept
     {
         return mImpl->getLayerInformation(layerIndex, format);
     }
@@ -2580,7 +3354,7 @@ public:
     //!
     //! \see LayerInformationFormat
     //!
-    AsciiChar const* getEngineInformation(LayerInformationFormat format) const noexcept
+    char const* getEngineInformation(LayerInformationFormat format) const noexcept
     {
         return mImpl->getEngineInformation(format);
     }

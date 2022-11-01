@@ -2,6 +2,55 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.43.1 (2022-10-12)
+### Fixed
+- Fixed a bug due to API breakages in `importlib_metadata`.
+
+
+## v0.43.0 (2022-10-06)
+### Added
+- Added a new `template onnx-gs` subtool that allows you to generate template files for
+    Python scripts to modify an ONNX model using ONNX-GraphSurgeon.
+- Added a new `PostprocessNetwork` loader and corresponding `--trt-network-postprocess-script` command-line flag
+    to allow for postprocessing a loaded TensorRT network using a user-defined function.
+
+### Changed
+- Updated the [working with run results example](./examples/api/08_working_with_run_results_and_saved_inputs_manually/)
+    to demonstrate how to work with saved input data as well.
+- Updated CLI subtools to report duration of the command by default.
+- Improved error messages in the `ExtractSubgraph` loader and consequently `surgeon extract` when the extracted
+    subgraph is invalid due to tensors without producers not marked as graph inputs.
+- Updated the [adding precision constraints run example](./examples/cli/run/08_adding_precision_constraints/)
+    to demonstrate how to use the `--trt-postprocess-network` flag to apply precision constraints to a parsed TensorRT
+    network.
+
+### Fixed
+- Fixed a bug where specifying the same runner multiple times would have no effect.
+- Fixed a bug where `Script` would close `stdout` after writing to it.
+- Fixed a bug where an API change in `onnxmltools` caused a breakage in the `ConvertToFp16` loader.
+- Fixed a bug where `debug precision` would not respect the layer precisions set by `--layer-precisions`.
+
+
+## 0.42.2 (2022-09-22)
+### Added
+- Added a [how-to guide](./how-to/use_debug_subtools_effectively.md) on using `debug` subtools effectively.
+- Added a [how-to guide](./how-to/use_debug_reduce_effectively.md) on using `debug reduce` effectively
+    and refactored the [`debug reduce` example README](./examples/cli/debug/02_reducing_failing_onnx_models/)
+    to omit information that's now captured in the how-to guide.
+- Added a [how-to guide](./how-to/use_custom_input_data.md) on using custom inference input data.
+
+### Changed
+- Moved the `diff-tactics` tool to `inspect`. `debug diff-tactics` is now an alias for `inspect diff-tactics`
+    to preserve backwards compatibility.
+- Updated command-line parsing logic to handle `inf`, `-inf`, and `nan`. These can now be specified to
+    options that expect floating point numbers, such as `--val-range`.
+
+### Fixed
+- Fixed a bug where `Profile.fill_defaults` would not work correctly for scalar shape-tensor
+    network inputs.
+- Fixed a bug where `lazy_import` would repeatedly call `importlib.import_module`.
+
+
 ## v0.42.1 (2022-09-07)
 ### Changed
 - Updated Polygraphy's TensorRT algorithm selectors to keep track of strides in addition to
@@ -51,7 +100,7 @@ Dates are in YYYY-MM-DD format.
 
 ## v0.41.0 (2022-08-24)
 ### Added
-- Added a [new example](./examples/api/08_working_with_run_results_manually/) showing how to work with `RunResults` using the API.
+- Added a [new example](./examples/api/08_working_with_run_results_and_saved_inputs_manually/) showing how to work with `RunResults` using the API.
 - Added a `size_threshold` option in `FoldConstants` and corersponding `--fold-size-threshold` CLI option,
     which allows for skipping constant folding on operations which would generate constants larger than
     the provided threshold.

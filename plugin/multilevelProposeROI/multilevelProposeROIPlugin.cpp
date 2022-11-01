@@ -16,8 +16,8 @@
  */
 
 #include "multilevelProposeROIPlugin.h"
-#include "plugin.h"
-#include "tlt_mrcnn_config.h"
+#include "common/plugin.h"
+#include "multilevelProposeROI/tlt_mrcnn_config.h"
 #include <algorithm>
 #include <cuda_runtime_api.h>
 #include <iostream>
@@ -72,35 +72,36 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
 {
     try
     {
+        plugin::validateRequiredAttributesExist({"prenms_topk", "keep_topk", "fg_threshold", "iou_threshold"}, fc);
         auto imageSize = TLTMaskRCNNConfig::IMAGE_SHAPE;
-        const PluginField* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        PluginField const* fields = fc->fields;
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "prenms_topk"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mPreNMSTopK = *(static_cast<const int*>(fields[i].data));
+                mPreNMSTopK = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "keep_topk"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mKeepTopK = *(static_cast<const int*>(fields[i].data));
+                mKeepTopK = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "fg_threshold"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mFGThreshold = *(static_cast<const float*>(fields[i].data));
+                mFGThreshold = *(static_cast<float const*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mIOUThreshold = *(static_cast<const float*>(fields[i].data));
+                mIOUThreshold = *(static_cast<float const*>(fields[i].data));
             }
             if (!strcmp(attrName, "image_size"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                const auto dims = static_cast<const int32_t*>(fields[i].data);
+                const auto dims = static_cast<int32_t const*>(fields[i].data);
                 std::copy_n(dims, 3, imageSize.d);
             }
         }

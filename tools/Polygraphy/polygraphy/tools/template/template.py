@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.template.subtool import TrtNetwork, TrtConfig
+from polygraphy.tools.template.subtool import TrtNetwork, TrtConfig, OnnxGs
 
 
 class Template(Tool):
@@ -26,14 +26,9 @@ class Template(Tool):
     def __init__(self):
         super().__init__("template")
 
-    def add_parser_args(self, parser):
-        subparsers = parser.add_subparsers(title="Template Subtools", dest="subtool")
-        subparsers.required = True
-
-        SUBTOOLS = [
+    def get_subtools_impl(self):
+        return "Template Subtools", [
             TrtNetwork(),
             TrtConfig(),
+            OnnxGs(),
         ]
-
-        for subtool in SUBTOOLS:
-            subtool.setup_parser(subparsers)

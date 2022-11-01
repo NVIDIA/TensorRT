@@ -29,10 +29,10 @@ POLYGRAPHY_CMD = [os.path.join(ROOT_DIR, "bin", "polygraphy")]
 ALL_TOOLS = {
     "run": [],
     "convert": [],
-    "inspect": ["data", "model", "tactics", "capability"],
+    "inspect": ["data", "model", "tactics", "capability", "diff-tactics"],
     "surgeon": ["extract", "insert", "sanitize"],
-    "template": ["trt-network", "trt-config"],
-    "debug": ["build", "precision", "diff-tactics", "reduce", "repeat"],
+    "template": ["trt-network", "trt-config", "onnx-gs"],
+    "debug": ["build", "precision", "reduce", "repeat"],
     "data": ["to-input"],
 }
 

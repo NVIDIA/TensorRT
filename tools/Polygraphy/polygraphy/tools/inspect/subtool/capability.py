@@ -155,7 +155,7 @@ class Capability(Tool):
     def __init__(self):
         super().__init__("capability")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [
             ModelArgs(model_opt_required=True, input_shapes_opt_name=False, required_model_type="onnx"),
             OnnxInferShapesArgs(),
@@ -163,7 +163,7 @@ class Capability(Tool):
             OnnxSaveArgs(output_default_path="polygraphy_capability_dumps", allow_multiple_models=True),
         ]
 
-    def run(self, args):
+    def run_impl(self, args):
         supported, nodelists, _ = supports_model(self.arg_groups[ModelArgs].path)
         if supported:
             G_LOGGER.info("Graph is fully supported by TensorRT; Will not generate subgraphs.")

@@ -190,21 +190,25 @@ def lazy_import(
 
         # Auto-upgrade if necessary
         for install_name, install_version in all_required_mods:
+            installed_mod = importlib.import_module(install_name)
             if (
                 install_version is not None
-                and hasattr(mod, "__version__")
-                and not _version_ok(mod.__version__, install_version)
+                and hasattr(installed_mod, "__version__")
+                and not _version_ok(installed_mod.__version__, install_version)
             ):
                 if config.AUTOINSTALL_DEPS:
                     G_LOGGER.info(
-                        f"Note: Module: '{install_name}' version '{mod.__version__}' is installed, but version '{install_version}' is required.\n"
+                        f"Note: Module: '{install_name}' version '{installed_mod.__version__}' is installed, but version '{install_version}' is required.\n"
                         f"Attempting to upgrade now."
                     )
                     # We can try to use the other version if install fails, so this is non-fatal.
-                    mod = install_mod(install_name, install_version, raise_error=False)
+                    installed_mod = install_mod(install_name, install_version, raise_error=False)
+                    if install_name == name:
+                        mod = installed_mod
+
                 elif install_version != LATEST_VERSION:
                     G_LOGGER.error(
-                        f"Module: '{install_name}' version '{mod.__version__}' is installed, but version '{install_version}' is required.\n"
+                        f"Module: '{install_name}' version '{installed_mod.__version__}' is installed, but version '{install_version}' is required.\n"
                         f"Please install the required version or set POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables "
                         f"to allow Polygraphy to do so automatically.\n"
                         f"Attempting to continue with the currently installed version of this module, but note that this may cause errors!",
@@ -216,14 +220,24 @@ def lazy_import(
 
         return mod
 
+    MODULE_VAR_NAME = "module"
+
     class LazyModule:
+        def __init__(self):
+            super().__setattr__(MODULE_VAR_NAME, None)
+
+        def __polygraphy_import_mod(self):
+            if self.module is None:
+                super().__setattr__(MODULE_VAR_NAME, import_mod())
+            return self.module
+
         def __getattr__(self, name):
-            self = import_mod()
-            return getattr(self, name)
+            module = self.__polygraphy_import_mod()
+            return getattr(module, name)
 
         def __setattr__(self, name, value):
-            self = import_mod()
-            return setattr(self, name, value)
+            module = self.__polygraphy_import_mod()
+            return setattr(module, name, value)
 
     return LazyModule()
 

@@ -1,0 +1,125 @@
+---
+name: CustomEmbLayerNormPluginDynamic
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    inputs:
+      - token_id
+      - segment_id
+      - input_mask
+    outputs:
+      - embedded_input
+      - maskIdx
+    input_dims:
+      token_id: 2
+      segment_id: 2
+      input_mask: 2
+    input_dim_constraints:
+      - "token_id_0 == bert_embeddings_position_embeddings_0"
+      - "segment_id_0 == bert_embeddings_position_embeddings_0"
+      - "segment_id_1 == token_id_1"
+      - "input_mask_0 == bert_embeddings_position_embeddings_0"
+      - "input_mask_1 == token_id_1"
+    input_dim_range:
+      token_id:
+        min: "=1, =1"
+        max: "=pinf, =pinf"
+      segment_id:
+        min: "=1, =1"
+        max: "=pinf, =pinf"
+      input_mask:
+        min: "=1, =1"
+        max: "=pinf, =pinf"
+    supported_input_types:
+      combination1:
+        token_id: int32
+        segment_id: int32
+        input_mask: int32
+    output_dims:
+      embedded_input: "token_id_0, token_id_1, bert_embeddings_layernorm_beta_0, 1, 1"
+      maskIdx: "token_id_1, 1"
+    attributes:
+      - output_fp16
+      - full_mask
+      - mha_type_id
+      - bert_embeddings_layernorm_beta
+      - bert_embeddings_layernorm_gamma
+      - bert_embeddings_word_embeddings
+      - bert_embeddings_token_type_embeddings
+      - bert_embeddings_position_embeddings
+    attribute_types:
+      output_fp16: int32
+      full_mask: int32
+      mha_type_id: int32
+      bert_embeddings_layernorm_beta: float32
+      bert_embeddings_layernorm_gamma: float32
+      bert_embeddings_word_embeddings: float32
+      bert_embeddings_token_type_embeddings: float32
+      bert_embeddings_position_embeddings: float32
+    attribute_dims:
+      output_fp16: 1
+      full_mask: 1
+      mha_type_id: 1
+      bert_embeddings_layernorm_beta: 1
+      bert_embeddings_layernorm_gamma: 1
+      bert_embeddings_word_embeddings: 2
+      bert_embeddings_token_type_embeddings: 2
+      bert_embeddings_position_embeddings: 2
+    attribute_dim_range:
+      output_fp16:
+      - min: "=1"
+      - max: "=1"
+      full_mask:
+      - min: "=1"
+      - max: "=1"
+      mha_type_id:
+      - min: "=1"
+      - max: "=1"
+      bert_embeddings_layernorm_beta:
+      - min: "=1"
+      - max: "=pinf"
+      bert_embeddings_layernorm_gamma:
+      - min: "=1"
+      - max: "=pinf"
+      bert_embeddings_word_embedding:
+      - min: "=1, =1"
+      - max: "=pinf, =pinf"
+      bert_embeddings_token_type_embeddings:
+      - min: "=1, =1"
+      - max: "=pinf, =pinf"
+      bert_embeddings_position_embeddings:
+      - min: "=1, =1"
+      - max: "=pinf, =pinf"
+    attribute_options:
+      output_fp16:
+        - 0
+        - 1
+      full_mask:
+        - 0
+        - 1
+      mha_type_id:
+        - 0
+        - 1
+        - 2
+      bert_embeddings_layernorm_beta:
+        min: "=ninf"
+        max: "=pinf"
+      bert_embeddings_layernorm_gamma:
+        min: "=ninf"
+        max: "=pinf"
+      bert_embeddings_word_embeddings:
+        min: "=ninf"
+        max: "=pinf"
+      bert_embeddings_token_type_embeddings:
+        min: "=ninf"
+        max: "=pinf"
+      bert_embeddings_position_embeddings:
+        min: "=ninf"
+        max: "=pinf"
+    attributes_required:
+      - bert_embeddings_layernorm_beta
+      - bert_embeddings_layernorm_gamma
+      - bert_embeddings_word_embeddings
+      - bert_embeddings_token_type_embeddings
+      - bert_embeddings_position_embeddings
+...

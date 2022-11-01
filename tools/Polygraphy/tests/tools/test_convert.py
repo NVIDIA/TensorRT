@@ -39,7 +39,14 @@ class TestConvertToOnnx:
             poly_convert(
                 [ONNX_MODELS["identity_identity"].path, "--convert-to=onnx", "--fp-to-fp16", "-o", outmodel.name]
             )
-            assert onnx.load(outmodel.name).graph.input[0].type.tensor_type.elem_type == 10
+            # I/O types should be unchanged
+            model = onnx.load(outmodel.name)
+            assert model.graph.input[0].type.tensor_type.elem_type == 1
+            assert model.graph.node[2].op_type == "Cast"
+            assert model.graph.node[0].op_type == "Identity"
+            assert model.graph.node[1].op_type == "Identity"
+            assert model.graph.node[3].op_type == "Cast"
+            assert model.graph.output[0].type.tensor_type.elem_type == 1
 
 
 class TestConvertToTrt:

@@ -113,7 +113,7 @@ python3 create_onnx.py \
 
 You may need to adapt the argument `--input_size` to explicitly define the exact input image dimensions to use in the graph. Consult the model definitions in the corresponding training system, to find the expected input size for the model you are working with.
 
-This will create the file `model.onnx` which is ready to convert to TensorRT. 
+This will create the file `model.onnx` which is ready to convert to TensorRT.
 
 Optionally, you may wish to visualize the resulting ONNX graph with a tool such as [Netron](https://netron.app/).
 

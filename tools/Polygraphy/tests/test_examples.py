@@ -45,7 +45,9 @@ class Marker:
 
 VALID_MARKERS = {
     # For command markers, the start marker may be annotated with a language tag, e.g. ```py, so an exact match is too strict.
-    "command": Marker(matches_start_func=lambda line: "```" in line, matches_end_func=lambda line: line == "```"),
+    "command": Marker(
+        matches_start_func=lambda line: line.startswith("```"), matches_end_func=lambda line: line == "```"
+    ),
     # Marks an entire block to be ignored by the tests.
     "ignore": Marker.from_name("Ignore"),
     # Marks an entire block as being expected to fail.
@@ -205,7 +207,7 @@ API_EXAMPLES = [
     Example(["api", "05_using_tensorrt_network_api"]),
     Example(["api", "06_immediate_eval_api"], artifact_names=["identity.engine"]),
     Example(["api", "07_tensorrt_and_dynamic_shapes"], artifact_names=["dynamic_identity.engine"]),
-    Example(["api", "08_working_with_run_results_manually"], artifact_names=["outputs.json"]),
+    Example(["api", "08_working_with_run_results_and_saved_inputs_manually"], artifact_names=["inputs.json", "outputs.json"]),
 ]
 
 

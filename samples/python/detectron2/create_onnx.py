@@ -203,14 +203,10 @@ class DET2GraphSurgeon:
         Remove all the pre-processing nodes in the ONNX graph and leave only the image normalization essentials.
         :param batch_size: The batch size to use for the ONNX graph.
         """
-
-        # Delete second unnecessary in our case input. 
-        del self.graph.inputs[1]
-
         # Set graph inputs.
         self.batch_size = batch_size
-        self.height = self.graph.inputs[0].shape[2]
-        self.width = self.graph.inputs[0].shape[3]
+        self.height = self.graph.inputs[0].shape[1]
+        self.width = self.graph.inputs[0].shape[2]
 
         input_shape = [self.batch_size, 3, self.height, self.width]
         self.graph.inputs[0].shape = input_shape
@@ -227,16 +223,15 @@ class DET2GraphSurgeon:
         # Get input tensor.
         input_tensor = self.graph.inputs[0]
         
-        # Find first Sub node and connect input tensor to it.
-        sub_node = self.graph.find_node_by_op("Sub")
-        log.info("Found {} node".format(sub_node.op))
-        sub_node.inputs[0] = input_tensor
+        # Create preprocessing Sub node and connect input tensor to it.
+        sub_const = np.expand_dims(np.asarray([255 * 0.406, 255 * 0.456, 255 * 0.485], dtype=np.float32), axis=(1, 2))
+        sub_out = self.graph.op_with_const("Sub", "preprocessor/mean", input_tensor, sub_const)
 
         # Find first Div node and connect to output of Sub node.
         div_node = self.graph.find_node_by_op("Div")
         log.info("Found {} node".format(div_node.op))
-        div_node.inputs[0] = sub_node.outputs[0]
-
+        div_node.inputs[0] = sub_out[0]
+        
         # Find first Conv and connect preprocessor directly to it.
         conv_node = self.graph.find_node_by_op("Conv")
         log.info("Found {} node".format(conv_node.op))
@@ -246,75 +241,6 @@ class DET2GraphSurgeon:
         for node in [node for node in self.graph.nodes if node.op == "Reshape"]:
             if type(node.inputs[1]) == gs.Constant and node.inputs[1].values[0] == 1:
                 node.inputs[1].values[0] = self.batch_size
-
-        self.sanitize()
-
-    def ResizeNearest(self, input, H, W, rn_num):
-        # Helper function to create the ResizeNearest Plugin node with the selected inputs. 
-        # ResizeNearest_TRT TensorRT Plugin is suitable for our use case.
-        # :param input: Input to ResizeNearest_TRT plugin, either Conv node outputs for 
-        # first ResizeNearest or output of previous ResizeNearest for second and third.      
-        # :param H: Calculated height of the ResizeNearest output.      
-        # :param W: Calculated width of the ResizeNearest output.      
-        # :param rn_num: Positional number of ResizeNearest node in a graph, renames ResizeNearest 
-        # elements accordingly in order to eliminate cycles. 
-
-        resized_feature_map = gs.Variable(name="rn/output_"+rn_num, dtype=np.float32,
-                                shape=[self.batch_size, self.fpn_out_channels, H, W])
-        self.graph.plugin(
-            op="ResizeNearest_TRT",
-            name="RN/Resize_Nearest_"+rn_num,
-            inputs=[input],
-            outputs=[resized_feature_map],
-            attrs={
-                'scale': 2.0,
-            }
-        )
-        log.info("Created {} ResizeNearest_TRT plugin".format(rn_num))
-
-        return resized_feature_map
-    
-    def prep_logits_deltas_for_NMS(self, logits, anchor_deltas, feature_map):
-        # This helper function prepares given objectness logits and anchor deltas
-        # for NMS. It is much more efficient to use one NMS for proposal generation
-        # instead of multiple for every single feature map.   
-        # :param logits: An output of a node that holds final objectness logits for specific feature map.
-        # :param anchor_deltas: An output of a node that holds final anchor deltas for specific feature map.
-        # :param feature_map: Name of a feature map, one of: p2, p3, p4, p5, p6.
-
-        # Identify which stride to use for given feature map.
-        if feature_map == 'p2':
-            stride = 4
-        elif feature_map == 'p3':
-            stride = 8
-        elif feature_map == 'p4':
-            stride = 16
-        elif feature_map == 'p5':
-            stride = 32
-        elif feature_map == 'p6':
-            stride = 64
-        else:
-            log.info("Given feature map does not exist, cannot proceed")
-            sys.exit(1)
-
-        # Calculate height and width of a feature map.
-        feature_map_H, feature_map_W = self.height/stride, self.width/stride
-
-        # Prepare objectness logits for NMS
-        initial_logits_reshape_shape = np.asarray([self.batch_size, 3, 1, feature_map_H, feature_map_W], dtype=np.int64)
-        initial_logits_reshape_node = self.graph.op_with_const("Reshape", "logits_reshape_1_"+feature_map, logits, initial_logits_reshape_shape)
-        logits_transpose = self.graph.transpose("logits_transpose_"+feature_map, initial_logits_reshape_node, [0, 3, 4, 1, 2])
-        final_logits_reshape_shape = np.asarray([self.batch_size, feature_map_H*feature_map_W*3, 1], dtype=np.int64)
-        final_logits_reshape_node = self.graph.op_with_const("Reshape", "logits_reshape_2_"+feature_map, logits_transpose, final_logits_reshape_shape)
-
-        # Prepare anchor deltas for NMS
-        initial_anchor_reshape_shape = np.asarray([self.batch_size, 3, 4, feature_map_H, feature_map_W], dtype=np.int64)
-        initial_anchor_reshape_node = self.graph.op_with_const("Reshape", "anchor_reshape_1_"+feature_map, anchor_deltas, initial_anchor_reshape_shape)
-        anchor_transpose = self.graph.transpose("anchor_transpose_"+feature_map, initial_anchor_reshape_node, [0, 3, 4, 1, 2])
-        final_anchor_reshape_shape = np.asarray([self.batch_size, feature_map_H*feature_map_W*3, 4], dtype=np.int64)
-        final_anchor_reshape_node = self.graph.op_with_const("Reshape", "anchor_reshape_2_"+feature_map, anchor_transpose, final_anchor_reshape_shape)
-
-        return final_logits_reshape_node[0], final_anchor_reshape_node[0]
 
     def NMS(self, boxes, scores, anchors, background_class, score_activation, max_proposals, iou_threshold, nms_score_threshold, user_threshold, nms_name=None):
         # Helper function to create the NMS Plugin node with the selected inputs. 
@@ -428,45 +354,11 @@ class DET2GraphSurgeon:
             """
             Updates the graph to replace all ResizeNearest ops with ResizeNearest plugins in backbone. 
             """
-            # Find a Conv op that is an input to the first ResizeNearest op.
-            first_resnear_input = self.graph.find_node_by_op_input_output_name("Conv", "487", "488", 0, 0)
-            # Find an Add op which takes first ResizeNearest output as input.
-            first_resnear_output = self.graph.find_node_by_op_input_output_name("Add", "491", "492", 0, 0)
-
-            # Calculate ResizeNearest output dimensions, since scale is 2, we need to multiply by 2.
-            first_RN_H = first_resnear_input.outputs[0].shape[2]*2.0
-            first_RN_W = first_resnear_input.outputs[0].shape[2]*2.0
-
-            # Connect ResizeNearest plugin to Add node that follows it. 
-            first_resnear_output.inputs[1] = self.ResizeNearest(first_resnear_input.outputs[0], first_RN_H, first_RN_W, "first")
-
-            # Find an Add op which takes second ResizeNearest output as input. First Resize nearest serves
-            # as input for second Resize nearest.
-            second_resnear_output = self.graph.find_node_by_op_input_output_name("Add", "495", "496", 0, 0)
-
-            # Calculate ResizeNearest output dimensions, since scale is 2, we need to multiply by 2.
-            second_RN_H = first_RN_H*2.0
-            second_RN_W = first_RN_W*2.0
-
-            # Connect ResizeNearest plugin to Add node that follows it. 
-            second_resnear_output.inputs[1] = self.ResizeNearest(first_resnear_output.outputs[0], second_RN_H, second_RN_W, "second")
-
-            # Find an Add op which takes third ResizeNearest output as input. Second Resize nearest serves
-            # as input for third Resize nearest.
-            third_resnear_output = self.graph.find_node_by_op_input_output_name("Add", "499", "500", 0, 0)
-
-            # Calculate ResizeNearest output dimensions, since scale is 2, we need to multiply by 2.
-            third_RN_H = second_RN_H*2.0
-            third_RN_W = second_RN_W*2.0
-
-            # Connect ResizeNearest plugin to Add node that follows it. 
-            third_resnear_output.inputs[1] = self.ResizeNearest(second_resnear_output.outputs[0], third_RN_H, third_RN_W, "third")
-
-            # After connecting all ResizeNearest plugins, get final backbone outputs.
-            p2 = self.graph.find_node_by_op_input_output_name("Conv", "500", "501", 0, 0)
-            p3 = self.graph.find_node_by_op_input_output_name("Conv", "496", "497", 0, 0)
-            p4 = self.graph.find_node_by_op_input_output_name("Conv", "492", "493", 0, 0)
-            p5 = self.graph.find_node_by_op_input_output_name("Conv", "488", "489", 0, 0)
+            # Get final backbone outputs.
+            p2 = self.graph.find_node_by_op_name("Conv", "Conv_279")
+            p3 = self.graph.find_node_by_op_name("Conv", "Conv_274")
+            p4 = self.graph.find_node_by_op_name("Conv", "Conv_269")
+            p5 = self.graph.find_node_by_op_name("Conv", "Conv_264")
 
             return p2.outputs[0], p3.outputs[0], p4.outputs[0], p5.outputs[0]
 
@@ -478,35 +370,30 @@ class DET2GraphSurgeon:
             :param first_nms_threshold: Override the 1st NMS score threshold value. If set to None, use the value in the graph.
             """
             # Get nodes containing final objectness logits.
-            p2_logits = self.graph.find_node_by_op_input_output_name("Conv", "504", "505", 0, 0)
-            p3_logits = self.graph.find_node_by_op_input_output_name("Conv", "508", "509", 0, 0)
-            p4_logits = self.graph.find_node_by_op_input_output_name("Conv", "512", "513", 0, 0)
-            p5_logits = self.graph.find_node_by_op_input_output_name("Conv", "516", "517", 0, 0)
-            p6_logits = self.graph.find_node_by_op_input_output_name("Conv", "520", "521", 0, 0)
+            p2_logits = self.graph.find_node_by_op_name("Flatten", "Flatten_527")
+            p3_logits = self.graph.find_node_by_op_name("Flatten", "Flatten_529")
+            p4_logits = self.graph.find_node_by_op_name("Flatten", "Flatten_531")
+            p5_logits = self.graph.find_node_by_op_name("Flatten", "Flatten_533")
+            p6_logits = self.graph.find_node_by_op_name("Flatten", "Flatten_535")
 
             # Get nodes containing final anchor_deltas.
-            p2_anchors = self.graph.find_node_by_op_input_output_name("Conv", "504", "506", 0, 0)
-            p3_anchors = self.graph.find_node_by_op_input_output_name("Conv", "508", "510", 0, 0)
-            p4_anchors = self.graph.find_node_by_op_input_output_name("Conv", "512", "514", 0, 0)
-            p5_anchors = self.graph.find_node_by_op_input_output_name("Conv", "516", "518", 0, 0)
-            p6_anchors = self.graph.find_node_by_op_input_output_name("Conv", "520", "522", 0, 0)
+            p2_anchors = self.graph.find_node_by_op_name("Reshape", "Reshape_562")
+            p3_anchors = self.graph.find_node_by_op_name("Reshape", "Reshape_589")
+            p4_anchors = self.graph.find_node_by_op_name("Reshape", "Reshape_616")
+            p5_anchors = self.graph.find_node_by_op_name("Reshape", "Reshape_643")
+            p6_anchors = self.graph.find_node_by_op_name("Reshape", "Reshape_670")                    
 
-            # Get prepared for NMS objectness logits and anchor deltas. 
-            p2_final_logits, p2_final_anchors = self.prep_logits_deltas_for_NMS(p2_logits.outputs[0], p2_anchors.outputs[0], 'p2')
-            p3_final_logits, p3_final_anchors = self.prep_logits_deltas_for_NMS(p3_logits.outputs[0], p3_anchors.outputs[0], 'p3')
-            p4_final_logits, p4_final_anchors = self.prep_logits_deltas_for_NMS(p4_logits.outputs[0], p4_anchors.outputs[0], 'p4')
-            p5_final_logits, p5_final_anchors = self.prep_logits_deltas_for_NMS(p5_logits.outputs[0], p5_anchors.outputs[0], 'p5')
-            p6_final_logits, p6_final_anchors = self.prep_logits_deltas_for_NMS(p6_logits.outputs[0], p6_anchors.outputs[0], 'p6')
+            # Concatenate all objectness logits/scores data.
+            scores_inputs = [p2_logits.outputs[0], p3_logits.outputs[0], p4_logits.outputs[0], p5_logits.outputs[0], p6_logits.outputs[0]]
+            scores_tensor = self.graph.layer(name="scores", op="Concat", inputs=scores_inputs, outputs=['scores'], attrs={'axis': 1})[0]
+            # Unsqueeze to add 3rd dimension of 1 to match tensor dimensions of boxes tensor.
+            scores = self.graph.unsqueeze("scores_unsqueeze", scores_tensor, [2])[0]
 
-            # Concatenate all objectness logits/scores data
-            scores_inputs = [p2_final_logits, p3_final_logits, p4_final_logits, p5_final_logits, p6_final_logits]
-            scores = self.graph.layer(name="scores", op="Concat", inputs=scores_inputs, outputs=['scores'], attrs={'axis': 1})[0]
-
-            # Concatenate all boxes/anchor_delta data
-            boxes_inputs = [p2_final_anchors, p3_final_anchors, p4_final_anchors, p5_final_anchors, p6_final_anchors]
+            # Concatenate all boxes/anchor_delta data.
+            boxes_inputs = [p2_anchors.outputs[0], p3_anchors.outputs[0], p4_anchors.outputs[0], p5_anchors.outputs[0], p6_anchors.outputs[0]]
             boxes = self.graph.layer(name="boxes", op="Concat", inputs=boxes_inputs, outputs=['anchors'], attrs={'axis': 1})[0]
 
-            # Convert the anchors from Corners to CenterSize encoding
+            # Convert the anchors from Corners to CenterSize encoding.
             anchors = np.matmul(anchors, [[0.5, 0, -1, 0], [0, 0.5, 0, -1], [0.5, 0, 1, 0], [0, 0.5, 0, 1]])
             anchors = anchors / [self.width, self.height, self.width, self.height] # Normalize anchors to [0-1] range
             anchors = np.expand_dims(anchors, axis=0)
@@ -540,12 +427,12 @@ class DET2GraphSurgeon:
             box_pooler_reshape = self.graph.op_with_const("Reshape", "box_pooler/reshape", box_pooler_output, box_pooler_shape)
             
             # Get first Gemm op of box head and connect box pooler to it.
-            first_box_head_gemm = self.graph.find_node_by_op_input_output_name("Gemm", "567", "568", 0, 0)
+            first_box_head_gemm = self.graph.find_node_by_op_name("Gemm", "Gemm_1685")
             first_box_head_gemm.inputs[0] = box_pooler_reshape[0]
 
             # Get final two nodes of box predictor. Softmax op for cls_score, Gemm op for bbox_pred.
-            cls_score = self.graph.find_node_by_op_input_output_name("Softmax", "572", "574", 0, 0)
-            bbox_pred = self.graph.find_node_by_op_input_output_name("Gemm", "571", "573", 0, 0)
+            cls_score = self.graph.find_node_by_op_name("Softmax", "Softmax_1796")
+            bbox_pred = self.graph.find_node_by_op_name("Gemm", "Gemm_1690")
 
             # Linear transformation to convert box coordinates from (TopLeft, BottomRight) Corner encoding
             # to CenterSize encoding. 1st NMS boxes are multiplied by transformation matrix in order to 
@@ -579,7 +466,7 @@ class DET2GraphSurgeon:
             mask_pooler_reshape_node = self.graph.op_with_const("Reshape", "mask_pooler/reshape", mask_pooler_output, mask_pooler_shape)
             
             # Get first Conv op in mask head and connect ROIAlign's squeezed output to it. 
-            mask_head_conv = self.graph.find_node_by_op_input_output_name("Conv", "614", "615", 0, 0)
+            mask_head_conv = self.graph.find_node_by_op_name("Conv", "Conv_2084")
             mask_head_conv.inputs[0] = mask_pooler_reshape_node[0]
            
             # Reshape node that is preparing 2nd NMS class outputs for Add node that comes next.
@@ -602,7 +489,7 @@ class DET2GraphSurgeon:
             classes_add_node = self.graph.op_with_const("Add", "box_outputs/add", classes_reshape_node[0], add_array)
             
             # Get the last Conv op in mask head and reshape it to correctly gather class of interest's masks. 
-            last_conv = self.graph.find_node_by_op_input_output_name("Conv", "624", "625", 0, 0)
+            last_conv = self.graph.find_node_by_op_name("Conv", "Conv_2094")
             last_conv_reshape_shape = np.asarray([self.second_NMS_max_proposals*self.num_classes*self.batch_size, self.mask_out_res, self.mask_out_res], dtype=np.int64)
             last_conv_reshape_node = self.graph.op_with_const("Reshape", "mask_head/reshape_all_masks", last_conv.outputs[0], last_conv_reshape_shape)
             
@@ -610,7 +497,7 @@ class DET2GraphSurgeon:
             final_gather = self.graph.gather("mask_head/final_gather", last_conv_reshape_node[0], classes_add_node[0], 0)
             
             # Get last Sigmoid node and connect Gather node to it. 
-            mask_head_sigmoid = self.graph.find_node_by_op_input_output_name("Sigmoid", "625", "626", 0, 0)
+            mask_head_sigmoid = self.graph.find_node_by_op_name("Sigmoid", "Sigmoid_2120")
             mask_head_sigmoid.inputs[0] = final_gather[0]
             
             # Final Reshape node, reshapes output of Sigmoid, important for various batch_size support (not tested yet).

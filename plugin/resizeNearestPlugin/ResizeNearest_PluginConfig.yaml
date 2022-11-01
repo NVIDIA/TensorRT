@@ -13,4 +13,6 @@ versions:
       scale:
         min: "0"
         max: "=pinf"
+    attributes_required:
+      - scale
 ...

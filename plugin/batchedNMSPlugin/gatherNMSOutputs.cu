@@ -19,9 +19,10 @@
 #include "cuda_fp16.h"
 #include "gatherNMSOutputs.h"
 #include <array>
-
+using namespace nvinfer1;
 // __half minus with fallback to float for old sm
-inline __device__ __half minus_fb(const __half & a, const __half & b) {
+inline __device__ __half minus_fb(const __half& a, const __half& b)
+{
 #if __CUDA_ARCH__ >= 530
     return a - b;
 #else
@@ -181,6 +182,7 @@ struct nmsOutLaunchConfig
     nmsOutLaunchConfig(DataType t_bbox, DataType t_score)
         : t_bbox(t_bbox)
         , t_score(t_score)
+        , function(nullptr)
     {
     }
     nmsOutLaunchConfig(DataType t_bbox, DataType t_score, nmsOutFunc function)

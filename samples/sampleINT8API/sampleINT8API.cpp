@@ -39,7 +39,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
-
+using namespace nvinfer1;
 using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_int8_api";
@@ -373,6 +373,7 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
                     case DataType::kINT8: val = static_cast<const int8_t*>(wts.values)[wb]; break;
                     case DataType::kHALF: val = static_cast<const half_float::half*>(wts.values)[wb]; break;
                     case DataType::kINT32: val = static_cast<const int32_t*>(wts.values)[wb]; break;
+                    case DataType::kUINT8: val = static_cast<uint8_t const*>(wts.values)[wb]; break;
                     }
                     max = std::max(max, std::abs(val));
                 }

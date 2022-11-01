@@ -51,7 +51,7 @@ class BaseCheckerSubtool(Tool):
         self._allow_until_opt = allow_until_opt
         self._allow_debug_replay = allow_debug_replay
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [
             CheckCmdArgs(),
             ArtifactSortArgs(allow_no_artifacts_warning=self._allow_no_artifacts_warning),
@@ -70,6 +70,9 @@ class BaseCheckerSubtool(Tool):
             TrtLoadEngineArgs(),
             TrtSaveEngineArgs(output_opt=False),
         ]
+
+    def show_start_end_logging_impl(self, args):
+        return True
 
     def setup(self, args, network):
         """
@@ -104,9 +107,7 @@ class BaseCheckerSubtool(Tool):
         """
         pass
 
-    def run(self, args):
-        G_LOGGER.start("Starting iterations")
-
+    def run_impl(self, args):
         # Hack to switch obey_precision_constraints to strict_types on older versions
         if (
             mod.version(trt.__version__) < mod.version("8.2")
@@ -136,7 +137,7 @@ class BaseCheckerSubtool(Tool):
                     engine = self.arg_groups[TrtLoadEngineArgs].load_engine((builder, network))
                 except Exception as err:
                     G_LOGGER.warning(
-                        f"Failed to create network or engine, continuing to the next index.\nNote: Error was: {err}"
+                        f"Failed to create network or engine, continuing to the next iteration.\nNote: Error was: {err}"
                     )
                     G_LOGGER.internal_error("Failed to create network or engine. See warning above for details.")
                     self.arg_groups[IterativeDebugArgs].skip_iteration(success=False)

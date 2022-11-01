@@ -168,6 +168,7 @@ IPluginV2* LReluPluginCreator::createPlugin(const char* name, const PluginFieldC
         const PluginField* fields = fc->fields;
         PLUGIN_VALIDATE(fc->nbFields == 1);
         PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kFLOAT32);
+        PLUGIN_VALIDATE(!strcmp(fields[0].name, "negSlope"));
         float negSlope = *(static_cast<const float*>(fields[0].data));
 
         return new LReLU(negSlope);

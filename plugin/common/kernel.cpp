@@ -17,7 +17,7 @@
 
 #include "common/kernel.h"
 #include "common/plugin.h"
-
+using namespace nvinfer1;
 size_t detectionInferenceWorkspaceSize(bool shareLocation, int N, int C1, int C2, int numClasses, int numPredsPerClass,
     int topK, DataType DT_BBOX, DataType DT_SCORE)
 {

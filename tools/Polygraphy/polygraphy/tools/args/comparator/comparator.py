@@ -52,7 +52,7 @@ class ComparatorRunArgs(BaseArgs):
         self.group.add_argument(
             "--save-inputs",
             "--save-input-data",
-            help="[EXPERIMENTAL] Path to save inference inputs. "
+            help="Path to save inference inputs. "
             "The inputs (List[Dict[str, numpy.ndarray]]) will be encoded as JSON and saved",
             default=None,
             dest="save_inputs_path",

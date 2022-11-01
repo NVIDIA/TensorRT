@@ -247,14 +247,18 @@ class TrtConfigArgs(BaseArgs):
         replay_group = self.group.add_mutually_exclusive_group()
         replay_group.add_argument(
             "--save-tactics",
+            "--save-tactic-replay",
             help="Path to save a Polygraphy tactic replay file. "
             "Details about tactics selected by TensorRT will be recorded and stored at this location as a JSON file. ",
+            dest="save_tactics",
             default=None,
         )
         replay_group.add_argument(
             "--load-tactics",
+            "--load-tactic-replay",
             help="Path to load a Polygraphy tactic replay file, such as one created by --save-tactics. "
             "The tactics specified in the file will be used to override TensorRT's default selections. ",
+            dest="load_tactics",
             default=None,
         )
 

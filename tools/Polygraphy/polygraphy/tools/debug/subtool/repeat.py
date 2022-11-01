@@ -16,8 +16,7 @@
 #
 
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool.iterative_debug_args import (
-    ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs)
+from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs
 
 
 class Repeat(Tool):
@@ -29,8 +28,11 @@ class Repeat(Tool):
     def __init__(self):
         super().__init__("repeat")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [CheckCmdArgs(), ArtifactSortArgs(), IterativeDebugArgs(allow_iter_art_opt=False, allow_until_opt=True)]
 
-    def run(self, args):
+    def show_start_end_logging_impl(self, args):
+        return True
+
+    def run_impl(self, args):
         self.arg_groups[IterativeDebugArgs].iterate()

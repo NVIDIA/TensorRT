@@ -19,7 +19,6 @@ import io
 import os
 import sys
 import tempfile
-from collections import namedtuple
 from textwrap import dedent
 
 import numpy as np
@@ -28,94 +27,9 @@ import pytest
 import tensorrt as trt
 from polygraphy import mod
 from polygraphy.backend.onnx import onnx_from_path
-from polygraphy.backend.trt import Algorithm, TacticReplayData
 from polygraphy.json import save_json
 from tests.helper import POLYGRAPHY_CMD
 from tests.models.meta import ONNX_MODELS
-
-FakeAlgorithmContext = namedtuple("FakeAlgorithmContext", ["name", "num_inputs", "num_outputs"])
-FakeAlgorithm = namedtuple("FakeAlgorithm", ["algorithm_variant", "io_info"])
-FakeAlgorithm.get_algorithm_io_info = lambda this, index: this.io_info[index]
-
-FakeAlgorithmVariant = namedtuple("FakeAlgorithmVariant", ["implementation", "tactic"])
-FakeAlgorithmIOInfo = namedtuple("FakeAlgorithmIOInfo", ["tensor_format", "dtype", "strides"])
-
-
-@pytest.fixture(scope="session", params=["", "subdir"])
-def replay_dir(request):
-    def fake_context(name, num_inputs=1, num_outputs=1):
-        return FakeAlgorithmContext(name=name, num_inputs=num_inputs, num_outputs=num_outputs)
-
-    def fake_algo(
-        implementation=6, tactic=0, num_io=2, tensor_format=trt.TensorFormat.LINEAR, dtype=trt.float32, strides=(1, 2)
-    ):
-        io_info = [FakeAlgorithmIOInfo(tensor_format=tensor_format, dtype=dtype, strides=strides)] * num_io
-        return FakeAlgorithm(algorithm_variant=FakeAlgorithmVariant(implementation, tactic), io_info=io_info)
-
-    def make_replay(tactic):
-        return TacticReplayData().add("layer0", Algorithm.from_trt(fake_context("layer0"), fake_algo(0, tactic)))
-
-    with tempfile.TemporaryDirectory() as dir:
-
-        def make_path(prefix, *args):
-            path = os.path.join(dir, prefix)
-            if request.param:
-                path = os.path.join(path, request.param)
-            path = os.path.join(path, *args)
-            return path
-
-        # Good tactics
-        save_json(make_replay(0), make_path("good", "0.json"))
-        save_json(make_replay(1), make_path("good", "1.json"))
-
-        # Bad tactics
-        save_json(make_replay(1), make_path("bad", "0.json"))
-        save_json(make_replay(2), make_path("bad", "1.json"))
-
-        EXPECTED_OUTPUT = dedent(
-            """
-            [I] Loaded {num} good tactic replays.
-            [I] Loaded {num} bad tactic replays.
-            [I] Found potentially bad tactics:
-            [I] Layer: layer0
-                    Algorithms: ["(Implementation: 0, Tactic: 2) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1, 2)'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1, 2)'),)"]
-            """
-        )
-        yield dir, EXPECTED_OUTPUT
-
-
-class TestDiffTactics:
-    def check_output(self, status, expected_output, expected_num=2):
-        output = "\n".join(
-            line
-            for line in status.stdout.strip().splitlines()
-            if "Loading tactic replay file from " not in line and "[V]" not in line
-        )
-        assert output == expected_output.format(num=expected_num).strip()
-
-    def test_dir(self, replay_dir, poly_debug):
-        replay_dir, expected_output = replay_dir
-        status = poly_debug(["diff-tactics", "--dir", replay_dir])
-        self.check_output(status, expected_output)
-
-    def test_good_bad(self, replay_dir, poly_debug):
-        replay_dir, expected_output = replay_dir
-
-        good = os.path.join(replay_dir, "good")
-        bad = os.path.join(replay_dir, "bad")
-        status = poly_debug(["diff-tactics", "--good", good, "--bad", bad])
-        self.check_output(status, expected_output)
-
-    def test_good_bad_file(self, replay_dir, poly_debug):
-        replay_dir, expected_output = replay_dir
-
-        def find_file(dirpath, filename):
-            return glob.glob(os.path.join(dirpath, "**", filename), recursive=True)[0]
-
-        good = find_file(os.path.join(replay_dir, "good"), "0.json")
-        bad = find_file(os.path.join(replay_dir, "bad"), "1.json")
-        status = poly_debug(["diff-tactics", "--good", good, "--bad", bad])
-        self.check_output(status, expected_output, expected_num=1)
 
 
 @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")

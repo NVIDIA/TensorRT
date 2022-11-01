@@ -187,12 +187,75 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
 
             return network_from_onnx_bytes(bytes_from_path(path))
 
+@mod.export(funcify=True)
+class PostprocessNetwork(BaseLoader):
+    """
+    [EXPERIMENTAL] Functor that applies a given post-processing function to a TensorRT ``INetworkDefinition``.
+    """
+    def __init__(self, network, func, name=None):
+        """
+        Applies a given post-processing function to a TensorRT ``INetworkDefinition``.
+
+        Args:
+            network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
+                    A tuple containing a TensorRT builder, network and optionally parser or a callable that returns one.
+                    To omit the parser, return a tuple containing just the builder and network.
+            func (Callable[[trt.INetworkDefinition], None])
+                    A callable which accepts a named `network` argument.  `PostprocessNetwork` will pass in the parsed network via this argument, which can then be modified by the callable.
+            name (Optional[str])
+                    The name of this postprocessing step, used for logging purposes.
+        """
+
+        self._network = network
+
+        # Sanity-check that the function passed in is callable
+        if not callable(func):
+            G_LOGGER.critical(f"Object {func} (of type {type(func)}) is not a callable.")
+
+        try:
+            func_name = func.__name__
+        except:
+            func_name = str(func)
+
+        self.func = func
+        self.name = util.default(name, func_name)
+
+    def call_impl(self):
+        """
+        Returns:
+            Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]:
+                    The modified network along with the builder and parser if provided.
+        """
+        ret, owns_network = util.invoke_if_callable(self._network)
+        builder, network, parser = util.unpack_args(ret, num=3)
+
+        G_LOGGER.verbose(f"Executing postprocessing step [{self.name}]")
+
+        with contextlib.ExitStack() as stack:
+            if owns_network:
+                stack.enter_context(util.FreeOnException([builder, network, parser]))
+
+            self.func(network=network)
+
+            if parser is None:
+                return builder, network
+            return builder, network, parser
 
 @mod.export(funcify=True)
-class ModifyNetworkOutputs(BaseLoader):
+class ModifyNetworkOutputs(PostprocessNetwork):
     """
     Functor that modifies outputs in a TensorRT ``INetworkDefinition``.
     """
+
+    @staticmethod
+    def _apply(network, outputs, exclude_outputs):
+        if outputs == constants.MARK_ALL:
+            trt_util.mark_layerwise(network)
+        elif outputs is not None:
+            trt_util.mark_outputs(network, outputs)
+        if exclude_outputs is not None:
+            trt_util.unmark_outputs(network, exclude_outputs)
+        return network
 
     def __init__(self, network, outputs=None, exclude_outputs=None):
         """
@@ -211,41 +274,30 @@ class ModifyNetworkOutputs(BaseLoader):
                     Names of tensors to exclude as outputs. This can be useful in conjunction with
                     ``outputs=constants.MARK_ALL`` to omit outputs.
         """
-        self._network = network
-        self.outputs = outputs
-        self.exclude_outputs = exclude_outputs
-
-    def call_impl(self):
-        """
-        Returns:
-            Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]:
-                    The modified network along with the builder and parser if provided.
-        """
-        ret, owns_network = util.invoke_if_callable(self._network)
-        builder, network, parser = util.unpack_args(ret, num=3)
-
-        with contextlib.ExitStack() as stack:
-            if owns_network:
-                stack.enter_context(util.FreeOnException([builder, network, parser]))
-
-            if self.outputs == constants.MARK_ALL:
-                trt_util.mark_layerwise(network)
-            elif self.outputs is not None:
-                trt_util.mark_outputs(network, self.outputs)
-
-            if self.exclude_outputs is not None:
-                trt_util.unmark_outputs(network, self.exclude_outputs)
-
-            if parser is None:
-                return builder, network
-            return builder, network, parser
-
+        func = lambda network : ModifyNetworkOutputs._apply(network, outputs, exclude_outputs)
+        super().__init__(network, func, "ModifyNetworkOutputs")
 
 @mod.export(funcify=True)
-class SetLayerPrecisions(BaseLoader):
+class SetLayerPrecisions(PostprocessNetwork):
     """
     Functor that sets layer precisions in a TensorRT ``INetworkDefinition``.
     """
+
+    @staticmethod
+    def _apply(network, layer_precisions):
+        util.check_sequence_contains(
+            [layer.name for layer in network],
+            layer_precisions.keys(),
+            name="the network",
+            items_name="layers",
+            check_extra=False,
+        )
+
+        for layer in network:
+            if layer.name in layer_precisions:
+                layer.precision = layer_precisions[layer.name]
+        return network
+
 
     def __init__(self, network, layer_precisions):
         """
@@ -258,44 +310,29 @@ class SetLayerPrecisions(BaseLoader):
             layer_precisions (Dict[str, trt.DataType]):
                     A mapping of layer names to their desired compute precision.
         """
-        self._network = network
-        self.layer_precisions = layer_precisions
-
-    def call_impl(self):
-        """
-        Returns:
-            Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]:
-                    The modified network along with the builder and parser if provided.
-        """
-        ret, owns_network = util.invoke_if_callable(self._network)
-        builder, network, parser = util.unpack_args(ret, num=3)
-
-        with contextlib.ExitStack() as stack:
-            if owns_network:
-                stack.enter_context(util.FreeOnException([builder, network, parser]))
-
-            util.check_sequence_contains(
-                [layer.name for layer in network],
-                self.layer_precisions.keys(),
-                name="the network",
-                items_name="layers",
-                check_extra=False,
-            )
-
-            for layer in network:
-                if layer.name in self.layer_precisions:
-                    layer.precision = self.layer_precisions[layer.name]
-
-            if parser is None:
-                return builder, network
-            return builder, network, parser
-
+        func = lambda network : SetLayerPrecisions._apply(network, layer_precisions)
+        super().__init__(network, func, "SetLayerPrecisions")
 
 @mod.export(funcify=True)
-class SetTensorDatatypes(BaseLoader):
+class SetTensorDatatypes(PostprocessNetwork):
     """
     Functor that sets tensor datatypes in a TensorRT ``INetworkDefinition``.
     """
+
+    @staticmethod
+    def _apply(network, tensor_datatypes):
+        tensor_map = trt_util.get_all_tensors(network)
+        util.check_sequence_contains(
+            tensor_map.keys(),
+            tensor_datatypes.keys(),
+            name="the network",
+            items_name="tensors",
+            check_extra=False,
+        )
+
+        for name, dtype in tensor_datatypes.items():
+            tensor_map[name].dtype = dtype
+        return network
 
     def __init__(self, network, tensor_datatypes):
         """
@@ -308,44 +345,34 @@ class SetTensorDatatypes(BaseLoader):
             tensor_datatypes (Dict[str, trt.DataType]):
                     A mapping of tensor names to their desired data types.
         """
-        self._network = network
-        self.tensor_datatypes = tensor_datatypes
-
-    def call_impl(self):
-        """
-        Returns:
-            Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]:
-                    The modified network along with the builder and parser if provided.
-        """
-        ret, owns_network = util.invoke_if_callable(self._network)
-        builder, network, parser = util.unpack_args(ret, num=3)
-
-        with contextlib.ExitStack() as stack:
-            if owns_network:
-                stack.enter_context(util.FreeOnException([builder, network, parser]))
-
-            tensor_map = trt_util.get_all_tensors(network)
-            util.check_sequence_contains(
-                tensor_map.keys(),
-                self.tensor_datatypes.keys(),
-                name="the network",
-                items_name="tensors",
-                check_extra=False,
-            )
-
-            for name, dtype in self.tensor_datatypes.items():
-                tensor_map[name].dtype = dtype
-
-            if parser is None:
-                return builder, network
-            return builder, network, parser
-
+        func = lambda network : SetTensorDatatypes._apply(network, tensor_datatypes)
+        super().__init__(network, func, "SetTensorDatatypes")
 
 @mod.export(funcify=True)
-class SetTensorFormats(BaseLoader):
+class SetTensorFormats(PostprocessNetwork):
     """
     Functor that sets tensor formats in a TensorRT ``INetworkDefinition``.
     """
+
+    @staticmethod
+    def _apply(network, tensor_formats):
+        tensor_map = trt_util.get_all_tensors(network)
+        util.check_sequence_contains(
+            tensor_map.keys(),
+            tensor_formats.keys(),
+            name="the network",
+            items_name="tensors",
+            check_extra=False,
+        )
+
+        for name, formats in tensor_formats.items():
+            mask = 0
+            for format in formats:
+                mask |= 1 << int(format)
+            tensor_map[name].allowed_formats = mask
+        return network
+
+
 
     def __init__(self, network, tensor_formats):
         """
@@ -358,41 +385,8 @@ class SetTensorFormats(BaseLoader):
             tensor_formats (Dict[str, List[trt.TensorFormat]]):
                     A mapping of tensor names to their allowed formats.
         """
-        self._network = network
-        self.tensor_formats = tensor_formats
-
-    def call_impl(self):
-        """
-        Returns:
-            Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]:
-                    The modified network along with the builder and parser if provided.
-        """
-        ret, owns_network = util.invoke_if_callable(self._network)
-        builder, network, parser = util.unpack_args(ret, num=3)
-
-        with contextlib.ExitStack() as stack:
-            if owns_network:
-                stack.enter_context(util.FreeOnException([builder, network, parser]))
-
-            tensor_map = trt_util.get_all_tensors(network)
-            util.check_sequence_contains(
-                tensor_map.keys(),
-                self.tensor_formats.keys(),
-                name="the network",
-                items_name="tensors",
-                check_extra=False,
-            )
-
-            for name, formats in self.tensor_formats.items():
-                mask = 0
-                for format in formats:
-                    mask |= 1 << int(format)
-                tensor_map[name].allowed_formats = mask
-
-            if parser is None:
-                return builder, network
-            return builder, network, parser
-
+        func = lambda network : SetTensorFormats._apply(network, tensor_formats)
+        super().__init__(network, func, "SetTensorFormats")
 
 @mod.export(funcify=True)
 class EngineBytesFromNetwork(BaseLoader):

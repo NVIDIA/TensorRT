@@ -111,9 +111,15 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
     int32_t bucket;
     int32_t mid = span / 2;
     int32_t index;
-    float tmp1 = logf(mid);
-    float tmp = (mid - 1) / (logf(dimResult.y - 1) - tmp1);
+
     // tmp values are precomputed for re-use; must be at least float to ensure accuracy
+    float tmp1 = logf(mid);
+
+    // Multiply by (1 - epsilon) to ensure that taking the ceil of approximately an integer
+    // results in that integer when computing the bucket later on.
+    // This corrects for the mathematical imprecision from using float.
+    constexpr float kEPSILON = 1e-7;
+    float tmp = (mid - 1) / (logf(dimResult.y - 1) - tmp1) * (1 - kEPSILON);
 #endif
 
     __shared__ TDataType T[tTileSize][tTileSize + 1]; // +1 to avoid bank conflict

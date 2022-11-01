@@ -120,6 +120,11 @@ private:
     // attributes
     int32_t mSpan;
     float mFactor;
+
+    using IPluginV2::getOutputDimensions;
+    using IPluginV2::getWorkspaceSize;
+    using IPluginV2::enqueue;
+    using IPluginV2Ext::configurePlugin;
 };
 
 class DisentangledAttentionPluginCreator : public nvinfer1::IPluginCreator
