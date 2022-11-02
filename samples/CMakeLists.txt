@@ -21,20 +21,9 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleAlgorithmSelector
     sampleCharRNN
     sampleDynamicReshape
-    sampleFasterRCNN
-    sampleGoogleNet
-    sampleINT8
     sampleINT8API
-    sampleMNIST
-    sampleMNISTAPI
     sampleOnnxMNIST
     sampleIOFormats
-    sampleSSD
-    sampleUffFasterRCNN
-    sampleUffMaskRCNN
-    sampleUffMNIST
-    sampleUffPluginV2Ext
-    sampleUffSSD
     sampleOnnxMnistCoordConvAC
     trtexec)
 

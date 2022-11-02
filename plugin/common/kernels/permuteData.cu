@@ -17,6 +17,8 @@
 #include "common/kernel.h"
 #include <array>
 
+using namespace nvinfer1;
+
 template <typename Dtype, unsigned nthds_per_cta>
 __launch_bounds__(nthds_per_cta) __global__ void permuteData_kernel(const int nthreads, const int num_classes,
     const int num_data, const int num_dim, bool confSigmoid, const Dtype* data, Dtype* new_data)
@@ -67,6 +69,7 @@ struct pdLaunchConfig
 
     pdLaunchConfig(DataType t_data)
         : t_data(t_data)
+        , function(nullptr)
     {
     }
     pdLaunchConfig(DataType t_data, pdFunc function)

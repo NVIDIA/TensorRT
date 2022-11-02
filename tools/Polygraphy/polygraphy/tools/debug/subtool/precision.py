@@ -62,7 +62,12 @@ class BisectMarker(BaseMarker):
             self.bad = self.num_layers_to_mark
             round_func = math.ceil
 
-        self.num_layers_to_mark = round_func((self.good + self.bad) / 2.0)
+        old_num_layers_to_mark = self.num_layers_to_mark
+        self.num_layers_to_mark = int(round_func((self.good + self.bad) / 2.0))
+
+        # Prevent infinite looping:
+        if old_num_layers_to_mark == self.num_layers_to_mark:
+            return True
 
         # If good and bad are within 1 layer of each other,
         # then we already have the information we need.
@@ -73,14 +78,14 @@ class BisectMarker(BaseMarker):
                 self.success_message()
             return True
 
-        if self.num_layers_to_mark <= 1 or self.num_layers_to_mark > self.max_layers:
+        if self.num_layers_to_mark > self.max_layers:
             G_LOGGER.error("Could not find a configuration that satisfied accuracy requirements.")
             return True
 
         return False
 
     def remaining(self):
-        return int(math.log2(self.good - self.bad))
+        return int(math.ceil(math.log2(self.good - self.bad)))
 
 
 class LinearMarker(BaseMarker):
@@ -141,22 +146,22 @@ class Precision(BaseCheckerSubtool):
             "-p",
             "--precision",
             help="Precision to use when marking layers to run in higher precision",
-            choices=["fp32", "fp16"],
-            default="fp32",
+            choices=["float32", "float16"],
+            default="float32",
         )
 
     def setup(self, args, network):
-        self.precision = {"fp32": trt.float32, "fp16": trt.float16}[args.precision]
+        self.precision = {"float32": trt.float32, "float16": trt.float16}[args.precision]
 
         if self.precision == trt.float16 and not self.arg_groups[TrtConfigArgs].fp16:
             G_LOGGER.critical(
-                "Cannot mark layers to run in fp16 if it is not enabled in the builder configuration.\n"
+                "Cannot mark layers to run in float16 if it is not enabled in the builder configuration.\n"
                 "Please also specify `--fp16` as a command-line option"
             )
 
         if self.precision == trt.float16 and not self.arg_groups[TrtConfigArgs].int8:
             G_LOGGER.warning(
-                "Using fp16 as the higher precision, but fp16 is also the lowest precision available. "
+                "Using float16 as the higher precision, but float16 is also the lowest precision available. "
                 "Did you mean to set --int8 as well?"
             )
 
@@ -167,7 +172,7 @@ class Precision(BaseCheckerSubtool):
                 self.arg_groups[TrtConfigArgs].int8,
             ]
         ):
-            G_LOGGER.critical("Please enable at least one precision besides fp32 (e.g. --int8, --fp16, --tf32)")
+            G_LOGGER.critical("Please enable at least one precision besides float32 (e.g. --int8, --fp16, --tf32)")
 
         if self.arg_groups[ModelArgs].model_type == "engine":
             G_LOGGER.critical(
@@ -182,13 +187,21 @@ class Precision(BaseCheckerSubtool):
         elif args.mode == "bisect":
             self.layer_marker = BisectMarker(len(network), args.direction)
 
+        self.original_precisions = {}
+        for index, layer in enumerate(network):
+            if layer.precision_is_set:
+                self.original_precisions[index] = layer.precision
+
     def mark_layers(self, network, indices):
         EXCLUDE_LAYER_NAMES = ["CONSTANT"]
         EXCLUDE_LAYERS = [getattr(trt.LayerType, attr) for attr in EXCLUDE_LAYER_NAMES if hasattr(trt.LayerType, attr)]
 
         # First, reset, since changes from the previous call will persist.
-        for layer in network:
-            layer.reset_precision()
+        for index, layer in enumerate(network):
+            if index in self.original_precisions:
+                layer.precision = self.original_precisions[index]
+            else:
+                layer.reset_precision()
 
         marked_indices = set()
         for index in indices:

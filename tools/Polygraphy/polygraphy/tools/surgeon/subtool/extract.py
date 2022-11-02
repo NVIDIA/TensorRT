@@ -35,7 +35,7 @@ class Extract(BaseSurgeonSubtool):
     def __init__(self):
         super().__init__("extract")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [
             ModelArgs(
                 model_opt_required=True,
@@ -50,7 +50,10 @@ class Extract(BaseSurgeonSubtool):
             OnnxSaveArgs(output_opt_required=True),
         ]
 
-    def add_parser_args(self, parser):
+    def show_start_end_logging_impl(self, args):
+        return True
+
+    def add_parser_args_impl(self, parser):
         parser.add_argument(
             "--inputs",
             dest="input_meta",
@@ -74,8 +77,6 @@ class Extract(BaseSurgeonSubtool):
             nargs="+",
             default=[],
         )
-
-        super().add_parser_args(parser)
 
     def run_impl(self, args):
         def missing_meta_tensors(input_metadata, output_metadata):

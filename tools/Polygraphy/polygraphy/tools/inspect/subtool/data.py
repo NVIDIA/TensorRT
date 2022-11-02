@@ -45,7 +45,7 @@ class Data(Tool):
         )
         parser.add_argument("--histogram", help="Show a histogram of the value distribution", action="store_true")
 
-    def run(self, args):
+    def run_impl(self, args):
         # Note: It's important we have encode/decode JSON methods registered
         # for the types we care about, e.g. RunResults. Importing the class should generally guarantee this.
         data = load_json(args.path)

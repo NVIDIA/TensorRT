@@ -58,28 +58,6 @@ inline size_t typeSize(const nvinfer1::DataType type)
 
 #define AlignMem(x) nAlignUp(x, 256)
 
-template <typename Dtype>
-struct CudaBind
-{
-    size_t mSize;
-    void* mPtr;
-
-    CudaBind(size_t size)
-    {
-        mSize = size;
-        PLUGIN_CUASSERT(cudaMalloc(&mPtr, sizeof(Dtype) * mSize));
-    }
-
-    ~CudaBind()
-    {
-        if (mPtr != nullptr)
-        {
-            PLUGIN_CUASSERT(cudaFree(mPtr));
-            mPtr = nullptr;
-        }
-    }
-};
-
 struct RefineNMSParameters
 {
     int backgroundLabelId, numClasses, keepTopK;

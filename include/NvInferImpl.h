@@ -30,10 +30,7 @@ class IAlgorithmVariant;
 class IAssertionLayer;
 class IBuilderConfig;
 class IConcatenationLayer;
-class IIfConditional;
 class IConditionLayer;
-class IIfConditionalOutputLayer;
-class IIfConditionalInputLayer;
 class IConstantLayer;
 class IConvolutionLayer;
 class ICudaEngine;
@@ -42,13 +39,17 @@ class IDequantizeLayer;
 class IDimensionExpr;
 class IEinsumLayer;
 class IElementWiseLayer;
+class IEngineInspector;
 class IExecutionContext;
 class IFillLayer;
 class IFullyConnectedLayer;
 class IGatherLayer;
+class IGridSampleLayer;
 class IHostMemory;
 class IIdentityLayer;
 class IIfConditional;
+class IIfConditionalInputLayer;
+class IIfConditionalOutputLayer;
 class IInt8Calibrator;
 class IIteratorLayer;
 class ILayer;
@@ -57,7 +58,11 @@ class ILoopOutputLayer;
 class ILRNLayer;
 class IMatrixMultiplyLayer;
 class INetworkDefinition;
+class INMSLayer;
+class INonZeroLayer;
+class IOneHotLayer;
 class IOptimizationProfile;
+class IOutputAllocator;
 class IPaddingLayer;
 class IParametricReLULayer;
 class IPlugin;
@@ -80,7 +85,6 @@ class IShapeLayer;
 class IShuffleLayer;
 class ISliceLayer;
 class ISoftMaxLayer;
-class IEngineInspector;
 class ITensor;
 class ITimingCache;
 class ITopKLayer;
@@ -90,6 +94,7 @@ struct Permutation;
 class Weights;
 
 enum class ActivationType : int32_t;
+enum class BoundingBoxFormat : int32_t;
 enum class BuilderFlag : int32_t;
 enum class CalibrationAlgoType : int32_t;
 enum class DeviceType : int32_t;
@@ -111,7 +116,7 @@ enum class ProfilingVerbosity : int32_t;
 enum class QuantizationFlag : int32_t;
 enum class ReduceOperation : int32_t;
 enum class ResizeCoordinateTransformation : int32_t;
-enum class ResizeMode : int32_t;
+enum class InterpolationMode : int32_t;
 enum class ResizeRoundMode : int32_t;
 enum class ResizeSelector : int32_t;
 enum class RNNDirection : int32_t;
@@ -120,18 +125,22 @@ enum class RNNInputMode : int32_t;
 enum class RNNOperation : int32_t;
 enum class ScaleMode : int32_t;
 enum class ScatterMode : int32_t;
-enum class SliceMode : int32_t;
+enum class SampleMode : int32_t;
+enum class TensorIOMode : int32_t;
 enum class TensorLocation : int32_t;
 enum class TopKOperation : int32_t;
 enum class TripLimit : int32_t;
 enum class UnaryOperation : int32_t;
 enum class WeightsRole : int32_t;
+enum class PreviewFeature : int32_t;
 
 using TacticSources = uint32_t;
 using TensorFormats = uint32_t;
 using BuilderFlags = uint32_t;
 using NetworkDefinitionCreationFlags = uint32_t;
 using QuantizationFlags = uint32_t;
+using ResizeMode = InterpolationMode;
+using SliceMode = SampleMode;
 
 //!
 //! \file NvInferImpl.h
@@ -262,6 +271,20 @@ public:
     virtual TacticSources getTacticSources() const noexcept = 0;
     virtual ProfilingVerbosity getProfilingVerbosity() const noexcept = 0;
     virtual IEngineInspector* createEngineInspector() const noexcept = 0;
+    virtual Dims getTensorShape(char const* tensorName) const noexcept = 0;
+    virtual DataType getTensorDataType(char const* tensorName) const noexcept = 0;
+    virtual TensorLocation getTensorLocation(char const* tensorName) const noexcept = 0;
+    virtual bool isShapeInferenceIO(char const* tensorName) const noexcept = 0;
+    virtual TensorIOMode getTensorIOMode(char const* tensorName) const noexcept = 0;
+    virtual int32_t getTensorBytesPerComponent(char const* tensorName) const noexcept = 0;
+    virtual int32_t getTensorComponentsPerElement(char const* tensorName) const noexcept = 0;
+    virtual TensorFormat getTensorFormat(char const* tensorName) const noexcept = 0;
+    virtual char const* getTensorFormatDesc(char const* tensorName) const noexcept = 0;
+    virtual int32_t getTensorVectorizedDim(char const* tensorName) const noexcept = 0;
+    virtual Dims getProfileShape(
+        char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept = 0;
+    virtual int32_t getNbIOTensors() const noexcept = 0;
+    virtual char const* getIOTensorName(int32_t index) const noexcept = 0;
 };
 
 class VExecutionContext : public VRoot
@@ -296,6 +319,26 @@ public:
     virtual void setEnqueueEmitsProfile(bool enqueueEmitsProfile) noexcept = 0;
     virtual bool getEnqueueEmitsProfile() const noexcept = 0;
     virtual bool reportToProfiler() const noexcept = 0;
+    virtual bool setInputShape(char const* tensorName, Dims const& dims) noexcept = 0;
+    virtual Dims getTensorShape(char const* tensorName) const noexcept = 0;
+    virtual Dims getTensorStrides(char const* tensorName) const noexcept = 0;
+    virtual bool setTensorAddress(char const* tensorName, void* data) noexcept = 0;
+    virtual void const* getTensorAddress(char const* tensorName) const noexcept = 0;
+    virtual bool setInputTensorAddress(char const* tensorName, void const* data) noexcept = 0;
+    virtual int32_t inferShapes(int32_t nbMaxNames, char const** tensorNames) noexcept = 0;
+    virtual bool setInputConsumedEvent(cudaEvent_t event) noexcept = 0;
+    virtual cudaEvent_t getInputConsumedEvent() const noexcept = 0;
+    virtual void* getOutputTensorAddress(char const* tensorName) const noexcept = 0;
+    virtual bool setOutputAllocator(char const* tensorName, IOutputAllocator* outputAllocator) noexcept = 0;
+    virtual IOutputAllocator* getOutputAllocator(char const* name) noexcept = 0;
+    virtual int64_t getMaxOutputSize(char const* tensorName) const noexcept = 0;
+    virtual bool setTemporaryStorageAllocator(IGpuAllocator* allocator) noexcept = 0;
+    virtual IGpuAllocator* getTemporaryStorageAllocator() const noexcept = 0;
+    virtual bool enqueueV3(cudaStream_t stream) noexcept = 0;
+    virtual void setPersistentCacheLimit(size_t size) noexcept = 0;
+    virtual size_t getPersistentCacheLimit() const noexcept = 0;
+    virtual bool setNvtxVerbosity(ProfilingVerbosity verbosity) noexcept = 0;
+    virtual ProfilingVerbosity getNvtxVerbosity() const noexcept = 0;
 };
 
 class VEngineInspector : public VRoot
@@ -303,8 +346,8 @@ class VEngineInspector : public VRoot
 public:
     virtual bool setExecutionContext(IExecutionContext const* context) noexcept = 0;
     virtual IExecutionContext const* getExecutionContext() const noexcept = 0;
-    virtual AsciiChar const* getLayerInformation(int32_t layerIndex, LayerInformationFormat format) const noexcept = 0;
-    virtual AsciiChar const* getEngineInformation(LayerInformationFormat format) const noexcept = 0;
+    virtual char const* getLayerInformation(int32_t layerIndex, LayerInformationFormat format) const noexcept = 0;
+    virtual char const* getEngineInformation(LayerInformationFormat format) const noexcept = 0;
     virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
 };
@@ -333,6 +376,8 @@ public:
     virtual TensorFormats getAllowedFormats() const noexcept = 0;
     virtual bool isShapeTensor() const noexcept = 0;
     virtual bool isExecutionTensor() const noexcept = 0;
+    virtual void setDimensionName(int32_t index, char const* name) noexcept = 0;
+    virtual char const* getDimensionName(int32_t index) const noexcept = 0;
 };
 class VLayer : public VRoot
 {
@@ -651,6 +696,11 @@ public:
     virtual MatrixOperation getOperation(int32_t index) const noexcept = 0;
 };
 
+class VNonZeroLayer : public VRoot
+{
+public:
+};
+
 class VRaggedSoftMaxLayer : public VRoot
 {
 public:
@@ -692,6 +742,10 @@ public:
     virtual ResizeSelector getSelectorForSinglePixel() const noexcept = 0;
     virtual void setNearestRounding(ResizeRoundMode value) noexcept = 0;
     virtual ResizeRoundMode getNearestRounding() const noexcept = 0;
+    virtual void setCubicCoeff(float value) noexcept = 0;
+    virtual float getCubicCoeff() const noexcept = 0;
+    virtual void setExcludeOutside(bool value) noexcept = 0;
+    virtual bool getExcludeOutside() const noexcept = 0;
 };
 
 class VLoopBoundaryLayer : public VRoot
@@ -823,6 +877,33 @@ public:
     virtual char const* getEquation() const noexcept = 0;
 };
 
+class VOneHotLayer : public VRoot
+{
+public:
+    virtual int32_t getAxis() const noexcept = 0;
+    virtual void setAxis(int32_t axis) noexcept = 0;
+}; // class VOneHotLayer
+
+class VGridSampleLayer : public VRoot
+{
+public:
+    virtual void setInterpolationMode(InterpolationMode mode) noexcept = 0;
+    virtual InterpolationMode getInterpolationMode() const noexcept = 0;
+    virtual void setAlignCorners(bool alignCorners) noexcept = 0;
+    virtual bool getAlignCorners() const noexcept = 0;
+    virtual bool setSampleMode(SampleMode mode) noexcept = 0;
+    virtual SampleMode getSampleMode() const noexcept = 0;
+}; // class VGridSampleLayer
+
+class VNMSLayer : public VRoot
+{
+public:
+    virtual void setBoundingBoxFormat(BoundingBoxFormat fmt) noexcept = 0;
+    virtual BoundingBoxFormat getBoundingBoxFormat() const noexcept = 0;
+    virtual void setTopKBoxLimit(int32_t limit) noexcept = 0;
+    virtual int32_t getTopKBoxLimit() const noexcept = 0;
+}; // class VNMSLayer
+
 class VNetworkDefinition : public VRoot
 {
 public:
@@ -904,6 +985,10 @@ public:
     virtual IScatterLayer* addScatter(ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode) noexcept = 0;
     virtual IEinsumLayer* addEinsum(ITensor* const* inputs, int32_t nbInputs, char const* equation) noexcept = 0;
     virtual IAssertionLayer* addAssertion(ITensor& condition, char const* message) noexcept = 0;
+    virtual IOneHotLayer* addOneHot(ITensor& indices, ITensor& values, ITensor& depth, int32_t axis) noexcept = 0;
+    virtual INonZeroLayer* addNonZero(ITensor& input) noexcept = 0;
+    virtual IGridSampleLayer* addGridSample(ITensor& input, ITensor& grid) noexcept = 0;
+    virtual INMSLayer* addNMS(ITensor& boxes, ITensor& scores, ITensor& maxOutputBoxesPerClass) noexcept = 0;
 };
 
 class VAlgorithmIOInfo : public VRoot
@@ -998,6 +1083,8 @@ public:
     virtual nvinfer1::ITimingCache const* getTimingCache() const noexcept = 0;
     virtual void setMemoryPoolLimit(MemoryPoolType pool, std::size_t poolSize) noexcept = 0;
     virtual std::size_t getMemoryPoolLimit(MemoryPoolType pool) const noexcept = 0;
+    virtual void setPreviewFeature(PreviewFeature feature, bool enable) noexcept = 0;
+    virtual bool getPreviewFeature(PreviewFeature feature) const noexcept = 0;
 };
 
 class VBuilder : public VRoot

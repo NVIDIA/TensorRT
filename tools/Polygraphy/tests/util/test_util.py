@@ -217,3 +217,24 @@ class TestMakeRepr:
 
     def test_empty_kwargs_are_default(self):
         assert util.make_repr("Example", 1, 2) == ("Example(1, 2)", False, True)
+
+    def test_does_not_modify(self):
+        obj = {"x": float("inf")}
+        assert util.make_repr("Example", obj) == ("Example({'x': float('inf')})", False, True)
+        assert obj == {"x": float("inf")}
+
+    @pytest.mark.parametrize("obj", [float("nan"), float("inf"), float("-inf")])
+    @pytest.mark.parametrize("recursion_depth", [0, 1, 2])
+    def test_nan_inf(self, obj, recursion_depth):
+        if obj == float("inf"):
+            expected = "float('inf')"
+        elif obj == float("-inf"):
+            expected = "float('-inf')"
+        else:
+            expected = "float('nan')"
+
+        for _ in range(recursion_depth):
+            obj = {"x": obj}
+            expected = f"{{'x': {expected}}}"
+
+        assert util.make_repr("Example", obj) == (f"Example({expected})", False, True)

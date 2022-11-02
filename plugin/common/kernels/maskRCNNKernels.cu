@@ -2313,19 +2313,19 @@ cudaError_t DecodeBBoxes(cudaStream_t stream, int N,
 
     switch (dtype)
     {
-        case nvinfer1::DataType::kFLOAT:
-        {
-            decode_bboxes_kernel<<<blocks, threads, 0, stream>>>(
-                samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
-            break;
-        }
-        case nvinfer1::DataType::kHALF:
-        {
-            decode_bboxes_kernel_half<<<blocks, threads, 0, stream>>>(
-                samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
-            break;
-        }
-        default: PLUGIN_ASSERT(false);   
+    case nvinfer1::DataType::kFLOAT:
+    {
+        decode_bboxes_kernel<<<blocks, threads, 0, stream>>>(
+            samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
+        break;
+    }
+    case nvinfer1::DataType::kHALF:
+    {
+        decode_bboxes_kernel_half<<<blocks, threads, 0, stream>>>(
+            samples, anchors, delta, regWeight, inputHeight, inputWidth, outputBbox, bboxClipThresh);
+        break;
+    }
+    default: PLUGIN_ASSERT(false);
     }
 
     return cudaGetLastError();

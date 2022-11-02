@@ -39,17 +39,21 @@ in the engine.
 Run the following command to compare running the model with TensorRT using FP16
 optimizations against ONNX-Runtime in FP32:
 
-<!-- Polygraphy Test: Ignore Start -->
+<!-- Polygraphy Test: XFAIL Start -->
 ```bash
 polygraphy run needs_constraints.onnx \
     --trt --fp16 --onnxrt --val-range x:[1,2] \
+    --layer-precisions Add:float16 Sub:float32 --precision-constraints prefer \
     --check-error-stat median
 ```
-<!-- Polygraphy Test: Ignore End -->
+<!-- Polygraphy Test: XFAIL End -->
 
-If FP16 tactics are selected for the `Add` or `Sub` layers, this should fail for the reasons described above.
+To increase the chances that this command fails for the reasons outlined above,
+we'll force the `Add` to run in FP16 precision and the subsequent `Sub` to run in FP32.
+This will prevent them from being fused and cause the outputs of `Add` to overflow the FP16 range.
 
-### Using A Network Script To Constrain Precisions
+
+### Using A Network Loader Script To Constrain Precisions
 
 The below section assumes you have read through the example on
 [Defining a TensorRT Network or Config Manually](../../../../examples/cli/run/04_defining_a_tensorrt_network_or_config_manually)
@@ -62,7 +66,7 @@ polygraphy run needs_constraints.onnx --onnxrt --val-range x:[1,2] \
     --save-inputs inputs.json --save-outputs golden_outputs.json
 ```
 
-Next, run the provided network script
+Next, run the provided network loader script
 [constrained_network.py](./constrained_network.py) which constrains precisions
 in the model, forcing TensorRT to obey constraints, using the saved input and comparing against the saved golden output:
 
@@ -85,6 +89,32 @@ polygraphy run constrained_network.py --precision-constraints prefer \
     --trt --fp16 --load-inputs inputs.json --load-outputs golden_outputs.json \
     --check-error-stat median
 ```
+
+### Using a Network Postprocessing Script to Constrain Precisions
+
+Another option is to use a TensorRT network postprocessing script to apply precisions on the parsed network.  This allows
+direct comparison of the constrained network with ONNX-Runtime in a single Polygraphy run, without the need to save and load
+reference data.
+
+Use the provided network postprocessing script [add_constraints.py](./add_constraints.py) to constrain precisions in the model:
+
+
+```
+polygraphy run needs_constraints.onnx --onnxrt --trt --fp16 --precision-constraints obey \
+    --val-range x:[1,2] --check-error-stat median \
+    --trt-network-postprocess-script ./add_constraints.py
+```
+
+*TIP: You can use `--trt-npps` as shorthand for `--trt-network-postprocess-script`.*
+
+By default Polygraphy looks for a function called `postprocess` in the script to execute.  To specify
+a different function to use, suffix the script name with a colon followed by the function name, e.g.
+
+<!-- Polygraphy Test: Ignore Start -->
+```
+polygraphy run ... --trt-npps my_script.py:custom_func
+```
+<!-- Polygraphy Test: Ignore End -->
 
 
 ## See Also

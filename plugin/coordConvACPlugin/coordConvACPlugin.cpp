@@ -21,6 +21,7 @@
 #include <vector>
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 const int NUM_COORDCONV_CHANNELS = 2;
 
 namespace
@@ -72,13 +73,18 @@ void CoordConvACPlugin::terminate() noexcept {}
 
 Dims CoordConvACPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {
+    PLUGIN_ASSERT(index == 0);
+    PLUGIN_ASSERT(nbInputDims == 1);
+    PLUGIN_ASSERT(inputs != nullptr);
     // CHW
     nvinfer1::Dims dimsOutput;
-    dimsOutput.nbDims = inputs->nbDims;
-    dimsOutput.d[0] = inputs->d[0] + NUM_COORDCONV_CHANNELS;
-    dimsOutput.d[1] = inputs->d[1];
-    dimsOutput.d[2] = inputs->d[2];
-    dimsOutput.d[3] = inputs->d[3];
+    // Don't trigger null dereference since we check if inputs is nullptr above.
+    // NOLINTNEXTLINE(clang-analyzer-core.NullDereference)
+    PLUGIN_ASSERT(inputs[0].nbDims == 3);
+    dimsOutput.nbDims = inputs[0].nbDims;
+    dimsOutput.d[0] = inputs[0].d[0] + NUM_COORDCONV_CHANNELS;
+    dimsOutput.d[1] = inputs[0].d[1];
+    dimsOutput.d[2] = inputs[0].d[2];
     return dimsOutput;
 }
 

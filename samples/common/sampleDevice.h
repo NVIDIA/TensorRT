@@ -24,6 +24,8 @@
 #include <iostream>
 #include <thread>
 
+#include "sampleUtils.h"
+
 namespace sample
 {
 
@@ -468,6 +470,46 @@ private:
     size_t mSize{0};
     TrtManagedBuffer mBuffer;
 }; // class UnifiedMirroredBuffer
+
+//!
+//! Class to allocate memory for outputs with data-dependent shapes. The sizes of those are unknown so pre-allocation is
+//! not possible.
+//!
+class OutputAllocator : public nvinfer1::IOutputAllocator
+{
+public:
+    OutputAllocator(IMirroredBuffer* buffer)
+        : mBuffer(buffer)
+    {
+    }
+
+    void* reallocateOutput(
+        char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept override
+    {
+        // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
+        // even for empty tensors, so allocate a dummy byte.
+        size = std::max(size, static_cast<uint64_t>(1));
+        if (size > mSize)
+        {
+            mBuffer->allocate(roundUp(size, alignment));
+            mSize = size;
+        }
+        return mBuffer->getDeviceBuffer();
+    }
+
+    void notifyShape(char const* tensorName, nvinfer1::Dims const& dims) noexcept override {}
+
+    IMirroredBuffer* getBuffer()
+    {
+        return mBuffer.get();
+    }
+
+    virtual ~OutputAllocator() {}
+
+private:
+    std::unique_ptr<IMirroredBuffer> mBuffer;
+    uint64_t mSize{};
+};
 
 inline void setCudaDevice(int device, std::ostream& os)
 {

@@ -31,8 +31,8 @@ from NNDF.tensorrt_utils import TRTNativeRunner
 @use_cuda
 def gpt2_inference(gpt2, input_ids, timing_profile, use_cuda=True):
     gpt2_stmt = lambda: gpt2(input_ids=input_ids)
-    gpt2_e2e_median_time = measure_python_inference_code(gpt2_stmt, timing_profile)
-    return (gpt2_stmt(), gpt2_e2e_median_time)
+    gpt2_e2e_time = measure_python_inference_code(gpt2_stmt, timing_profile)
+    return (gpt2_stmt(), gpt2_e2e_time)
 
 
 # Code specifically for Pythonic inference measurement used across all GPT2 related scripts
@@ -58,5 +58,5 @@ def full_inference_greedy(
                 output = gpt2.generate(input_ids, min_length=max_length, max_length=max_length, batch_size=batch_size)  # greedy search with fixed length
         return output
 
-    full_e2e_median_time = measure_python_inference_code(_e2e, timing_profile)
-    return (_e2e(), full_e2e_median_time)
+    full_e2e_time = measure_python_inference_code(_e2e, timing_profile)
+    return (_e2e(), full_e2e_time)

@@ -48,6 +48,9 @@ class BARTMetadata(_BARTMetadata, MetadataArgparseInteropMixin):
             action="store_true",
             default=False,
         )
+        network_group.add_argument(
+            "--num-beams", type=int, default=1, help="Enables beam search during decoding."
+        )
 
     @staticmethod
     def from_args(args: argparse.Namespace):
@@ -84,13 +87,23 @@ class BARTMetadata(_BARTMetadata, MetadataArgparseInteropMixin):
             type=int,
             help="Specify fixed output sequence length for perf benchmarking. (default: max supported sequence length)",
         )
+        benchmarking_group.add_argument(
+            "--input-profile-max-len",
+            type=int,
+            help="Specify max input sequence length in engine profile. (default: max supported sequence length)",
+        )
+        benchmarking_group.add_argument(
+            "--output-profile-max-len",
+            type=int,
+            help="Specify max output sequence length in engine profile. (default: max supported sequence length)",
+        )
 
 
-BARTBenchmarkingArgs = namedtuple("BARTBenchmarkingArgs", ["input_seq_len", "output_seq_len"])
+BARTBenchmarkingArgs = namedtuple("BARTBenchmarkingArgs", ["input_seq_len", "output_seq_len", "input_profile_max_len", "output_profile_max_len"])
 
 class BARTModelTRTConfig(NNConfig):
 
-    TARGET_MODELS = ["facebook/bart-base", "facebook/bart-large", "facebook/bart-large-cnn"]
+    TARGET_MODELS = ["facebook/bart-base", "facebook/bart-large", "facebook/bart-large-cnn", "facebook/mbart-large-50"]
     
     # bart-base: 12-layer, 768-hidden, 139M parameters
     # bart-large: 24-layer, 1024-hidden, 406M parameters
@@ -99,6 +112,7 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[0]: 12, 
         TARGET_MODELS[1]: 24, 
         TARGET_MODELS[2]: 24,
+        TARGET_MODELS[3]: 24,
     } 
     
     # in all bart variants, # of heads in encoder and decoder are the same
@@ -106,12 +120,14 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[0]: 12, 
         TARGET_MODELS[1]: 16, 
         TARGET_MODELS[2]: 16,
+        TARGET_MODELS[3]: 16,
     }
 
     MAX_SEQUENCE_LENGTH = {
         TARGET_MODELS[0]: 768,
         TARGET_MODELS[1]: 1024,
         TARGET_MODELS[2]: 1024,
+        TARGET_MODELS[3]: 1024,
     }
 
     # encoder hidden size is not necessarily same as max sequence length. Separate for clarification
@@ -119,6 +135,7 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[0]: 768,
         TARGET_MODELS[1]: 1024,
         TARGET_MODELS[2]: 1024,
+        TARGET_MODELS[3]: 1024,
     } 
 
     # To achieve identical results with original HuggingFace implementation, the min_length in model config should be consistent with each model variant
@@ -127,6 +144,7 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[0]: 0,
         TARGET_MODELS[1]: 0,
         TARGET_MODELS[2]: 56,
+        TARGET_MODELS[3]: 0,
     } 
 
     #TODO: this might better be an inference time input like the `max_length` arg in generate() and greedy_search(). The change needed is in NNDF/interface.py:__call__ so it's a fundamental change affecting GPT2 and T5 code. Here I just put this option in BART model config for now. But it's also reasonable to treat this as a model config, because the TRT engine building may need this to have fixed dimension (e.g., to enable KV-cache)
@@ -135,14 +153,19 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[0]: 768,
         TARGET_MODELS[1]: 1024,
         TARGET_MODELS[2]: 142,
+        TARGET_MODELS[3]: 200,
     } 
 
+    # BART specific configs: https://huggingface.co/facebook/bart-base/blob/main/config.json 
     NO_REPEAT_NGRAM_SIZE = 3
+    BOS_TOKEN_ID = 0
+    EOS_TOKEN_ID = 2
 
     VOCAB_SIZE = {
         TARGET_MODELS[0]: 50265,
         TARGET_MODELS[1]: 50265,
         TARGET_MODELS[2]: 50264, # for bart-large-cnn config it's 50264 somehow. If not change here, results are incorrect since the trt results dimension reshape depends on this
+        TARGET_MODELS[3]: 250054 # for mbart multilingual models, vocab size is much larger
     }
 
     NETWORK_FULL_NAME = "full"
@@ -183,7 +206,10 @@ class BARTModelTRTConfig(NNConfig):
 
     def get_metadata_string(self, metadata: NetworkMetadata) -> str:
         # Remove redundant bart name prefix
-        metadata = metadata._replace(variant=metadata.variant.replace("facebook/bart-",""))
+        if "mbart" in metadata.variant:
+            metadata = metadata._replace(variant=metadata.variant.replace("facebook/mbart-","mbart-"))
+        else:    
+            metadata = metadata._replace(variant=metadata.variant.replace("facebook/bart-",""))
         return super().get_metadata_string(metadata)
 
     @staticmethod

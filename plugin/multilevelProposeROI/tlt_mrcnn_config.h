@@ -21,7 +21,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-using namespace nvinfer1;
 
 namespace TLTMaskRCNNConfig
 {
@@ -73,7 +72,7 @@ static const std::vector<std::pair<float, float>> ANCHOR_RATIOS
 // If 2, then anchors are created for every other cell, and so on.
 static const int RPN_ANCHOR_STRIDE = 1;
 
-//  TRT fails if this number larger than MAX_TOPK_K defined in engine/checkMacros.h
+//  TRT fails if this number larger than kMAX_TOPK_K defined in engine/checkMacros.h
 static const int MAX_PRE_NMS_RESULTS = 1000; // 3840;
 
 // Non-max suppression threshold to filter RPN proposals.
@@ -170,9 +169,9 @@ static const std::vector<std::string> CLASS_NAMES = {
 
 static const std::string MODEL_NAME = "mrcnn_nchw.uff";
 static const std::string MODEL_INPUT = "Input";
-static const Dims3 MODEL_INPUT_SHAPE = IMAGE_SHAPE;
+static const nvinfer1::Dims3 MODEL_INPUT_SHAPE = IMAGE_SHAPE;
 static const std::vector<std::string> MODEL_OUTPUTS = {"generate_detections", "mask_head/mask_fcn_logits/BiasAdd"};
-static const Dims2 MODEL_DETECTION_SHAPE{DETECTION_MAX_INSTANCES, 6};
-static const Dims4 MODEL_MASK_SHAPE{DETECTION_MAX_INSTANCES, NUM_CLASSES, 28, 28};
+static const nvinfer1::Dims2 MODEL_DETECTION_SHAPE{DETECTION_MAX_INSTANCES, 6};
+static const nvinfer1::Dims4 MODEL_MASK_SHAPE{DETECTION_MAX_INSTANCES, NUM_CLASSES, 28, 28};
 } // namespace TLTMaskRCNNConfig
 #endif

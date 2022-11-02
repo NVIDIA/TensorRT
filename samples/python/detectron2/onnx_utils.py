@@ -79,10 +79,10 @@ def slice(self, name, input, starts, ends, axes):
 
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created {} node '{}".format("Slice", name))
-    const_start = [starts]
-    const_end = [ends]
-    const_axes = [axes]
-    return self.layer(name=name, op="Slice", inputs=[input_tensor], outputs=[name + ":0"], attrs={'axes': const_axes, 'ends': const_end, 'starts': const_start})
+    const_start = gs.Constant(name="{}_value:0".format(name), values=np.asarray([starts], dtype=np.int64))
+    const_end = gs.Constant(name="{}_value:1".format(name), values=np.asarray([ends], dtype=np.int64))
+    const_axes = gs.Constant(name="{}_value:2".format(name), values=np.asarray([axes], dtype=np.int64))
+    return self.layer(name=name, op="Slice", inputs=[input_tensor, const_start, const_end, const_axes], outputs=[name + ":0"])
 
 @gs.Graph.register()
 def unsqueeze(self, name, input, axes=[3]):
@@ -180,6 +180,20 @@ def find_node_by_op(self, op):
     """
     for node in self.nodes:
         if node.op == op:
+            return node
+    return None
+
+@gs.Graph.register()
+def find_node_by_op_name(self, op, name):
+    """
+    Finds the first node in the graph with the given operation name.
+    :param self: The gs.Graph object being extended.
+    :param op: The operation name to search for.
+    :param name: Selected node name.
+    :return: The first node matching that performs that op.
+    """
+    for node in self.nodes:
+        if node.op == op and node.name == name:
             return node
     return None
 

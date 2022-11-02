@@ -17,7 +17,8 @@
 #include "common/kernel.h"
 #include "cuda_fp16.h"
 #include <array>
-
+using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 // overloading exp for half type
 inline __device__ __half exp(__half a)
 {
@@ -335,6 +336,7 @@ struct dbbLaunchConfig
 
     dbbLaunchConfig(DataType t_bbox)
         : t_bbox(t_bbox)
+        , function(nullptr)
     {
     }
     dbbLaunchConfig(DataType t_bbox, dbbFunc function)

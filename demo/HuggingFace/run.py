@@ -273,10 +273,18 @@ def get_default_parser(
     return parser
 
 
+def verify_python_version():
+    if sys.version_info.major < 3 or sys.version_info.minor <= 6:
+        raise RuntimeError("HuggingFace OSS Demo does not support Python <= 3.6 due to end-of-life.")
+
+
 def main() -> None:
     """
     Parses network folders and responsible for passing --help flags to subcommands if --network is provided.
     """
+    # Verify python version support
+    verify_python_version()
+
     # Get all available network scripts
     networks = register_network_folders(os.getcwd())
 

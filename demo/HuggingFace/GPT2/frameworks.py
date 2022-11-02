@@ -192,12 +192,12 @@ class GPT2HuggingFace(FrameworkCommand):
         greedy_output = gpt2_torch.generate(input_ids) #greedy search
 
         # get single decoder iteration inference timing profile
-        _, decoder_e2e_median_time = gpt2_inference(
+        _, decoder_e2e_time = gpt2_inference(
             gpt2_torch, input_ids, timing_profile, use_cuda=(not use_cpu)
         )
 
         # get complete decoder inference result and its timing profile
-        sample_output, full_e2e_median_runtime = full_inference_greedy(
+        sample_output, full_e2e_runtime = full_inference_greedy(
             gpt2_torch,
             input_ids,
             timing_profile,
@@ -208,20 +208,20 @@ class GPT2HuggingFace(FrameworkCommand):
         )
 
         # Prepare runtime results.
-        median_runtime = [
+        runtime = [
             NetworkRuntime(
                 name=GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
-                runtime=decoder_e2e_median_time,
+                runtime=decoder_e2e_time,
             ),
             NetworkRuntime(
                 name=GPT2ModelTRTConfig.NETWORK_FULL_NAME,
-                runtime=full_e2e_median_runtime,
+                runtime=full_e2e_runtime,
             ),
         ]
 
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
-            return BenchmarkingResult(median_runtime=median_runtime, models=network_fpaths)
+            return BenchmarkingResult(median_runtime=runtime, models=network_fpaths)
 
         # Remove the padding and end tokens.
         semantic_outputs = tokenizer.decode(
@@ -235,7 +235,7 @@ class GPT2HuggingFace(FrameworkCommand):
             input=inference_input,
             output_tensor=greedy_output,
             semantic_output=semantic_outputs,
-            median_runtime=median_runtime,
+            median_runtime=runtime,
             models=network_fpaths,
         )
 

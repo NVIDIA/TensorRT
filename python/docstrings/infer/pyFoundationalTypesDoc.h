@@ -25,14 +25,28 @@ namespace DataTypeDoc
 constexpr const char* descr = R"trtdoc(
     Represents data types.
 
-    :itemsize: :class:`int` The size in bytes of this :class:`DataType` .
+    :ivar itemsize: :class:`int` The size in bytes of this :class:`DataType` .
 )trtdoc";
 
-constexpr const char* float32 = R"trtdoc(Represents a 32-bit floating point number.)trtdoc";
-constexpr const char* float16 = R"trtdoc(Represents a 16-bit floating point number.)trtdoc";
-constexpr const char* int8 = R"trtdoc(Represents an 8-bit integer.)trtdoc";
-constexpr const char* int32 = R"trtdoc(Represents a 32-bit integer.)trtdoc";
-constexpr const char* boolean = R"trtdoc(Represents a boolean.)trtdoc";
+constexpr char const* float32 = R"trtdoc(32-bit floating point format.)trtdoc";
+constexpr char const* float16 = R"trtdoc(IEEE 16-bit floating-point format.)trtdoc";
+constexpr char const* int8 = R"trtdoc(Signed 8-bit integer representing a quantized floating-point value.)trtdoc";
+constexpr char const* int32 = R"trtdoc(Signed 32-bit integer format.)trtdoc";
+constexpr char const* boolean = R"trtdoc(8-bit boolean. 0 = false, 1 = true, other values undefined.)trtdoc";
+constexpr char const* uint8 = R"trtdoc(
+    Unsigned 8-bit integer format.
+    Cannot be used to represent quantized floating-point values.
+    Use the IdentityLayer to convert ``uint8`` network-level inputs to {``float32``, ``float16``} prior
+    to use with other TensorRT layers, or to convert intermediate output
+    before ``uint8`` network-level outputs from {``float32``, ``float16``} to ``uint8``.
+    ``uint8`` conversions are only supported for {``float32``, ``float16``}.
+    ``uint8`` to {``float32``, ``float16``} conversion will convert the integer values
+    to equivalent floating point values.
+    {``float32``, ``float16``} to ``uint8`` conversion will convert the floating point values
+    to integer values by truncating towards zero. This conversion has undefined behavior for
+    floating point values outside the range [0.0f, 256.0) after truncation.
+    ``uint8`` conversions are not supported for {``int8``, ``int32``, ``bool``}.
+)trtdoc";
 
 } // namespace DataTypeDoc
 

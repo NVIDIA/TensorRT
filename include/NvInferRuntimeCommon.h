@@ -84,7 +84,10 @@ static constexpr int32_t kNV_TENSORRT_VERSION_IMPL
 
 //! char_t is the type used by TensorRT to represent all valid characters.
 using char_t = char;
+
 //! AsciiChar is the type used by TensorRT to represent valid ASCII characters.
+//! This type is used by IPluginV2, PluginField, IPluginCreator, IPluginRegistry, and
+//! ILogger due to their use in automotive safety context.
 using AsciiChar = char_t;
 
 //! Forward declare IErrorRecorder for use in other interfaces.
@@ -118,14 +121,29 @@ enum class DataType : int32_t
     //! IEEE 16-bit floating-point format.
     kHALF = 1,
 
-    //! 8-bit integer representing a quantized floating-point value.
+    //! Signed 8-bit integer representing a quantized floating-point value.
     kINT8 = 2,
 
     //! Signed 32-bit integer format.
     kINT32 = 3,
 
     //! 8-bit boolean. 0 = false, 1 = true, other values undefined.
-    kBOOL = 4
+    kBOOL = 4,
+
+    //! Unsigned 8-bit integer format.
+    //! Cannot be used to represent quantized floating-point values.
+    //! Use the IdentityLayer to convert kUINT8 network-level inputs to {kFLOAT, kHALF} prior
+    //! to use with other TensorRT layers, or to convert intermediate output
+    //! before kUINT8 network-level outputs from {kFLOAT, kHALF} to kUINT8.
+    //! kUINT8 conversions are only supported for {kFLOAT, kHALF}.
+    //! kUINT8 to {kFLOAT, kHALF} conversion will convert the integer values
+    //! to equivalent floating point values.
+    //! {kFLOAT, kHALF} to kUINT8 conversion will convert the floating point values
+    //! to integer values by truncating towards zero. This conversion has undefined behavior for
+    //! floating point values outside the range [0.0f, 256.0f) after truncation.
+    //! kUINT8 conversions are not supported for {kINT8, kINT32, kBOOL}.
+    kUINT8 = 5
+
 };
 
 namespace impl
@@ -135,7 +153,7 @@ template <>
 struct EnumMaxImpl<DataType>
 {
     // Declaration of kVALUE that represents maximum number of elements in DataType enum
-    static constexpr int32_t kVALUE = 5;
+    static constexpr int32_t kVALUE = 6;
 };
 } // namespace impl
 
@@ -230,7 +248,7 @@ enum class TensorFormat : int32_t
     //! [N][(C+15)/16][H][W][16], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/16][h][w][c%16].
     //!
-    //! For DLA usage, this format maps to the native image format for FP16,
+    //! For DLA usage, this format maps to the native feature format for FP16,
     //! and the tensor sizes are limited to C,H,W in the range [1,8192].
     //!
     kCHW16 = 4,
@@ -242,7 +260,7 @@ enum class TensorFormat : int32_t
     //! [N][(C+31)/32][H][W][32], with the tensor coordinates (n, c, h, w)
     //! mapping to array subscript [n][c/32][h][w][c%32].
     //!
-    //! For DLA usage, this format maps to the native image format for INT8,
+    //! For DLA usage, this format maps to the native feature format for INT8,
     //! and the tensor sizes are limited to C,H,W in the range [1,8192].
     kCHW32 = 5,
 
@@ -262,7 +280,7 @@ enum class TensorFormat : int32_t
     //! mapping to array subscript [n][c/32][d][h][w][c%32].
     kCDHW32 = 7,
 
-    //! Non-vectorized channel-last format. This format is bound to FP32
+    //! Non-vectorized channel-last format. This format is bound to either FP32 or UINT8,
     //! and is only available for dimensions >= 3.
     kHWC = 8,
 
@@ -332,7 +350,7 @@ struct PluginTensorDesc
 {
     //! Dimensions.
     Dims dims;
-    //! \warning DataType:kBOOL not supported.
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
     DataType type;
     //! Tensor format.
     TensorFormat format;
@@ -369,7 +387,10 @@ enum class PluginVersion : uint8_t
 //! \see IPluginCreator
 //! \see IPluginRegistry
 //!
-class IPluginV2
+//! \deprecated Deprecated in TensorRT 8.5. Implement IPluginV2DynamicExt or IPluginV2IOExt depending on your
+//! requirement.
+//!
+class TRT_DEPRECATED IPluginV2
 {
 public:
     //!
@@ -466,7 +487,7 @@ public:
     //! will not be passed in, this is to keep backward compatibility with TensorRT 5.x series.  Use PluginV2IOExt
     //! or PluginV2DynamicExt for other PluginFormats.
     //!
-    //! \warning DataType:kBOOL not supported.
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -496,7 +517,7 @@ public:
     //! will not be passed in, this is to keep backward compatibility with TensorRT 5.x series.  Use PluginV2IOExt
     //! or PluginV2DynamicExt for other PluginFormats.
     //!
-    //! \warning DataType:kBOOL not supported.
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
     //!
     //! \see clone()
     //!
@@ -676,7 +697,10 @@ protected:
 //!
 //! \see IPluginV2
 //!
-class IPluginV2Ext : public IPluginV2
+//! \deprecated Deprecated in TensorRT 8.5. Implement IPluginV2DynamicExt or IPluginV2IOExt depending on your
+//! requirement.
+//!
+class TRT_DEPRECATED IPluginV2Ext : public IPluginV2
 {
 public:
     //!
@@ -687,7 +711,7 @@ public:
     //!
     //! \see supportsFormat()
     //!
-    //! \warning DataType:kBOOL not supported.
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -886,7 +910,7 @@ public:
     //! \brief Configure the layer.
     //!
     //! This function is called by the builder prior to initialize(). It provides an opportunity for the layer to make
-    //! algorithm choices on the basis of I/O PluginTensorDesc and the maximum batch size.
+    //! algorithm choices on the basis of the provided I/O PluginTensorDesc.
     //!
     //! \param in The input tensors attributes that are used for configuration.
     //! \param nbInput Number of input tensors.
@@ -1372,7 +1396,7 @@ public:
     //!
     //! \see deallocate()
     //!
-    //! \deprecated Superseded by deallocate. Deprecated in TensorRT 8.0.
+    //! \deprecated Deprecated in TensorRT 8.0. Superseded by deallocate.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -1844,6 +1868,34 @@ protected:
     IErrorRecorder& operator=(IErrorRecorder&&) & = default;
     // @endcond
 }; // class IErrorRecorder
+
+//!
+//! \enum TensorIOMode
+//!
+//! \brief Definition of tensor IO Mode.
+//!
+enum class TensorIOMode : int32_t
+{
+    //! Tensor is not an input or output.
+    kNONE = 0,
+
+    //! Tensor is input to the engine.
+    kINPUT = 1,
+
+    //! Tensor is output by the engine.
+    kOUTPUT = 2
+};
+
+namespace impl
+{
+//! Maximum number of elements in TensorIOMode enum. \see TensorIOMode
+template <>
+struct EnumMaxImpl<TensorIOMode>
+{
+    // Declaration of kVALUE that represents maximum number of elements in TensorIOMode enum
+    static constexpr int32_t kVALUE = 3;
+};
+} // namespace impl
 } // namespace nvinfer1
 
 //!

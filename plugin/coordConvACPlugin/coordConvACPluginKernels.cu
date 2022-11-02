@@ -18,6 +18,10 @@
 #include "coordConvACPlugin.h"
 #include <cuda_fp16.h>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 template <typename T_DATA>
 __global__ void kernelCopy(int N, T_DATA* inputs, T_DATA* outputs)
 {
@@ -89,9 +93,12 @@ int CoordConvACPlugin::enqueue(
     case DataType::kHALF:
         return inferenceAC(batchSize, iC, iH, iW, oC, oH, oW, (__half*) inputs[0], (__half*) outputs[0], stream);
     case DataType::kINT8:
+    case DataType::kUINT8:
     case DataType::kINT32:
     case DataType::kBOOL:
         break;
     }
     return 1;
 }
+} // namespace plugin
+} // namespace nvinfer1

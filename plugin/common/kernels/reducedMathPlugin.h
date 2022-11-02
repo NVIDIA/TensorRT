@@ -97,9 +97,9 @@ public:
     }
 
 protected:
-    uint32_t mul_coeff;
-    uint32_t shift_coeff;
-    int y;
+    uint32_t mul_coeff{};
+    uint32_t shift_coeff{};
+    int y{};
 };
 
 } // namespace plugin

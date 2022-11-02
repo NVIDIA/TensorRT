@@ -8,6 +8,7 @@
 | [batchedNMSPlugin](batchedNMSPlugin) | BatchedNMS_TRT | 1 |
 | [batchedNMSDynamicPlugin](batchedNMSPlugin) | BatchedNMSDynamic_TRT | 1 |
 | [bertQKVToContextPlugin](bertQKVToContextPlugin) | CustomQKVToContextPluginDynamic | 1, 2, 3 |
+| [clipPlugin](clipPlugin) | Clip_TRT | 1 |
 | [coordConvACPlugin](coordConvACPlugin) | CoordConvAC | 1 |
 | [cropAndResizePlugin](cropAndResizePlugin) | CropAndResize | 1 |
 | [decodeBbox3DPlugin](decodeBbox3DPlugin) | DecodeBbox3DPlugin | 1 |
@@ -38,6 +39,7 @@
 | [pyramidROIAlignPlugin](pyramidROIAlignPlugin) | PyramidROIAlign_TRT | 1 |
 | [regionPlugin](regionPlugin) | Region_TRT | 1 |
 | [reorgPlugin](reorgPlugin) | Reorg_TRT | 1 |
+| [roiAlignPlugin](roiAlignPlugin) | ROIAlign_TRT | 1 |
 | [resizeNearestPlugin](resizeNearestPlugin) | ResizeNearest_TRT | 1 |
 | [scatterPlugin](scatterPlugin) | ScatterND | 1 |
 | [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 1, 2, 3 |

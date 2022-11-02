@@ -14,8 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "NvInfer.h"
 #include "common/bboxUtils.h"
 #include "common/kernel.h"
+using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 
 pluginStatus_t detectionInference(cudaStream_t stream, const int N, const int C1, const int C2,
     const bool shareLocation, const bool varianceEncodedInTarget, const int backgroundLabelId,

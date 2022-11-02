@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 #include "flattenConcat.h"
+#include "common/dimsHelpers.h"
+
 #include <algorithm>
 #include <cstring>
 #include <cudnn.h>
@@ -42,13 +44,14 @@ FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch)
 }
 
 FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, int outputConcatAxis,
-    const int* inputConcatAxis, const size_t* copySize)
+    const int* inputConcatAxis, const size_t* copySize, nvinfer1::Dims const& chwDims)
     : mCopySize(numInputs)
     , mInputConcatAxis(numInputs)
     , mIgnoreBatch(ignoreBatch)
     , mConcatAxisID(concatAxis)
     , mOutputConcatAxis(outputConcatAxis)
     , mNumInputs(numInputs)
+    , mCHW(chwDims)
 {
     PLUGIN_VALIDATE(mConcatAxisID >= 1 && mConcatAxisID <= 3);
 
@@ -145,7 +148,7 @@ int FlattenConcat::enqueue(
     {
         PLUGIN_ASSERT(mConcatAxisID != 0);
         // mCHW is the first input tensor
-        int numConcats = std::accumulate(mCHW.d, mCHW.d + mConcatAxisID - 1, 1, std::multiplies<int>());
+        auto numConcats = static_cast<int32_t>(pluginInternal::volume(mCHW, /*start*/ 0, /*stop*/ mConcatAxisID - 1));
 
         // Num concats will be proportional to number of samples in a batch
         if (!mIgnoreBatch)
@@ -320,8 +323,8 @@ IPluginV2Ext* FlattenConcat::clone() const noexcept
 {
     try
     {
-        auto* plugin = new FlattenConcat(
-            mConcatAxisID, mIgnoreBatch, mNumInputs, mOutputConcatAxis, mInputConcatAxis.data(), mCopySize.data());
+        auto* plugin = new FlattenConcat(mConcatAxisID, mIgnoreBatch, mNumInputs, mOutputConcatAxis,
+            mInputConcatAxis.data(), mCopySize.data(), mCHW);
         plugin->setPluginNamespace(mPluginNamespace.c_str());
         return plugin;
     }
@@ -361,8 +364,9 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(const char* name, const P
 {
     try
     {
+        plugin::validateRequiredAttributesExist({"axis", "ignoreBatch"}, fc);
         const PluginField* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "axis"))

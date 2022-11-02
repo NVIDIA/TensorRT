@@ -22,6 +22,7 @@
 // mode for legacy back-compatibilty
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 using nvinfer1::plugin::EfficientNMSParameters;
 using nvinfer1::plugin::EfficientNMSImplicitTFTRTPlugin;
 using nvinfer1::plugin::EfficientNMSImplicitTFTRTPluginCreator;

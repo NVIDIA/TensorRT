@@ -32,27 +32,34 @@ def data_loader_args():
     return ArgGroupTestHelper(DataLoaderArgs(), deps=[ModelArgs()])
 
 
-ARG_CASES = [
-    (["--seed=123"], ["seed"], [123]),
-    (["--int-min=23", "--int-max=94"], ["int_range"], [(23, 94)]),
-    (["--float-min=2.3", "--float-max=9.4"], ["float_range"], [(2.3, 9.4)]),
-    ([], ["val_range"], [None], [(0.0, 1.0)]),  # When not specified, this should default to None.
-    (["--val-range", "[0.0,2.3]"], ["val_range"], [{"": (0.0, 2.3)}]),
-    (["--val-range", "[1,5]"], ["val_range"], [{"": (1, 5)}]),  # Should work for integral quantities
-    (["--val-range", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"], ["val_range"], [{"inp0": (0.0, 2.3), "inp1": (4.5, 9.6)}]),
-    (
-        ["--val-range", "[-1,0]", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"],
-        ["val_range"],
-        [{"": (-1, 0), "inp0": (0.0, 2.3), "inp1": (4.5, 9.6)}],
-    ),
-    (["--val-range", "))):[0.0,2.3]"], ["val_range"], [{")))": (0.0, 2.3)}]),
-    (["--val-range", "'\"':[0.0,2.3]"], ["val_range"], [{"'\"'": (0.0, 2.3)}]),
-    (["--iterations=12"], ["iterations"], [12]),
-]
-
-
 class TestDataLoaderArgs:
-    @pytest.mark.parametrize("case", ARG_CASES, ids=lambda c: c[1][0])
+    @pytest.mark.parametrize(
+        "case",
+        [
+            (["--seed=123"], ["seed"], [123]),
+            (["--int-min=23", "--int-max=94"], ["int_range"], [(23, 94)]),
+            (["--float-min=2.3", "--float-max=9.4"], ["float_range"], [(2.3, 9.4)]),
+            ([], ["val_range"], [None], [(0.0, 1.0)]),  # When not specified, this should default to None.
+            (["--val-range", "[0.0,2.3]"], ["val_range"], [{"": (0.0, 2.3)}]),
+            (["--val-range", "[1,5]"], ["val_range"], [{"": (1, 5)}]),  # Should work for integral quantities
+            (
+                ["--val-range", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"],
+                ["val_range"],
+                [{"inp0": (0.0, 2.3), "inp1": (4.5, 9.6)}],
+            ),
+            (
+                ["--val-range", "[-1,0]", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"],
+                ["val_range"],
+                [{"": (-1, 0), "inp0": (0.0, 2.3), "inp1": (4.5, 9.6)}],
+            ),
+            (["--val-range", "))):[0.0,2.3]"], ["val_range"], [{")))": (0.0, 2.3)}]),
+            (["--val-range", "'\"':[0.0,2.3]"], ["val_range"], [{"'\"'": (0.0, 2.3)}]),
+            (["--iterations=12"], ["iterations"], [12]),
+            (["--val-range", "[0.0,inf]"], ["val_range"], [{"": (0.0, float("inf"))}]),
+            (["--val-range", "[-inf,0.0]"], ["val_range"], [{"": (float("-inf"), 0.0)}]),
+        ],
+        ids=lambda c: c[1][0],
+    )
     def test_parsing(self, data_loader_args, case):
         cli_args, attrs, expected, expected_dl = util.unpack_args(case, 4)
         expected_dl = expected_dl or expected
@@ -63,6 +70,13 @@ class TestDataLoaderArgs:
         for attr, exp, exp_dl in zip(attrs, expected, expected_dl):
             assert getattr(data_loader_args, attr) == exp
             assert getattr(data_loader, attr) == exp_dl
+
+    def test_val_range_nan(self, data_loader_args):
+        data_loader_args.parse_args(["--val-range", "[nan,0.0]"])
+        data_loader = data_loader_args.get_data_loader()
+
+        val_range = data_loader.val_range[""]
+        assert util.is_nan(val_range[0])
 
     def test_input_metadata(self, data_loader_args):
         data_loader_args.parse_args(["--input-shapes", "test0:[1,1,1]", "test1:[2,32,2]"])

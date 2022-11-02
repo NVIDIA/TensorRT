@@ -682,3 +682,37 @@ class TestCapability:
                 expected_files
             )
             assert dedent(expected_summary).strip() in status.stdout
+
+
+class TestDiffTactics:
+    def check_output(self, status, expected_output, expected_num=2):
+        output = "\n".join(
+            line
+            for line in status.stdout.strip().splitlines()
+            if "Loading tactic replay file from " not in line and "[V]" not in line
+        )
+        assert output == expected_output.format(num=expected_num).strip()
+
+    def test_dir(self, replay_dir, poly_inspect):
+        replay_dir, expected_output = replay_dir
+        status = poly_inspect(["diff-tactics", "--dir", replay_dir])
+        self.check_output(status, expected_output)
+
+    def test_good_bad(self, replay_dir, poly_inspect):
+        replay_dir, expected_output = replay_dir
+
+        good = os.path.join(replay_dir, "good")
+        bad = os.path.join(replay_dir, "bad")
+        status = poly_inspect(["diff-tactics", "--good", good, "--bad", bad])
+        self.check_output(status, expected_output)
+
+    def test_good_bad_file(self, replay_dir, poly_inspect):
+        replay_dir, expected_output = replay_dir
+
+        def find_file(dirpath, filename):
+            return glob.glob(os.path.join(dirpath, "**", filename), recursive=True)[0]
+
+        good = find_file(os.path.join(replay_dir, "good"), "0.json")
+        bad = find_file(os.path.join(replay_dir, "bad"), "1.json")
+        status = poly_inspect(["diff-tactics", "--good", good, "--bad", bad])
+        self.check_output(status, expected_output, expected_num=1)

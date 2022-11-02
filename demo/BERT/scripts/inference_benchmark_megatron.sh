@@ -27,7 +27,7 @@ WEIGHTS="${7}"
 
 CHECKPOINTS_DIR="models/fine-tuned/bert_tf_ckpt_${MODEL_VARIANT}_qa_squad2_amp_${SEQUENCE_LENGTH}_v19.03.1"
 SQUAD_DIR="BERT/squad"
-ENGINE_NAME="engines/bert_mt_${MODEL_VARIANT}_${PRECISION}_bs${MAX_BATCH}_seqlen${SEQUENCE_LENGTH}_benchmark.engine"
+ENGINE_NAME="engines/bert_mt_${MODEL_VARIANT}_${PRECISION}_bs${MAX_BATCH}_seqlen${SEQUENCE_LENGTH}_weight${WEIGHTS}_benchmark.engine"
 QAT_CHECKPOINT="models/fine-tuned/bert_pyt_statedict_megatron_sparse_int8qat_v21.03.0/bert_pyt_statedict_megatron_sparse_int8_qat"
 CUDAGRAPH_PERFBIN="build/perf"
 

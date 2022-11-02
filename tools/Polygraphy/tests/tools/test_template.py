@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+import os
+import shutil
+import sys
+import tempfile
+
 import tensorrt as trt
 from polygraphy import util
 from polygraphy.backend.common import InvokeFromScript
@@ -65,3 +70,21 @@ class TestTrtConfig:
                 assert isinstance(config, trt.IBuilderConfig)
                 assert config.get_flag(trt.BuilderFlag.FP16)
                 assert config.get_flag(trt.BuilderFlag.INT8)
+
+
+class TestOnnxGs:
+    def test_basic(self, poly_template, sandboxed_install_run):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Copy a model into the temporary directory since the default output path
+            # will write the new model into the same directory as the original.
+            model_path = os.path.join(tmp_dir, "model.onnx")
+            shutil.copyfile(ONNX_MODELS["identity"].path, model_path)
+
+            template_path = os.path.join(tmp_dir, "process_model.py")
+            poly_template(["onnx-gs", model_path, "-o", template_path])
+
+            status = sandboxed_install_run([sys.executable, template_path], cwd=tmp_dir)
+            assert status.success
+
+            outpath = os.path.join(tmp_dir, "model_updated.onnx")
+            assert os.path.exists(outpath)

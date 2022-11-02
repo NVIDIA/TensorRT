@@ -461,7 +461,8 @@ class IterativeDebugArgs(BaseArgs):
     def skip_iteration(self, success=None):
         """
         Indicate that the current iteration should be skipped prior to running checks.
-        This may only be invoked from the ``make_iter_art_func()`` callback.
+        This may only be invoked from the ``make_iter_art_func()`` callback and may
+        **only** be used if ``make_iter_art_func()`` does not return anything.
 
         Args:
             success (bool):
@@ -627,6 +628,7 @@ class IterativeDebugArgs(BaseArgs):
                         stack.callback(try_remove(self.iteration_info_path))
 
                     extra_advance_args = []
+                    do_check = True
                     if make_iter_art_func is not None:
                         try:
                             ret = make_iter_art_func()
@@ -634,8 +636,7 @@ class IterativeDebugArgs(BaseArgs):
                                 extra_advance_args = [ret]
                         except IterativeDebugArgs.SkipIteration as err:
                             success = err.success
-                            log_status(success, start_time)
-                            continue
+                            do_check = False
                         except StopIteration:
                             break
 
@@ -652,8 +653,9 @@ class IterativeDebugArgs(BaseArgs):
                     debug_replay[debug_replay_key] = [False, extra_advance_args]
                     save_replay(debug_replay, suffix="_skip_current")
 
-                    success = self.arg_groups[CheckCmdArgs].run_check(self.iter_artifact_path)
-                    self.arg_groups[ArtifactSortArgs].sort_artifacts(success, suffix=debug_replay_key)
+                    if do_check:
+                        success = self.arg_groups[CheckCmdArgs].run_check(self.iter_artifact_path)
+                        self.arg_groups[ArtifactSortArgs].sort_artifacts(success, suffix=debug_replay_key)
 
                     debug_replay[debug_replay_key] = [success, extra_advance_args]
                     save_replay(debug_replay, "debug replay")

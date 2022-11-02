@@ -15,11 +15,16 @@
 # limitations under the License.
 #
 
-"""Common utils used by demo folder."""
+"""Common utils used by demo folder.
+Note: 
+- For now, users/developers that are contributing to TensorRT OSS should NOT import non-default Python packages in this file, because the test pipeline's boot-up process cannot load extra dependencies. In the near future, alternative solutions such as creating a separate boot-up util list can be possible. 
+- Users/developers that are just using the TensorRT OSS without contributing are still free to modify this file and customize for deployment.
+"""
 
 import os
 import shutil
 import timeit
+import math
 
 from datetime import datetime
 from shutil import rmtree
@@ -153,15 +158,30 @@ def measure_python_inference_code(
     Args:
         stmt (Union[Callable, str]): Callable or string for generating numbers.
         timing_profile (TimingProfile): The timing profile settings with the following fields.
-            iterations (int): Number of iterations to run as warm-up before actual measurement cycles.
+            warmup (int): Number of iterations to run as warm-up before actual measurement cycles.
             number (int): Number of times to call function per iteration.
             iterations (int): Number of measurement cycles.
             duration (float): Minimal duration for measurement cycles.
+            percentile (int or list of ints): key percentile number(s) for measurement.
     """
+
+    def simple_percentile(data, p):
+        """
+        Temporary replacement for numpy.percentile() because TRT CI/CD pipeline requires additional packages to be added at boot up in this general_utils.py file.
+        """
+        assert p >= 0 and p <= 100, "Percentile must be between 1 and 99"
+        
+        rank = len(data) * p / 100
+        if rank.is_integer():
+            return sorted(data)[int(rank)]
+        else:
+            return sorted(data)[int(math.ceil(rank)) - 1]
+
     warmup = timing_profile.warmup
     number = timing_profile.number
     iterations = timing_profile.iterations
     duration = timing_profile.duration
+    percentile = timing_profile.percentile
 
     G_LOGGER.debug(
         "Measuring inference call with warmup: {} and number: {} and iterations {} and duration {} secs".format(
@@ -180,7 +200,10 @@ def measure_python_inference_code(
         iter_idx += 1
         results.append(timeit.timeit(stmt, number=number))
 
-    return median(results) / number
+    if isinstance(percentile, int):
+        return simple_percentile(results, percentile) / number
+    else:
+        return [simple_percentile(results, p) / number for p in percentile]
 
 class NNFolderWorkspace:
     """

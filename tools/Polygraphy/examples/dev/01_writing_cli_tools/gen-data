@@ -31,16 +31,16 @@ class GenData(Tool):
     """
     Generate random data and write it to a file.
     """
-    # First, we'll implement `get_subscriptions()` to subscribe to argument groups
+    # First, we'll implement `get_subscriptions_impl()` to subscribe to argument groups
     # that we're intrested in.
     # All the argument groups we subscribe to will be stored in a member called
     # arg_groups, which maps types to instances.
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [DataLoaderArgs()]
 
     # Next, we'll add custom arguments, beyond those provided by our subscribed
-    # argument groups, by defining `add_parser_args`.
-    def add_parser_args(self, parser):
+    # argument groups, by defining `add_parser_args_impl`.
+    def add_parser_args_impl(self, parser):
         parser.add_argument("-o", "--output", help="Path at which to write generated data.", required=True)
         parser.add_argument("--num-values", help="The number of random values to generate.", default=1, type=int)
 

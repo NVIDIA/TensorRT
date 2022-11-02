@@ -155,11 +155,20 @@ def np_type_from_str(dt_str):
 
 
 @mod.export()
-def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=None):
+def parse_tuple_list_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None):
     """
-    Generate a dictionary from a list of arguments of the form:
-    ``<key>:<val>``. If ``<key>`` is empty, the value will be assigned
-    to an empty string key in the returned mapping.
+    Generate a list of (key, value) pairs from a list of arguments of the form:
+    ``<key><sep><val>``.
+
+    If the argument is missing a separator,
+
+    - If `treat_missing_sep_as_val` is True, then the argument is treated as a
+      value with empty key, i.e. it is parsed as ``<sep><val>``.
+    - If `treat_missing_sep_as_val` is False, then the argument is treated as a
+      key with empty value, i.e. it is parsed as ``<key><sep>``.
+
+    If `allow_empty_key` is False, then this function will log a critical error if
+    any empty keys are detected.
 
     Args:
         arg_lst (List[str]):
@@ -174,26 +183,77 @@ def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=Non
         allow_empty_key (bool):
                 Whether empty keys should be allowed.
                 Defaults to True.
+        treat_missing_sep_as_val (bool):
+                Whether the argument should be treated as a value with empty key
+                when separator is missing (see above).  Defaults to True.
     Returns:
-        Dict[str, obj]: The mapping.
+        Optional[List[Tuple[str, obj]]]:
+            The parsed list, or None if arg_lst is None (indicating the flag
+            was not specified).
     """
     sep = util.default(sep, ":")
     cast_to = util.default(cast_to, cast)
     allow_empty_key = util.default(allow_empty_key, True)
+    treat_missing_sep_as_val = util.default(treat_missing_sep_as_val, True)
 
     if arg_lst is None:
-        return
+        return None
 
-    arg_map = {}
+    ret = []
     for arg in arg_lst:
-        key, _, val = arg.rpartition(sep)
+        key, parsed_sep, val = arg.rpartition(sep)
+
+        if parsed_sep == '' and not treat_missing_sep_as_val:
+            key, val = val, key
+
         if not key and not allow_empty_key:
             G_LOGGER.critical(
                 f"Could not parse argument: {arg}. Expected an argument in the format: `key{sep}value`.\n"
             )
-        arg_map[key] = cast_to(val)
-    return arg_map
+        ret.append((key, cast_to(val)))
+    return ret
 
+@mod.export()
+def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None):
+    """
+    Generate a dict from a list of arguments of the form:
+    ``<key><sep><val>``.
+
+    If the argument is missing a separator,
+
+    - If `treat_missing_sep_as_val` is True, then the argument is treated as a
+      value with empty key, i.e. it is parsed as ``<sep><val>``.
+    - If `treat_missing_sep_as_val` is False, then the argument is treated as a
+      key with empty value, i.e. it is parsed as ``<key><sep>``.
+
+    If `allow_empty_key` is False, then this function will log a critical error if
+    any empty keys are detected.
+
+    Args:
+        arg_lst (List[str]):
+                The arguments to map.
+
+        cast_to (Callable):
+                A callable to cast types before adding them to the map.
+                Defaults to `cast()`.
+        sep (str):
+                The separator between the key and value strings.
+                Defaults to ":".
+        allow_empty_key (bool):
+                Whether empty keys should be allowed.
+                Defaults to True.
+        treat_missing_sep_as_val (bool):
+                Whether the argument should be treated as a value with empty key
+                when separator is missing (see above).  Defaults to True.
+    Returns:
+        Optional[Dict[str, obj]]:
+            The parsed key-value map, or None if arg_lst is None (indicating the flag
+            was not specified).
+    """
+    tuple_list = parse_tuple_list_with_default(arg_lst, cast_to, sep, allow_empty_key, treat_missing_sep_as_val)
+    if tuple_list is None:
+        return None
+    return dict(tuple_list)
 
 @mod.deprecate(
     remove_in="0.45.0",

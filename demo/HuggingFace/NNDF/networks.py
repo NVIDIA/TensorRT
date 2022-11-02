@@ -54,8 +54,8 @@ Precision = namedtuple("Precision", ["fp16"])
 """NetworkMetadata(variant: str, precision: Precision, other: Union[namedtuple, None])"""
 NetworkMetadata = namedtuple("NetworkMetadata", ["variant", "precision", "other"])
 
-"""TimingProfile(iterations: int, repeat: int)"""
-TimingProfile = namedtuple("TimingProfile", ["iterations", "number", "warmup", "duration"])
+"""TimingProfile(iterations: int, number: int, warmup: int, duration: int, percentile: int or [int])"""
+TimingProfile = namedtuple("TimingProfile", ["iterations", "number", "warmup", "duration", "percentile"])
 
 
 """NetworkModel(name: str, fpath: str)"""

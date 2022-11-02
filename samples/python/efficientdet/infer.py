@@ -24,7 +24,15 @@ import numpy as np
 import tensorrt as trt
 
 import pycuda.driver as cuda
-import pycuda.autoinit
+
+# Use autoprimaryctx if available (pycuda >= 2021.1) to
+# prevent issues with other modules that rely on the primary
+# device context.
+try:
+    import pycuda.autoprimaryctx
+except ModuleNotFoundError:
+    import pycuda.autoinit
+
 
 from image_batcher import ImageBatcher
 from visualize import visualize_detections
@@ -43,9 +51,10 @@ class TensorRTInfer:
         self.logger = trt.Logger(trt.Logger.ERROR)
         trt.init_libnvinfer_plugins(self.logger, namespace="")
         with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
+            assert runtime
             self.engine = runtime.deserialize_cuda_engine(f.read())
-        self.context = self.engine.create_execution_context()
         assert self.engine
+        self.context = self.engine.create_execution_context()
         assert self.context
 
         # Setup I/O bindings

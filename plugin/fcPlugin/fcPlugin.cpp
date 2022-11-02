@@ -728,11 +728,12 @@ IPluginV2* FCPluginDynamicCreator::createPlugin(const char* name, const PluginFi
     {
         gLogVerbose << "Creating FCPluginDynamicCreator...\n";
 
-        int outDims = 0;
-        int typeId = -1;
+        int32_t outDims = 0;
+        int32_t typeId = -1;
         Weights W{DataType::kFLOAT, nullptr, 0ll};
+        plugin::validateRequiredAttributesExist({"out_dims", "type_id", "W"}, fc);
 
-        for (int i = 0; i < fc->nbFields; i++)
+        for (int32_t i = 0; i < fc->nbFields; i++)
         {
             std::string field_name(fc->fields[i].name);
             if (field_name.compare("out_dims") == 0)

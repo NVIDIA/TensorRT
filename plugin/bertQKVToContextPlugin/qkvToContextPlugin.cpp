@@ -174,9 +174,9 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
     // we only support int8 IO in fused mha runner, and we only support fused mha runner on Xavier, Turing and Ampere
     if (mType == DataType::kINT8)
     {
-        if (mSM != kSM_75 && mSM != kSM_80 && mSM != kSM_86 && mSM != kSM_87)
+        if (mSM != kSM_75 && mSM != kSM_80 && mSM != kSM_86 && mSM != kSM_87 && mSM != kSM_89 && mSM != kSM_90)
         {
-            gLogError << "INT8 IO is only supported on Turing and Ampere for plugin " << QKV_TO_CONTEXT_PLUGIN_NAME
+            gLogError << "INT8 IO is only supported on Turing, Ampere and Hopper for plugin " << QKV_TO_CONTEXT_PLUGIN_NAME
                       << std::endl;
             return false;
         }
@@ -238,6 +238,7 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
                 gLogError << "CustomEmbLayerNormPluginDynamic returned mask with pack size " << inMask->dims.d[1]
                           << ", but " << QKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
                           << std::endl;
+                return false;
             }
 
             // detect full mask and check that it was produced
@@ -438,15 +439,23 @@ int32_t QKVToContextPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, co
     PLUGIN_ASSERT(mS == inputDesc->dims.d[SDIM]);
     PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
 
-    const void* maskPtr = mHasImask ? inputs[1] : nullptr;
-    if (fusedDispatcher.get() && fusedDispatcher->isValid(inputDesc->dims.d[SDIM]))
+    try
     {
-        fusedDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+        void const* const maskPtr = mHasImask ? inputs[1] : nullptr;
+        if (fusedDispatcher.get() && fusedDispatcher->isValid(inputDesc->dims.d[SDIM]))
+        {
+            fusedDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+        }
+        else
+        {
+            PLUGIN_VALIDATE(unfusedDispatcher.get(), "The Unfused MHARunner is uninitialized, no MHARunner available!");
+            unfusedDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+        }
     }
-    else
+    catch (std::exception const& e)
     {
-        PLUGIN_ASSERT(unfusedDispatcher.get());
-        unfusedDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+        caughtError(e);
+        return -1;
     }
     return 0;
 }
@@ -480,74 +489,80 @@ const PluginFieldCollection* QKVToContextPluginDynamicCreator::getFieldNames() n
 
 IPluginV2* QKVToContextPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
-    BERT_DEBUG_MSG("Creating QKV2ContextPlugin...");
-
-    int32_t hiddenSize = 0;
-    int32_t numHeads = 0;
-    bool hasMask = false;
-    int32_t typeId = -1;
-
-    float dqProbs = -1;
-
-    for (int32_t i = 0; i < fc->nbFields; i++)
+    try
     {
-        std::string field_name(fc->fields[i].name);
+        BERT_DEBUG_MSG("Creating QKV2ContextPlugin...");
+        PLUGIN_VALIDATE(fc != nullptr);
+        int32_t hiddenSize = 0;
+        // Since numHeads must always exist or validateRequiredAttributes will fail,
+        // we can set numHeads to -1 so that static analysis tools don't warn about
+        // a division by zero in QKVToContextPluginDynamic constructor.
+        int32_t numHeads{-1};
+        bool hasMask = false;
+        int32_t typeId = -1;
 
-        if (field_name.compare("type_id") == 0)
+        float dqProbs = -1;
+
+        PLUGIN_VALIDATE(fc->fields != nullptr);
+        plugin::validateRequiredAttributesExist({"type_id", "hidden_size", "num_heads", "has_mask"}, fc);
+
+        for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            typeId = *static_cast<const int*>(fc->fields[i].data);
-            BERT_DEBUG_VALUE("Building typeId: ", typeId);
-        }
-        if (field_name.compare("hidden_size") == 0)
-        {
-            hiddenSize = *static_cast<const int*>(fc->fields[i].data);
-            BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
-        }
-        if (field_name.compare("num_heads") == 0)
-        {
-            numHeads = *static_cast<const int*>(fc->fields[i].data);
-            BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
-        }
-        if (field_name.compare("has_mask") == 0)
-        {
-            hasMask = *static_cast<const bool*>(fc->fields[i].data);
-            BERT_DEBUG_VALUE("Building hasMask: ", hasMask);
+            PLUGIN_VALIDATE(fc->fields[i].name != nullptr);
+            PLUGIN_VALIDATE(fc->fields[i].data != nullptr);
+            std::string field_name(fc->fields[i].name);
+
+            if (field_name.compare("type_id") == 0)
+            {
+                typeId = *static_cast<int32_t const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(typeId >= 0 && typeId <= 2, ("QKV: Invalid TypeId " + std::to_string(typeId)).c_str());
+                BERT_DEBUG_VALUE("Building typeId: ", typeId);
+            }
+            if (field_name.compare("hidden_size") == 0)
+            {
+                hiddenSize = *static_cast<int32_t const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(hiddenSize > 0, ("QKV: Invalid hiddenSize " + std::to_string(hiddenSize)).c_str());
+                BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
+            }
+            if (field_name.compare("num_heads") == 0)
+            {
+                numHeads = *static_cast<int32_t const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(numHeads > 0, ("QKV: Invalid numHeads " + std::to_string(numHeads)).c_str());
+                BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
+            }
+            if (field_name.compare("has_mask") == 0)
+            {
+                auto hasMaskValue = *static_cast<int32_t const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(hasMaskValue == 0 || hasMaskValue == 1,
+                    ("QKV: Invalid hasMask " + std::to_string(hasMaskValue)).c_str());
+                hasMask = static_cast<bool>(hasMaskValue);
+                BERT_DEBUG_VALUE("Building hasMask: ", hasMask);
+            }
+
+            if (field_name.compare("dq_probs") == 0)
+            {
+                dqProbs = *static_cast<float const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(dqProbs > 0.0F, ("QKV: Invalid dqProbs " + std::to_string(dqProbs)).c_str());
+                BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
+            }
         }
 
-        if (field_name.compare("dq_probs") == 0)
+        BERT_DEBUG_MSG("Building the Plugin...");
+        auto type = static_cast<DataType>(typeId);
+        if (type == DataType::kINT8 && dqProbs < 0)
         {
-            dqProbs = *static_cast<const float*>(fc->fields[i].data);
-            BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
+            BERT_DEBUG_MSG("Using default scale factor");
+            dqProbs = 1.F / 127.F;
         }
+
+        auto* p = new QKVToContextPluginDynamic(name, type, hiddenSize, numHeads, dqProbs, hasMask);
+        return p;
     }
-    if (typeId < 0 || typeId > 3)
+    catch (std::exception const& e)
     {
-        gLogError << "QKV: Invalid TypeId " << typeId << std::endl;
-        return nullptr;
+        caughtError(e);
     }
-
-    if (hiddenSize <= 0)
-    {
-        gLogError << "QKV: Invalid hiddenSize " << hiddenSize << std::endl;
-        return nullptr;
-    }
-
-    if (numHeads <= 0)
-    {
-        gLogError << "QKV: Invalid numHeads " << numHeads << std::endl;
-        return nullptr;
-    }
-
-    BERT_DEBUG_MSG("Building the Plugin...");
-    DataType type = static_cast<DataType>(typeId);
-    if (type == DataType::kINT8 && dqProbs < 0)
-    {
-        BERT_DEBUG_MSG("Using default scale factor");
-        dqProbs = 1.F / 127.F;
-    }
-
-    QKVToContextPluginDynamic* p = new QKVToContextPluginDynamic(name, type, hiddenSize, numHeads, dqProbs, hasMask);
-    return p;
+    return nullptr;
 }
 
 IPluginV2* QKVToContextPluginDynamicCreator::deserializePlugin(
@@ -568,8 +583,8 @@ const char* QKVToContextPluginDynamicCreator::getPluginNamespace() const noexcep
     return mNamespace.c_str();
 }
 
-QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(const std::string name, const DataType type,
-    const int32_t hiddenSize, const int32_t numHeads, const float dqProbs, bool hasImask, bool varSeqlen)
+QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name, DataType const type,
+    int32_t const hiddenSize, int32_t const numHeads, float const dqProbs, bool hasImask, bool varSeqlen, bool useInt8ScaleMax)
     : mLayerName(name)
     , mS(0)
     , mB(0)
@@ -581,7 +596,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(const std::string name,
     , mDqProbs(dqProbs)
     , mHdim(HDIM)
     , mUseVarSeqlen(varSeqlen)
-
+    , mUseInt8ScaleMax(useInt8ScaleMax)
 {
     mSM = getSMVersion();
 
@@ -589,7 +604,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(const std::string name,
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        PLUGIN_ASSERT((mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75 || mSM == kSM_72)
+        PLUGIN_ASSERT((mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75 || mSM == kSM_72)
             && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
@@ -614,6 +629,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(const std::string name,
 
     deserialize_value(&data, &length, &mUseVarSeqlen);
     deserialize_value(&data, &length, &mHdim);
+    deserialize_value(&data, &length, &mUseInt8ScaleMax);
 
     createMHARunner();
     dispatcher->deserialize(data, length);
@@ -628,7 +644,7 @@ void QKVToContextVarSeqlenPlugin::createMHARunner()
         return;
     }
 
-    if (mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75 || mSM == kSM_72)
+    if (mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75 || mSM == kSM_72)
     {
         int32_t headSize = mHeadSize;
         if (mHeadSize != 32 && mHeadSize != 64)
@@ -643,7 +659,7 @@ void QKVToContextVarSeqlenPlugin::createMHARunner()
         }
         else if (mType == DataType::kINT8)
         {
-            dispatcher.reset(new FusedMHARunnerInt8v2(mNumHeads, headSize, mSM, mDqProbs));
+            dispatcher.reset(new FusedMHARunnerInt8v2(mNumHeads, headSize, mSM, mDqProbs, mUseInt8ScaleMax));
         }
     }
     else
@@ -670,7 +686,7 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextVarSeqlenPlugin::clone() const noexce
     else
     {
         ret = new QKVToContextVarSeqlenPlugin(
-            mLayerName, mType, mHiddenSize, mNumHeads, mDqProbs, mHasImask, mUseVarSeqlen);
+            mLayerName, mType, mHiddenSize, mNumHeads, mDqProbs, mHasImask, mUseVarSeqlen, mUseInt8ScaleMax);
     }
 
     ret->setPluginNamespace(mNamespace.c_str());
@@ -695,7 +711,7 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     // we only support int8 IO in fused mha runner, and we only support fused mha runner on Turing and Ampere
-    if (mType == DataType::kINT8 && mSM != kSM_87 && mSM != kSM_86 && mSM != kSM_80 && mSM != kSM_75 && mSM != kSM_72)
+    if (mType == DataType::kINT8 && mSM != kSM_90 && mSM != kSM_89 && mSM != kSM_87 && mSM != kSM_86 && mSM != kSM_80 && mSM != kSM_75 && mSM != kSM_72)
     {
         BERT_DEBUG_VALUE(
             "INT8 IO is only supported on Xavier, Turing and Ampere for plugin ", QKV_TO_CONTEXT_PLUGIN_NAME);
@@ -870,7 +886,7 @@ size_t QKVToContextVarSeqlenPlugin::getSerializationSize() const noexcept
 {
     return sizeof(mNumHeads) + sizeof(mHeadSize) + sizeof(DataType) + sizeof(mHasImask) + sizeof(mHiddenSize)
         + sizeof(mSM) + sizeof(mS) + sizeof(mB) + sizeof(mDqProbs) + dispatcher->getSerializationSize()
-        + sizeof(mUseVarSeqlen) + sizeof(mHdim);
+        + sizeof(mUseVarSeqlen) + sizeof(mHdim) + sizeof(mUseInt8ScaleMax);
 }
 
 void QKVToContextVarSeqlenPlugin::serialize(void* buffer) const noexcept
@@ -887,6 +903,7 @@ void QKVToContextVarSeqlenPlugin::serialize(void* buffer) const noexcept
     serialize_value(&buffer, mDqProbs);
     serialize_value(&buffer, mUseVarSeqlen);
     serialize_value(&buffer, mHdim);
+    serialize_value(&buffer, mUseInt8ScaleMax);
     dispatcher->serialize(buffer);
 }
 
@@ -962,8 +979,16 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* i
 
             MhaRunParameter paddingArgs
                 = patcher->patchMhaArgs(inputDesc, outputDesc, inputs, outputs, paddingWorkspace, sumSeqLen, mNumHeads);
-            this->dispatcher->run(paddingArgs.inputDesc, paddingArgs.outputDesc, paddingArgs.inputs,
-                paddingArgs.outputs, workspace, stream);
+            try
+            {
+                this->dispatcher->run(paddingArgs.inputDesc, paddingArgs.outputDesc, paddingArgs.inputs,
+                    paddingArgs.outputs, workspace, stream);
+            }
+            catch (std::exception const& e)
+            {
+                caughtError(e);
+                return -1;
+            }
 
             ret = patcher->unpad(paddingArgs.outputs[0], outputs[0], sumSeqLen, mNumHeads, mHeadSize, stream);
             if (ret != cudaSuccess)
@@ -973,7 +998,15 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* i
         }
         else
         {
-            this->dispatcher->run(inputDesc, outputDesc, inputs, outputs, workspace, stream);
+            try
+            {
+                this->dispatcher->run(inputDesc, outputDesc, inputs, outputs, workspace, stream);
+            }
+            catch (std::exception const& e)
+            {
+                caughtError(e);
+                return -1;
+            }
         }
 
         return cudaGetLastError();
@@ -998,6 +1031,7 @@ QKVToContextVarSeqlenPluginCreator::QKVToContextVarSeqlenPluginCreator()
     mPluginAttributes.emplace_back(PluginField("has_mask", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("dq_probs", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("var_seqlen", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("use_int8_scale_max", nullptr, PluginFieldType::kINT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -1023,66 +1057,72 @@ IPluginV2* QKVToContextVarSeqlenPluginCreator::createPlugin(const char* name, co
     BERT_DEBUG_MSG("Creating QKV2ContextPlugin...");
 
     int32_t hiddenSize = 0;
-    int32_t numHeads = 0;
+    // Since numHeads must always exist or validateRequiredAttributes will fail,
+    // we can set numHeads to -1 so that static analysis tools don't warn about
+    // a division by zero in QKVToContextVarSeqelnPlugin constructor.
+    int32_t numHeads{-1};
     bool hasMask = false;
     int32_t typeId = -1;
 
     int32_t varSeqlen = 0;
 
     float dqProbs = -1;
+    int32_t useInt8ScaleMax{-1};
 
+    plugin::validateRequiredAttributesExist({"type_id", "hidden_size", "num_heads", "has_mask"}, fc);
     for (int32_t i = 0; i < fc->nbFields; i++)
     {
         std::string field_name(fc->fields[i].name);
 
         if (field_name.compare("type_id") == 0)
         {
-            typeId = *static_cast<const int*>(fc->fields[i].data);
+            typeId = *static_cast<int32_t const*>(fc->fields[i].data);
+            PLUGIN_VALIDATE(typeId >= 0 && typeId <= 2, ("QKV: Invalid TypeId " + std::to_string(typeId)).c_str());
             BERT_DEBUG_VALUE("Building typeId: ", typeId);
         }
         if (field_name.compare("hidden_size") == 0)
         {
-            hiddenSize = *static_cast<const int*>(fc->fields[i].data);
+            hiddenSize = *static_cast<int32_t const*>(fc->fields[i].data);
+            PLUGIN_VALIDATE(hiddenSize > 0, ("QKV: Invalid hiddenSize " + std::to_string(hiddenSize)).c_str());
             BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
         }
         if (field_name.compare("num_heads") == 0)
         {
-            numHeads = *static_cast<const int*>(fc->fields[i].data);
+            numHeads = *static_cast<int32_t const*>(fc->fields[i].data);
+            PLUGIN_VALIDATE(numHeads > 0, ("QKV: Invalid numHeads " + std::to_string(numHeads)).c_str());
             BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
         }
         if (field_name.compare("has_mask") == 0)
         {
-            hasMask = *static_cast<const bool*>(fc->fields[i].data);
+            hasMask = *static_cast<bool const*>(fc->fields[i].data);
+            PLUGIN_VALIDATE(hasMask == 0 || hasMask == 1, ("QKV: Invalid hasMask " + std::to_string(hasMask)).c_str());
             BERT_DEBUG_VALUE("Building hasMask: ", hasMask);
         }
 
         if (field_name.compare("dq_probs") == 0)
         {
-            dqProbs = *static_cast<const float*>(fc->fields[i].data);
+            dqProbs = *static_cast<float const*>(fc->fields[i].data);
+            PLUGIN_VALIDATE(dqProbs > 0.0F, ("QKV: Invalid dqProbs " + std::to_string(dqProbs)).c_str());
             BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
         }
         if (field_name.compare("var_seqlen") == 0)
         {
-            varSeqlen = *static_cast<const int*>(fc->fields[i].data);
+            varSeqlen = *static_cast<int32_t const*>(fc->fields[i].data);
             BERT_DEBUG_VALUE("Building var_seqlen: ", varSeqlen);
         }
-    }
-    if (typeId < 0 || typeId > 3)
-    {
-        gLogError << "QKV: Invalid TypeId " << typeId << std::endl;
-        return nullptr;
-    }
-
-    if (hiddenSize <= 0)
-    {
-        gLogError << "QKV: Invalid hiddenSize " << hiddenSize << std::endl;
-        return nullptr;
+        if (field_name.compare("use_int8_scale_max") == 0)
+        {
+            useInt8ScaleMax = *static_cast<int32_t const*>(fc->fields[i].data);
+            PLUGIN_VALIDATE(useInt8ScaleMax == 0 || useInt8ScaleMax == 1,
+                ("QKV: Invalid useInt8ScaleMax " + std::to_string(useInt8ScaleMax)).c_str());
+            BERT_DEBUG_VALUE("Building useInt8ScaleMax: ", useInt8ScaleMax);
+        }
     }
 
-    if (numHeads <= 0)
+    if (useInt8ScaleMax < 0)
     {
-        gLogError << "QKV: Invalid numHeads " << numHeads << std::endl;
-        return nullptr;
+        gLogInfo << "Using default for use_int8_scale_max: true" << std::endl;
+        useInt8ScaleMax = 1;
     }
 
     BERT_DEBUG_MSG("Building the Plugin...");
@@ -1093,8 +1133,10 @@ IPluginV2* QKVToContextVarSeqlenPluginCreator::createPlugin(const char* name, co
         dqProbs = 1.F / 127.F;
     }
 
+    auto const useInt8ScaleMaxFlag = static_cast<bool>(useInt8ScaleMax);
+
     QKVToContextVarSeqlenPlugin* p
-        = new QKVToContextVarSeqlenPlugin(name, type, hiddenSize, numHeads, dqProbs, hasMask, varSeqlen);
+        = new QKVToContextVarSeqlenPlugin(name, type, hiddenSize, numHeads, dqProbs, hasMask, varSeqlen, useInt8ScaleMaxFlag);
     return p;
 }
 

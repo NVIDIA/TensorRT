@@ -54,3 +54,8 @@ def test_logger_severity():
     assert G_LOGGER.severity == G_LOGGER.module_severity.get()
     with G_LOGGER.verbosity():
         assert G_LOGGER.severity == G_LOGGER.CRITICAL
+
+
+def test_debug_diff_tactics(poly_debug):
+    status = poly_debug(["diff-tactics"])
+    assert "debug diff-tactics is deprecated and will be removed" in status.stdout + status.stderr

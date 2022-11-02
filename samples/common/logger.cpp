@@ -18,7 +18,7 @@
 #include "logger.h"
 #include "ErrorRecorder.h"
 #include "logging.h"
-
+using namespace nvinfer1;
 SampleErrorRecorder gRecorder;
 namespace sample
 {

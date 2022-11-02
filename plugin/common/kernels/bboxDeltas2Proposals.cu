@@ -20,6 +20,7 @@
 #include <math.h>
 #include <stdio.h>
 
+using namespace nvinfer1;
 using std::max;
 using std::min;
 
@@ -209,13 +210,15 @@ struct bd2pLaunchConfig
     DLayout_t l_scores;
     bd2pFun function;
 
-    bd2pLaunchConfig(DataType t_deltas, DLayout_t l_deltas, DataType t_proposals, DLayout_t l_proposals, DataType t_scores, DLayout_t l_scores)
+    bd2pLaunchConfig(DataType t_deltas, DLayout_t l_deltas, DataType t_proposals, DLayout_t l_proposals,
+        DataType t_scores, DLayout_t l_scores)
         : t_deltas(t_deltas)
         , l_deltas(l_deltas)
         , t_proposals(t_proposals)
         , l_proposals(l_proposals)
         , t_scores(t_scores)
         , l_scores(l_scores)
+        , function(nullptr)
     {
     }
 

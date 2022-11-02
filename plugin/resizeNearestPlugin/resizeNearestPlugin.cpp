@@ -64,14 +64,15 @@ IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const P
 {
     try
     {
+        plugin::validateRequiredAttributesExist({"scale"}, fc);
         const PluginField* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            const char* attrName = fields[i].name;
+            char const* attrName = fields[i].name;
             if (!strcmp(attrName, "scale"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mScale = *(static_cast<const float*>(fields[i].data));
+                mScale = *(static_cast<float const*>(fields[i].data));
             }
         }
         return new ResizeNearest(mScale);

@@ -72,7 +72,7 @@ static const float RPN_ANCHOR_RATIOS[] = {0.5F, 1.F, 2.F};
 static const int RPN_ANCHOR_STRIDE = 1;
 
 // Although Python impementation uses 6000,
-//  TRT fails if this number larger than MAX_TOPK_K defined in engine/checkMacros.h
+//  TRT fails if this number larger than kMAX_TOPK_K defined in engine/checkMacros.h
 static const int MAX_PRE_NMS_RESULTS = 1024; // 3840;
 
 // Non-max suppression threshold to filter RPN proposals.

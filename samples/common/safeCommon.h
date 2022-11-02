@@ -24,6 +24,17 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <numeric>
+
+// For loadLibrary
+#ifdef _MSC_VER
+// Needed so that the max/min definitions in windows.h do not conflict with std::max/min.
+#define NOMINMAX
+#include <windows.h>
+#undef NOMINMAX
+#else
+#include <dlfcn.h>
+#endif
 
 #undef CHECK
 #define CHECK(status)                                                                                                  \
@@ -37,8 +48,8 @@
         }                                                                                                              \
     } while (0)
 
-#undef ASSERT
-#define ASSERT(condition)                                                   \
+#undef SAFE_ASSERT
+#define SAFE_ASSERT(condition)                                                   \
     do                                                                      \
     {                                                                       \
         if (!(condition))                                                   \
@@ -68,6 +79,7 @@ inline uint32_t elementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kFLOAT: return 4;
     case nvinfer1::DataType::kHALF: return 2;
     case nvinfer1::DataType::kINT8: return 1;
+    case nvinfer1::DataType::kUINT8: return 1;
     case nvinfer1::DataType::kBOOL: return 1;
     }
     return 0;
@@ -77,6 +89,28 @@ template <typename A, typename B>
 inline A divUp(A x, B n)
 {
     return (x + n - 1) / n;
+}
+
+inline int64_t volume(nvinfer1::Dims const& d)
+{
+    return std::accumulate(d.d, d.d + d.nbDims, int64_t{1}, std::multiplies<int64_t>{});
+}
+
+// Return m rounded up to nearest multiple of n
+template <typename T>
+inline T roundUp(T m, T n)
+{
+    return ((m + n - 1) / n) * n;
+}
+
+//! comps is the number of components in a vector. Ignored if vecDim < 0.
+inline int64_t volume(nvinfer1::Dims dims, int32_t vecDim, int32_t comps, int32_t batch)
+{
+    if (vecDim >= 0)
+    {
+        dims.d[vecDim] = roundUp(dims.d[vecDim], comps);
+    }
+    return samplesCommon::volume(dims) * std::max(batch, 1);
 }
 
 //!
@@ -132,12 +166,12 @@ public:
         const auto ret = cudaStreamEndCapture(stream, &mGraph);
         if (ret == cudaErrorStreamCaptureInvalidated)
         {
-            ASSERT(mGraph == nullptr);
+            SAFE_ASSERT(mGraph == nullptr);
         }
         else
         {
-            ASSERT(ret == cudaSuccess);
-            ASSERT(mGraph != nullptr);
+            SAFE_ASSERT(ret == cudaSuccess);
+            SAFE_ASSERT(mGraph != nullptr);
             CHECK(cudaGraphDestroy(mGraph));
             mGraph = nullptr;
         }
@@ -150,6 +184,38 @@ private:
     cudaGraph_t mGraph{};
     cudaGraphExec_t mGraphExec{};
 };
+
+inline void safeLoadLibrary(const std::string& path)
+{
+#ifdef _MSC_VER
+    void* handle = LoadLibrary(path.c_str());
+#else
+    int32_t flags{RTLD_LAZY};
+    void* handle = dlopen(path.c_str(), flags);
+#endif
+    if (handle == nullptr)
+    {
+#ifdef _MSC_VER
+        sample::gLogError << "Could not load plugin library: " << path << std::endl;
+#else
+        sample::gLogError << "Could not load plugin library: " << path << ", due to: " << dlerror() << std::endl;
+#endif
+    }
+}
+
+inline std::vector<std::string> safeSplitString(std::string str, char delimiter = ',')
+{
+    std::vector<std::string> splitVect;
+    std::stringstream ss(str);
+    std::string substr;
+
+    while (ss.good())
+    {
+        getline(ss, substr, delimiter);
+        splitVect.emplace_back(std::move(substr));
+    }
+    return splitVect;
+}
 
 } // namespace samplesCommon
 

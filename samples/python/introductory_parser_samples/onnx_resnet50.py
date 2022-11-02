@@ -24,7 +24,15 @@ import sys
 import numpy as np
 
 # This import causes pycuda to automatically manage CUDA context creation and cleanup.
-import pycuda.autoinit
+
+# Use autoprimaryctx if available (pycuda >= 2021.1) to
+# prevent issues with other modules that rely on the primary
+# device context.
+try:
+    import pycuda.autoprimaryctx
+except ModuleNotFoundError:
+    import pycuda.autoinit
+
 import tensorrt as trt
 from PIL import Image
 

@@ -14,24 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "NvInferPluginUtils.h"
 #include "common/kernel.h"
 #include "reducedMathPlugin.h"
 #include <iostream>
 
+using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 using nvinfer1::plugin::ReducedDivisor;
 
 template <unsigned nthdsPerCTA>
-__launch_bounds__(nthdsPerCTA)
-    __global__ void priorBoxKernel(
-        PriorBoxParameters param,
-        const int H,
-        const int W,
-        const int numPriors,
-        const int numAspectRatios,
-        const float* minSize,
-        const float* maxSize,
-        const float* aspectRatios,
-        float* outputData)
+__launch_bounds__(nthdsPerCTA) __global__ void priorBoxKernel(PriorBoxParameters param, const int H, const int W,
+    const int numPriors, const int numAspectRatios, const float* minSize, const float* maxSize,
+    const float* aspectRatios, float* outputData)
 {
     // output dims: (H, W, param.numMinSize, (1+haveMaxSize+numAR-1), 4)
     const int dim = H * W * numPriors;

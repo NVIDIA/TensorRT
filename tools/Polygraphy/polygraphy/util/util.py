@@ -15,7 +15,9 @@
 # limitations under the License.
 #
 import contextlib
+import copy
 import glob
+import math
 import os
 import sys
 import tempfile
@@ -30,6 +32,16 @@ np = mod.lazy_import("numpy")
 # These modules are not cross-platform so any usage should be guarded
 fcntl = mod.lazy_import("fcntl")
 msvcrt = mod.lazy_import("msvcrt")
+
+
+@mod.export()
+def is_nan(obj):
+    return isinstance(obj, float) and math.isnan(obj)
+
+
+@mod.export()
+def is_inf(obj):
+    return isinstance(obj, float) and math.isinf(obj)
 
 
 @mod.export()
@@ -218,7 +230,9 @@ def default(value, default):
 
 @mod.export()
 def is_sequence(obj):
-    return hasattr(obj, "__iter__") and not isinstance(obj, dict) and not isinstance(obj, set)
+    return (
+        hasattr(obj, "__iter__") and not isinstance(obj, dict) and not isinstance(obj, set) and not isinstance(obj, str)
+    )
 
 
 @mod.export()
@@ -881,6 +895,56 @@ def indent_block(block, level=1):
     return tab + sep.join(str(block).splitlines())
 
 
+# Some objects don't have correct `repr` implementations, so we need to handle them specially.
+# For other objects, we do nothing.
+def handle_special_repr(obj):
+    # 1. Work around incorrect `repr` implementations
+
+    # Use a special __repr__ override so that we can inline strings
+    class InlineString(str):
+        def __repr__(self) -> str:
+            return self
+
+    if is_nan(obj) or is_inf(obj):
+        return InlineString(f"float('{obj}')")
+
+    # 2. If this object is a collection, recursively apply this logic.
+    # Note that we only handle the built-in collections here, since custom collections
+    # may have special behavior that we don't know about.
+
+    if type(obj) not in [tuple, list, dict, set]:
+        return obj
+
+    obj = copy.copy(obj)
+    # Tuple needs special handling since it doesn't support assignment.
+    if type(obj) is tuple:
+        args = tuple(handle_special_repr(elem) for elem in obj)
+        obj = type(obj)(args)
+    elif type(obj) is list:
+        for index, elem in enumerate(obj):
+            obj[index] = handle_special_repr(elem)
+    elif type(obj) is dict:
+        new_items = {}
+        for key, value in obj.items():
+            new_items[handle_special_repr(key)] = handle_special_repr(value)
+        obj.clear()
+        obj.update(new_items)
+    elif type(obj) is set:
+        new_elems = set()
+        for value in obj:
+            new_elems.add(handle_special_repr(value))
+        obj.clear()
+        obj.update(new_elems)
+
+    # 3. Finally, return the modified version of the object
+    return obj
+
+
+def apply_repr(obj):
+    obj = handle_special_repr(obj)
+    return repr(obj)
+
+
 @mod.export()
 def make_repr(type_str, *args, **kwargs):
     """
@@ -901,16 +965,16 @@ def make_repr(type_str, *args, **kwargs):
                 indicating whether all the positional and keyword arguments were default
                 (i.e. None) respectively.
     """
-    processed_args = list(map(repr, args))
+    processed_args = list(map(apply_repr, args))
 
     processed_kwargs = []
     for key, val in filter(lambda t: t[1] is not None, kwargs.items()):
-        processed_kwargs.append(f"{key}={repr(val)}")
+        processed_kwargs.append(f"{key}={apply_repr(val)}")
 
     repr_str = f"{type_str}({', '.join(processed_args + processed_kwargs)})"
 
     def all_default(arg_list):
-        return all(arg == repr(None) for arg in arg_list)
+        return all(arg == apply_repr(None) for arg in arg_list)
 
     return repr_str, all_default(processed_args), all_default(processed_kwargs)
 

@@ -138,6 +138,11 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 legacy = *(static_cast<int32_t const*>(fields[i].data));
             }
+            if (!strcmp(attrName, "legacy"))
+            {
+                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
+                legacy = *(static_cast<int32_t const*>(fields[i].data));
+            }
         }
         return new PyramidROIAlign(
             pooledSize, transformCoords, absCoords, swapCoords, plusOneCoords, samplingRatio, legacy, imageSize, fpnScale);

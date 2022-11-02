@@ -19,7 +19,7 @@
 #include "common/kernel.h"
 #include "common/nmsUtils.h"
 #include "common/plugin.h"
-#include "gatherNMSOutputs.h"
+#include "batchedNMSPlugin/gatherNMSOutputs.h"
 #include <string>
 #include <vector>
 
@@ -38,13 +38,13 @@ public:
     // IPluginV2 methods
     const char* getPluginType() const noexcept override;
     const char* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    Dims getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims) noexcept override;
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
     int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
@@ -56,21 +56,21 @@ public:
     void setCaffeSemantics(bool caffeSemantics) noexcept;
 
     // IPluginV2Ext methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-        noexcept override;
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
-        noexcept override;
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
-    void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
+    nvinfer1::DataType getOutputDataType(
+        int32_t index, const nvinfer1::DataType* inputTypes, int32_t nbInputs) const noexcept override;
+    bool isOutputBroadcastAcrossBatch(
+        int32_t outputIndex, const bool* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
+    void configurePlugin(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
         const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+        const bool* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
     IPluginV2Ext* clone() const noexcept override;
 
 private:
     NMSParameters param{};
-    int boxesSize{};
-    int scoresSize{};
-    int numPriors{};
+    int32_t mBoxesSize{};
+    int32_t mScoresSize{};
+    int32_t mNumPriors{};
     std::string mNamespace;
     bool mClipBoxes{};
     DataType mPrecision;
@@ -89,8 +89,8 @@ public:
     // IPluginV2 methods
     const char* getPluginType() const noexcept override;
     const char* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
@@ -102,26 +102,27 @@ public:
     void setCaffeSemantics(bool caffeSemantics) noexcept;
 
     // IPluginV2Ext methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const
-        noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int32_t index, const nvinfer1::DataType* inputType, int32_t nbInputs) const noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
-        int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept override;
-    bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(
-        const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(
-        const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
-    int enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs,
+        int32_t outputIndex, const DimsExprs* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
+    bool supportsFormatCombination(
+        int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(const DynamicPluginTensorDesc* in, int32_t nbInputs, const DynamicPluginTensorDesc* out,
+        int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(const PluginTensorDesc* inputs, int32_t nbInputs, const PluginTensorDesc* outputs,
+        int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
 private:
     NMSParameters param{};
-    int boxesSize{};
-    int scoresSize{};
-    int numPriors{};
+    int32_t mBoxesSize{};
+    int32_t mScoresSize{};
+    int32_t mNumPriors{};
     std::string mNamespace;
     bool mClipBoxes{};
     DataType mPrecision;

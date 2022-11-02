@@ -54,7 +54,7 @@ from NNDF.general_utils import NNFolderWorkspace
 from NNDF.tensorrt_utils import PolygraphyOnnxRunner
 from T5.frameworks import T5FHuggingFace
 from T5.T5ModelConfig import T5ModelTRTConfig, T5BenchmarkingArgs
-from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy
+from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy, full_inference_beam
 
 
 class OnnxHFRunner(PolygraphyOnnxRunner, GenerationMixin):
@@ -98,8 +98,8 @@ class T5ONNXRT(OnnxRTCommand):
             "Runs polygraphy results for T5 model.",
             T5FHuggingFace,
         )
-        self.t5_trt_decoder = None
-        self.t5_trt_encoder = None
+        self.t5_ort_decoder = None
+        self.t5_ort_encoder = None
 
     def cleanup(
         self,
@@ -108,10 +108,10 @@ class T5ONNXRT(OnnxRTCommand):
         keep_torch_model: bool = False,
     ) -> None:
         # Deactivates context
-        if self.t5_trt_encoder:
-            self.t5_trt_encoder.release()
-        if self.t5_trt_decoder:
-            self.t5_trt_decoder.release()
+        if self.t5_ort_encoder:
+            self.t5_ort_encoder.release()
+        if self.t5_ort_decoder:
+            self.t5_ort_decoder.release()
 
         self.frameworks_cmd.cleanup(workspace, keep_onnx_model, keep_torch_model)
 
@@ -121,7 +121,8 @@ class T5ONNXRT(OnnxRTCommand):
         onnx_fpaths: Dict[str, NetworkModel],
         inference_input: str,
         timing_profile: TimingProfile,
-        batch_size: int=1,
+        batch_size: int = 1,
+        num_beams: int = 1,
         benchmarking_mode: bool = False,
         benchmarking_args: T5BenchmarkingArgs = None,
     ) -> NetworkResult:
@@ -137,41 +138,55 @@ class T5ONNXRT(OnnxRTCommand):
             output_seq_len = benchmarking_args.output_seq_len if benchmarking_args.output_seq_len > 0 else max_seq_len
             input_ids = torch.randint(0, T5ModelTRTConfig.VOCAB_SIZE, (batch_size, input_seq_len))
 
-        encoder_last_hidden_state, encoder_e2e_median_time = encoder_inference(
-            self.t5_trt_encoder, input_ids, timing_profile
+        encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
+            self.t5_ort_encoder, input_ids, timing_profile
         )
-        _, decoder_e2e_median_time = decoder_inference(
-            self.t5_trt_decoder,
+        _, decoder_e2e_time = decoder_inference(
+            self.t5_ort_decoder,
             input_ids,
             encoder_last_hidden_state,
             timing_profile,
             use_cuda=False,
         )
-        decoder_output_greedy, full_e2e_median_runtime = full_inference_greedy(
-            self.t5_trt_encoder,
-            self.t5_trt_decoder,
-            input_ids,
-            tokenizer,
-            timing_profile,
-            max_length=output_seq_len,
-            use_cuda=False,
-            batch_size=batch_size,
-            early_stopping=(not benchmarking_mode),
-        )
+        if num_beams == 1:
+            decoder_output, full_e2e_runtime = full_inference_greedy(
+                self.t5_ort_encoder,
+                self.t5_ort_decoder,
+                input_ids,
+                tokenizer,
+                timing_profile,
+                max_length=output_seq_len,
+                use_cuda=False,
+                batch_size=batch_size,
+                early_stopping=(not benchmarking_mode),
+            )
+        else:
+            decoder_output, full_e2e_runtime = full_inference_beam(
+                self.t5_ort_encoder,
+                self.t5_ort_decoder,
+                input_ids,
+                tokenizer,
+                timing_profile,
+                num_beams=num_beams,
+                max_length=output_seq_len,
+                use_cuda=False,
+                batch_size=batch_size,
+                early_stopping=(not benchmarking_mode),
+            )
 
         # Prepare runtime results.
-        median_runtime = [
+        runtime = [
             NetworkRuntime(
                 name=T5ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
-                runtime=decoder_e2e_median_time,
+                runtime=decoder_e2e_time,
             ),
             NetworkRuntime(
                 name=T5ModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME,
-                runtime=encoder_e2e_median_time,
+                runtime=encoder_e2e_time,
             ),
             NetworkRuntime(
                 name=T5ModelTRTConfig.NETWORK_FULL_NAME,
-                runtime=full_e2e_median_runtime,
+                runtime=full_e2e_runtime,
             ),
         ]
         models=NetworkModels(
@@ -182,11 +197,11 @@ class T5ONNXRT(OnnxRTCommand):
 
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
-            return BenchmarkingResult(median_runtime=median_runtime, models=models)
+            return BenchmarkingResult(median_runtime=runtime, models=models)
 
         # Remove the padding and end tokens.
         semantic_outputs = tokenizer.decode(
-            decoder_output_greedy[-1, :], skip_special_tokens=True
+            decoder_output[-1, :], skip_special_tokens=True
         )
 
         if isinstance(semantic_outputs, list):
@@ -196,7 +211,7 @@ class T5ONNXRT(OnnxRTCommand):
             input=inference_input,
             output_tensor=encoder_last_hidden_state,
             semantic_output=semantic_outputs,
-            median_runtime=median_runtime,
+            median_runtime=runtime,
             models=models,
         )
 
@@ -241,10 +256,10 @@ class T5ONNXRT(OnnxRTCommand):
                 use_cache=metadata.other.kv_cache,
                 num_layers=T5ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
             )
-            self.t5_trt_encoder = T5OnnxEncoder(
+            self.t5_ort_encoder = T5OnnxEncoder(
                 lookup_onnx_table["encoder"].fpath, metadata, tfm_config
             )
-            self.t5_trt_decoder = T5OnnxDecoder(
+            self.t5_ort_decoder = T5OnnxDecoder(
                 lookup_onnx_table["decoder"].fpath, metadata, tfm_config
             )
 
@@ -252,13 +267,13 @@ class T5ONNXRT(OnnxRTCommand):
                 for ninput in network_input:
                     results.append(
                         self.execute_inference(
-                            metadata, lookup_onnx_table, ninput, timing_profile, batch_size
+                            metadata, lookup_onnx_table, ninput, timing_profile, batch_size, args.num_beams
                         )
                     )
             else:
                 benchmarking_args = T5BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
                 results = self.execute_inference(
-                    metadata, lookup_onnx_table, None, timing_profile, batch_size, True, benchmarking_args
+                    metadata, lookup_onnx_table, None, timing_profile, batch_size, args.num_beams, True, benchmarking_args
                 )
 
         finally:

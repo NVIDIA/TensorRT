@@ -37,6 +37,7 @@ from torch.nn import Module
 # huggingface
 from transformers.generation_utils import GenerationMixin
 from transformers.modeling_outputs import Seq2SeqLMOutput
+from transformers import BartForConditionalGeneration
 
 # TRT-HuggingFace
 from BART.BARTModelConfig import BARTModelTRTConfig
@@ -121,6 +122,10 @@ class BARTDecoderTorchFile(TorchModelFile):
             self.bias = final_logits_bias
             self.config = config
 
+        @staticmethod
+        def _reorder_cache(past, beam_idx):
+            return BartForConditionalGeneration._reorder_cache(past, beam_idx)
+            
         def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
             # cut decoder_input_ids if past is used
             if past is not None:

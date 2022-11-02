@@ -407,16 +407,14 @@ struct nmsLaunchConfig
     {
     }
 
-    nmsLaunchConfig(DType_t t_fgScores,
-                    DLayout_t l_fgScores,
-                    DType_t t_proposals,
-                    DLayout_t l_proposals,
-                    DType_t t_rois)
+    nmsLaunchConfig(
+        DType_t t_fgScores, DLayout_t l_fgScores, DType_t t_proposals, DLayout_t l_proposals, DType_t t_rois)
         : t_fgScores(t_fgScores)
         , l_fgScores(l_fgScores)
         , t_proposals(t_proposals)
         , l_proposals(l_proposals)
         , t_rois(t_rois)
+        , function(nullptr)
     {
     }
 

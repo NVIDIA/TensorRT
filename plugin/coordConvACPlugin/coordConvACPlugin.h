@@ -19,8 +19,8 @@
 #define TRT_COORDCONV_PLUGIN_H
 
 #include "NvInferPlugin.h"
-#include "kernel.h"
-#include "plugin.h"
+#include "common/kernel.h"
+#include "common/plugin.h"
 #include <cuda_runtime.h>
 #include <string>
 #include <vector>

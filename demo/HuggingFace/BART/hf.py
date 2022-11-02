@@ -29,6 +29,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--variant", help="Name of BART variant.")
 parser.add_argument("--enable-kv-cache", help="Bart enable KV cache", action="store_true", default=False)
 parser.add_argument("--fp16", help="Bart FP16", action="store_true", default=False)
+parser.add_argument("--num-beams", type=int, default=1, help="Enables beam search during decoding.")
 
 args = parser.parse_args()
 
@@ -47,7 +48,7 @@ input_ids = tokenizer([ARTICLE_TO_SUMMARIZE], padding=True, return_tensors="pt")
 
 warmup = 10
 for i in range(warmup):
-    summary_ids = model.generate(input_ids, max_length=1024, num_beams=1, use_cache=args.enable_kv_cache)
+    summary_ids = model.generate(input_ids, max_length=1024, num_beams=args.num_beams, use_cache=args.enable_kv_cache)
 
 start = time.time()
 trials = 10
@@ -56,7 +57,7 @@ input_ids = tokenizer([ARTICLE_TO_SUMMARIZE], padding=True, return_tensors="pt")
 
 for i in range(trials):
     # Generate Summary. Note: generate() method already has torch.no_grad() decorator.
-    summary_ids = model.generate(input_ids, max_length=1024, num_beams=1, use_cache=args.enable_kv_cache)
+    summary_ids = model.generate(input_ids, max_length=1024, num_beams=args.num_beams, use_cache=args.enable_kv_cache)
 
 end = time.time()
 

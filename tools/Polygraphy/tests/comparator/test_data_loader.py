@@ -62,6 +62,10 @@ class TestDataLoader:
             (0, 1, np.int32),
             (5.0, 5.5, np.float32),
             (0, 1, bool),
+            (float("inf"), float("inf"), np.float32),
+            (float("-inf"), float("inf"), np.float32),
+            (0, float("inf"), np.float32),
+            (float("-inf"), 0, np.float32),
         ],
     )
     def test_val_ranges(self, range):

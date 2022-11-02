@@ -24,7 +24,15 @@ import numpy as np
 import tensorrt as trt
 
 import pycuda.driver as cuda
-import pycuda.autoinit
+
+# Use autoprimaryctx if available (pycuda >= 2021.1) to
+# prevent issues with other modules that rely on the primary
+# device context.
+try:
+    import pycuda.autoprimaryctx
+except ModuleNotFoundError:
+    import pycuda.autoinit
+
 
 from image_batcher import ImageBatcher
 from visualize import visualize_detections
@@ -46,9 +54,10 @@ class TensorRTInfer:
         self.logger = trt.Logger(trt.Logger.ERROR)
         trt.init_libnvinfer_plugins(self.logger, namespace="")
         with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
+            assert runtime
             self.engine = runtime.deserialize_cuda_engine(f.read())
-        self.context = self.engine.create_execution_context()
         assert self.engine
+        self.context = self.engine.create_execution_context()
         assert self.context
 
         # Setup I/O bindings
@@ -149,13 +158,13 @@ class TensorRTInfer:
                     # Depending on detection type you need slightly different data.
                     if self.detection_type == 'bbox':
                         mask = None
-                    # Segmentation is only supported with Mask R-CNN, which has 
+                    # Segmentation is only supported with Mask R-CNN, which has
                     # fixed_shape_resizer as image_resizer (lookup pipeline.config)
                     elif self.detection_type == 'segmentation':
                         # Select a mask
                         mask = masks[i][n]
                         # Slight scaling, to get binary masks after float32 -> uint8
-                        # conversion, if not scaled all pixels are zero. 
+                        # conversion, if not scaled all pixels are zero.
                         mask = mask > self.iou_threshold
                         # Convert float32 -> uint8.
                         mask = mask.astype(np.uint8)
@@ -169,7 +178,7 @@ class TensorRTInfer:
                         scale_x = scale
                     if nms_threshold and scores[i][n] < nms_threshold:
                         continue
-                # Append to detections          
+                # Append to detections
                 detections[i].append({
                     'ymin': boxes[i][n][0] * scale_y,
                     'xmin': boxes[i][n][1] * scale_x,
@@ -218,14 +227,14 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--engine", default=None, help="The serialized TensorRT engine")
     parser.add_argument("-i", "--input", default=None, help="Path to the image or directory to process")
     parser.add_argument("-o", "--output", default=None, help="Directory where to save the visualization results")
-    parser.add_argument("-l", "--labels", default="./labels_coco.txt", 
+    parser.add_argument("-l", "--labels", default="./labels_coco.txt",
                         help="File to use for reading the class labels from, default: ./labels_coco.txt")
     parser.add_argument("-d", "--detection_type", default="bbox", choices=["bbox", "segmentation"],
                         help="Detection type for COCO, either bbox or if you are using Mask R-CNN's instance segmentation - segmentation")
-    parser.add_argument("-t", "--nms_threshold", type=float, 
+    parser.add_argument("-t", "--nms_threshold", type=float,
                         help="Override the score threshold for the NMS operation, if higher than the threshold in the engine.")
-    parser.add_argument("--iou_threshold", default=0.5, type=float, 
-                        help="Select the IoU threshold for the mask segmentation. Range is 0 to 1. Pixel values more than threshold will become 1, less 0")                                                              
+    parser.add_argument("--iou_threshold", default=0.5, type=float,
+                        help="Select the IoU threshold for the mask segmentation. Range is 0 to 1. Pixel values more than threshold will become 1, less 0")
     parser.add_argument("--preprocessor", default="fixed_shape_resizer", choices=["fixed_shape_resizer", "keep_aspect_ratio_resizer"],
                         help="Select the image preprocessor to use based on your pipeline.config, either 'fixed_shape_resizer' or 'keep_aspect_ratio_resizer', default: fixed_shape_resizer")
     args = parser.parse_args()

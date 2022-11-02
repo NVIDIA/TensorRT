@@ -30,7 +30,7 @@ class Build(BaseCheckerSubtool):
     1. Builds a TensorRT engine and saves it in the current directory as `polygraphy_debug.engine` by default.
     2. Evaluates it using the `--check` command if it was provided, or in interactive mode otherwise.
     3. Sorts files specified by `--artifacts` into `good` and `bad` directories based on (2).
-        This is useful for sorting tactic replays, which can then be further analyzed with `debug diff-tactics`.
+        This is useful for sorting tactic replays, which can then be further analyzed with `inspect diff-tactics`.
 
     The typical usage of `debug build` is:
 

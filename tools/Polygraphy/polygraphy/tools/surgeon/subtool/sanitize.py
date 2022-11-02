@@ -160,7 +160,7 @@ class Sanitize(BaseSurgeonSubtool):
     def __init__(self):
         super().__init__("sanitize")
 
-    def get_subscriptions(self):
+    def get_subscriptions_impl(self):
         return [
             ModelArgs(
                 model_opt_required=True,
@@ -175,14 +175,16 @@ class Sanitize(BaseSurgeonSubtool):
             ConstFoldArgs(),
         ]
 
-    def add_parser_args(self, parser):
+    def add_parser_args_impl(self, parser):
         parser.add_argument(
             "--cleanup",
             help="Run dead layer removal on the graph. This is generally not required if other options are set. ",
             action="store_true",
             default=False,
         )
-        super().add_parser_args(parser)
+
+    def show_start_end_logging_impl(self, args):
+        return True
 
     def run_impl(self, args):
         # First do all processing that requires an ONNX-GraphSurgeon graph, then do everything

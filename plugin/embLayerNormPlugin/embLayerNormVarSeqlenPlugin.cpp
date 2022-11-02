@@ -17,6 +17,7 @@
 
 #include <cstring>
 #include <cuda.h>
+#include <set>
 #include <vector>
 
 #include "NvInfer.h"
@@ -65,10 +66,11 @@ EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(std::string con
     , mType(type)
 {
     // Assuming Weights.count is the number of elements and not bytes
-    PLUGIN_ASSERT(beta.count == gamma.count);
-    PLUGIN_ASSERT(wordEmb.count % mLd == 0);
-    PLUGIN_ASSERT(posEmb.count % mLd == 0);
-    PLUGIN_ASSERT(tokEmb.count % mLd == 0);
+    PLUGIN_VALIDATE(beta.count == gamma.count);
+    PLUGIN_VALIDATE(mLd > 0U);
+    PLUGIN_VALIDATE(wordEmb.count % mLd == 0);
+    PLUGIN_VALIDATE(posEmb.count % mLd == 0);
+    PLUGIN_VALIDATE(tokEmb.count % mLd == 0);
     mWordVocabSize = wordEmb.count / mLd;
     mPosVocabSize = posEmb.count / mLd;
     mTokVocabSize = tokEmb.count / mLd;
@@ -668,6 +670,15 @@ bool initializeFields(char const* name, PluginFieldCollection const* fc, Weights
     Weights& word_emb, Weights& pos_emb, Weights& tok_emb)
 {
     bool output_fp16 = false;
+    std::set<std::string> const requiredAttributes{
+        "bert_embeddings_layernorm_beta",
+        "bert_embeddings_layernorm_gamma",
+        "bert_embeddings_word_embeddings",
+        "bert_embeddings_token_type_embeddings",
+        "bert_embeddings_position_embeddings",
+    };
+    plugin::validateRequiredAttributesExist(requiredAttributes, fc);
+
     for (int32_t i = 0; i < fc->nbFields; i++)
     {
         std::string field_name(fc->fields[i].name);
@@ -727,11 +738,16 @@ IPluginV2* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(
     {
         BERT_DEBUG_MSG("EmbLayerNormVarSeqlenHFace createPlugin");
 
-        Weights beta;
-        Weights gamma;
-        Weights word_emb;
-        Weights pos_emb;
-        Weights tok_emb;
+        Weights beta{};  // required attribute: validateRequiredAttributesExist() call in initializeFields() will verify
+                         // existence
+        Weights gamma{}; // required attribute: validateRequiredAttributesExist() call in initializeFields() will verify
+                         // existence
+        Weights word_emb{}; // required attribute: validateRequiredAttributesExist() call in initializeFields() will
+                            // verify existence
+        Weights pos_emb{};  // required attribute: validateRequiredAttributesExist() call in initializeFields() will
+                            // verify existence
+        Weights tok_emb{};  // required attribute: validateRequiredAttributesExist() call in initializeFields() will
+                            // verify existence
         bool output_fp16 = initializeFields(name, fc, beta, gamma, word_emb, pos_emb, tok_emb);
 
         BERT_DEBUG_MSG("Building the Plugin...");
@@ -753,11 +769,16 @@ IPluginV2* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(
     {
         BERT_DEBUG_MSG("EmbLayerNormVarSeqlenMTron createPlugin");
 
-        Weights beta;
-        Weights gamma;
-        Weights word_emb;
-        Weights pos_emb;
-        Weights tok_emb;
+        Weights beta{};  // required attribute: validateRequiredAttributesExist() call in initializeFields() will verify
+                         // existence
+        Weights gamma{}; // required attribute: validateRequiredAttributesExist() call in initializeFields() will verify
+                         // existence
+        Weights word_emb{}; // required attribute: validateRequiredAttributesExist() call in initializeFields() will
+                            // verify existence
+        Weights pos_emb{};  // required attribute: validateRequiredAttributesExist() call in initializeFields() will
+                            // verify existence
+        Weights tok_emb{};  // required attribute: validateRequiredAttributesExist() call in initializeFields() will
+                            // verify existence
         bool output_fp16 = initializeFields(name, fc, beta, gamma, word_emb, pos_emb, tok_emb);
 
         BERT_DEBUG_MSG("Building the Plugin...");

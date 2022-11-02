@@ -279,15 +279,15 @@ IPluginV2* PillarScatterPluginCreator::createPlugin(const char* name, const Plug
     try
     {
         const PluginField* fields = fc->fields;
-        int nbFields = fc->nbFields;
-        int targetH = 0;
-        int targetW = 0;
-        for (int i = 0; i < nbFields; ++i)
+        int32_t nbFields = fc->nbFields;
+        int32_t targetH = 0;
+        int32_t targetW = 0;
+        plugin::validateRequiredAttributesExist({"dense_shape"}, fc);
+        for (int32_t i = 0; i < nbFields; ++i)
         {
-            const char* attr_name = fields[i].name;
-            if (!strcmp(attr_name, "dense_shape"))
+            if (!strcmp(fields[i].name, "dense_shape"))
             {
-                const int* ts = static_cast<const int*>(fields[i].data);
+                int32_t const* ts = static_cast<int32_t const*>(fields[i].data);
                 targetH = ts[0];
                 targetW = ts[1];
                 PLUGIN_VALIDATE(targetH > 0 && targetW > 0);

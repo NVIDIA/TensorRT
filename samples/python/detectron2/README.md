@@ -2,23 +2,29 @@
 
 Support for Detectron 2 Mask R-CNN R50-FPN 3x model in TensorRT. This script helps with converting, running and validating this model with TensorRT.
 
+## Changelog
+
+- October 2022:
+  - Updated converter to support `tracing` export instead of deprecated `caffe2_tracing`
+
 ## Setup
 
 In order for scripts to work we suggest an environment with TensorRT >= 8.4.1.
 
-Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download. 
+Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download.
 
 Install all dependencies listed in `requirements.txt`:
 
 ```
 pip install -r requirements.txt
 ```
+Note: this sample cannot be run on Jetson platforms as `torch.distributed` is not available. To check whether your platform supports `torch.distributed`, open a Python shell and confirm that `torch.distributed.is_available()` returns `True`.
 
 ## Model Conversion
 
-The workflow to convert Detectron 2 Mask R-CNN R50-FPN 3x model is basically Detectron 2 → Caffe 2 → ONNX → TensorRT, and so parts of this process require Detectron 2 to be installed. Official export to ONNX is documented [here](https://detectron2.readthedocs.io/en/latest/tutorials/deployment.html). 
+The workflow to convert Detectron 2 Mask R-CNN R50-FPN 3x model is basically Detectron 2 → ONNX → TensorRT, and so parts of this process require Detectron 2 to be installed. Official export to ONNX is documented [here](https://detectron2.readthedocs.io/en/latest/tutorials/deployment.html).
 
-### Detectron 2 Deployment 
+### Detectron 2 Deployment
 Deployment is done through export model script located in `detectron2/tools/deploy/export_model.py` of Detectron 2 [github](https://github.com/facebookresearch/detectron2). Detectron 2 Mask R-CNN R50-FPN 3x model is dynamic with minimum testing dimension size of 800 and maximum of 1333. TensorRT plug-ins used for conversion of this model do not support dynamic shapes, as a result we have to set both height and width of the input tensor to 1344. 1344 instead of 1333 because model requires both height and width of the input tensor to be divisible by 32. In order to export this model with correct 1344x1344 resolution, we have to make a change to `export_model.py`. Currently lines 160-162:
 
 ```
@@ -40,15 +46,15 @@ Export script takes `--sample-image` as one of the arguments. Such image is used
 python detectron2/tools/deploy/export_model.py \
     --sample-image 1344x1344.jpg \
     --config-file detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml \
-    --export-method caffe2_tracing \
+    --export-method tracing \
     --format onnx \
-    --output ./ 
+    --output ./ \
     MODEL.WEIGHTS path/to/model_final_f10217.pkl \
     MODEL.DEVICE cuda
 
 ```
 
-Where `--sample-image` is 1344x1344 image; `--config-file` path to Mask R-CNN R50-FPN 3x config, included with detectron2; `MODEL.WEIGHTS` are weights of Mask R-CNN R50-FPN 3x that can be downloaded [here](https://github.com/facebookresearch/detectron2/blob/main/MODEL_ZOO.md). Resulted `model.onnx` will be an input to conversion script.  
+Where `--sample-image` is 1344x1344 image; `--config-file` path to Mask R-CNN R50-FPN 3x config, included with detectron2; `MODEL.WEIGHTS` are weights of Mask R-CNN R50-FPN 3x that can be downloaded [here](https://github.com/facebookresearch/detectron2/blob/main/MODEL_ZOO.md). Resulted `model.onnx` will be an input to conversion script.
 
 ### Create ONNX Graph
 This is supported Detectron 2 model:
@@ -64,19 +70,19 @@ python create_onnx.py \
     --exported_onnx /path/to/model.onnx \
     --onnx /path/to/converted.onnx \
     --det2_config /detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml \
-    --det2_weights /model_final_f10217.pkl
+    --det2_weights /model_final_f10217.pkl \
     --sample_image any_image.jpg
 ```
 
-This will create the file `converted.onnx` which is ready to convert to TensorRT. 
+This will create the file `converted.onnx` which is ready to convert to TensorRT.
 
-It is important to mention that `--sample_image` in this case is used for anchor generation. Detectron 2 ONNX models do not have anchor data inside the graph, so anchors have to be generated "offline". If custom model is used, make sure preprocessing of your model matches what is coded in `get_anchors(self, sample_image)` function. 
+It is important to mention that `--sample_image` in this case is used for anchor generation. Detectron 2 ONNX models do not have anchor data inside the graph, so anchors have to be generated "offline". If custom model is used, make sure preprocessing of your model matches what is coded in `get_anchors(self, sample_image)` function.
 
 The script has a few optional arguments, including:
 
 * `--first_nms_threshold [...]` allows overriding the default 1st NMS score threshold parameter, as the runtime latency of the NMS plugin is sensitive to this value. It's a good practice to set this value as high as possible, while still fulfilling your application requirements, to reduce inference latency. In Mask R-CNN this will be a score threshold for Region Proposal Network.
 * `--second_nms_threshold [...]` allows overriding the default 2nd NMS score threshold parameter, further improves the runtime latency of the NMS plugin. It's a good practice to set this value as high as possible, while still fulfilling your application requirements, to reduce inference latency. It will be the second and last NMS.
-* `--batch_size` allows selection of various batch sizes, default is 1. 
+* `--batch_size` allows selection of various batch sizes, default is 1.
 
 
 Optionally, you may wish to visualize the resulting ONNX graph with a tool such as [Netron](https://netron.app/).
@@ -91,7 +97,7 @@ The outputs of the graph are the same as the outputs of the [EfficientNMS_TRT](h
 TensorRT engine can be built directly with `trtexec` using the ONNX graph generated in the previous step. If it's not already in your `$PATH`, the `trtexec` binary is usually found in `/usr/src/tensorrt/bin/trtexec`, depending on your TensorRT installation method. Run:
 
 ```
-trtexec --onnx=/path/to/converted.onnx --saveEngine=/path/to/engine.trt --useCudaGraph 
+trtexec --onnx=/path/to/converted.onnx --saveEngine=/path/to/engine.trt --useCudaGraph
 ```
 
 However, the script `build_engine.py` is also provided in this repository for convenience, as it has been tailored to Detectron 2 2 Mask R-CNN R50-FPN 3x engine building and INT8 calibration. Run `python3 build_engine.py --help` for details on available settings.

@@ -622,6 +622,9 @@ public:
         : interface(interface)
         , sm(interface->mSm)
         , xmmaKernel(getXMMAKernels(DATA_TYPE_FP16, sm))
+        , xmmas_m(0U)
+        , xmmas_n(0U)
+        , threads_per_cta(1U)
     {
     }
 
@@ -640,9 +643,9 @@ public:
     {
         // TODO these implementation details might be better centralized into the XMMA code, since they are needed in
         // several places (also outside of this plugin)
-        size_t warps_m{};
-        size_t warps_n{};
-        size_t warps_k = 1;
+        size_t warps_m{1U};
+        size_t warps_n{1U};
+        size_t warps_k{1U};
         if (S == 64 || S == 96 || S == 128)
         {
             warps_m = 2;
@@ -764,6 +767,9 @@ public:
         , sm(interface->mSm)
         , xmmaKernel(getXMMAKernels(DATA_TYPE_INT8, sm))
         , mDqProbs(interface->mDqProbs)
+        , xmmas_m(0U)
+        , xmmas_n(0U)
+        , threads_per_cta(1U)
     {
     }
 
@@ -779,9 +785,9 @@ public:
 
     void setup(const int S, const int B)
     {
-        size_t warps_m{};
-        size_t warps_n{};
-        size_t warps_k = 1;
+        size_t warps_m{1U};
+        size_t warps_n{1U};
+        size_t warps_k{1U};
         if (S == 128)
         {
             warps_m = 2;
@@ -907,7 +913,7 @@ public:
         , sm(interface->mSm)
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_FP16, sm))
     {
-        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87)
+        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90)
             && "Unsupported architecture");
         params.clear();
     }
@@ -927,9 +933,9 @@ public:
     {
         // TODO these implementation details might be better centralized into the XMMA code, since they are needed in
         // several places (also outside of this plugin)
-        size_t warps_m{};
-        size_t warps_n{};
-        size_t warps_k = 1;
+        size_t warps_m{1U};
+        size_t warps_n{1U};
+        size_t warps_k{1U};
         if (S == 64 || S == 96 || S == 128)
         {
             warps_m = 2;
@@ -1064,8 +1070,11 @@ public:
         , sm(interface->mSm)
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_INT8, sm))
         , mDqProbs(interface->mDqProbs)
+        , xmmas_m(0U)
+        , xmmas_n(0U)
+        , threads_per_cta(1U)
     {
-        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87)
+        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90)
             && "Unsupported architecture");
         params.clear();
     }
@@ -1082,9 +1091,9 @@ public:
 
     void setup(const int S, const int B)
     {
-        size_t warps_m{};
-        size_t warps_n{};
-        size_t warps_k = 1;
+        size_t warps_m{1U};
+        size_t warps_n{1U};
+        size_t warps_k{1U};
         if (S == 128)
         {
             warps_m = 2;
@@ -1116,7 +1125,7 @@ public:
         params.h = interface->mNumHeads;
         params.s = S;
         params.d = interface->mHeadSize;
-        params.use_int8_scale_max = true;
+        params.use_int8_scale_max = interface->mUseInt8ScaleMax;
         params.packed_mask_stride_in_bytes = xmmas_m * threads_per_cta * sizeof(uint32_t);
         params.qkv_stride_in_bytes = 3 * interface->mNumHeads * interface->mHeadSize * sizeof(int8_t);
         params.o_stride_in_bytes = interface->mNumHeads * interface->mHeadSize * sizeof(int8_t);
@@ -1144,7 +1153,7 @@ public:
         // dummy input in V2/V3 because now we use cu_seqlens
         params.packed_mask_ptr = nullptr;
 
-        params.use_int8_scale_max = true;
+        params.use_int8_scale_max = interface->mUseInt8ScaleMax;
 
         params.o_ptr = output;
 
@@ -1170,11 +1179,12 @@ private:
     size_t threads_per_cta;
 };
 
-FusedMHARunnerInt8v2::FusedMHARunnerInt8v2(const int numHeads, const int headSize, const int sm, const float dqProbs)
+FusedMHARunnerInt8v2::FusedMHARunnerInt8v2(const int numHeads, const int headSize, const int sm, const float dqProbs, bool const useInt8ScaleMax)
     : MHARunner(DataType::kINT8, numHeads, headSize)
     , mSm(sm)
     , pimpl(new mhaImpl(this))
     , mDqProbs(dqProbs)
+    , mUseInt8ScaleMax(useInt8ScaleMax)
 {
 }
 

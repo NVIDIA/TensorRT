@@ -20,6 +20,14 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+
+# [1.2.5] - 2022-10-08
+- Added beam search support for BART
+ 
+# [1.2.4] - 2022-09-30
+- Added notebooks for BART demo
+- Enabled flexible control on (a) percentile latency reports (b) engine building profile other than standard maximum input/output length config
+
 # [1.2.3] - 2022-06-30
 - Added KV cache support for BART demo
   

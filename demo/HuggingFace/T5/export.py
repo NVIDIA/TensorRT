@@ -24,6 +24,7 @@ from typing import List
 
 # tensorrt
 import tensorrt as trt
+from tensorrt import PreviewFeature
 
 # polygraphy
 from polygraphy.backend.trt import Profile
@@ -258,10 +259,10 @@ class T5DecoderConverter(ModelFileConverter):
                 **inputs.get_torch_dynamic_axis_encoding(),
                 **outputs.get_torch_dynamic_axis_encoding(),
             },
-            training=False,
+            training=torch.onnx.TrainingMode.EVAL,
             **opt_args
         )
-        
+
 
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for T5")
@@ -276,7 +277,7 @@ class T5EncoderConverter(ModelFileConverter):
         super().__init__(T5EncoderTorchFile, T5EncoderONNXFile, T5EncoderTRTEngine)
 
     def onnx_to_trt(
-        self, output_fpath: str, input_fpath: str, network_metadata: NetworkMetadata, profiles: List[Profile]
+        self, output_fpath: str, input_fpath: str, network_metadata: NetworkMetadata, profiles: List[Profile], preview_features: List[PreviewFeature]
     ):
         """
         Override onnx_to_trt function from base.
@@ -290,7 +291,7 @@ class T5EncoderConverter(ModelFileConverter):
             del network_metadata_cp_dct["precision"]
             network_metadata = NetworkMetadata(**network_metadata_cp_dct, precision=Precision(fp16=False))
 
-        return super().onnx_to_trt(output_fpath, input_fpath, network_metadata, profiles)
+        return super().onnx_to_trt(output_fpath, input_fpath, network_metadata, profiles, preview_features)
 
     def torch_to_onnx(
         self, output_fpath: str, model: Module, network_metadata: NetworkMetadata
@@ -330,10 +331,10 @@ class T5EncoderConverter(ModelFileConverter):
                 **inputs.get_torch_dynamic_axis_encoding(),
                 **outputs.get_torch_dynamic_axis_encoding(),
             },
-            training=False,
+            training=torch.onnx.TrainingMode.EVAL,
             **opt_args
         )
-        
+
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for T5")
             move_t5_cast_op(output_fpath, output_fpath)

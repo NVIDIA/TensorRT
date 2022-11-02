@@ -164,6 +164,7 @@ def nptype(trt_type):
         int8: np.int8,
         int32: np.int32,
         bool: np.bool,
+        uint8: np.uint8,
     }
     if trt_type in mapping:
         return mapping[trt_type]
@@ -185,6 +186,7 @@ def _itemsize(trt_type):
         int8: 1,
         int32: 4,
         bool: 1,
+        uint8: 1,
     }
     if trt_type in mapping:
         return mapping[trt_type]

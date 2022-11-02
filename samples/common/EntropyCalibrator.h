@@ -100,7 +100,7 @@ private:
 //!  CalibrationAlgoType is kENTROPY_CALIBRATION_2.
 //!
 template <typename TBatchStream>
-class Int8EntropyCalibrator2 : public IInt8EntropyCalibrator2
+class Int8EntropyCalibrator2 : public nvinfer1::IInt8EntropyCalibrator2
 {
 public:
     Int8EntropyCalibrator2(

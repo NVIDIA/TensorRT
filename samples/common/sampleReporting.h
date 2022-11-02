@@ -119,12 +119,12 @@ inline InferenceTime operator+=(InferenceTime& a, InferenceTime const& b)
 //!
 struct PerformanceResult
 {
-    float min{0};
-    float max{0};
-    float mean{0};
-    float median{0};
-    float percentile{0};
-    float coeffVar{0}; // coefficient of variation
+    float min{0.F};
+    float max{0.F};
+    float mean{0.F};
+    float median{0.F};
+    std::vector<float> percentiles;
+    float coeffVar{0.F}; // coefficient of variation
 };
 
 //!
@@ -140,14 +140,14 @@ void printTiming(std::vector<InferenceTime> const& timings, int32_t runsPerAvg, 
 //!
 //! \brief Print the performance summary of a trace
 //!
-void printEpilog(std::vector<InferenceTime> const& timings, float percentile, int32_t batchSize, std::ostream& osInfo,
-    std::ostream& osWarning, std::ostream& osVerbose);
+void printEpilog(std::vector<InferenceTime> const& timings, std::vector<float> const& percentiles, int32_t batchSize,
+    std::ostream& osInfo, std::ostream& osWarning, std::ostream& osVerbose);
 
 //!
 //! \brief Get the result of a specific performance metric from a trace
 //!
 PerformanceResult getPerformanceResult(std::vector<InferenceTime> const& timings,
-    std::function<float(InferenceTime const&)> metricGetter, float percentile);
+    std::function<float(InferenceTime const&)> metricGetter, std::vector<float> const& percentiles);
 
 //!
 //! \brief Print the explanations of the performance metrics printed in printEpilog() function.
@@ -163,7 +163,8 @@ void printPerformanceReport(std::vector<InferenceTrace> const& trace, ReportingO
 //!
 //! \brief Export a timing trace to JSON file
 //!
-void exportJSONTrace(std::vector<InferenceTrace> const& trace, std::string const& fileName);
+void exportJSONTrace(
+    std::vector<InferenceTrace> const& InferenceTime, std::string const& fileName, int32_t const nbWarmups);
 
 //!
 //! \brief Print input tensors to stream
@@ -173,13 +174,16 @@ void dumpInputs(nvinfer1::IExecutionContext const& context, Bindings const& bind
 //!
 //! \brief Print output tensors to stream
 //!
-void dumpOutputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
+template <typename ContextType>
+void dumpOutputs(ContextType const& context, Bindings const& bindings, std::ostream& os);
 
 //!
 //! \brief Export output tensors to JSON file
 //!
+template <typename ContextType>
 void exportJSONOutput(
-    nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
+    ContextType const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
+
 
 //!
 //! \struct LayerProfile

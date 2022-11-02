@@ -26,13 +26,7 @@ class Data(Tool):
     def __init__(self):
         super().__init__("data")
 
-    def add_parser_args(self, parser):
-        subparsers = parser.add_subparsers(title="Data Manipulation Subtools", dest="subtool")
-        subparsers.required = True
-
-        SUBTOOLS = [
+    def get_subtools_impl(self):
+        return "Data Manipulation Subtools", [
             ToInput(),
         ]
-
-        for subtool in SUBTOOLS:
-            subtool.setup_parser(subparsers)

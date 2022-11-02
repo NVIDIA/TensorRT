@@ -31,7 +31,7 @@ if __name__ == "__main__":
 from polygraphy.backend.trt import Profile
 
 # tensorrt
-import tensorrt as trt 
+import tensorrt as trt
 
 # torch
 import torch
@@ -41,6 +41,9 @@ from transformers import BartTokenizer, BartConfig
 from transformers.modeling_outputs import Seq2SeqLMOutput
 from transformers.configuration_utils import PretrainedConfig
 from transformers.generation_utils import GenerationMixin
+
+# tensorrt
+from tensorrt import PreviewFeature
 
 # TRT-HuggingFace
 from NNDF.interface import TRTInferenceCommand
@@ -56,12 +59,30 @@ from NNDF.networks import (
 )
 
 from NNDF.tensorrt_utils import TRTNativeRunner
+from NNDF.torch_utils import expand_inputs_for_beam_search
 from NNDF.general_utils import NNFolderWorkspace
 from BART.frameworks import BARTHuggingFace
 from BART.BARTModelConfig import BARTModelTRTConfig, BARTBenchmarkingArgs, BARTMetadata
-from BART.measurements import decoder_inference, encoder_inference, full_inference_greedy
+from BART.measurements import decoder_inference, encoder_inference, full_inference_greedy, full_inference_beam
 from BART.export import BARTDecoderONNXFile, BARTEncoderONNXFile
 from NNDF.models import TRTEngineFile
+from NNDF.logger import G_LOGGER
+
+# from HuggingFace transformers
+from transformers.generation_logits_process import (
+    NoRepeatNGramLogitsProcessor,
+    MinLengthLogitsProcessor,
+    ForcedBOSTokenLogitsProcessor,
+    ForcedEOSTokenLogitsProcessor,
+    LogitsProcessorList,
+)
+from transformers.generation_stopping_criteria import (
+    MaxLengthCriteria,
+    StoppingCriteriaList,
+)
+from transformers.generation_beam_search import (
+    BeamSearchScorer,
+)
 
 class TRTHFRunner(TRTNativeRunner, GenerationMixin):
     """Runner that adds interop support for HF and HF provided greedy_search functions."""
@@ -124,7 +145,7 @@ class BARTTRTEncoder(TRTHFRunner):
         batch_size: int = 1
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
-        
+
         self.max_sequence_length = BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[network_metadata.variant]
         self.encoder_hidden_size = BARTModelTRTConfig.ENCODER_HIDDEN_SIZE[network_metadata.variant]
 
@@ -190,10 +211,11 @@ class BARTTRTDecoder(TRTHFRunner):
         trt_engine_file: TRTEngineFile,
         network_metadata: NetworkMetadata,
         hf_config: PretrainedConfig,
-        batch_size: int = 1
+        batch_size: int = 1,
+        num_beams: int = 1,
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
-        
+
         self.max_sequence_length = BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[network_metadata.variant]
         self.encoder_hidden_size = BARTModelTRTConfig.ENCODER_HIDDEN_SIZE[network_metadata.variant]
         self.max_output_length = BARTModelTRTConfig.MAX_OUTPUT_LENGTH[network_metadata.variant]
@@ -201,19 +223,19 @@ class BARTTRTDecoder(TRTHFRunner):
         self.embedding_size_per_head = self.encoder_hidden_size // self.num_heads
 
         # We only have one profile to select so we can just grab the profile at the start of the class
-        self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size, sequence_length=1)
+        self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size * num_beams, sequence_length=1)
 
         self.input_types = {
             "input_ids": torch.int32,
             "encoder_hidden_states": torch.float32
         }
         self.input_shapes = {
-            "input_ids": (self.batch_size, self.max_sequence_length),
-            "encoder_hidden_states": (self.batch_size, self.max_sequence_length, self.encoder_hidden_size)
+            "input_ids": (self.batch_size * num_beams, self.max_output_length),
+            "encoder_hidden_states": (self.batch_size * num_beams, self.max_sequence_length, self.encoder_hidden_size)
         }
 
         self.output_shapes = {
-            "hidden_states": (self.batch_size, self.max_sequence_length, BARTModelTRTConfig.VOCAB_SIZE[network_metadata.variant])
+            "hidden_states": (self.batch_size * num_beams, self.max_output_length, BARTModelTRTConfig.VOCAB_SIZE[network_metadata.variant])
         }
         self.output_types = {
             "hidden_states": torch.float32
@@ -223,7 +245,7 @@ class BARTTRTDecoder(TRTHFRunner):
 
             # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
             for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[network_metadata.variant]) // 2):
-                
+
                 self.input_types[f"past_key_values.{i}.decoder.key"] = torch.float32
                 self.input_types[f"past_key_values.{i}.decoder.value"] = torch.float32
                 self.input_types[f"past_key_values.{i}.encoder.key"] = torch.float32
@@ -240,13 +262,13 @@ class BARTTRTDecoder(TRTHFRunner):
 
                 cross_attention_kv_shape = (self.batch_size, self.num_heads, self.max_sequence_length, self.embedding_size_per_head)
                 self.input_shapes[f"past_key_values.{i}.encoder.key"] = cross_attention_kv_shape
-                self.input_shapes[f"past_key_values.{i}.encoder.value"] = cross_attention_kv_shape 
+                self.input_shapes[f"past_key_values.{i}.encoder.value"] = cross_attention_kv_shape
 
                 self.output_shapes[f"present_key_values.{i}.decoder.key"] = self_attention_kv_shape
                 self.output_shapes[f"present_key_values.{i}.decoder.value"] = self_attention_kv_shape
                 self.output_shapes[f"present_key_values.{i}.encoder.key"] = cross_attention_kv_shape
-                self.output_shapes[f"present_key_values.{i}.encoder.value"] = cross_attention_kv_shape 
-            
+                self.output_shapes[f"present_key_values.{i}.encoder.value"] = cross_attention_kv_shape
+
             self.kv_cache_binding_offset = 2 # 0: input_ids, 1: encoder_hidden_states, kv cache input indices start from 2
 
         self.bindings = self._allocate_memory(self.input_shapes, self.input_types, self.output_shapes, self.output_types)
@@ -254,12 +276,12 @@ class BARTTRTDecoder(TRTHFRunner):
         # Optimization bit
         self.persist_encoder_hidden_states = False
         self.persist_cross_attention_kv_cache = False
-        
-        self.use_non_kv_engine = self.config.use_cache 
+
+        self.use_non_kv_engine = self.config.use_cache
         # trick: set flag based on kv cache mode. This maintains code simplicity in forward() where a common codeblock is shared between non kv-cache & kv-cache modes
         # non kv-cache mode: False. Then in forward(), trt_context and bindings are set to the default ones
         # kv-cache mode: True. By default 1st decoding step starts with non-kv engine's context and binding; then flag gets updated in prepare_inputs_for_generation()
-        
+
         self.return_device = "cuda"
 
         self.variant = network_metadata.variant # record variant name to later index the vocab_size in forward()
@@ -306,13 +328,13 @@ class BARTTRTDecoder(TRTHFRunner):
 
         self.bindings_non_kv = bindings
 
-        print("Non-KV cache engine setup is successful in KV cache mode.")    
+        G_LOGGER.info("Non-KV cache engine setup is successful in KV cache mode.")
 
     def set_encoder_hidden_states_for_inference_cycle(self, encoder_hidden_states):
         """Used to cache encoder hidden state runs across same encoder sessions"""
         self.persist_encoder_hidden_states = True
 
-        bs = self.batch_size
+        bs = encoder_hidden_states.shape[0] # in beam search mode, bs is batch_size * num_beams
         encoder_hidden_size = self.encoder_hidden_size
         encoder_length = TRTHFRunner.ENCODER_LENGTH
         if encoder_hidden_states.device == torch.device("cpu"):
@@ -344,7 +366,7 @@ class BARTTRTDecoder(TRTHFRunner):
 
         # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
         for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[self.variant]) // 2):
-            
+
             # Set the binding shape of cross-attention KV caches, which should be (bs, num_heads, encoder_length, embedding_size_per_head).
             cross_attention_kv_shape = (bs, num_heads, encoder_length, embedding_size_per_head)
             cross_attention_kv_flatten_length = bs * num_heads * encoder_length * embedding_size_per_head
@@ -373,7 +395,7 @@ class BARTTRTDecoder(TRTHFRunner):
 
     def forward(self, input_ids, encoder_hidden_states, *args, **kwargs):
         # Get the batch size.
-        bs = self.batch_size
+        bs = input_ids.shape[0] # in beam search mode, bs is batch_size * num_beams
 
         # Get the maximum sequence length.
         max_length = self.max_sequence_length
@@ -383,14 +405,14 @@ class BARTTRTDecoder(TRTHFRunner):
 
         # Actual sequence length of the input_ids and the output hidden_states.
         input_length = input_ids.shape[1]
-        
+
         # The sequence length of the encoder_hidden_states.
         encoder_length = TRTHFRunner.ENCODER_LENGTH
 
         # Encoder hidden size
         encoder_hidden_size = self.encoder_hidden_size
 
-        # KV cache flag 
+        # KV cache flag
         use_cache = kwargs.get("use_cache", False)
 
         # flag for switch between dual engines
@@ -433,23 +455,23 @@ class BARTTRTDecoder(TRTHFRunner):
         trt_context.set_binding_shape(1, (bs, encoder_length, encoder_hidden_size))
 
         if self.config.use_cache: # or use_cache
-            if non_kv_flag: 
+            if non_kv_flag:
                 # use non-kv engine, no additional inputs
                 past_decoder_length = 0
-            else: 
+            else:
                 # use kv engine
                 past_key_values = kwargs.get("past_key_values") # set by prepare_inputs_for_generation() during HF e2e pipeline; if only test decoder, need to set this field
-                past_decoder_length = past_key_values[0][0].size(2) 
+                past_decoder_length = past_key_values[0][0].size(2)
                 num_heads = self.num_heads
                 embedding_size_per_head = self.embedding_size_per_head
 
                 # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
                 for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[self.variant]) // 2):
-                    
+
                     # Set the binding shape of self-attention KV caches, which should be (bs, num_heads, past_decoder_length, embedding_size_per_head).
                     self_attention_kv_shape = (bs, num_heads, past_decoder_length, embedding_size_per_head)
                     self_attention_kv_flatten_length = bs * num_heads * past_decoder_length * embedding_size_per_head
-                    
+
                     if past_key_values is not None:
                         if past_key_values[0][0].device == torch.device("cpu"):
                             inputs[f"past_key_values.{i}.decoder.key"] = past_key_values[i][0].flatten().contiguous().cuda()
@@ -483,7 +505,7 @@ class BARTTRTDecoder(TRTHFRunner):
             folded = outputs["hidden_states"].cpu()[:bs * input_length * vocab_size].view(bs, input_length, vocab_size)
         else:
             folded = outputs["hidden_states"][:bs * input_length * vocab_size].view(bs, input_length, vocab_size)
-        
+
         present_key_values = None
         if self.config.use_cache:
             # 1st decoding step and steps after handle the outputs in the same way
@@ -496,34 +518,34 @@ class BARTTRTDecoder(TRTHFRunner):
             for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[self.variant]) // 2):
                 self_attention_kv_shape = (bs, num_heads, curr_decoder_length, embedding_size_per_head)
                 self_attention_kv_flatten_length = bs * num_heads * curr_decoder_length * embedding_size_per_head
-                
+
                 cross_attention_kv_shape = (bs, num_heads, encoder_length, embedding_size_per_head)
                 cross_attention_kv_flatten_length = bs * num_heads * encoder_length * embedding_size_per_head
-                
+
                 if is_cpu_mode:
                     self_attn_k = outputs[f"present_key_values.{i}.decoder.key"].cpu()[:self_attention_kv_flatten_length].view(*self_attention_kv_shape)
                     self_attn_v = outputs[f"present_key_values.{i}.decoder.value"].cpu()[:self_attention_kv_flatten_length].view(*self_attention_kv_shape)
-                    
+
                     cross_attn_k = outputs[f"present_key_values.{i}.encoder.key"].cpu()[:cross_attention_kv_flatten_length].view(*cross_attention_kv_shape)
                     cross_attn_v = outputs[f"present_key_values.{i}.encoder.value"].cpu()[:cross_attention_kv_flatten_length].view(*cross_attention_kv_shape)
                 else:
                     self_attn_k = outputs[f"present_key_values.{i}.decoder.key"][:self_attention_kv_flatten_length].view(*self_attention_kv_shape)
                     self_attn_v = outputs[f"present_key_values.{i}.decoder.value"][:self_attention_kv_flatten_length].view(*self_attention_kv_shape)
-                    
-                    cross_attn_k = None 
+
+                    cross_attn_k = None
                     cross_attn_v = None
                     if non_kv_flag:
                         cross_attn_k = outputs[f"present_key_values.{i}.encoder.key"][:cross_attention_kv_flatten_length].view(*cross_attention_kv_shape)
                         cross_attn_v = outputs[f"present_key_values.{i}.encoder.value"][:cross_attention_kv_flatten_length].view(*cross_attention_kv_shape)
 
-                present_key_values += ((self_attn_k, self_attn_v, cross_attn_k, cross_attn_v), ) # make multi-dim tuple   
+                present_key_values += ((self_attn_k, self_attn_v, cross_attn_k, cross_attn_v), ) # make multi-dim tuple
 
         # Transfer predictions back from GPU to do greedy search
         return Seq2SeqLMOutput(logits=folded.to(self.return_device), past_key_values=present_key_values,)
 
     def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
         # in HuggingFace generation_utils.py, this function will be called at each decoding step, before running the decoder's forward(). So we can use it to set the flag indicating if this is the 1st decoding step (use non-kv engine) or steps after (use kv engine)
-        
+
         # cut decoder_input_ids if past is used (with past cache, only need to process the current length 1 token)
         # also, if past exists, it means we're at > 1 decoding steps thus set non-kv engine flag to False
         if past is not None:
@@ -537,8 +559,8 @@ class BARTTRTDecoder(TRTHFRunner):
 
         if self.config.use_cache:
             ret["use_cache"] = use_cache
-            ret["past_key_values"] = past 
-        
+            ret["past_key_values"] = past
+
         return ret
 
 
@@ -571,6 +593,78 @@ class BARTTRT(TRTInferenceCommand):
 
         self.frameworks_cmd.cleanup(workspace, keep_onnx_model, keep_torch_model)
 
+    def setup(self, encoder, decoder):
+        self.BART_trt_encoder = encoder
+        self.BART_trt_decoder = decoder
+
+    def generate(
+        self,
+        input_ids,
+        min_length: int = None,
+        max_length: int = None,
+        num_beams: int = 1,
+        use_cache: bool = False,
+        early_stopping: bool = True,
+    ):
+        batch_size = input_ids.shape[0]
+
+        if max_length is None:
+            max_length = BARTModelTRTConfig.MAX_OUTPUT_LENGTH[self.metadata.variant]
+        
+        if min_length is None:
+            min_length = BARTModelTRTConfig.MIN_OUTPUT_LENGTH[self.metadata.variant]
+
+        stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length)])
+        logits_processor = LogitsProcessorList([
+            NoRepeatNGramLogitsProcessor(BARTModelTRTConfig.NO_REPEAT_NGRAM_SIZE), 
+            MinLengthLogitsProcessor(min_length, BARTModelTRTConfig.EOS_TOKEN_ID),
+            ForcedBOSTokenLogitsProcessor(BARTModelTRTConfig.BOS_TOKEN_ID),
+            ForcedEOSTokenLogitsProcessor(max_length, BARTModelTRTConfig.EOS_TOKEN_ID)
+        ]) 
+
+        decoder_input_ids = torch.full(
+            (batch_size, 1), BARTModelTRTConfig.EOS_TOKEN_ID, dtype=torch.int32
+        ).to("cuda")
+        
+        if num_beams == 1:
+            G_LOGGER.info("Running full inference with greedy decoding...")
+            encoder_last_hidden_state = self.BART_trt_encoder(input_ids=input_ids)
+            self.BART_trt_decoder.set_encoder_hidden_states_for_inference_cycle(encoder_last_hidden_state)
+            decoder_output = self.BART_trt_decoder.greedy_search(
+                input_ids=decoder_input_ids,
+                encoder_hidden_states=encoder_last_hidden_state,
+                stopping_criteria=stopping_criteria,
+                logits_processor=logits_processor,
+                use_cache=use_cache
+            )
+        else:
+            G_LOGGER.info(f"Running full inference with beam search (num_beams = {num_beams}) decoding...")
+
+            beam_scorer = BeamSearchScorer(
+                batch_size=batch_size,
+                num_beams=num_beams,
+                device="cuda",
+                do_early_stopping=early_stopping,
+            )
+
+            decoder_input_ids = expand_inputs_for_beam_search(decoder_input_ids, expand_size=num_beams)
+
+            encoder_last_hidden_state = self.BART_trt_encoder(input_ids=input_ids)
+            
+            encoder_last_hidden_state = expand_inputs_for_beam_search(encoder_last_hidden_state, expand_size=num_beams)
+            
+            self.BART_trt_decoder.set_encoder_hidden_states_for_inference_cycle(encoder_last_hidden_state)
+            decoder_output = self.BART_trt_decoder.beam_search(
+                input_ids=decoder_input_ids,
+                beam_scorer=beam_scorer,
+                encoder_hidden_states=encoder_last_hidden_state,
+                stopping_criteria=stopping_criteria,
+                logits_processor=logits_processor,
+                use_cache=use_cache
+            )
+
+        return decoder_output
+
     def execute_inference(
         self,
         metadata: NetworkMetadata,
@@ -578,59 +672,80 @@ class BARTTRT(TRTInferenceCommand):
         inference_input: str,
         timing_profile: TimingProfile,
         batch_size: int = 1,
+        num_beams: int = 1,
         benchmarking_mode: bool = False,
         benchmarking_args: BARTBenchmarkingArgs = None,
     ) -> Union[NetworkResult, BenchmarkingResult]:
 
         tokenizer = BartTokenizer.from_pretrained(metadata.variant)
-        
+
         # Prepare the input tokens and find output sequence length.
         if not benchmarking_mode:
             output_seq_len = BARTModelTRTConfig.MAX_OUTPUT_LENGTH[metadata.variant] # note: T5 uses XXModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant] which is the max input length. Here should rather be the max output length for generation
             input_ids = tokenizer([inference_input] * batch_size, padding=True, return_tensors="pt").input_ids
         else:
-            max_seq_len = BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
-            input_seq_len = benchmarking_args.input_seq_len if benchmarking_args.input_seq_len > 0 else max_seq_len
-            output_seq_len = benchmarking_args.output_seq_len if benchmarking_args.output_seq_len > 0 else max_seq_len
+            max_input_len = BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+            max_output_len = BARTModelTRTConfig.MAX_OUTPUT_LENGTH[metadata.variant] 
+
+            input_seq_len = benchmarking_args.input_seq_len if benchmarking_args.input_seq_len > 0 else max_input_len
+            output_seq_len = benchmarking_args.output_seq_len if benchmarking_args.output_seq_len > 0 else max_output_len
+            input_profile_max_len = benchmarking_args.input_profile_max_len if benchmarking_args.input_profile_max_len is not None else max_input_len
+            output_profile_max_len = benchmarking_args.output_profile_max_len if benchmarking_args.output_profile_max_len is not None else max_output_len
+            
             input_ids = torch.randint(0, BARTModelTRTConfig.VOCAB_SIZE[metadata.variant], (batch_size, input_seq_len))
-                
-        encoder_last_hidden_state, encoder_e2e_median_time = encoder_inference(
+
+        encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             self.BART_trt_encoder, input_ids, timing_profile
         )
+        _, decoder_e2e_time = decoder_inference(
+            self.BART_trt_decoder,
+            expand_inputs_for_beam_search(input_ids, num_beams) if num_beams > 1 else input_ids,
+            expand_inputs_for_beam_search(encoder_last_hidden_state, num_beams) if num_beams > 1 else encoder_last_hidden_state,
+            timing_profile,
+            use_cache=metadata.other.kv_cache,
+        )
 
-        _, decoder_e2e_median_time = decoder_inference(
-            self.BART_trt_decoder,
-            input_ids,
-            encoder_last_hidden_state,
-            timing_profile,
-            use_cache=metadata.other.kv_cache,
-        )
-        
-        decoder_output_greedy, full_e2e_median_runtime = full_inference_greedy(
-            self.BART_trt_encoder,
-            self.BART_trt_decoder,
-            input_ids,
-            tokenizer,
-            timing_profile,
-            max_length=output_seq_len,
-            batch_size=batch_size,
-            use_cache=metadata.other.kv_cache,
-            early_stopping=(not benchmarking_mode),
-        )
-  
+        if num_beams == 1:
+            decoder_output, full_e2e_runtime = full_inference_greedy(
+                self.BART_trt_encoder,
+                self.BART_trt_decoder,
+                input_ids,
+                tokenizer,
+                timing_profile,
+                max_length=output_seq_len,
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant],
+                batch_size=batch_size,
+                use_cache=metadata.other.kv_cache,
+                early_stopping=(not benchmarking_mode),
+            )
+        else:
+            decoder_output, full_e2e_runtime = full_inference_beam(
+                self.BART_trt_encoder,
+                self.BART_trt_decoder,
+                input_ids,
+                tokenizer,
+                timing_profile,
+                num_beams=num_beams,
+                max_length=output_seq_len,
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant],
+                batch_size=batch_size,
+                use_cache=metadata.other.kv_cache,
+                early_stopping=(not benchmarking_mode),
+            )
+
         # Prepare runtime results.
-        median_runtime=[
+        runtime=[
             NetworkRuntime(
                 name=BARTModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME,
-                runtime=decoder_e2e_median_time,
+                runtime=decoder_e2e_time,
             ),
             NetworkRuntime(
                 name=BARTModelTRTConfig.NETWORK_ENCODER_SEGMENT_NAME,
-                runtime=encoder_e2e_median_time,
+                runtime=encoder_e2e_time,
             ),
             NetworkRuntime(
                 name=BARTModelTRTConfig.NETWORK_FULL_NAME,
-                runtime=full_e2e_median_runtime,
+                runtime=full_e2e_runtime,
             ),
         ]
         models=NetworkModels(
@@ -650,11 +765,11 @@ class BARTTRT(TRTInferenceCommand):
 
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
-            return BenchmarkingResult(median_runtime=median_runtime, models=models)
+            return BenchmarkingResult(median_runtime=runtime, models=models)
 
         # Remove the padding and end tokens.
         semantic_outputs = tokenizer.decode(
-            decoder_output_greedy[-1, :], skip_special_tokens=True
+            decoder_output[-1, :], skip_special_tokens=True
         )
 
         if isinstance(semantic_outputs, list):
@@ -664,7 +779,7 @@ class BARTTRT(TRTInferenceCommand):
             input=inference_input,
             output_tensor=encoder_last_hidden_state,
             semantic_output=semantic_outputs,
-            median_runtime=median_runtime,
+            median_runtime=runtime,
             models=models,
         )
 
@@ -688,6 +803,8 @@ class BARTTRT(TRTInferenceCommand):
         metadata: NetworkMetadata,
         hash_onnx_fpath: Dict[str, NetworkModel],
         batch_size: int,
+        num_beams: int,
+        preview_dynamic_shapes: bool,
         benchmarking_args: BARTBenchmarkingArgs = None,
     ) -> None:
 
@@ -706,21 +823,34 @@ class BARTTRT(TRTInferenceCommand):
         ].fpath
 
         # Generate optimization profiles.
+        # non-benchmarking mode: opt profile length is by default half of the max profile
+        # benchmarking mode: user can specify opt and max profile by flags. If no additional benchmarking flags are provided, it will just use the non-benchmarking mode defaults
         max_sequence_length = BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+        max_output_length = BARTModelTRTConfig.MAX_OUTPUT_LENGTH[metadata.variant]
+        opt_input_seq_len = max_sequence_length // 2
+        opt_output_seq_len = max_output_length // 2
+        
+        # benchmarking flags
+        if benchmarking_args is not None:
+            if benchmarking_args.input_profile_max_len is not None:
+                max_sequence_length = benchmarking_args.input_profile_max_len
+            if benchmarking_args.output_profile_max_len is not None:
+                max_output_length = benchmarking_args.output_profile_max_len
+            if benchmarking_args.input_seq_len is not None:
+                opt_input_seq_len = benchmarking_args.input_seq_len
+            else:
+                opt_input_seq_len = max_sequence_length // 2
+            if benchmarking_args.output_seq_len is not None:
+                opt_output_seq_len = benchmarking_args.output_seq_len
+            else:
+                opt_output_seq_len = max_output_length // 2
+            
+            assert opt_input_seq_len <= max_sequence_length, "Input profile error: Optional dimension must not exceed Maximum dimension!"
+            assert max_sequence_length <= BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant], "Input profile error: Maximum dimension must not exceed max in model config!"
+            assert opt_output_seq_len <= max_output_length, "Output profile error: Optional dimension must not exceed Maximum dimension!"
+            assert max_output_length <= BARTModelTRTConfig.MAX_OUTPUT_LENGTH[metadata.variant], "Output profile error: Maximum dimension must not exceed max in model config!"
 
         encoder_hidden_size = BARTModelTRTConfig.ENCODER_HIDDEN_SIZE[metadata.variant]
-
-        max_output_length = BARTModelTRTConfig.MAX_OUTPUT_LENGTH[metadata.variant]
-
-        if benchmarking_args is None or benchmarking_args.input_seq_len is None:
-            opt_input_seq_len = max_sequence_length // 2
-        else:
-            opt_input_seq_len = benchmarking_args.input_seq_len
-
-        if benchmarking_args is None or benchmarking_args.output_seq_len is None:
-            opt_output_seq_len = max_output_length // 2
-        else:
-            opt_output_seq_len = benchmarking_args.output_seq_len
 
         encoder_profiles = [
             Profile().add(
@@ -731,18 +861,20 @@ class BARTTRT(TRTInferenceCommand):
             )
         ]
 
+        # for beam search, decoder engine's inputs are expanded `num_beams` times
+        # optimization profiles should be changed accordingly, but onnx models can be shared across greedy/beam because the first dim (batch size) is already a dynamic value, so no change needed in export.py
         dec_profiles = Profile()
         dec_profiles = dec_profiles.add(
             "input_ids",
-            min=(batch_size, 1),
-            opt=(batch_size, opt_output_seq_len),
-            max=(batch_size, max_sequence_length),
+            min=(batch_size * num_beams, 1),
+            opt=(batch_size * num_beams, opt_output_seq_len),
+            max=(batch_size * num_beams, max_output_length),
         )
         dec_profiles = dec_profiles.add(
             "encoder_hidden_states",
-            min=(batch_size, 1, encoder_hidden_size),
-            opt=(batch_size, opt_input_seq_len, encoder_hidden_size),
-            max=(batch_size, max_sequence_length, encoder_hidden_size),
+            min=(batch_size * num_beams, 1, encoder_hidden_size),
+            opt=(batch_size * num_beams, opt_input_seq_len, encoder_hidden_size),
+            max=(batch_size * num_beams, max_sequence_length, encoder_hidden_size),
         )
         
         if metadata.other.kv_cache:
@@ -786,20 +918,33 @@ class BARTTRT(TRTInferenceCommand):
         # Convert ONNX models to TRT engines.
         if benchmarking_args is None:
             engine_tag = "bs{}".format(batch_size)
-        else:
+        elif benchmarking_args.input_profile_max_len is None or benchmarking_args.output_profile_max_len is None:
             engine_tag = "bs{}-inseq{}-outseq{}".format(batch_size, benchmarking_args.input_seq_len, benchmarking_args.output_seq_len)
+        else:
+            engine_tag = "bs{}-inmax{}-outmax{}".format(batch_size, benchmarking_args.input_profile_max_len, benchmarking_args.output_profile_max_len)
+
+        if num_beams > 1:
+            engine_tag += "-beam{}".format(num_beams)
+
+        preview_features = []
+        if preview_dynamic_shapes:
+            preview_features = [PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
+            engine_tag += "-previewFasterDynamicShapes"
 
         self.BART_trt_encoder_engine = BARTEncoderONNXFile(
             encoder_onnx_fpath, metadata
         ).as_trt_engine(
-            encoder_onnx_fpath + "-{}.engine".format(engine_tag),
+            encoder_onnx_fpath + "-{}.engine".format(engine_tag).replace(f"-beam{num_beams}", ""), # encoder engine name not affected by beam search
             profiles=encoder_profiles,
+            preview_features=preview_features
         )
+
         self.BART_trt_decoder_engine = BARTDecoderONNXFile(
             decoder_onnx_fpath, metadata
         ).as_trt_engine(
             decoder_onnx_fpath + "-{}.engine".format(engine_tag),
             profiles=decoder_profiles,
+            preview_features=preview_features
         )
 
         # Create BARTTRTEncoder and BARTTRTDecoder instances.
@@ -811,18 +956,19 @@ class BARTTRT(TRTInferenceCommand):
             self.BART_trt_encoder_engine, metadata, tfm_config, batch_size=batch_size
         )
         self.BART_trt_decoder = BARTTRTDecoder(
-            self.BART_trt_decoder_engine, metadata, tfm_config, batch_size=batch_size
+            self.BART_trt_decoder_engine, metadata, tfm_config, batch_size=batch_size, num_beams=num_beams
         )
 
         if metadata.other.kv_cache:
             # dual-engine approach: still need to setup non-kv engine in kv mode
-            # note: workspace cleanup is not handled for these extra non-kv files       
+            # note: workspace cleanup is not handled for these extra non-kv files
             decoder_onnx_fpath_non_kv = os.path.splitext(decoder_onnx_fpath)[0] + '-non-kv' + os.path.splitext(decoder_onnx_fpath)[1]
             self.BART_trt_decoder_engine_non_kv = BARTDecoderONNXFile(
                 decoder_onnx_fpath_non_kv, metadata
             ).as_trt_engine(
                 decoder_onnx_fpath_non_kv + "-{}.engine".format(engine_tag),
                 profiles=decoder_profiles_non_kv,
+                preview_features=preview_features
             )
 
             # switch between BARTTRTDecoder is impossible (becase HF decoding step is bound to one decoder). Therefore, we need to add the non-kv engines inside the same decoder --> decoder contains two TRT engines
@@ -841,6 +987,7 @@ class BARTTRT(TRTInferenceCommand):
         batch_size: int = 1,
         args: object = None,
         benchmarking_mode: bool = False,
+        preview_dynamic_shapes: bool = False
     ) -> Union[List[NetworkResult], BenchmarkingResult] :
 
         self.working_directory = working_directory
@@ -858,18 +1005,21 @@ class BARTTRT(TRTInferenceCommand):
         results = []
         try:
             if not benchmarking_mode:
-                self._setup_engines(metadata, hash_onnx_fpath, batch_size)
+                self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes)
                 for ninput in network_input:
                     results.append(
                         self.execute_inference(
-                            metadata, hash_onnx_fpath, ninput, timing_profile, batch_size
+                            metadata, hash_onnx_fpath, ninput, timing_profile, batch_size, args.num_beams
                         )
                     )
             else:
-                benchmarking_args = BARTBenchmarkingArgs(args.input_seq_len, args.output_seq_len)
-                self._setup_engines(metadata, hash_onnx_fpath, batch_size, benchmarking_args)
+                if args.input_profile_max_len is not None and args.output_profile_max_len is not None:
+                    benchmarking_args = BARTBenchmarkingArgs(args.input_seq_len, args.output_seq_len, args.input_profile_max_len, args.output_profile_max_len)
+                else:
+                    benchmarking_args = BARTBenchmarkingArgs(args.input_seq_len, args.output_seq_len, None, None)
+                self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes, benchmarking_args)
                 results = self.execute_inference(
-                    metadata, hash_onnx_fpath, None, timing_profile, batch_size, True, benchmarking_args
+                    metadata, hash_onnx_fpath, None, timing_profile, batch_size, args.num_beams, True, benchmarking_args
                 )
 
         finally:

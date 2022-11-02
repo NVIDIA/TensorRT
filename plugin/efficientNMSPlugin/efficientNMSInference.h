@@ -24,8 +24,8 @@
 
 size_t EfficientNMSWorkspaceSize(int batchSize, int numScoreElements, int numClasses, nvinfer1::DataType datatype);
 
-pluginStatus_t EfficientNMSInference(EfficientNMSParameters param, const void* boxesInput, const void* scoresInput,
-    const void* anchorsInput, void* numDetectionsOutput, void* nmsBoxesOutput, void* nmsScoresOutput,
-    void* nmsClassesOutput, void* nmsIndicesOutput, void* workspace, cudaStream_t stream);
+pluginStatus_t EfficientNMSInference(nvinfer1::plugin::EfficientNMSParameters param, const void* boxesInput,
+    const void* scoresInput, const void* anchorsInput, void* numDetectionsOutput, void* nmsBoxesOutput,
+    void* nmsScoresOutput, void* nmsClassesOutput, void* nmsIndicesOutput, void* workspace, cudaStream_t stream);
 
 #endif

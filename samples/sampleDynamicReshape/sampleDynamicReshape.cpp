@@ -35,7 +35,7 @@
 #include "NvInfer.h"
 #include <cuda_runtime_api.h>
 #include <random>
-
+using namespace nvinfer1;
 using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_dynamic_reshape";

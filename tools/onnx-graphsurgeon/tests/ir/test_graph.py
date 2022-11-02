@@ -117,6 +117,27 @@ def tile(self, inp, repeats):
     return out
 
 
+@gs.Graph.register()
+def dequantize_linear(self, inp, scale, zero_point, axis=1):
+    out = self.layer(
+        op="DequantizeLinear", inputs=[inp, scale, zero_point], outputs=["dequantize_linear_out"], attrs={"axis": axis}
+    )[0]
+    out.dtype = np.float32
+    return out
+
+
+@gs.Graph.register()
+def quantize_linear(self, inp, out_scale, out_zero_point, axis=1):
+    out = self.layer(
+        op="QuantizeLinear",
+        inputs=[inp, out_scale, out_zero_point],
+        outputs=["quantize_linear_out"],
+        attrs={"axis": axis},
+    )[0]
+    out.dtype = np.int8
+    return out
+
+
 # Generates a graph where an outer node has no outputs except
 # within the subgraph. ONNX-GS should recognize that the node
 # is being used, and should not remove it during cleanup().
@@ -797,7 +818,7 @@ def simple_foldable():
     graph = Graph()
     inp = Variable("input", shape=(1, 3), dtype=np.float32)
     c = graph.add(weights, weights, name="c")
-    out = graph.add(inp, c)
+    out = graph.add(inp, c, name="out")
 
     graph.inputs = [inp]
     graph.outputs = [out]
@@ -1366,6 +1387,72 @@ class TestFoldConstants(object):
         # When a tensor is folded, it is disconnected from its producer nodes
         assert len(graph.nodes[0].outputs) == (0 if layer0_should_fold else 1)
         assert len(graph.nodes[1].outputs) == (0 if layer1_should_fold else 1)
+
+    @pytest.mark.parametrize("op", ["Q", "DQ"])
+    @pytest.mark.parametrize("add_intermediate_layer", [True, False])
+    def test_no_fold_qdq(self, op, add_intermediate_layer):
+        dtype = np.float32 if op == "Q" else np.int8
+        inp = gs.Constant("input", np.ones(shape=(1, 3, 5, 5), dtype=dtype))
+        graph = Graph(inputs=[inp], opset=13)
+
+        if add_intermediate_layer:
+            inp = graph.identity(inp)
+
+        qdq_func = graph.quantize_linear if op == "Q" else graph.dequantize_linear
+        graph.outputs = [qdq_func(inp, 1.2, np.array(0, dtype=np.int8))]  # Arbitrary scale and zero-point
+
+        graph.fold_constants().cleanup()
+        assert len(graph.nodes) == 1
+        assert graph.nodes[0].op == "QuantizeLinear" if op == "Q" else "DequantizeLinear"
+
+    @pytest.mark.parametrize(
+        "should_exclude_node_func,expected_node_names",
+        [
+            (
+                lambda node: True,
+                [
+                    "onnx_graphsurgeon_node_1",
+                    "onnx_graphsurgeon_node_3",
+                    "onnx_graphsurgeon_node_5",
+                    "onnx_graphsurgeon_node_7",
+                ],
+            ),
+            (
+                lambda node: node.name == "onnx_graphsurgeon_node_5",
+                ["onnx_graphsurgeon_node_5", "onnx_graphsurgeon_node_7"],
+            ),
+            (
+                lambda node: node.op == "Add",
+                [
+                    "onnx_graphsurgeon_node_1",
+                    "onnx_graphsurgeon_node_3",
+                    "onnx_graphsurgeon_node_5",
+                    "onnx_graphsurgeon_node_7",
+                ],
+            ),
+            (
+                lambda node: node.op == "Relu",
+                [
+                    "onnx_graphsurgeon_node_3",
+                    "onnx_graphsurgeon_node_5",
+                    "onnx_graphsurgeon_node_7",
+                ],
+            ),
+        ],
+    )
+    def test_custom_should_exclude_node(self, should_exclude_node_func, expected_node_names):
+        inp = gs.Constant("input", np.ones(shape=(1, 3, 5, 5), dtype=np.float32))
+        graph = Graph(inputs=[inp])
+
+        add_0 = graph.add(inp, inp)  # onnx_graphsurgeon_node_1 -> add_out_0
+        relu_0 = graph.relu(add_0)  # onnx_graphsurgeon_node_3 -> relu_out_2
+        add_1 = graph.add(relu_0, relu_0)  # onnx_graphsurgeon_node_5 -> add_out_4
+        relu_1 = graph.relu(add_1)  # onnx_graphsurgeon_node_7 -> relu_out_6
+
+        graph.outputs = [relu_1]
+
+        graph.fold_constants(should_exclude_node=should_exclude_node_func).cleanup()
+        assert [node.name for node in graph.nodes] == expected_node_names
 
 
 class TestIO(object):

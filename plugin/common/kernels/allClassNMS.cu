@@ -18,11 +18,10 @@
 #include "common/kernel.h"
 #include "cuda_fp16.h"
 #include <array>
+using namespace nvinfer1;
 
 template <typename T_BBOX>
-__device__ float bboxSize(
-    const Bbox<T_BBOX>& bbox,
-    const bool normalized)
+__device__ float bboxSize(const Bbox<T_BBOX>& bbox, const bool normalized)
 {
     if (float(bbox.xmax) < float(bbox.xmin) || float(bbox.ymax) < float(bbox.ymin))
     {
@@ -350,6 +349,7 @@ struct nmsLaunchConfigSSD
     nmsLaunchConfigSSD(DataType t_score, DataType t_bbox)
         : t_score(t_score)
         , t_bbox(t_bbox)
+        , function(nullptr)
     {
     }
     nmsLaunchConfigSSD(DataType t_score, DataType t_bbox, nmsFunc function)

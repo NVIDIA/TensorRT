@@ -13,4 +13,6 @@ versions:
       dense_shape:
         min: "0, 0"
         max: "=pinf, =pinf"
+    attributes_required:
+      - dense_shape
 ...

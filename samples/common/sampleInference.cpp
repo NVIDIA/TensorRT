@@ -43,7 +43,7 @@
 #include "sampleOptions.h"
 #include "sampleReporting.h"
 #include "sampleUtils.h"
-
+using namespace nvinfer1;
 namespace sample
 {
 
@@ -88,27 +88,25 @@ private:
     int32_t batch;
     int32_t endBindingIndex;
 
-    void fillOneBinding(int32_t bindingIndex, int64_t vol)
+    void fillOneBinding(TensorInfo const& tensorInfo)
     {
-        auto const dims = getDims(bindingIndex);
-        auto const name = engine->getBindingName(bindingIndex);
-        auto const isInput = engine->bindingIsInput(bindingIndex);
-        auto const dataType = engine->getBindingDataType(bindingIndex);
-        auto const *bindingInOutStr = isInput ? "input" : "output";
+        auto const name = tensorInfo.name;
+        auto const* bindingInOutStr = tensorInfo.isInput ? "input" : "output";
         for (auto& binding : bindings)
         {
             auto const input = inputs.find(name);
-            if (isInput && input != inputs.end())
+            if (tensorInfo.isInput && input != inputs.end())
             {
                 sample::gLogInfo << "Using values loaded from " << input->second << " for input " << name << std::endl;
-                binding->addBinding(bindingIndex, name, isInput, vol, dataType, input->second);
+                binding->addBinding(tensorInfo, input->second);
             }
             else
             {
                 sample::gLogInfo << "Using random values for " << bindingInOutStr << " " << name << std::endl;
-                binding->addBinding(bindingIndex, name, isInput, vol, dataType);
+                binding->addBinding(tensorInfo);
             }
-            sample::gLogInfo << "Created " << bindingInOutStr <<" binding for " << name << " with dimensions " << dims << std::endl;
+            sample::gLogInfo << "Created " << bindingInOutStr << " binding for " << name << " with dimensions "
+                             << tensorInfo.dims << std::endl;
         }
     }
 
@@ -119,23 +117,22 @@ private:
             sample::gLogError << "Invalid tensor names found in --loadInputs flag." << std::endl;
             return false;
         }
-
         for (int32_t b = 0; b < endBindingIndex; b++)
         {
-            auto const dims = getDims(b);
-            auto const comps = engine->getBindingComponentsPerElement(b);
-            auto const strides = context->getStrides(b);
-            int32_t const vectorDimIndex = engine->getBindingVectorizedDim(b);
-            auto const vol = volume(dims, strides, vectorDimIndex, comps, batch);
-            fillOneBinding(b, vol);
+            TensorInfo tensorInfo;
+            tensorInfo.bindingIndex = b;
+            getTensorInfo(tensorInfo);
+            tensorInfo.updateVolume(batch);
+            fillOneBinding(tensorInfo);
         }
         return true;
     }
 
-    Dims getDims(int32_t bindingIndex);
+    void getTensorInfo(TensorInfo& tensorInfo);
 
 public:
-    FillBindingClosure(EngineType const* _engine, ContextType const* _context, InputsMap const& _inputs, BindingsVector& _bindings, int32_t _batch, int32_t _endBindingIndex)
+    FillBindingClosure(EngineType const* _engine, ContextType const* _context, InputsMap const& _inputs,
+        BindingsVector& _bindings, int32_t _batch, int32_t _endBindingIndex)
         : engine(_engine)
         , context(_context)
         , inputs(_inputs)
@@ -152,18 +149,52 @@ public:
 };
 
 template <>
-Dims FillBindingClosure<nvinfer1::ICudaEngine, nvinfer1::IExecutionContext>::getDims(int32_t bindingIndex)
+void FillBindingClosure<nvinfer1::ICudaEngine, nvinfer1::IExecutionContext>::getTensorInfo(TensorInfo& tensorInfo)
 {
-    return context->getBindingDimensions(bindingIndex);
+    auto const b = tensorInfo.bindingIndex;
+    auto const name = engine->getBindingName(b);
+    tensorInfo.name = name;
+    if (engine->hasImplicitBatchDimension())
+    {
+        tensorInfo.dims = context->getBindingDimensions(b);
+        tensorInfo.comps = engine->getBindingComponentsPerElement(b);
+        tensorInfo.strides = context->getStrides(b);
+        tensorInfo.vectorDimIndex = engine->getBindingVectorizedDim(b);
+        tensorInfo.isInput = engine->bindingIsInput(b);
+        tensorInfo.dataType = engine->getBindingDataType(b);
+    }
+    else
+    {
+        // Use enqueueV3.
+        tensorInfo.dims = context->getTensorShape(name);
+        tensorInfo.isDynamic = std::any_of(
+            tensorInfo.dims.d, tensorInfo.dims.d + tensorInfo.dims.nbDims, [](int32_t dim) { return dim == -1; });
+        tensorInfo.comps = engine->getTensorComponentsPerElement(name);
+        tensorInfo.strides = context->getTensorStrides(name);
+        tensorInfo.vectorDimIndex = engine->getTensorVectorizedDim(name);
+        tensorInfo.isInput = engine->getTensorIOMode(name) == TensorIOMode::kINPUT;
+        tensorInfo.dataType = engine->getTensorDataType(name);
+    }
 }
 
 template <>
-Dims FillBindingClosure<nvinfer1::safe::ICudaEngine, nvinfer1::safe::IExecutionContext>::getDims(int32_t bindingIndex)
+void FillBindingClosure<nvinfer1::safe::ICudaEngine, nvinfer1::safe::IExecutionContext>::getTensorInfo(
+    TensorInfo& tensorInfo)
 {
-    return engine->getBindingDimensions(bindingIndex);
+    // Use enqueueV3 for safe engine/context
+    auto const b = tensorInfo.bindingIndex;
+    auto const name = engine->getIOTensorName(b);
+    tensorInfo.name = name;
+    tensorInfo.dims = engine->getTensorShape(name);
+    tensorInfo.isDynamic = false;
+    tensorInfo.comps = engine->getTensorComponentsPerElement(name);
+    tensorInfo.strides = context->getTensorStrides(name);
+    tensorInfo.vectorDimIndex = engine->getTensorVectorizedDim(name);
+    tensorInfo.isInput = engine->getTensorIOMode(name) == TensorIOMode::kINPUT;
+    tensorInfo.dataType = engine->getTensorDataType(name);
 }
 
-bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inference)
+bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
     int32_t device{};
     cudaCheck(cudaGetDevice(&device));
@@ -186,7 +217,13 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
 
         for (int32_t s = 0; s < inference.streams; ++s)
         {
-            iEnv.safeContexts.emplace_back(safeEngine->createExecutionContext());
+            auto ec = safeEngine->createExecutionContext();
+            if (ec == nullptr)
+            {
+                sample::gLogError << "Unable to create execution context for stream " << s << "." << std::endl;
+                return false;
+            }
+            iEnv.safeContexts.emplace_back(ec);
             iEnv.bindings.emplace_back(new Bindings(useManagedMemory));
         }
         int32_t const nbBindings = safeEngine->getNbBindings();
@@ -200,6 +237,15 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     auto* engine = iEnv.engine.get();
     SMP_RETVAL_IF_FALSE(engine != nullptr, "Got invalid engine!", false, sample::gLogError);
 
+    bool const hasDLA = system.DLACore >= 0;
+    if (engine->hasImplicitBatchDimension() && hasDLA && inference.batch != engine->getMaxBatchSize())
+    {
+        sample::gLogError << "When using DLA with an implicit batch engine, the inference batch size must be the same "
+                             "as the engine's maximum batch size. Please specify the batch size by adding: '--batch="
+                          << engine->getMaxBatchSize() << "' to your command." << std::endl;
+        return false;
+    }
+
     // Release serialized blob to save memory space.
     iEnv.engine.releaseBlob();
 
@@ -211,6 +257,13 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
             sample::gLogError << "Unable to create execution context for stream " << s << "." << std::endl;
             return false;
         }
+        ec->setNvtxVerbosity(inference.nvtxVerbosity);
+
+        int32_t const persistentCacheLimit
+            = samplesCommon::getMaxPersistentCacheSize() * inference.persistentCacheRatio;
+        sample::gLogInfo << "Setting persistentCacheLimit to " << persistentCacheLimit << " bytes." << std::endl;
+        ec->setPersistentCacheLimit(persistentCacheLimit);
+
         iEnv.contexts.emplace_back(ec);
         iEnv.bindings.emplace_back(new Bindings(useManagedMemory));
     }
@@ -222,9 +275,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     }
 
     int32_t const nbOptProfiles = engine->getNbOptimizationProfiles();
-    int32_t const nbBindings = engine->getNbBindings();
-    int32_t const bindingsInProfile = nbOptProfiles > 0 ? nbBindings / nbOptProfiles : 0;
-    int32_t const endBindingIndex = bindingsInProfile ? bindingsInProfile : engine->getNbBindings();
+    int32_t const endBindingIndex = engine->getNbIOTensors();
 
     if (nbOptProfiles > 1)
     {
@@ -240,83 +291,114 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     }
 
     // Set all input dimensions before all bindings can be allocated
+    bool const useEnqueueV3 = !engine->hasImplicitBatchDimension();
+    if (useEnqueueV3)
+    {
+        sample::gLogVerbose << "Using enqueueV3." << std::endl;
+    }
     for (int32_t b = 0; b < endBindingIndex; ++b)
     {
-        if (engine->bindingIsInput(b))
+        auto const& name = engine->getIOTensorName(b);
+        auto const& mode = engine->getTensorIOMode(name);
+        if (mode == TensorIOMode::kINPUT)
         {
-            auto dims = iEnv.contexts.front()->getBindingDimensions(b);
-            bool const isScalar = dims.nbDims == 0;
-            bool const isDynamicInput = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; })
-                || engine->isShapeBinding(b);
-            if (isDynamicInput)
+            Dims const dims = iEnv.contexts.front()->getTensorShape(name);
+            bool isShapeInferenceIO{false};
+            if (useEnqueueV3)
             {
-                auto shape = inference.shapes.find(engine->getBindingName(b));
+                isShapeInferenceIO = engine->isShapeInferenceIO(name);
+            }
+            else
+            {
+                isShapeInferenceIO = engine->isShapeBinding(b);
+            }
+            bool const hasRuntimeDim = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; });
+            if (hasRuntimeDim || isShapeInferenceIO)
+            {
+                // Set shapeData to either dimensions of the input (if it has a dynamic shape)
+                // or set to values of the input (if it is an input shape tensor).
+                std::vector<int32_t> shapeData;
 
-                std::vector<int32_t> staticDims;
+                auto const shape = inference.shapes.find(name);
                 if (shape == inference.shapes.end())
                 {
-                    // If no shape is provided, set dynamic dimensions to 1.
-                    constexpr int32_t DEFAULT_DIMENSION = 1;
-                    if (engine->isShapeBinding(b))
+                    // No information provided. Use default value for missing data.
+                    constexpr int32_t kDEFAULT_VALUE = 1;
+                    if (isShapeInferenceIO)
                     {
-                        if (isScalar)
-                        {
-                            staticDims.push_back(1);
-                        }
-                        else
-                        {
-                            staticDims.resize(dims.d[0]);
-                            std::fill(staticDims.begin(), staticDims.end(), DEFAULT_DIMENSION);
-                        }
+                        // Set shape tensor to all ones.
+                        shapeData.assign(volume(dims, 0, dims.nbDims), kDEFAULT_VALUE);
+                        sample::gLogWarning << "Values missing for input shape tensor: " << engine->getBindingName(b)
+                                            << "Automatically setting values to: " << shapeData << std::endl;
                     }
                     else
                     {
-                        staticDims.resize(dims.nbDims);
-                        std::transform(dims.d, dims.d + dims.nbDims, staticDims.begin(),
-                            [&](int32_t dimension) { return dimension >= 0 ? dimension : DEFAULT_DIMENSION; });
+                        // Use default value for unspecified runtime dimensions.
+                        shapeData.resize(dims.nbDims);
+                        std::transform(dims.d, dims.d + dims.nbDims, shapeData.begin(),
+                            [&](int32_t dimension) { return dimension >= 0 ? dimension : kDEFAULT_VALUE; });
+                        sample::gLogWarning
+                            << "Shape missing for input with dynamic shape: " << engine->getBindingName(b)
+                            << "Automatically setting shape to: " << shapeData << std::endl;
                     }
-                    sample::gLogWarning << "Dynamic dimensions required for input: " << engine->getBindingName(b)
-                                        << ", but no shapes were provided. Automatically overriding shape to: "
-                                        << staticDims << std::endl;
                 }
-                else if (inference.inputs.count(shape->first) && engine->isShapeBinding(b))
+                else if (inference.inputs.count(shape->first) && isShapeInferenceIO)
                 {
-                    if (isScalar || dims.nbDims == 1)
-                    {
-                        // Load shape tensor from file.
-                        size_t const size = isScalar ? 1 : dims.d[0];
-                        staticDims.resize(size);
-                        auto const& filename = inference.inputs.at(shape->first);
-                        auto dst = reinterpret_cast<char*>(staticDims.data());
-                        loadFromFile(filename, dst, size * sizeof(decltype(staticDims)::value_type));
-                    }
-                    else
-                    {
-                        sample::gLogWarning << "Cannot load shape tensor " << shape->first << " from file, "
-                                            << "ND-Shape isn't supported yet" << std::endl;
-                        // Fallback
-                        staticDims = shape->second;
-                    }
+                    // Load shape tensor from file.
+                    int64_t const size = volume(dims, 0, dims.nbDims);
+                    shapeData.resize(size);
+                    auto const& filename = inference.inputs.at(shape->first);
+                    auto dst = reinterpret_cast<char*>(shapeData.data());
+                    loadFromFile(filename, dst, size * sizeof(decltype(shapeData)::value_type));
                 }
                 else
                 {
-                    staticDims = shape->second;
+                    shapeData = shape->second;
+                }
+
+                int32_t* shapeTensorData{nullptr};
+                if (isShapeInferenceIO)
+                {
+                    // Save the data in iEnv, in a way that it's address does not change
+                    // before enqueueV2 or enqueueV3 is called.
+                    iEnv.inputShapeTensorValues.emplace_back(std::move(shapeData));
+                    shapeTensorData = iEnv.inputShapeTensorValues.back().data();
                 }
 
                 for (auto& c : iEnv.contexts)
                 {
-                    if (engine->isShapeBinding(b))
+                    if (useEnqueueV3)
                     {
-                        if (!c->setInputShapeBinding(b, staticDims.data()))
+                        if (isShapeInferenceIO)
                         {
-                            return false;
+                            if (!c->setTensorAddress(name, shapeTensorData))
+                            {
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            if (!c->setInputShape(name, toDims(shapeData)))
+                            {
+                                return false;
+                            }
                         }
                     }
                     else
                     {
-                        if (!c->setBindingDimensions(b, toDims(staticDims)))
+                        if (isShapeInferenceIO)
                         {
-                            return false;
+                            if (!c->setInputShapeBinding(b, shapeTensorData))
+                            {
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            if (!c->setBindingDimensions(b, toDims(shapeData)))
+                            {
+                                return false;
+                            }
                         }
                     }
                 }
@@ -329,6 +411,26 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     return FillStdBindings(engine, context, inference.inputs, iEnv.bindings, batch, endBindingIndex)();
 }
 
+TaskInferenceEnvironment::TaskInferenceEnvironment(
+    std::string engineFile, InferenceOptions inference, int32_t deviceId, int32_t DLACore, int32_t bs)
+    : iOptions(inference)
+    , device(deviceId)
+    , batch(bs)
+{
+    BuildEnvironment bEnv(false, DLACore);
+    loadEngineToBuildEnv(engineFile, false, bEnv, sample::gLogError);
+    std::unique_ptr<InferenceEnvironment> tmp(new InferenceEnvironment(bEnv));
+    iEnv = std::move(tmp);
+
+    cudaCheck(cudaSetDevice(device));
+    SystemOptions system{};
+    system.device = device;
+    system.DLACore = DLACore;
+    if (!setUpInference(*iEnv, iOptions, system))
+    {
+        sample::gLogError << "Inference set up failed" << std::endl;
+    }
+}
 namespace
 {
 
@@ -365,26 +467,25 @@ struct SyncStruct
 
 struct Enqueue
 {
-    explicit Enqueue(nvinfer1::IExecutionContext& context, void** buffers)
+    explicit Enqueue(nvinfer1::IExecutionContext& context)
         : mContext(context)
-        , mBuffers(buffers)
     {
     }
 
     nvinfer1::IExecutionContext& mContext;
-    void** mBuffers{};
 };
 
 //!
 //! \class EnqueueImplicit
-//! \brief Functor to enqueue inference with implict batch
+//! \brief Functor to enqueue inference with implicit batch
 //!
 class EnqueueImplicit : private Enqueue
 {
 
 public:
     explicit EnqueueImplicit(nvinfer1::IExecutionContext& context, void** buffers, int32_t batch)
-        : Enqueue(context, buffers)
+        : Enqueue(context)
+        , mBuffers(buffers)
         , mBatch(batch)
     {
     }
@@ -404,7 +505,8 @@ public:
     }
 
 private:
-    int32_t mBatch;
+    void** mBuffers{};
+    int32_t mBatch{};
 };
 
 //!
@@ -415,24 +517,29 @@ class EnqueueExplicit : private Enqueue
 {
 
 public:
-    explicit EnqueueExplicit(nvinfer1::IExecutionContext& context, void** buffers)
-        : Enqueue(context, buffers)
+    explicit EnqueueExplicit(nvinfer1::IExecutionContext& context, Bindings const& bindings)
+        : Enqueue(context)
+        , mBindings(bindings)
     {
+        ASSERT(mBindings.setTensorAddresses(mContext));
     }
 
     bool operator()(TrtCudaStream& stream) const
     {
-        if (mContext.enqueueV2(mBuffers, stream.get(), nullptr))
+        if (mContext.enqueueV3(stream.get()))
         {
             // Collecting layer timing info from current profile index of execution context
             if (mContext.getProfiler() && !mContext.getEnqueueEmitsProfile() && !mContext.reportToProfiler())
             {
-                gLogWarning << "Failed to collect layer timing info from previous enqueueV2()" << std::endl;
+                gLogWarning << "Failed to collect layer timing info from previous enqueueV3()" << std::endl;
             }
             return true;
         }
         return false;
     }
+
+private:
+    Bindings const& mBindings;
 };
 
 //!
@@ -495,15 +602,16 @@ public:
 class EnqueueSafe
 {
 public:
-    explicit EnqueueSafe(nvinfer1::safe::IExecutionContext& context, void** buffers)
+    explicit EnqueueSafe(nvinfer1::safe::IExecutionContext& context, Bindings const& bindings)
         : mContext(context)
-        , mBuffers(buffers)
+        , mBindings(bindings)
     {
+        ASSERT(mBindings.setSafeTensorAddresses(mContext));
     }
 
     bool operator()(TrtCudaStream& stream) const
     {
-        if (mContext.enqueueV2(mBuffers, stream.get(), nullptr))
+        if (mContext.enqueueV3(stream.get()))
         {
             return true;
         }
@@ -511,7 +619,8 @@ public:
     }
 
     nvinfer1::safe::IExecutionContext& mContext;
-    void** mBuffers{};
+private:
+    Bindings const& mBindings;
 };
 
 using EnqueueFunction = std::function<bool(TrtCudaStream&)>;
@@ -724,7 +833,7 @@ private:
         }
         else
         {
-            mEnqueue = EnqueueFunction(EnqueueExplicit(context, mBindings.getDeviceBuffers()));
+            mEnqueue = EnqueueFunction(EnqueueExplicit(context, mBindings));
         }
         if (inference.graph)
         {
@@ -760,7 +869,7 @@ private:
 
     void createEnqueueFunction(InferenceOptions const& inference, nvinfer1::safe::IExecutionContext& context, Bindings&)
     {
-        mEnqueue = EnqueueFunction(EnqueueSafe(context, mBindings.getDeviceBuffers()));
+        mEnqueue = EnqueueFunction(EnqueueSafe(context, mBindings));
         if (inference.graph)
         {
             TrtCudaStream& stream = getStream(StreamType::kCOMPUTE);
@@ -935,6 +1044,41 @@ bool runInference(
     return !iEnv.error;
 }
 
+bool runMultiTasksInference(std::vector<std::unique_ptr<TaskInferenceEnvironment>>& tEnvList)
+{
+    cudaCheck(cudaProfilerStart());
+    cudaSetDeviceFlags(cudaDeviceScheduleSpin);
+
+    SyncStruct sync;
+    sync.sleep = 0;
+    sync.mainStream.sleep(&sync.sleep);
+    sync.cpuStart = getCurrentTime();
+    sync.gpuStart.record(sync.mainStream);
+
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < tEnvList.size(); ++i)
+    {
+        auto& tEnv = tEnvList[i];
+        threads.emplace_back(makeThread(
+            tEnv->iOptions, *(tEnv->iEnv), sync, /*threadIdx*/ 0, /*streamsPerThread*/ 1, tEnv->device, tEnv->trace));
+    }
+    for (auto& th : threads)
+    {
+        th.join();
+    }
+
+    cudaCheck(cudaProfilerStop());
+
+    auto cmpTrace = [](InferenceTrace const& a, InferenceTrace const& b) { return a.h2dStart < b.h2dStart; };
+    for (auto& tEnv : tEnvList)
+    {
+        std::sort(tEnv->trace.begin(), tEnv->trace.end(), cmpTrace);
+    }
+
+    return std::none_of(tEnvList.begin(), tEnvList.end(),
+        [](std::unique_ptr<TaskInferenceEnvironment>& tEnv) { return tEnv->iEnv->error; });
+}
+
 namespace
 {
 size_t reportGpuMemory()
@@ -1090,77 +1234,115 @@ void Binding::fill()
         fillBuffer<__half>(buffer->getHostBuffer(), volume, -1.0F, 1.0F);
         break;
     }
+    case nvinfer1::DataType::kUINT8:
+    {
+        fillBuffer<uint8_t>(buffer->getHostBuffer(), volume, 0, 255);
+        break;
+    }
     }
 }
 
 void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim, int32_t spv,
     std::string const separator /*= " "*/) const
 {
+    void* outputBuffer{};
+    if (outputAllocator != nullptr)
+    {
+        outputBuffer = outputAllocator->getBuffer()->getHostBuffer();
+    }
+    else
+    {
+        outputBuffer = buffer->getHostBuffer();
+    }
     switch (dataType)
     {
     case nvinfer1::DataType::kBOOL:
     {
-        dumpBuffer<bool>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        dumpBuffer<bool>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
     case nvinfer1::DataType::kINT32:
     {
-        dumpBuffer<int32_t>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        dumpBuffer<int32_t>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
     case nvinfer1::DataType::kINT8:
     {
-        dumpBuffer<int8_t>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        dumpBuffer<int8_t>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
     case nvinfer1::DataType::kFLOAT:
     {
-        dumpBuffer<float>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        dumpBuffer<float>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
     case nvinfer1::DataType::kHALF:
     {
-        dumpBuffer<__half>(buffer->getHostBuffer(), separator, os, dims, strides, vectorDim, spv);
+        dumpBuffer<__half>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
+    case nvinfer1::DataType::kUINT8:
+    {
+        dumpBuffer<uint8_t>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
     }
 }
 
-void Bindings::addBinding(int b, std::string const& name, bool isInput, int64_t volume, nvinfer1::DataType dataType,
-    std::string const& fileName /*= ""*/)
+void Bindings::addBinding(TensorInfo const& tensorInfo, std::string const& fileName /*= ""*/)
 {
+    auto const b = tensorInfo.bindingIndex;
     while (mBindings.size() <= static_cast<size_t>(b))
     {
         mBindings.emplace_back();
         mDevicePointers.emplace_back();
     }
-    mNames[name] = b;
-    if (mBindings[b].buffer == nullptr)
+    mNames[tensorInfo.name] = b;
+    mBindings[b].isInput = tensorInfo.isInput;
+    mBindings[b].volume = tensorInfo.vol;
+    mBindings[b].dataType = tensorInfo.dataType;
+    if (tensorInfo.isDynamic)
     {
-        if (mUseManaged)
+        ASSERT(!tensorInfo.isInput); // Only output shape can be possibly unknown because of DDS.
+        if (mBindings[b].outputAllocator == nullptr)
         {
-            mBindings[b].buffer.reset(new UnifiedMirroredBuffer);
+            if (mUseManaged)
+            {
+                mBindings[b].outputAllocator.reset(new OutputAllocator(new UnifiedMirroredBuffer));
+            }
+            else
+            {
+                mBindings[b].outputAllocator.reset(new OutputAllocator(new DiscreteMirroredBuffer));
+            }
         }
-        else
-        {
-            mBindings[b].buffer.reset(new DiscreteMirroredBuffer);
-        }
-    }
-    mBindings[b].isInput = isInput;
-    // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
-    // even for empty tensors, so allocate a dummy byte.
-    if (volume == 0)
-    {
-        mBindings[b].buffer->allocate(1);
     }
     else
     {
-        mBindings[b].buffer->allocate(static_cast<size_t>(volume) * static_cast<size_t>(dataTypeSize(dataType)));
+        if (mBindings[b].buffer == nullptr)
+        {
+            if (mUseManaged)
+            {
+                mBindings[b].buffer.reset(new UnifiedMirroredBuffer);
+            }
+            else
+            {
+                mBindings[b].buffer.reset(new DiscreteMirroredBuffer);
+            }
+        }
+        // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
+        // even for empty tensors, so allocate a dummy byte.
+        if (tensorInfo.vol == 0)
+        {
+            mBindings[b].buffer->allocate(1);
+        }
+        else
+        {
+            mBindings[b].buffer->allocate(
+                static_cast<size_t>(tensorInfo.vol) * static_cast<size_t>(dataTypeSize(tensorInfo.dataType)));
+        }
+        mDevicePointers[b] = mBindings[b].buffer->getDeviceBuffer();
     }
-    mBindings[b].volume = volume;
-    mBindings[b].dataType = dataType;
-    mDevicePointers[b] = mBindings[b].buffer->getDeviceBuffer();
-    if (isInput)
+    if (tensorInfo.isInput)
     {
         if (fileName.empty())
         {
@@ -1195,19 +1377,20 @@ void Bindings::transferOutputToHost(TrtCudaStream& stream)
     {
         if (!mBindings[b.second].isInput)
         {
-            mBindings[b.second].buffer->deviceToHost(stream);
+            if (mBindings[b.second].outputAllocator != nullptr)
+            {
+                mBindings[b.second].outputAllocator->getBuffer()->deviceToHost(stream);
+            }
+            else
+            {
+                mBindings[b.second].buffer->deviceToHost(stream);
+            }
         }
     }
 }
 
-void Bindings::dumpBindingDimensions(int binding, nvinfer1::IExecutionContext const& context, std::ostream& os) const
-{
-    auto const dims = context.getBindingDimensions(binding);
-    // Do not add a newline terminator, because the caller may be outputting a JSON string.
-    os << dims;
-}
-
-void Bindings::dumpBindingValues(nvinfer1::IExecutionContext const& context, int binding, std::ostream& os,
+template <>
+void Bindings::dumpBindingValues<nvinfer1::IExecutionContext>(nvinfer1::IExecutionContext const& context, int32_t binding, std::ostream& os,
     std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
 {
     Dims dims = context.getBindingDimensions(binding);
@@ -1217,7 +1400,7 @@ void Bindings::dumpBindingValues(nvinfer1::IExecutionContext const& context, int
 
     if (context.getEngine().hasImplicitBatchDimension())
     {
-        auto insertN = [](Dims& d, int32_t bs) {
+        auto const insertN = [](Dims& d, int32_t bs) {
             int32_t const nbDims = d.nbDims;
             ASSERT(nbDims < Dims::MAX_DIMS);
             std::copy_backward(&d.d[0], &d.d[nbDims], &d.d[nbDims + 1]);
@@ -1240,22 +1423,32 @@ void Bindings::dumpBindingValues(nvinfer1::IExecutionContext const& context, int
     mBindings[binding].dump(os, dims, strides, vectorDim, spv, separator);
 }
 
-void Bindings::dumpBindings(
-    nvinfer1::IExecutionContext const& context, std::function<bool(Binding const&)> predicate, std::ostream& os) const
+template <>
+void Bindings::dumpBindingDimensions<nvinfer1::IExecutionContext>(int binding, nvinfer1::IExecutionContext const& context, std::ostream& os) const
 {
-    for (auto const& n : mNames)
-    {
-        auto const binding = n.second;
-        if (predicate(mBindings[binding]))
-        {
-            os << n.first << ": (";
-            dumpBindingDimensions(binding, context, os);
-            os << ")" << std::endl;
+    auto const dims = context.getBindingDimensions(binding);
+    // Do not add a newline terminator, because the caller may be outputting a JSON string.
+    os << dims;
+}
 
-            dumpBindingValues(context, binding, os);
-            os << std::endl;
-        }
-    }
+template <>
+void Bindings::dumpBindingDimensions<nvinfer1::safe::IExecutionContext>(int binding, nvinfer1::safe::IExecutionContext const& context, std::ostream& os) const
+{
+    auto const dims = context.getEngine().getBindingDimensions(binding);
+    // Do not add a newline terminator, because the caller may be outputting a JSON string.
+    os << dims;
+}
+
+template <>
+void Bindings::dumpBindingValues<nvinfer1::safe::IExecutionContext>(nvinfer1::safe::IExecutionContext const& context, int32_t binding, std::ostream& os,
+    std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
+{
+    Dims const dims = context.getEngine().getBindingDimensions(binding);
+    Dims const strides = context.getStrides(binding);
+    int32_t const vectorDim = context.getEngine().getBindingVectorizedDim(binding);
+    int32_t const spv = context.getEngine().getBindingComponentsPerElement(binding);
+
+    mBindings[binding].dump(os, dims, strides, vectorDim, spv, separator);
 }
 
 std::unordered_map<std::string, int> Bindings::getBindings(std::function<bool(Binding const&)> predicate) const
@@ -1270,6 +1463,56 @@ std::unordered_map<std::string, int> Bindings::getBindings(std::function<bool(Bi
         }
     }
     return bindings;
+}
+
+bool Bindings::setTensorAddresses(nvinfer1::IExecutionContext& context) const
+{
+    for (auto const& b : mNames)
+    {
+        auto const name = b.first.c_str();
+        auto const location = context.getEngine().getTensorLocation(name);
+        if (location == TensorLocation::kDEVICE)
+        {
+            if (mBindings[b.second].outputAllocator != nullptr)
+            {
+                if (!context.setOutputAllocator(name, mBindings[b.second].outputAllocator.get()))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                if (!context.setTensorAddress(name, mDevicePointers[b.second]))
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+bool Bindings::setSafeTensorAddresses(nvinfer1::safe::IExecutionContext& context) const
+{
+    for (auto const& b : mNames)
+    {
+        auto const name = b.first.c_str();
+        if (context.getEngine().getTensorIOMode(name) == nvinfer1::TensorIOMode::kINPUT)
+        {
+            if (!context.setInputTensorAddress(name, static_cast<void const*>(mDevicePointers[b.second])))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if (!context.setOutputTensorAddress(name, mDevicePointers[b.second]))
+            {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 } // namespace sample

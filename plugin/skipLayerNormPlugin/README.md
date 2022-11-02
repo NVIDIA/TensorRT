@@ -43,7 +43,7 @@ The parameters are defined below and consists of the following attributes:
 | Type     | Parameter                               |  Version   | Description
 |----------|-----------------------------------------|------------|-------------------------------------------------------------------
 |`int`     |`type_id`                                |  1, 2      |Integer encoding the DataType (0: FP32, 1: FP16, 2: INT8)
-|`int`     |`ld`                                     |  2,        |The leading dimension of the input tensor, corresponding to the hidden size, denoted by `E` above.
+|`int`     |`ld`                                     |  1         |The leading dimension of the input tensor, corresponding to the hidden size, denoted by `E` above.
 |`Weights` |`beta`                                   |  1, 2, 3   |The mean to normalize to. Shape: `[1, 1, E]`
 |`Weights` |`gamma`                                  |  1, 2, 3   |The standard deviation to normalize to. Shape: `[1, 1, E]`
 |`Weights` |`bias`                                   |  1, 2      |An optional bias vector to add before normalization. Shape: `[1, 1, E]`

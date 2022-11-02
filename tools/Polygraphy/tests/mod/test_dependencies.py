@@ -171,7 +171,7 @@ class TestAutoinstallDeps:
                 poly_venv.python,
                 "-c",
                 f"from polygraphy import mod; "
-                f"requests = mod.lazy_import('requests', requires=['colored{new_ver}']); "
+                f"requests = mod.lazy_import('requests==1.0.0', requires=['colored{new_ver}']); "
                 f"requests.__version__; "
                 f"import colored; print(colored.__version__)",
             ]

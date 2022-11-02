@@ -87,6 +87,11 @@ private:
     bool mHasBias;
     bert::cuda_shared_ptr<void> mBiasDev;
     size_t mLd;
+
+    using IPluginV2::getOutputDimensions;
+    using IPluginV2::getWorkspaceSize;
+    using IPluginV2::enqueue;
+    using IPluginV2Ext::configurePlugin;
 };
 
 class GeluPluginDynamicCreator : public nvinfer1::IPluginCreator

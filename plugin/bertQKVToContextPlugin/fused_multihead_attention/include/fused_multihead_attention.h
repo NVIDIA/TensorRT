@@ -129,6 +129,15 @@ extern unsigned char cubin_fmha_v1_fp16_128_64_sm87_cu_cubin[];
 extern unsigned char cubin_fmha_v1_fp16_96_64_sm87_cu_cubin[];
 extern unsigned char cubin_fmha_v1_fp16_64_64_sm87_cu_cubin[];
 
+extern unsigned char cubin_fmha_v1_int8_512_64_sm90_cu_cubin[];
+extern unsigned char cubin_fmha_v1_int8_384_64_sm90_cu_cubin[];
+extern unsigned char cubin_fmha_v1_int8_128_64_sm90_cu_cubin[];
+extern unsigned char cubin_fmha_v1_fp16_512_64_sm90_cu_cubin[];
+extern unsigned char cubin_fmha_v1_fp16_384_64_sm90_cu_cubin[];
+extern unsigned char cubin_fmha_v1_fp16_128_64_sm90_cu_cubin[];
+extern unsigned char cubin_fmha_v1_fp16_96_64_sm90_cu_cubin[];
+extern unsigned char cubin_fmha_v1_fp16_64_64_sm90_cu_cubin[];
+
 extern uint32_t fused_multihead_attention_fp16_64_64_kernel_sm75_cu_o_len;
 extern uint32_t fused_multihead_attention_fp16_96_64_kernel_sm75_cu_o_len;
 extern uint32_t fused_multihead_attention_fp16_64_64_kernel_sm80_cu_o_len;
@@ -150,6 +159,20 @@ extern uint32_t cubin_fmha_v1_fp16_128_64_sm87_cu_cubin_len;
 extern uint32_t cubin_fmha_v1_fp16_96_64_sm87_cu_cubin_len;
 extern uint32_t cubin_fmha_v1_fp16_64_64_sm87_cu_cubin_len;
 
+extern uint32_t cubin_fmha_v1_int8_512_64_sm90_cu_cubin_len;
+extern uint32_t cubin_fmha_v1_int8_384_64_sm90_cu_cubin_len;
+extern uint32_t cubin_fmha_v1_int8_128_64_sm90_cu_cubin_len;
+extern uint32_t cubin_fmha_v1_fp16_512_64_sm90_cu_cubin_len;
+extern uint32_t cubin_fmha_v1_fp16_384_64_sm90_cu_cubin_len;
+extern uint32_t cubin_fmha_v1_fp16_128_64_sm90_cu_cubin_len;
+extern uint32_t cubin_fmha_v1_fp16_96_64_sm90_cu_cubin_len;
+extern uint32_t cubin_fmha_v1_fp16_64_64_sm90_cu_cubin_len;
+#if !(defined(ENABLE_SM72) || defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86)                     \
+    || defined(ENABLE_SM87) || defined(ENABLE_SM89) || defined(ENABLE_SM90))
+// TRT-17573: Remove SM72 support from this file by factoring out the common logic required by the
+// V2 headers into a separate header.
+#error This file can only be included one of sm 72, 75, 80, 86, 87, 89, or 90 are defined.
+#endif
 static const struct FusedMultiHeadAttentionKernelMetaInfoV1
 {
     Data_type mDataType;
@@ -162,6 +185,7 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
     uint32_t mSharedMemBytes;
     uint32_t mThreadsPerCTA;
 } sMhaKernelMetaInfos[] = {
+#if defined(ENABLE_SM75)
     // Turing
     {DATA_TYPE_FP16, 64, 64, kSM_75, fused_multihead_attention_fp16_64_64_kernel_sm75_cu_o,
         fused_multihead_attention_fp16_64_64_kernel_sm75_cu_o_len,
@@ -181,7 +205,8 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
     {DATA_TYPE_INT8, 384, 64, kSM_75, fused_multihead_attention_int8_384_64_kernel_sm75_cu_o,
         fused_multihead_attention_int8_384_64_kernel_sm75_cu_o_len, "fused_multihead_attention_int8_384_64_kernel_sm75",
         53284, 256},
-#if CUDA_VERSION >= 11000
+#endif // defined(ENABLE_SM75)
+#if defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89)
     // Ampere
     {DATA_TYPE_FP16, 64, 64, kSM_80, fused_multihead_attention_fp16_64_64_kernel_sm80_cu_o,
         fused_multihead_attention_fp16_64_64_kernel_sm80_cu_o_len,
@@ -201,7 +226,8 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
     {DATA_TYPE_INT8, 384, 64, kSM_80, fused_multihead_attention_int8_384_64_kernel_sm80_cu_o,
         fused_multihead_attention_int8_384_64_kernel_sm80_cu_o_len, "fused_multihead_attention_int8_384_64_kernel_sm80",
         57344, 256},
-
+#endif // defined(ENABLE_SM80) || defined(SM86) || defined(ENABLE_SM89)
+#if defined(ENABLE_SM86)
     // GA10x
     // Note: For GA10X keep only kernels whose sharedMemBytes < 100KiB
     {DATA_TYPE_FP16, 64, 64, kSM_86, fused_multihead_attention_fp16_64_64_kernel_sm80_cu_o,
@@ -222,10 +248,8 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
     {DATA_TYPE_INT8, 384, 64, kSM_86, fused_multihead_attention_int8_384_64_kernel_sm80_cu_o,
         fused_multihead_attention_int8_384_64_kernel_sm80_cu_o_len, "fused_multihead_attention_int8_384_64_kernel_sm80",
         57344, 256},
-
-#endif
-
-#if CUDA_VERSION >= 11040
+#endif // defined(ENABLE_SM86)
+#if defined(ENABLE_SM87)
     // GA10b (Orin-Auto)
     {DATA_TYPE_INT8, 384, 64, kSM_87, cubin_fmha_v1_int8_384_64_sm87_cu_cubin,
         cubin_fmha_v1_int8_384_64_sm87_cu_cubin_len, "fmha_v1_int8_384_64_sm87_kernel", 40960, 256},
@@ -239,7 +263,26 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
         "fmha_v1_fp16_96_64_sm87_kernel", 49152, 128},
     {DATA_TYPE_FP16, 64, 64, kSM_87, cubin_fmha_v1_fp16_64_64_sm87_cu_cubin, cubin_fmha_v1_fp16_64_64_sm87_cu_cubin_len,
         "fmha_v1_fp16_64_64_sm87_kernel", 32768, 128},
-#endif
+#endif // defined(ENABLE_SM87)
+#if defined(ENABLE_SM90)
+    // GH100 hopper
+    {DATA_TYPE_INT8, 512, 64, kSM_90, cubin_fmha_v1_int8_512_64_sm90_cu_cubin,
+        cubin_fmha_v1_int8_512_64_sm90_cu_cubin_len, "fmha_v1_int8_512_64_sm90_kernel", 73728, 256},
+    {DATA_TYPE_INT8, 384, 64, kSM_90, cubin_fmha_v1_int8_384_64_sm90_cu_cubin,
+        cubin_fmha_v1_int8_384_64_sm90_cu_cubin_len, "fmha_v1_int8_384_64_sm90_kernel", 73728, 256},
+    {DATA_TYPE_INT8, 128, 64, kSM_90, cubin_fmha_v1_int8_128_64_sm90_cu_cubin,
+        cubin_fmha_v1_int8_128_64_sm90_cu_cubin_len, "fmha_v1_int8_128_64_sm90_kernel", 24576, 128},
+    {DATA_TYPE_FP16, 512, 64, kSM_90, cubin_fmha_v1_fp16_512_64_sm90_cu_cubin,
+        cubin_fmha_v1_fp16_512_64_sm90_cu_cubin_len, "fmha_v1_fp16_512_64_sm90_kernel", 73728, 256},
+    {DATA_TYPE_FP16, 384, 64, kSM_90, cubin_fmha_v1_fp16_384_64_sm90_cu_cubin,
+        cubin_fmha_v1_fp16_384_64_sm90_cu_cubin_len, "fmha_v1_fp16_384_64_sm90_kernel", 65536, 256},
+    {DATA_TYPE_FP16, 128, 64, kSM_90, cubin_fmha_v1_fp16_128_64_sm90_cu_cubin,
+        cubin_fmha_v1_fp16_128_64_sm90_cu_cubin_len, "fmha_v1_fp16_128_64_sm90_kernel", 65536, 128},
+    {DATA_TYPE_FP16, 96, 64, kSM_90, cubin_fmha_v1_fp16_96_64_sm90_cu_cubin, cubin_fmha_v1_fp16_96_64_sm90_cu_cubin_len,
+        "fmha_v1_fp16_96_64_sm90_kernel", 49152, 128},
+    {DATA_TYPE_FP16, 64, 64, kSM_90, cubin_fmha_v1_fp16_64_64_sm90_cu_cubin, cubin_fmha_v1_fp16_64_64_sm90_cu_cubin_len,
+        "fmha_v1_fp16_64_64_sm90_kernel", 32768, 128},
+#endif // defined(ENABLE_SM90)
 };
 
 template <typename TKernelMeta, typename TKernelParam>
@@ -263,6 +306,7 @@ public:
         , mKernelMetaCount(nMetaCount)
         , mSM(sm)
     {
+        PLUGIN_ASSERT(mKernelMetaCount && "No kernels were loaded correctly.");
     }
 
     void loadXMMAKernels(uint32_t smVersion)
@@ -336,7 +380,8 @@ public:
 
         // sm_86 chips prefer sm_86 sass, but can also use sm_80 sass if sm_86 not exist.
         // sm_87 cannot run sm_80 sass
-        if (mSM == kSM_86)
+        // sm_89 will reuse sm_80 kernels
+        if (mSM == kSM_86 || mSM == kSM_89)
         {
             loadXMMAKernels(kSM_80);
         }

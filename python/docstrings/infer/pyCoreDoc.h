@@ -23,7 +23,7 @@ namespace tensorrt
 
 namespace ILoggerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
 Abstract base Logger class for the :class:`Builder`, :class:`ICudaEngine` and :class:`Runtime` .
 
 To implement a custom logger, ensure that you explicitly instantiate the base class in :func:`__init__` :
@@ -45,7 +45,7 @@ The logger used to create an instance of IBuilder, IRuntime or IRefitter is used
 The logger should be valid until all objects created are released.
 )trtdoc";
 
-constexpr const char* log = R"trtdoc(
+constexpr char const* log = R"trtdoc(
 Logs a message to `stderr` . This function must be overriden by a derived class.
 
 :arg severity: The severity of the message.
@@ -56,7 +56,7 @@ Logs a message to `stderr` . This function must be overriden by a derived class.
 
 namespace LoggerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
 Logger for the :class:`Builder`, :class:`ICudaEngine` and :class:`Runtime` .
 
 :arg min_severity: The initial minimum severity of this Logger.
@@ -65,7 +65,7 @@ Logger for the :class:`Builder`, :class:`ICudaEngine` and :class:`Runtime` .
 
 )trtdoc";
 
-constexpr const char* log = R"trtdoc(
+constexpr char const* log = R"trtdoc(
 Logs a message to `stderr` .
 
 :arg severity: The severity of the message.
@@ -75,35 +75,35 @@ Logs a message to `stderr` .
 
 namespace SeverityDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Indicates the severity of a message. The values in this enum are also accessible in the :class:`ILogger` directly.
     For example, ``tensorrt.ILogger.INFO`` corresponds to ``tensorrt.ILogger.Severity.INFO`` .
 )trtdoc";
 
-constexpr const char* internal_error = R"trtdoc(
+constexpr char const* internal_error = R"trtdoc(
     Represents an internal error. Execution is unrecoverable.
 )trtdoc";
 
-constexpr const char* error = R"trtdoc(
+constexpr char const* error = R"trtdoc(
     Represents an application error.
 )trtdoc";
 
-constexpr const char* warning = R"trtdoc(
+constexpr char const* warning = R"trtdoc(
     Represents an application error that TensorRT has recovered from or fallen back to a default.
 )trtdoc";
 
-constexpr const char* info = R"trtdoc(
+constexpr char const* info = R"trtdoc(
     Represents informational messages.
 )trtdoc";
 
-constexpr const char* verbose = R"trtdoc(
+constexpr char const* verbose = R"trtdoc(
     Verbose messages with debugging information.
 )trtdoc";
 } // namespace SeverityDoc
 
 namespace IProfilerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Abstract base Profiler class.
 
     To implement a custom profiler, ensure that you explicitly instantiate the base class in :func:`__init__` :
@@ -121,7 +121,7 @@ constexpr const char* descr = R"trtdoc(
     It is not recommended to run inference with profiler enabled when the inference execution time is critical since the profiler may affect execution time negatively.
 )trtdoc";
 
-constexpr const char* report_layer_time = R"trtdoc(
+constexpr char const* report_layer_time = R"trtdoc(
     Reports time in milliseconds for each layer. This function must be overriden a derived class.
 
     :arg layer_name: The name of the layer, set when constructing the :class:`INetworkDefinition` .
@@ -131,13 +131,13 @@ constexpr const char* report_layer_time = R"trtdoc(
 
 namespace ProfilerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     When this class is added to an :class:`IExecutionContext`, the profiler will be called once per layer for each invocation of :func:`IExecutionContext.execute_v2()` or :func:`IExecutionContext.execute_async_v2()`.
 
     It is not recommended to run inference with profiler enabled when the inference execution time is critical since the profiler may affect execution time negatively.
 )trtdoc";
 
-constexpr const char* report_layer_time = R"trtdoc(
+constexpr char const* report_layer_time = R"trtdoc(
     Prints time in milliseconds for each layer to stdout.
 
     :arg layer_name: The name of the layer, set when constructing the :class:`INetworkDefinition` .
@@ -147,7 +147,7 @@ constexpr const char* report_layer_time = R"trtdoc(
 
 namespace IOptimizationProfileDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Optimization profile for dynamic input dimensions and shape tensors.
 
     When building an :class:`ICudaEngine` from an :class:`INetworkDefinition` that has dynamically resizable inputs (at least
@@ -172,7 +172,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar extra_memory_target: Additional memory that the builder should aim to maximally allocate for this profile, as a fraction of the memory it would use if the user did not impose any constraints on memory. This unconstrained case is the default; it corresponds to ``extra_memory_target`` == 1.0. If ``extra_memory_target`` == 0.0, the builder aims to create the new optimization profile without allocating any additional weight memory. Valid inputs lie between 0.0 and 1.0. This parameter is only a hint, and TensorRT does not guarantee that the ``extra_memory_target`` will be reached. This parameter is ignored for the first (default) optimization profile that is defined.
 )trtdoc";
 
-constexpr const char* set_shape = R"trtdoc(
+constexpr char const* set_shape = R"trtdoc(
     Set the minimum/optimum/maximum dimensions for a dynamic input tensor.
 
     This function must be called for any network input tensor that has dynamic dimensions. If ``min``, ``opt``, and ``max`` are the minimum, optimum, and maximum dimensions, and ``real_shape`` is the shape for this input tensor provided to the :class:`INetworkDefinition` ,then the following conditions must hold:
@@ -192,14 +192,14 @@ constexpr const char* set_shape = R"trtdoc(
     :raises: :class:`ValueError` if an inconsistency was detected. Note that inputs can be validated only partially; a full validation is performed at engine build time.
 )trtdoc";
 
-constexpr const char* get_shape = R"trtdoc(
+constexpr char const* get_shape = R"trtdoc(
     Get the minimum/optimum/maximum dimensions for a dynamic input tensor.
     If the dimensions have not been previously set via :func:`set_shape`, return an invalid :class:`Dims` with a length of -1.
 
     :returns: A ``List[Dims]`` of length 3, containing the minimum, optimum, and maximum shapes, in that order. If the shapes have not been set yet, an empty list is returned.
 )trtdoc";
 
-constexpr const char* set_shape_input = R"trtdoc(
+constexpr char const* set_shape_input = R"trtdoc(
     Set the minimum/optimum/maximum values for a shape input tensor.
 
     This function must be called for every input tensor ``t`` that is a shape tensor (``t.is_shape`` == ``True``).
@@ -218,7 +218,7 @@ constexpr const char* set_shape_input = R"trtdoc(
     :raises: :class:`ValueError` if an inconsistency was detected. Note that inputs can be validated only partially; a full validation is performed at engine build time.
 )trtdoc";
 
-constexpr const char* get_shape_input = R"trtdoc(
+constexpr char const* get_shape_input = R"trtdoc(
     Get the minimum/optimum/maximum values for a shape input tensor.
 
     :returns: A ``List[List[int]]`` of length 3, containing the minimum, optimum, and maximum values, in that order. If the values have not been set yet, an empty list is returned.
@@ -227,21 +227,21 @@ constexpr const char* get_shape_input = R"trtdoc(
 
 namespace ErrorCodeDoc
 {
-constexpr const char* descr = R"trtdoc(Error codes that can be returned by TensorRT during execution.)trtdoc";
+constexpr char const* descr = R"trtdoc(Error codes that can be returned by TensorRT during execution.)trtdoc";
 
-constexpr const char* SUCCESS = R"trtdoc(Execution completed successfully.)trtdoc";
+constexpr char const* SUCCESS = R"trtdoc(Execution completed successfully.)trtdoc";
 
-constexpr const char* UNSPECIFIED_ERROR = R"trtdoc(
+constexpr char const* UNSPECIFIED_ERROR = R"trtdoc(
     An error that does not fall into any other category. This error is included for forward compatibility.
 )trtdoc";
 
-constexpr const char* INTERNAL_ERROR = R"trtdoc(A non-recoverable TensorRT error occurred.)trtdoc";
+constexpr char const* INTERNAL_ERROR = R"trtdoc(A non-recoverable TensorRT error occurred.)trtdoc";
 
-constexpr const char* INVALID_ARGUMENT = R"trtdoc(
+constexpr char const* INVALID_ARGUMENT = R"trtdoc(
     An argument passed to the function is invalid in isolation. This is a violation of the API contract.
 )trtdoc";
 
-constexpr const char* INVALID_CONFIG = R"trtdoc(
+constexpr char const* INVALID_CONFIG = R"trtdoc(
     An error occurred when comparing the state of an argument relative to other arguments. For example, the
     dimensions for concat differ between two tensors outside of the channel dimension. This error is triggered
     when an argument is correct in isolation, but not relative to other arguments. This is to help to distinguish
@@ -249,32 +249,32 @@ constexpr const char* INVALID_CONFIG = R"trtdoc(
     This is a violation of the API contract.
 )trtdoc";
 
-constexpr const char* FAILED_ALLOCATION = R"trtdoc(
+constexpr char const* FAILED_ALLOCATION = R"trtdoc(
     An error occurred when performing an allocation of memory on the host or the device.
     A memory allocation error is normally fatal, but in the case where the application provided its own memory
     allocation routine, it is possible to increase the pool of available memory and resume execution.
 )trtdoc";
 
-constexpr const char* FAILED_INITIALIZATION = R"trtdoc(
+constexpr char const* FAILED_INITIALIZATION = R"trtdoc(
     One, or more, of the components that TensorRT relies on did not initialize correctly.
     This is a system setup issue.
 )trtdoc";
 
-constexpr const char* FAILED_EXECUTION = R"trtdoc(
+constexpr char const* FAILED_EXECUTION = R"trtdoc(
     An error occurred during execution that caused TensorRT to end prematurely, either an asynchronous error or
     other execution errors reported by CUDA/DLA. In a dynamic system, the
     data can be thrown away and the next frame can be processed or execution can be retried.
     This is either an execution error or a memory error.
 )trtdoc";
 
-constexpr const char* FAILED_COMPUTATION = R"trtdoc(
+constexpr char const* FAILED_COMPUTATION = R"trtdoc(
     An error occurred during execution that caused the data to become corrupted, but execution finished. Examples
     of this error are NaN squashing or integer overflow. In a dynamic system, the data can be thrown away and the
     next frame can be processed or execution can be retried.
     This is either a data corruption error, an input error, or a range error.
 )trtdoc";
 
-constexpr const char* INVALID_STATE = R"trtdoc(
+constexpr char const* INVALID_STATE = R"trtdoc(
     TensorRT was put into a bad state by incorrect sequence of function calls. An example of an invalid state is
     specifying a layer to be DLA only without GPU fallback, and that layer is not supported by DLA. This can occur
     in situations where a service is optimistically executing networks for multiple different configurations
@@ -287,7 +287,7 @@ constexpr const char* INVALID_STATE = R"trtdoc(
     or setting the layer to run on the GPU.
 )trtdoc";
 
-constexpr const char* UNSUPPORTED_STATE = R"trtdoc(
+constexpr char const* UNSUPPORTED_STATE = R"trtdoc(
     An error occurred due to the network not being supported on the device due to constraints of the hardware or
     system. An example is running a unsafe layer in a safety certified context, or a resource requirement for the
     current network is greater than the capabilities of the target device. The network is otherwise correct, but
@@ -300,7 +300,7 @@ constexpr const char* UNSUPPORTED_STATE = R"trtdoc(
 
 namespace IErrorRecorderDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Reference counted application-implemented error reporting interface for TensorRT objects.
 
     The error reporting mechanism is a user defined object that interacts with the internal state of the object
@@ -320,7 +320,7 @@ constexpr const char* descr = R"trtdoc(
     the interface functions.
 )trtdoc";
 
-constexpr const char* has_overflowed = R"trtdoc(
+constexpr char const* has_overflowed = R"trtdoc(
     Determine if the error stack has overflowed.
 
     In the case when the number of errors is large, this function is used to query if one or more
@@ -330,7 +330,7 @@ constexpr const char* has_overflowed = R"trtdoc(
     :returns: True if errors have been dropped due to overflowing the error stack.
 )trtdoc";
 
-constexpr const char* get_num_errors = R"trtdoc(
+constexpr char const* get_num_errors = R"trtdoc(
     Return the number of errors
 
     Determines the number of errors that occurred between the current point in execution
@@ -342,7 +342,7 @@ constexpr const char* get_num_errors = R"trtdoc(
     :returns: Returns the number of errors detected, or 0 if there are no errors.
 )trtdoc";
 
-constexpr const char* get_error_code = R"trtdoc(
+constexpr char const* get_error_code = R"trtdoc(
     Returns the ErrorCode enumeration.
 
     The error_idx specifies what error code from 0 to :attr:`num_errors`-1 that the application
@@ -353,7 +353,7 @@ constexpr const char* get_error_code = R"trtdoc(
     :returns: Returns the enum corresponding to error_idx.
 )trtdoc";
 
-constexpr const char* get_error_desc = R"trtdoc(
+constexpr char const* get_error_desc = R"trtdoc(
     Returns description of the error.
 
     For the error specified by the idx value, return description of the error. In the safety context there is a
@@ -365,14 +365,14 @@ constexpr const char* get_error_desc = R"trtdoc(
     :returns: Returns description of the error.
 )trtdoc";
 
-constexpr const char* clear = R"trtdoc(
+constexpr char const* clear = R"trtdoc(
     Clear the error stack on the error recorder.
 
     Removes all the tracked errors by the error recorder.  This function must guarantee that after
     this function is called, and as long as no error occurs, :attr:`num_errors` will be zero.
 )trtdoc";
 
-constexpr const char* report_error = R"trtdoc(
+constexpr char const* report_error = R"trtdoc(
     Clear the error stack on the error recorder.
 
     Report an error to the user that has a given value and human readable description. The function returns false
@@ -388,7 +388,7 @@ constexpr const char* report_error = R"trtdoc(
 
 namespace IExecutionContextDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Context for executing inference using an :class:`ICudaEngine` .
     Multiple :class:`IExecutionContext` s may exist for one :class:`ICudaEngine` instance, allowing the same
     :class:`ICudaEngine` to be used for the execution of multiple batches simultaneously.
@@ -399,13 +399,16 @@ constexpr const char* descr = R"trtdoc(
     :ivar name: :class:`str` The name of the :class:`IExecutionContext` .
     :ivar device_memory: :class:`capsule` The device memory for use by this execution context. The memory must be aligned on a 256-byte boundary, and its size must be at least :attr:`engine.device_memory_size`. If using :func:`execute_async_v2()` to run the network, The memory is in use from the invocation of :func:`execute_async_v2()` until network execution is complete. If using :func:`execute_v2()`, it is in use until :func:`execute_v2()` returns. Releasing or otherwise using the memory for other purposes during this time will result in undefined behavior.
     :ivar active_optimization_profile: :class:`int` The active optimization profile for the context. The selected profile will be used in subsequent calls to :func:`execute_v2()` or :func:`execute_async_v2()` . Profile 0 is selected by default. Changing this value will invalidate all dynamic bindings for the current execution context, so that they have to be set again using :func:`set_binding_shape` before calling either :func:`execute_v2()` or :func:`execute_async_v2()` .
-    :ivar all_binding_shapes_specified: :class:`bool` Whether all dynamic dimensions of input tensors have been specified by calling :func:`set_binding_shape` . Trivially true if network has no dynamically shaped input tensors.
-    :ivar all_shape_inputs_specified: :class:`bool` Whether values for all input shape tensors have been specified by calling :func:`set_shape_input` . Trivially true if network has no input shape bindings.
+    :ivar all_binding_shapes_specified: :class:`bool` Whether all dynamic dimensions of input tensors have been specified by calling :func:`set_binding_shape` . Trivially true if network has no dynamically shaped input tensors. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
+    :ivar all_shape_inputs_specified: :class:`bool` Whether values for all input shape tensors have been specified by calling :func:`set_shape_input` . Trivially true if network has no input shape bindings. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
-    :ival enqueue_emits_profile: :class:`bool` Whether enqueue emits layer timing to the profiler. The default value is :class:`True`. If set to :class:`False`, enqueue will be asynchronous if there is a profiler attached. An extra method :func:`IExecutionContext::report_to_profiler()` needs to be called to obtain the profiling data and report to the profiler attached.
+    :ivar enqueue_emits_profile: :class:`bool` Whether enqueue emits layer timing to the profiler. The default value is :class:`True`. If set to :class:`False`, enqueue will be asynchronous if there is a profiler attached. An extra method :func:`IExecutionContext::report_to_profiler()` needs to be called to obtain the profiling data and report to the profiler attached.
+    :ivar persistent_cache_limit: The maximum size of persistent L2 cache that this execution context may use for activation caching. Activation caching is not supported on all architectures - see "How TensorRT uses Memory" in the developer guide for details. The default is 0 Bytes.
+    :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with kDETAILED verbosity will generally increase latency in enqueueV2/V3(). Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
+    :ivar temporary_allocator: :class:`IGpuAllocator` The GPU allocator used for internal temporary storage.
 )trtdoc";
 
-constexpr const char* execute = R"trtdoc(
+constexpr char const* execute = R"trtdoc(
     [DEPRECATED] Please use execute_v2() instead if the engine is built from a network with explicit batch dimension mode enabled.
 
     Synchronously execute inference on a batch.
@@ -417,7 +420,7 @@ constexpr const char* execute = R"trtdoc(
     :returns: True if execution succeeded.
 )trtdoc";
 
-constexpr const char* execute_async = R"trtdoc(
+constexpr char const* execute_async = R"trtdoc(
     [DEPRECATED] Please use execute_async_v2() instead if the engine is built from a network with explicit batch dimension mode enabled.
 
     Asynchronously execute inference on a batch.
@@ -431,7 +434,7 @@ constexpr const char* execute_async = R"trtdoc(
     :returns: True if the kernels were executed successfully.
 )trtdoc";
 
-constexpr const char* execute_v2 = R"trtdoc(
+constexpr char const* execute_v2 = R"trtdoc(
     Synchronously execute inference on a batch.
     This method requires a array of input and output buffers. The mapping from tensor names to indices can be queried using :func:`ICudaEngine.get_binding_index()` .
     This method only works for execution contexts built from networks with no implicit batch dimension.
@@ -441,7 +444,7 @@ constexpr const char* execute_v2 = R"trtdoc(
     :returns: True if execution succeeded.
 )trtdoc";
 
-constexpr const char* execute_async_v2 = R"trtdoc(
+constexpr char const* execute_async_v2 = R"trtdoc(
     Asynchronously execute inference on a batch.
     This method requires a array of input and output buffers. The mapping from tensor names to indices can be queried using :func:`ICudaEngine::get_binding_index()` .
     This method only works for execution contexts built from networks with no implicit batch dimension.
@@ -454,7 +457,7 @@ constexpr const char* execute_async_v2 = R"trtdoc(
 )trtdoc";
 
 // TODO: Check if this makes sense to have.
-constexpr const char* device_memory = R"trtdoc(
+constexpr char const* device_memory = R"trtdoc(
     The device memory for use by this :class:`IExecutionContext` .
 
     The memory must be aligned on a 256-byte boundary, and its size must be at least that
@@ -464,7 +467,7 @@ constexpr const char* device_memory = R"trtdoc(
     purposes during this time will result in undefined behavior.
 )trtdoc";
 
-constexpr const char* get_strides = R"trtdoc(
+constexpr char const* get_strides = R"trtdoc(
     Return the strides of the buffer for the given binding.
 
     Note that strides can be different for different execution contexts with dynamic shapes.
@@ -472,7 +475,7 @@ constexpr const char* get_strides = R"trtdoc(
     :arg binding: The binding index.
 )trtdoc";
 
-constexpr const char* set_binding_shape = R"trtdoc(
+constexpr char const* set_binding_shape = R"trtdoc(
     Set the dynamic shape of a binding.
 
     Requires the engine to be built without an implicit batch dimension.
@@ -497,7 +500,7 @@ constexpr const char* set_binding_shape = R"trtdoc(
     shape using :func:`get_binding_shape` on the output binding.
 )trtdoc";
 
-constexpr const char* get_binding_shape = R"trtdoc(
+constexpr char const* get_binding_shape = R"trtdoc(
     Get the dynamic shape of a binding.
 
     If :func:`set_binding_shape` has been called on this binding (or if there are no
@@ -515,7 +518,7 @@ constexpr const char* get_binding_shape = R"trtdoc(
     :returns: A :class:`Dims` object representing the currently selected shape.
 )trtdoc";
 
-constexpr const char* set_shape_input = R"trtdoc(
+constexpr char const* set_shape_input = R"trtdoc(
     Set values of an input shape tensor required by shape calculations.
 
     :arg binding: The binding index of an input tensor for which ``ICudaEngine.is_shape_binding(binding)`` and ``ICudaEngine.binding_is_input(binding)`` are both true.
@@ -531,7 +534,7 @@ constexpr const char* set_shape_input = R"trtdoc(
     shape using :func:`get_binding_shape` on the output binding.
 )trtdoc";
 
-constexpr const char* get_shape = R"trtdoc(
+constexpr char const* get_shape = R"trtdoc(
     Get values of an input shape tensor required for shape calculations or an output tensor produced by shape calculations.
 
     :arg binding: The binding index of an input tensor for which ``ICudaEngine.is_shape_binding(binding)`` is true.
@@ -543,7 +546,7 @@ constexpr const char* get_shape = R"trtdoc(
     :returns: An iterable containing the values of the shape tensor.
 )trtdoc";
 
-constexpr const char* set_optimization_profile_async = R"trtdoc(
+constexpr char const* set_optimization_profile_async = R"trtdoc(
     Set the optimization profile with async semantics
 
     :arg profile_index: The index of the optimization profile
@@ -556,7 +559,7 @@ constexpr const char* set_optimization_profile_async = R"trtdoc(
     :returns: :class:`True` if the optimization profile was set successfully
 )trtdoc";
 
-constexpr const char* report_to_profiler = R"trtdoc(
+constexpr char const* report_to_profiler = R"trtdoc(
     Calculate layer timing info for the current optimization profile in IExecutionContext and update the profiler after one iteration of inference launch.
 
     If the enqueue_emits_profiler flag was set to true, the enqueue function will calculate layer timing implicitly if a profiler is provided. There is no need to call this function.
@@ -568,16 +571,113 @@ constexpr const char* report_to_profiler = R"trtdoc(
 
     :returns: :class:`True` if the call succeeded, else :class:`False` (e.g. profiler not provided, in CUDA graph capture mode, etc.)
 )trtdoc";
+
+constexpr char const* get_tensor_strides = R"trtdoc(
+    Return the strides of the buffer for the given tensor name.
+
+    Note that strides can be different for different execution contexts with dynamic shapes.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* set_input_shape = R"trtdoc(
+    Set shape for the given input tensor.
+
+    :arg name: The input tensor name.
+    :arg shape: The input tensor shape.
+)trtdoc";
+
+constexpr char const* get_tensor_shape = R"trtdoc(
+    Return the shape of the given input or output tensor.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* set_tensor_address = R"trtdoc(
+    Set memory address for the given input or output tensor.
+
+    :arg name: The tensor name.
+    :arg memory: The memory address.
+)trtdoc";
+
+constexpr char const* get_tensor_address = R"trtdoc(
+    Get memory address for the given input or output tensor.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* set_input_consumed_event = R"trtdoc(
+    Mark all input tensors as consumed.
+
+    :arg event: The cuda event that is triggered after all input tensors have been consumed.
+)trtdoc";
+
+constexpr char const* get_input_consumed_event = R"trtdoc(
+    Return the event associated with consuming the input tensors.
+)trtdoc";
+
+constexpr char const* set_output_allocator = R"trtdoc(
+    Set output allocator to use for the given output tensor.
+
+    Pass ``None`` to unset the output allocator.
+
+    The allocator is called by :func:`execute_async_v3`.
+
+    :arg name: The tensor name.
+    :arg output_allocator: The output allocator.
+)trtdoc";
+
+constexpr char const* get_output_allocator = R"trtdoc(
+    Return the output allocator associated with given output tensor, or ``None`` if the provided name does not map to an output tensor.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_max_output_size = R"trtdoc(
+    Return the upper bound on an output tensor's size, in bytes, based on the current optimization profile.
+
+    If the profile or input shapes are not yet set, or the provided name does not map to an output, returns -1.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* infer_shapes = R"trtdoc(
+    Infer shapes and return the names of any tensors that are insufficiently specified.
+
+    An input tensor is insufficiently specified if either of the following is true:
+
+    * It has dynamic dimensions and its runtime dimensions have not yet
+      been specified via :func:`set_input_shape` .
+
+    * is_shape_inference_io(t) is True and the tensor's address has not yet been set.
+
+    :returns: A ``List[str]`` indicating the names of any tensors which have not been sufficiently
+        specified, or an empty list on success.
+
+    :raises: RuntimeError if shape inference fails due to reasons other than insufficiently specified tensors.
+)trtdoc";
+
+constexpr char const* execute_async_v3 = R"trtdoc(
+    Asynchronously execute inference.
+
+    Modifying or releasing memory that has been registered for the tensors before stream synchronization or the event passed to :func:`set_input_consumed_event` has been triggered results in undefined behavior.
+
+    Input tensors can be released after the :func:`set_input_consumed_event` whereas output tensors require stream synchronization.
+
+    :arg stream_handle: The cuda stream on which the inference kernels will be enqueued.
+)trtdoc";
+
 } // namespace IExecutionContextDoc
 
 namespace ICudaEngineDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An :class:`ICudaEngine` for executing inference on a built network.
 
     The engine can be indexed with ``[]`` . When indexed in this way with an integer, it will return the corresponding binding name. When indexed with a string, it will return the corresponding binding index.
 
     :ivar num_bindings: :class:`int` The number of binding indices.
+    :ivar num_io_tensors: :class:`int` The number of IO tensors.
     :ivar max_batch_size: :class:`int` [DEPRECATED] The maximum batch size which can be used for inference for an engine built from an :class:`INetworkDefinition` with implicit batch dimension. For an engine built from an :class:`INetworkDefinition` with explicit batch dimension, this will always be ``1`` .
     :ivar has_implicit_batch_dimension: :class:`bool` Whether the engine was built with an implicit batch dimension. This is an engine-wide property. Either all tensors in the engine have an implicit batch dimension or none of them do. This is True if and only if the :class:`INetworkDefinition` from which this engine was built was created without the ``NetworkDefinitionCreationFlag.EXPLICIT_BATCH`` flag.
     :ivar num_layers: :class:`int` The number of layers in the network. The number of layers in the network is not necessarily the number in the original :class:`INetworkDefinition`, as layers may be combined or eliminated as the :class:`ICudaEngine` is optimized. This value can be useful when building per-layer tables, such as when aggregating profiling data over a number of executions.
@@ -592,7 +692,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar profiling_verbosity: The profiling verbosity the builder config was set to when the engine was built.
 )trtdoc";
 
-constexpr const char* get_binding_index = R"trtdoc(
+constexpr char const* get_binding_index = R"trtdoc(
     Retrieve the binding index for a named tensor.
 
     You can also use engine's :func:`__getitem__` with ``engine[name]``. When invoked with a :class:`str` , this will return the corresponding binding index.
@@ -606,7 +706,7 @@ constexpr const char* get_binding_index = R"trtdoc(
     :returns: The binding index for the named tensor, or -1 if the name is not found.
 )trtdoc";
 
-constexpr const char* get_binding_name = R"trtdoc(
+constexpr char const* get_binding_name = R"trtdoc(
     Retrieve the name corresponding to a binding index.
 
     You can also use engine's :func:`__getitem__` with ``engine[index]``. When invoked with an :class:`int` , this will return the corresponding binding name.
@@ -619,7 +719,7 @@ constexpr const char* get_binding_name = R"trtdoc(
 )trtdoc";
 
 // Documentation bug with parameters on these three functions because they are overloaded.
-constexpr const char* binding_is_input = R"trtdoc(
+constexpr char const* binding_is_input = R"trtdoc(
     Determine whether a binding is an input binding.
 
     :index: The binding index.
@@ -627,7 +727,7 @@ constexpr const char* binding_is_input = R"trtdoc(
     :returns: True if the index corresponds to an input binding and the index is in range.
 )trtdoc";
 
-constexpr const char* binding_is_input_str = R"trtdoc(
+constexpr char const* binding_is_input_str = R"trtdoc(
     Determine whether a binding is an input binding.
 
     :name: The name of the tensor corresponding to an engine binding.
@@ -635,7 +735,7 @@ constexpr const char* binding_is_input_str = R"trtdoc(
     :returns: True if the index corresponds to an input binding and the index is in range.
 )trtdoc";
 
-constexpr const char* get_binding_shape = R"trtdoc(
+constexpr char const* get_binding_shape = R"trtdoc(
     Get the shape of a binding.
 
     :index: The binding index.
@@ -643,7 +743,7 @@ constexpr const char* get_binding_shape = R"trtdoc(
     :Returns: The shape of the binding if the index is in range, otherwise Dims()
 )trtdoc";
 
-constexpr const char* get_binding_shape_str = R"trtdoc(
+constexpr char const* get_binding_shape_str = R"trtdoc(
     Get the shape of a binding.
 
     :name: The name of the tensor corresponding to an engine binding.
@@ -651,7 +751,7 @@ constexpr const char* get_binding_shape_str = R"trtdoc(
     :Returns: The shape of the binding if the tensor is present, otherwise Dims()
 )trtdoc";
 
-constexpr const char* get_binding_dtype = R"trtdoc(
+constexpr char const* get_binding_dtype = R"trtdoc(
     Determine the required data type for a buffer from its binding index.
 
     :index: The binding index.
@@ -659,7 +759,7 @@ constexpr const char* get_binding_dtype = R"trtdoc(
     :Returns: The type of data in the buffer.
 )trtdoc";
 
-constexpr const char* get_binding_dtype_str = R"trtdoc(
+constexpr char const* get_binding_dtype_str = R"trtdoc(
     Determine the required data type for a buffer from its binding index.
 
     :name: The name of the tensor corresponding to an engine binding.
@@ -667,19 +767,19 @@ constexpr const char* get_binding_dtype_str = R"trtdoc(
     :Returns: The type of data in the buffer.
 )trtdoc";
 
-constexpr const char* serialize = R"trtdoc(
+constexpr char const* serialize = R"trtdoc(
     Serialize the engine to a stream.
 
     :returns: An :class:`IHostMemory` object containing the serialized :class:`ICudaEngine` .
 )trtdoc";
 
-constexpr const char* create_execution_context = R"trtdoc(
+constexpr char const* create_execution_context = R"trtdoc(
     Create an :class:`IExecutionContext` .
 
     :returns: The newly created :class:`IExecutionContext` .
 )trtdoc";
 
-constexpr const char* get_location = R"trtdoc(
+constexpr char const* get_location = R"trtdoc(
     Get location of binding.
     This lets you know whether the binding should be a pointer to device or host memory.
 
@@ -688,7 +788,7 @@ constexpr const char* get_location = R"trtdoc(
     :returns: The location of the bound tensor with given index.
 )trtdoc";
 
-constexpr const char* get_location_str = R"trtdoc(
+constexpr char const* get_location_str = R"trtdoc(
     Get location of binding.
     This lets you know whether the binding should be a pointer to device or host memory.
 
@@ -697,14 +797,14 @@ constexpr const char* get_location_str = R"trtdoc(
     :returns: The location of the bound tensor with given index.
 )trtdoc";
 
-constexpr const char* create_execution_context_without_device_memory = R"trtdoc(
+constexpr char const* create_execution_context_without_device_memory = R"trtdoc(
     Create an :class:`IExecutionContext` without any device memory allocated
     The memory for execution of this device context must be supplied by the application.
 
     :returns: An :class:`IExecutionContext` without device memory allocated.
 )trtdoc";
 
-constexpr const char* get_profile_shape = R"trtdoc(
+constexpr char const* get_profile_shape = R"trtdoc(
     Get the minimum/optimum/maximum dimensions for a particular binding under an optimization profile.
 
     :arg profile_index: The index of the profile.
@@ -713,7 +813,7 @@ constexpr const char* get_profile_shape = R"trtdoc(
     :returns: A ``List[Dims]`` of length 3, containing the minimum, optimum, and maximum shapes, in that order.
 )trtdoc";
 
-constexpr const char* get_profile_shape_input = R"trtdoc(
+constexpr char const* get_profile_shape_input = R"trtdoc(
     Get minimum/optimum/maximum values for an input shape binding under an optimization profile. If the specified binding is not an input shape binding, an exception is raised.
 
     :arg profile_index: The index of the profile.
@@ -722,7 +822,7 @@ constexpr const char* get_profile_shape_input = R"trtdoc(
     :returns: A ``List[List[int]]`` of length 3, containing the minimum, optimum, and maximum values, in that order. If the values have not been set yet, an empty list is returned.
 )trtdoc";
 
-constexpr const char* is_shape_binding = R"trtdoc(
+constexpr char const* is_shape_binding = R"trtdoc(
     Returns :class:`True` if tensor is required as input for shape calculations or output from them.
 
     TensorRT evaluates a network in two phases:
@@ -747,7 +847,7 @@ constexpr const char* is_shape_binding = R"trtdoc(
     :arg binding: The binding index.
 )trtdoc";
 
-constexpr const char* is_execution_binding = R"trtdoc(
+constexpr char const* is_execution_binding = R"trtdoc(
     Returns :class:`True` if tensor is required for execution phase, false otherwise.
 
     For example, if a network uses an input tensor with binding i ONLY as the reshape dimensions for an :class:`IShuffleLayer` , then ``is_execution_binding(i) == False``, and a binding of `0` can be supplied for it when calling :func:`IExecutionContext.execute_v2()` or :func:`IExecutionContext.execute_async_v2()` .
@@ -755,14 +855,14 @@ constexpr const char* is_execution_binding = R"trtdoc(
     :arg binding: The binding index.
 )trtdoc";
 
-constexpr const char* get_binding_bytes_per_component = R"trtdoc(
+constexpr char const* get_binding_bytes_per_component = R"trtdoc(
     Return the number of bytes per component of an element.
     The vector component size is returned if :func:`get_binding_vectorized_dim` != -1.
 
     :arg index: The binding index.
 )trtdoc";
 
-constexpr const char* get_binding_components_per_element = R"trtdoc(
+constexpr char const* get_binding_components_per_element = R"trtdoc(
     Return the number of components included in one element.
 
     The number of elements in the vectors is returned if :func:`get_binding_vectorized_dim` != -1.
@@ -770,13 +870,13 @@ constexpr const char* get_binding_components_per_element = R"trtdoc(
     :arg index: The binding index.
 )trtdoc";
 
-constexpr const char* get_binding_format = R"trtdoc(
+constexpr char const* get_binding_format = R"trtdoc(
     Return the binding format.
 
     :arg index: The binding index.
 )trtdoc";
 
-constexpr const char* get_binding_format_desc = R"trtdoc(
+constexpr char const* get_binding_format_desc = R"trtdoc(
     Return the human readable description of the tensor format.
 
     The description includes the order, vectorization, data type, strides, etc. For example:
@@ -791,7 +891,7 @@ constexpr const char* get_binding_format_desc = R"trtdoc(
     :arg index: The binding index.
 )trtdoc";
 
-constexpr const char* get_binding_vectorized_dim = R"trtdoc(
+constexpr char const* get_binding_vectorized_dim = R"trtdoc(
     Return the dimension index that the buffer is vectorized.
 
     Specifically -1 is returned if scalars per vector is 1.
@@ -799,65 +899,198 @@ constexpr const char* get_binding_vectorized_dim = R"trtdoc(
     :arg index: The binding index.
 )trtdoc";
 
-constexpr const char* create_engine_inspector = R"trtdoc(
+constexpr char const* create_engine_inspector = R"trtdoc(
     Create an :class:`IEngineInspector` which prints out the layer information of an engine or an execution context.
 
     :returns: The :class:`IEngineInspector`.
 )trtdoc";
 
+// Docs for enqueueV3 related APIs
+constexpr char const* get_tensor_name = R"trtdoc(
+    Return the name of an input or output tensor.
+
+    :arg index: The tensor index.
+)trtdoc";
+
+constexpr char const* get_tensor_mode = R"trtdoc(
+    Determine whether a tensor is an input or output tensor.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* is_shape_inference_io = R"trtdoc(
+    Determine whether a tensor is read or written by infer_shapes.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_shape = R"trtdoc(
+    Return the shape of an input or output tensor.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_dtype = R"trtdoc(
+    Return the required data type for a buffer from its tensor name.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_location = R"trtdoc(
+    Determine whether an input or output tensor must be on GPU or CPU.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_bytes_per_component = R"trtdoc(
+    Return the number of bytes per component of an element.
+
+    The vector component size is returned if :func:`get_tensor_vectorized_dim` != -1.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_components_per_element = R"trtdoc(
+    Return the number of components included in one element.
+
+    The number of elements in the vectors is returned if :func:`get_tensor_vectorized_dim` != -1.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_format = R"trtdoc(
+    Return the tensor format.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_format_desc = R"trtdoc(
+    Return the human readable description of the tensor format.
+
+    The description includes the order, vectorization, data type, strides, etc. For example:
+
+    |   Example 1: kCHW + FP32
+    |       "Row major linear FP32 format"
+    |   Example 2: kCHW2 + FP16
+    |       "Two wide channel vectorized row major FP16 format"
+    |   Example 3: kHWC8 + FP16 + Line Stride = 32
+    |       "Channel major FP16 format where C % 8 == 0 and H Stride % 32 == 0"
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_vectorized_dim = R"trtdoc(
+    Return the dimension index that the buffer is vectorized.
+
+    Specifically -1 is returned if scalars per vector is 1.
+
+    :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_tensor_profile_shape = R"trtdoc(
+    Get the minimum/optimum/maximum dimensions for a particular tensor under an optimization profile.
+
+    :arg name: The tensor name.
+    :arg profile_index: The index of the profile.
+)trtdoc";
+
 } // namespace ICudaEngineDoc
+
+namespace OutputAllocatorDoc
+{
+constexpr char const* descr = R"trtdoc(
+Application-implemented class for controlling output tensor allocation.
+
+To implement a custom output allocator, ensure that you explicitly instantiate the base class in :func:`__init__` :
+::
+
+    class MyOutputAllocator(trt.IOutputAllocator):
+        def __init__(self):
+            trt.IOutputAllocator.__init__(self)
+
+        def reallocate_output(self, tensor_name, memory, size, alignment):
+            ... # Your implementation here
+
+        def notify_shape(self, tensor_name, shape):
+            ... # Your implementation here
+
+)trtdoc";
+
+constexpr char const* reallocate_output = R"trtdoc(
+    A callback implemented by the application to handle acquisition of output tensor memory.
+
+    If an allocation request cannot be satisfied, ``None`` should be returned.
+
+    :arg tensor_name: The output tensor name.
+    :arg memory: The output tensor memory address.
+    :arg size: The number of bytes required.
+    :arg alignment: The required alignment of memory.
+
+    :returns: The address of the output tensor memory.
+)trtdoc";
+
+constexpr char const* notify_shape = R"trtdoc(
+    Called by TensorRT when the shape of the output tensor is known.
+
+    :arg tensor_name: The output tensor name.
+    :arg shape: The output tensor shape.
+)trtdoc";
+
+} // namespace OutputAllocatorDoc
 
 namespace BuilderFlagDoc
 {
-constexpr const char* descr
+constexpr char const* descr
     = R"trtdoc(Valid modes that the builder can enable when creating an engine from a network definition.)trtdoc";
 
-constexpr const char* FP16 = R"trtdoc(Enable FP16 layer selection)trtdoc";
-constexpr const char* INT8 = R"trtdoc(Enable Int8 layer selection)trtdoc";
-constexpr const char* DEBUG = R"trtdoc(Enable debugging of layers via synchronizing after every layer)trtdoc";
-constexpr const char* GPU_FALLBACK
+constexpr char const* FP16 = R"trtdoc(Enable FP16 layer selection)trtdoc";
+constexpr char const* INT8 = R"trtdoc(Enable Int8 layer selection)trtdoc";
+constexpr char const* DEBUG = R"trtdoc(Enable debugging of layers via synchronizing after every layer)trtdoc";
+constexpr char const* GPU_FALLBACK
     = R"trtdoc(Enable layers marked to execute on GPU if layer cannot execute on DLA)trtdoc";
-constexpr const char* STRICT_TYPES = R"trtdoc([DEPRECATED] Enables strict type constraints. Equivalent to setting PREFER_PRECISION_CONSTRAINTS, DIRECT_IO, and REJECT_EMPTY_ALGORITHMS.)trtdoc";
-constexpr const char* REFIT = R"trtdoc(Enable building a refittable engine)trtdoc";
-constexpr const char* DISABLE_TIMING_CACHE
+constexpr char const* STRICT_TYPES = R"trtdoc([DEPRECATED] Enables strict type constraints. Equivalent to setting PREFER_PRECISION_CONSTRAINTS, DIRECT_IO, and REJECT_EMPTY_ALGORITHMS.)trtdoc";
+constexpr char const* REFIT = R"trtdoc(Enable building a refittable engine)trtdoc";
+constexpr char const* DISABLE_TIMING_CACHE
     = R"trtdoc(Disable reuse of timing information across identical layers.)trtdoc";
-constexpr const char* TF32
+constexpr char const* TF32
     = R"trtdoc(Allow (but not require) computations on tensors of type DataType.FLOAT to use TF32. TF32 computes inner products by rounding the inputs to 10-bit mantissas before multiplying, but accumulates the sum using 23-bit mantissas. Enabled by default.)trtdoc";
-constexpr const char* SPARSE_WEIGHTS
+constexpr char const* SPARSE_WEIGHTS
     = R"trtdoc(Allow the builder to examine weights and use optimized functions when weights have suitable sparsity.)trtdoc";
-constexpr const char* SAFETY_SCOPE
+constexpr char const* SAFETY_SCOPE
     = R"trtdoc(Change the allowed parameters in the EngineCapability.STANDARD flow to match the restrictions that EngineCapability.SAFETY check against for DeviceType.GPU and EngineCapability.DLA_STANDALONE check against the DeviceType.DLA case. This flag is forced to true if EngineCapability.SAFETY at build time if it is unset.)trtdoc";
-constexpr const char* OBEY_PRECISION_CONSTRAINTS
+constexpr char const* OBEY_PRECISION_CONSTRAINTS
     = R"trtdoc(Require that layers execute in specified precisions. Build fails otherwise.)trtdoc";
-constexpr const char* PREFER_PRECISION_CONSTRAINTS
+constexpr char const* PREFER_PRECISION_CONSTRAINTS
     = R"trtdoc(Prefer that layers execute in specified precisions. Fall back (with warning) to another precision if build would otherwise fail.)trtdoc";
-constexpr const char* DIRECT_IO
+constexpr char const* DIRECT_IO
     = R"trtdoc(Require that no reformats be inserted between a layer and a network I/O tensor for which ITensor.allowed_formats was set. Build fails if a reformat is required for functional correctness.)trtdoc";
-constexpr const char* REJECT_EMPTY_ALGORITHMS
+constexpr char const* REJECT_EMPTY_ALGORITHMS
     = R"trtdoc(Fail if IAlgorithmSelector.select_algorithms returns an empty set of algorithms.)trtdoc";
+constexpr char const* ENABLE_TACTIC_HEURISTIC
+    = R"trtdoc(Enable heuristic-based tactic selection for shorter engine generation time. The performance of the generated engine may not be as performant as a profiling-based builder.)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
 {
-constexpr const char* descr = R"trtdoc(The type for memory pools used by TensorRT.)trtdoc";
-constexpr const char* WORKSPACE = R"trtdoc(
+constexpr char const* descr = R"trtdoc(The type for memory pools used by TensorRT.)trtdoc";
+constexpr char const* WORKSPACE = R"trtdoc(
     WORKSPACE is used by TensorRT to store intermediate buffers within an operation.
     This is equivalent to the deprecated IBuilderConfig.max_workspace_size and overrides that value.
     This defaults to max device memory. Set to a smaller value to restrict tactics that use over the threshold en masse.
     For more targeted removal of tactics use the IAlgorithmSelector interface.
 )trtdoc";
-constexpr const char* DLA_MANAGED_SRAM = R"trtdoc(
+constexpr char const* DLA_MANAGED_SRAM = R"trtdoc(
     DLA_MANAGED_SRAM is a fast software managed RAM used by DLA to communicate within a layer.
     The size of this pool must be at least 4 KiB and must be a power of 2.
     This defaults to 1 MiB.
     Orin has capacity of 1 MiB per core, and Xavier shares 4 MiB across all of its accelerator cores.
 )trtdoc";
-constexpr const char* DLA_LOCAL_DRAM = R"trtdoc(
+constexpr char const* DLA_LOCAL_DRAM = R"trtdoc(
     DLA_LOCAL_DRAM is host RAM used by DLA to share intermediate tensor data across operations.
     The size of this pool must be at least 4 KiB and must be a power of 2.
     This defaults to 1 GiB.
 )trtdoc";
-constexpr const char* DLA_GLOBAL_DRAM = R"trtdoc(
+constexpr char const* DLA_GLOBAL_DRAM = R"trtdoc(
     DLA_GLOBAL_DRAM is host RAM used by DLA to store weights and metadata for execution.
     The size of this pool must be at least 4 KiB and must be a power of 2.
     This defaults to 512 MiB.
@@ -866,66 +1099,102 @@ constexpr const char* DLA_GLOBAL_DRAM = R"trtdoc(
 
 namespace QuantizationFlagDoc
 {
-constexpr const char* descr = R"trtdoc(List of valid flags for quantizing the network to int8.)trtdoc";
+constexpr char const* descr = R"trtdoc(List of valid flags for quantizing the network to int8.)trtdoc";
 
-constexpr const char* CALIBRATE_BEFORE_FUSION
+constexpr char const* CALIBRATE_BEFORE_FUSION
     = R"trtdoc(Run int8 calibration pass before layer fusion. Only valid for IInt8LegacyCalibrator and IInt8EntropyCalibrator. We always run int8 calibration pass before layer fusion for IInt8MinMaxCalibrator and IInt8EntropyCalibrator2. Disabled by default.)trtdoc";
 } // namespace QuantizationFlagDoc
 
+namespace PreviewFeatureDoc
+{
+constexpr char const* descr = R"trtdoc(
+    List of Preview Features that can be enabled. Preview Features have been fully tested but are not yet as stable as other features in TensorRT.
+    They are provided as opt-in features for at least one release.
+    For example, to enable faster dynamic shapes, call :func:`set_preview_feature` with ``PreviewFeature.FASTER_DYNAMIC_SHAPES_0805``
+)trtdoc";
+constexpr char const* FASTER_DYNAMIC_SHAPES_0805 = R"trtdoc(
+    Optimize runtime dimensions with TensorRT's DL Compiler.
+    Potentially reduces run time and decreases device memory usage and engine size.
+    Models most likely to benefit from enabling ``FASTER_DYNAMIC_SHAPES_0805`` are transformer-based models, and models containing dynamic control flows.
+)trtdoc";
+constexpr char const* DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 = R"trtdoc(
+    Disable usage of cuDNN/cuBLAS/cuBLASLt tactics in the TensorRT core library.
+    When the flag is enabled, TensorRT core will not use these tactics even if they are specified in
+    set_tactic_sources, but cudnnContext and cublasContext handles will still be passed to
+    plugins via IPluginV2::attachToContext() if the appropriate tactic sources are set.
+    This allows users to experiment with disabling external library tactics without having to modify their
+    application's plugins to support nullptr handles.
+    The default value for this flag is off.
+)trtdoc";
+} // namespace PreviewFeatureDoc
+
 namespace NetworkDefinitionCreationFlagDoc
 {
-constexpr const char* descr
+constexpr char const* descr
     = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable explicit batch mode, pass a value of ``1 << int(NetworkDefinitionCreationFlag.EXPLICIT_BATCH)`` to :func:`create_network` )trtdoc";
-constexpr const char* EXPLICIT_BATCH
+constexpr char const* EXPLICIT_BATCH
     = R"trtdoc(Specify that the network should be created with an explicit batch dimension. Creating a network without this flag has been deprecated.)trtdoc";
-constexpr const char* EXPLICIT_PRECISION
+constexpr char const* EXPLICIT_PRECISION
     = R"trtdoc([DEPRECATED] This flag has no effect now.)trtdoc";
 } // namespace NetworkDefinitionCreationFlagDoc
 
 namespace DeviceTypeDoc
 {
-constexpr const char* descr = R"trtdoc(Device types that TensorRT can execute on)trtdoc";
+constexpr char const* descr = R"trtdoc(Device types that TensorRT can execute on)trtdoc";
 
-constexpr const char* GPU = R"trtdoc(GPU device)trtdoc";
-constexpr const char* DLA = R"trtdoc(DLA core)trtdoc";
+constexpr char const* GPU = R"trtdoc(GPU device)trtdoc";
+constexpr char const* DLA = R"trtdoc(DLA core)trtdoc";
 } // namespace DeviceTypeDoc
 
 namespace ProfilingVerbosityDoc
 {
-constexpr const char* descr = R"trtdoc(Profiling verbosity in NVTX annotations and the engine inspector)trtdoc";
+constexpr char const* descr = R"trtdoc(Profiling verbosity in NVTX annotations and the engine inspector)trtdoc";
 
-constexpr const char* LAYER_NAMES_ONLY = R"trtdoc(Print only the layer names. This is the default setting.)trtdoc";
-constexpr const char* DETAILED
+constexpr char const* LAYER_NAMES_ONLY = R"trtdoc(Print only the layer names. This is the default setting.)trtdoc";
+constexpr char const* DETAILED
     = R"trtdoc(Print detailed layer information including layer names and layer parameters.)trtdoc";
-constexpr const char* NONE = R"trtdoc(Do not print any layer information.)trtdoc";
+constexpr char const* NONE = R"trtdoc(Do not print any layer information.)trtdoc";
 
-constexpr const char* DEFAULT = R"trtdoc([DEPRECATED] Same as LAYER_NAMES_ONLY.)trtdoc";
-constexpr const char* VERBOSE = R"trtdoc([DEPRECATED] Same as DETAILED.)trtdoc";
+constexpr char const* DEFAULT = R"trtdoc([DEPRECATED] Same as LAYER_NAMES_ONLY.)trtdoc";
+constexpr char const* VERBOSE = R"trtdoc([DEPRECATED] Same as DETAILED.)trtdoc";
 } // namespace ProfilingVerbosityDoc
+
+namespace TensorIOModeDoc
+{
+constexpr char const* descr = R"trtdoc(IO tensor modes for TensorRT.)trtdoc";
+
+constexpr char const* NONE = R"trtdoc(Tensor is not an input or output.)trtdoc";
+constexpr char const* INPUT = R"trtdoc(Tensor is input to the engine.)trtdoc";
+constexpr char const* OUTPUT = R"trtdoc(Tensor is output to the engine.)trtdoc";
+} // namespace TensorIOModeDoc
 
 namespace TacticSourceDoc
 {
-constexpr const char* descr = R"trtdoc(Tactic sources that can provide tactics for TensorRT.)trtdoc";
+constexpr char const* descr = R"trtdoc(Tactic sources that can provide tactics for TensorRT.)trtdoc";
 
-constexpr const char* CUBLAS = R"trtdoc(
-        Enables cuBLAS tactics.
+constexpr char const* CUBLAS = R"trtdoc(
+        Enables cuBLAS tactics. Enabled by default.
         **NOTE:** Disabling this value will cause the cublas handle passed to plugins in attachToContext to be null.
     )trtdoc";
-constexpr const char* CUBLAS_LT = R"trtdoc(
-        Enables cuBLAS LT tactics
+constexpr char const* CUBLAS_LT = R"trtdoc(
+        Enables cuBLAS LT tactics. Enabled for x86 platforms and only enabled for non-x86 platforms when CUDA >= 11.0 by default
     )trtdoc";
-constexpr const char* CUDNN = R"trtdoc(
-        Enables cuDNN tactics
+constexpr char const* CUDNN = R"trtdoc(
+        Enables cuDNN tactics. Enabled by default.
     )trtdoc";
-constexpr const char* EDGE_MASK_CONVOLUTIONS = R"trtdoc(
+constexpr char const* EDGE_MASK_CONVOLUTIONS = R"trtdoc(
         Enables convolution tactics implemented with edge mask tables. These tactics tradeoff memory for performance
-        by consuming additional memory space proportional to the input size.
+        by consuming additional memory space proportional to the input size. Enabled by default.
+    )trtdoc";
+constexpr char const* JIT_CONVOLUTIONS = R"trtdoc(
+        Enables convolution tactics implemented with source-code JIT fusion. The engine building time may increase
+        when this is enabled. Enabled by default.
     )trtdoc";
 } // namespace TacticSourceDoc
 
 namespace EngineCapabilityDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     List of supported engine capability flows.
     The EngineCapability determines the restrictions of a network during build time and what runtime
     it targets. When BuilderFlag::kSAFETY_SCOPE is not set (by default), EngineCapability.STANDARD does not provide any restrictions on functionality and the resulting
@@ -936,46 +1205,46 @@ constexpr const char* descr = R"trtdoc(
     the resulting serialized engine can be executed using standalone DLA runtime APIs. See sampleNvmedia for an
     example of integrating NvMediaDLA APIs with TensorRT APIs.)trtdoc";
 
-constexpr const char* DEFAULT
+constexpr char const* DEFAULT
     = R"trtdoc([DEPRECATED] Unrestricted: TensorRT mode without any restrictions using TensorRT nvinfer1 APIs.)trtdoc";
 
-constexpr const char* SAFE_GPU
+constexpr char const* SAFE_GPU
     = R"trtdoc([DEPRECATED] Safety-restricted: TensorRT mode for GPU devices using TensorRT safety APIs. See safety documentation for list of supported layers and formats.)trtdoc";
 
-constexpr const char* SAFE_DLA
+constexpr char const* SAFE_DLA
     = R"trtdoc([DEPRECATED] DLA-restricted: TensorRT mode for DLA devices using NvMediaDLA APIs. Only FP16 and Int8 modes are supported.)trtdoc";
 
-constexpr const char* STANDARD
+constexpr char const* STANDARD
     = R"trtdoc(Standard: TensorRT flow without targeting the standard runtime. This flow supports both DeviceType::kGPU and DeviceType::kDLA.)trtdoc";
 
-constexpr const char* SAFETY
+constexpr char const* SAFETY
     = R"trtdoc(Safety: TensorRT flow with restrictions targeting the safety runtime. See safety documentation for list of supported layers and formats. This flow supports only DeviceType::kGPU.)trtdoc";
 
-constexpr const char* DLA_STANDALONE
+constexpr char const* DLA_STANDALONE
     = R"trtdoc(DLA Standalone: TensorRT flow with restrictions targeting external, to TensorRT, DLA runtimes. See DLA documentation for list of supported layers and formats. This flow supports only DeviceType::kDLA.)trtdoc";
 
 } // namespace EngineCapabilityDoc
 
 namespace LayerInformationFormatDoc
 {
-constexpr const char* descr = R"trtdoc(The format in which the IEngineInspector prints the layer information.)trtdoc";
-constexpr const char* ONELINE = R"trtdoc(Print layer information in one line per layer.)trtdoc";
-constexpr const char* JSON = R"trtdoc(Print layer information in JSON format.)trtdoc";
+constexpr char const* descr = R"trtdoc(The format in which the IEngineInspector prints the layer information.)trtdoc";
+constexpr char const* ONELINE = R"trtdoc(Print layer information in one line per layer.)trtdoc";
+constexpr char const* JSON = R"trtdoc(Print layer information in JSON format.)trtdoc";
 } // namespace LayerInformationFormatDoc
 
 namespace ITimingCacheDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
         Class to handle tactic timing info collected from builder.
     )trtdoc";
 
-constexpr const char* serialize = R"trtdoc(
+constexpr char const* serialize = R"trtdoc(
         Serialize a timing cache to a :class:`IHostMemory` object.
 
         :returns: An :class:`IHostMemory` object that contains a serialized timing cache.
     )trtdoc";
 
-constexpr const char* combine = R"trtdoc(
+constexpr char const* combine = R"trtdoc(
         Combine input timing cache into local instance.
 
         Append entries in input cache to local cache. Conflicting entries will be skipped. The input
@@ -989,7 +1258,7 @@ constexpr const char* combine = R"trtdoc(
         :returns: A `bool` indicating whether the combine operation is done successfully.
     )trtdoc";
 
-constexpr const char* reset = R"trtdoc(
+constexpr char const* reset = R"trtdoc(
         Empty the timing cache
 
         :returns: A `bool` indicating whether the reset operation is done successfully.
@@ -998,7 +1267,7 @@ constexpr const char* reset = R"trtdoc(
 
 namespace IBuilderConfigDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
 
         :ivar min_timing_iterations: :class:`int` [DEPRECATED] The number of minimization iterations used when timing layers. When timing layers, the builder minimizes over a set of average times for layer execution. This parameter controls the number of iterations used in minimization. By default the minimum number of iterations is 1.
         :ivar avg_timing_iterations: :class:`int` The number of averaging iterations used when timing layers. When timing layers, the builder minimizes over a set of average times for layer execution. This parameter controls the number of iterations used in averaging. By default the number of averaging iterations is 1.
@@ -1011,9 +1280,10 @@ constexpr const char* descr = R"trtdoc(
         :ivar DLA_core: :class:`int` The DLA core that the engine executes on. Must be between 0 and N-1 where N is the number of available DLA cores.
         :ivar profiling_verbosity: Profiling verbosity in NVTX annotations.
         :ivar engine_capability: The desired engine capability. See :class:`EngineCapability` for details.
+        :ivar algorithm_selector: The :class:`IAlgorithmSelector` to use.
     )trtdoc";
 
-constexpr const char* set_memory_pool_limit = R"trtdoc(
+constexpr char const* set_memory_pool_limit = R"trtdoc(
         Set the memory size for the memory pool.
 
         TensorRT layers access different memory pools depending on the operation.
@@ -1035,7 +1305,7 @@ constexpr const char* set_memory_pool_limit = R"trtdoc(
         :arg pool_size: The size of the pool in bytes.
     )trtdoc";
 
-constexpr const char* get_memory_pool_limit = R"trtdoc(
+constexpr char const* get_memory_pool_limit = R"trtdoc(
         Retrieve the memory size limit of the corresponding pool in bytes.
         If :func:`set_memory_pool_limit` for the pool has not been called, this returns the default value used by TensorRT.
         This default value is not necessarily the maximum possible value for that configuration.
@@ -1045,19 +1315,19 @@ constexpr const char* get_memory_pool_limit = R"trtdoc(
         :returns: The size of the memory limit, in bytes, for the corresponding pool.
     )trtdoc";
 
-constexpr const char* clear_flag = R"trtdoc(
+constexpr char const* clear_flag = R"trtdoc(
         Clears the builder mode flag from the enabled flags.
 
         :arg flag: The flag to clear.
     )trtdoc";
 
-constexpr const char* set_flag = R"trtdoc(
+constexpr char const* set_flag = R"trtdoc(
         Add the input builder mode flag to the already enabled flags.
 
         :arg flag: The flag to set.
     )trtdoc";
 
-constexpr const char* get_flag = R"trtdoc(
+constexpr char const* get_flag = R"trtdoc(
         Check if a build mode flag is set.
 
         :arg flag: The flag to check.
@@ -1065,19 +1335,19 @@ constexpr const char* get_flag = R"trtdoc(
         :returns: A `bool` indicating whether the flag is set.
     )trtdoc";
 
-constexpr const char* clear_quantization_flag = R"trtdoc(
+constexpr char const* clear_quantization_flag = R"trtdoc(
         Clears the quantization flag from the enabled quantization flags.
 
         :arg flag: The flag to clear.
     )trtdoc";
 
-constexpr const char* set_quantization_flag = R"trtdoc(
+constexpr char const* set_quantization_flag = R"trtdoc(
         Add the input quantization flag to the already enabled quantization flags.
 
         :arg flag: The flag to set.
     )trtdoc";
 
-constexpr const char* get_quantization_flag = R"trtdoc(
+constexpr char const* get_quantization_flag = R"trtdoc(
         Check if a quantization flag is set.
 
         :arg flag: The flag to check.
@@ -1085,11 +1355,11 @@ constexpr const char* get_quantization_flag = R"trtdoc(
         :returns: A `bool` indicating whether the flag is set.
     )trtdoc";
 
-constexpr const char* reset = R"trtdoc(
+constexpr char const* reset = R"trtdoc(
         Resets the builder configuration to defaults. When initializing a builder config object, we can call this function.
     )trtdoc";
 
-constexpr const char* add_optimization_profile = R"trtdoc(
+constexpr char const* add_optimization_profile = R"trtdoc(
     Add an optimization profile.
 
     This function must be called at least once if the network has dynamic or shape input tensors.
@@ -1100,7 +1370,7 @@ constexpr const char* add_optimization_profile = R"trtdoc(
                 not valid.
 )trtdoc";
 
-constexpr const char* set_calibration_profile = R"trtdoc(
+constexpr char const* set_calibration_profile = R"trtdoc(
     Set a calibration profile.
 
     Calibration optimization profile must be set if int8 calibration is used to set scales for a network with runtime dimensions.
@@ -1110,13 +1380,13 @@ constexpr const char* set_calibration_profile = R"trtdoc(
     :returns: True if the calibration profile was set correctly.
 )trtdoc";
 
-constexpr const char* get_calibration_profile = R"trtdoc(
+constexpr char const* get_calibration_profile = R"trtdoc(
     Get the current calibration profile.
 
     :returns: The current calibration profile or nullptr if calibrartion profile is unset.
 )trtdoc";
 
-constexpr const char* set_device_type = R"trtdoc(
+constexpr char const* set_device_type = R"trtdoc(
     Set the device that this layer must execute on. If DeviceType is not set or is reset, TensorRT will use the
     default DeviceType set in the builder.
 
@@ -1128,7 +1398,7 @@ constexpr const char* set_device_type = R"trtdoc(
     :arg device_type: The DeviceType the layer must execute on
 )trtdoc";
 
-constexpr const char* get_device_type = R"trtdoc(
+constexpr char const* get_device_type = R"trtdoc(
     Get the device that the layer executes on.
 
     :arg layer: The layer to get the DeviceType for
@@ -1136,7 +1406,7 @@ constexpr const char* get_device_type = R"trtdoc(
     :returns: The DeviceType of the layer
 )trtdoc";
 
-constexpr const char* is_device_type_set = R"trtdoc(
+constexpr char const* is_device_type_set = R"trtdoc(
     Check if the DeviceType for a layer is explicitly set.
 
     :arg layer: The layer to check for DeviceType
@@ -1144,13 +1414,13 @@ constexpr const char* is_device_type_set = R"trtdoc(
     :returns: True if DeviceType is not default, False otherwise
 )trtdoc";
 
-constexpr const char* reset_device_type = R"trtdoc(
+constexpr char const* reset_device_type = R"trtdoc(
     Reset the DeviceType for the given layer.
 
     :arg layer: The layer to reset the DeviceType for
 )trtdoc";
 
-constexpr const char* can_run_on_DLA = R"trtdoc(
+constexpr char const* can_run_on_DLA = R"trtdoc(
     Check if the layer can run on DLA.
 
     :arg layer: The layer to check
@@ -1158,12 +1428,10 @@ constexpr const char* can_run_on_DLA = R"trtdoc(
     :returns: A `bool` indicating whether the layer can run on DLA
 )trtdoc";
 
-constexpr const char* set_tactic_sources = R"trtdoc(
+constexpr char const* set_tactic_sources = R"trtdoc(
     Set tactic sources.
 
     This bitset controls which tactic sources TensorRT is allowed to use for tactic selection.
-    By default, CUBLAS, CUDNN, and EDGE_MASK_CONVOLUTIONS are always enabled.
-    CUBLAS_LT is always enabled for x86 platforms and only enabled for non-x86 platforms when CUDA >= 11.0.
 
     Multiple tactic sources may be combined with a bitwise OR operation. For example,
     to enable cublas and cublasLt as tactic sources, use a value of:
@@ -1174,11 +1442,11 @@ constexpr const char* set_tactic_sources = R"trtdoc(
     :returns: A `bool` indicating whether the tactic sources in the build configuration were updated. The tactic sources in the build configuration will not be updated if the provided value is invalid.
 )trtdoc";
 
-constexpr const char* get_tactic_sources = R"trtdoc(
+constexpr char const* get_tactic_sources = R"trtdoc(
     Get the tactic sources currently set in the engine build configuration.
 )trtdoc";
 
-constexpr const char* create_timing_cache = R"trtdoc(
+constexpr char const* create_timing_cache = R"trtdoc(
     Create timing cache
 
     Create :class:`ITimingCache` instance from serialized raw data. The created timing cache doesn't belong to
@@ -1189,7 +1457,7 @@ constexpr const char* create_timing_cache = R"trtdoc(
     :returns: The created :class:`ITimingCache` object.
 )trtdoc";
 
-constexpr const char* set_timing_cache = R"trtdoc(
+constexpr char const* set_timing_cache = R"trtdoc(
     Attach a timing cache to IBuilderConfig
 
     The timing cache has verification header to make sure the provided cache can be used in current environment.
@@ -1203,17 +1471,38 @@ constexpr const char* set_timing_cache = R"trtdoc(
     :returns: A `BOOL` indicating whether the operation is done successfully.
 )trtdoc";
 
-constexpr const char* get_timing_cache = R"trtdoc(
+constexpr char const* get_timing_cache = R"trtdoc(
     Get the timing cache from current IBuilderConfig
 
     :returns: The timing cache used in current IBuilderConfig, or `None` if no timing cache is set.
+)trtdoc";
+
+constexpr char const* set_preview_feature = R"trtdoc(
+    Enable or disable a specific preview feature.
+
+    Allows enabling or disabling experimental features, which are not enabled by default in the current release.
+    Preview Features have been fully tested but are not yet as stable as other features in TensorRT.
+    They are provided as opt-in features for at least one release.
+
+    Refer to PreviewFeature for additional information, and a list of the available features.
+
+    :arg feature: the feature to enable
+    :arg enable: whether to enable or disable
+)trtdoc";
+
+constexpr char const* get_preview_feature = R"trtdoc(
+    Check if a preview feature is enabled.
+
+    :arg feature: the feature to query
+
+    :returns: true if the feature is enabled, false otherwise
 )trtdoc";
 
 } // namespace IBuilderConfigDoc
 
 namespace BuilderDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Builds an :class:`ICudaEngine` from a :class:`INetworkDefinition` .
 
     :ivar max_batch_size: :class:`int` [DEPRECATED] For networks built with implicit batch, the maximum batch size which can be used at execution time, and also the batch size for which the :class:`ICudaEngine` will be optimized. This no effect for networks created with explicit batch dimension mode.
@@ -1229,11 +1518,11 @@ constexpr const char* descr = R"trtdoc(
     :ivar max_threads: :class:`int` The maximum thread that can be used by the :class:`Builder`.
 )trtdoc";
 
-constexpr const char* init = R"trtdoc(
+constexpr char const* init = R"trtdoc(
     :arg logger: The logger to use.
 )trtdoc";
 
-constexpr const char* create_network = R"trtdoc(
+constexpr char const* create_network = R"trtdoc(
     Create a :class:`INetworkDefinition` object.
 
     :arg flags: :class:`NetworkDefinitionCreationFlag` s combined using bitwise OR. Please enable the ``NetworkDefinitionCreationFlag.EXPLICIT_BATCH`` flag whenever possible.
@@ -1241,7 +1530,7 @@ constexpr const char* create_network = R"trtdoc(
     :returns: An empty TensorRT :class:`INetworkDefinition` .
 )trtdoc";
 
-constexpr const char* create_optimization_profile = R"trtdoc(
+constexpr char const* create_optimization_profile = R"trtdoc(
     Create a new optimization profile.
 
     If the network has any dynamic input tensors, the appropriate calls to :func:`IOptimizationProfile.set_shape` must be made. Likewise, if there are any shape input tensors, the appropriate calls to :func:`IOptimizationProfile.set_shape_input` are required.
@@ -1249,13 +1538,13 @@ constexpr const char* create_optimization_profile = R"trtdoc(
     See :class:`IOptimizationProfile`
 )trtdoc";
 
-constexpr const char* create_builder_config = R"trtdoc(
+constexpr char const* create_builder_config = R"trtdoc(
     Create a builder configuration object.
 
     See :class:`IBuilderConfig`
 )trtdoc";
 
-constexpr const char* build_engine = R"trtdoc(
+constexpr char const* build_engine = R"trtdoc(
     Builds an engine for the given :class:`INetworkDefinition` and :class:`IBuilderConfig` .
 
     This enables the builder to build multiple engines based on the same network definition, but with different builder configurations.
@@ -1266,7 +1555,7 @@ constexpr const char* build_engine = R"trtdoc(
     :returns: A new :class:`ICudaEngine` .
 )trtdoc";
 
-constexpr const char* build_serialized_network = R"trtdoc(
+constexpr char const* build_serialized_network = R"trtdoc(
     Builds and serializes a network for the given :class:`INetworkDefinition` and :class:`IBuilderConfig` .
 
     This function allows building and serialization of a network without creating an engine.
@@ -1277,7 +1566,7 @@ constexpr const char* build_serialized_network = R"trtdoc(
     :returns: A pointer to a :class:`IHostMemory` object that contains a serialized network.
 )trtdoc";
 
-constexpr const char* is_network_supported = R"trtdoc(
+constexpr char const* is_network_supported = R"trtdoc(
     Checks that a network is within the scope of the :class:`IBuilderConfig` settings.
 
     :arg network: The network definition to check for configuration compliance.
@@ -1294,14 +1583,14 @@ constexpr const char* is_network_supported = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* reset = R"trtdoc(
+constexpr char const* reset = R"trtdoc(
     Resets the builder state to default values.
 )trtdoc";
 } // namespace BuilderDoc
 
 namespace RuntimeDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Allows a serialized :class:`ICudaEngine` to be deserialized.
 
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
@@ -1314,11 +1603,11 @@ constexpr const char* descr = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* init = R"trtdoc(
+constexpr char const* init = R"trtdoc(
     :arg logger: The logger to use.
 )trtdoc";
 
-constexpr const char* deserialize_cuda_engine = R"trtdoc(
+constexpr char const* deserialize_cuda_engine = R"trtdoc(
     Deserialize an :class:`ICudaEngine` from a stream.
 
     :arg serialized_engine: The :class:`buffer` that holds the serialized :class:`ICudaEngine` .
@@ -1330,7 +1619,7 @@ constexpr const char* deserialize_cuda_engine = R"trtdoc(
 
 namespace RuntimeInspectorDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An engine inspector which prints out the layer information of an engine or an execution context.
     The engine or the context must be set before get_layer_information() or get_engine_information() can be called.
 
@@ -1344,7 +1633,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
 )trtdoc";
 
-constexpr const char* get_layer_information = R"trtdoc(
+constexpr char const* get_layer_information = R"trtdoc(
     Get a string describing the information about a specific layer in the current engine or the execution context.
 
     :arg layer_index: The index of the layer. It must lie in [0, engine.num_layers].
@@ -1353,7 +1642,7 @@ constexpr const char* get_layer_information = R"trtdoc(
     :returns: A string describing the information about a specific layer in the current engine or the execution context.
 )trtdoc";
 
-constexpr const char* get_engine_information = R"trtdoc(
+constexpr char const* get_engine_information = R"trtdoc(
     Get a string describing the information about all the layers in the current engine or the execution context.
 
     :arg format: :class:`LayerInformationFormat` The format the layer information should be printed in.
@@ -1361,7 +1650,7 @@ constexpr const char* get_engine_information = R"trtdoc(
     :returns: A string describing the information about all the layers in the current engine or the execution context.
 )trtdoc";
 
-constexpr const char* clear_inspection_source = R"trtdoc(
+constexpr char const* clear_inspection_source = R"trtdoc(
     Clear the inspection srouce.
 
     :returns: A boolean indicating whether the action succeeds.
@@ -1371,7 +1660,7 @@ constexpr const char* clear_inspection_source = R"trtdoc(
 
 namespace RefitterDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Updates weights in an :class:`ICudaEngine` .
 
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
@@ -1379,12 +1668,12 @@ constexpr const char* descr = R"trtdoc(
     :ivar max_threads: :class:`int` The maximum thread that can be used by the :class:`Refitter`.
 )trtdoc";
 
-constexpr const char* init = R"trtdoc(
+constexpr char const* init = R"trtdoc(
     :arg engine: The engine to refit.
     :arg logger: The logger to use.
 )trtdoc";
 
-constexpr const char* set_weights = R"trtdoc(
+constexpr char const* set_weights = R"trtdoc(
     Specify new weights for a layer of given name.
     Possible reasons for rejection are:
 
@@ -1401,7 +1690,7 @@ constexpr const char* set_weights = R"trtdoc(
     :returns: ``True`` on success, or ``False`` if new weights are rejected.
 )trtdoc";
 
-constexpr const char* set_named_weights = R"trtdoc(
+constexpr char const* set_named_weights = R"trtdoc(
     Specify new weights of given name.
     Possible reasons for rejection are:
 
@@ -1416,13 +1705,13 @@ constexpr const char* set_named_weights = R"trtdoc(
     :returns: ``True`` on success, or ``False`` if new weights are rejected.
 )trtdoc";
 
-constexpr const char* refit_cuda_engine = R"trtdoc(
+constexpr char const* refit_cuda_engine = R"trtdoc(
     Updates associated engine.  Return ``True`` if successful.
 
     Failure occurs if :func:`get_missing` != 0 before the call.
 )trtdoc";
 
-constexpr const char* get_missing = R"trtdoc(
+constexpr char const* get_missing = R"trtdoc(
     Get description of missing weights.
 
     For example, if some Weights have been set, but the engine was optimized
@@ -1432,7 +1721,7 @@ constexpr const char* get_missing = R"trtdoc(
     :returns: The names of layers with missing weights, and the roles of those weights.
 )trtdoc";
 
-constexpr const char* get_missing_weights = R"trtdoc(
+constexpr char const* get_missing_weights = R"trtdoc(
     Get names of missing weights.
 
     For example, if some Weights have been set, but the engine was optimized
@@ -1442,19 +1731,19 @@ constexpr const char* get_missing_weights = R"trtdoc(
     :returns: The names of missing weights, empty string for unnamed weights.
 )trtdoc";
 
-constexpr const char* get_all = R"trtdoc(
+constexpr char const* get_all = R"trtdoc(
     Get description of all weights that could be refitted.
 
     :returns: The names of layers with refittable weights, and the roles of those weights.
 )trtdoc";
 
-constexpr const char* get_all_weights = R"trtdoc(
+constexpr char const* get_all_weights = R"trtdoc(
     Get names of all weights that could be refitted.
 
     :returns: The names of refittable weights.
 )trtdoc";
 
-constexpr const char* get_dynamic_range = R"trtdoc(
+constexpr char const* get_dynamic_range = R"trtdoc(
     Gets the dynamic range of a tensor. If the dynamic range was never set, returns the range computed during calibration.
 
     :arg tensor_name: The name of the tensor whose dynamic range to retrieve.
@@ -1462,7 +1751,7 @@ constexpr const char* get_dynamic_range = R"trtdoc(
     :returns: :class:`Tuple[float, float]` A tuple containing the [minimum, maximum] of the dynamic range.
 )trtdoc";
 
-constexpr const char* set_dynamic_range = R"trtdoc(
+constexpr char const* set_dynamic_range = R"trtdoc(
     Update dynamic range for a tensor.
 
     :arg tensor_name: The name of the tensor whose dynamic range to update.
@@ -1473,7 +1762,7 @@ constexpr const char* set_dynamic_range = R"trtdoc(
     Returns false if there is no Int8 engine tensor derived from a network tensor of that name.  If successful, then :func:`get_missing` may report that some weights need to be supplied.
 )trtdoc";
 
-constexpr const char* get_tensors_with_dynamic_range = R"trtdoc(
+constexpr char const* get_tensors_with_dynamic_range = R"trtdoc(
     Get names of all tensors that have refittable dynamic ranges.
 
     :returns: The names of tensors with refittable dynamic ranges.
@@ -1483,16 +1772,16 @@ constexpr const char* get_tensors_with_dynamic_range = R"trtdoc(
 
 namespace AllocatorFlagDoc
 {
-constexpr const char* descr = R"trtdoc()trtdoc";
+constexpr char const* descr = R"trtdoc()trtdoc";
 
-constexpr const char* RESIZABLE = R"trtdoc(TensorRT may call realloc() on this allocation)trtdoc";
+constexpr char const* RESIZABLE = R"trtdoc(TensorRT may call realloc() on this allocation)trtdoc";
 } // namespace AllocatorFlagDoc
 
 namespace GpuAllocatorDoc
 {
-constexpr const char* descr = R"trtdoc(Application-implemented class for controlling allocation on the GPU.)trtdoc";
+constexpr char const* descr = R"trtdoc(Application-implemented class for controlling allocation on the GPU.)trtdoc";
 
-constexpr const char* allocate = R"trtdoc(
+constexpr char const* allocate = R"trtdoc(
     A callback implemented by the application to handle acquisition of GPU memory.
     If an allocation request of size 0 is made, ``None`` should be returned.
 
@@ -1508,7 +1797,7 @@ constexpr const char* allocate = R"trtdoc(
     :returns: The address of the allocated memory
 )trtdoc";
 
-constexpr const char* free = R"trtdoc(
+constexpr char const* free = R"trtdoc(
     A callback implemented by the application to handle release of GPU memory.
 
     TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.
@@ -1516,7 +1805,7 @@ constexpr const char* free = R"trtdoc(
     :arg memory: The memory address of the memory to release.
 )trtdoc";
 
-constexpr const char* reallocate = R"trtdoc(
+constexpr char const* reallocate = R"trtdoc(
     A callback implemented by the application to resize an existing allocation.
 
     Only allocations which were allocated with AllocatorFlag.RESIZABLE will be resized.
@@ -1544,7 +1833,7 @@ constexpr const char* reallocate = R"trtdoc(
     :returns: The address of the reallocated memory
 )trtdoc";
 
-constexpr const char* deallocate = R"trtdoc(
+constexpr char const* deallocate = R"trtdoc(
     A callback implemented by the application to handle release of GPU memory.
 
     TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.

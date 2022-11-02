@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
+import numpy as np
 import pytest
 import tensorrt as trt
-from polygraphy import mod
-from polygraphy.backend.trt import Profile, network_from_onnx_bytes
+from polygraphy.backend.trt import Profile, create_network, network_from_onnx_bytes
 from tests.models.meta import ONNX_MODELS
 
 
@@ -43,10 +43,31 @@ class TestProfile:
         _, network, _ = dynamic_identity_network
         profile = Profile().add("X", (1, 1, 1, 1), (1, 1, 2, 2), (1, 1, 3, 3))
 
-        profile.fill_defaults(network) is profile
+        assert profile.fill_defaults(network) is profile
         assert profile["X"].min == (1, 1, 1, 1)
         assert profile["X"].opt == (1, 1, 2, 2)
         assert profile["X"].max == (1, 1, 3, 3)
+
+    def test_fill_defaults_scalar_shape_tensor(self):
+        _, network = create_network()
+        fill_shape = network.add_input("fill_shape", shape=tuple(), dtype=trt.int32)
+
+        # Need to add some other operations so TensorRT treats `fill_shape` as a shape tensor.
+        fill = network.add_fill(tuple(), trt.FillOperation.LINSPACE)
+        fill.set_input(0, fill_shape)
+        fill.set_input(1, network.add_constant(shape=tuple(), weights=np.array(0).astype(np.int32)).get_output(0))
+        fill.set_input(2, network.add_constant(shape=tuple(), weights=np.array(1).astype(np.int32)).get_output(0))
+
+        network.mark_output(fill.get_output(0))
+
+        assert fill_shape.is_shape_tensor
+
+        profile = Profile()
+        profile.fill_defaults(network)
+
+        assert profile[fill_shape.name].min == (1,)
+        assert profile[fill_shape.name].opt == (1,)
+        assert profile[fill_shape.name].max == (1,)
 
     def test_to_trt(self, dynamic_identity_network):
         builder, network, _ = dynamic_identity_network

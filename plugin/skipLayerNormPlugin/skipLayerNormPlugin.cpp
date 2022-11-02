@@ -416,24 +416,26 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(const char* name, con
     {
         BERT_DEBUG_MSG("SkipLayerNormPluginDynamicCreator createPlugin");
 
-        int ld = 0;
+        int32_t ld = 0;
         Weights beta{DataType::kFLOAT, nullptr, 0};
         Weights gamma{DataType::kFLOAT, nullptr, 0};
         Weights bias{DataType::kFLOAT, nullptr, 0};
-        int typeId = -1;
+        int32_t typeId = -1;
 
-        for (int i = 0; i < fc->nbFields; i++)
+        plugin::validateRequiredAttributesExist({"type_id", "beta", "ld", "gamma"}, fc);
+
+        for (int32_t i = 0; i < fc->nbFields; i++)
         {
             std::string field_name(fc->fields[i].name);
             if (field_name.compare("ld") == 0)
             {
-                ld = *static_cast<const int*>(fc->fields[i].data);
+                ld = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building ld: ", ld);
             }
 
             if (field_name.compare("type_id") == 0)
             {
-                typeId = *static_cast<const int*>(fc->fields[i].data);
+                typeId = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
 
@@ -870,15 +872,17 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(const char* name, c
         Weights beta{DataType::kFLOAT, nullptr, 0};
         Weights gamma{DataType::kFLOAT, nullptr, 0};
         Weights bias{DataType::kFLOAT, nullptr, 0};
-        int typeId = -1;
+        int32_t typeId = -1;
 
-        for (int i = 0; i < fc->nbFields; i++)
+        plugin::validateRequiredAttributesExist({"type_id", "beta", "gamma"}, fc);
+
+        for (int32_t i = 0; i < fc->nbFields; i++)
         {
             std::string field_name(fc->fields[i].name);
 
             if (field_name.compare("type_id") == 0)
             {
-                typeId = *static_cast<const int*>(fc->fields[i].data);
+                typeId = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
 

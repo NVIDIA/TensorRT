@@ -1,0 +1,84 @@
+---
+name: GridAnchor_TRT
+interface: "IPluginV2Ext"
+versions:
+  "1":
+    inputs: []
+    outputs:
+      - outputs
+    attributes:
+      - numLayers
+      - minSize
+      - maxSize
+      - variance
+      - aspectRatios
+      - featureMapShapes
+    attribute_types:
+      numLayers: int32
+      minSize: float32
+      maxSize: float32
+      variance: float32
+      aspectRatios: float32
+      featureMapShapes: int32
+    attribute_length:
+      numLayers: 1
+      minSize: 1
+      maxSize: 1
+      variance: 4
+      aspectRatios: -1
+      featureMapShapes: -1
+    attribute_options:
+      numLayers:
+        min: "0"
+        max: "=pinf"
+      minSize:
+        min: "0"
+        max: "1"
+      maxSize:
+        min: "0"
+        max: "1"
+      variance:
+        min: "=ninf"
+        max: "=pinf"
+      aspectRatios:
+        min: "0"
+        max: "=pinf"
+      featureMapShapes:
+        min: "1"
+        max: "=pinf"
+    attributes_required:
+      - numLayers
+      - minSize
+      - maxSize
+      - variance
+      - aspectRatios
+      - featureMapShapes
+    golden_io_path: "plugin/gridAnchorPlugin/GridAnchor_TRT_PluginGoldenIO.json"
+    abs_tol: 1e-2
+    rel_tol: 1e-2
+    configs:
+      config1:
+        input_types:
+          input_layer: float32
+        attribute_options:
+          numLayers:
+            value: 6
+            shape: "1"
+          minSize:
+            value: 0.2
+            shape: "1"
+          maxSize:
+            value: 0.95
+            shape: "1"
+          variance:
+            value: [0.1, 0.1, 0.2, 0.2]
+            shape: "4"
+          aspectRatios:
+            value: [1.0, 2.0, 0.5, 3.0, 0.33]
+            shape: "5"
+          featureMapShapes:
+            value: [40, 20, 10, 5, 3, 1]
+            shape: "6"
+        output_types:
+          output: float32
+...

@@ -29,11 +29,6 @@ The `debug` tool can help debug accuracy issues during inference.
     The tool works by iteratively marking a subset of the layers in the network in the specified
     higher precision (`float32` by default) and generating engines similar to `build`.
 
-- `diff-tactics` can determine potentially bad tactics given a set of known-good tactic replay
-    files and a set of bad ones.
-
-    See the [example](../../../examples/cli/debug/01_debugging_flaky_trt_tactics/) for details.
-
 - [EXPERIMENTAL] `reduce` can reduce failing ONNX models to a minimal subgraph of failing nodes.
     This can make further debugging significantly easier.
 

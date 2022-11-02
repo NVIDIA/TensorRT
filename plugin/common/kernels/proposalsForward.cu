@@ -17,6 +17,7 @@
 #include "common/bboxUtils.h"
 #include "common/kernel.h"
 
+using namespace nvinfer1;
 // PROPOSALS INFERENCE
 pluginStatus_t proposalsInference(cudaStream_t stream, const int N, const int A, const int H, const int W,
     const int featureStride, const int preNmsTop, const int nmsMaxOut, const float iouThreshold, const float minBoxSize,

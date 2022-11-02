@@ -25,6 +25,7 @@
 #define NMS_TILES 5
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 
 template <typename T>
 __device__ float IOU(EfficientNMSParameters param, BoxCorner<T> box1, BoxCorner<T> box2)
@@ -673,22 +674,6 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
     char* sortedWorkspaceData = EfficientNMSWorkspace<char>(workspace, workspaceOffset, sortedWorkspaceSize);
     cub::DoubleBuffer<T> scoresDB(topScoresData, sortedScoresData);
     cub::DoubleBuffer<int> indexDB(topIndexData, sortedIndexData);
-
-    // Device Specific Properties
-    int device;
-    CSC(cudaGetDevice(&device), STATUS_FAILURE);
-    struct cudaDeviceProp properties;
-    CSC(cudaGetDeviceProperties(&properties, device), STATUS_FAILURE);
-    if (properties.regsPerBlock >= 65536)
-    {
-        // Most Devices
-        param.numSelectedBoxes = 5000;
-    }
-    else
-    {
-        // Jetson TX1/TX2
-        param.numSelectedBoxes = 2000;
-    }
 
     // Kernels
     status = EfficientNMSFilterLauncher<T>(param, (T*) scoresInput, topNumData, topIndexData, topAnchorsData,

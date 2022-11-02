@@ -37,7 +37,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-
+using namespace nvinfer1;
 using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_onnx_mnist_coord_conv_ac";

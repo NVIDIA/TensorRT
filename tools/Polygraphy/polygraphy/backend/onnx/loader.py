@@ -26,7 +26,7 @@ from polygraphy.logger import G_LOGGER, LogMode
 
 onnx = mod.lazy_import("onnx>=1.8.1")
 onnxrt = mod.lazy_import("onnxruntime>=1.10.0")
-onnxmltools = mod.lazy_import("onnxmltools")
+onnxmltools = mod.lazy_import("onnxmltools==1.11.1", requires=["onnxconverter_common==1.12.2"])
 tf = mod.lazy_import("tensorflow<2.0")
 tf2onnx = mod.lazy_import("tf2onnx")
 tf_util = mod.lazy_import("polygraphy.backend.tf.util", log=False)
@@ -283,13 +283,9 @@ class ConvertToFp16(BaseLoadOnnxCopy):
         model = self.load()
 
         G_LOGGER.info("Converting float tensors to float16")
-        try:
-            model = onnxmltools.utils.float16_converter.convert_float_to_float16(
-                model, keep_io_types=True, disable_shape_inference=True
-            )
-        except TypeError:  # Using an old version of onnxmltools
-            model = onnxmltools.utils.float16_converter.convert_float_to_float16(model)
-
+        model = onnxmltools.utils.float16_converter.convert_float_to_float16(
+            model, keep_io_types=True, disable_shape_infer=True
+        )
         return model
 
 
@@ -645,6 +641,17 @@ class ExtractSubgraph(BaseLoader):
                     graph.outputs.append(tensor)
 
             graph.cleanup()
+
+            tensor_map = graph.tensors()
+            for tensor in tensor_map.values():
+                if isinstance(tensor, gs.Variable) and not tensor.inputs and tensor not in graph.inputs:
+                    consumer_nodes = [f"Node: '{node.name}' (Op: {node.op})" for node in tensor.outputs]
+                    G_LOGGER.error(
+                        f"Tensor: '{tensor.name}' is a variable tensor consumed by: {consumer_nodes}, "
+                        "but is not produced by a node or marked as a graph input."
+                        f"\nDid you forget to mark a tensor as a graph input? Hint: Try inspecting the resulting model. "
+                        f"\nNote: The resulting model will not be valid!"
+                    )
 
         return manager.retval
 

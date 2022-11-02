@@ -318,7 +318,7 @@ class TestCreateConfig:
     )
     def test_preview_features(self, identity_builder_network):
         builder, network = identity_builder_network
-        preview_features = [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES]
+        preview_features = [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
         loader = CreateConfig(preview_features=preview_features)
         with loader(builder, network) as config:
             for pf in preview_features:
