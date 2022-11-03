@@ -16,7 +16,7 @@ Join the [TensorRT and Triton community](https://www.nvidia.com/en-us/deep-learn
 We provide the TensorRT Python package for an easy installation. \
 To install:
 ```bash
-pip install nvidia-tensorrt
+pip install tensorrt
 ```
 You can skip the **Build** section to enjoy TensorRT with Python.
 
