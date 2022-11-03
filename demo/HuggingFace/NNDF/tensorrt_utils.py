@@ -170,7 +170,7 @@ class TRTNativeRunner:
 class PolygraphyOnnxRunner:
     def __init__(self, onnx_fpath: str, network_metadata: NetworkMetadata):
         self.network_metadata = network_metadata
-        self.trt_session = SessionFromOnnx(onnx_fpath)
+        self.trt_session = SessionFromOnnx(onnx_fpath, providers=["CUDAExecutionProvider"])
         self.trt_context = OnnxrtRunner(self.trt_session)
         self.trt_context.activate()
 
