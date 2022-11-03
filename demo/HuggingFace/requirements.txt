@@ -22,4 +22,5 @@ sentencepiece==0.1.95
 --extra-index-url https://pypi.ngc.nvidia.com
 onnx==1.9.0
 onnx_graphsurgeon
-polygraphy
+polygraphy>=0.42.2
+onnxruntime-gpu
