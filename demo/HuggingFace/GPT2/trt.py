@@ -60,7 +60,7 @@ from NNDF.tensorrt_utils import TRTNativeRunner, TRTPolygraphyRunner
 from GPT2.frameworks import GPT2HuggingFace
 from NNDF.general_utils import NNFolderWorkspace
 from GPT2.GPT2ModelConfig import GPT2ModelTRTConfig, GPT2BenchmarkingArgs
-from GPT2.measurements import gpt2_inference, full_inference_greedy
+from GPT2.measurements import gpt2_inference, full_inference_greedy, calculate_perplexity
 from GPT2.export import GPT2ONNXFile, GPT2TRTEngine
 
 
@@ -120,11 +120,17 @@ class GPT2TRTDecoder(TRTHFRunner):
 
         # We only have one profile to select so we can just grab the profile at the start of the class
         self.profile_idx = self.get_optimization_profile(batch_size=batch_size, sequence_length=1)
+        self.set_input_output_bindings(
+            (self.batch_size, self.max_sequence_length),
+            (self.batch_size, self.max_sequence_length, GPT2ModelTRTConfig.VOCAB_SIZE),
+        )
+
+    def set_input_output_bindings(self, input_shapes, output_shapes):
         self.inputs = {
-            "input_ids": torch.zeros(self.batch_size, self.max_sequence_length, dtype=torch.int32).cuda(),
+            "input_ids": torch.zeros(input_shapes, dtype=torch.int32).cuda(),
         }
         self.outputs = {
-            "logits": torch.zeros(self.batch_size, self.max_sequence_length, GPT2ModelTRTConfig.VOCAB_SIZE, dtype=torch.float32).cuda()
+            "logits": torch.zeros(output_shapes, dtype=torch.float32).cuda()
         }
         self.bindings = self._allocate_memory(self.inputs, self.outputs)
 
@@ -250,6 +256,29 @@ class GPT2Polygraphy(TRTInferenceCommand):
             models=models,
         )
 
+    def execute_calculate_perplexity(
+        self,
+        metadata: NetworkMetadata,
+        reference: str,
+    ):
+        tokenizer = GPT2Tokenizer.from_pretrained(metadata.variant)
+
+        # GPT2 has no proper token set. Use custom token. Only "generate()" will auto
+        # replace with EOS token when using generating mode
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
+        reference = reference.replace("\\n", "\n")
+        ppl_input_ids = tokenizer([reference], padding=True, return_tensors="pt").input_ids
+
+        # Reset bindings
+        self.gpt2_trt.set_input_output_bindings(
+            (1, ppl_input_ids.shape[1]),
+            (1, ppl_input_ids.shape[1], GPT2ModelTRTConfig.VOCAB_SIZE),
+        )
+
+        perplexity = calculate_perplexity(self.gpt2_trt, ppl_input_ids)
+        return perplexity
+
     def run_trt(
         self,
         metadata: NetworkMetadata,
@@ -264,13 +293,15 @@ class GPT2Polygraphy(TRTInferenceCommand):
         args: object = None,
         benchmarking_mode: bool = False,
         preview_dynamic_shapes: bool = False,
+        perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
 
         workspace = NNFolderWorkspace(
             self.frameworks_cmd.config.network_name, metadata, working_directory
         )
 
-        results = []
+        inference_results = []
+        ppl_results = []
         try:
             # no fpath provided for onnx files, download them
             if len(onnx_fpaths) == 0:
@@ -327,21 +358,26 @@ class GPT2Polygraphy(TRTInferenceCommand):
 
             if not benchmarking_mode:
                 for ninput in network_input:
-                    results.append(
+                    inference_results.append(
                         self.execute_inference(
                             metadata, hash_onnx_fpath, ninput, timing_profile, batch_size
                         )
                     )
+                if perplexity_reference is not None:
+                    for r in perplexity_reference:
+                        ppl_results.append(
+                            self.execute_calculate_perplexity(metadata, r)
+                        )
             else:
                 benchmarking_args = GPT2BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
-                results = self.execute_inference(
+                inference_results = self.execute_inference(
                     metadata, hash_onnx_fpath, None, timing_profile, batch_size, True, benchmarking_args
                 )
 
         finally:
             self.cleanup(workspace, keep_trt_engine, keep_onnx_model, keep_torch_model)
 
-        return results
+        return inference_results, ppl_results
 
     def add_args(self, parser) -> None:
         super().add_args(parser)
