@@ -59,7 +59,7 @@ from NNDF.torch_utils import expand_inputs_for_beam_search
 from NNDF.general_utils import NNFolderWorkspace
 from T5.frameworks import T5FHuggingFace
 from T5.T5ModelConfig import T5ModelTRTConfig, T5BenchmarkingArgs
-from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy, full_inference_beam
+from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy, full_inference_beam, calculate_perplexity
 from T5.export import T5DecoderONNXFile, T5EncoderONNXFile, T5DecoderTRTEngine, T5EncoderTRTEngine
 from NNDF.models import TRTEngineFile
 from NNDF.logger import G_LOGGER
@@ -441,6 +441,19 @@ class T5TRT(TRTInferenceCommand):
             models=models,
         )
 
+    def execute_calculate_perplexity(
+        self,
+        metadata: NetworkMetadata,
+        encoder_input: str,
+        decoder_input: str,
+    ):
+        tokenizer = T5Tokenizer.from_pretrained(metadata.variant)
+        encoder_input_ids = tokenizer([encoder_input], padding=True, return_tensors="pt").input_ids
+        decoder_input_ids = tokenizer([decoder_input], padding=True, return_tensors="pt").input_ids
+
+        perplexity = calculate_perplexity(self.t5_trt_encoder, self.t5_trt_decoder, tokenizer, encoder_input_ids, decoder_input_ids)
+        return perplexity
+
     def _setup_workspace(self, metadata: NetworkMetadata, working_directory: str) -> NNFolderWorkspace:
         return NNFolderWorkspace(
             self.frameworks_cmd.config.network_name, metadata, working_directory
@@ -574,6 +587,7 @@ class T5TRT(TRTInferenceCommand):
         args: object = None,
         benchmarking_mode: bool = False,
         preview_dynamic_shapes: bool = False,
+        perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult] :
 
         workspace = self._setup_workspace(metadata, working_directory)
@@ -587,27 +601,37 @@ class T5TRT(TRTInferenceCommand):
 
         hash_onnx_fpath = {v.name: v for v in onnx_fpaths}
 
-        results = []
+        inference_results = []
+        ppl_results = []
         try:
             if not benchmarking_mode:
                 self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes)
                 for ninput in network_input:
-                    results.append(
+                    inference_results.append(
                         self.execute_inference(
                             metadata, hash_onnx_fpath, ninput, timing_profile, batch_size, args.num_beams
                         )
                     )
+                if perplexity_reference is not None:
+                    assert len(network_input) == len(perplexity_reference), "Encoder and decoder inputs must pair up"
+                    if metadata.other.kv_cache:
+                        G_LOGGER.warning("Skipping perplexity calculation for TRT with KV cache because it is not supported yet.")
+                    else:
+                        for ei, di in zip(network_input, perplexity_reference):
+                            ppl_results.append(
+                                self.execute_calculate_perplexity(metadata, ei, di)
+                            )
             else:
                 benchmarking_args = T5BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
                 self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes, benchmarking_args)
-                results = self.execute_inference(
+                inference_results = self.execute_inference(
                     metadata, hash_onnx_fpath, None, timing_profile, batch_size, args.num_beams, True, benchmarking_args
                 )
 
         finally:
             self.cleanup(workspace, keep_trt_engine, keep_onnx_model, keep_torch_model)
 
-        return results
+        return inference_results, ppl_results
 
     def add_args(self, parser) -> None:
         super().add_args(parser)

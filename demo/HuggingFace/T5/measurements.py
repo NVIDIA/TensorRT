@@ -230,3 +230,36 @@ def full_inference_beam(
     full_e2e_time = measure_python_inference_code(measurement_function, timing_profile)
 
     return (measurement_function(), full_e2e_time)
+
+@use_cuda
+def calculate_perplexity(
+    t5_encoder,
+    t5_decoder,
+    tokenizer,
+    input_ids,
+    decoder_input_ids,
+    use_cuda=True,
+):
+    encoder_last_hidden_state = t5_encoder(input_ids=input_ids)
+    if isinstance(t5_decoder, TRTNativeRunner):
+        t5_decoder.set_return_device("cuda" if use_cuda else "cpu")
+        t5_decoder.set_encoder_hidden_states_for_inference_cycle(encoder_last_hidden_state)
+
+    # Set the first token to be pad token
+    decoder_input_ids_padded = torch.full(
+        decoder_input_ids.size()[:-1] + (decoder_input_ids.size()[-1] + 1,),
+        tokenizer.convert_tokens_to_ids(tokenizer.pad_token),
+        dtype=decoder_input_ids.dtype,
+    )
+    decoder_input_ids_padded[..., 1:] = decoder_input_ids
+
+    if use_cuda:
+        encoder_last_hidden_state = encoder_last_hidden_state.to("cuda")
+        decoder_input_ids_padded = decoder_input_ids_padded.to("cuda")
+
+    with torch.no_grad():
+        logits = t5_decoder(decoder_input_ids_padded, encoder_last_hidden_state, return_dict=True).logits
+        # Truncate the last prediction
+        logits = logits[:, :-1, :]
+        loss = torch.nn.CrossEntropyLoss()(logits.permute((0, 2, 1)), decoder_input_ids)
+        return torch.exp(loss).item()

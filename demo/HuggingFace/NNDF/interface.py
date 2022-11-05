@@ -237,6 +237,7 @@ class FrameworkCommand(NetworkCommand):
         batch_size: int,
         args: object = None,
         benchmarking_mode: bool = False,
+        perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
         pass
 
@@ -245,7 +246,7 @@ class FrameworkCommand(NetworkCommand):
 
         checkpoint = self.load_nn_semantic_checkpoint()
 
-        network_results = self.run_framework(
+        network_results, ppl_results = self.run_framework(
             metadata=self.metadata,
             network_input=list(checkpoint.inputs()),
             working_directory=self._args.working_dir,
@@ -256,11 +257,13 @@ class FrameworkCommand(NetworkCommand):
             batch_size=self._args.batch_size,
             args=self._args,
             benchmarking_mode=False,
+            perplexity_reference=list(checkpoint.labels()),
         )
 
         return NetworkCheckpointResult(
             network_results=network_results,
             accuracy=checkpoint.accuracy(network_results),
+            perplexity=(sum(ppl_results) / len(ppl_results) if ppl_results else None),
         )
 
     def run_benchmark(self):
@@ -318,6 +321,8 @@ class TRTInferenceCommand(NetworkCommand):
         batch_size: int = 1,
         args: object = None,
         benchmarking_mode: bool = False,
+        preview_dynamic_shapes: bool = False,
+        perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
         pass
 
@@ -328,7 +333,7 @@ class TRTInferenceCommand(NetworkCommand):
 
         checkpoint = self.load_nn_semantic_checkpoint()
 
-        network_results = self.run_trt(
+        network_results, ppl_results = self.run_trt(
             metadata=self.metadata,
             onnx_fpaths=onnx_fpaths,
             network_input=list(checkpoint.inputs()),
@@ -340,12 +345,14 @@ class TRTInferenceCommand(NetworkCommand):
             batch_size=self._args.batch_size,
             args=self._args,
             benchmarking_mode=False,
-            preview_dynamic_shapes=self._args.preview_dynamic_shapes
+            preview_dynamic_shapes=self._args.preview_dynamic_shapes,
+            perplexity_reference=list(checkpoint.labels()),
         )
 
         return NetworkCheckpointResult(
             network_results=network_results,
             accuracy=checkpoint.accuracy(network_results),
+            perplexity=(sum(ppl_results) / len(ppl_results) if ppl_results else None),
         )
 
     def run_benchmark(self):

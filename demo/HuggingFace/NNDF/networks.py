@@ -42,9 +42,9 @@ BenchmarkingResult = namedtuple(
     ["median_runtime", "models"],
 )
 
-"""CheckpointResult(network_results: List[NetworkResult], accuracy: float)"""
+"""CheckpointResult(network_results: List[NetworkResult], accuracy: float, perplexity: float)"""
 NetworkCheckpointResult = namedtuple(
-    "NetworkCheckpointResult", ["network_results", "accuracy"]
+    "NetworkCheckpointResult", ["network_results", "accuracy", "perplexity"]
 )
 
 # Tracks TRT Precision Config

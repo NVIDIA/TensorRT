@@ -21,6 +21,9 @@ Uses [semantic versioning](https://semver.org/).
 - `Security` in case of vulnerabilities.
 
 
+# [1.3.0] - 2022-11-03
+- Added perplexity calculation for all samples
+
 # [1.2.5] - 2022-10-08
 - Added beam search support for BART
  
