@@ -39,6 +39,15 @@ from NNDF.logger import G_LOGGER
 # externals
 # None, there should be no external dependencies for testing purposes.
 
+# Program-wide constants for passing in valid frameworks.
+FRAMEWORK_NATIVE = "native"
+FRAMEWORK_TENSORRT = "trt"
+FRAMEWORK_ONNXRT = "onnxrt"
+VALID_FRAMEWORKS = [
+    FRAMEWORK_NATIVE,
+    FRAMEWORK_ONNXRT,
+    FRAMEWORK_TENSORRT
+]
 
 class MetadataArgparseInteropMixin:
     """Add argparse support where the class can add new arguments to an argparse object."""
@@ -85,6 +94,7 @@ class NetworkCommand(metaclass=ABCMeta):
     def __init__(self, network_config: NNConfig, description: str):
         self.config = network_config()
         self.description = description
+        self.framework_name = None
         self._parser = argparse.ArgumentParser(description=description, conflict_handler="resolve")
 
     def __call__(self):
@@ -203,7 +213,7 @@ class NetworkCommand(metaclass=ABCMeta):
         from NNDF.checkpoints import NNSemanticCheckpoint
         checkpoint = NNSemanticCheckpoint(
             "checkpoint.toml",
-            framework="native",
+            framework=self.framework_name,
             network_name=self.config.network_name,
             metadata=self.metadata,
         )
@@ -224,6 +234,10 @@ class NetworkCommand(metaclass=ABCMeta):
 
 class FrameworkCommand(NetworkCommand):
     """Base class that is associated with Frameworks related scripts."""
+
+    def __init__(self, network_config: NNConfig, description: str):
+        super().__init__(network_config, description)
+        self.framework_name = FRAMEWORK_NATIVE
 
     @abstractmethod
     def run_framework(
@@ -304,6 +318,7 @@ class TRTInferenceCommand(NetworkCommand):
         frameworks_cmd: FrameworkCommand,
     ):
         super().__init__(network_config, description)
+        self.framework_name = FRAMEWORK_TENSORRT
         # Should be set by
         self.frameworks_cmd = frameworks_cmd()
 
@@ -409,6 +424,7 @@ class OnnxRTCommand(NetworkCommand):
         frameworks_cmd: FrameworkCommand,
     ):
         super().__init__(network_config, description)
+        self.framework_name = FRAMEWORK_ONNXRT
         # Should be set by
         self.frameworks_cmd = frameworks_cmd()
 
