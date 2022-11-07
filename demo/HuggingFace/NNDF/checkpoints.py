@@ -19,17 +19,34 @@
 Helper file for generating common checkpoints.
 """
 
+import itertools
 from typing import List
 
 # TRT-HuggingFace
 from NNDF.networks import NetworkMetadata, NetworkResult
+from NNDF.interface import VALID_FRAMEWORKS
 
 # externals
 import toml
-
-
 class NNTomlCheckpoint:
-    """Loads a toml checkpoint file for comparing labels and inputs."""
+    """
+    Loads a toml checkpoint file for comparing labels and inputs.
+    The following nested key structure is required:
+
+    [Network.Framework.Variant.Precision]
+
+    For each category, you can assign a default behviour using a special key
+    defined by CHECKPOINT_STRUCTURE_FLAT.
+
+    CHECKPOINT_STRUCTURE_FLAT cannot be valid in terms of the result that is being added inwards.
+    """
+
+    # The checkpoint structure and their default keys
+    CHECKPOINT_STRUCTURE_FLAT = {
+        "framework": "all",
+        "variant": "default",
+        "precision": "all"
+    }
 
     def __init__(self, fpath: str, framework: str, network_name: str, metadata: NetworkMetadata):
         """Loads the toml file for processing."""
@@ -37,23 +54,40 @@ class NNTomlCheckpoint:
         with open(fpath) as f:
             data = toml.load(f)
 
+        assert framework in VALID_FRAMEWORKS
+        # These keys are reserved to indicate the default state.
+        assert self.CHECKPOINT_STRUCTURE_FLAT["framework"] not in VALID_FRAMEWORKS
+
         # Select the current input data
         # try to get the base data
-        network = data.get(network_name, {})
-        self.baseline = network.get("all", {}).get("default", {})
-        specific_general_data = network.get("all", {}).get(metadata.variant, {})
-        # Defaults are also used as baselines for the network in case there are deviations known in variants.
+        network_data = data.get(network_name, {})
 
-        # then apply specific data
-        addendum = network.get(framework, {})
-        addendum_default = addendum.get("default", {})
-        addendum_specific = addendum.get(metadata.variant, {})
-        self.data = {
-            k: {**self.baseline[k],
-                **specific_general_data.get(k, {}),
-                **addendum_default.get(k, {}),
-                **addendum_specific.get(k, {})} for k in self.baseline.keys()
+        cur_keys = {
+            "framework": framework,
+            "variant": metadata.variant,
+            "precision": "fp16" if metadata.precision.fp16 else "fp32"
         }
+
+        combined_keys =[[self.CHECKPOINT_STRUCTURE_FLAT[k], cur_keys[k]] for k in self.CHECKPOINT_STRUCTURE_FLAT.keys()]
+        # A helper function for flattening the getters.
+        def flat_getter(d=network_data, *args):
+            for k in args:
+                if k not in d:
+                    return {}
+                d = d[k]
+            return d
+
+        # self.data stores several keys:
+        # {"checkpoint_name": {"label": xxx, "input": xxx}}
+        # The loop below attempts to merge several code snippets together.
+        self.data = network_data["all"]["default"]["all"]
+        for keys in itertools.product(*combined_keys):
+            values = flat_getter(network_data, *keys)
+            if len(values) == 0:
+                continue
+            for data_k, data_v in self.data.items():
+                if data_k in values:
+                    self.data[data_k] = {**data_v, **values[data_k]}
 
         # Used when accuracy() is called
         self._lookup_cache = None
@@ -79,7 +113,7 @@ class NNTomlCheckpoint:
 class NNSemanticCheckpoint(NNTomlCheckpoint):
     """Requires the following data structure:
 
-    [<network>.<framework>.<variant>]
+    [<network>.<framework>.<variant>.<precision>]
         [input_a]
         label = "sample_label"
         input = "sample_input"
@@ -91,6 +125,7 @@ class NNSemanticCheckpoint(NNTomlCheckpoint):
     Following are reserved keywords:
     <framework> = "all" indicates rules apply to all frameworks
     <variant> = "default" indicates rules apply to all networks.
+    <precision> = "all" indicates rules apply to all precisions.
     """
 
     def __iter__(self):
