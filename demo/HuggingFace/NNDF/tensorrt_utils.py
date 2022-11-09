@@ -17,7 +17,8 @@
 
 """Utilities related to Polygraphy"""
 
-from typing import List
+from typing import Dict, List
+from functools import reduce
 
 # polygraphy
 from polygraphy.backend.trt import engine_from_bytes, TrtRunner
@@ -40,7 +41,44 @@ from NNDF.networks import NetworkMetadata
 from NNDF.models import TRTEngineFile
 from NNDF.logger import G_LOGGER
 
+# PyTorch
+import torch
+
 # Helper Functions
+def setup_benchmark_arg(user_input, name, default):
+    '''
+    Set up benchmarking arguments for trt
+    '''
+    if user_input is None:
+        G_LOGGER.warning("{} is not provided, default to {}".format(name, default))
+        return default
+    return user_input
+
+def allocate_binding_buffer(types_dict, shapes_dict):
+    '''
+    Allocate binding buffers for trt based on provided types and shapes dict
+    '''
+    return {
+        k: torch.zeros(reduce(lambda v, a: v*a, shape), dtype=types_dict[k]).cuda()
+        for k, shape in shapes_dict.items()
+    }
+
+
+def set_kv_data(kv_dict, past_or_present, layer_id, segment_value_dict):
+    '''
+    Set the types and shapes dict for kv-cache based on the provided inputs:
+        kv_dict: Dict[str, tuple/torch.dtype], the dict to modify within the function
+        past_or_present: str, either "past" or "present"
+        layer_id: int, need kv cache for each decoder layer
+        segment_value_dict: Dict[str, tuple/torch.dtype], example: 
+            kvcache type: {"encoder": torch.float32, "decoder": torch.float32}
+            kvcache shape: {"encoder": cross_attention_kv_shape, "decoder": self_attention_kv_shape}
+    '''
+    for segment, value in segment_value_dict.items():
+        for code in ['key', 'value']:
+            kv_dict[f"{past_or_present}_key_values.{layer_id}.{segment}.{code}"] = value
+            
+
 def clamp_weights_onnx(onnx_input_fpath: str, onnx_output_fpath: str, min: float, max: float, ignore_nodes: List = None):
     """
     Clamps given onnx model to targeted upper and lower bounds.

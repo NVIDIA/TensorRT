@@ -88,7 +88,7 @@ def full_inference_greedy(
     min_length=0,
     batch_size=1,
     use_cuda=True,
-    early_stopping=True,
+    early_stopping=True, # Deprecated
     use_cache=True
 ):
     G_LOGGER.info("Running full inference with greedy decoding...")
@@ -158,7 +158,7 @@ def full_inference_beam(
     min_length=0,
     batch_size=1,
     use_cuda=True,
-    early_stopping=True,
+    early_stopping=True, # Deprecated
     use_cache=True
 ):
 
