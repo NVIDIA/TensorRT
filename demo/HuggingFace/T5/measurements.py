@@ -26,6 +26,7 @@ import torch
 from transformers.generation_logits_process import (
     MinLengthLogitsProcessor,
     LogitsProcessorList,
+    ForcedEOSTokenLogitsProcessor,
 )
 from transformers.generation_stopping_criteria import (
     MaxLengthCriteria,
@@ -43,7 +44,7 @@ from NNDF.logger import G_LOGGER
 
 @use_cuda
 def decoder_inference(
-    t5_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=True
+    t5_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=True, use_cache=True, past_key_values=None
 ):
     # This implementation is a bit ugly. Moving implementation of the model to check HFRunner would be cleaner.
     if isinstance(t5_decoder, TRTNativeRunner):
@@ -54,7 +55,8 @@ def decoder_inference(
 
     def decoder_stmt():
         t5_decoder(
-            input_ids=input_ids, encoder_hidden_states=encoder_last_hidden_state
+            input_ids=input_ids, encoder_hidden_states=encoder_last_hidden_state, use_cache=use_cache, 
+            past_key_values=past_key_values
         )
 
     decoder_e2e_time = measure_python_inference_code(decoder_stmt, timing_profile)
@@ -79,20 +81,21 @@ def full_inference_greedy(
     tokenizer,
     timing_profile,
     max_length,
+    min_length=0,
     batch_size=1,
     use_cuda=True,
-    early_stopping=True,
+    early_stopping=True, # Deprecated
+    use_cache=True
 ):
     G_LOGGER.info("Running full inference with greedy decoding...")
 
     stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length)])
-    if early_stopping:
-        logits_processor = LogitsProcessorList([])
-    else:
-        logits_processor = LogitsProcessorList([
-            MinLengthLogitsProcessor(max_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
-        ])
 
+    logits_processor = LogitsProcessorList([
+        MinLengthLogitsProcessor(min_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token)),
+        ForcedEOSTokenLogitsProcessor(max_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
+    ])
+    
     decoder_input_ids = torch.full(
         (batch_size, 1), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
     )
@@ -110,6 +113,7 @@ def full_inference_greedy(
                 encoder_hidden_states=encoder_last_hidden_state,
                 stopping_criteria=stopping_criteria,
                 logits_processor=logits_processor,
+                use_cache=use_cache
             )
         return decoder_output_greedy
 
@@ -123,6 +127,7 @@ def full_inference_greedy(
                 encoder_hidden_states=encoder_last_hidden_state,
                 stopping_criteria=stopping_criteria,
                 logits_processor=logits_processor,
+                use_cache=use_cache
             )
         return decoder_output_greedy
         
@@ -147,20 +152,19 @@ def full_inference_beam(
     min_length=0,
     batch_size=1,
     use_cuda=True,
-    early_stopping=True,
+    early_stopping=True, # Deprecated
     use_cache=True
 ):
 
     G_LOGGER.info(f"Running full inference with beam search (num_beams = {num_beams}) decoding...")
 
     stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length)])
-    if early_stopping:
-        logits_processor = LogitsProcessorList([])
-    else:
-        logits_processor = LogitsProcessorList([
-            MinLengthLogitsProcessor(max_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
-        ])
 
+    logits_processor = LogitsProcessorList([
+        MinLengthLogitsProcessor(min_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token)),
+        ForcedEOSTokenLogitsProcessor(max_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
+    ])
+    
     decoder_input_ids = torch.full(
         (batch_size, 1), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
     )

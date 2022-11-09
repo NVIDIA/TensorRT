@@ -395,11 +395,23 @@ class TRTInferenceCommand(NetworkCommand):
 
     def add_args(self, parser) -> argparse.ArgumentParser:
         super().add_args(parser)
-        device_group = parser.add_argument_group("trt")
-        device_group.add_argument(
+        trt_group = parser.add_argument_group("trt")
+        trt_group.add_argument(
             "--preview-dynamic-shapes",
             help="Use the FASTER_DYNAMIC_SHAPES_0805 preview feature when building the TensorRT engine",
             action="store_true",
+        )
+
+        trt_benchmarking_group = parser.add_argument_group("trt benchmarking group")
+        trt_benchmarking_group.add_argument(
+            "--input-profile-max-len",
+            type=int,
+            help="Specify max input sequence length in TRT engine profile. (default: max supported sequence length)",
+        )
+        trt_benchmarking_group.add_argument(
+            "--output-profile-max-len",
+            type=int,
+            help="Specify max output sequence length in TRT engine profile. (default: max supported sequence length)",
         )
 
     def args_to_network_metadata(self, args) -> NetworkMetadata:

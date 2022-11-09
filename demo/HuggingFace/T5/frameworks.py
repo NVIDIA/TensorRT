@@ -236,6 +236,7 @@ class T5FHuggingFace(FrameworkCommand):
                 max_length=output_seq_len,
                 use_cuda=(not use_cpu),
                 batch_size=batch_size,
+                use_cache=metadata.other.kv_cache,
                 early_stopping=(not benchmarking_mode),
             )
         else:

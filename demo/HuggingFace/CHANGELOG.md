@@ -20,6 +20,11 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+
+# [1.3.1] - 2022-11-04
+- Added beam search support for T5 demo
+- Added KV cache support for T5 demo
+
 # [1.3.0] - 2022-11-03
 - Added perplexity calculation for all samples
 - Added precision override to checkpoints.

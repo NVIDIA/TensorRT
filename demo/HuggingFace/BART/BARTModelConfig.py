@@ -80,26 +80,18 @@ class BARTMetadata(_BARTMetadata, MetadataArgparseInteropMixin):
         benchmarking_group.add_argument(
             "--input-seq-len",
             type=int,
-            help="Specify fixed input sequence length for perf benchmarking. (default: max supported sequence length)",
+            help="Specify fixed input sequence length for perf benchmarking. Required for benchmark except when both input_profile_max and output_profile_max are provided for trt",
         )
         benchmarking_group.add_argument(
             "--output-seq-len",
             type=int,
-            help="Specify fixed output sequence length for perf benchmarking. (default: max supported sequence length)",
-        )
-        benchmarking_group.add_argument(
-            "--input-profile-max-len",
-            type=int,
-            help="Specify max input sequence length in engine profile. (default: max supported sequence length)",
-        )
-        benchmarking_group.add_argument(
-            "--output-profile-max-len",
-            type=int,
-            help="Specify max output sequence length in engine profile. (default: max supported sequence length)",
+            help="Specify fixed output sequence length for perf benchmarking. Required for benchmark except when both input_profile_max and output_profile_max are provided for trt",
         )
 
+BARTBenchmarkingArgs = namedtuple("BARTBenchmarkingArgs", ["input_seq_len", "output_seq_len"])
 
-BARTBenchmarkingArgs = namedtuple("BARTBenchmarkingArgs", ["input_seq_len", "output_seq_len", "input_profile_max_len", "output_profile_max_len"])
+# trt has more benchmarking arguments
+BARTTRTBenchmarkingArgs = namedtuple("BARTTRTBenchmarkingArgs", ["input_seq_len", "output_seq_len", "input_profile_max_len", "output_profile_max_len"])
 
 class BARTModelTRTConfig(NNConfig):
 
@@ -113,6 +105,13 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 24, 
         TARGET_MODELS[2]: 24,
         TARGET_MODELS[3]: 24,
+    } 
+    
+    NUMBER_OF_DECODER_LAYERS = {
+        TARGET_MODELS[0]: 6, 
+        TARGET_MODELS[1]: 12, 
+        TARGET_MODELS[2]: 12,
+        TARGET_MODELS[3]: 12,
     } 
     
     # in all bart variants, # of heads in encoder and decoder are the same
@@ -233,9 +232,7 @@ class BARTModelTRTConfig(NNConfig):
         )
         if metadata.other.kv_cache:
             # for KV cache version, we need add per-layer KV cache inputs. `past_key_values` at each layer is (self-attention K, self-attention V, cross-attention K, cross-attention V)
-
-            # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
-            for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]) // 2):
+            for i in range(BARTModelTRTConfig.NUMBER_OF_DECODER_LAYERS[metadata.variant]):
                 # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep) 
                 self_attention_past_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("past_decoder_length"), "embedding_size_per_head")
                 decoder_inputs_dict[f"past_key_values.{i}.decoder.key"] = self_attention_past_kv_dims
@@ -271,7 +268,7 @@ class BARTModelTRTConfig(NNConfig):
             # for KV cache version, we need add per-layer KV cache inputs. `past_key_values` at each layer is (self-attention K, self-attention V, cross-attention K, cross-attention V)
             
             # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
-            for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]) // 2):
+            for i in range(BARTModelTRTConfig.NUMBER_OF_DECODER_LAYERS[metadata.variant]):
                 # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep) 
                 self_attention_present_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("decoder_length"), "embedding_size_per_head")
                 decoder_outputs_dict[f"present_key_values.{i}.decoder.key"] = self_attention_present_kv_dims
