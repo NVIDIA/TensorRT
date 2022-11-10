@@ -10,10 +10,11 @@ graphviz
 jupyter
 netron
 openpyxl # for excel reporting
-ipywidgets
+ipywidgets==7.7.2
 ipyfilechooser
 jupyterlab
 jupyter-dash
 pytest
 dtale==2.2.0
 xlsxwriter
+Flask==2.0.0
