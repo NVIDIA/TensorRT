@@ -242,6 +242,7 @@ def calculate_perplexity(
     tokenizer,
     input_ids,
     decoder_input_ids,
+    max_seq_len=None,
     use_cuda=True,
 ):
     encoder_last_hidden_state = t5_encoder(input_ids=input_ids)
@@ -262,6 +263,8 @@ def calculate_perplexity(
         decoder_input_ids_padded = decoder_input_ids_padded.to("cuda")
 
     with torch.no_grad():
+        if max_seq_len is not None:
+            decoder_input_ids = decoder_input_ids[:, :max_seq_len]
         logits = t5_decoder(decoder_input_ids_padded, encoder_last_hidden_state, return_dict=True).logits
         # Truncate the last prediction
         logits = logits[:, :-1, :]

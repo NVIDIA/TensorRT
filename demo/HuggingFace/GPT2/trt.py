@@ -276,7 +276,9 @@ class GPT2Polygraphy(TRTInferenceCommand):
             (1, ppl_input_ids.shape[1], GPT2ModelTRTConfig.VOCAB_SIZE),
         )
 
-        perplexity = calculate_perplexity(self.gpt2_trt, ppl_input_ids)
+        perplexity = calculate_perplexity(
+            self.gpt2_trt, ppl_input_ids, GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+        )
         return perplexity
 
     def run_trt(

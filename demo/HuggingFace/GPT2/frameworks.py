@@ -255,7 +255,10 @@ class GPT2HuggingFace(FrameworkCommand):
         tokenizer, gpt2_torch = self.setup_tokenizer_and_model(metadata, network_fpaths)
         reference = reference.replace("\\n", "\n")
         ppl_input_ids = tokenizer([reference], padding=True, return_tensors="pt").input_ids
-        perplexity = calculate_perplexity(gpt2_torch, ppl_input_ids)
+        perplexity = calculate_perplexity(
+            gpt2_torch, ppl_input_ids, GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+        )
+
         return perplexity
 
     def run_framework(
