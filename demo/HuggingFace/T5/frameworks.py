@@ -299,7 +299,10 @@ class T5FHuggingFace(FrameworkCommand):
         tokenizer, t5_torch_encoder, t5_torch_decoder = self.setup_tokenizer_and_model(metadata, network_fpaths)
         encoder_input_ids = tokenizer([encoder_input], padding=True, return_tensors="pt").input_ids
         decoder_input_ids = tokenizer([decoder_input], padding=True, return_tensors="pt").input_ids
-        perplexity = calculate_perplexity(t5_torch_encoder, t5_torch_decoder, tokenizer, encoder_input_ids, decoder_input_ids)
+        perplexity = calculate_perplexity(
+            t5_torch_encoder, t5_torch_decoder, tokenizer, encoder_input_ids, decoder_input_ids,
+            T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
+        )
         return perplexity
 
     def run_framework(

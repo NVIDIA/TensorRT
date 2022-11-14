@@ -694,7 +694,10 @@ class T5TRT(TRTInferenceCommand):
         encoder_input_ids = tokenizer([encoder_input], padding=True, return_tensors="pt").input_ids
         decoder_input_ids = tokenizer([decoder_input], padding=True, return_tensors="pt").input_ids
 
-        perplexity = calculate_perplexity(self.t5_trt_encoder, self.t5_trt_decoder, tokenizer, encoder_input_ids, decoder_input_ids)
+        perplexity = calculate_perplexity(
+            self.t5_trt_encoder, self.t5_trt_decoder, tokenizer, encoder_input_ids, decoder_input_ids,
+            T5ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
+        )
         return perplexity
 
     def _setup_workspace(self, metadata: NetworkMetadata, working_directory: str) -> NNFolderWorkspace:
