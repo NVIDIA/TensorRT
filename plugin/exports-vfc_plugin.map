@@ -20,6 +20,8 @@
   global:
     extern "C++" {
       nvinfer1::plugin::ROIAlign*;
+      nvinfer1::plugin::getPluginCreators;
+      nvinfer1::plugin::setLoggerFinder;
     };
   local: *;
 };

@@ -1,0 +1,58 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef TRT_PLUGIN_VFC_COMMON_H
+#define TRT_PLUGIN_VFC_COMMON_H
+#include "NvInfer.h"
+#include "NvInferPlugin.h"
+
+using namespace nvinfer1;
+
+namespace nvinfer1
+{
+namespace plugin
+{
+
+IPluginCreator* const* getPluginCreators(int32_t& nbCreators);
+
+//!
+//! \class LoggerFinder
+//!
+//! \brief It is a virtual base class to find a global logger.
+//! In the TRT runtime, we will implement a subclass of LoggerFinder() whose findLogger() method
+//! calls getLogger(), and create a global instance of that class to pass to loaded plugins.
+//!
+//!
+class LoggerFinder
+{
+public:
+    LoggerFinder() = default;
+    virtual ~LoggerFinder() = default;
+    virtual ILogger* findLogger() = 0;
+    LoggerFinder(LoggerFinder const&) = delete;
+    LoggerFinder(LoggerFinder&&) = delete;
+    LoggerFinder& operator=(LoggerFinder const&) & = delete;
+    LoggerFinder& operator=(LoggerFinder&&) & = delete;
+};
+
+void setLoggerFinder(LoggerFinder* finder);
+
+ILogger* getPluginLogger();
+
+} // namespace plugin
+} // namespace nvinfer1
+#endif // TRT_PLUGIN_VFC_COMMON_H

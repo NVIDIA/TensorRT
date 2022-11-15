@@ -123,7 +123,7 @@ if (STABLE_DIFFUSION_CU_SOURCES)
     list(APPEND PLUGIN_SOURCES "${STABLE_DIFFUSION_CU_SOURCES}")
 endif()
 
-list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/api/InferPlugin.cpp")
+list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/inferPlugin.cpp")
 list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../samples/common/logger.cpp")
 
 ################################## SHARED LIBRARY #######################################
