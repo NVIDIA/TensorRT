@@ -16,6 +16,7 @@
  */
 
 #include "common/checkMacrosPlugin.h"
+#include "common/vfcCommon.h"
 #include <cstdlib>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -110,7 +111,15 @@ void reportValidationFailure(char const* msg, char const* file, int line)
 {
     std::ostringstream stream;
     stream << "Validation failed: " << msg << "\n" << file << ':' << line << "\n";
-    gLogError << stream.str().c_str() << std::endl;
+#ifdef COMPILE_VFC_PLUGIN
+    ILogger* logger = getPluginLogger();
+    if (logger != nullptr)
+    {
+        logger->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
+    }
+#else
+    getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
+#endif
 }
 
 // break-pointable
@@ -121,7 +130,15 @@ void reportAssertion(const char* msg, const char* file, int line)
            << file << ':' << line << "\n"
            << "Aborting..."
            << "\n";
-    gLogError << stream.str().c_str() << std::endl;
+#ifdef COMPILE_VFC_PLUGIN
+    ILogger* logger = getPluginLogger();
+    if (logger != nullptr)
+    {
+        logger->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
+    }
+#else
+    getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
+#endif
     PLUGIN_CUASSERT(cudaDeviceReset());
     abort();
 }
