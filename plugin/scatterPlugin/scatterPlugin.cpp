@@ -164,7 +164,7 @@ int32_t ScatterND::enqueue(const PluginTensorDesc* inputDesc, const PluginTensor
     case DataType::kBOOL:
         elementSizeInBytes = 1;
         break;
-    case DataType::kFP8: PLUGIN_FAIL("FP8 not implemented yet"); break;
+    case DataType::kFP8: PLUGIN_FAIL("FP8 not supported"); break;
     }
 
     for (int i = indexRank; i < dataDims.nbDims; i++)

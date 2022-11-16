@@ -682,7 +682,7 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
 
     status = cub::DeviceSegmentedRadixSort::SortPairsDescending(sortedWorkspaceData, sortedWorkspaceSize, scoresDB,
         indexDB, param.batchSize * param.numScoreElements, param.batchSize, topOffsetsStartData, topOffsetsEndData,
-        param.scoreBits > 0 ? (10 - param.scoreBits) : 0, param.scoreBits > 0 ? 10 : sizeof(T) * 8, stream, false);
+        param.scoreBits > 0 ? (10 - param.scoreBits) : 0, param.scoreBits > 0 ? 10 : sizeof(T) * 8, stream);
     CSC(status, STATUS_FAILURE);
 
     status = EfficientNMSLauncher<T>(param, topNumData, outputIndexData, outputClassData, indexDB.Current(),
