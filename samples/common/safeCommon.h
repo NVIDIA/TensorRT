@@ -154,7 +154,11 @@ public:
     void endCapture(cudaStream_t& stream)
     {
         CHECK(cudaStreamEndCapture(stream, &mGraph));
+#if CUDART_VERSION >= 12000
+        CHECK(cudaGraphInstantiate(&mGraphExec, mGraph, 0));
+#else
         CHECK(cudaGraphInstantiate(&mGraphExec, mGraph, nullptr, nullptr, 0));
+#endif
         CHECK(cudaGraphDestroy(mGraph));
     }
 

@@ -97,7 +97,7 @@ int CoordConvACPlugin::enqueue(
     case DataType::kINT32:
     case DataType::kBOOL:
         break;
-    case DataType::kFP8: PLUGIN_FAIL("FP8 not implemented yet"); break;
+    case DataType::kFP8: PLUGIN_FAIL("FP8 not supported"); break;
     }
     return 1;
 }

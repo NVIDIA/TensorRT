@@ -113,6 +113,11 @@ namespace plugin
 
 extern ILogger* gLogger;
 
+} // namespace plugin
+} // namespace nvinfer1
+
+namespace
+{
 // This singleton ensures that each plugin is only registered once for a given
 // namespace and type, and attempts of duplicate registration are ignored.
 class PluginCreatorRegistry
@@ -203,8 +208,7 @@ void initializePlugin(void* logger, char const* libNamespace)
     PluginCreatorRegistry::getInstance().addPluginCreator<CreatorType>(logger, libNamespace);
 }
 
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace
 // New Plugin APIs
 
 extern "C"
