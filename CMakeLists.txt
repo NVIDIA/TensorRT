@@ -64,7 +64,11 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations ${CMAKE_CXX_FLAGS} -DBUILD_SYSTEM=cmake_oss")
+if(NOT MSVC)
+    set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations ${CMAKE_CXX_FLAGS} -DBUILD_SYSTEM=cmake_oss")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_SYSTEM=cmake_oss")
+endif()
 
 ############################################################################################
 # Cross-compilation settings
@@ -116,11 +120,11 @@ include_directories(
     ${CUDNN_ROOT_DIR}/include
 )
 find_library(CUDNN_LIB cudnn HINTS
-    ${CUDA_TOOLKIT_ROOT_DIR} ${CUDNN_ROOT_DIR} PATH_SUFFIXES lib64 lib)
+    ${CUDA_TOOLKIT_ROOT_DIR} ${CUDNN_ROOT_DIR} PATH_SUFFIXES lib64 lib/x64 lib)
 find_library(CUBLAS_LIB cublas HINTS
-    ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/stubs)
+    ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/x64 lib/stubs)
 find_library(CUBLASLT_LIB cublasLt HINTS
-    ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/stubs)
+    ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/x64 lib/stubs)
 if(BUILD_PARSERS)
     configure_protobuf(${PROTOBUF_VERSION})
 endif()
@@ -128,8 +132,11 @@ endif()
 find_library_create_target(nvinfer nvinfer SHARED ${TRT_LIB_DIR})
 find_library_create_target(nvuffparser nvparsers SHARED ${TRT_LIB_DIR})
 
-find_library(CUDART_LIB cudart HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib64)
-find_library(RT_LIB rt)
+find_library(CUDART_LIB cudart HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
+
+if (NOT MSVC)
+    find_library(RT_LIB rt)
+endif()
 
 set(CUDA_LIBRARIES ${CUDART_LIB})
 
@@ -165,20 +172,30 @@ else()
   message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${GPU_ARCHS}")
 endif()
 set(BERT_GENCODES)
+set(STABLE_DIFFUSION_GENCODES)
 # Generate SASS for each architecture
 foreach(arch ${GPU_ARCHS})
     if (${arch} GREATER_EQUAL 70)
         set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
+        set(STABLE_DIFFUSION_GENCODES "${STABLE_DIFFUSION_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
     endif()
     set(GENCODES "${GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
 endforeach()
+
 # Generate PTX for the last architecture in the list.
 list(GET GPU_ARCHS -1 LATEST_SM)
 set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
 if (${LATEST_SM} GREATER_EQUAL 70)
     set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
+    set(STABLE_DIFFUSION_GENCODES "${STABLE_DIFFUSION_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
 endif()
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -Wno-deprecated-declarations")
+
+if(NOT MSVC)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -Wno-deprecated-declarations")
+else()
+    set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler")
+endif()
 
 ############################################################################################
 # TensorRT
