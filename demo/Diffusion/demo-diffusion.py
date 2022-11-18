@@ -152,7 +152,7 @@ class DemoDiffusion:
         self.engine = {}
         self.stream = cuda.Stream()
 
-    def __del__(self):
+    def teardown(self):
         for engine in self.engine.values():
             del engine
         self.stream.free()
@@ -471,3 +471,5 @@ if __name__ == "__main__":
     images = demo.infer(prompt, negative_prompt, verbose=args.verbose)
     if args.profile:
         cudart.cudaProfilerStop()
+
+    demo.teardown()
