@@ -726,7 +726,7 @@ class UNet(BaseModel):
         dtype = torch.float16 if self.fp16 else torch.float32
         return (
             torch.randn(2*batch_size,4,self.latent_height,self.latent_width, dtype=torch.float32, device=self.device),
-            torch.tensor(1, dtype=torch.float32, device=self.device),
+            torch.tensor([1.], dtype=torch.float32, device=self.device),
             torch.randn(2*batch_size, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device)
         )
 
