@@ -33,13 +33,13 @@ def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion Demo")
     # Stable Diffusion configuration
     parser.add_argument('prompt', nargs = '*', help="Text prompt(s) to guide image generation")
+    parser.add_argument('--negative-prompt', nargs = '*', default=[''], help="The negative prompt(s) to guide the image generation.")
+    parser.add_argument('--repeat-prompt', type=int, default=1, choices=[1, 2, 4, 8, 16], help="Number of times to repeat the prompt (batch size multiplier)")
     parser.add_argument('--height', type=int, default=512, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=512, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--num-images', type=int, default=1, help="Number of images to generate per prompt")
-    parser.add_argument('--steps', type=int, default=50, help="Number of inference steps")
-    parser.add_argument('--denoise-prec', type=str, default='fp16', choices=['fp32', 'fp16'], help="UNet model precision")
-    parser.add_argument('--negative-prompt', nargs = '*', default=[''], help="The negative prompt(s) to guide the image generation.")
-    parser.add_argument('--repeat-prompt', type=int, default=1, choices=[1, 2, 4, 8, 16], help="Number of times to repeat the prompt (batch size multiplier)")
+    parser.add_argument('--denoising-steps', type=int, default=50, help="Number of denoising steps")
+    parser.add_argument('--denoising-prec', type=str, default='fp16', choices=['fp32', 'fp16'], help="Denoiser model precision")
     parser.add_argument('--scheduler', type=str, default="LMSD", choices=["LMSD", "DPM"], help="Scheduler for diffusion process")
 
     # ONNX export
@@ -47,48 +47,45 @@ def parseArgs():
     parser.add_argument('--onnx-dir', default='onnx', help="Output directory for ONNX export")
     parser.add_argument('--force-onnx-export', action='store_true', help="Force ONNX export of CLIP, UNET, and VAE models")
     parser.add_argument('--force-onnx-optimize', action='store_true', help="Force ONNX optimizations for CLIP, UNET, and VAE models")
+    parser.add_argument('--onnx-minimal-optimization', action='store_true', help="Restrict ONNX optimization to const folding and shape inference.")
+
+    # TensorRT engine build
+    parser.add_argument('--engine-dir', default='engine', help="Output directory for TensorRT engines")
     parser.add_argument('--force-engine-build', action='store_true', help="Force rebuilding the TensorRT engine")
-    parser.add_argument('--force-static-batch', action='store_true', help="Force building TensorRT engines with fixed batch size.")
-    parser.add_argument('--minimal-optimization', action='store_true', help="Limited optimizations to only const folding and shape inference.")
-    parser.add_argument('--enable-preview-features', action='store_true', help="Enable TensorRT preview features.")
+    parser.add_argument('--build-static-batch', action='store_true', help="Build TensorRT engines with fixed batch size.")
+    parser.add_argument('--build-dynamic-shape', action='store_true', help="Build TensorRT engines with dynamic image shapes.")
+    parser.add_argument('--build-preview-features', action='store_true', help="Build TensorRT engines with preview features.")
 
     # TensorRT inference
-    parser.add_argument('--engine-dir', default='engine', help="Output directory for TensorRT engines")
     parser.add_argument('--num-warmup-runs', type=int, default=5, help="Number of warmup runs before benchmarking performance")
-    parser.add_argument('--profile', action='store_true', help="Enable performance profiling")
+    parser.add_argument('--nvtx-profile', action='store_true', help="Enable NVTX markers for performance profiling")
     parser.add_argument('--seed', type=int, default=None, help="Seed for random generator to get consistent results")
 
     parser.add_argument('--output-dir', default='output', help="Output directory for logs and image artifacts")
-    parser.add_argument('--hf-token', type=str, help="HuggingFace API token to use for downloading checkpoints")
+    parser.add_argument('--hf-token', type=str, help="HuggingFace API access token for downloading model checkpoints")
     parser.add_argument('-v', '--verbose', action='store_true', help="Show verbose output")
     return parser.parse_args()
 
 class DemoDiffusion:
     """
-    Application showcasing the acceleration of [Stable Diffusion v1.4](https://huggingface.co/CompVis/stable-diffusion-v1-4) pipeline using NVidia TensorRT w/ Plugins.
+    Application showcasing the acceleration of Stable Diffusion v1.4 pipeline using NVidia TensorRT w/ Plugins.
     """
     def __init__(
         self,
-        image_height,
-        image_width,
         denoising_steps,
-        scheduler="LMSD",
         denoising_fp16=True,
+        scheduler="LMSD",
         guidance_scale=7.5,
         device='cuda',
         output_dir='.',
         hf_token=None,
         verbose=False,
-        profile=False,
+        nvtx_profile=False,
     ):
         """
         Initializes the Diffusion pipeline.
 
         Args:
-            image_height (int):
-                Height (in pixels) of the image to be generated. Should be a multiple of 8.
-            image_width (int):
-                Width (in pixels) of the image to be generated. Should be a multiple of 8.
             denoising_steps (int):
                 The number of denoising steps.
                 More denoising steps usually lead to a higher quality image at the expense of slower inference.
@@ -106,16 +103,9 @@ class DemoDiffusion:
                 HuggingFace User Access Token to use for downloading Stable Diffusion model checkpoints.
             verbose (bool):
                 Enable verbose logging.
-            profile (bool):
+            nvtx_profile (bool):
                 Insert NVTX profiling markers.
         """
-
-        if image_height % 8 != 0 or image_width % 8 != 0:
-            raise ValueError(f"Image height and width have to be divisible by 8 but specified as: {image_height} and {image_width}.")
-        # Spatial dimensions of latent tensor
-        self.latent_height = image_height // 8
-        self.latent_width = image_width // 8
-
         # Only supports single image per prompt.
         self.num_images = 1
 
@@ -128,7 +118,7 @@ class DemoDiffusion:
         self.hf_token = hf_token
         self.device = device
         self.verbose = verbose
-        self.profile = profile
+        self.nvtx_profile = nvtx_profile
 
         # A scheduler to be used in combination with unet to denoise the encoded image latens.
         # This demo uses an adaptation of LMSDiscreteScheduler or DPMScheduler:
@@ -144,9 +134,9 @@ class DemoDiffusion:
 
         self.unet_model_key = 'unet_fp16' if denoising_fp16 else 'unet'
         self.models = {
-            'clip': CLIP(hf_token=hf_token, image_width=image_width, image_height=image_height, device=device, verbose=verbose),
-            self.unet_model_key: UNet(hf_token=hf_token, image_width=image_width, image_height=image_height, fp16=denoising_fp16, device=device, verbose=verbose),
-            'vae': VAE(hf_token=hf_token, image_width=image_width, image_height=image_height, device=device, verbose=verbose)
+            'clip': CLIP(hf_token=hf_token, device=device, verbose=verbose),
+            self.unet_model_key: UNet(hf_token=hf_token, fp16=denoising_fp16, device=device, verbose=verbose),
+            'vae': VAE(hf_token=hf_token, device=device, verbose=verbose)
         }
 
         self.engine = {}
@@ -167,11 +157,14 @@ class DemoDiffusion:
         onnx_dir,
         onnx_opset,
         opt_batch_size,
+        opt_image_height,
+        opt_image_width,
         force_export=False,
         force_optimize=False,
         force_build=False,
         minimal_optimization=False,
         static_batch=False,
+        static_shape=True,
         enable_preview=False,
     ):
         """
@@ -187,6 +180,10 @@ class DemoDiffusion:
                 ONNX opset version to export the models.
             opt_batch_size (int):
                 Batch size to optimize for during engine building.
+            opt_image_height (int):
+                Image height to optimize for during engine building. Must be a multiple of 8.
+            opt_image_width (int):
+                Image width to optimize for during engine building. Must be a multiple of 8.
             force_export (bool):
                 Force re-exporting the ONNX models.
             force_optimize (bool):
@@ -197,54 +194,56 @@ class DemoDiffusion:
                 Apply minimal optimizations during build (no plugins).
             static_batch (bool):
                 Build engine only for specified opt_batch_size.
+            static_shape (bool):
+                Build engine only for specified opt_image_height & opt_image_width. Default = True.
             enable_preview (bool):
                 Enable TensorRT preview features.
         """
-
-        def exportOnnx (model_name, obj):
-            onnx_opt_path = self.getModelPath(model_name, onnx_dir)
-            if force_optimize or not os.path.exists(onnx_opt_path):
-                onnx_path = self.getModelPath(model_name, onnx_dir, opt=False)
-                if force_export or not os.path.exists(onnx_path):
-                    print(f"Exporting model: {onnx_path}")
-                    model = obj.get_model()
-                    with torch.inference_mode(), torch.autocast("cuda"):
-                        inputs = obj.get_sample_input(batch_size=opt_batch_size)
-                        torch.onnx.export(model,
-                                inputs,
-                                onnx_path,
-                                export_params=True,
-                                opset_version=onnx_opset,
-                                do_constant_folding=True,
-                                input_names = obj.get_input_names(),
-                                output_names = obj.get_output_names(),
-                                dynamic_axes=obj.get_dynamic_axes(),
-                        )
-                else:
-                    print(f"Found cached model: {onnx_path}")
-
-                print(f"Generating optimizing model: {onnx_opt_path}")
-                onnx_opt_graph = obj.optimize(onnx.load(onnx_path), minimal_optimization=minimal_optimization)
-                onnx.save(onnx_opt_graph, onnx_opt_path)
-            else:
-                print(f"Found cached optimized model: {onnx_opt_path} ")
 
         # Build engines
         for model_name, obj in self.models.items():
             engine = Engine(model_name, engine_dir)
             if force_build or not os.path.exists(engine.engine_path):
-                onnx_path = self.getModelPath(model_name, onnx_dir)
-                if not os.path.exists(onnx_path):
-                    exportOnnx(model_name, obj)
-                engine.build(onnx_path, fp16=True, \
-                    input_profile=obj.get_input_profile(batch_size=opt_batch_size, static_batch=static_batch), \
-                    enable_preview=enable_preview)
+                onnx_path = self.getModelPath(model_name, onnx_dir, opt=False)
+                onnx_opt_path = self.getModelPath(model_name, onnx_dir)
+                if not os.path.exists(onnx_opt_path):
+                    # Export onnx
+                    if force_export or not os.path.exists(onnx_path):
+                        print(f"Exporting model: {onnx_path}")
+                        model = obj.get_model()
+                        with torch.inference_mode(), torch.autocast("cuda"):
+                            inputs = obj.get_sample_input(opt_batch_size, opt_image_height, opt_image_width)
+                            torch.onnx.export(model,
+                                    inputs,
+                                    onnx_path,
+                                    export_params=True,
+                                    opset_version=onnx_opset,
+                                    do_constant_folding=True,
+                                    input_names = obj.get_input_names(),
+                                    output_names = obj.get_output_names(),
+                                    dynamic_axes=obj.get_dynamic_axes(),
+                            )
+                    else:
+                        print(f"Found cached model: {onnx_path}")
 
-        # Load engines
-        for model_name, obj in self.models.items():
-            engine = Engine(model_name, engine_dir)
-            engine.activate()
+                    # Optimize onnx
+                    if force_optimize or not os.path.exists(onnx_opt_path):
+                        print(f"Generating optimizing model: {onnx_opt_path}")
+                        onnx_opt_graph = obj.optimize(onnx.load(onnx_path), minimal_optimization=minimal_optimization)
+                        onnx.save(onnx_opt_graph, onnx_opt_path)
+                    else:
+                        print(f"Found cached optimized model: {onnx_opt_path} ")
+
+                # Build engine
+                engine.build(onnx_opt_path, fp16=True, \
+                    input_profile=obj.get_input_profile(opt_batch_size, opt_image_height, opt_image_width, \
+                        static_batch=static_batch, static_shape=static_shape), \
+                    enable_preview=enable_preview)
             self.engine[model_name] = engine
+
+        # Separate iteration to activate engines
+        for model_name, obj in self.models.items():
+            self.engine[model_name].activate()
 
     def loadModules(
         self,
@@ -262,6 +261,8 @@ class DemoDiffusion:
         self,
         prompt,
         negative_prompt,
+        image_height,
+        image_width,
         warmup = False,
         verbose = False,
     ):
@@ -273,6 +274,10 @@ class DemoDiffusion:
                 The text prompt to guide image generation.
             negative_prompt (str):
                 The prompt not to guide the image generation.
+            image_height (int):
+                Height (in pixels) of the image to be generated. Must be a multiple of 8.
+            image_width (int):
+                Width (in pixels) of the image to be generated. Must be a multiple of 8.
             warmup (bool):
                 Indicate if this is a warmup run.
             verbose (bool):
@@ -282,6 +287,10 @@ class DemoDiffusion:
         batch_size = len(prompt)
         assert len(prompt) == len(negative_prompt)
 
+        # Spatial dimensions of latent tensor
+        latent_height = image_height // 8
+        latent_width = image_width // 8
+
         # Create profiling events
         events = {}
         for stage in ['clip', 'denoise', 'vae']:
@@ -290,7 +299,7 @@ class DemoDiffusion:
 
         # Allocate buffers for TensorRT engine bindings
         for model_name, obj in self.models.items():
-            self.engine[model_name].allocate_buffers(shape_dict=obj.get_shape_dict(batch_size=batch_size), device=self.device)
+            self.engine[model_name].allocate_buffers(shape_dict=obj.get_shape_dict(batch_size, image_height, image_width), device=self.device)
 
         generator = None
         if args.seed is not None:
@@ -300,7 +309,7 @@ class DemoDiffusion:
         with torch.inference_mode(), torch.autocast("cuda"), trt.Runtime(TRT_LOGGER) as runtime:
             # latents need to be generated on the target device
             unet_channels = 4 # unet.in_channels
-            latents_shape = (batch_size * self.num_images, unet_channels, self.latent_height, self.latent_width)
+            latents_shape = (batch_size * self.num_images, unet_channels, latent_height, latent_width)
             latents_dtype = torch.float32 # text_embeddings.dtype
             latents = torch.randn(latents_shape, device=self.device, dtype=latents_dtype, generator=generator)
 
@@ -310,7 +319,7 @@ class DemoDiffusion:
             torch.cuda.synchronize()
             e2e_tic = time.perf_counter()
 
-            if self.profile:
+            if self.nvtx_profile:
                 nvtx_clip = nvtx.start_range(message='clip', color='green')
             cudart.cudaEventRecord(events['clip-start'], 0)
             # Tokenize input
@@ -353,22 +362,22 @@ class DemoDiffusion:
                 text_embeddings = text_embeddings.to(dtype=torch.float16)
 
             cudart.cudaEventRecord(events['clip-stop'], 0)
-            if self.profile:
+            if self.nvtx_profile:
                 nvtx.end_range(nvtx_clip)
 
             cudart.cudaEventRecord(events['denoise-start'], 0)
             for step_index, timestep in enumerate(self.scheduler.timesteps):
-                if self.profile:
+                if self.nvtx_profile:
                     nvtx_latent_scale = nvtx.start_range(message='latent_scale', color='pink')
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2)
                 # LMSDiscreteScheduler.scale_model_input()
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, step_index)
-                if self.profile:
+                if self.nvtx_profile:
                     nvtx.end_range(nvtx_latent_scale)
 
                 # predict the noise residual
-                if self.profile:
+                if self.nvtx_profile:
                     nvtx_unet = nvtx.start_range(message='unet', color='blue')
                 dtype = np.float16 if self.denoising_fp16 else np.float32
                 if timestep.dtype != torch.float32:
@@ -379,10 +388,10 @@ class DemoDiffusion:
                 timestep_inp = cuda.DeviceView(ptr=timestep_float.data_ptr(), shape=timestep_float.shape, dtype=np.float32)
                 embeddings_inp = cuda.DeviceView(ptr=text_embeddings.data_ptr(), shape=text_embeddings.shape, dtype=dtype)
                 noise_pred = self.runEngine(self.unet_model_key, {"sample": sample_inp, "timestep": timestep_inp, "encoder_hidden_states": embeddings_inp})['latent']
-                if self.profile:
+                if self.nvtx_profile:
                     nvtx.end_range(nvtx_unet)
 
-                if self.profile:
+                if self.nvtx_profile:
                     nvtx_latent_step = nvtx.start_range(message='latent_step', color='pink')
                 # Perform guidance
                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
@@ -390,19 +399,19 @@ class DemoDiffusion:
 
                 latents = self.scheduler.step(noise_pred, latents, step_index, timestep)
 
-                if self.profile:
+                if self.nvtx_profile:
                     nvtx.end_range(nvtx_latent_step)
 
             latents = 1. / 0.18215 * latents
             cudart.cudaEventRecord(events['denoise-stop'], 0)
 
-            if self.profile:
+            if self.nvtx_profile:
                 nvtx_vae = nvtx.start_range(message='vae', color='red')
             cudart.cudaEventRecord(events['vae-start'], 0)
             sample_inp = cuda.DeviceView(ptr=latents.data_ptr(), shape=latents.shape, dtype=np.float32)
             images = self.runEngine('vae', {"latent": sample_inp})['images']
             cudart.cudaEventRecord(events['vae-stop'], 0)
-            if self.profile:
+            if self.nvtx_profile:
                 nvtx.end_range(nvtx_vae)
 
             torch.cuda.synchronize()
@@ -439,36 +448,42 @@ if __name__ == "__main__":
     else:
         negative_prompt = args.negative_prompt
 
+    # Validate image dimensions
+    image_height = args.height
+    image_width = args.width
+    if image_height % 8 != 0 or image_width % 8 != 0:
+        raise ValueError(f"Image height and width have to be divisible by 8 but specified as: {image_height} and {image_width}.")
+
     # Register TensorRT plugins
     trt.init_libnvinfer_plugins(TRT_LOGGER, '')
 
     # Initialize demo
     demo = DemoDiffusion(
-        image_height=args.height,
-        image_width=args.width,
-        denoising_steps=args.steps,
-        denoising_fp16=(args.denoise_prec == 'fp16'),
+        denoising_steps=args.denoising_steps,
+        denoising_fp16=(args.denoising_prec == 'fp16'),
         output_dir=args.output_dir,
         scheduler=args.scheduler,
         hf_token=args.hf_token,
         verbose=args.verbose,
-        profile=args.profile)
+        nvtx_profile=args.nvtx_profile)
 
-    # Build/load TensorRT engines and torch models
-    demo.loadEngines(args.engine_dir, args.onnx_dir, args.onnx_opset, opt_batch_size=len(prompt), \
+    # Load TensorRT engines and pytorch modules
+    demo.loadEngines(args.engine_dir, args.onnx_dir, args.onnx_opset, 
+        opt_batch_size=len(prompt), opt_image_height=image_height, opt_image_width=image_width, \
         force_export=args.force_onnx_export, force_optimize=args.force_onnx_optimize, \
-        force_build=args.force_engine_build, minimal_optimization=args.minimal_optimization, \
-        static_batch=args.force_static_batch, enable_preview=args.enable_preview_features)
+        force_build=args.force_engine_build, minimal_optimization=args.onnx_minimal_optimization, \
+        static_batch=args.build_static_batch, static_shape=not args.build_dynamic_shape, \
+        enable_preview=args.build_preview_features)
     demo.loadModules()
 
     print("[I] Warming up ..")
     for _ in range(args.num_warmup_runs):
-        images = demo.infer(prompt, negative_prompt, warmup=True, verbose=False)
+        images = demo.infer(prompt, negative_prompt, image_height, image_width, warmup=True, verbose=False)
 
     print("[I] Running StableDiffusion pipeline")
     if args.profile:
         cudart.cudaProfilerStart()
-    images = demo.infer(prompt, negative_prompt, verbose=args.verbose)
+    images = demo.infer(prompt, negative_prompt, image_height, image_width, verbose=args.verbose)
     if args.profile:
         cudart.cudaProfilerStop()
 

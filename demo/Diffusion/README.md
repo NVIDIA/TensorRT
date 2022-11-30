@@ -93,9 +93,7 @@ export HF_TOKEN=<your access token>
 LD_PRELOAD=${PLUGIN_LIBS} python3 demo-diffusion.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN -v
 ```
 
-
 # Restrictions
-
-- This demo supports upto 16 simultaneous prompts (maximum batch size) per inference.
-- TensorRT engines must be re-generated if the image dimensions change (default = 512x512)
-  - Dynamic image shapes will be supported in a subsequent release.
+- Upto 16 simultaneous prompts (maximum batch size) per inference.
+- For generating images of dynamic shapes without rebuilding the engines, use `--force-dynamic-shape`.
+- Supports images sizes between 256x256 and 1024x1024.

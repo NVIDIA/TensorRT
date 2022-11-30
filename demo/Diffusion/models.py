@@ -305,7 +305,7 @@ class Optimizer():
         self.cleanup()
         return nSeqLen2SpatialPlugin
 
-    def fuse_kv(self, node_k, node_v, fused_kv_idx, heads, dynamic_batch=False):
+    def fuse_kv(self, node_k, node_v, fused_kv_idx, heads, num_dynamic=0):
         # Get weights of K
         weights_k = node_k.inputs[1].values
         # Get weights of V
@@ -331,11 +331,10 @@ class Optimizer():
         fused_kv_node = gs.Node(op="MatMul", name="MatMul_KV_{}".format(fused_kv_idx), inputs=[input_tensor, constant_weights_kv], outputs=[output_tensor_k])
         self.graph.nodes.append(fused_kv_node)
 
-        idx = 1 if dynamic_batch else 0
         # Connect the output of fused node to the inputs of the nodes after K and V
-        node_v.o(idx).inputs[0] = output_tensor_k
-        node_k.o(idx).inputs[0] = output_tensor_k
-        if dynamic_batch:
+        node_v.o(num_dynamic).inputs[0] = output_tensor_k
+        node_k.o(num_dynamic).inputs[0] = output_tensor_k
+        for i in range(0,num_dynamic):
             node_v.o().inputs.clear()
             node_k.o().inputs.clear()
 
@@ -348,11 +347,10 @@ class Optimizer():
         self.cleanup()
         return fused_kv_node
 
-    def insert_fmhca(self, node_q, node_kv, final_tranpose, mhca_idx, heads, dynamic_batch=False):
-        idx = 1 if dynamic_batch else 0
+    def insert_fmhca(self, node_q, node_kv, final_tranpose, mhca_idx, heads, num_dynamic=0):
         # Get inputs and outputs for the fMHCA plugin
         # We take an output of reshape that follows the Q GEMM
-        output_q = node_q.o(idx).o().inputs[0]
+        output_q = node_q.o(num_dynamic).o().inputs[0]
         output_kv = node_kv.o().inputs[0]
         output_final_tranpose = final_tranpose.outputs[0]
 
@@ -360,9 +358,9 @@ class Optimizer():
         # to delete these subgraphs (it will be substituted by fMHCA plugin)
         node_kv.outputs[0].outputs[0].inputs.clear()
         node_kv.outputs[0].outputs[0].inputs.clear()
-        node_q.o(idx).o().inputs.clear()
-        if dynamic_batch:
-            node_q.o(0).o().o(1).inputs.clear()
+        node_q.o(num_dynamic).o().inputs.clear()
+        for i in range(0,num_dynamic):
+            node_q.o(i).o().o(1).inputs.clear()
 
         weights_kv = node_kv.inputs[1].values
         dims_per_head = weights_kv.shape[1] // (heads * 2)
@@ -383,9 +381,9 @@ class Optimizer():
         self.graph.nodes.append(fmhca)
 
         # Connect input of fMHCA to output of Q GEMM
-        node_q.o(idx).outputs[0] = output_q
+        node_q.o(num_dynamic).outputs[0] = output_q
 
-        if dynamic_batch:
+        if num_dynamic > 0:
             reshape2_input1_out = gs.Variable("Reshape2_fmhca{}_out".format(mhca_idx), np.dtype(np.int64), None)
             reshape2_input1_shape = gs.Node("Shape", "Reshape2_fmhca{}_shape".format(mhca_idx), inputs=[node_q.inputs[0]], outputs=[reshape2_input1_out])
             self.graph.nodes.append(reshape2_input1_shape)
@@ -396,7 +394,7 @@ class Optimizer():
 
         self.cleanup()
 
-    def fuse_qkv(self, node_q, node_k, node_v, fused_qkv_idx, heads, dynamic_batch=False):
+    def fuse_qkv(self, node_q, node_k, node_v, fused_qkv_idx, heads, num_dynamic=0):
         # Get weights of Q
         weights_q = node_q.inputs[1].values
         # Get weights of K
@@ -425,11 +423,10 @@ class Optimizer():
         self.graph.nodes.append(fused_qkv_node)
 
         # Connect the output of the fused node to the inputs of the nodes after Q, K and V
-        idx = 1 if dynamic_batch else 0
-        node_q.o(idx).inputs[0] = output_tensor_k
-        node_k.o(idx).inputs[0] = output_tensor_k
-        node_v.o(idx).inputs[0] = output_tensor_k
-        if dynamic_batch:
+        node_q.o(num_dynamic).inputs[0] = output_tensor_k
+        node_k.o(num_dynamic).inputs[0] = output_tensor_k
+        node_v.o(num_dynamic).inputs[0] = output_tensor_k
+        for i in range(0,num_dynamic):
             node_q.o().inputs.clear()
             node_k.o().inputs.clear()
             node_v.o().inputs.clear()
@@ -446,7 +443,7 @@ class Optimizer():
         self.cleanup()
         return fused_qkv_node
 
-    def insert_fmha(self, node_qkv, final_tranpose, mha_idx, heads, dynamic_batch=False):
+    def insert_fmha(self, node_qkv, final_tranpose, mha_idx, heads, num_dynamic=0):
         # Get inputs and outputs for the fMHA plugin
         output_qkv = node_qkv.o().inputs[0]
         output_final_tranpose = final_tranpose.outputs[0]
@@ -475,7 +472,7 @@ class Optimizer():
         # Insert node
         self.graph.nodes.append(fmha)
 
-        if dynamic_batch:
+        if num_dynamic > 0:
             reshape2_input1_out = gs.Variable("Reshape2_{}_out".format(mha_idx), np.dtype(np.int64), None)
             reshape2_input1_shape = gs.Node("Shape", "Reshape2_{}_shape".format(mha_idx), inputs=[node_qkv.inputs[0]], outputs=[reshape2_input1_out])
             self.graph.nodes.append(reshape2_input1_shape)
@@ -494,8 +491,18 @@ class Optimizer():
             ((mha and len(node.inputs[0].inputs) > 0  and node.i().op == "Add") or \
             (not mha and len(node.inputs[0].inputs) == 0)):
 
-            dynamic_batch = (node.o().op == 'Shape')
-            o = node.o(1) if dynamic_batch else node.o()
+            if node.o().op == 'Shape':
+                if node.o(1).op == 'Shape':
+                    num_dynamic_kv = 3 if node.o(2).op == 'Shape' else 2
+                else:
+                    num_dynamic_kv = 1
+                # For Cross-Attention, if batch axis is dynamic (in QKV), assume H*W (in Q) is dynamic as well
+                num_dynamic_q = num_dynamic_kv if mha else num_dynamic_kv + 1
+            else:
+                num_dynamic_kv = 0
+                num_dynamic_q = 0
+
+            o = node.o(num_dynamic_kv)
             if o.op == "Reshape" and \
                 o.o().op == "Transpose" and \
                 o.o().o().op == "Reshape" and \
@@ -515,11 +522,11 @@ class Optimizer():
                 node_q = o.o().o().o().i(0).i().i().i(0).i().i().i()
                 node_k = o.o().o().o().i(0).i().i().i(1).i().i().i().i()
                 node_v = node
-                final_tranpose = o.o().o().o().o(1).o() if dynamic_batch else o.o().o().o().o().o()
+                final_tranpose = o.o().o().o().o(num_dynamic_q).o()
                 # Sanity check to make sure that the graph looks like expected
                 if node_q.op == "MatMul" and final_tranpose.op == "Transpose":
-                    return True, dynamic_batch, node_q, node_k, node_v, final_tranpose
-        return False, False, None, None, None, None
+                    return True, num_dynamic_q, num_dynamic_kv, node_q, node_k, node_v, final_tranpose
+        return False, 0, 0, None, None, None, None
 
     def fuse_kv_insert_fmhca(self, heads, mhca_index):
         nodes = self.graph.nodes
@@ -530,12 +537,14 @@ class Optimizer():
                 continue
 
             # Get anchor nodes for fusion and fMHCA plugin insertion if the MHCA is detected
-            detected, dynamic_batch, node_q, node_k, node_v, final_tranpose = self.mha_mhca_detected(nodes[idx], mha=False)
+            detected, num_dynamic_q, num_dynamic_kv, node_q, node_k, node_v, final_tranpose = \
+                self.mha_mhca_detected(nodes[idx], mha=False)
             if detected:
+                assert num_dynamic_q == 0 or num_dynamic_q == num_dynamic_kv + 1
                 # Fuse K and V GEMMS
-                node_kv = self.fuse_kv(node_k, node_v, mhca_index, heads, dynamic_batch)
+                node_kv = self.fuse_kv(node_k, node_v, mhca_index, heads, num_dynamic_kv)
                 # Insert fMHCA plugin
-                self.insert_fmhca(node_q, node_kv, final_tranpose, mhca_index, heads, dynamic_batch)
+                self.insert_fmhca(node_q, node_kv, final_tranpose, mhca_index, heads, num_dynamic_q)
                 return True
         return False
 
@@ -548,12 +557,14 @@ class Optimizer():
                 continue
 
             # Get anchor nodes for fusion and fMHA plugin insertion if the MHA is detected
-            detected, dynamic_batch, node_q, node_k, node_v, final_tranpose = self.mha_mhca_detected(nodes[idx], mha=True)
+            detected, num_dynamic_q, num_dynamic_kv, node_q, node_k, node_v, final_tranpose = \
+                self.mha_mhca_detected(nodes[idx], mha=True)
             if detected:
+                assert num_dynamic_q == num_dynamic_kv
                 # Fuse Q, K and V GEMMS
-                node_qkv = self.fuse_qkv(node_q, node_k, node_v, mha_index, heads, dynamic_batch)
+                node_qkv = self.fuse_qkv(node_q, node_k, node_v, mha_index, heads, num_dynamic_kv)
                 # Insert fMHA plugin
-                self.insert_fmha(node_qkv, final_tranpose, mha_index, heads, dynamic_batch)
+                self.insert_fmha(node_qkv, final_tranpose, mha_index, heads, num_dynamic_kv)
                 return True
         return False
 
@@ -573,8 +584,6 @@ class BaseModel():
     def __init__(
         self,
         hf_token,
-        image_width=512,
-        image_height=512,
         text_maxlen=77,
         embedding_dim=768,
         fp16=False,
@@ -587,14 +596,12 @@ class BaseModel():
         self.hf_token = hf_token
 
         # Defaults
-        self.image_width = image_width
-        self.image_height = image_height
-        self.latent_width = self.image_width // 8
-        self.latent_height = self.image_height // 8
         self.text_maxlen = text_maxlen
         self.embedding_dim = embedding_dim
         self.min_batch = 1
         self.max_batch = 16
+        self.min_latent_shape = 256 // 8  # min image resolution: 256x256
+        self.max_latent_shape = 1024 // 8 # max image resolution: 1024x1024
 
     def get_model(self):
         pass
@@ -608,17 +615,37 @@ class BaseModel():
     def get_dynamic_axes(self):
         return None
 
-    def get_sample_input(self):
+    def get_sample_input(self, batch_size, image_height, image_width):
         pass
 
-    def get_input_profile(self, batch_size, static_batch=False):
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
         return None
 
-    def get_shape_dict(self, batch_size):
+    def get_shape_dict(self, batch_size, image_height, image_width):
         return None
 
     def optimize(self, onnx_graph, minimal_optimization=False):
         return onnx_graph
+
+    def check_dims(self, batch_size, image_height, image_width):
+        assert batch_size >= self.min_batch and batch_size <= self.max_batch
+        assert image_height % 8 == 0 or image_width % 8 == 0
+        latent_height = image_height // 8
+        latent_width = image_width // 8
+        assert latent_height >= self.min_latent_shape and latent_height <= self.max_latent_shape
+        assert latent_width >= self.min_latent_shape and latent_width <= self.max_latent_shape
+        return (latent_height, latent_width)
+
+    def get_minmax_dims(self, batch_size, image_height, image_width, static_batch, static_shape):
+        min_batch = batch_size if static_batch else self.min_batch
+        max_batch = batch_size if static_batch else self.max_batch
+        latent_height = image_height // 8
+        latent_width = image_width // 8
+        min_latent_height = latent_height if static_shape else self.min_latent_shape
+        max_latent_height = latent_height if static_shape else self.max_latent_shape
+        min_latent_width = latent_width if static_shape else self.min_latent_shape
+        max_latent_width = latent_width if static_shape else self.max_latent_shape
+        return (min_batch, max_batch, min_latent_height, max_latent_height, min_latent_width, max_latent_width)
 
 class CLIP(BaseModel):
     def get_model(self):
@@ -636,25 +663,25 @@ class CLIP(BaseModel):
             'text_embeddings': {0: 'B'}
         }
 
-    def get_input_profile(self, batch_size, static_batch=False):
-        assert batch_size >= self.min_batch and batch_size <= self.max_batch
-        min_batch = batch_size if static_batch else self.min_batch
-        max_batch = batch_size if static_batch else self.max_batch
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, _, _, _, _ = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
         return {
-            'input_ids': [(min_batch, self.text_maxlen), (batch_size, self.text_maxlen), (max_batch, self.text_maxlen)],
+            'input_ids': [(min_batch, self.text_maxlen), (batch_size, self.text_maxlen), (max_batch, self.text_maxlen)]
         }
 
-    def get_shape_dict(self, batch_size):
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        self.check_dims(batch_size, image_height, image_width)
         return {
             'input_ids': (batch_size, self.text_maxlen),
-            'text_embeddings': (batch_size, self.text_maxlen, self.embedding_dim),
+            'text_embeddings': (batch_size, self.text_maxlen, self.embedding_dim)
         }
 
-    def get_sample_input(self, batch_size):
+    def get_sample_input(self, batch_size, image_height, image_width):
+        self.check_dims(batch_size, image_height, image_width)
         return torch.zeros(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device)
 
     def optimize(self, onnx_graph, minimal_optimization=False):
-
         enable_optimization = not minimal_optimization
 
         # Remove Cast Node to optimize Attention block
@@ -701,37 +728,38 @@ class UNet(BaseModel):
 
     def get_dynamic_axes(self):
         return {
-            'sample': {0: '2B'},
+            'sample': {0: '2B', 2: 'H', 3: 'W'},
             'encoder_hidden_states': {0: '2B'},
-            'latent': {0: '2B'}
+            'latent': {0: '2B', 2: 'H', 3: 'W'}
         }
 
-    def get_input_profile(self, batch_size, static_batch=False):
-        assert batch_size >= self.min_batch and batch_size <= self.max_batch
-        min_batch = batch_size if static_batch else self.min_batch
-        max_batch = batch_size if static_batch else self.max_batch
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
+            self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
         return {
-            'sample': [(2*min_batch, 4, self.latent_height, self.latent_width), (2*batch_size, 4, self.latent_height, self.latent_width), (2*max_batch, 4, self.latent_height, self.latent_width)],
-            'encoder_hidden_states': [(2*min_batch, self.text_maxlen, self.embedding_dim), (2*batch_size, self.text_maxlen, self.embedding_dim), (2*max_batch, self.text_maxlen, self.embedding_dim)],
+            'sample': [(2*min_batch, 4, min_latent_height, min_latent_width), (2*batch_size, 4, latent_height, latent_width), (2*max_batch, 4, max_latent_height, max_latent_width)],
+            'encoder_hidden_states': [(2*min_batch, self.text_maxlen, self.embedding_dim), (2*batch_size, self.text_maxlen, self.embedding_dim), (2*max_batch, self.text_maxlen, self.embedding_dim)]
         }
 
-    def get_shape_dict(self, batch_size):
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         return {
-            'sample': (2*batch_size, 4, self.latent_height, self.latent_width),
+            'sample': (2*batch_size, 4, latent_height, latent_width),
             'encoder_hidden_states': (2*batch_size, self.text_maxlen, self.embedding_dim),
-            'latent': (2*batch_size, 4, self.latent_height, self.latent_width),
+            'latent': (2*batch_size, 4, latent_height, latent_width)
         }
 
-    def get_sample_input(self, batch_size):
+    def get_sample_input(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         dtype = torch.float16 if self.fp16 else torch.float32
         return (
-            torch.randn(2*batch_size,4,self.latent_height,self.latent_width, dtype=torch.float32, device=self.device),
+            torch.randn(2*batch_size, 4, latent_height, latent_width, dtype=torch.float32, device=self.device),
             torch.tensor([1.], dtype=torch.float32, device=self.device),
             torch.randn(2*batch_size, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device)
         )
 
     def optimize(self, onnx_graph, minimal_optimization=False):
-
         enable_optimization = not minimal_optimization
 
         # Decompose InstanceNormalization into primitive Ops
@@ -756,7 +784,8 @@ class UNet(BaseModel):
         # Insert Split+GeLU Plugin
         bSplitGeLUPlugin = True
         # Replace BiasAdd+ResidualAdd+SeqLen2Spatial with plugin
-        bSeqLen2SpatialPlugin = True
+        # TODO - support dynamic shapes in plugin
+        bSeqLen2SpatialPlugin = False
 
         opt = Optimizer(onnx_graph, verbose=self.verbose)
         opt.info('UNet: original')
@@ -829,29 +858,30 @@ class VAE(BaseModel):
 
     def get_dynamic_axes(self):
         return {
-            'latent': {0: 'B'},
-            'images': {0: 'B'}
+            'latent': {0: 'B', 2: 'H', 3: 'W'},
+            'images': {0: 'B', 2: '8H', 3: '8W'}
         }
 
-    def get_input_profile(self, batch_size, static_batch=False):
-        assert batch_size >= self.min_batch and batch_size <= self.max_batch
-        min_batch = batch_size if static_batch else self.min_batch
-        max_batch = batch_size if static_batch else self.max_batch
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
+            self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
         return {
-            'latent': [(min_batch, 4, self.latent_height, self.latent_width), (batch_size, 4, self.latent_height, self.latent_width), (max_batch, 4, self.latent_height, self.latent_width)],
+            'latent': [(min_batch, 4, min_latent_height, min_latent_width), (batch_size, 4, latent_height, latent_width), (max_batch, 4, max_latent_height, max_latent_width)]
         }
 
-    def get_shape_dict(self, batch_size):
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         return {
-            'latent': (batch_size, 4, self.latent_height, self.latent_width),
-            'images': (batch_size, 3, self.image_height, self.image_width)
+            'latent': (batch_size, 4, latent_height, latent_width),
+            'images': (batch_size, 3, image_height, image_width)
         }
 
-    def get_sample_input(self, batch_size):
-        return torch.randn(batch_size,4,self.latent_height,self.latent_width, dtype=torch.float32, device=self.device)
+    def get_sample_input(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        return torch.randn(batch_size, 4, latent_height, latent_width, dtype=torch.float32, device=self.device)
 
     def optimize(self, onnx_graph, minimal_optimization=False):
-
         enable_optimization = not minimal_optimization
 
         # Decompose InstanceNormalization into primitive Ops
