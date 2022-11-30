@@ -27,8 +27,6 @@ namespace nvinfer1
 namespace plugin
 {
 
-IPluginCreator* const* getPluginCreators(int32_t& nbCreators);
-
 //!
 //! \class LoggerFinder
 //!
@@ -49,10 +47,12 @@ public:
     LoggerFinder& operator=(LoggerFinder&&) & = delete;
 };
 
-void setLoggerFinder(LoggerFinder* finder);
-
 ILogger* getPluginLogger();
 
 } // namespace plugin
 } // namespace nvinfer1
+
+extern "C" void setLoggerFinder(nvinfer1::plugin::LoggerFinder* finder);
+
+extern "C" IPluginCreator* const* getPluginCreators(int32_t& nbCreators);
 #endif // TRT_PLUGIN_VFC_COMMON_H

@@ -1,7 +1,7 @@
 #ifndef TRT_PLUGIN_API_LOGGER_FINDER_H
 #define TRT_PLUGIN_API_LOGGER_FINDER_H
 
-#include "common/vfcCommon.h"
+#include "plugin/common/vfcCommon.h"
 
 namespace nvinfer1
 {
@@ -24,9 +24,11 @@ VFCPluginLoggerFinder gVFCPluginLoggerFinder;
 //! use getLogger without dependency on nvinfer. This function shall be called once for the loaded vfc plugin
 //! library.
 //!
-void setVFCPluginLoggerFinder()
+//! \param setLoggerFinderFunc function in VFC plugin library for setting logger finder.
+//!
+void setVFCPluginLoggerFinder(std::function<void(LoggerFinder*)> setLoggerFinderFunc)
 {
-    setLoggerFinder(static_cast<LoggerFinder*>(&gVFCPluginLoggerFinder));
+    setLoggerFinderFunc(static_cast<LoggerFinder*>(&gVFCPluginLoggerFinder));
 }
 
 } // namespace plugin
