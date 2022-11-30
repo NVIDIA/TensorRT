@@ -18,10 +18,10 @@
 /* Hides all symbols except those specified in the global section */
 {
   global:
+    getPluginCreators;
+    setLoggerFinder;
     extern "C++" {
       nvinfer1::plugin::ROIAlign*;
-      nvinfer1::plugin::getPluginCreators;
-      nvinfer1::plugin::setLoggerFinder;
     };
   local: *;
 };
