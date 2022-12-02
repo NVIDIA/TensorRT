@@ -16,6 +16,7 @@
  */
 
 #include "fmhca.h"
+#include <stdexcept>
 
 namespace nvinfer1
 {
@@ -142,6 +143,10 @@ int32_t run_fmhca_api(void* q_packed_d, void* kv_packed_d, void* cu_seqlens_q_d,
     float scale_bmm1 = 1.f / sqrtf(d);
     float scale_softmax = 1.f;
     float scale_bmm2 = 1.f;
+
+    if (sm == 75 && d >= 160) {
+        throw std::invalid_argument("There are no fMHCA kernels for sm75 and d >= 160.");
+    }
 
     // Set the params.
     Fused_multihead_attention_params_mhca params{};

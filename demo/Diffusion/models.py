@@ -24,6 +24,7 @@ import onnx_graphsurgeon as gs
 from polygraphy.backend.onnx.loader import fold_constants
 import torch
 from transformers import CLIPTextModel
+from cuda import cudart
 
 class Optimizer():
     def __init__(
@@ -529,7 +530,7 @@ class Optimizer():
                     return True, num_dynamic_q, num_dynamic_kv, node_q, node_k, node_v, final_tranpose
         return False, 0, 0, None, None, None, None
 
-    def fuse_kv_insert_fmhca(self, heads, mhca_index):
+    def fuse_kv_insert_fmhca(self, heads, mhca_index, sm):
         nodes = self.graph.nodes
         # Iterate over graph and search for MHCA pattern
         for idx, _ in enumerate(nodes):
@@ -542,6 +543,9 @@ class Optimizer():
                 self.mha_mhca_detected(nodes[idx], mha=False)
             if detected:
                 assert num_dynamic_q == 0 or num_dynamic_q == num_dynamic_kv + 1
+                # Skip the FMHCA plugin for SM75 except for when the dim per head is 40.
+                if sm == 75 and node_q.inputs[1].shape[1] // heads == 160:
+                    continue
                 # Fuse K and V GEMMS
                 node_kv = self.fuse_kv(node_k, node_v, mhca_index, heads, num_dynamic_kv)
                 # Insert fMHCA plugin
@@ -569,9 +573,9 @@ class Optimizer():
                 return True
         return False
 
-    def insert_fmhca_plugin(self, num_heads):
+    def insert_fmhca_plugin(self, num_heads, sm):
         mhca_index = 0
-        while self.fuse_kv_insert_fmhca(num_heads, mhca_index):
+        while self.fuse_kv_insert_fmhca(num_heads, mhca_index, sm):
             mhca_index += 1
         return mhca_index
 
@@ -590,6 +594,7 @@ class BaseModel():
         fp16=False,
         device='cuda',
         verbose=True,
+        max_batch_size=16
     ):
         self.fp16 = fp16
         self.device = device
@@ -600,7 +605,7 @@ class BaseModel():
         self.text_maxlen = text_maxlen
         self.embedding_dim = embedding_dim
         self.min_batch = 1
-        self.max_batch = 16
+        self.max_batch = max_batch_size
         self.min_latent_shape = 256 // 8  # min image resolution: 256x256
         self.max_latent_shape = 1024 // 8 # max image resolution: 1024x1024
 
@@ -839,7 +844,9 @@ class UNet(BaseModel):
             opt.info('UNet: inserted '+str(num_fmha_inserted)+' fMHA plugins')
 
         if bMHCAPlugin and not bDisablePlugins:
-            num_fmhca_inserted = opt.insert_fmhca_plugin(num_heads)
+            props = cudart.cudaGetDeviceProperties(0)[1]
+            sm = props.major * 10 + props.minor
+            num_fmhca_inserted = opt.insert_fmhca_plugin(num_heads, sm)
             opt.info('UNet: inserted '+str(num_fmhca_inserted)+' fMHCA plugins')
 
         if bGroupNormPlugin and not bDisablePlugins:

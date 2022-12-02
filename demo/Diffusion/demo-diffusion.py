@@ -81,6 +81,7 @@ class DemoDiffusion:
         hf_token=None,
         verbose=False,
         nvtx_profile=False,
+        max_batch_size=16
     ):
         """
         Initializes the Diffusion pipeline.
@@ -105,6 +106,8 @@ class DemoDiffusion:
                 Enable verbose logging.
             nvtx_profile (bool):
                 Insert NVTX profiling markers.
+            max_batch_size (int):
+                Max batch size for dynamic batch engines.
         """
         # Only supports single image per prompt.
         self.num_images = 1
@@ -134,9 +137,9 @@ class DemoDiffusion:
 
         self.unet_model_key = 'unet_fp16' if denoising_fp16 else 'unet'
         self.models = {
-            'clip': CLIP(hf_token=hf_token, device=device, verbose=verbose),
-            self.unet_model_key: UNet(hf_token=hf_token, fp16=denoising_fp16, device=device, verbose=verbose),
-            'vae': VAE(hf_token=hf_token, device=device, verbose=verbose)
+            'clip': CLIP(hf_token=hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size),
+            self.unet_model_key: UNet(hf_token=hf_token, fp16=denoising_fp16, device=device, verbose=verbose, max_batch_size=max_batch_size),
+            'vae': VAE(hf_token=hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size)
         }
 
         self.engine = {}
@@ -440,7 +443,7 @@ if __name__ == "__main__":
 
     # Process prompt
     if not isinstance(args.prompt, list):
-        raise ValueError(f"`prompt` must be of type `str` or `str` list, but is {type(prompt)}")
+        raise ValueError(f"`prompt` must be of type `str` or `str` list, but is {type(args.prompt)}")
     prompt = args.prompt * args.repeat_prompt
 
     if not isinstance(args.negative_prompt, list):
@@ -449,6 +452,13 @@ if __name__ == "__main__":
         negative_prompt = args.negative_prompt * len(prompt)
     else:
         negative_prompt = args.negative_prompt
+
+    max_batch_size = 16
+    if args.build_dynamic_shape:
+        max_batch_size = 4
+
+    if len(prompt) > max_batch_size:
+        raise ValueError(f"Batch size {len(prompt)} is larger than allowed {max_batch_size}. If dynamic shape is used, then maximum batch size is 4")
 
     # Validate image dimensions
     image_height = args.height
@@ -467,7 +477,8 @@ if __name__ == "__main__":
         scheduler=args.scheduler,
         hf_token=args.hf_token,
         verbose=args.verbose,
-        nvtx_profile=args.nvtx_profile)
+        nvtx_profile=args.nvtx_profile,
+        max_batch_size=max_batch_size)
 
     # Load TensorRT engines and pytorch modules
     demo.loadEngines(args.engine_dir, args.onnx_dir, args.onnx_opset, 
