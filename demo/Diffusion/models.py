@@ -687,7 +687,7 @@ class CLIP(BaseModel):
         # Remove Cast Node to optimize Attention block
         bRemoveCastNode = enable_optimization
         # Insert LayerNormalization Plugin
-        bLayerNormPlugin = enable_optimization
+        bLayerNormPlugin = False # enable_optimization
 
         opt = Optimizer(onnx_graph, verbose=self.verbose)
         opt.info('CLIP: original')
@@ -712,14 +712,24 @@ class CLIP(BaseModel):
         opt.info('CLIP: final')
         return opt_onnx_graph
 
+class UNetWrapper(UNet2DConditionModel):
+    def forward(self, sample, timestep, encoder_hidden_states):
+        sample_shape=sample.shape
+        sample=sample.reshape((-1,)+sample_shape[2:])
+        encoder_hidden_states=encoder_hidden_states.reshape((-1,)+encoder_hidden_states.shape[2:])
+        ret = UNet2DConditionModel.forward(self, sample, timestep[0], encoder_hidden_states)
+        ret = ret.sample
+        return ret.reshape(sample_shape) # ret.shape[0]/2,2,ret.shape[1],ret.shape[2], ret.shape[3])
+
 class UNet(BaseModel):
     def get_model(self):
         model_opts = {'revision': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
-        return UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4",
+        unet = UNetWrapper.from_pretrained("CompVis/stable-diffusion-v1-4",
             subfolder="unet",
             use_auth_token=self.hf_token,
             **model_opts).to(self.device)
-
+        return unet
+        
     def get_input_names(self):
         return ['sample', 'timestep', 'encoder_hidden_states']
 
@@ -728,9 +738,10 @@ class UNet(BaseModel):
 
     def get_dynamic_axes(self):
         return {
-            'sample': {0: '2B', 2: 'H', 3: 'W'},
-            'encoder_hidden_states': {0: '2B'},
-            'latent': {0: '2B', 2: 'H', 3: 'W'}
+            'sample': {0: 'B', 3: 'H', 4: 'W'},
+            'timestep' : {0: 'B'},
+            'encoder_hidden_states': {0: 'B'},
+            'latent': {0: 'B', 3: 'H', 4: 'W'}
         }
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
@@ -738,27 +749,30 @@ class UNet(BaseModel):
         min_batch, max_batch, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
             self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
         return {
-            'sample': [(2*min_batch, 4, min_latent_height, min_latent_width), (2*batch_size, 4, latent_height, latent_width), (2*max_batch, 4, max_latent_height, max_latent_width)],
-            'encoder_hidden_states': [(2*min_batch, self.text_maxlen, self.embedding_dim), (2*batch_size, self.text_maxlen, self.embedding_dim), (2*max_batch, self.text_maxlen, self.embedding_dim)]
+            'sample': [(min_batch, 2, 4, min_latent_height, min_latent_width), (batch_size, 2, 4, latent_height, latent_width), (max_batch, 2, 4, max_latent_height, max_latent_width)],
+            'timestep' : [(min_batch,), (batch_size,), (max_batch,)],
+            'encoder_hidden_states': [(min_batch, 2, self.text_maxlen, self.embedding_dim), (batch_size, 2, self.text_maxlen, self.embedding_dim), (max_batch, 2, self.text_maxlen, self.embedding_dim)]
         }
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         return {
-            'sample': (2*batch_size, 4, latent_height, latent_width),
-            'encoder_hidden_states': (2*batch_size, self.text_maxlen, self.embedding_dim),
-            'latent': (2*batch_size, 4, latent_height, latent_width)
+            'sample': (batch_size, 2, 4, latent_height, latent_width),
+            'timestep' : (batch_size),
+            'encoder_hidden_states': (batch_size, 2, self.text_maxlen, self.embedding_dim),
+            'latent': (batch_size, 2, 4, latent_height, latent_width)
         }
 
     def get_sample_input(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         dtype = torch.float16 if self.fp16 else torch.float32
-        return (
-            torch.randn(2*batch_size, 4, latent_height, latent_width, dtype=torch.float32, device=self.device),
-            torch.tensor([1.], dtype=torch.float32, device=self.device),
-            torch.randn(2*batch_size, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device)
+        ret = (
+            torch.randn(batch_size, 2, 4, latent_height, latent_width, dtype=torch.float32, device=self.device),
+            torch.ones((batch_size,), dtype=torch.float32, device=self.device),
+            torch.randn(batch_size, 2, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device)
         )
-
+        return ret
+    
     def optimize(self, onnx_graph, minimal_optimization=False):
         enable_optimization = not minimal_optimization
 
@@ -778,7 +792,7 @@ class UNet(BaseModel):
         # Use multi-head cross attention Plugin
         bMHCAPlugin = True
         # Insert GroupNormalization Plugin
-        bGroupNormPlugin = True
+        bGroupNormPlugin = False # borisf: fails with "list index out of range"
         # Insert LayerNormalization Plugin
         bLayerNormPlugin = True
         # Insert Split+GeLU Plugin
@@ -889,7 +903,7 @@ class VAE(BaseModel):
         # Remove Cast Node to optimize Attention block
         bRemoveCastNode = enable_optimization
         # Insert GroupNormalization Plugin
-        bGroupNormPlugin = enable_optimization
+        bGroupNormPlugin = False # enable_optimization
 
         opt = Optimizer(onnx_graph, verbose=self.verbose)
         opt.info('VAE: original')
