@@ -17,13 +17,14 @@
 #ifndef TRT_SEQLEN2SPATIAL_PLUGIN_H
 #define TRT_SEQLEN2SPATIAL_PLUGIN_H
 
-#include "common/plugin.h"
-#include <cuda_runtime_api.h>
-#include <stdint.h>
-#include <vector>
-
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
+
+#include "common/plugin.h"
+
+#include <cstdint>
+#include <cuda_runtime_api.h>
+#include <vector>
 
 namespace nvinfer1
 {
@@ -37,7 +38,12 @@ public:
     SeqLen2SpatialPlugin(std::string const& name, void const* buffer, size_t length);
     ~SeqLen2SpatialPlugin() override = default;
 
-    // Method inherited from IPluginV2
+    SeqLen2SpatialPlugin(SeqLen2SpatialPlugin const& /*other*/) = default;
+    SeqLen2SpatialPlugin& operator=(SeqLen2SpatialPlugin const& /*other*/) = delete;
+    SeqLen2SpatialPlugin(SeqLen2SpatialPlugin&& /*other*/) noexcept = delete;
+    SeqLen2SpatialPlugin& operator=(SeqLen2SpatialPlugin&& /*other*/) noexcept = delete;
+
+    // Methods inherited from IPluginV2
     char const* getPluginType() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     int32_t getNbOutputs() const noexcept override;
@@ -52,7 +58,7 @@ public:
     // Method inherited from IPluginV2Ext
     DataType getOutputDataType(int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    // Method inherited from IPluginV2DynamicExt
+    // Methods inherited from IPluginV2DynamicExt
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
         int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
@@ -66,10 +72,10 @@ public:
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
 private:
-    const std::string mName;
+    std::string mName;
     std::string mNameSpace;
-    int32_t mHeight;
-    int32_t mWidth;
+    int32_t mHeight{};
+    int32_t mWidth{};
 };
 
 class SeqLen2SpatialPluginCreator : public nvinfer1::pluginInternal::BaseCreator
@@ -77,6 +83,12 @@ class SeqLen2SpatialPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 public:
     SeqLen2SpatialPluginCreator();
     ~SeqLen2SpatialPluginCreator();
+
+    SeqLen2SpatialPluginCreator(SeqLen2SpatialPluginCreator const& /*other*/) = delete;
+    SeqLen2SpatialPluginCreator& operator=(SeqLen2SpatialPluginCreator const& /*other*/) = delete;
+    SeqLen2SpatialPluginCreator(SeqLen2SpatialPluginCreator&& /*other*/) noexcept = delete;
+    SeqLen2SpatialPluginCreator& operator=(SeqLen2SpatialPluginCreator&& /*other*/) noexcept = delete;
+
     char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     PluginFieldCollection const* getFieldNames() noexcept override;

@@ -14,15 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef TRT_SEQLEN2SPATIAL_KERNEL_H
 #define TRT_SEQLEN2SPATIAL_KERNEL_H
 
-#include <cuda_runtime_api.h>
-#include <stdint.h>
-#include <cuda.h>
-#include "cuda_fp16.h"
-
 #include "common/checkMacrosPlugin.h"
+
+#include <cstdint>
+#include <cuda.h>
+#include <cuda_fp16.h>
+#include <cuda_runtime_api.h>
 
 using half = __half;
 

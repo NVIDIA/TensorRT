@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#include "seqLen2SpatialPlugin.h"
 #include "seqLen2SpatialKernel.h"
+#include "seqLen2SpatialPlugin.h"
 
 using namespace nvinfer1;
 using namespace plugin;
@@ -26,8 +26,8 @@ using nvinfer1::plugin::SeqLen2SpatialPluginCreator;
 
 namespace
 {
-char const* kSEQLEN2SPATIAL_PLUGIN_NAME{"SeqLen2Spatial"};
-char const* kSEQLEN2SPATIAL_PLUGIN_VERSION{"1"};
+static std::string const kSEQLEN2SPATIAL_PLUGIN_NAME{"SeqLen2Spatial"};
+static std::string const kSEQLEN2SPATIAL_PLUGIN_VERSION{"1"};
 size_t constexpr kSERIALIZATION_SIZE{2 * sizeof(int32_t)};
 } // namespace
 
@@ -44,8 +44,8 @@ SeqLen2SpatialPlugin::SeqLen2SpatialPlugin(std::string const& name, void const* 
     PLUGIN_VALIDATE(buffer != nullptr);
     PLUGIN_VALIDATE(length == kSERIALIZATION_SIZE);
 
-    char const* d = static_cast<char const*>(buffer);
-    char const* a = d;
+    auto const* d = static_cast<char const*>(buffer);
+    auto const* a = d;
 
     mHeight = read<int32_t>(d);
     mWidth = read<int32_t>(d);
@@ -73,41 +73,78 @@ int32_t SeqLen2SpatialPlugin::getNbOutputs() const noexcept
     return 1;
 }
 
-DataType SeqLen2SpatialPlugin::getOutputDataType(int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
+DataType SeqLen2SpatialPlugin::getOutputDataType(
+    int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    return inputTypes[0];
+    DataType ret{};
+    try
+    {
+        PLUGIN_VALIDATE(inputTypes != nullptr);
+        PLUGIN_VALIDATE(nbInputs > 0);
+        ret = inputTypes[0];
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return ret;
 }
 
 DimsExprs SeqLen2SpatialPlugin::getOutputDimensions(
     int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
-    DimsExprs inputDims = inputs[0];
-    DimsExprs outputDims;
-    outputDims.nbDims = 4;
-    outputDims.d[0] = inputDims.d[0];
-    outputDims.d[1] = inputDims.d[2];
-    outputDims.d[2] = exprBuilder.constant(mHeight);
-    outputDims.d[3] = exprBuilder.constant(mWidth);
-    return outputDims;
+    DimsExprs ret{};
+    try
+    {
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(nbInputs > 0);
+        DimsExprs inputDims = inputs[0];
+        DimsExprs outputDims;
+        outputDims.nbDims = 4;
+        outputDims.d[0] = inputDims.d[0];
+        outputDims.d[1] = inputDims.d[2];
+        outputDims.d[2] = exprBuilder.constant(mHeight);
+        outputDims.d[3] = exprBuilder.constant(mWidth);
+        ret = outputDims;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return ret;
 }
 
 bool SeqLen2SpatialPlugin::supportsFormatCombination(
     int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    switch (pos)
+    try
     {
-    case 0:
-        return (inOut[pos].type == DataType::kFLOAT || inOut[pos].type == DataType::kHALF) && inOut[pos].format == TensorFormat::kLINEAR;
-    case 1:
-        return inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format;
-    case 2:
-        return inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format;
-    case 3:
-        return inOut[pos].type == inOut[0].type
-            && ((inOut[pos].type == DataType::kFLOAT && inOut[pos].format == TensorFormat::kHWC)
-            || (inOut[pos].type == DataType::kHALF && inOut[pos].format == TensorFormat::kHWC8));
-    default: // should NOT be here!
-        return false;
+        PLUGIN_VALIDATE(inOut != nullptr);
+        PLUGIN_VALIDATE(nbInputs + nbOutputs > 0);
+        PLUGIN_VALIDATE(pos < nbInputs + nbOutputs);
+        PLUGIN_VALIDATE(pos >= 0 && pos <= 3);
+
+        if (pos == 0)
+        {
+            return (inOut[pos].type == DataType::kFLOAT || inOut[pos].type == DataType::kHALF)
+                && inOut[pos].format == TensorFormat::kLINEAR;
+        }
+
+        if (pos == 1 || pos == 2)
+        {
+            return inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format;
+        }
+
+        if (pos == 3)
+        {
+            return inOut[pos].type == inOut[0].type
+                && ((inOut[pos].type == DataType::kFLOAT && inOut[pos].format == TensorFormat::kHWC)
+                    || (inOut[pos].type == DataType::kHALF && inOut[pos].format == TensorFormat::kHWC8));
+        }
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
     }
     return false;
 }
@@ -126,13 +163,18 @@ size_t SeqLen2SpatialPlugin::getWorkspaceSize(
 int32_t SeqLen2SpatialPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    int32_t const BS = inputDesc[0].dims.d[0];
-    int32_t const HW = inputDesc[0].dims.d[1];
-    int32_t const C = inputDesc[0].dims.d[2];
-    int32_t const gridSize = BS * HW;
-    nvinfer1::DataType const dtype = inputDesc[0].type;
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr);
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(outputDesc != nullptr);
+
+        int32_t const BS = inputDesc[0].dims.d[0];
+        int32_t const HW = inputDesc[0].dims.d[1];
+        int32_t const C = inputDesc[0].dims.d[2];
+        int32_t const gridSize = BS * HW;
+        nvinfer1::DataType const dtype = inputDesc[0].type;
         launchSeqLen2SpatialKernel(inputs, outputs, dtype, gridSize, C, stream);
         return 0;
     }
@@ -162,12 +204,19 @@ size_t SeqLen2SpatialPlugin::getSerializationSize() const noexcept
 
 void SeqLen2SpatialPlugin::serialize(void* buffer) const noexcept
 {
-    PLUGIN_ASSERT(buffer != nullptr);
-    char* d = static_cast<char*>(buffer);
-    char* a = d;
-    write(d, mHeight); // int32_t
-    write(d, mWidth); // int32_t
-    PLUGIN_ASSERT(d == a + getSerializationSize());
+    try
+    {
+        PLUGIN_VALIDATE(buffer != nullptr);
+        auto* d = static_cast<char*>(buffer);
+        auto* a = d;
+        write(d, mHeight); // int32_t
+        write(d, mWidth);  // int32_t
+        PLUGIN_VALIDATE(d == a + getSerializationSize());
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 void SeqLen2SpatialPlugin::setPluginNamespace(char const* pluginNamespace) noexcept
@@ -182,12 +231,12 @@ char const* SeqLen2SpatialPlugin::getPluginNamespace() const noexcept
 
 char const* SeqLen2SpatialPlugin::getPluginType() const noexcept
 {
-    return kSEQLEN2SPATIAL_PLUGIN_NAME;
+    return kSEQLEN2SPATIAL_PLUGIN_NAME.c_str();
 }
 
 char const* SeqLen2SpatialPlugin::getPluginVersion() const noexcept
 {
-    return kSEQLEN2SPATIAL_PLUGIN_VERSION;
+    return kSEQLEN2SPATIAL_PLUGIN_VERSION.c_str();
 }
 
 PluginFieldCollection SeqLen2SpatialPluginCreator::mFC{};
@@ -255,12 +304,12 @@ IPluginV2* SeqLen2SpatialPluginCreator::deserializePlugin(
 
 char const* SeqLen2SpatialPluginCreator::getPluginName() const noexcept
 {
-    return kSEQLEN2SPATIAL_PLUGIN_NAME;
+    return kSEQLEN2SPATIAL_PLUGIN_NAME.c_str();
 }
 
 char const* SeqLen2SpatialPluginCreator::getPluginVersion() const noexcept
 {
-    return kSEQLEN2SPATIAL_PLUGIN_VERSION;
+    return kSEQLEN2SPATIAL_PLUGIN_VERSION.c_str();
 }
 
 PluginFieldCollection const* SeqLen2SpatialPluginCreator::getFieldNames() noexcept

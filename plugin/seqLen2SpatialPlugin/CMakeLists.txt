@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 file(GLOB SRCS *.cpp)
 set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
 set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)
+
 file(GLOB CU_SRCS *.cu)
 set(STABLE_DIFFUSION_CU_SOURCES ${STABLE_DIFFUSION_CU_SOURCES} ${CU_SRCS})
 set(STABLE_DIFFUSION_CU_SOURCES ${STABLE_DIFFUSION_CU_SOURCES} PARENT_SCOPE)
