@@ -157,11 +157,11 @@ class Optimizer():
         nGroupNormPlugin = 0
         for node in self.graph.nodes:
           try:
+            # "node.outputs != []" is added for VAE
             if node.op == "Reshape" and node.outputs != [] and node.o().op == "ReduceMean" and node.o(1).op == "Sub" and node.o().o() == node.o(1) :
               gammaNode = node.o().o().o().o().o().o().o().o().o().o().o()
-              if gammaNode.op == "Mul" and gammaNode.op.o().op == "Add" and \
+              if gammaNode.op == "Mul" and gammaNode.o().op == "Add" and \
                 len(node.o().o().o().o().o().o().o().o().inputs[1].values.shape) == 3:
-                # "node.outputs != []" is added for VAE
 
                 inputTensor = node.i().inputs[0]
 
@@ -198,7 +198,8 @@ class Optimizer():
                 lastNode.outputs = []
                 nGroupNormPlugin += 1
           except Exception:
-              print("Caught exception with node ", node)
+              if self.verbose:
+                  print("Caught exception with node ", node)
 
         self.cleanup()
         return nGroupNormPlugin
@@ -693,7 +694,7 @@ class CLIP(BaseModel):
         # Remove Cast Node to optimize Attention block
         bRemoveCastNode = enable_optimization
         # Insert LayerNormalization Plugin
-        bLayerNormPlugin = False # enable_optimization
+        bLayerNormPlugin = enable_optimization
 
         opt = Optimizer(onnx_graph, verbose=self.verbose)
         opt.info('CLIP: original')
@@ -722,15 +723,13 @@ class CLIP(BaseModel):
 # This is transpose/shape adaptor [B,2,..] -> [2B,..] -> [B,2,..]
 class UNetWrapper(UNet2DConditionModel):
     def forward(self, sample, timestep, encoder_hidden_states):
-        sample_shape=sample.shape
-        # UNet2DConditionModel expects [2,B,..] order of elements but we need to send B first for proper Triton dynamic batching
-        # sample=sample.transpose(0,1)
-        sample=sample.reshape((-1,)+sample_shape[2:])
-        # encoder_hidden_states=encoder_hidden_states.transpose(0,1)
-        encoder_hidden_states=encoder_hidden_states.reshape((-1,)+encoder_hidden_states.shape[2:])
+        # UNet2DConditionModel expects [2,B,..] order of elements but we needed to send B first for proper Triton dynamic batching
+        # [B,2,..] -> [2B,..]
+        sample = torch.cat(torch.chunk(sample,2, dim=1)).squeeze(1)
+        encoder_hidden_states = torch.cat(torch.chunk(encoder_hidden_states,2, dim=1)).squeeze(1)
         ret = UNet2DConditionModel.forward(self, sample, timestep[0], encoder_hidden_states).sample
-        # ret = ret.transpose(0,1)
-        return ret.reshape(sample_shape)
+        # [2B,..] -> [B,2,..] 
+        return torch.stack(torch.chunk(ret,2), dim=1).contiguous() 
 
 class UNet(BaseModel):
     def get_model(self):
@@ -759,6 +758,7 @@ class UNet(BaseModel):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         min_batch, max_batch, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
             self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        print("min_batch=", min_batch, "static_batch=", static_batch)
         return {
             'sample': [(min_batch, 2, 4, min_latent_height, min_latent_width), (batch_size, 2, 4, latent_height, latent_width), (max_batch, 2, 4, max_latent_height, max_latent_width)],
             'timestep' : [(min_batch,), (batch_size,), (max_batch,)],
@@ -916,7 +916,7 @@ class VAE(BaseModel):
         # Remove Cast Node to optimize Attention block
         bRemoveCastNode = enable_optimization
         # Insert GroupNormalization Plugin
-        bGroupNormPlugin = False # enable_optimization
+        bGroupNormPlugin = enable_optimization
 
         opt = Optimizer(onnx_graph, verbose=self.verbose)
         opt.info('VAE: original')

@@ -360,11 +360,10 @@ class DemoDiffusion:
             uncond_embeddings = uncond_embeddings.view(batch_size * self.num_images, seq_len, -1)
 
             # Concatenate the unconditional and text embeddings into a single batch to avoid doing two forward passes for classifier free guidance
-            text_embeddings = torch.stack([uncond_embeddings, text_embeddings], dim=1)
+            text_embeddings = torch.stack([uncond_embeddings, text_embeddings], dim=1).contiguous()
 
             if self.denoising_fp16:
                 text_embeddings = text_embeddings.to(dtype=torch.float16)
-                uncond_embeddings = uncond_embeddings.to(dtype=torch.float16)
 
             cudart.cudaEventRecord(events['clip-stop'], 0)
             if self.nvtx_profile:
@@ -376,7 +375,7 @@ class DemoDiffusion:
                     nvtx_latent_scale = nvtx.start_range(message='latent_scale', color='pink')
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = self.scheduler.scale_model_input(latents, step_index)
-                latent_model_input = torch.stack([latent_model_input,latent_model_input], dim=1)
+                latent_model_input = torch.stack([latent_model_input,latent_model_input], dim=1).contiguous()
                 if self.nvtx_profile:
                     nvtx.end_range(nvtx_latent_scale)
 
@@ -400,6 +399,8 @@ class DemoDiffusion:
                     nvtx_latent_step = nvtx.start_range(message='latent_step', color='pink')
                 # Perform guidance
                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2, dim=1)
+                noise_pred_uncond=noise_pred_uncond.squeeze(1)
+                noise_pred_text=noise_pred_text.squeeze(1)
                 noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
 
                 latents = self.scheduler.step(noise_pred, latents, step_index, timestep)
