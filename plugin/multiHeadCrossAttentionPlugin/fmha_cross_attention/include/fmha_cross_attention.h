@@ -166,28 +166,39 @@ struct Fused_multihead_attention_params_mhca
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+extern unsigned char cubin_fmha_mhca_fp16_128_64_sm75_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_64_sm86_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_64_sm89_cu_cubin[];
+
+extern unsigned char cubin_fmha_mhca_fp16_128_128_sm75_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_128_sm86_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_128_sm89_cu_cubin[];
+
+// No support for D=160 on Turing.
 extern unsigned char cubin_fmha_mhca_fp16_128_256_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_256_sm86_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_256_sm89_cu_cubin[];
 
+extern uint32_t cubin_fmha_mhca_fp16_128_64_sm75_cu_cubin_len;
 extern uint32_t cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_mhca_fp16_128_64_sm86_cu_cubin_len;
 extern uint32_t cubin_fmha_mhca_fp16_128_64_sm89_cu_cubin_len;
+
+extern uint32_t cubin_fmha_mhca_fp16_128_128_sm75_cu_cubin_len;
 extern uint32_t cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_mhca_fp16_128_128_sm86_cu_cubin_len;
 extern uint32_t cubin_fmha_mhca_fp16_128_128_sm89_cu_cubin_len;
+
+// No support for D=160 on Turing.
 extern uint32_t cubin_fmha_mhca_fp16_128_256_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_mhca_fp16_128_256_sm86_cu_cubin_len;
 extern uint32_t cubin_fmha_mhca_fp16_128_256_sm89_cu_cubin_len;
 
-#if !(defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89))
-#error This file can only be included one of sm 80, 86 or 89 are defined.
+#if !(defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89))
+#error This file can only be included one of sm 75, 80, 86 or 89 are defined.
 #endif
 static const struct FusedMultiHeadCrossAttentionKernelMetaInfoV2
 {
@@ -203,12 +214,20 @@ static const struct FusedMultiHeadCrossAttentionKernelMetaInfoV2
     uint32_t mUnrollStep;
     bool mInterleaved;
 } sMhaKernelMetaInfos[] = {
+#if defined(ENABLE_SM75) 
+    { DATA_TYPE_FP16, 128, 64, kSM_75,  cubin_fmha_mhca_fp16_128_64_sm75_cu_cubin, cubin_fmha_mhca_fp16_128_64_sm75_cu_cubin_len, "fmha_mhca_fp16_128_64_sm75_kernel", 40960, 128, 0, false },
+    { DATA_TYPE_FP16, 128, 64, kSM_75,  cubin_fmha_mhca_fp16_128_64_sm75_cu_cubin, cubin_fmha_mhca_fp16_128_64_sm75_cu_cubin_len, "fmha_mhca_fp16_128_64_sm75_kernel_nl", 36864, 128, 32, false },
+    { DATA_TYPE_FP16, 128, 128, kSM_75,  cubin_fmha_mhca_fp16_128_128_sm75_cu_cubin, cubin_fmha_mhca_fp16_128_128_sm75_cu_cubin_len, "fmha_mhca_fp16_128_128_sm75_kernel", 81920, 128, 0, false },
+    { DATA_TYPE_FP16, 128, 128, kSM_75,  cubin_fmha_mhca_fp16_128_128_sm75_cu_cubin, cubin_fmha_mhca_fp16_128_128_sm75_cu_cubin_len, "fmha_mhca_fp16_128_128_sm75_kernel_nl", 40960, 128, 32, false },
+
+    // No support for D=160 on Turing.
+#endif 
 #if defined(ENABLE_SM80) 
-    { DATA_TYPE_FP16, 128, 64, kSM_80,  cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin_len, "fmha_mhca_fp16_128_64_sm80_kernel", 49152, 128, 0, false },
-    { DATA_TYPE_FP16, 128, 64, kSM_80,  cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin_len, "fmha_mhca_fp16_128_64_sm80_kernel_nl", 49152, 128, 64, false },
-    { DATA_TYPE_FP16, 128, 128, kSM_80,  cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin_len, "fmha_mhca_fp16_128_128_sm80_kernel", 98304, 128, 0, false },
-    { DATA_TYPE_FP16, 128, 128, kSM_80,  cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin_len, "fmha_mhca_fp16_128_128_sm80_kernel_nl", 81920, 128, 32, false },
-    { DATA_TYPE_FP16, 128, 256, kSM_80,  cubin_fmha_mhca_fp16_128_256_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_256_sm80_cu_cubin_len, "fmha_mhca_fp16_128_256_sm80_kernel", 163840, 256, 0, false },
+    { DATA_TYPE_FP16, 128, 64,  kSM_80,  cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin,  cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin_len,  "fmha_mhca_fp16_128_64_sm80_kernel",      49152, 128,  0, false },
+    { DATA_TYPE_FP16, 128, 64,  kSM_80,  cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin,  cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin_len,  "fmha_mhca_fp16_128_64_sm80_kernel_nl",   49152, 128, 64, false },
+    { DATA_TYPE_FP16, 128, 128, kSM_80,  cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin_len, "fmha_mhca_fp16_128_128_sm80_kernel",     98304, 128,  0, false },
+    { DATA_TYPE_FP16, 128, 128, kSM_80,  cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_128_sm80_cu_cubin_len, "fmha_mhca_fp16_128_128_sm80_kernel_nl",  81920, 128, 32, false },
+    { DATA_TYPE_FP16, 128, 256, kSM_80,  cubin_fmha_mhca_fp16_128_256_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_256_sm80_cu_cubin_len, "fmha_mhca_fp16_128_256_sm80_kernel",    163840, 256,  0, false },
     { DATA_TYPE_FP16, 128, 256, kSM_80,  cubin_fmha_mhca_fp16_128_256_sm80_cu_cubin, cubin_fmha_mhca_fp16_128_256_sm80_cu_cubin_len, "fmha_mhca_fp16_128_256_sm80_kernel_nl", 147456, 256, 16, false },
 #endif 
 #if defined(ENABLE_SM86)
