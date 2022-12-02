@@ -334,13 +334,11 @@ class DemoDiffusion:
             # CLIP text encoder
             text_input_ids_inp = cuda.DeviceView(ptr=text_input_ids.data_ptr(), shape=text_input_ids.shape, dtype=np.int32)
             text_embeddings = self.runEngine('clip', {"input_ids": text_input_ids_inp})['text_embeddings']
-            print("After clip:", text_embeddings.shape)
 
             # Duplicate text embeddings for each generation per prompt
             bs_embed, seq_len, _ = text_embeddings.shape
             text_embeddings = text_embeddings.repeat(1, self.num_images, 1)
             text_embeddings = text_embeddings.view(bs_embed * self.num_images, seq_len, -1)
-            print("After view:", text_embeddings.shape)
             
             max_length = text_input_ids.shape[-1]
             uncond_input_ids = self.tokenizer(
@@ -359,8 +357,7 @@ class DemoDiffusion:
             uncond_embeddings = uncond_embeddings.view(batch_size * self.num_images, seq_len, -1)
 
             # Concatenate the unconditional and text embeddings into a single batch to avoid doing two forward passes for classifier free guidance
-            text_embeddings = torch.cat([uncond_embeddings.unsqueeze(1), text_embeddings.unsqueeze(1)], dim=1)
-            print("After cat:", text_embeddings.shape)
+            text_embeddings = torch.stack([uncond_embeddings, text_embeddings], dim=1)
 
             if self.denoising_fp16:
                 text_embeddings = text_embeddings.to(dtype=torch.float16)
@@ -375,10 +372,8 @@ class DemoDiffusion:
                 if self.nvtx_profile:
                     nvtx_latent_scale = nvtx.start_range(message='latent_scale', color='pink')
                 # expand the latents if we are doing classifier free guidance
-                latent_model_input = latents.unsqueeze(1)
-                latent_model_input = torch.cat([latent_model_input,latent_model_input], dim=1)
-                # LMSDiscreteScheduler.scale_model_input()
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, step_index)
+                latent_model_input = self.scheduler.scale_model_input(latents, step_index)
+                latent_model_input = torch.stack([latent_model_input,latent_model_input], dim=1)
                 if self.nvtx_profile:
                     nvtx.end_range(nvtx_latent_scale)
 
@@ -401,7 +396,7 @@ class DemoDiffusion:
                 if self.nvtx_profile:
                     nvtx_latent_step = nvtx.start_range(message='latent_step', color='pink')
                 # Perform guidance
-                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2,dim=1)
+                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2, dim=1)
                 noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
 
                 latents = self.scheduler.step(noise_pred, latents, step_index, timestep)

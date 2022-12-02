@@ -155,16 +155,15 @@ class Optimizer():
     def insert_groupnorm_plugin(self):
         nGroupNormPlugin = 0
         for node in self.graph.nodes:
-            if node.op == "Reshape" and node.outputs != [] and \
-                node.o().op == "ReduceMean" and node.o(1).op == "Sub" and node.o().o() == node.o(1) and \
-                node.o().o().o().o().o().o().o().o().o().o().o().op == "Mul" and \
-                node.o().o().o().o().o().o().o().o().o().o().o().o().op == "Add" and \
+          try:
+            if node.op == "Reshape" and node.outputs != [] and node.o().op == "ReduceMean" and node.o(1).op == "Sub" and node.o().o() == node.o(1) :
+              gammaNode = node.o().o().o().o().o().o().o().o().o().o().o()
+              if gammaNode.op == "Mul" and gammaNode.op.o().op == "Add" and \
                 len(node.o().o().o().o().o().o().o().o().inputs[1].values.shape) == 3:
                 # "node.outputs != []" is added for VAE
 
                 inputTensor = node.i().inputs[0]
 
-                gammaNode = node.o().o().o().o().o().o().o().o().o().o().o()
                 index = [type(i) == gs.ir.tensor.Constant for i in gammaNode.inputs].index(True)
                 gamma = np.array(deepcopy(gammaNode.inputs[index].values.tolist()), dtype=np.float32)
                 constantGamma = gs.Constant("groupNormGamma-" + str(nGroupNormPlugin), np.ascontiguousarray(gamma.reshape(-1)))  # MUST use np.ascontiguousarray, or TRT will regard the shape of this Constant as (0) !!!
@@ -197,6 +196,8 @@ class Optimizer():
                 node.i().inputs = []
                 lastNode.outputs = []
                 nGroupNormPlugin += 1
+          except Exception:
+              print("Caught exception with node ", node)
 
         self.cleanup()
         return nGroupNormPlugin
@@ -712,14 +713,19 @@ class CLIP(BaseModel):
         opt.info('CLIP: final')
         return opt_onnx_graph
 
+
+# This is transpose/shape adaptor [B,2,..] -> [2B,..] -> [B,2,..]
 class UNetWrapper(UNet2DConditionModel):
     def forward(self, sample, timestep, encoder_hidden_states):
         sample_shape=sample.shape
+        # UNet2DConditionModel expects [2,B,..] order of elements but we need to send B first for proper Triton dynamic batching
+        # sample=sample.transpose(0,1)
         sample=sample.reshape((-1,)+sample_shape[2:])
+        # encoder_hidden_states=encoder_hidden_states.transpose(0,1)
         encoder_hidden_states=encoder_hidden_states.reshape((-1,)+encoder_hidden_states.shape[2:])
-        ret = UNet2DConditionModel.forward(self, sample, timestep[0], encoder_hidden_states)
-        ret = ret.sample
-        return ret.reshape(sample_shape) # ret.shape[0]/2,2,ret.shape[1],ret.shape[2], ret.shape[3])
+        ret = UNet2DConditionModel.forward(self, sample, timestep[0], encoder_hidden_states).sample
+        # ret = ret.transpose(0,1)
+        return ret.reshape(sample_shape)
 
 class UNet(BaseModel):
     def get_model(self):
@@ -758,7 +764,7 @@ class UNet(BaseModel):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         return {
             'sample': (batch_size, 2, 4, latent_height, latent_width),
-            'timestep' : (batch_size),
+            'timestep' : (batch_size,),
             'encoder_hidden_states': (batch_size, 2, self.text_maxlen, self.embedding_dim),
             'latent': (batch_size, 2, 4, latent_height, latent_width)
         }
@@ -792,7 +798,7 @@ class UNet(BaseModel):
         # Use multi-head cross attention Plugin
         bMHCAPlugin = True
         # Insert GroupNormalization Plugin
-        bGroupNormPlugin = False # borisf: fails with "list index out of range"
+        bGroupNormPlugin = True # False # borisf: fails with "list index out of range"
         # Insert LayerNormalization Plugin
         bLayerNormPlugin = True
         # Insert Split+GeLU Plugin
