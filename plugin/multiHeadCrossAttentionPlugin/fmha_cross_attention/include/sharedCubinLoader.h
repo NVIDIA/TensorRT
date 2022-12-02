@@ -148,8 +148,8 @@ public:
         }
         else
         {
-            int32_t unroll = params.s_q / kernelMeta.mUnrollStep;
-            PLUGIN_ASSERT(params.s_q == kernelMeta.mUnrollStep * unroll);
+            int32_t unroll = (params.s_q + kernelMeta.mUnrollStep-1) / kernelMeta.mUnrollStep;
+            PLUGIN_ASSERT(params.s_q <= kernelMeta.mUnrollStep * unroll);
             cuErrCheck(mDriver.cuLaunchKernel(func, params.h, params.b, unroll, kernelMeta.mThreadsPerCTA, 1, 1,
                            kernelMeta.mSharedMemBytes, ss, kernelParams, nullptr),
                 mDriver);

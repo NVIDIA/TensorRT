@@ -42,20 +42,6 @@ int32_t fmhcaPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTens
         int32_t const headNum = inputDesc[0].dims.d[2];
         int32_t const sizePerHead = inputDesc[0].dims.d[3];
 
-        // Check for seq len to support dynamic input shape
-        if (sizePerHead <= 64)
-        {
-            PLUGIN_VALIDATE(seqLenQ % 64 == 0, "Not support q buffer sequence length not multiple of 64 when head size < 64 for plugin fMHCA");
-        }
-        else if (sizePerHead <= 128)
-        {
-            PLUGIN_VALIDATE(seqLenQ % 32 == 0, "Not support q buffer sequence length not multiple of 32 when head size between 64 and 128 for plugin fMHCA");
-        }
-        else
-        {
-            PLUGIN_VALIDATE(seqLenQ % 16 == 0, "Not support q buffer sequence length not multiple of 16 when head size > 128 for plugin fMHCA");
-        }
-
         if (batchSize != m_.mOptBatchSize || m_.mOptSeqLenQ != seqLenQ || m_.mOptSeqLenKV != seqLenKV)
         {
             m_.mOptSeqLenQ = initializeSeqlens(batchSize, seqLenQ, mCuSeqLensQ.get(), stream);
