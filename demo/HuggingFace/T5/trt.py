@@ -270,13 +270,13 @@ class T5TRTDecoder(TRTHFRunner):
             self.trt_engine_non_kv = self.trt_runtime.deserialize_cuda_engine(f.read())
             self.trt_context_non_kv = self.trt_engine_non_kv.create_execution_context()
 
+        # Input does not have kv cache, so only inpuy_ids and encoder_hidden_states
         self.input_types_non_kv = {k: self.input_types[k] for k in ["input_ids", "encoder_hidden_states"]}
-
         self.input_shapes_non_kv = {k: self.input_shapes[k] for k in ["input_ids", "encoder_hidden_states"]}
-
-        self.output_types_non_kv = {k: self.output_types[k] for k in self.output_types.keys() if k == "hidden_states" or "present_key_values" in k}
-
-        self.output_shapes_non_kv = {k: self.output_shapes[k] for k in self.output_shapes.keys() if k == "hidden_states" or "present_key_values" in k}
+        
+        # Output is the same as kv
+        self.output_types_non_kv = copy.deepcopy(self.output_types)
+        self.output_shapes_non_kv = copy.deepcopy(self.output_shapes)
 
         # follow same steps in _allocate_memory
         self.inputs_non_kv = allocate_binding_buffer(self.input_types_non_kv, self.input_shapes_non_kv)
@@ -929,8 +929,8 @@ class T5TRT(TRTInferenceCommand):
                         
                 if perplexity_reference is not None:
                     assert len(network_input) == len(perplexity_reference), "Encoder and decoder inputs must pair up"
-                    if metadata.other.kv_cache:
-                        G_LOGGER.warning("Skipping perplexity calculation for TRT with KV cache because it is not supported yet.")
+                    if metadata.other.kv_cache or (args.num_beams > 1):
+                        G_LOGGER.warning("Skipping perplexity calculation for TRT with KV cache or beam search because it is not supported yet.")
                     else:
                         for ei, di in zip(network_input, perplexity_reference):
                             ppl_results.append(
