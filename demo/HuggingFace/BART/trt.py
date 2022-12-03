@@ -232,13 +232,13 @@ class BARTTRTDecoder(TRTHFRunner):
 
         # We only have one profile to select so we can just grab the profile at the start of the class
         self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size * num_beams, sequence_length=1)
-
+        input_profile_length = self.max_output_length if (not self.config.use_cache) else 1
         self.input_types = {
             "input_ids": torch.int32,
             "encoder_hidden_states": torch.float32
         }
         self.input_shapes = {
-            "input_ids": (self.batch_size * num_beams, self.max_output_length),
+            "input_ids": (self.batch_size * num_beams, input_profile_length),
             "encoder_hidden_states": (self.batch_size * num_beams, self.max_sequence_length, self.encoder_hidden_size)
         }
 
@@ -258,8 +258,8 @@ class BARTTRTDecoder(TRTHFRunner):
                 set_kv_data(self.input_types, "past", i, kv_type_dict)
                 set_kv_data(self.output_types,"present", i, kv_type_dict)
 
-                self_attention_kv_shape = (self.batch_size, self.num_heads, self.max_output_length, self.embedding_size_per_head)
-                cross_attention_kv_shape = (self.batch_size, self.num_heads, self.max_sequence_length, self.embedding_size_per_head)
+                self_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_output_length, self.embedding_size_per_head)
+                cross_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_sequence_length, self.embedding_size_per_head)
                 kv_shape_dict = {"encoder": cross_attention_kv_shape, "decoder": self_attention_kv_shape}
 
                 set_kv_data(self.input_shapes, "past", i, kv_shape_dict)
@@ -348,13 +348,12 @@ class BARTTRTDecoder(TRTHFRunner):
         """
         self.persist_cross_attention_kv_cache = True
 
-        bs = self.batch_size
+        bs = past_key_values[0][0].shape[0] # In beam search, it should be batch_size * num_beams
         encoder_length = TRTHFRunner.ENCODER_LENGTH if past_key_values is not None else 0
         num_heads = self.num_heads
         embedding_size_per_head = self.embedding_size_per_head
 
-        # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
-        for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[self.variant]) // 2):
+        for i in range(self.num_decoder_layers):
 
             # Set the binding shape of cross-attention KV caches, which should be (bs, num_heads, encoder_length, embedding_size_per_head).
             cross_attention_kv_shape = (bs, num_heads, encoder_length, embedding_size_per_head)
@@ -381,6 +380,15 @@ class BARTTRTDecoder(TRTHFRunner):
         This is used in our measurement code.
         """
         self.return_device = return_device
+    
+    def _reorder_cache(self, past, beam_idx):
+        reordered_past = ()
+        for layer_past in past:
+            # cached cross_attention states don't have to be reordered -> they are always the same
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
+        return reordered_past
 
     def forward(self, input_ids, encoder_hidden_states, *args, **kwargs):
         # Get the batch size.
@@ -455,7 +463,7 @@ class BARTTRTDecoder(TRTHFRunner):
                 embedding_size_per_head = self.embedding_size_per_head
 
                 # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
-                for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[self.variant]) // 2):
+                for i in range(self.num_decoder_layers):
 
                     # Set the binding shape of self-attention KV caches, which should be (bs, num_heads, past_decoder_length, embedding_size_per_head).
                     self_attention_kv_shape = (bs, num_heads, past_decoder_length, embedding_size_per_head)
@@ -532,7 +540,7 @@ class BARTTRTDecoder(TRTHFRunner):
                     cross_attn_v = cross_attn_v_output[:cross_attention_kv_flatten_length].view(*cross_attention_kv_shape)
 
                 present_key_values += ((self_attn_k, self_attn_v, cross_attn_k, cross_attn_v), ) # make multi-dim tuple
-        
+
         # Transfer predictions back from GPU to do greedy search
         return Seq2SeqLMOutput(logits=folded.to(self.return_device), past_key_values=present_key_values,)
 
@@ -681,13 +689,15 @@ class BARTTRT(TRTInferenceCommand):
             output_seq_len = benchmarking_args.output_seq_len
      
             input_ids = torch.randint(0, BARTModelTRTConfig.VOCAB_SIZE[metadata.variant], (batch_size, input_seq_len))
-
+        
         encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             self.BART_trt_encoder, input_ids, timing_profile
-        )
-        # Need to feed the decoder a new empty input_ids for text generation, cannot reuse the original encoder input_ids
+        )        
+        
+        # Need to feed the decoder a new empty input_ids for text generation. 
+        decoder_output_len = output_seq_len // 2 if (not metadata.other.kv_cache) else 1
         decoder_input_ids = torch.full(
-            (batch_size, output_seq_len // 2), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
+            (batch_size, decoder_output_len), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
         )
 
         _, decoder_e2e_time = decoder_inference(
@@ -856,59 +866,72 @@ class BARTTRT(TRTInferenceCommand):
             )
         ]
 
+        # Set up the non kv engine, used for non-kv mode and kv mode generation phase (1st decoder run uses the non-kv profile to generate kv cache)
+        dec_profiles_non_kv = Profile()
+        
         # for beam search, decoder engine's inputs are expanded `num_beams` times
         # optimization profiles should be changed accordingly, but onnx models can be shared across greedy/beam because the first dim (batch size) is already a dynamic value, so no change needed in export.py
-        dec_profiles = Profile()
-        dec_profiles = dec_profiles.add(
-            "input_ids",
-            min=(batch_size * num_beams, 1),
-            opt=(batch_size * num_beams, opt_output_seq_len),
-            max=(batch_size * num_beams, max_output_length),
-        )
-        dec_profiles = dec_profiles.add(
+        if not metadata.other.kv_cache:
+            dec_profiles_non_kv = dec_profiles_non_kv.add(
+                "input_ids",
+                min=(batch_size * num_beams, 1),
+                opt=(batch_size * num_beams, opt_output_seq_len),
+                max=(batch_size * num_beams, max_output_length),
+            )
+        else:
+            dec_profiles_non_kv = dec_profiles_non_kv.add(
+                "input_ids",
+                min=(batch_size * num_beams, 1),
+                opt=(batch_size * num_beams, 1),
+                max=(batch_size * num_beams, 1),
+            )
+
+        dec_profiles_non_kv = dec_profiles_non_kv.add(
             "encoder_hidden_states",
             min=(batch_size * num_beams, 1, encoder_hidden_size),
             opt=(batch_size * num_beams, opt_input_seq_len, encoder_hidden_size),
             max=(batch_size * num_beams, max_sequence_length, encoder_hidden_size),
         )
-        
+
+        decoder_profiles_non_kv = [dec_profiles_non_kv]
+        dec_profiles_kv = copy.deepcopy(dec_profiles_non_kv)
         if metadata.other.kv_cache:
-            # still need non-kv engine in kv mode
-            dec_profiles_non_kv = copy.deepcopy(dec_profiles)
-            decoder_profiles_non_kv = [dec_profiles_non_kv]
 
             num_heads = BARTModelTRTConfig.NUMBER_OF_HEADS[metadata.variant]
             embedding_size_per_head = encoder_hidden_size // num_heads
+            num_decoder_layers = BARTModelTRTConfig.NUMBER_OF_DECODER_LAYERS[metadata.variant]
 
-            # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
-            for i in range(int(BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]) // 2):
-                self_attention_profile = {
-                    "min": (batch_size, num_heads, 1, embedding_size_per_head),
-                    "opt": (batch_size, num_heads, opt_output_seq_len, embedding_size_per_head),
-                    "max": (batch_size, num_heads, max_output_length, embedding_size_per_head),
-                }
-                cross_attention_profile = {
-                    "min": (batch_size, num_heads, 1, embedding_size_per_head),
-                    "opt": (batch_size, num_heads, opt_input_seq_len, embedding_size_per_head),
-                    "max": (batch_size, num_heads, max_sequence_length, embedding_size_per_head),
-                }
-                dec_profiles = dec_profiles.add(
+            self_attention_profile = {
+                "min": (batch_size * num_beams, num_heads, 1, embedding_size_per_head),
+                "opt": (batch_size * num_beams, num_heads, opt_output_seq_len, embedding_size_per_head),
+                "max": (batch_size * num_beams, num_heads, max_output_length, embedding_size_per_head),
+            }
+            cross_attention_profile = {
+                "min": (batch_size * num_beams, num_heads, 1, embedding_size_per_head),
+                "opt": (batch_size * num_beams, num_heads, opt_input_seq_len, embedding_size_per_head),
+                "max": (batch_size * num_beams, num_heads, max_sequence_length, embedding_size_per_head),
+            }
+
+            for i in range(num_decoder_layers):
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.decoder.key",
                     **self_attention_profile
                 )
-                dec_profiles = dec_profiles.add(
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.decoder.value",
                     **self_attention_profile
                 )
-                dec_profiles = dec_profiles.add(
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.encoder.key",
                     **cross_attention_profile
                 )
-                dec_profiles = dec_profiles.add(
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.encoder.value",
                     **cross_attention_profile
-                )
-        decoder_profiles = [dec_profiles]
+                )  
+            decoder_profiles_kv = [dec_profiles_kv]
+        
+        decoder_profiles = decoder_profiles_kv if (metadata.other.kv_cache) else decoder_profiles_non_kv
 
         # Convert ONNX models to TRT engines.
         if benchmarking_args is None:
@@ -967,10 +990,8 @@ class BARTTRT(TRTInferenceCommand):
                 profiles=decoder_profiles_non_kv,
                 preview_features=preview_features
             )
-
             # switch between BARTTRTDecoder is impossible (becase HF decoding step is bound to one decoder). Therefore, we need to add the non-kv engines inside the same decoder --> decoder contains two TRT engines
             self.BART_trt_decoder.set_non_kv_engine_for_kv_mode(self.BART_trt_decoder_engine_non_kv)
-
     def run_trt(
         self,
         metadata: NetworkMetadata,

@@ -24,6 +24,7 @@ Uses [semantic versioning](https://semver.org/).
 - Added beam search support for GPT2 demo
 - Added KV cache support for GPT2 demo
 - Fixed perplexity calculation array size out of max_length
+- Fixed trt KV cache engine profile to only accept input_length = 1
 
 # [1.3.1] - 2022-11-04
 - Added beam search support for T5 demo

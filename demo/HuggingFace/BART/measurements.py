@@ -48,7 +48,7 @@ from NNDF.logger import G_LOGGER
 
 @use_cuda
 def decoder_inference(
-    BART_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=True, use_cache=True, past_key_values=None
+    BART_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=True, use_cache=False, past_key_values=None
 ):
     # This implementation is a bit ugly. Moving implementation of the model to check HFRunner would be cleaner.
     if isinstance(BART_decoder, TRTNativeRunner):
@@ -88,8 +88,8 @@ def full_inference_greedy(
     min_length=0,
     batch_size=1,
     use_cuda=True,
-    early_stopping=True, # Deprecated
-    use_cache=True
+    early_stopping=False,
+    use_cache=False
 ):
     G_LOGGER.info("Running full inference with greedy decoding...")
 
@@ -158,8 +158,8 @@ def full_inference_beam(
     min_length=0,
     batch_size=1,
     use_cuda=True,
-    early_stopping=True, # Deprecated
-    use_cache=True
+    early_stopping=False, # Now used to control beam search early_stopping to have the same meaning as HuggingFace
+    use_cache=False
 ):
 
     G_LOGGER.info(f"Running full inference with beam search (num_beams = {num_beams}) decoding...")
@@ -190,7 +190,7 @@ def full_inference_beam(
                 batch_size=batch_size,
                 num_beams=num_beams,
                 device="cuda" if use_cuda else "cpu",
-                do_early_stopping=early_stopping,
+                do_early_stopping=early_stopping
             )
 
             encoder_last_hidden_state = BART_encoder(input_ids=input_ids)
@@ -215,7 +215,7 @@ def full_inference_beam(
                 batch_size=batch_size,
                 num_beams=num_beams,
                 device="cuda" if use_cuda else "cpu",
-                do_early_stopping=early_stopping,
+                do_early_stopping=early_stopping
             )
 
             encoder_last_hidden_state = BART_encoder(input_ids=input_ids)

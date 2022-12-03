@@ -139,9 +139,9 @@ class GPT2TRTDecoder(TRTHFRunner):
 
         # We only have one profile to select so we can just grab the profile at the start of the class
         self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size * num_beams, sequence_length=1)
-        
+        input_profile_length = self.max_output_length if (not self.config.use_cache) else 1
         self.input_shapes = {
-            "input_ids": (self.batch_size * num_beams, self.max_sequence_length)
+            "input_ids": (self.batch_size * num_beams, input_profile_length)
         }
         self.input_types = {
             "input_ids": torch.int32
@@ -165,7 +165,7 @@ class GPT2TRTDecoder(TRTHFRunner):
                 set_kv_data(self.input_types, "past", i, kv_type_dict)
                 set_kv_data(self.output_types,"present", i, kv_type_dict)
 
-                self_attention_kv_shape = (self.batch_size, self.num_heads, self.max_output_length, self.embedding_size_per_head)
+                self_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_output_length, self.embedding_size_per_head)
                 kv_shape_dict = {"decoder": self_attention_kv_shape}
 
                 set_kv_data(self.input_shapes, "past", i, kv_shape_dict)
@@ -193,10 +193,11 @@ class GPT2TRTDecoder(TRTHFRunner):
             self.trt_engine_non_kv = self.trt_runtime.deserialize_cuda_engine(f.read())
             self.trt_context_non_kv = self.trt_engine_non_kv.create_execution_context()
         
-        # The only input for GPT2 is the inpud_ids. Input same as non-kv mode
+        # The only input for GPT2 is the inpud_ids. 
         input_name = "input_ids"
         self.input_types_non_kv = {input_name: self.input_types[input_name]}
-        self.input_shapes_non_kv = {input_name: self.input_shapes[input_name]}
+        # non_kv engine profile is different from kv since it needs to accept input_ids.
+        self.input_shapes_non_kv = {input_name: (self.input_shapes[input_name][0], self.max_sequence_length)}
 
         # Output is the same as kv
         self.output_types_non_kv = copy.deepcopy(self.output_types)
@@ -243,6 +244,17 @@ class GPT2TRTDecoder(TRTHFRunner):
         This is used in our measurement code.
         """
         self.return_device = return_device
+    
+    def _reorder_cache(self, past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the :obj:`past_key_values` cache if
+        :meth:`~transformers.PreTrainedModel.beam_search` or :meth:`~transformers.PreTrainedModel.beam_sample` is
+        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+        """
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past
+        )
         
     def forward(self, input_ids, *args, **kwargs):
         bs = input_ids.shape[0]
@@ -516,40 +528,53 @@ class GPT2TRT(TRTInferenceCommand):
             opt_input_seq_len = benchmarking_args.input_seq_len
             opt_output_seq_len = benchmarking_args.output_seq_len
 
+       # Set up the non kv engine, used for non-kv mode and kv mode generation phase (1st decoder run uses the non-kv profile to generate kv cache)
+        dec_profiles_non_kv = Profile()
+        
         # for beam search, decoder engine's inputs are expanded `num_beams` times
         # optimization profiles should be changed accordingly, but onnx models can be shared across greedy/beam because the first dim (batch size) is already a dynamic value, so no change needed in export.py
-        dec_profiles = Profile()
-        dec_profiles = dec_profiles.add(
+        dec_profiles_non_kv = dec_profiles_non_kv.add(
             "input_ids",
             min=(batch_size * num_beams, 1),
             opt=(batch_size * num_beams, opt_output_seq_len),
             max=(batch_size * num_beams, max_output_length),
         )
+
+        decoder_profiles_non_kv = [dec_profiles_non_kv]
         
+        dec_profiles_kv = Profile()
         if metadata.other.kv_cache:
-            # still need non-kv engine in kv mode
-            dec_profiles_non_kv = copy.deepcopy(dec_profiles)
-            decoder_profiles_non_kv = [dec_profiles_non_kv]
+            # Note that the kv profile only accept length 1
+            dec_profiles_kv = dec_profiles_kv.add(
+                "input_ids",
+                min=(batch_size * num_beams, 1),
+                opt=(batch_size * num_beams, 1),
+                max=(batch_size * num_beams, 1),
+            )
 
             num_heads = GPT2ModelTRTConfig.NUMBER_OF_HEADS[metadata.variant]
             embedding_size_per_head = GPT2ModelTRTConfig.EMBEDDING_SIZE[metadata.variant] // num_heads
             num_decoder_layers = GPT2ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]
-
+            self_attention_profile = {
+                "min": (batch_size * num_beams, num_heads, 1, embedding_size_per_head),
+                "opt": (batch_size * num_beams, num_heads, opt_output_seq_len, embedding_size_per_head),
+                "max": (batch_size * num_beams, num_heads, max_output_length, embedding_size_per_head),
+            }
+            
+            # TODO: move this logic (and some other similar place) into utils.
             for i in range(num_decoder_layers):
-                self_attention_profile = {
-                    "min": (batch_size, num_heads, 1, embedding_size_per_head),
-                    "opt": (batch_size, num_heads, opt_output_seq_len, embedding_size_per_head),
-                    "max": (batch_size, num_heads, max_output_length, embedding_size_per_head),
-                }
-                dec_profiles = dec_profiles.add(
+
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.decoder.key",
                     **self_attention_profile
                 )
-                dec_profiles = dec_profiles.add(
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.decoder.value",
                     **self_attention_profile
                 )
-        decoder_profiles = [dec_profiles]
+            decoder_profiles_kv = [dec_profiles_kv]
+        
+        decoder_profiles = decoder_profiles_kv if (metadata.other.kv_cache) else decoder_profiles_non_kv
 
         # Convert ONNX models to TRT engines.
         if benchmarking_args is None:
@@ -659,7 +684,7 @@ class GPT2TRT(TRTInferenceCommand):
                             )
             else:
                 # Check that input_seq_len and output_seq_len is valid and within required range
-                max_input_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+                max_input_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant] 
                 max_output_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
 
                 seq_tag = args.input_profile_max_len is None and args.output_profile_max_len is None
@@ -681,9 +706,8 @@ class GPT2TRT(TRTInferenceCommand):
                 assert benchmarking_args.input_profile_max_len <= max_input_seq_len, "Model config restrict input_profile_max_len <= {} for benchmark mode".format(max_input_seq_len)
                 assert benchmarking_args.output_profile_max_len <= max_output_seq_len, "Model config restrict output_profile_max_len <= {} for benchmark mode".format(max_output_seq_len)
                 # GPT2 model requires output_seq_len > input_seq_len since it is a text generation model.
-                assert benchmarking_args.input_seq_len < benchmarking_args.output_seq_len, "GPT2 model text generation requires output_seq_len > input_seq_len."
-                assert benchmarking_args.input_profile_max_len < benchmarking_args.output_profile_max_len, "GPT2 model text generation requires output_profile_max_len > input_profile_max_len"
-
+                assert benchmarking_args.input_seq_len <= benchmarking_args.output_seq_len, "GPT2 model text generation requires output_seq_len > input_seq_len."
+                assert benchmarking_args.input_profile_max_len <= benchmarking_args.output_profile_max_len, "GPT2 model text generation requires output_profile_max_len > input_profile_max_len"
                 self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes, benchmarking_args, seq_tag)
                 inference_results = self.execute_inference(
                     metadata, hash_onnx_fpath, None, timing_profile, batch_size, args.num_beams, True, benchmarking_args

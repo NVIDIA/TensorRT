@@ -478,6 +478,7 @@ class OnnxRTCommand(NetworkCommand):
         return NetworkCheckpointResult(
             network_results=network_results,
             accuracy=checkpoint.accuracy(network_results),
+            perplexity=None,
         )
 
     def run_benchmark(self):
