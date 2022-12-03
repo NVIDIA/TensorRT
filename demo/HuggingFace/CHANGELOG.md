@@ -20,6 +20,10 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+# [1.3.2] - 2022-11-17
+- Added beam search support for GPT2 demo
+- Added KV cache support for GPT2 demo
+- Fixed perplexity calculation array size out of max_length
 
 # [1.3.1] - 2022-11-04
 - Added beam search support for T5 demo
