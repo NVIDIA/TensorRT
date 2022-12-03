@@ -57,7 +57,7 @@ def full_inference(
     min_length = 0,
     use_cuda=True,
     batch_size=1,
-    early_stopping=True, # Deprecated
+    early_stopping=False,
     use_cache=False,
     num_beams = 1,
 ):
@@ -72,8 +72,9 @@ def full_inference(
                 max_length=max_length, 
                 min_length=min_length, 
                 batch_size=batch_size, 
-                num_beams = num_beams,
-                use_cache = use_cache,
+                num_beams=num_beams,
+                use_cache=use_cache,
+                early_stopping=early_stopping
             )
 
         return output

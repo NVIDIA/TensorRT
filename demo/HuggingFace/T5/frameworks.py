@@ -38,6 +38,7 @@ if __name__ == "__main__":
 
 # TRT-HuggingFace
 from NNDF.interface import FrameworkCommand
+from NNDF.torch_utils import expand_inputs_for_beam_search
 from NNDF.networks import (
     BenchmarkingResult,
     NetworkResult,
@@ -222,8 +223,20 @@ class T5FHuggingFace(FrameworkCommand):
         encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             t5_torch_encoder, input_ids, timing_profile, use_cuda=(not use_cpu)
         )
+
+        # Need to feed the decoder a new empty input_ids for text generation. 
+        decoder_output_len = output_seq_len // 2 if (not metadata.other.kv_cache) else 1
+
+        decoder_input_ids = torch.full(
+            (batch_size, decoder_output_len), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
+        )
+
         _, decoder_e2e_time = decoder_inference(
-            t5_torch_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=(not use_cpu),
+            t5_torch_decoder,
+            expand_inputs_for_beam_search(decoder_input_ids, num_beams) if num_beams > 1 else decoder_input_ids,
+            expand_inputs_for_beam_search(encoder_last_hidden_state, num_beams) if num_beams > 1 else encoder_last_hidden_state,
+            timing_profile,
+            use_cache=metadata.other.kv_cache,
         )
         
         if num_beams == 1:
@@ -234,10 +247,10 @@ class T5FHuggingFace(FrameworkCommand):
                 tokenizer,
                 timing_profile,
                 max_length=output_seq_len,
+                min_length=T5ModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 use_cuda=(not use_cpu),
                 batch_size=batch_size,
                 use_cache=metadata.other.kv_cache,
-                early_stopping=(not benchmarking_mode),
             )
         else:
             decoder_output, full_e2e_runtime = full_inference_beam(
@@ -248,9 +261,10 @@ class T5FHuggingFace(FrameworkCommand):
                 timing_profile,
                 num_beams=num_beams,
                 max_length=output_seq_len,
+                min_length=T5ModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
+                use_cuda=(not use_cpu),
                 batch_size=batch_size,
                 use_cache=metadata.other.kv_cache,
-                early_stopping=(not benchmarking_mode),
             )
 
         # Prepare runtime results.

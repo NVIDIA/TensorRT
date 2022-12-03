@@ -60,6 +60,7 @@ class GPT2TorchFile(TorchModelFile):
             self.transformer = transformer
             self.lm_head = lm_head
             self.config = config
+            self.device = "cuda" # WAR to avoid beam search in framework
 
         def prepare_inputs_for_generation(self, input_ids, past = None, use_cache=None, **kwargs):
             # Todo (@pchadha): add position_ids, token_type_ids support
@@ -84,6 +85,17 @@ class GPT2TorchFile(TorchModelFile):
             lm_logits = self.lm_head(hidden_states)
 
             return CausalLMOutputWithCrossAttentions(logits=lm_logits, past_key_values=transformer_outputs.past_key_values if self.config.use_cache else None,)
+        
+        def _reorder_cache(self, past, beam_idx):
+            """
+            This function is used to re-order the :obj:`past_key_values` cache if
+            :meth:`~transformers.PreTrainedModel.beam_search` or :meth:`~transformers.PreTrainedModel.beam_sample` is
+            called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+            """
+            return tuple(
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+                for layer_past in past
+            )
 
         def __call__(self, *args, **kwargs):
             return self.forward(*args, **kwargs)
@@ -244,7 +256,7 @@ class GPT2Converter(ModelFileConverter):
             inputs_non_kv = Dims(dict_inputs_non_kv)
             torch.onnx.export(
                 gpt2_model,
-                (input_ids[:,-1:], True),
+                (input_ids, True),
                 output_fpath_non_kv,
                 export_params=True,
                 opset_version=12,

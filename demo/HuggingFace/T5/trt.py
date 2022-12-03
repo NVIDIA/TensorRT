@@ -216,18 +216,19 @@ class T5TRTDecoder(TRTHFRunner):
         self.embedding_size_per_head = T5ModelTRTConfig.EMBEDDING_SIZE_PER_HEAD[network_metadata.variant]
         # We only have one profile to select so we can just grab the profile at the start of the class
         self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size * num_beams, sequence_length=1)
+        input_profile_length = self.max_output_length if (not self.config.use_cache) else 1
 
         self.input_types = {
             "input_ids": torch.int32,
             "encoder_hidden_states": torch.float32
         }
         self.input_shapes = {
-            "input_ids": (self.batch_size * num_beams, self.max_sequence_length),
+            "input_ids": (self.batch_size * num_beams, input_profile_length),
             "encoder_hidden_states": (self.batch_size * num_beams, self.max_sequence_length, self.encoder_hidden_size)
         }
 
         self.output_shapes = {
-            "hidden_states": (self.batch_size * num_beams, self.max_sequence_length, T5ModelTRTConfig.VOCAB_SIZE)
+            "hidden_states": (self.batch_size * num_beams, self.max_output_length, T5ModelTRTConfig.VOCAB_SIZE)
         }
         self.output_types = {
             "hidden_states": torch.float32
@@ -236,14 +237,14 @@ class T5TRTDecoder(TRTHFRunner):
         if self.config.use_cache:
 
             self.num_decoder_layers = T5ModelTRTConfig.NUMBER_OF_DECODER_LAYERS[network_metadata.variant]
+            self_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_output_length, self.embedding_size_per_head)
+            cross_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_sequence_length, self.embedding_size_per_head)
             # Set kv cache shape and type
             for i in range(self.num_decoder_layers):
                 kv_type_dict = {"encoder": torch.float32, "decoder": torch.float32}
                 set_kv_data(self.input_types, "past", i, kv_type_dict)
                 set_kv_data(self.output_types,"present", i, kv_type_dict)
 
-                self_attention_kv_shape = (self.batch_size, self.num_heads, self.max_output_length, self.embedding_size_per_head)
-                cross_attention_kv_shape = (self.batch_size, self.num_heads, self.max_sequence_length, self.embedding_size_per_head)
                 kv_shape_dict = {"encoder": cross_attention_kv_shape, "decoder": self_attention_kv_shape}
 
                 set_kv_data(self.input_shapes, "past", i, kv_shape_dict)
@@ -330,7 +331,7 @@ class T5TRTDecoder(TRTHFRunner):
         """
         self.persist_cross_attention_kv_cache = True
 
-        bs = self.batch_size
+        bs = past_key_values[0][0].shape[0] # In beam search, it should be batch_size * num_beams
         encoder_length = TRTHFRunner.ENCODER_LENGTH if past_key_values is not None else 0
         num_heads = self.num_heads
         embedding_size_per_head = self.embedding_size_per_head
@@ -350,7 +351,6 @@ class T5TRTDecoder(TRTHFRunner):
                     self.bindings[self.kv_cache_binding_offset+4*i+3] = self.inputs[f"past_key_values.{i}.encoder.value"].data_ptr()
                 else:
                     self.inputs[f"past_key_values.{i}.encoder.key"][:cross_attention_kv_flatten_length] = past_key_values[i][2].flatten()
-
                     self.inputs[f"past_key_values.{i}.encoder.value"][:cross_attention_kv_flatten_length] = past_key_values[i][3].flatten()
 
             self.trt_context.set_binding_shape(self.kv_cache_binding_offset+4*i + 2, cross_attention_kv_shape)
@@ -362,6 +362,36 @@ class T5TRTDecoder(TRTHFRunner):
         This is used in our measurement code.
         """
         self.return_device = return_device
+        self.device = return_device
+    
+    def _reorder_cache(self, past, beam_idx):
+        # Reference: https://huggingface.co/transformers/v4.11.3/_modules/transformers/models/t5/modeling_t5.html
+        # Note that for BART, this function is static, but for T5, it is not
+        # if decoder past is not included in output
+        # speedy decoding is disabled and no need to reorder
+        if past is None:
+            print("You might want to consider setting `use_cache=True` to speed up decoding")
+            return past
+
+        reordered_decoder_past = ()
+        for layer_past_states in past:
+            # get the correct batch idx from layer past batch dim
+            # batch dim of `past` is at 2nd position
+            reordered_layer_past_states = ()
+            for layer_past_state in layer_past_states:
+                if layer_past_state is not None:
+                    # need to set correct `past` for each of the four key / value states
+                    reordered_layer_past_states = reordered_layer_past_states + (
+                        layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
+                    )
+                else:
+                    reordered_layer_past_states = reordered_layer_past_states + (None,)
+
+            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
+            assert len(reordered_layer_past_states) == len(layer_past_states)
+
+            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
+        return reordered_decoder_past
 
     def forward(self, input_ids, encoder_hidden_states, *args, **kwargs):
         # Get the batch size.
@@ -595,9 +625,11 @@ class T5TRT(TRTInferenceCommand):
             self.t5_trt_encoder, input_ids, timing_profile
         )
         
-        # Need to feed the decoder a new empty input_ids for text generation, cannot reuse the original encoder input_ids!
+        # Need to feed the decoder a new empty input_ids for text generation. 
+        decoder_output_len = output_seq_len // 2 if (not metadata.other.kv_cache) else 1
+
         decoder_input_ids = torch.full(
-            (batch_size, output_seq_len // 2), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
+            (batch_size, decoder_output_len), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
         )
 
         _, decoder_e2e_time = decoder_inference(
@@ -667,7 +699,7 @@ class T5TRT(TRTInferenceCommand):
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
             return BenchmarkingResult(median_runtime=runtime, models=models)
-
+        
         # Remove the padding and end tokens.
         semantic_outputs = tokenizer.decode(
             decoder_output[-1, :], skip_special_tokens=True
@@ -765,59 +797,74 @@ class T5TRT(TRTInferenceCommand):
                 max=(batch_size, max_sequence_length),
             )
         ]
+
+        # Set up the non kv engine, used for non-kv mode and kv mode generation phase (1st decoder run uses the non-kv profile to generate kv cache)
+        dec_profiles_non_kv = Profile()
+        
         # for beam search, decoder engine's inputs are expanded `num_beams` times
         # optimization profiles should be changed accordingly, but onnx models can be shared across greedy/beam because the first dim (batch size) is already a dynamic value, so no change needed in export.py
-        dec_profiles = Profile()
-        dec_profiles = dec_profiles.add(
-            "input_ids",
-            min=(batch_size * num_beams, 1),
-            opt=(batch_size * num_beams, opt_output_seq_len),
-            max=(batch_size * num_beams, max_output_length),
-        )
-        dec_profiles = dec_profiles.add(
+        if not metadata.other.kv_cache:
+            dec_profiles_non_kv = dec_profiles_non_kv.add(
+                "input_ids",
+                min=(batch_size * num_beams, 1),
+                opt=(batch_size * num_beams, opt_output_seq_len),
+                max=(batch_size * num_beams, max_output_length),
+            )
+        else:
+            dec_profiles_non_kv = dec_profiles_non_kv.add(
+                "input_ids",
+                min=(batch_size * num_beams, 1),
+                opt=(batch_size * num_beams, 1),
+                max=(batch_size * num_beams, 1),
+            )
+
+        dec_profiles_non_kv = dec_profiles_non_kv.add(
             "encoder_hidden_states",
             min=(batch_size * num_beams, 1, encoder_hidden_size),
             opt=(batch_size * num_beams, opt_input_seq_len, encoder_hidden_size),
             max=(batch_size * num_beams, max_sequence_length, encoder_hidden_size),
         )
+
+        decoder_profiles_non_kv = [dec_profiles_non_kv]
+        dec_profiles_kv = copy.deepcopy(dec_profiles_non_kv)
         
         if metadata.other.kv_cache:
-            # still need non-kv engine in kv mode
-            dec_profiles_non_kv = copy.deepcopy(dec_profiles)
-            decoder_profiles_non_kv = [dec_profiles_non_kv]
 
             num_heads = T5ModelTRTConfig.NUMBER_OF_HEADS[metadata.variant]
             embedding_size_per_head = T5ModelTRTConfig.EMBEDDING_SIZE_PER_HEAD[metadata.variant]
             num_decoder_layers = T5ModelTRTConfig.NUMBER_OF_DECODER_LAYERS[metadata.variant]
+            
+            self_attention_profile = {
+                "min": (batch_size * num_beams, num_heads, 1, embedding_size_per_head),
+                "opt": (batch_size * num_beams, num_heads, opt_output_seq_len, embedding_size_per_head),
+                "max": (batch_size * num_beams, num_heads, max_output_length, embedding_size_per_head),
+            }
+            cross_attention_profile = {
+                "min": (batch_size * num_beams, num_heads, 1, embedding_size_per_head),
+                "opt": (batch_size * num_beams, num_heads, opt_input_seq_len, embedding_size_per_head),
+                "max": (batch_size * num_beams, num_heads, max_sequence_length, embedding_size_per_head),
+            }
 
             for i in range(num_decoder_layers):
-                self_attention_profile = {
-                    "min": (batch_size, num_heads, 1, embedding_size_per_head),
-                    "opt": (batch_size, num_heads, opt_output_seq_len, embedding_size_per_head),
-                    "max": (batch_size, num_heads, max_output_length, embedding_size_per_head),
-                }
-                cross_attention_profile = {
-                    "min": (batch_size, num_heads, 1, embedding_size_per_head),
-                    "opt": (batch_size, num_heads, opt_input_seq_len, embedding_size_per_head),
-                    "max": (batch_size, num_heads, max_sequence_length, embedding_size_per_head),
-                }
-                dec_profiles = dec_profiles.add(
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.decoder.key",
                     **self_attention_profile
                 )
-                dec_profiles = dec_profiles.add(
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.decoder.value",
                     **self_attention_profile
                 )
-                dec_profiles = dec_profiles.add(
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.encoder.key",
                     **cross_attention_profile
                 )
-                dec_profiles = dec_profiles.add(
+                dec_profiles_kv = dec_profiles_kv.add(
                     f"past_key_values.{i}.encoder.value",
                     **cross_attention_profile
-                )
-        decoder_profiles = [dec_profiles]
+                )  
+            decoder_profiles_kv = [dec_profiles_kv]
+        
+        decoder_profiles = decoder_profiles_kv if (metadata.other.kv_cache) else decoder_profiles_non_kv
 
         # Convert ONNX models to TRT engines.
         if benchmarking_args is None:

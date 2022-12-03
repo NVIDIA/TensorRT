@@ -39,6 +39,7 @@ import torch
 
 # TRT-HuggingFace
 from NNDF.interface import OnnxRTCommand
+from NNDF.torch_utils import expand_inputs_for_beam_search
 from NNDF.networks import (
     BenchmarkingResult,
     NetworkMetadata,
@@ -55,7 +56,7 @@ from NNDF.tensorrt_utils import PolygraphyOnnxRunner
 from T5.frameworks import T5FHuggingFace
 from T5.T5ModelConfig import T5ModelTRTConfig, T5BenchmarkingArgs
 from T5.measurements import decoder_inference, encoder_inference, full_inference_greedy, full_inference_beam
-
+from NNDF.logger import G_LOGGER
 
 class OnnxHFRunner(PolygraphyOnnxRunner, GenerationMixin):
     """Runner that adds interop support for HF and HF provided greedy_search functions."""
@@ -141,13 +142,22 @@ class T5ONNXRT(OnnxRTCommand):
         encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             self.t5_ort_encoder, input_ids, timing_profile
         )
+
+        # Need to feed the decoder a new empty input_ids for text generation. 
+        decoder_output_len = output_seq_len // 2
+
+        decoder_input_ids = torch.full(
+            (batch_size, decoder_output_len), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
+        )
+        # OnnxRT currently does not enable kv cache
         _, decoder_e2e_time = decoder_inference(
             self.t5_ort_decoder,
-            input_ids,
-            encoder_last_hidden_state,
+            expand_inputs_for_beam_search(decoder_input_ids, num_beams) if num_beams > 1 else decoder_input_ids,
+            expand_inputs_for_beam_search(encoder_last_hidden_state, num_beams) if num_beams > 1 else encoder_last_hidden_state,
             timing_profile,
-            use_cuda=False,
+            use_cache=metadata.other.kv_cache,
         )
+
         if num_beams == 1:
             decoder_output, full_e2e_runtime = full_inference_greedy(
                 self.t5_ort_encoder,
@@ -156,9 +166,10 @@ class T5ONNXRT(OnnxRTCommand):
                 tokenizer,
                 timing_profile,
                 max_length=output_seq_len,
+                min_length=T5ModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 use_cuda=False,
                 batch_size=batch_size,
-                early_stopping=(not benchmarking_mode),
+                use_cache=metadata.other.kv_cache,
             )
         else:
             decoder_output, full_e2e_runtime = full_inference_beam(
@@ -169,9 +180,10 @@ class T5ONNXRT(OnnxRTCommand):
                 timing_profile,
                 num_beams=num_beams,
                 max_length=output_seq_len,
+                min_length=T5ModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 use_cuda=False,
                 batch_size=batch_size,
-                early_stopping=(not benchmarking_mode),
+                use_cache=metadata.other.kv_cache,
             )
 
         # Prepare runtime results.
@@ -234,6 +246,8 @@ class T5ONNXRT(OnnxRTCommand):
 
         results = []
         try:
+            if metadata.other.kv_cache:
+                assert False, "OnnxRT currently does not support kv cache."
             # no fpath provided for onnx files, download them
             if len(onnx_fpaths) == 0:
                 onnx_fpaths = self.frameworks_cmd.generate_and_download_framework(
@@ -278,7 +292,8 @@ class T5ONNXRT(OnnxRTCommand):
 
         finally:
             self.cleanup(workspace, keep_onnx_model, keep_torch_model)
-
+        # TODO: Add perplexity calculation for OnnxRT
+        G_LOGGER.warning("perplexity calculation is disabled for OnnxRT.")
         return results
 
     def add_args(self, parser) -> None:

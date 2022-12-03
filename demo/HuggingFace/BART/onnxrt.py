@@ -156,10 +156,10 @@ class BARTONNXRT(OnnxRTCommand):
                 tokenizer,
                 timing_profile,
                 max_length=output_seq_len,
-                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant],
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 use_cuda=False,
+                use_cache=metadata.other.kv_cache,
                 batch_size=batch_size,
-                early_stopping=(not benchmarking_mode),
             )
         else:
             decoder_output, full_e2e_runtime = full_inference_beam(
@@ -170,10 +170,10 @@ class BARTONNXRT(OnnxRTCommand):
                 timing_profile,
                 num_beams=num_beams,
                 max_length=output_seq_len,
-                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant],
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else outout_seq_len,
                 use_cuda=False,
+                use_cache=metadata.other.kv_cache,
                 batch_size=batch_size,
-                early_stopping=(not benchmarking_mode),
             )
 
         # Prepare runtime results.
@@ -236,6 +236,8 @@ class BARTONNXRT(OnnxRTCommand):
 
         results = []
         try:
+            if metadata.other.kv_cache:
+                assert False, "OnnxRT currently does not support kv cache."
             # no fpath provided for onnx files, download them
             if len(onnx_fpaths) == 0:
                 onnx_fpaths = self.frameworks_cmd.generate_and_download_framework(

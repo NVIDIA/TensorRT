@@ -235,11 +235,11 @@ class BARTHuggingFace(FrameworkCommand):
                 input_ids,
                 tokenizer,
                 timing_profile,
-                max_length=output_seq_len, # note: T5 uses XXModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant] which is the max input length. Here should rather be the max output length for generation
+                max_length=output_seq_len,
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 use_cuda=(not use_cpu),
                 batch_size=batch_size,
                 use_cache=metadata.other.kv_cache,
-                early_stopping=(not benchmarking_mode),
             )
         else:
             decoder_output, full_e2e_runtime = full_inference_beam(
@@ -250,10 +250,9 @@ class BARTHuggingFace(FrameworkCommand):
                 timing_profile,
                 num_beams=num_beams,
                 max_length=output_seq_len,
-                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant],
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 batch_size=batch_size,
                 use_cache=metadata.other.kv_cache,
-                early_stopping=(not benchmarking_mode),
             )
         
         # Prepare runtime results.
