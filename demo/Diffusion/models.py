@@ -758,7 +758,6 @@ class UNet(BaseModel):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         min_batch, max_batch, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
             self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
-        print("min_batch=", min_batch, "static_batch=", static_batch)
         return {
             'sample': [(min_batch, 2, 4, min_latent_height, min_latent_width), (batch_size, 2, 4, latent_height, latent_width), (max_batch, 2, 4, max_latent_height, max_latent_width)],
             'timestep' : [(min_batch,), (batch_size,), (max_batch,)],
