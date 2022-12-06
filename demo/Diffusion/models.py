@@ -104,6 +104,56 @@ class Optimizer():
         self.cleanup()
         return mRemoveSwishNode
 
+    def resize_fix(self):
+        '''
+        This function loops through the graph looking for Resize nodes that uses scales for resize (has 3 inputs).
+        It substitutes found Resize with Resize that takes the size of the output tensor instead of scales.
+        It adds Shape->Slice->Concat
+                Shape->Slice----^     subgraph to the graph to extract the shape of the output tensor.
+        This fix is required for the dynamic shape support.
+        '''
+        mResizeNodes = 0
+        for node in self.graph.nodes:
+            if node.op == "Resize" and len(node.inputs) == 3:
+                name = node.name + "/"
+                
+                add_node = node.o().o().i(1)
+                div_node = node.i()
+                
+                shape_hw_out = gs.Variable(name=name + "shape_hw_out", dtype=np.int64, shape=[4])
+                shape_hw = gs.Node(op="Shape", name=name+"shape_hw", inputs=[add_node.outputs[0]], outputs=[shape_hw_out])
+
+                const_zero = gs.Constant(name=name + "const_zero", values=np.array([0], dtype=np.int64))
+                const_two = gs.Constant(name=name + "const_two", values=np.array([2], dtype=np.int64))
+                const_four = gs.Constant(name=name + "const_four", values=np.array([4], dtype=np.int64))
+
+                slice_hw_out = gs.Variable(name=name + "slice_hw_out", dtype=np.int64, shape=[2])
+                slice_hw = gs.Node(op="Slice", name=name+"slice_hw", inputs=[shape_hw_out, const_two, const_four, const_zero], outputs=[slice_hw_out])
+
+                shape_bc_out = gs.Variable(name=name + "shape_bc_out", dtype=np.int64, shape=[2])
+                shape_bc = gs.Node(op="Shape", name=name+"shape_bc", inputs=[div_node.outputs[0]], outputs=[shape_bc_out])
+
+                slice_bc_out = gs.Variable(name=name + "slice_bc_out", dtype=np.int64, shape=[2])
+                slice_bc = gs.Node(op="Slice", name=name+"slice_bc", inputs=[shape_bc_out, const_zero, const_two, const_zero], outputs=[slice_bc_out])
+
+                concat_bchw_out = gs.Variable(name=name + "concat_bchw_out", dtype=np.int64, shape=[4])
+                concat_bchw = gs.Node(op="Concat", name=name+"concat_bchw", attrs={"axis": 0}, inputs=[slice_bc_out, slice_hw_out], outputs=[concat_bchw_out])
+
+                none_var = gs.Variable.empty()
+
+                resize_bchw = gs.Node(op="Resize", name=name+"resize_bchw", attrs=node.attrs, inputs=[node.inputs[0], none_var, none_var, concat_bchw_out], outputs=[node.outputs[0]])
+
+                self.graph.nodes.extend([shape_hw, slice_hw, shape_bc, slice_bc, concat_bchw, resize_bchw])
+
+                node.inputs = []
+                node.outputs = []
+
+                mResizeNodes += 1
+
+        self.cleanup()
+        return mResizeNodes
+
+
     def adjustAddNode(self):
         nAdjustAddNode = 0
         for node in self.graph.nodes:
@@ -775,6 +825,8 @@ class UNet(BaseModel):
         bRemoveParallelSwish = enable_optimization
         # Adjust the bias to be the second input to the Add ops
         bAdjustAddNode = enable_optimization
+        # Change Resize node to take size instead of scale
+        bResizeFix = enable_optimization 
 
         # Common override for disabling all plugins below
         bDisablePlugins = minimal_optimization
@@ -810,6 +862,10 @@ class UNet(BaseModel):
         if bAdjustAddNode:
             num_adjust_add = opt.adjustAddNode()
             opt.info('UNet: adjusted '+str(num_adjust_add)+' adds')
+
+        if bResizeFix:
+            num_resize_fix = opt.resize_fix()
+            opt.info('UNet: fixed '+str(num_resize_fix)+' resizes')
 
         opt.cleanup()
         opt.info('UNet: cleanup')
