@@ -14,17 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef TRT_GROUPNORM_PLUGIN_H
 #define TRT_GROUPNORM_PLUGIN_H
 
-#include "common/plugin.h"
-#include "groupNormPluginCommon.h"
-#include <stdint.h>
-#include <stdlib.h>
-#include <vector>
-
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
+
+#include "common/plugin.h"
+#include "groupNormPluginCommon.h"
+
+#include <cstdint>
+#include <cstdlib>
+#include <vector>
 
 namespace nvinfer1
 {
@@ -38,7 +40,12 @@ public:
     GroupNormPlugin(std::string const& name, void const* buffer, size_t length);
     ~GroupNormPlugin() override = default;
 
-    // Method inherited from IPluginV2
+    GroupNormPlugin(const GroupNormPlugin& /*other*/) = default;
+    GroupNormPlugin& operator=(const GroupNormPlugin& /*other*/) = delete;
+    GroupNormPlugin(GroupNormPlugin&& /*other*/) noexcept = delete;
+    GroupNormPlugin& operator=(GroupNormPlugin&& /*other*/) noexcept = delete;
+
+    // Methods inherited from IPluginV2
     char const* getPluginType() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     int32_t getNbOutputs() const noexcept override;
@@ -53,7 +60,7 @@ public:
     // Method inherited from IPluginV2Ext
     DataType getOutputDataType(int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    // Method inherited from IPluginV2DynamicExt
+    // Methods inherited from IPluginV2DynamicExt
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
         int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
@@ -69,12 +76,12 @@ public:
 private:
     size_t getWorkspaceSizeInBytes() const;
 
-    const std::string mName;
+    std::string mName;
     std::string mNameSpace;
 
-    float mEpsilon;
-    int32_t mBSwish;
-    Group_norm_nhwc_params mParams;
+    float mEpsilon{};
+    int32_t mBSwish{};
+    GroupNormNHWCParams mParams;
 };
 
 class GroupNormPluginCreator : public nvinfer1::pluginInternal::BaseCreator
@@ -82,6 +89,12 @@ class GroupNormPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 public:
     GroupNormPluginCreator();
     ~GroupNormPluginCreator();
+
+    GroupNormPluginCreator(const GroupNormPluginCreator& /*other*/) = delete;
+    GroupNormPluginCreator& operator=(const GroupNormPluginCreator& /*other*/) = delete;
+    GroupNormPluginCreator(GroupNormPluginCreator&& /*other*/) noexcept = delete;
+    GroupNormPluginCreator& operator=(GroupNormPluginCreator&& /*other*/) noexcept = delete;
+
     char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     PluginFieldCollection const* getFieldNames() noexcept override;
