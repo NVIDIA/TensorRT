@@ -1,5 +1,20 @@
 # TensorRT OSS Release Changelog
 
+## [22.12](https://github.com/NVIDIA/TensorRT/releases/tag/22.12) - 2022-12-06
+
+### Added
+- Stable Diffusion demo using TensorRT Plugins
+- KV-cache and beam search to GPT2 and T5 demos
+- Perplexity calculation to all HF demos
+
+### Changed
+- Updated trex to v0.1.5
+- Increased default workspace size in demoBERT to build BS=128 fp32 engines
+- Use `avg_iter=8` and timing cache to make demoBERT perf more stable
+
+### Removed
+- None
+
 ## [8.5.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1) - 2022-11-01
 
 TensorRT OSS release corresponding to TensorRT 8.5.1.7 GA release.
