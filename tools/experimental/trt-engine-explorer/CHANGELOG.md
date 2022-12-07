@@ -2,6 +2,9 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.1.5 (2022-12-06)
+- Updated requirements.txt for Ubuntu 20.04 and 22.04
+
 ## v0.1.4 (2022-09-01)
 - Validated using Python 3.8.
 - Added more tests.

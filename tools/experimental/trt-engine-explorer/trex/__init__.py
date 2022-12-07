@@ -30,4 +30,4 @@ from trex.report_card import *
 from trex.compare_engines import *
 from trex.excel_summary import *
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"

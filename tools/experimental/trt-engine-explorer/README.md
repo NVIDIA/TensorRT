@@ -29,7 +29,7 @@ To measure per-layer execution times, when `trtexec` enqueues kernel layers for 
 ## Supported TensorRT Versions
 Starting with TensorRT 8.2, engine-plan graph and profiling data can be exported to JSON files. `trex` supports TensortRT 8.2 and 8.4.
 
-`trex` has only been tested on Ubuntu 18.04 LTS, with Python 3.8.<br>
+`trex` has only been tested on Ubuntu 18.04, 20.04, 22.04, with Python 3.8.<br>
 `trex` does not require a GPU, but generating the input JSON file(s) does require a GPU.
 
 <details><summary><h1>Installation</h1></summary>
