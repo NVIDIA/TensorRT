@@ -33,7 +33,7 @@ def main():
 
     setup(
         name="trex",
-        version="0.1.4",
+        version="0.1.5",
         description="TREX: TensorRT Engine Exploration Toolkit",
         long_description=open("README.md", "r", encoding="utf-8").read(),
         author="NVIDIA",
