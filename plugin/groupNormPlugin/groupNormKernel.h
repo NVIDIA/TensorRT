@@ -17,13 +17,13 @@
 #ifndef TRT_GROUPNORM_KERNEL_H
 #define TRT_GROUPNORM_KERNEL_H
 
-#include "cuda_fp16.h"
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-#include <stdint.h>
-
 #include "common/checkMacrosPlugin.h"
 #include "groupNormPluginCommon.h"
+
+#include <cstdint>
+#include <cuda.h>
+#include <cuda_fp16.h>
+#include <cuda_runtime_api.h>
 
 using half = __half;
 
@@ -32,8 +32,8 @@ static inline int32_t divUp(int32_t m, int32_t n)
     return (m + n - 1) / n;
 }
 
-void group_norm_nhwc_sum(Group_norm_nhwc_params const& params, cudaStream_t stream);
+void groupNormNHWCSum(GroupNormNHWCParams const& params, cudaStream_t stream);
 
-void group_norm_nhwc_scale(Group_norm_nhwc_params const& params, cudaStream_t stream);
+void groupNormNHWCScale(GroupNormNHWCParams const& params, cudaStream_t stream);
 
 #endif // TRT_GROUPNORM_KERNEL_H
