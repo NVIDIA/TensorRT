@@ -34,7 +34,7 @@ class SeqLen2SpatialPlugin : public IPluginV2DynamicExt
 {
 public:
     SeqLen2SpatialPlugin() = delete;
-    SeqLen2SpatialPlugin(std::string const& name, int32_t height, int32_t width);
+    SeqLen2SpatialPlugin(std::string const& name);
     SeqLen2SpatialPlugin(std::string const& name, void const* buffer, size_t length);
     ~SeqLen2SpatialPlugin() override = default;
 
@@ -74,8 +74,6 @@ public:
 private:
     std::string mName;
     std::string mNameSpace;
-    int32_t mHeight{};
-    int32_t mWidth{};
 };
 
 class SeqLen2SpatialPluginCreator : public nvinfer1::pluginInternal::BaseCreator

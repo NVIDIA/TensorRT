@@ -345,9 +345,9 @@ class Optimizer():
                 inputTensor = biasNode.inputs[inputIndex]
                 residualInput = residualNode.inputs[1]
                 outputTensor = transposeNode.outputs[0]
+                outputShapeTensor = transposeNode.i().i().i(1).i(1).i(1).i().inputs[0]
                 seqLen2SpatialNode = gs.Node("SeqLen2Spatial", "AddAddSeqLen2Spatial-" + str(nSeqLen2SpatialPlugin),
-                    attrs=OrderedDict([("height", outputTensor.shape[2]), ("width", outputTensor.shape[3])]),
-                    inputs=[inputTensor, biasInput, residualInput], outputs=[outputTensor])
+                    inputs=[inputTensor, biasInput, residualInput, outputShapeTensor], outputs=[outputTensor])
                 self.graph.nodes.append(seqLen2SpatialNode)
                 biasNode.inputs.clear()
                 transposeNode.outputs.clear()
@@ -841,8 +841,7 @@ class UNet(BaseModel):
         # Insert Split+GeLU Plugin
         bSplitGeLUPlugin = True
         # Replace BiasAdd+ResidualAdd+SeqLen2Spatial with plugin
-        # TODO - support dynamic shapes in plugin
-        bSeqLen2SpatialPlugin = False
+        bSeqLen2SpatialPlugin = True
 
         opt = Optimizer(onnx_graph, verbose=self.verbose)
         opt.info('UNet: original')
