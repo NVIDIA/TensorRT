@@ -1,5 +1,17 @@
 # TensorRT OSS Release Changelog
 
+## [8.5.2 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2) - 2022-12-12
+
+TensorRT OSS release corresponding to TensorRT 8.5.2.2 GA release.
+- Updates since [TensorRT 8.5.1 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1).
+- Please refer to the [TensorRT 8.5.2 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2) for more information.
+
+Key Features and Updates:
+
+- Plugin enhancements
+  - Added [LayerNormPlugin](plugin/layerNormPlugin), [SplitGeLUPlugin](plugin/splitGeLUPlugin), [GroupNormPlugin](plugin/groupNormPlugin), and [SeqLen2SpatialPlugin](plugin/seqLen2SpatialPlugin) to support [stable diffusion demo](demo/Diffusion).
+- KV-cache and beam search to GPT2 and T5 demos
+
 ## [22.12](https://github.com/NVIDIA/TensorRT/releases/tag/22.12) - 2022-12-06
 
 ### Added

@@ -18,7 +18,7 @@
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:11.8.0-devel-ubuntu20.04
 
-ENV TRT_VERSION 8.5.1.7
+ENV TRT_VERSION 8.5.2.2
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
