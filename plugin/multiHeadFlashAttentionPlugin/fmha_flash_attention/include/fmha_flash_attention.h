@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-#pragma once
-#ifndef _FMHA_FLASH_ATTENTION
-#define _FMHA_FLASH_ATTENTION
+#ifndef TRT_FMHA_FLASH_ATTENTION_H
+#define TRT_FMHA_FLASH_ATTENTION_H
 
 #include "common/bertCommon.h"
 #include "common/plugin.h"
@@ -26,22 +25,49 @@
 
 namespace
 {
-    static inline size_t get_size_in_bytes(size_t n, nvinfer1::plugin::Data_type dtype)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Do not modify this, it is integrated from src/fused_multihead_attention_utils.h in fmha-flash-attention.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+static void set_alpha(uint32_t& alpha, float norm, nvinfer1::plugin::MHFADataType dtype)
+{
+    if (dtype == nvinfer1::plugin::DATA_TYPE_FP16)
     {
-        switch (dtype)
-        {
-        case nvinfer1::plugin::DATA_TYPE_E8M10: return n * 4;
-        case nvinfer1::plugin::DATA_TYPE_FP32: return n * 4;
-        case nvinfer1::plugin::DATA_TYPE_FP16: return n * 2;
-        case nvinfer1::plugin::DATA_TYPE_INT32: return n * 4;
-        case nvinfer1::plugin::DATA_TYPE_INT8: return n;
-        case nvinfer1::plugin::DATA_TYPE_INT4: return n / 2U;
-        case nvinfer1::plugin::DATA_TYPE_BOOL: return n / 8U;
-        case nvinfer1::plugin::DATA_TYPE_E8M7: return n * 2;
-        default: PLUGIN_ASSERT(false); return 0;
-        }
+        half x = __float2half_rn(norm);
+        uint16_t h = reinterpret_cast<uint16_t const&>(x);
+        ushort2 h2 = {h, h};
+        alpha = reinterpret_cast<uint32_t const&>(h2);
+    }
+    else if (dtype == nvinfer1::plugin::DATA_TYPE_FP32)
+    {
+        alpha = reinterpret_cast<uint32_t const&>(norm);
+    }
+    else if (dtype == nvinfer1::plugin::DATA_TYPE_INT32)
+    {
+        int32_t inorm = static_cast<int32_t>(norm);
+        alpha = reinterpret_cast<uint32_t const&>(inorm);
+    }
+    else
+    {
+        assert(false);
     }
 }
+
+static int64_t get_size_in_bytes(size_t n, nvinfer1::plugin::MHFADataType dtype)
+{
+    switch (dtype)
+    {
+    case nvinfer1::plugin::DATA_TYPE_E8M10: return n * 4;
+    case nvinfer1::plugin::DATA_TYPE_FP32: return n * 4;
+    case nvinfer1::plugin::DATA_TYPE_FP16: return n * 2;
+    case nvinfer1::plugin::DATA_TYPE_INT32: return n * 4;
+    case nvinfer1::plugin::DATA_TYPE_INT8: return n;
+    case nvinfer1::plugin::DATA_TYPE_INT4: return n / 2U;
+    case nvinfer1::plugin::DATA_TYPE_BOOL: return n / 8U;
+    case nvinfer1::plugin::DATA_TYPE_E8M7: return n * 2;
+    default: PLUGIN_ASSERT(false); return 0;
+    }
+}
+} // namespace
 
 namespace nvinfer1
 {
@@ -49,8 +75,10 @@ namespace plugin
 {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// Do not modify this, it is integrated from src/fused_multihead_attention_demo_bert_params.h in fmha-flash-attention.
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct Fused_multihead_attention_params_v2
+struct Fused_multihead_flash_attention_params_v2
 {
     // The QKV matrices.
     void* qkv_ptr;
@@ -138,7 +166,8 @@ struct Fused_multihead_attention_params_v2
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
+// Do not modify this, it is integrated from generated/fmha_cubin.h in fmha-flash-attention.
+////////////////////////////////////////////////////////////////////////////////////////////////////
 extern unsigned char cubin_fmha_v2_flash_attention_fp16_64_64_S_16_sm75_cu_cubin[];
 extern unsigned char cubin_fmha_v2_flash_attention_fp16_64_64_S_32_sm75_cu_cubin[];
 extern unsigned char cubin_fmha_v2_flash_attention_fp16_64_64_S_40_sm75_cu_cubin[];
@@ -241,25 +270,25 @@ extern uint32_t cubin_fmha_v2_flash_attention_fp16_128_32_S_128_sm89_cu_cubin_le
 extern uint32_t cubin_fmha_v2_flash_attention_fp16_64_16_S_160_sm89_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_flash_attention_fp16_64_16_S_256_sm89_cu_cubin_len;
 
-constexpr uint32_t S{0};
+constexpr int32_t S{0};
 
 #if !(defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89))
 #error This file can only be included one of sm 75, 80, 86 or 89 are defined.
 #endif
 static const struct FusedMultiHeadFlashAttentionKernelMetaInfoV2
 {
-    Data_type mDataType;
-    uint32_t mS;
-    uint32_t mQStep;
-    uint32_t mKVStep;
-    uint32_t mD;
-    uint32_t mSM;
+    MHFADataType mDataType;
+    int32_t mS;
+    int32_t mQStep;
+    int32_t mKVStep;
+    int32_t mD;
+    int32_t mSM;
     unsigned char const* mCubin;
     uint32_t mCubinSize;
     char const* mFuncName;
-    uint32_t mSharedMemBytes;
-    uint32_t mThreadsPerCTA;
-    uint32_t mUnrollStep;
+    int32_t mSharedMemBytes;
+    int32_t mThreadsPerCTA;
+    int32_t mUnrollStep;
     bool mInterleaved;
 } sMhaKernelMetaInfos[] = {
 #if defined(ENABLE_SM75)
@@ -372,34 +401,105 @@ static const struct FusedMultiHeadFlashAttentionKernelMetaInfoV2
 #endif // defined(ENABLE_SM89)
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Do not modify this, it is integrated from function set_params, file src/fused_multihead_attention.cpp in
+// fmha-flash-attention.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+static Fused_multihead_flash_attention_params_v2 getMHFAParams(
+    // types
+    MHFADataType data_type, MHFADataType acc_type,
+    // sizes
+    int32_t b, int32_t s, int32_t h, int32_t d, int32_t total,
+    // device pointers
+    void const* qkv_packed_d, void* cu_seqlens_d, void* o_packed_d, void* p_d, void* s_d,
+    // scale factors
+    float scale_bmm1, float scale_softmax, float scale_bmm2,
+    // flags
+    bool interleaved, bool ignore_b1opt, bool force_unroll, bool use_int8_scale_max)
+{
+    Fused_multihead_flash_attention_params_v2 params{};
+
+    // Set the pointers.
+    params.qkv_ptr = const_cast<void*>(qkv_packed_d);
+    params.qkv_stride_in_bytes = get_size_in_bytes(h * 3 * d, data_type);
+    params.o_ptr = o_packed_d;
+    params.o_stride_in_bytes = get_size_in_bytes(h * d, data_type);
+
+    if (interleaved)
+    {
+        params.qkv_stride_in_bytes = total;
+        params.o_stride_in_bytes = total;
+    }
+
+    params.cu_seqlens = static_cast<int*>(cu_seqlens_d);
+
+#if defined(STORE_P)
+    params.p_ptr = p_d;
+    params.p_stride_in_bytes = get_size_in_bytes(b * h * s, acc_type);
+#endif // defined(STORE_P)
+
+#if defined(STORE_S)
+    params.s_ptr = s_d;
+    params.s_stride_in_bytes = get_size_in_bytes(b * h * s, data_type);
+#endif // defined(STORE_S)
+
+    // Set the dimensions.
+    params.b = b;
+    params.h = h;
+    params.s = s;
+    params.d = d;
+
+    // Set the different scale values.
+    MHFADataType scale_type1 = data_type == DATA_TYPE_FP16 ? acc_type : DATA_TYPE_FP32;
+    MHFADataType scale_type2 = data_type == DATA_TYPE_FP16 ? DATA_TYPE_FP16 : DATA_TYPE_FP32;
+
+    set_alpha(params.scale_bmm1, scale_bmm1, scale_type1);
+    set_alpha(params.scale_softmax, scale_softmax, scale_type1);
+    set_alpha(params.scale_bmm2, scale_bmm2, scale_type2);
+
+    // Set flags
+    params.interleaved = interleaved;
+    params.ignore_b1opt = ignore_b1opt;
+    params.force_unroll = force_unroll;
+    params.use_int8_scale_max = use_int8_scale_max;
+
+    // Do we enable the trick to replace I2F with FP math in the 2nd GEMM?
+    if (data_type == DATA_TYPE_INT8)
+    {
+        params.enable_i2f_trick
+            = -double(1 << 22) * double(scale_bmm2) <= -128.F && double(1 << 22) * double(scale_bmm2) >= 127.F;
+    }
+    return params;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 class FusedMultiHeadFlashAttentionKernel
-    : public TSharedCubinKernel<FusedMultiHeadFlashAttentionKernelMetaInfoV2, Fused_multihead_attention_params_v2>
+    : public TSharedCubinKernel<FusedMultiHeadFlashAttentionKernelMetaInfoV2, Fused_multihead_flash_attention_params_v2>
 {
 public:
     FusedMultiHeadFlashAttentionKernel(FusedMultiHeadFlashAttentionKernelMetaInfoV2 const* pMetaStart,
-        uint32_t nMetaCount, Data_type type, uint32_t sm)
-        : TSharedCubinKernel<FusedMultiHeadFlashAttentionKernelMetaInfoV2, Fused_multihead_attention_params_v2>(
+        int32_t nMetaCount, MHFADataType type, int32_t sm)
+        : TSharedCubinKernel<FusedMultiHeadFlashAttentionKernelMetaInfoV2, Fused_multihead_flash_attention_params_v2>(
             pMetaStart, nMetaCount, type, sm)
     {
     }
 
-    uint64_t hashID(uint32_t headsize, uint32_t qStep, uint32_t kvStep, bool interleaved, bool unroll) const
+    uint64_t hashID(int32_t headsize, int32_t qStep, int32_t kvStep, bool interleaved, bool unroll) const
     {
         // we only have 30 bits room for head size
         PLUGIN_ASSERT(headsize <= 0x3FFFFFFF);
-        PLUGIN_ASSERT(qStep <= 0xFFFFU);
-        PLUGIN_ASSERT(kvStep <= 0xFFFFU);
+        PLUGIN_ASSERT(qStep <= 0xFFFF);
+        PLUGIN_ASSERT(kvStep <= 0xFFFF);
         return static_cast<uint64_t>(qStep << 16 | kvStep) << 32 | (headsize << 2) | (interleaved ? 2U : 0U)
             | (unroll ? 1U : 0U);
     }
 
-
-    uint64_t hashID(Fused_multihead_attention_params_v2 const& param) const
+    uint64_t hashID(Fused_multihead_flash_attention_params_v2 const& param) const
     {
-        bool const isSmallBS = param.b * param.h < 64U;
+        bool const isSmallBS = param.b * param.h < 64;
         bool const isSM75 = mSM == 75;
-        uint32_t qStep{64};
-        uint32_t kvStep{16};
+        int32_t qStep{64};
+        int32_t kvStep{16};
         switch (param.d)
         {
         case 16:
@@ -421,13 +521,14 @@ public:
 
     uint64_t hashID(KernelMeta const& kernelMeta) const
     {
-        return hashID(kernelMeta.mD, kernelMeta.mQStep, kernelMeta.mKVStep, kernelMeta.mInterleaved, kernelMeta.mUnrollStep > 0);
+        return hashID(
+            kernelMeta.mD, kernelMeta.mQStep, kernelMeta.mKVStep, kernelMeta.mInterleaved, kernelMeta.mUnrollStep > 0);
     }
 };
 
 using FusedMHAFlashKernelFactory = TSharedCubinKernelFactory<FusedMultiHeadFlashAttentionKernel>;
 
-inline FusedMultiHeadFlashAttentionKernel const* getFMHACubinKernels(Data_type type, uint32_t sm)
+inline FusedMultiHeadFlashAttentionKernel const* getFMHAFlashCubinKernels(MHFADataType type, int32_t sm)
 {
     return FusedMHAFlashKernelFactory::Get().getCubinKernels(
         sMhaKernelMetaInfos, sizeof(sMhaKernelMetaInfos) / sizeof(sMhaKernelMetaInfos[0]), type, sm);
@@ -436,4 +537,4 @@ inline FusedMultiHeadFlashAttentionKernel const* getFMHACubinKernels(Data_type t
 } // namespace plugin
 } // namespace nvinfer1
 
-#endif
+#endif // TRT_FMHA_FLASH_ATTENTION_H
