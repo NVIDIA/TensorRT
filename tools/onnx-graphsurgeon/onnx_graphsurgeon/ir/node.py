@@ -31,6 +31,7 @@ class Node(object):
         attrs: Dict[str, object] = None,
         inputs: List["Tensor"] = None,
         outputs: List["Tensor"] = None,
+        domain: str = None,
     ):
         """
         A node represents an operation in a graph, and consumes zero or more Tensors, and produces zero or more Tensors.
@@ -42,12 +43,14 @@ class Node(object):
             attrs (Dict[str, object]): A dictionary that maps attribute names to their values.
             inputs (List[Tensor]): A list of zero or more input Tensors.
             outputs (List[Tensor]): A list of zero or more output Tensors.
+            domain (str): The domain of this node,
         """
         self.op = op
         self.name = misc.default_value(name, "")
         self.attrs = misc.default_value(attrs, OrderedDict())
         self.inputs = misc.SynchronizedList(self, field_name="outputs", initial=misc.default_value(inputs, []))
         self.outputs = misc.SynchronizedList(self, field_name="inputs", initial=misc.default_value(outputs, []))
+        self.domain = misc.default_value(name, "")
 
     def i(self, tensor_idx=0, producer_idx=0):
         """
@@ -119,7 +122,7 @@ class Node(object):
             else:
                 new_attrs[name] = attr
 
-        return Node(self.op, self.name, new_attrs, inputs=inputs, outputs=outputs)
+        return Node(self.op, self.name, new_attrs, inputs=inputs, outputs=outputs, domain=self.domain)
 
     def __str__(self):
         ret = "{:} ({:})".format(self.name, self.op)
@@ -136,6 +139,10 @@ class Node(object):
 
         if self.attrs:
             ret += "\nAttributes: {:}".format(self.attrs)
+
+        if self.domain:
+            ret += "\nDomain: {:}".format(self.domain)
+
         return ret
 
     def __repr__(self):
@@ -153,4 +160,5 @@ class Node(object):
         outputs_match = len(self.outputs) == len(other.outputs) and all(
             [out == other_out for out, other_out in zip(self.outputs, other.outputs)]
         )
-        return attrs_match and inputs_match and outputs_match
+        domain_match = self.domain == other.domain
+        return attrs_match and inputs_match and outputs_match and domain_match
