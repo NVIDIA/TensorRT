@@ -27,10 +27,21 @@ using nvinfer1::plugin::InstanceNormalizationPlugin;
 using nvinfer1::plugin::InstanceNormalizationPluginV2;
 using nvinfer1::plugin::InstanceNormalizationPluginCreator;
 using nvinfer1::plugin::InstanceNormalizationPluginCreatorV2;
-
+namespace
+{
+int32_t roundUp(int32_t m, int32_t n)
+{
+    PLUGIN_ASSERT(m >= 0);
+    PLUGIN_ASSERT(n > 0);
+    // Use unsigned arithmetic to preclude overflow.
+    auto const mu = static_cast<uint32_t>(m);
+    auto const nu = static_cast<uint32_t>(n);
+    return ((mu + nu - 1U) / nu) * nu;
+}
+} // namespace
 template <typename T, int32_t THREADS_PER_CTA>
 __global__ __launch_bounds__(THREADS_PER_CTA) void in3dReluActivation(
-    T* __restrict dst, T const* __restrict src, float alpha, int32_t count)
+    T* dst, T const* src, float alpha, int32_t count)
 {
     int32_t idx = blockIdx.x * THREADS_PER_CTA + threadIdx.x;
     if (idx >= count)
@@ -39,7 +50,7 @@ __global__ __launch_bounds__(THREADS_PER_CTA) void in3dReluActivation(
     }
 
     float val = src[idx];
-    dst[idx] = (val < 0.f) ? val * alpha : val;
+    dst[idx] = (val < 0.F) ? val * alpha : val;
 }
 
 cudnnStatus_t convertTrt2cudnnDtype(nvinfer1::DataType trt_dtype, cudnnDataType_t* cudnn_dtype)
@@ -258,11 +269,11 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             switch (type)
             {
             case nvinfer1::DataType::kFLOAT:
-                in3dReluActivation<float, kBLOCK_SZ><<<(count + kBLOCK_SZ - 1) / kBLOCK_SZ, kBLOCK_SZ, 0, stream>>>(
+                in3dReluActivation<float, kBLOCK_SZ><<<roundUp(count, kBLOCK_SZ), kBLOCK_SZ, 0, stream>>>(
                     static_cast<float*>(inOut), static_cast<float*>(inOut), mAlpha, count);
                 break;
             case nvinfer1::DataType::kHALF:
-                in3dReluActivation<__half, kBLOCK_SZ><<<(count + kBLOCK_SZ - 1) / kBLOCK_SZ, kBLOCK_SZ, 0, stream>>>(
+                in3dReluActivation<__half, kBLOCK_SZ><<<roundUp(count, kBLOCK_SZ), kBLOCK_SZ, 0, stream>>>(
                     static_cast<__half*>(inOut), static_cast<__half*>(inOut), mAlpha, count);
                 break;
             default: PLUGIN_ASSERT(0);
