@@ -41,8 +41,14 @@ fi
 SONAME=$(readelf -d "${IN_LIBFILE}" | grep '(SONAME)' | cut -d [ -f 2 | cut -d ] -f 1)
 
 # make stub library
-nm -D "${IN_LIBFILE}" | \
-    awk '{if ($2 == "T") { print "void",$3,"() {}" }}' | \
-    "${CC}" -x c -O0 -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" -
+if [ -z "${CC_ARGS}" ] ; then
+    nm -D "${IN_LIBFILE}" ${EXTRA_NM_FLAG} | \
+        awk '{if ($2 == "T") { print "void",$3,"() {}" }}' | \
+        "${CC}" -c -x c -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" -
+else
+    nm -D "${IN_LIBFILE}" ${EXTRA_NM_FLAG} | \
+        awk '{if ($2 == "T") { print "void",$3,"() {}" }}' | \
+        "${CC}" -c -x c -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" "${CC_ARGS}" -
+fi
 
 exit $?

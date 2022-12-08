@@ -57,6 +57,7 @@ void throwCudaError(const char* file, const char* function, int line, int status
 {
     CudaError error(file, function, line, status, msg);
     error.log(gLogError);
+    // NOLINTNEXTLINE(misc-throw-by-value-catch-by-reference)
     throw error;
 }
 
@@ -82,6 +83,7 @@ void throwCublasError(const char* file, const char* function, int line, int stat
     }
     CublasError error(file, function, line, status, msg);
     error.log(gLogError);
+    // NOLINTNEXTLINE(misc-throw-by-value-catch-by-reference)
     throw error;
 }
 
@@ -90,6 +92,7 @@ void throwCudnnError(const char* file, const char* function, int line, int statu
 {
     CudnnError error(file, function, line, status, msg);
     error.log(gLogError);
+    // NOLINTNEXTLINE(misc-throw-by-value-catch-by-reference)
     throw error;
 }
 
@@ -98,6 +101,7 @@ void throwPluginError(char const* file, char const* function, int line, int stat
 {
     PluginError error(file, function, line, status, msg);
     reportValidationFailure(msg, file, line);
+    // NOLINTNEXTLINE(misc-throw-by-value-catch-by-reference)
     throw error;
 }
 

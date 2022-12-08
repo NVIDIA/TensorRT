@@ -22,10 +22,10 @@
 
 #define checkCudaErrors(status)                                                                                        \
     {                                                                                                                  \
-        if (status != 0)                                                                                               \
+        if ((status) != 0)                                                                                             \
         {                                                                                                              \
             std::cout << "Cuda failure: " << cudaGetErrorString(status) << " at line " << __LINE__ << " in file "      \
-                      << __FILE__ << " error status: " << status << std::endl;                                         \
+                      << __FILE__ << " error status: " << (status) << std::endl;                                       \
             abort();                                                                                                   \
         }                                                                                                              \
     }
