@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-#pragma once
-#ifndef _COMMON_DATATYPE_FLASH
-#define _COMMON_DATATYPE_FLASH
+#ifndef TRT_COMMON_DATATYPE_FLASH_H
+#define TRT_COMMON_DATATYPE_FLASH_H
 
 namespace nvinfer1
 {
 namespace plugin
 {
 
-enum Data_type
+// Do not modify this, it is integrated from src/fused_multihead_attention_utils.h in fmha_v2.
+enum MHCADataType
 {
     DATA_TYPE_BOOL,
     DATA_TYPE_E8M10,
@@ -39,4 +39,4 @@ enum Data_type
 } // namespace plugin
 } // namespace nvinfer1
 
-#endif
+#endif // TRT_COMMON_DATATYPE_FLASH_H

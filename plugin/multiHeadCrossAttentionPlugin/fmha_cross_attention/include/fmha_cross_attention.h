@@ -15,33 +15,59 @@
  * limitations under the License.
  */
 
-#pragma once
-#ifndef _FMHA_CROSS_ATTENTION
-#define _FMHA_CROSS_ATTENTION
+#ifndef TRT_FMHA_CROSS_ATTENTION_H
+#define TRT_FMHA_CROSS_ATTENTION_H
 
 #include "common/bertCommon.h"
 #include "common/plugin.h"
 #include "commonDatatype.h"
 #include "sharedCubinLoader.h"
 
-namespace 
+namespace
 {
-    static inline size_t get_size_in_bytes(size_t n, nvinfer1::plugin::Data_type dtype)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Do not modify this, it is integrated from src/fused_multihead_attention_utils.h in fmha_v2.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+static void set_alpha(uint32_t& alpha, float norm, nvinfer1::plugin::MHCADataType dtype)
+{
+    if (dtype == nvinfer1::plugin::DATA_TYPE_FP16)
     {
-        switch (dtype)
-        {
-        case nvinfer1::plugin::DATA_TYPE_E8M10: return n * 4;
-        case nvinfer1::plugin::DATA_TYPE_FP32: return n * 4;
-        case nvinfer1::plugin::DATA_TYPE_FP16: return n * 2;
-        case nvinfer1::plugin::DATA_TYPE_INT32: return n * 4;
-        case nvinfer1::plugin::DATA_TYPE_INT8: return n;
-        case nvinfer1::plugin::DATA_TYPE_INT4: return n / 2U;
-        case nvinfer1::plugin::DATA_TYPE_BOOL: return n / 8U;
-        case nvinfer1::plugin::DATA_TYPE_E8M7: return n * 2;
-        default: PLUGIN_ASSERT(false); return 0;
-        }
+        half x = __float2half_rn(norm);
+        uint16_t h = reinterpret_cast<uint16_t const&>(x);
+        ushort2 h2 = {h, h};
+        alpha = reinterpret_cast<uint32_t const&>(h2);
+    }
+    else if (dtype == nvinfer1::plugin::DATA_TYPE_FP32)
+    {
+        alpha = reinterpret_cast<uint32_t const&>(norm);
+    }
+    else if (dtype == nvinfer1::plugin::DATA_TYPE_INT32)
+    {
+        int32_t inorm = static_cast<int32_t>(norm);
+        alpha = reinterpret_cast<uint32_t const&>(inorm);
+    }
+    else
+    {
+        assert(false);
     }
 }
+
+static int64_t get_size_in_bytes(size_t n, nvinfer1::plugin::MHCADataType dtype)
+{
+    switch (dtype)
+    {
+    case nvinfer1::plugin::DATA_TYPE_E8M10: return n * 4;
+    case nvinfer1::plugin::DATA_TYPE_FP32: return n * 4;
+    case nvinfer1::plugin::DATA_TYPE_FP16: return n * 2;
+    case nvinfer1::plugin::DATA_TYPE_INT32: return n * 4;
+    case nvinfer1::plugin::DATA_TYPE_INT8: return n;
+    case nvinfer1::plugin::DATA_TYPE_INT4: return n / 2U;
+    case nvinfer1::plugin::DATA_TYPE_BOOL: return n / 8U;
+    case nvinfer1::plugin::DATA_TYPE_E8M7: return n * 2;
+    default: PLUGIN_ASSERT(false); return 0;
+    }
+}
+} // namespace
 
 namespace nvinfer1
 {
@@ -49,7 +75,8 @@ namespace plugin
 {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
+// Do not modify this, it is integrated from src/fused_multihead_attention_demo_bert_params.h in fmha_v2.
+////////////////////////////////////////////////////////////////////////////////////////////////////
 struct Gmem_params
 {
     // The matrix.
@@ -166,7 +193,8 @@ struct Fused_multihead_attention_params_mhca
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
+// Do not modify this, it is integrated from generated/fmha_cubin.h in fmha_v2.
+////////////////////////////////////////////////////////////////////////////////////////////////////
 extern unsigned char cubin_fmha_mhca_fp16_128_64_sm75_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_mhca_fp16_128_64_sm86_cu_cubin[];
@@ -202,16 +230,16 @@ extern uint32_t cubin_fmha_mhca_fp16_128_256_sm89_cu_cubin_len;
 #endif
 static const struct FusedMultiHeadCrossAttentionKernelMetaInfoV2
 {
-    Data_type mDataType;
-    uint32_t mS;
-    uint32_t mD;
-    uint32_t mSM;
+    MHCADataType mDataType;
+    int32_t mS;
+    int32_t mD;
+    int32_t mSM;
     unsigned char const* mCubin;
     uint32_t mCubinSize;
     char const* mFuncName;
-    uint32_t mSharedMemBytes;
-    uint32_t mThreadsPerCTA;
-    uint32_t mUnrollStep;
+    int32_t mSharedMemBytes;
+    int32_t mThreadsPerCTA;
+    int32_t mUnrollStep;
     bool mInterleaved;
 } sMhaKernelMetaInfos[] = {
 #if defined(ENABLE_SM75) 
@@ -248,18 +276,97 @@ static const struct FusedMultiHeadCrossAttentionKernelMetaInfoV2
 #endif // defined(ENABLE_SM89)
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Do not modify this, it is integrated from function set_params, file src/fused_multihead_attention.cpp in fmha_v2.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+static Fused_multihead_attention_params_mhca getMHCAParams(
+    // types
+    MHCADataType data_type, MHCADataType acc_type,
+    // sizes
+    int32_t b, int32_t s_q, int32_t s_kv, int32_t h, int32_t d, int32_t total,
+    // device pointers
+    void const* q_packed_d, void const* kv_packed_d, void* cu_seqlens_q_d, void* cu_seqlens_kv_d, void* o_packed_d,
+    void* p_d, void* s_d,
+    // scale factors
+    float scale_bmm1, float scale_softmax, float scale_bmm2,
+    // flags
+    bool interleaved, bool ignore_b1opt, bool force_unroll, bool use_int8_scale_max, bool use_tma)
+{
+    Fused_multihead_attention_params_mhca params{};
+
+    int32_t const d_padded = std::pow(2, std::ceil(std::log(d) / std::log(2)));
+
+    // Set the pointers.
+    params.o_ptr = o_packed_d;
+    params.o_stride_in_bytes = get_size_in_bytes(h * d, data_type);
+
+#if defined(STORE_P)
+    params.p_ptr = p_d;
+    params.p_stride_in_bytes = get_size_in_bytes(b * h * s_kv, acc_type);
+#endif // defined(STORE_P)
+
+#if defined(STORE_S)
+    params.s_ptr = s_d;
+    params.s_stride_in_bytes = get_size_in_bytes(b * h * s_kv, data_type);
+#endif // defined(STORE_S)
+
+    // Set the dimensions.
+    params.b = b;
+    params.h = h;
+    params.s_q = s_q;
+    params.s = s_kv;
+    params.d = d;
+    params.d_padded = d_padded;
+
+    // Set the different scale values.
+    MHCADataType scale_type1 = data_type == DATA_TYPE_FP16 ? acc_type : DATA_TYPE_FP32;
+    MHCADataType scale_type2 = data_type == DATA_TYPE_FP16 ? DATA_TYPE_FP16 : DATA_TYPE_FP32;
+
+    set_alpha(params.scale_bmm1, scale_bmm1, scale_type1);
+    set_alpha(params.scale_softmax, scale_softmax, scale_type1);
+    set_alpha(params.scale_bmm2, scale_bmm2, scale_type2);
+
+    // Set the pointers.
+    params.gmem_q_params.ptr = const_cast<void*>(q_packed_d);
+    params.gmem_q_params.stride_in_bytes = get_size_in_bytes(h * d, data_type);
+    params.gmem_q_params.h = h;
+    params.gmem_q_params.d = d;
+    params.gmem_q_params.cu_seqlens = static_cast<int32_t*>(cu_seqlens_q_d);
+
+    params.gmem_kv_params.ptr = const_cast<void*>(kv_packed_d);
+    params.gmem_kv_params.stride_in_bytes = get_size_in_bytes(h * 2 * d, data_type);
+    params.gmem_kv_params.h = h;
+    params.gmem_kv_params.d = d;
+    params.gmem_kv_params.cu_seqlens = static_cast<int32_t*>(cu_seqlens_kv_d);
+
+    // Set flags
+    params.interleaved = interleaved;
+    params.ignore_b1opt = ignore_b1opt;
+    params.force_unroll = force_unroll;
+    params.use_int8_scale_max = use_int8_scale_max;
+
+    // Do we enable the trick to replace I2F with FP math in the 2nd GEMM?
+    if (data_type == DATA_TYPE_INT8)
+    {
+        params.enable_i2f_trick
+            = -double(1 << 22) * double(scale_bmm2) <= -128.F && double(1 << 22) * double(scale_bmm2) >= 127.F;
+    }
+    return params;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 class FusedMultiHeadCrossAttentionKernel
     : public TSharedCubinKernel<FusedMultiHeadCrossAttentionKernelMetaInfoV2, Fused_multihead_attention_params_mhca>
 {
 public:
     FusedMultiHeadCrossAttentionKernel(FusedMultiHeadCrossAttentionKernelMetaInfoV2 const* pMetaStart,
-        uint32_t nMetaCount, Data_type type, uint32_t sm)
+        int32_t nMetaCount, MHCADataType type, int32_t sm)
         : TSharedCubinKernel<FusedMultiHeadCrossAttentionKernelMetaInfoV2, Fused_multihead_attention_params_mhca>(
             pMetaStart, nMetaCount, type, sm)
     {
     }
 
-    uint64_t hashID(uint32_t s, uint32_t headsize, bool interleaved, bool unroll) const
+    uint64_t hashID(int32_t s, int32_t headsize, bool interleaved, bool unroll) const
     {
         // we only have 30 bits room for head size
         PLUGIN_ASSERT(headsize <= 0x3FFFFFFF);
@@ -279,7 +386,7 @@ public:
 
 using FusedMHACrossKernelFactory = TSharedCubinKernelFactory<FusedMultiHeadCrossAttentionKernel>;
 
-inline FusedMultiHeadCrossAttentionKernel const* getFMHCACubinKernels(Data_type type, uint32_t sm)
+inline FusedMultiHeadCrossAttentionKernel const* getFMHCACubinKernels(MHCADataType type, int32_t sm)
 {
     return FusedMHACrossKernelFactory::Get().getCubinKernels(
         sMhaKernelMetaInfos, sizeof(sMhaKernelMetaInfos) / sizeof(sMhaKernelMetaInfos[0]), type, sm);
@@ -288,4 +395,4 @@ inline FusedMultiHeadCrossAttentionKernel const* getFMHCACubinKernels(Data_type 
 } // namespace plugin
 } // namespace nvinfer1
 
-#endif
+#endif // TRT_FMHA_CROSS_ATTENTION_H
