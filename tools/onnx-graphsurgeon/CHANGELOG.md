@@ -2,6 +2,11 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.3.26 (2022-12-09)
+### Fixed
+- Fixed a bug where onnx node domain is lost, which is intended to be kept for some custom or user-defined node.
+
+
 ## v0.3.25 (2022-10-14)
 ### Added
 - Added a `should_exclude_node` parameter to `fold_constants` to allow for excluding nodes
@@ -10,6 +15,7 @@ Dates are in YYYY-MM-DD format.
 ### Fixed
 - Fixed a bug where `fold_constants` would fold quantization nodes, which are intended to be executed
     at runtime even though they are computable beforehand.
+
 
 ## v0.3.24 (2022-08-31)
 ### Fixed

@@ -62,7 +62,8 @@ class OnnxExporter(BaseExporter):
     def export_node(node: Node, do_type_check: bool) -> onnx.NodeProto:
         # Cannot pass in attrs directly as make_node will change the order
         onnx_node = onnx.helper.make_node(
-            node.op, inputs=[t.name for t in node.inputs], outputs=[t.name for t in node.outputs], name=node.name
+            node.op, inputs=[t.name for t in node.inputs], outputs=[t.name for t in node.outputs],
+            name=node.name, domain=node.domain
         )
         # Convert Tensors and Graphs to TensorProtos and GraphProtos respectively
         for key, val in node.attrs.items():
