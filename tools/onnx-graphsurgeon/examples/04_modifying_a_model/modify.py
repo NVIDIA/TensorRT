@@ -43,6 +43,16 @@ graph.outputs = [identity_out]
 # Therefore, you should only need to sort the graph when you have added new nodes out-of-order.
 # In this case, the identity node is already in the correct spot (it is the last node,
 # and was appended to the end of the list), but to be on the safer side, we can sort anyway.
+
+# Notice that the original inputs to the whole graph are 'x0' and 'x1'.
+# According to the 2nd picture in Readme.md in folder 04_modifying_a_model,
+# input 'x0' is no longer needed and therefore should be removed.
+# It turned out that 'graph.cleanup().toposort()' won't remove 'x0' from
+# the graph, and therefore one should still pass in both 'x0' and 'x1'
+# when running inference on the modified graph using 'onnxruntime'
+# the code below fix this problem for this case.
+graph.inputs = [inp for inp in graph.inputs if inp.name != 'x0']
+
 graph.cleanup().toposort()
 
 onnx.save(gs.export_onnx(graph), "modified.onnx")
