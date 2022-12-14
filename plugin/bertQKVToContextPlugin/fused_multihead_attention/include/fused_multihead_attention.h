@@ -395,7 +395,34 @@ public:
     virtual void run(TKernelParam& params, cudaStream_t ss) const
     {
         const auto findIter = mFunctions.find(hashID(params.s, params.d));
-        PLUGIN_ASSERT(findIter != mFunctions.end());
+        std::stringstream errMsg;
+        errMsg << "Could not find kernel for:\n"
+               << "\t s: " << params.s << "\n"
+               << "\t d: " << params.d << "\n"
+               << "Was the plugin compiled on a compatible CUDA and SM version?\n"
+               << "\t Compiled on CUDA " << CUDA_VERSION << "\n"
+               << "\t Current SM version: " << mSM << "\n"
+               << "\t SM versions enabled during compilation: "
+#if defined(ENABLE_SM72)
+               << "72 "
+#endif
+#if defined(ENABLE_SM75)
+               << "75 "
+#endif
+#if defined(ENABLE_SM80)
+               << "80 "
+#endif
+#if defined(ENABLE_SM86)
+               << "86 "
+#endif
+#if defined(ENABLE_SM87)
+               << "87 "
+#endif
+#if defined(ENABLE_SM90)
+               << "90 "
+#endif
+               << "\n";
+        PLUGIN_VALIDATE(findIter != mFunctions.end(), errMsg.str().c_str());
 
         const auto& kernelMeta = mKernelMeta[findIter->second.mMetaInfoIndex];
         const CUfunction func = findIter->second.mDeviceFunction;
