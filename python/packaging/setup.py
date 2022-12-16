@@ -50,18 +50,16 @@ def get_requirements():
 
 
 name = "tensorrt"
-if is_standalone():
-    name = "nvidia-{:}".format(name)
-    # Only standalone wheels need to be disambiguated. Otherwise, the entire tar/deb/rpm is DLA/non-DLA.
-    if is_dla():
-        name += "-dla"
+# Only standalone wheels need to be disambiguated. Otherwise, the entire tar/deb/rpm is DLA/non-DLA.
+if is_standalone() and is_dla():
+    name += "-dla"
 
 setup(
     name=name,
     version="##TENSORRT_VERSION##",
     description="A high performance deep learning inference library",
     long_description="A high performance deep learning inference library",
-    author="NVIDIA",
+    author="NVIDIA Corporation",
     license="Proprietary",
     classifiers=[
         "License :: Other/Proprietary License",
@@ -74,4 +72,7 @@ setup(
     package_data={"tensorrt": ["*.so*", "*.pyd", "*.pdb"]},
     include_package_data=True,
     zip_safe=True,
+    keywords="nvidia tensorrt deeplearning inference",
+    url="https://developer.nvidia.com/tensorrt",
+    download_url="https://github.com/nvidia/tensorrt/tags",
 )

@@ -130,7 +130,7 @@ class BaseCheckerSubtool(Tool):
 
             self.setup(args, network)
 
-            def make_iter_art():
+            def make_iter_art(_):
                 self.process_network(network)
 
                 try:
@@ -148,8 +148,8 @@ class BaseCheckerSubtool(Tool):
                             engine, self.arg_groups[IterativeDebugArgs].iter_artifact_path
                         )
 
-            def advance(index, success):
-                if self.step(success):
+            def advance(context):
+                if self.step(context.success):
                     self.arg_groups[IterativeDebugArgs].stop_iteration()
 
             self.arg_groups[IterativeDebugArgs].iterate(

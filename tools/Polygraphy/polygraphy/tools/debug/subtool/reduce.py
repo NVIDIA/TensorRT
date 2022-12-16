@@ -384,7 +384,7 @@ class Reduce(Tool):
         def bisect_io(graph, marker, attr, filter_const=True, debug_replay=None):
             G_LOGGER.start(f"Reducing model {attr}")
 
-            def make_iter_art():
+            def make_iter_art(context):
                 iter_graph = graph.copy()  # This is a very light-weight copy of the entire graph.
 
                 with G_LOGGER.indent():
@@ -395,11 +395,10 @@ class Reduce(Tool):
                         gs.export_onnx(fix_graph(iter_graph)),
                         self.arg_groups[IterativeDebugArgs].iter_artifact_path,
                     )
+                context.state["num_nodes"] = len(iter_graph.nodes)
 
-                return len(iter_graph.nodes)
-
-            def advance(index, success, num_nodes):
-                marker.step(success, num_nodes)
+            def advance(context):
+                marker.step(context.success, context.state["num_nodes"])
                 if marker.stop():
                     self.arg_groups[IterativeDebugArgs].stop_iteration()
 

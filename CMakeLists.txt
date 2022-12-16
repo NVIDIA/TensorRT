@@ -100,6 +100,7 @@ message(STATUS "cuDNN version set to ${CUDNN_VERSION}")
 set_ifndef(PROTOBUF_VERSION ${DEFAULT_PROTOBUF_VERSION})
 message(STATUS "Protobuf version set to ${PROTOBUF_VERSION}")
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 if (BUILD_PLUGINS OR BUILD_PARSERS)
     include(third_party/protobuf.cmake)
@@ -132,7 +133,7 @@ endif()
 find_library_create_target(nvinfer nvinfer SHARED ${TRT_LIB_DIR})
 find_library_create_target(nvuffparser nvparsers SHARED ${TRT_LIB_DIR})
 
-find_library(CUDART_LIB cudart HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
+find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
 
 if (NOT MSVC)
     find_library(RT_LIB rt)

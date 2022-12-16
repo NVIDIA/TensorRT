@@ -25,6 +25,8 @@ from transformers import (
     BartForConditionalGeneration,
     BartTokenizer,
     BartConfig,
+    MBartForConditionalGeneration,
+    MBart50Tokenizer,
 )
 
 # torch
@@ -73,9 +75,9 @@ class BARTHuggingFace(FrameworkCommand):
         
         trt_BART_config = self.config
         metadata_serialized = trt_BART_config.get_metadata_string(metadata)
-        workspace_dir = workspace.get_path()
-
-        pytorch_model_dir = os.path.join(workspace_dir, metadata_serialized)
+        workspace_dir, encoder_onnx_root, decoder_onnx_root = workspace.set_model_path(metadata_serialized, is_encoder_decoder = True)
+        pytorch_model_dir = os.path.join(workspace_dir, "pytorch_model")
+        
         # We keep track of the generated torch location for cleanup later
         self.torch_BART_dir = pytorch_model_dir
 
@@ -85,10 +87,15 @@ class BARTHuggingFace(FrameworkCommand):
             num_layers=BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
         ) # Note
         if not os.path.exists(pytorch_model_dir):
-            # Generate the pre-trained weights
-            model = BartForConditionalGeneration(tfm_config).from_pretrained(
-                metadata.variant
-            )
+            # mbart variant cannot be recognized by HF yet
+            if "mbart" not in metadata.variant:
+                # Generate the pre-trained weights
+                model = BartForConditionalGeneration(tfm_config).from_pretrained(
+                    metadata.variant
+                )
+            else:
+                model = MBartForConditionalGeneration.from_pretrained(metadata.variant)
+
             model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
             model.save_pretrained(pytorch_model_dir)
             print("Pytorch Model saved to {}".format(pytorch_model_dir))
@@ -96,18 +103,18 @@ class BARTHuggingFace(FrameworkCommand):
             print(
                 "Frameworks file already exists, skipping generation and loading from file instead."
             )
-            model = BartForConditionalGeneration(tfm_config).from_pretrained(
-                pytorch_model_dir
-            )
-            model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
+            if "mbart" not in metadata.variant:
+                model = BartForConditionalGeneration(tfm_config).from_pretrained(
+                    pytorch_model_dir
+                )
+            else:
+                model = MBartForConditionalGeneration.from_pretrained(pytorch_model_dir)
 
-        # These ONNX models can be converted using special encoder and decoder classes.
-        root_onnx_model_name = "{}.onnx".format(metadata_serialized)
-        root_onnx_model_fpath = os.path.join(
-            os.getcwd(), workspace_dir, root_onnx_model_name
-        )
-        encoder_onnx_model_fpath = root_onnx_model_fpath + "-encoder.onnx"
-        decoder_onnx_model_fpath = root_onnx_model_fpath + "-decoder-with-lm-head.onnx"
+            model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
+        
+        # These ONNX models can be converted using special encoder and decoder classes.        
+        encoder_onnx_model_fpath = os.path.join(encoder_onnx_root, metadata_serialized + "-encoder.onnx")
+        decoder_onnx_model_fpath = os.path.join(decoder_onnx_root, metadata_serialized + "-decoder-with-lm-head.onnx")
 
         BART_encoder = BARTEncoderTorchFile(model, metadata)
         BART_decoder = BARTDecoderTorchFile(model, metadata)
@@ -155,15 +162,6 @@ class BARTHuggingFace(FrameworkCommand):
             if self.onnx_BART_encoder is not None:
                 self.onnx_BART_encoder.cleanup()
 
-            # Remove any onnx external files by removing integer named values and weight files
-            workspace_path = workspace.get_path()
-            for d in os.listdir(workspace_path):
-                fpath = os.path.join(workspace_path, d)
-                if os.path.isfile(fpath) and os.path.splitext(d)[1] == ".weight":
-                    os.remove(fpath)
-                elif d.isnumeric():
-                    os.remove(fpath)
-
         if not keep_pytorch_model:
             # Using rmtree can be dangerous, have user confirm before deleting.
             confirm_folder_delete(
@@ -188,7 +186,10 @@ class BARTHuggingFace(FrameworkCommand):
             num_layers=BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
         )
         BART_model = BartForConditionalGeneration(config).from_pretrained(BART_torch_fpath)
-        
+        if "mbart" in metadata.variant:
+            BART_model = MBartForConditionalGeneration(config).from_pretrained(BART_torch_fpath)
+            tokenizer = MBart50Tokenizer.from_pretrained(metadata.variant, src_lang="en_XX")
+
         BART_torch_encoder = BARTEncoderTorchFile.TorchModule(BART_model.get_encoder())
         BART_torch_decoder = BARTDecoderTorchFile.TorchModule(
             BART_model.get_decoder(), BART_model.lm_head, BART_model.final_logits_bias, BART_model.config
@@ -285,7 +286,7 @@ class BARTHuggingFace(FrameworkCommand):
 
         return NetworkResult(
             input=inference_input,
-            output_tensor=encoder_last_hidden_state,
+            output_tensor=decoder_output,
             semantic_output=semantic_outputs,
             median_runtime=runtime,
             models=network_fpaths,

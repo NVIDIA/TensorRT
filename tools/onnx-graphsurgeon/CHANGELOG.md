@@ -4,7 +4,7 @@ Dates are in YYYY-MM-DD format.
 
 ## v0.3.26 (2022-12-09)
 ### Fixed
-- Fixed a bug where onnx node domain is lost, which is intended to be kept for some custom or user-defined node.
+- Fixed a bug where node domain was not preserved.
 
 
 ## v0.3.25 (2022-10-14)

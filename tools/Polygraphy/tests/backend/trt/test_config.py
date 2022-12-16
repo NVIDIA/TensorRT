@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util
-from polygraphy.backend.trt import Calibrator, CreateConfig, Profile, network_from_onnx_bytes
-from polygraphy.common.struct import MetadataTuple
+from polygraphy.backend.trt import Calibrator, CreateConfig, Profile, network_from_onnx_bytes, postprocess_config
+from polygraphy.common.struct import MetadataTuple, BoundedShape
 from polygraphy.comparator import DataLoader
 from tests.helper import has_dla
 from tests.models.meta import ONNX_MODELS
@@ -33,6 +33,8 @@ class TestCreateConfig:
                 assert not config.get_flag(trt.BuilderFlag.SPARSE_WEIGHTS)
             assert not config.get_flag(trt.BuilderFlag.FP16)
             assert not config.get_flag(trt.BuilderFlag.INT8)
+            if mod.version(trt.__version__) >= mod.version("8.6"):
+                assert not config.get_flag(trt.BuilderFlag.FP8)
             assert config.num_optimization_profiles == 1
             assert config.int8_calibrator is None
             with contextlib.suppress(AttributeError):
@@ -127,6 +129,14 @@ class TestCreateConfig:
         loader = CreateConfig(fp16=flag)
         with loader(builder, network) as config:
             assert config.get_flag(trt.BuilderFlag.FP16) == flag
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6")
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_fp8(self, identity_builder_network, flag):
+        builder, network = identity_builder_network
+        loader = CreateConfig(fp8=flag)
+        with loader(builder, network) as config:
+            assert config.get_flag(trt.BuilderFlag.FP8) == flag
 
     @pytest.mark.parametrize("flag", [True, False])
     def test_int8(self, identity_builder_network, flag):
@@ -231,7 +241,7 @@ class TestCreateConfig:
             assert config.int8_calibrator
             assert "x" in calibrator.data_loader.input_metadata
             assert calibrator.data_loader.input_metadata["x"] == MetadataTuple(
-                shape=(1, 1, 2, 2), dtype=np.dtype(np.float32)
+                shape=BoundedShape((1, 1, 2, 2)), dtype=np.dtype(np.float32)
             )
 
     def test_multiple_profiles(self, identity_builder_network):
@@ -313,13 +323,75 @@ class TestCreateConfig:
                 for pool_type, pool_size in pool_limits.items():
                     assert config.get_memory_pool_limit(pool_type) == pool_size
 
+    if mod.version(trt.__version__) >= mod.version("8.5"):
+
+        @pytest.mark.parametrize(
+            "preview_features",
+            [
+                [],
+                [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
+                [
+                    trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805,
+                    trt.PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805,
+                ],
+            ],
+        )
+        def test_preview_features(self, identity_builder_network, preview_features):
+            builder, network = identity_builder_network
+            loader = CreateConfig(preview_features=preview_features)
+            with loader(builder, network) as config:
+                # Check that only the enabled preview features are on.
+                for pf in trt.PreviewFeature.__members__.values():
+                    assert config.get_preview_feature(pf) == (pf in preview_features)
+
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.5"), reason="Unsupported for TRT versions prior to 8.5"
+        mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
     )
-    def test_preview_features(self, identity_builder_network):
+    @pytest.mark.parametrize("level", range(5))
+    def test_builder_optimization_level(self, identity_builder_network, level):
         builder, network = identity_builder_network
-        preview_features = [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
-        loader = CreateConfig(preview_features=preview_features)
+        loader = CreateConfig(builder_optimization_level=level)
         with loader(builder, network) as config:
-            for pf in preview_features:
-                assert config.get_preview_feature(pf)
+            assert config.builder_optimization_level == level
+
+    if mod.version(trt.__version__) >= mod.version("8.6"):
+
+        @pytest.mark.parametrize(
+            "level",
+            [
+                trt.HardwareCompatibilityLevel.NONE,
+                trt.HardwareCompatibilityLevel.AMPERE_PLUS,
+            ],
+        )
+        def test_hardware_compatibility_level(self, identity_builder_network, level):
+            builder, network = identity_builder_network
+            loader = CreateConfig(hardware_compatibility_level=level)
+            with loader(builder, network) as config:
+                assert config.hardware_compatibility_level == level
+
+
+class TestPostprocessConfig:
+    def test_with_config(self, identity_builder_network):
+        builder, network = identity_builder_network
+        config = CreateConfig()(builder, network)
+        assert not config.get_flag(trt.BuilderFlag.INT8)
+
+        config = postprocess_config(
+            config,
+            func=lambda builder, network, config: config.set_flag(trt.BuilderFlag.INT8),
+            builder=builder,
+            network=network,
+        )
+        assert config.get_flag(trt.BuilderFlag.INT8)
+
+    def test_with_config_callable(self, identity_builder_network):
+        builder, network = identity_builder_network
+        config = CreateConfig()
+
+        config = postprocess_config(
+            config,
+            func=lambda builder, network, config: config.set_flag(trt.BuilderFlag.INT8),
+            builder=builder,
+            network=network,
+        )
+        assert config.get_flag(trt.BuilderFlag.INT8)

@@ -140,21 +140,23 @@ class TrtLoadNetworkArgs(BaseArgs):
 
         self.group.add_argument(
             "--trt-network-func-name",
-            help="When using a trt-network-script instead of other model types, this specifies the name "
+            help="[DEPRECATED - function name can be specified alongside the script like so: `my_custom_script.py:my_func`] "
+            "When using a trt-network-script instead of other model types, this specifies the name "
             "of the function that loads the network. Defaults to `load_network`.",
-            default="load_network",
+            default=None,
         )
 
         self.group.add_argument(
-            "--trt-network-postprocess-script","--trt-npps",
+            "--trt-network-postprocess-script",
+            "--trt-npps",
             help="[EXPERIMENTAL] Specify a post-processing script to run on the parsed TensorRT network. The script file may "
-                 "optionally be suffixed with the name of the callable to be invoked.  For example: "
-                 "`--trt-npps process.py:do_something`. If no callable is specified, then by default "
-                 "Polygraphy uses the callable name `postprocess`. "
-                 "The callable is expected to take a named argument `network` of type `trt.INetworkDefinition`. "
-                 "Multiple scripts may be specified, in which case they are executed in the order given.",
+            "optionally be suffixed with the name of the callable to be invoked.  For example: "
+            "`--trt-npps process.py:do_something`. If no callable is specified, then by default "
+            "Polygraphy uses the callable name `postprocess`. "
+            "The callable is expected to take a named argument `network` of type `trt.INetworkDefinition`. "
+            "Multiple scripts may be specified, in which case they are executed in the order given.",
             nargs="+",
-            default=None
+            default=None,
         )
 
     def parse_impl(self, args):
@@ -168,13 +170,16 @@ class TrtLoadNetworkArgs(BaseArgs):
             layer_precisions (Dict[str, str]): Layer names mapped to their desired compute precision, in string form.
             tensor_datatypes (Dict[str, str]): Tensor names mapped to their desired data types, in string form.
             tensor_formats (Dict[str, List[str]]): Tensor names mapped to their desired formats, in string form.
+            postprocess_scripts (List[Tuple[str, str]]):
+                    A list of tuples specifying a path to a network postprocessing script and the name of the postprocessing function.
         """
         self.outputs = args_util.get_outputs(args, "trt_outputs")
 
         self.exclude_outputs = args_util.get(args, "trt_exclude_outputs")
+
         self.trt_network_func_name = args_util.get(args, "trt_network_func_name")
 
-        layer_precisions = args_util.parse_dict_with_default(
+        layer_precisions = args_util.parse_arglist_to_dict(
             args_util.get(args, "layer_precisions"), allow_empty_key=False
         )
         self.layer_precisions = None
@@ -183,16 +188,14 @@ class TrtLoadNetworkArgs(BaseArgs):
                 name: inline(safe("trt.{}", inline_identifier(value))) for name, value in layer_precisions.items()
             }
 
-        tensor_datatypes = args_util.parse_dict_with_default(
-            args_util.get(args, "tensor_dtypes"), allow_empty_key=False
-        )
+        tensor_datatypes = args_util.parse_arglist_to_dict(args_util.get(args, "tensor_dtypes"), allow_empty_key=False)
         self.tensor_datatypes = None
         if tensor_datatypes is not None:
             self.tensor_datatypes = {
                 name: inline(safe("trt.{}", inline_identifier(value))) for name, value in tensor_datatypes.items()
             }
 
-        tensor_formats = args_util.parse_dict_with_default(args_util.get(args, "tensor_formats"), allow_empty_key=False)
+        tensor_formats = args_util.parse_arglist_to_dict(args_util.get(args, "tensor_formats"), allow_empty_key=False)
         self.tensor_formats = None
         if tensor_formats is not None:
             self.tensor_formats = {
@@ -200,8 +203,10 @@ class TrtLoadNetworkArgs(BaseArgs):
                 for name, values in tensor_formats.items()
             }
 
-        pps = args_util.parse_tuple_list_with_default(args_util.get(args, "trt_network_postprocess_script"), treat_missing_sep_as_val=False)
-        if not pps:
+        pps = args_util.parse_arglist_to_tuple_list(
+            args_util.get(args, "trt_network_postprocess_script"), treat_missing_sep_as_val=False
+        )
+        if pps is None:
             pps = []
 
         self.postprocess_scripts = []
@@ -213,6 +218,11 @@ class TrtLoadNetworkArgs(BaseArgs):
             self.postprocess_scripts.append((script_path, func))
 
     def add_to_script_impl(self, script):
+        network_func_name = self.arg_groups[ModelArgs].extra_model_info
+        if self.trt_network_func_name is not None:
+            mod.warn_deprecated("--trt-network-func-name", "the model argument", "0.50.0", always_show_warning=True)
+            network_func_name = self.trt_network_func_name
+
         model_file = self.arg_groups[ModelArgs].path
         model_type = self.arg_groups[ModelArgs].model_type
         outputs = args_util.get_outputs_for_script(script, self.outputs)
@@ -222,7 +232,11 @@ class TrtLoadNetworkArgs(BaseArgs):
 
         if model_type == "trt-network-script":
             script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
-            loader_str = make_invocable("InvokeFromScript", model_file, name=self.trt_network_func_name)
+            loader_str = make_invocable(
+                "InvokeFromScript",
+                model_file,
+                name=network_func_name,
+            )
             loader_name = script.add_loader(loader_str, "load_network")
         elif self._allow_onnx_loading:
             if self.arg_groups[OnnxLoadArgs].must_use_onnx_loader(disable_custom_outputs=True):
@@ -426,7 +440,7 @@ class TrtLoadEngineArgs(BaseArgs):
             self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, network_loader_name),
             config=config_loader_name,
             # Needed to support legacy --timing-cache argument
-            save_timing_cache=self.save_timing_cache or self.arg_groups[TrtConfigArgs].timing_cache,
+            save_timing_cache=self.save_timing_cache or self.arg_groups[TrtConfigArgs]._timing_cache,
         )
         loader_name = script.add_loader(loader_str, "build_engine")
 

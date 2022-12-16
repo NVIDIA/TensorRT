@@ -30,6 +30,7 @@ PYTEST_OPTS := -v -x --durations=5 --failed-first --new-first --script-launch-mo
 test: docs install
 	export PYTHONPATH=$(CURDIR):$${PYTHONPATH}
 	export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1
+	export CUDA_MODULE_LOADING=LAZY
     # Some tests need to be run serially - we annotate those with a `serial` marker.
 	python3 -m pytest $(TESTS_DIR) -m "serial" $(PYTEST_OPTS) && \
 		python3 -m pytest $(TESTS_DIR) -n $(NPROC) --dist=loadscope -m "not serial" $(PYTEST_OPTS)

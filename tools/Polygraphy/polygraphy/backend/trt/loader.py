@@ -187,11 +187,13 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
 
             return network_from_onnx_bytes(bytes_from_path(path))
 
+
 @mod.export(funcify=True)
 class PostprocessNetwork(BaseLoader):
     """
     [EXPERIMENTAL] Functor that applies a given post-processing function to a TensorRT ``INetworkDefinition``.
     """
+
     def __init__(self, network, func, name=None):
         """
         Applies a given post-processing function to a TensorRT ``INetworkDefinition``.
@@ -217,13 +219,13 @@ class PostprocessNetwork(BaseLoader):
         except:
             func_name = str(func)
 
-        self.func = func
+        self._func = func
         self.name = util.default(name, func_name)
 
     def call_impl(self):
         """
         Returns:
-            Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]:
+            Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]:
                     The modified network along with the builder and parser if provided.
         """
         ret, owns_network = util.invoke_if_callable(self._network)
@@ -235,11 +237,12 @@ class PostprocessNetwork(BaseLoader):
             if owns_network:
                 stack.enter_context(util.FreeOnException([builder, network, parser]))
 
-            self.func(network=network)
+            self._func(network=network)
 
             if parser is None:
                 return builder, network
             return builder, network, parser
+
 
 @mod.export(funcify=True)
 class ModifyNetworkOutputs(PostprocessNetwork):
@@ -274,8 +277,9 @@ class ModifyNetworkOutputs(PostprocessNetwork):
                     Names of tensors to exclude as outputs. This can be useful in conjunction with
                     ``outputs=constants.MARK_ALL`` to omit outputs.
         """
-        func = lambda network : ModifyNetworkOutputs._apply(network, outputs, exclude_outputs)
+        func = lambda network: ModifyNetworkOutputs._apply(network, outputs, exclude_outputs)
         super().__init__(network, func, "ModifyNetworkOutputs")
+
 
 @mod.export(funcify=True)
 class SetLayerPrecisions(PostprocessNetwork):
@@ -310,8 +314,9 @@ class SetLayerPrecisions(PostprocessNetwork):
             layer_precisions (Dict[str, trt.DataType]):
                     A mapping of layer names to their desired compute precision.
         """
-        func = lambda network : SetLayerPrecisions._apply(network, layer_precisions)
+        func = lambda network: SetLayerPrecisions._apply(network, layer_precisions)
         super().__init__(network, func, "SetLayerPrecisions")
+
 
 @mod.export(funcify=True)
 class SetTensorDatatypes(PostprocessNetwork):
@@ -345,8 +350,9 @@ class SetTensorDatatypes(PostprocessNetwork):
             tensor_datatypes (Dict[str, trt.DataType]):
                     A mapping of tensor names to their desired data types.
         """
-        func = lambda network : SetTensorDatatypes._apply(network, tensor_datatypes)
+        func = lambda network: SetTensorDatatypes._apply(network, tensor_datatypes)
         super().__init__(network, func, "SetTensorDatatypes")
+
 
 @mod.export(funcify=True)
 class SetTensorFormats(PostprocessNetwork):
@@ -385,8 +391,9 @@ class SetTensorFormats(PostprocessNetwork):
             tensor_formats (Dict[str, List[trt.TensorFormat]]):
                     A mapping of tensor names to their allowed formats.
         """
-        func = lambda network : SetTensorFormats._apply(network, tensor_formats)
+        func = lambda network: SetTensorFormats._apply(network, tensor_formats)
         super().__init__(network, func, "SetTensorFormats")
+
 
 @mod.export(funcify=True)
 class EngineBytesFromNetwork(BaseLoader):

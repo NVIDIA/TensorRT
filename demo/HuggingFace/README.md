@@ -6,11 +6,11 @@ Currently, this repository supports the following models:
 
 1. [GPT2 (text generation task)](https://huggingface.co/transformers/model_doc/gpt2.html). The sample supports following variants of GPT2:
 
-    gpt2 (117M), gpt2-large (774M)
+    gpt2 (117M), gpt2-medium (345M), gpt2-large (774M), gpt2-xl (1558M), EleutherAI/gpt-j-6B (6053M)
 
 2. [T5 (translation, premise task)](https://huggingface.co/transformers/model_doc/t5.html). The sample supports following variants of T5:
 
-    t5-small (60M), t5-base (220M), t5-large (770M)
+    t5-small (60M), t5-base (220M), t5-large (770M), t5-3b(3B), t5-11b(11B)
 
 3. [BART (summarization task)](https://huggingface.co/docs/transformers/model_doc/bart.html). The sample supports the following variants of BART:
 
@@ -18,10 +18,19 @@ Currently, this repository supports the following models:
 
 ## Setup
 
-Follow the setup steps in the TensorRT OSS repository, and then install the additional dependencies below. It is recommended to experiment inside Docker container.
+Follow the setup steps in the TensorRT OSS repository. It is recommended to experiment inside Docker container.
+For a smoother setup experience, it is recommended to use [Poetry](https://python-poetry.org/) to install requirements and execute:
 
-```python
-pip3 install -r requirements.txt
+```bash
+poetry install # one-time setup
+poetry run python run.py <args> # execute program
+```
+
+However requirements.txt are also provided.
+
+```bash
+pip3 install -r requirements.txt # install requirements
+python run.py <args> # execute program
 ```
 
 **Please note that due to end-of-life, Python <= 3.6 is no longer supported.**
@@ -55,7 +64,7 @@ pip3 install -r requirements.txt
 The `compare` action will by default compare all implemented frameworks, e.g., PyTorch frameworks & TRT (for GPT2), PyTorch framework & TRT & OnnxRT (for T5 and BART).
 
 ```python
-python3 run.py compare GPT2 --variant [gpt2 | gpt2-large] --working-dir temp
+python3 run.py compare GPT2 --variant [gpt2 | gpt2-medium | gpt2-large | gpt2-xl | EleutherAI/gpt-j-6B] --working-dir temp
 ```
 
 The above script compares the performance of PyTorch framework inference and TensorRT inference for GPT2:
@@ -72,7 +81,7 @@ Notes: `--variant` designates the pre-trained model for testing. `--working-dir`
 The `run` action will run the specific script under the model directory.
 
 ```python
-python3 run.py run GPT2 [frameworks | trt] --variant [gpt2 | gpt2-large] --working-dir temp
+python3 run.py run GPT2 [frameworks | trt] --variant [gpt2 | gpt2-medium | gpt2-large | gpt2-xl | EleutherAI/gpt-j-6B] --working-dir temp
 ```
 
 Expected output:
@@ -111,29 +120,32 @@ Notes:
 
 ## How to run with K-V cache
 
-For BART, use `--enable-kv-cache` option to get the same effect of HuggingFace's `use_cache` option. For encoder-decoder models, this option will use key & value cache in decoder for uni-directional self-attention and encoder-decoder cross-attention.
+For all the models (GPT2/BART/T5), use `--enable-kv-cache` option to get the same effect of HuggingFace's `use_cache` option. For encoder-decoder models, this option will use key & value cache in decoder for uni-directional self-attention and encoder-decoder cross-attention. KV cache could reduce the size of `input_ids` and improve runtime performance when `input_ids` is long. Current benchmarking result shows that at `input_seq_len = 1024` and `output_seq_len = 1024`, t5-large model with kv cache could achieve 3x faster than without kv cache in single NVIDIA A100 GPU. 
 
 ```python
 python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --working-dir temp --enable-kv-cache
 ```
 
-Note: current implementation of K-V cache does not exhibit performance gain over the non K-V cache TensorRT version. Please consider to skip the K-V cache experiment for now.
+Notes:
+* For BART and GPT2, K-V cache decoder with TensorRT requires exporting 2 onnx files and building separate engines respectively, called "non-kv" and "kv". For the first decoder run, KV Cache needs to be generated with only `input_ids` and `encoder_hidden_states`(if encoder_decoder), which is named "non-kv". For the other decoder iterations, previous KV Cache and other inputs are passed into the model to generate the updated KV Cache and decoder_hidden_states, which is named "kv". Because current onnx export cannot handle dynamic number of inputs, 2 onnx files with slightly different configurations are used together.
+* For T5, the code has been optimized according to the latest TensorRT features. (1) Cross attention kv does not change throughout decoding session, so it is only calculated once at the first decoding session. `onnx.export` cannot handle this logic properly for HuggingFace, so we creates a "cross attention kv generator" using only `encoder_hidden_states`. (2) TensorRT's "zero tensor" feature is used for self attention kv cache growth starting at empty. (3) Self attention input and output are the same location to avoid D2D copy for kv cache. A similar optimization will be ported to all the models.
+
 
 ## How to run with beam search
 
-In addition to greedy search, beam search is another widely used decoding method. For BART, use `--num-beams <N>` to enable beam search during decoding.
+In addition to greedy search, beam search is another widely used decoding method. For all the models, use `--num-beams <N>` to enable beam search during decoding.
 
 ```python
 python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --working-dir temp --num-beams 3
 ```
 
 Notes:
-* Please use `--num-beam <N>` without K-V cache. Since K-V cache is under development for better performance, the beam search support for K-V cache mode will be added once the K-V cache implementation is finalized.
-* Beam search argument is only supported for BART model for now. Other models such as T5 will be enabled later.
+* K-V cache with beam search may have memory concurrency issues with TensorRT Optimization. We are currently working on this issue.
+
 
 ## How to run with TensorRT `FASTER_DYNAMIC_SHAPES_0805` preview feature
 
-Use the `--preview-dynamic-shapes` option to enable this preview feature for BART, GPT2, or T5.
+Use the `--preview-dynamic-shapes` option to enable this preview feature for BART, GPT2, or T5. This feature will significantly improve TensorRT engine build time.
 
 ```python
 python3 run.py run BART trt --variant facebook/bart-base --working-dir temp --preview-dynamic-shapes
@@ -142,6 +154,14 @@ python3 run.py run BART trt --variant facebook/bart-base --working-dir temp --pr
 Notes: 
 * preview feature functionality is only supported in TensorRT 8.5+.
 * preview argument is only for TensorRT runs. Hence, please avoid using `compare` action with `--preview-dynamic-shapes` since the syntax doesn't exist for `frameworks` and `onnxrt` runs. Instead, it is recommended to test TensorRT `run` command seperately to get the performance with preview feature functionality.
+
+## How to run in performance benchmarking mode
+
+The `benchmark` action will benchmark the specific script under the model directory using random input data with specified input/output sequence lengths. Note that since the input data is random, the accuracy is not guaranteed, but the benchmarking mode is useful for performance measurement since it allows arbitrary and controllable input/output sequence lengths with early stopping being disabled and allows apples-to-apples performance comparisons across different frameworks.
+
+```python
+python3 run.py benchmark GPT2 [frameworks | trt] --variant [gpt2 | gpt2-medium | gpt2-large | gpt2-xl | EleutherAI/gpt-j-6B] --working-dir temp --input-seq-len 128 --output-seq-len 256
+```
 
 ## How to run in performance benchmarking mode
 

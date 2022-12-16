@@ -1,11 +1,21 @@
 # Comparing Frameworks
+
 ## Introduction
+
 You can use the `run` subtool to compare a model between different frameworks.
 In the simplest case, you can supply a model, and one or more framework flags.
-By default, `run` will generate synthetic input data, run inference using the
+By default, it will generate synthetic input data, run inference using the
 specified frameworks, then compare outputs of the specified frameworks.
 
 ## Running The Example
+
+In this example, we'll outline various common use-cases for the `run` subtool:
+
+- [Comparing TensorRT And ONNX-Runtime Outputs](#comparing-tensorrt-and-onnx-runtime-outputs)
+- [Comparing TensorRT Precisions](#comparing-tensorrt-precisions)
+- [Changing Tolerances](#changing-tolerances)
+- [Changing Comparison Metrics](#changing-comparison-metrics)
+- [Comparing Per-Layer Outputs Between ONNX-Runtime And TensorRT](#comparing-per-layer-outputs-between-onnx-runtime-and-tensorrt)
 
 ### Comparing TensorRT And ONNX-Runtime Outputs
 
@@ -46,12 +56,10 @@ polygraphy run dynamic_identity.onnx --trt --fp16 --onnxrt \
     --input-shapes X:[1,2,4,4]
 ```
 
->>>
-:warning: Getting acceptable accuracy with INT8 precision typically requires an additional calibration step:
-see the [developer guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#working-with-int8)
-and instructions on [how to do calibration](../../../../examples/cli/convert/01_int8_calibration_in_tensorrt)
-with Polygraphy on the command line.
->>>
+> :warning: Getting acceptable accuracy with INT8 precision typically requires an additional calibration step:
+  see the [developer guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#working-with-int8)
+  and instructions on [how to do calibration](../../../../examples/cli/convert/01_int8_calibration_in_tensorrt)
+  with Polygraphy on the command line.
 
 ### Changing Tolerances
 
@@ -97,12 +105,10 @@ polygraphy run dynamic_identity.onnx --trt --fp16 --onnxrt \
     --atol 0.001 --rtol 0.001 --check-error-stat median
 ```
 
->>>
-You can also specify per-output values for `--atol`/`--rtol`/`--check-error-stat`.
-See the help output of the `run` subtool for more information.
->>>
+> You can also specify per-output values for `--atol`/`--rtol`/`--check-error-stat`.
+  See the help output of the `run` subtool for more information.
 
-### Comparing Per-layer Outputs Between ONNX-Runtime And TensorRT
+### Comparing Per-Layer Outputs Between ONNX-Runtime And TensorRT
 
 When network outputs do not match, it can be useful to compare per-layer outputs
 to see where the error is introduced. To do so, you can use the `--trt-outputs`

@@ -88,15 +88,15 @@ class DataLoader:
         self.iterations = util.default(iterations, 1)
         self.user_input_metadata = util.default(input_metadata, {})
 
-        self.int_range_set = int_range is not None
-        if self.int_range_set:
+        self._int_range_set = int_range is not None
+        if self._int_range_set:
             mod.warn_deprecated("The int_range parameter in DataLoader", "val_range", remove_in="0.50.0")
-        self.int_range = default_tuple(int_range, (1, 25))
+        self._int_range = default_tuple(int_range, (1, 25))
 
-        self.float_range_set = float_range is not None
-        if self.float_range_set:
+        self._float_range_set = float_range is not None
+        if self._float_range_set:
             mod.warn_deprecated("The float_range parameter in DataLoader", "val_range", remove_in="0.50.0")
-        self.float_range = default_tuple(float_range, (-1.0, 1.0))
+        self._float_range = default_tuple(float_range, (-1.0, 1.0))
 
         self.input_metadata = None
         self.default_val_range = default_tuple(val_range, (0.0, 1.0))
@@ -113,16 +113,16 @@ class DataLoader:
             seed=self.seed,
             iterations=self.iterations,
             input_metadata=self.user_input_metadata or None,
-            int_range=self.int_range,
-            float_range=self.float_range,
+            int_range=self._int_range,
+            float_range=self._float_range,
             val_range=self.val_range,
         )[0]
 
     def _get_range(self, name, cast_type):
-        if cast_type == int and self.int_range_set:
-            return self.int_range
-        elif cast_type == float and self.float_range_set:
-            return self.float_range
+        if cast_type == int and self._int_range_set:
+            return self._int_range
+        elif cast_type == float and self._float_range_set:
+            return self._float_range
 
         tup = util.value_or_from_dict(self.val_range, name, self.default_val_range)
         return tuple(cast_type(val) for val in tup)
@@ -150,14 +150,21 @@ class DataLoader:
         def get_static_shape(name, shape):
             static_shape = shape
             if util.is_shape_dynamic(shape):
-                static_shape = util.override_dynamic_shape(shape)
+                if shape.min is not None:
+                    static_shape = shape.min
+                elif shape.max is not None:
+                    static_shape = shape.max
+                else:
+                    static_shape = util.override_dynamic_shape(shape)
+
                 if static_shape != shape:
                     if not util.is_valid_shape_override(static_shape, shape):
                         G_LOGGER.critical(
                             f"Input tensor: {name} | Cannot override original shape: {shape} to {static_shape}"
                         )
                     G_LOGGER.warning(
-                        f"Input tensor: {name} [shape={shape}] | Will generate data of shape: {static_shape}.\nIf this is incorrect, please set input_metadata or provide a custom data loader.",
+                        f"Input tensor: {name} [shape={shape}] | Will generate data of shape: {static_shape}.\n"
+                        f"If this is incorrect, please provide a custom data loader.",
                         mode=LogMode.ONCE,
                     )
             return static_shape

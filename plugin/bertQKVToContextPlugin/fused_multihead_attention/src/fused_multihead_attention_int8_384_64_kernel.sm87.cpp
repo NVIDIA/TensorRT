@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
 unsigned char cubin_fmha_v1_int8_384_64_sm87_cu_cubin[] = {
@@ -20728,4 +20732,6 @@ unsigned char cubin_fmha_v1_int8_384_64_sm87_cu_cubin[] = {
   0x00, 0x00, 0x00, 0x00
 };
 unsigned int cubin_fmha_v1_int8_384_64_sm87_cu_cubin_len = 248488;
-}
+} // namespace bert
+} // namespace plugin
+} // namespace nvinfer1

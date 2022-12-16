@@ -121,6 +121,7 @@ class GPT2TRTDecoder(TRTHFRunner):
         benchmarking_args: GPT2BenchmarkingArgs = None
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
+        self.network_metadata = network_metadata
         # In benchmarking mode, if input_profile_max is provided, should use that as max_sequence_length
         if benchmarking_args is not None:
             if benchmarking_args.input_profile_max_len is not None:
@@ -148,11 +149,12 @@ class GPT2TRTDecoder(TRTHFRunner):
         }
 
         self.output_shapes = {
-            "logits": (self.batch_size * num_beams, self.max_output_length, GPT2ModelTRTConfig.VOCAB_SIZE)
+            "logits": (self.batch_size * num_beams, self.max_output_length, GPT2ModelTRTConfig.VOCAB_SIZE[network_metadata.variant])
         }
         self.output_types = {
             "logits": torch.float32
         }
+        self.main_input_name = "input_ids"
 
         self.num_heads = GPT2ModelTRTConfig.NUMBER_OF_HEADS[network_metadata.variant]
         self.embedding_size_per_head = GPT2ModelTRTConfig.EMBEDDING_SIZE[network_metadata.variant] // self.num_heads
@@ -165,7 +167,7 @@ class GPT2TRTDecoder(TRTHFRunner):
                 set_kv_data(self.input_types, "past", i, kv_type_dict)
                 set_kv_data(self.output_types,"present", i, kv_type_dict)
 
-                self_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_output_length, self.embedding_size_per_head)
+                self_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_output_length - 1, self.embedding_size_per_head)
                 kv_shape_dict = {"decoder": self_attention_kv_shape}
 
                 set_kv_data(self.input_shapes, "past", i, kv_shape_dict)
@@ -259,7 +261,7 @@ class GPT2TRTDecoder(TRTHFRunner):
     def forward(self, input_ids, *args, **kwargs):
         bs = input_ids.shape[0]
         input_length = input_ids.shape[1]
-        vocab_size = GPT2ModelTRTConfig.VOCAB_SIZE
+        vocab_size = GPT2ModelTRTConfig.VOCAB_SIZE[self.network_metadata.variant]
         max_length = self.max_sequence_length
         use_cache = kwargs.get("use_cache", False)
         # flag for switch between dual engines
@@ -379,6 +381,9 @@ class GPT2TRT(TRTInferenceCommand):
 
         if not keep_trt_engine:
             self.gpt2_trt_engine.cleanup()
+            # TODO: Avoid using workspace.metadata to handle non_kv removals.
+            if workspace.metadata.other.kv_cache:
+                self.gpt2_trt_engine_non_kv.cleanup()
 
         self.frameworks_cmd.cleanup(workspace, keep_onnx_model, keep_torch_model)
 
@@ -407,7 +412,7 @@ class GPT2TRT(TRTInferenceCommand):
         else:
             input_seq_len = benchmarking_args.input_seq_len
             output_seq_len = benchmarking_args.output_seq_len
-            input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE, (batch_size, input_seq_len))
+            input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE[metadata.variant], (batch_size, input_seq_len))
 
         # get single decoder iteration inference timing profile
         _, decoder_e2e_time = gpt2_inference(
@@ -556,9 +561,9 @@ class GPT2TRT(TRTInferenceCommand):
             embedding_size_per_head = GPT2ModelTRTConfig.EMBEDDING_SIZE[metadata.variant] // num_heads
             num_decoder_layers = GPT2ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]
             self_attention_profile = {
-                "min": (batch_size * num_beams, num_heads, 1, embedding_size_per_head),
-                "opt": (batch_size * num_beams, num_heads, opt_output_seq_len, embedding_size_per_head),
-                "max": (batch_size * num_beams, num_heads, max_output_length, embedding_size_per_head),
+                "min": (batch_size * num_beams, num_heads, 0, embedding_size_per_head),
+                "opt": (batch_size * num_beams, num_heads, opt_output_seq_len - 1, embedding_size_per_head),
+                "max": (batch_size * num_beams, num_heads, max_output_length - 1, embedding_size_per_head),
             }
             
             # TODO: move this logic (and some other similar place) into utils.
@@ -593,14 +598,40 @@ class GPT2TRT(TRTInferenceCommand):
         if preview_dynamic_shapes:
             preview_features = [PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
             engine_tag += "-previewFasterDynamicShapes"
+        
+        if not metadata.other.kv_cache:
+            self.gpt2_trt_engine = GPT2ONNXFile(
+                decoder_onnx_fpath, metadata
+            ).as_trt_engine(
+                os.path.splitext(decoder_onnx_fpath)[0] + "-{}.engine".format(engine_tag),
+                profiles=decoder_profiles,
+                preview_features=preview_features
+            )
+        else:
+            decoder_root, decoder_fullname = os.path.split(decoder_onnx_fpath)
+            # Split kv and non kv engines into separate folders to avoid weight overlap
+            non_kv_root = os.path.join(decoder_root, "non-kv")
+            kv_root = os.path.join(decoder_root, "kv")
+            decoder_name, decoder_ext = os.path.splitext(decoder_fullname)
+            decoder_onnx_non_kv_fpath = os.path.join(non_kv_root, decoder_name + "-non-kv" + decoder_ext)
+            decoder_onnx_kv_fpath = os.path.join(kv_root, decoder_fullname)
+            self.gpt2_trt_engine = GPT2ONNXFile(
+                decoder_onnx_kv_fpath, metadata
+            ).as_trt_engine(
+                os.path.splitext(decoder_onnx_kv_fpath)[0] + "-{}.engine".format(engine_tag),
+                profiles=decoder_profiles,
+                preview_features=preview_features
+            )
+            # dual-engine approach: still need to setup non-kv engine in kv mode
+            # note: workspace cleanup is not handled for these extra non-kv files
+            self.gpt2_trt_engine_non_kv = GPT2ONNXFile(
+                decoder_onnx_non_kv_fpath, metadata
+            ).as_trt_engine(
+                os.path.splitext(decoder_onnx_non_kv_fpath)[0] + "-{}.engine".format(engine_tag),
+                profiles=decoder_profiles_non_kv,
+                preview_features=preview_features
+            )
 
-        self.gpt2_trt_engine = GPT2ONNXFile(
-            decoder_onnx_fpath, metadata
-        ).as_trt_engine(
-            decoder_onnx_fpath + "-{}.engine".format(engine_tag),
-            profiles=decoder_profiles,
-            preview_features=preview_features
-        )
 
         # Create GPT2TRTDecoder instances.
         tfm_config = GPT2Config(
@@ -613,19 +644,8 @@ class GPT2TRT(TRTInferenceCommand):
         )
 
         if metadata.other.kv_cache:
-            # dual-engine approach: still need to setup non-kv engine in kv mode
-            # note: workspace cleanup is not handled for these extra non-kv files
-            decoder_onnx_fpath_non_kv = os.path.splitext(decoder_onnx_fpath)[0] + '-non-kv' + os.path.splitext(decoder_onnx_fpath)[1]
-            self.GPT2_trt_engine_non_kv = GPT2ONNXFile(
-                decoder_onnx_fpath_non_kv, metadata
-            ).as_trt_engine(
-                decoder_onnx_fpath_non_kv + "-{}.engine".format(engine_tag),
-                profiles=decoder_profiles_non_kv,
-                preview_features=preview_features
-            )
-
             # switch between GPT2TRT is impossible (becase HF decoding step is bound to one decoder). Therefore, we need to add the non-kv engines inside the same decoder --> decoder contains two TRT engines
-            self.gpt2_trt._set_non_kv_engine_for_kv_mode(self.GPT2_trt_engine_non_kv)
+            self.gpt2_trt._set_non_kv_engine_for_kv_mode(self.gpt2_trt_engine_non_kv)
 
     def run_trt(
         self,

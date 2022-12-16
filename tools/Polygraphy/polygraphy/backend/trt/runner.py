@@ -81,7 +81,6 @@ class TrtRunner(BaseRunner):
         super().__init__(name=name, prefix="trt-runner")
         self._engine_or_context = engine
         self.optimization_profile = optimization_profile
-        self._use_v3_api = mod.version(trt.__version__) > mod.version("8.5.0.9")
 
     def activate_impl(self):
         engine_or_context, owning = util.invoke_if_callable(self._engine_or_context)
@@ -155,7 +154,7 @@ class TrtRunner(BaseRunner):
             return device_buffers, host_output_buffers, output_allocator
 
         self.device_buffers, self.host_output_buffers, self.output_allocator = (
-            make_buffers() if self._use_v3_api else make_buffers_legacy()
+            make_buffers() if trt_util._should_use_v3_api() else make_buffers_legacy()
         )
         self.stream = cuda.Stream()
 
@@ -191,9 +190,12 @@ class TrtRunner(BaseRunner):
                 G_LOGGER.critical(f"Failed to set optimization profile to: {index}")
 
     def get_input_metadata_impl(self):
-        start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
-        # This function always uses binding names of the 0th profile.
-        return trt_util.get_input_metadata_from_engine(self.engine, start_binding, end_binding)
+        if trt_util._should_use_v3_api():
+            return trt_util.get_metadata_from_engine(self.engine, mode=trt.TensorIOMode.INPUT)
+        else:
+            start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
+            # This function always uses binding names of the 0th profile.
+            return trt_util.get_input_metadata_from_engine(self.engine, start_binding, end_binding)
 
     def _set_shapes_from_feed_dict_legacy(self, feed_dict):
         """
@@ -416,7 +418,7 @@ class TrtRunner(BaseRunner):
         copy_outputs_to_host = util.default(copy_outputs_to_host, True)
 
         start = time.time()
-        if self._use_v3_api:
+        if trt_util._should_use_v3_api():
             output_buffers = self._infer_impl_v3(feed_dict, copy_outputs_to_host)
         else:
             output_buffers = self._infer_impl_legacy(feed_dict, copy_outputs_to_host)

@@ -105,15 +105,18 @@ class DataLoaderArgs(BaseArgs):
             "--data-loader-script",
             help="Path to a Python script that defines a function that loads input data. "
             "The function should take no arguments and return a generator or iterable that yields input data (Dict[str, np.ndarray]). "
-            "When this option is used, all other data loader arguments are ignored. ",
+            "When this option is used, all other data loader arguments are ignored. "
+            "By default, Polygraphy looks for a function called `load_data`. You can specify a custom function name "
+            "by separating it with a colon. For example: `my_custom_script.py:my_func`",
             default=None,
         )
 
         self.group.add_argument(
             "--data-loader-func-name",
-            help="When using a data-loader-script, this specifies the name of the function "
+            help="[DEPRECATED - function name can be specified with --data-loader-script like so: `my_custom_script.py:my_func`] "
+            "When using a data-loader-script, this specifies the name of the function "
             "that loads data. Defaults to `load_data`. ",
-            default="load_data",
+            default=None,
         )
 
     def parse_impl(self, args):
@@ -134,9 +137,9 @@ class DataLoaderArgs(BaseArgs):
 
         self.seed = args_util.get(args, "seed")
 
-        self.int_range = omit_none_tuple(tup=(args_util.get(args, "int_min"), args_util.get(args, "int_max")))
-        self.float_range = omit_none_tuple(tup=(args_util.get(args, "float_min"), args_util.get(args, "float_max")))
-        if self.int_range or self.float_range:
+        self._int_range = omit_none_tuple(tup=(args_util.get(args, "int_min"), args_util.get(args, "int_max")))
+        self._float_range = omit_none_tuple(tup=(args_util.get(args, "float_min"), args_util.get(args, "float_max")))
+        if self._int_range or self._float_range:
             mod.warn_deprecated(
                 "--int-min/--int-max and --float-min/--float-max",
                 use_instead="--val-range, which allows you to specify per-input data ranges,",
@@ -144,7 +147,7 @@ class DataLoaderArgs(BaseArgs):
                 always_show_warning=True,
             )
 
-        self.val_range = args_util.parse_dict_with_default(
+        self.val_range = args_util.parse_arglist_to_dict(
             args_util.get(args, "val_range"), cast_to=lambda x: tuple(args_util.cast(x))
         )
         if self.val_range is not None:
@@ -164,8 +167,14 @@ class DataLoaderArgs(BaseArgs):
         self.iterations = args_util.get(args, "iterations")
 
         self.load_inputs_paths = args_util.get(args, "load_inputs_paths")
-        self.data_loader_script = args_util.get(args, "data_loader_script")
-        self.data_loader_func_name = args_util.get(args, "data_loader_func_name")
+
+        self.data_loader_script, self.data_loader_func_name = args_util.parse_script_and_func_name(
+            args_util.get(args, "data_loader_script"), default_func_name="load_data"
+        )
+        func_name = args_util.get(args, "data_loader_func_name")
+        if func_name is not None:
+            mod.warn_deprecated("--data-loader-func-name", "--data-loader-script", "0.50.0", always_show_warning=True)
+            self.data_loader_func_name = func_name
 
         if self.load_inputs_paths or self.data_loader_script:
             for arg in ["seed", "int_min", "int_max", "float_min", "float_max", "val_range", "iterations"]:
@@ -212,8 +221,8 @@ class DataLoaderArgs(BaseArgs):
                 seed=self.seed,
                 iterations=self.iterations,
                 input_metadata=user_input_metadata_str,
-                int_range=self.int_range,
-                float_range=self.float_range,
+                int_range=self._int_range,
+                float_range=self._float_range,
                 val_range=self.val_range,
             )
             if data_loader:

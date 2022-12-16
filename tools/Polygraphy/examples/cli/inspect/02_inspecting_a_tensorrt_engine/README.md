@@ -43,14 +43,14 @@ about TensorRT engines, i.e. plan files:
         ---- Memory ----
         Device Memory: 0 bytes
 
-        ---- 2 Profile(s) (2 Binding(s) Each) ----
+        ---- 2 Profile(s) (2 Tensor(s) Each) ----
         - Profile: 0
-            Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
-            Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
+            Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
+            Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
 
         - Profile: 1
-            Binding Index: 2 (Input)  [Name: X [profile 1]] | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
-            Binding Index: 3 (Output) [Name: Y [profile 1]] | Shape: (1, 2, -1, -1)
+            Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
+            Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
 
         ---- 1 Layer(s) Per Profile ----
         - Profile: 0

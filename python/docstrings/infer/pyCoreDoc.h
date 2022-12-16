@@ -1202,8 +1202,8 @@ constexpr char const* descr = R"trtdoc(
     EngineCapability.SAFETY provides a restricted subset of network operations that are safety certified and
     the resulting serialized engine can be executed with TensorRT's safe runtime APIs in the `nvinfer1::safe` namespace.
     EngineCapability.DLA_STANDALONE provides a restricted subset of network operations that are DLA compatible and
-    the resulting serialized engine can be executed using standalone DLA runtime APIs. See sampleNvmedia for an
-    example of integrating NvMediaDLA APIs with TensorRT APIs.)trtdoc";
+    the resulting serialized engine can be executed using standalone DLA runtime APIs. See sampleCudla for an
+    example of integrating cuDLA APIs with TensorRT APIs.)trtdoc";
 
 constexpr char const* DEFAULT
     = R"trtdoc([DEPRECATED] Unrestricted: TensorRT mode without any restrictions using TensorRT nvinfer1 APIs.)trtdoc";
@@ -1212,7 +1212,7 @@ constexpr char const* SAFE_GPU
     = R"trtdoc([DEPRECATED] Safety-restricted: TensorRT mode for GPU devices using TensorRT safety APIs. See safety documentation for list of supported layers and formats.)trtdoc";
 
 constexpr char const* SAFE_DLA
-    = R"trtdoc([DEPRECATED] DLA-restricted: TensorRT mode for DLA devices using NvMediaDLA APIs. Only FP16 and Int8 modes are supported.)trtdoc";
+    = R"trtdoc([DEPRECATED] DLA-restricted: TensorRT mode for DLA devices using cuDLA APIs. Only FP16 and Int8 modes are supported.)trtdoc";
 
 constexpr char const* STANDARD
     = R"trtdoc(Standard: TensorRT flow without targeting the standard runtime. This flow supports both DeviceType::kGPU and DeviceType::kDLA.)trtdoc";

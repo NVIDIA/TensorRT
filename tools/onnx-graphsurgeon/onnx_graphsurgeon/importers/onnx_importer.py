@@ -190,7 +190,7 @@ class OnnxImporter(BaseImporter):
             attrs=attrs_to_dict(onnx_node.attribute),
             inputs=retrieve_node_inputs(),
             outputs=retrieve_node_outputs(),
-            domain=onnx_node.domain,
+            domain=onnx_node.domain if onnx_node.HasField("domain") else None,
         )
 
     @staticmethod

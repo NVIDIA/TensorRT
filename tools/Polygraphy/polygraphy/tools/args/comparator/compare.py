@@ -93,9 +93,9 @@ class CompareFuncSimpleArgs(BaseArgs):
             infinities_compare_equal (bool): Whether to allow +-inf to compare as equal.
         """
         self.no_shape_check = args_util.get(args, "no_shape_check")
-        self.rtol = args_util.parse_dict_with_default(args_util.get(args, "rtol"))
-        self.atol = args_util.parse_dict_with_default(args_util.get(args, "atol"))
-        self.check_error_stat = args_util.parse_dict_with_default(args_util.get(args, "check_error_stat"))
+        self.rtol = args_util.parse_arglist_to_dict(args_util.get(args, "rtol"))
+        self.atol = args_util.parse_arglist_to_dict(args_util.get(args, "atol"))
+        self.check_error_stat = args_util.parse_arglist_to_dict(args_util.get(args, "check_error_stat"))
         self.infinities_compare_equal = args_util.get(args, "infinities_compare_equal")
 
         # Without this early check, failure would only happen after inference, which is clearly not desirable.
@@ -156,7 +156,7 @@ class CompareFuncIndicesArgs(BaseArgs):
         Attributes:
             index_tolerance (Dict[str, int]): Per-tensor index tolerance.
         """
-        self.index_tolerance = args_util.parse_dict_with_default(args_util.get(args, "index_tolerance"))
+        self.index_tolerance = args_util.parse_arglist_to_dict(args_util.get(args, "index_tolerance"))
 
     def add_to_script_impl(self, script):
         from polygraphy.tools.args.comparator.comparator import ComparatorCompareArgs

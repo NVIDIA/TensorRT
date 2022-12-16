@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +17,13 @@
 #ifndef TRT_SPLITGELU_PLUGIN_H
 #define TRT_SPLITGELU_PLUGIN_H
 
-#include "common/plugin.h"
-#include <stdint.h>
-#include <vector>
-
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
+
+#include "common/plugin.h"
+
+#include <cstdint>
+#include <vector>
 
 namespace nvinfer1
 {
@@ -36,7 +37,12 @@ public:
     SplitGeLUPlugin(std::string const& name, void const* buffer, size_t length);
     ~SplitGeLUPlugin() override = default;
 
-    // Method inherited from IPluginV2
+    SplitGeLUPlugin(SplitGeLUPlugin const& /*other*/) = default;
+    SplitGeLUPlugin& operator=(SplitGeLUPlugin const& /*other*/) = delete;
+    SplitGeLUPlugin(SplitGeLUPlugin&& /*other*/) noexcept = delete;
+    SplitGeLUPlugin& operator=(SplitGeLUPlugin&& /*other*/) noexcept = delete;
+
+    // Methods inherited from IPluginV2
     char const* getPluginType() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     int32_t getNbOutputs() const noexcept override;
@@ -65,11 +71,11 @@ public:
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
 private:
-    std::string const mName;
+    std::string mName;
     std::string mNameSpace;
-    float mFDiv;
-    float mFAdd;
-    float mFMul;
+    float mFDiv{};
+    float mFAdd{};
+    float mFMul{};
 };
 
 class SplitGeLUPluginCreator : public nvinfer1::pluginInternal::BaseCreator
@@ -77,6 +83,12 @@ class SplitGeLUPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 public:
     SplitGeLUPluginCreator();
     ~SplitGeLUPluginCreator();
+
+    SplitGeLUPluginCreator(SplitGeLUPluginCreator const& /*other*/) = delete;
+    SplitGeLUPluginCreator& operator=(SplitGeLUPluginCreator const& /*other*/) = delete;
+    SplitGeLUPluginCreator(SplitGeLUPluginCreator&& /*other*/) noexcept = delete;
+    SplitGeLUPluginCreator& operator=(SplitGeLUPluginCreator&& /*other*/) noexcept = delete;
+
     char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     PluginFieldCollection const* getFieldNames() noexcept override;

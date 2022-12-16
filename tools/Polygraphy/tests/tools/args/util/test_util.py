@@ -27,30 +27,30 @@ class TestParseMeta:
     def test_parse_legacy(self, name):  # Legacy argument format used comma.
         meta_args = [f"{name},1x3x224x224"]
         meta = args_util.parse_meta(meta_args, includes_dtype=False)
-        assert meta[name].shape == (1, 3, 224, 224)
+        assert meta[name].shape == [1, 3, 224, 224]
         assert meta[name].dtype is None
 
     def test_parse_shape_only(self, name):
         meta_args = [f"{name}:[1,3,224,224]"]
         meta = args_util.parse_meta(meta_args, includes_dtype=False)
-        assert meta[name].shape == (1, 3, 224, 224)
+        assert meta[name].shape == [1, 3, 224, 224]
         assert meta[name].dtype is None
 
     def test_parse_empty_shape(self, name):
         meta_args = [f"{name}:[0,3,0,224]"]
         meta = args_util.parse_meta(meta_args, includes_dtype=False)
-        assert meta[name].shape == (0, 3, 0, 224)
+        assert meta[name].shape == [0, 3, 0, 224]
         assert meta[name].dtype is None
 
     def test_parse_shape_scalar(self, name):
         meta_args = [f"{name}:[]"]
         meta = args_util.parse_meta(meta_args, includes_dtype=False)
-        assert meta[name].shape == tuple()
+        assert meta[name].shape == []
 
     def test_parse_shape_single_dim(self, name):
         meta_args = [f"{name}:[1]"]
         meta = args_util.parse_meta(meta_args, includes_dtype=False)
-        assert meta[name].shape == (1,)
+        assert meta[name].shape == [1]
 
     def test_parse_dtype_only(self, name):
         meta_args = [f"{name}:float32"]
@@ -61,7 +61,7 @@ class TestParseMeta:
     def test_parse_shape_dtype(self, name):
         meta_args = [f"{name}:[1,3,224,224]:float32"]
         meta = args_util.parse_meta(meta_args)
-        assert meta[name].shape == (1, 3, 224, 224)
+        assert meta[name].shape == [1, 3, 224, 224]
         assert meta[name].dtype == np.float32
 
     def test_parse_shape_dtype_auto(self, name):
@@ -74,7 +74,7 @@ class TestParseMeta:
     def test_parse_shape_with_dim_param_quoted(self, name, quote):
         meta_args = [f"{name}:[{quote}batch{quote},3,224,224]"]
         meta = args_util.parse_meta(meta_args, includes_dtype=False)
-        assert meta[name].shape == ("batch", 3, 224, 224)
+        assert meta[name].shape == ["batch", 3, 224, 224]
 
 
 class TestRunScript:

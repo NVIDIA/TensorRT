@@ -159,6 +159,7 @@ class TrtConfigArgs(BaseArgs):
 
         self.group.add_argument("--tf32", help="Enable tf32 precision in TensorRT", action="store_true", default=None)
         self.group.add_argument("--fp16", help="Enable fp16 precision in TensorRT", action="store_true", default=None)
+        self.group.add_argument("--fp8", help="Enable fp8 precision in TensorRT", action="store_true", default=None)
         self.group.add_argument(
             "--int8",
             help="Enable int8 precision in TensorRT. "
@@ -267,7 +268,8 @@ class TrtConfigArgs(BaseArgs):
             help="Tactic sources to enable. This controls which libraries "
             "(e.g. cudnn, cublas, etc.) TensorRT is allowed to load tactics from. "
             "Values come from the names of the values in the trt.TacticSource enum and are case-insensitive. "
-            "If no arguments are provided, e.g. '--tactic-sources', then all tactic sources are disabled.",
+            "If no arguments are provided, e.g. '--tactic-sources', then all tactic sources are disabled."
+            "Defaults to TensorRT's default tactic sources.",
             nargs="*",
             default=None,
         )
@@ -276,14 +278,28 @@ class TrtConfigArgs(BaseArgs):
             "--trt-config-script",
             help="Path to a Python script that defines a function that creates a "
             "TensorRT IBuilderConfig. The function should take a builder and network as parameters and return a "
-            "TensorRT builder configuration. When this option is specified, all other config arguments are ignored. ",
+            "TensorRT builder configuration. When this option is specified, all other config arguments are ignored. "
+            "By default, Polygraphy looks for a function called `load_config`. You can specify a custom function name "
+            "by separating it with a colon. For example: `my_custom_script.py:my_func`",
             default=None,
         )
         self.group.add_argument(
             "--trt-config-func-name",
-            help="When using a trt-config-script, this specifies the name of the function "
+            help="[DEPRECATED - function name can be specified with --trt-config-script like so: `my_custom_script.py:my_func`]"
+            "When using a trt-config-script, this specifies the name of the function "
             "that creates the config. Defaults to `load_config`. ",
-            default="load_config",
+            default=None,
+        )
+        self.group.add_argument(
+            "--trt-config-postprocess-script",
+            "--trt-cpps",
+            help="[EXPERIMENTAL] Path to a Python script that defines a function that modifies a TensorRT IBuilderConfig. "
+            "This function will be called after Polygraphy has finished created the builder configuration and should take a builder, "
+            "network, and config as parameters and modify the config in place. "
+            "Unlike `--trt-config-script`, all other config arguments will be reflected in the config passed to the function."
+            "By default, Polygraphy looks for a function called `postprocess_config`. You can specify a custom function name "
+            "by separating it with a colon. For example: `my_custom_script.py:my_func`",
+            default=None,
         )
         self.group.add_argument(
             "--trt-safety-restricted",
@@ -306,7 +322,7 @@ class TrtConfigArgs(BaseArgs):
         )
         self.group.add_argument(
             "--allow-gpu-fallback",
-            help="[EXPERIMENTAL] Allow layers unsupported on the DLA to fall back to GPU. Has no effect if --dla is not set.",
+            help="[EXPERIMENTAL] Allow layers unsupported on the DLA to fall back to GPU. Has no effect if --use-dla is not set.",
             action="store_true",
             default=None,
         )
@@ -314,7 +330,7 @@ class TrtConfigArgs(BaseArgs):
             "--pool-limit",
             "--memory-pool-limit",
             dest="memory_pool_limit",
-            help="Set memory pool limits. Memory pool names come from the names of values in the trt.MemoryPoolType enum and are case-insensitive"
+            help="Memory pool limits. Memory pool names come from the names of values in the `trt.MemoryPoolType` enum and are case-insensitive"
             "Format: `--pool-limit <pool_name>:<pool_limit> ...`. For example, `--pool-limit dla_local_dram:1e9 workspace:16777216`. "
             "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively. "
             "For example, `--pool-limit workspace:16M` is equivalent to `--pool-limit workspace:16777216`. ",
@@ -325,8 +341,28 @@ class TrtConfigArgs(BaseArgs):
             "--preview-features",
             dest="preview_features",
             help="Preview features to enable. Values come from the names of the values "
-            "in the trt.PreviewFeature enum, and are case-insensitive.",
-            nargs="+",
+            "in the trt.PreviewFeature enum, and are case-insensitive."
+            "If no arguments are provided, e.g. '--preview-features', then all preview features are disabled."
+            "Defaults to TensorRT's default preview features.",
+            nargs="*",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--builder-optimization-level",
+            help="The builder optimization level. Setting a higher optimization"
+            "level allows the optimizer to spend more time searching for optimization opportunities."
+            "The resulting engine may have better performance compared to an engine built with a lower optimization level."
+            "Refer to the TensorRT API documentation for details.",
+            type=int,
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--hardware-compatibility-level",
+            help="The hardware compatibility level to use for the engine. This allows engines built on one GPU architecture to work on GPUs"
+            "of other architectures. Values come from the names of values in the `trt.HardwareCompatibilityLevel` enum and are case-insensitive. "
+            "For example, `--hardware-compatibility-level ampere_plus`",
             default=None,
         )
 
@@ -356,6 +392,7 @@ class TrtConfigArgs(BaseArgs):
                 input names to a tuple of (min, opt, max) shapes.
             tf32 (bool): Whether to enable TF32.
             fp16 (bool): Whether to enable FP16.
+            fp8  (bool): Whether to enable FP8.
             int8 (bool): Whether to enable INT8.
             precision_constraints (str): The precision constraints to apply.
             restricted (bool): Whether to enable safety scope checking in the builder.
@@ -365,15 +402,25 @@ class TrtConfigArgs(BaseArgs):
             load_timing_cache (str): Path from which to load a timing cache.
             load_tactics (str): Path from which to load a tactic replay file.
             save_tactics (str): Path at which to save a tactic replay file.
-            tactic_sources (List[str]): Names of the tactic sources to enable.
+            tactic_sources (List[str]): Strings representing enum values of the tactic sources to enable.
             trt_config_script (str): Path to a custom TensorRT config script.
             trt_config_func_name (str): Name of the function in the custom config script that creates the config.
+            trt_config_postprocess_script (str): Path to a TensorRT config postprocessing script.
+            trt_config_postprocess_func_name (str): Name of the function in the config postprocessing script that applies the post-processing.
             use_dla (bool): Whether to enable DLA.
             allow_gpu_fallback (bool): Whether to allow GPU fallback when DLA is enabled.
-            memory_pool_limits (Dict[str, int]): Mapping of memory pool names to memory limits in bytes.
+            memory_pool_limits (Dict[str, int]): Mapping of strings representing memory pool enum values to memory limits in bytes.
             engine_capability (str): The desired engine capability.
             direct_io (bool): Whether to disallow reformatting layers at network input/output tensors which have user-specified formats.
+            preview_features (List[str]): Names of preview features to enable.
+            refittable (bool): Whether the engine should be refittable.
+            builder_optimization_level (int): The builder optimization level.
+            hardware_compatibility_level (str): A string representing a hardware compatibility level enum value.
         """
+
+        def make_enum_val(enum_name, value):
+            return inline(safe("trt.{:}.{:}", inline_identifier(enum_name), inline_identifier(value.upper())))
+
         trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
         trt_max_shapes = args_util.get(args, "trt_max_shapes", default=[])
         trt_opt_shapes = args_util.get(args, "trt_opt_shapes", default=[])
@@ -386,25 +433,17 @@ class TrtConfigArgs(BaseArgs):
 
         self.profile_dicts = parse_profile_shapes(default_shapes, trt_min_shapes, trt_opt_shapes, trt_max_shapes)
 
-        self.workspace = args_util.parse_num_bytes(args_util.get(args, "workspace"))
-        if self.workspace is not None:
-            mod.warn_deprecated(
-                "--workspace",
-                use_instead=f"--pool-limit workspace:{args_util.get(args, 'workspace')}",
-                remove_in="0.45.0",
-                always_show_warning=True,
-            )
-
         self.tf32 = args_util.get(args, "tf32")
         self.fp16 = args_util.get(args, "fp16")
         self.int8 = args_util.get(args, "int8")
+        self.fp8 = args_util.get(args, "fp8")
         self.precision_constraints = args_util.get(args, "precision_constraints")
 
         if self.precision_constraints == "none":
             self.precision_constraints = None
 
-        self.strict_types = args_util.get(args, "strict_types")
-        if self.strict_types is not None:
+        self._strict_types = args_util.get(args, "strict_types")
+        if self._strict_types is not None:
             mod.warn_deprecated(
                 "--strict-types",
                 use_instead=f"--precision-constraints=obey",
@@ -421,23 +460,23 @@ class TrtConfigArgs(BaseArgs):
         if calib_base is not None:
             self.calibration_base_class = inline(safe("trt.{:}", inline_identifier(calib_base)))
 
-        self.quantile = args_util.get(args, "quantile")
-        self.regression_cutoff = args_util.get(args, "regression_cutoff")
+        self._quantile = args_util.get(args, "quantile")
+        self._regression_cutoff = args_util.get(args, "regression_cutoff")
 
         self.sparse_weights = args_util.get(args, "sparse_weights")
 
         self.load_timing_cache = args_util.get(args, "load_timing_cache")
 
-        self.timing_cache = args_util.get(args, "timing_cache")
-        if self.timing_cache:
+        self._timing_cache = args_util.get(args, "timing_cache")
+        if self._timing_cache:
             mod.warn_deprecated(
                 "--timing-cache",
                 use_instead="--load-timing-cache/--save-timing-cache",
                 remove_in="0.45.0",
                 always_show_warning=True,
             )
-            if os.path.exists(self.timing_cache):
-                self.load_timing_cache = self.timing_cache
+            if os.path.exists(self._timing_cache):
+                self.load_timing_cache = self._timing_cache
 
         self.load_tactics = args_util.get(args, "load_tactics")
         self.save_tactics = args_util.get(args, "save_tactics")
@@ -445,42 +484,66 @@ class TrtConfigArgs(BaseArgs):
         tactic_sources = args_util.get(args, "tactic_sources")
         self.tactic_sources = None
         if tactic_sources is not None:
-            self.tactic_sources = [
-                inline(safe("trt.TacticSource.{:}", inline_identifier(source.upper()))) for source in tactic_sources
-            ]
+            self.tactic_sources = [make_enum_val("TacticSource", source) for source in tactic_sources]
 
-        self.trt_config_script = args_util.get(args, "trt_config_script")
-        self.trt_config_func_name = args_util.get(args, "trt_config_func_name")
+        self.trt_config_script, self.trt_config_func_name = args_util.parse_script_and_func_name(
+            args_util.get(args, "trt_config_script"), default_func_name="load_config"
+        )
+        (
+            self.trt_config_postprocess_script,
+            self.trt_config_postprocess_func_name,
+        ) = args_util.parse_script_and_func_name(
+            args_util.get(args, "trt_config_postprocess_script"), default_func_name="postprocess_config"
+        )
+
+        func_name = args_util.get(args, "trt_config_func_name")
+        if func_name is not None:
+            mod.warn_deprecated(
+                "--trt-config-func-name", "the config script argument", "0.50.0", always_show_warning=True
+            )
+            self.trt_config_func_name = func_name
 
         self.use_dla = args_util.get(args, "use_dla")
         self.allow_gpu_fallback = args_util.get(args, "allow_gpu_fallback")
 
-        memory_pool_limits = args_util.parse_dict_with_default(
+        self._workspace = args_util.parse_num_bytes(args_util.get(args, "workspace"))
+        if self._workspace is not None:
+            mod.warn_deprecated(
+                "--workspace",
+                use_instead=f"--pool-limit workspace:{args_util.get(args, 'workspace')}",
+                remove_in="0.45.0",
+                always_show_warning=True,
+            )
+
+        memory_pool_limits = args_util.parse_arglist_to_dict(
             args_util.get(args, "memory_pool_limit"), cast_to=args_util.parse_num_bytes, allow_empty_key=False
         )
         self.memory_pool_limits = None
         if memory_pool_limits is not None:
             self.memory_pool_limits = {
-                inline(safe("trt.MemoryPoolType.{:}", inline_identifier(pool_type.upper()))): pool_size
+                make_enum_val("MemoryPoolType", pool_type): pool_size
                 for pool_type, pool_size in memory_pool_limits.items()
             }
 
         preview_features = args_util.get(args, "preview_features")
         self.preview_features = None
         if preview_features is not None:
-            self.preview_features = [
-                inline(safe("trt.PreviewFeature.{:}", inline_identifier(feature.upper())))
-                for feature in preview_features
-            ]
+            self.preview_features = [make_enum_val("PreviewFeature", feature) for feature in preview_features]
 
         engine_capability = args_util.get(args, "engine_capability")
         self.engine_capability = None
         if engine_capability is not None:
-            self.engine_capability = inline(
-                safe("trt.EngineCapability.{:}", inline_identifier(engine_capability.upper()))
-            )
+            self.engine_capability = make_enum_val("EngineCapability", engine_capability)
 
         self.direct_io = args_util.get(args, "direct_io")
+        self.builder_optimization_level = args_util.get(args, "builder_optimization_level")
+
+        self.hardware_compatibility_level = None
+        hardware_compatibility_level = args_util.get(args, "hardware_compatibility_level")
+        if hardware_compatibility_level is not None:
+            self.hardware_compatibility_level = make_enum_val(
+                "HardwareCompatibilityLevel", hardware_compatibility_level
+            )
 
     def add_to_script_impl(self, script):
         profiles = []
@@ -529,8 +592,8 @@ class TrtConfigArgs(BaseArgs):
                 data_loader=data_loader_name if data_loader_name else inline(safe("DataLoader()")),
                 cache=self.calibration_cache,
                 BaseClass=self.calibration_base_class,
-                quantile=self.quantile,
-                regression_cutoff=self.regression_cutoff,
+                quantile=self._quantile,
+                regression_cutoff=self._regression_cutoff,
             )
 
         algo_selector = None
@@ -541,9 +604,16 @@ class TrtConfigArgs(BaseArgs):
             script.add_import(imports=["TacticRecorder"], frm="polygraphy.backend.trt")
             algo_selector = make_invocable("TacticRecorder", record=self.save_tactics)
 
+        # Add a `tensorrt` import if any argument requires direct access to the module.
         if any(
             arg is not None
-            for arg in [self.tactic_sources, self.memory_pool_limits, self.preview_features, self.engine_capability]
+            for arg in [
+                self.tactic_sources,
+                self.memory_pool_limits,
+                self.preview_features,
+                self.engine_capability,
+                self.hardware_compatibility_level,
+            ]
         ):
             script.add_import(imports="tensorrt", imp_as="trt")
 
@@ -555,12 +625,13 @@ class TrtConfigArgs(BaseArgs):
         else:
             config_loader_str = make_invocable_if_nondefault(
                 "CreateTrtConfig",
-                max_workspace_size=self.workspace,
+                max_workspace_size=self._workspace,
                 tf32=self.tf32,
                 fp16=self.fp16,
                 int8=self.int8,
+                fp8=self.fp8,
                 precision_constraints=self.precision_constraints,
-                strict_types=self.strict_types,
+                strict_types=self._strict_types,
                 restricted=self.restricted,
                 profiles=profile_name,
                 calibrator=calibrator,
@@ -575,6 +646,8 @@ class TrtConfigArgs(BaseArgs):
                 preview_features=self.preview_features,
                 engine_capability=self.engine_capability,
                 direct_io=self.direct_io,
+                builder_optimization_level=self.builder_optimization_level,
+                hardware_compatibility_level=self.hardware_compatibility_level,
             )
             if config_loader_str is not None:
                 script.add_import(imports="CreateConfig", frm="polygraphy.backend.trt", imp_as="CreateTrtConfig")
@@ -583,6 +656,24 @@ class TrtConfigArgs(BaseArgs):
             config_loader_name = script.add_loader(config_loader_str, "create_trt_config")
         else:
             config_loader_name = None
+
+        if self.trt_config_postprocess_script is not None:
+            # Need to set up a default config if there isn't one since `PostprocessConfig` will require a config.
+            if config_loader_name is None:
+                script.add_import(imports="CreateConfig", frm="polygraphy.backend.trt", imp_as="CreateTrtConfig")
+                config_loader_name = script.add_loader(make_invocable("CreateTrtConfig"), "create_trt_config")
+
+            script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
+            script.add_import(
+                imports=["PostprocessConfig"], frm="polygraphy.backend.trt", imp_as="PostprocessTrtConfig"
+            )
+            func = make_invocable(
+                "InvokeFromScript", self.trt_config_postprocess_script, name=self.trt_config_postprocess_func_name
+            )
+            config_loader_name = script.add_loader(
+                make_invocable("PostprocessTrtConfig", config_loader_name, func=func), "postprocess_trt_config"
+            )
+
         return config_loader_name
 
     def create_config(self, builder, network):

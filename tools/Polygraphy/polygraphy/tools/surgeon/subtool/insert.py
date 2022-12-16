@@ -64,7 +64,7 @@ class OnnxNodeArgs(BaseArgs):
         self.op = args_util.get(args, "op")
         self.name = args_util.get(args, "name")
 
-        self.attrs = args_util.parse_dict_with_default(args_util.get(args, "attrs"), sep="=")
+        self.attrs = args_util.parse_arglist_to_dict(args_util.get(args, "attrs"), sep="=")
         self.inputs = args_util.get(args, "inputs")
         self.outputs = args_util.get(args, "outputs")
 

@@ -40,7 +40,7 @@ def trt_config_args():
 class TestTrtConfigArgs:
     def test_defaults(self, trt_config_args):
         trt_config_args.parse_args([])
-        assert trt_config_args.workspace is None
+        assert trt_config_args._workspace is None
 
     def test_create_config(self, trt_config_args):
         trt_config_args.parse_args([])
@@ -54,6 +54,7 @@ class TestTrtConfigArgs:
         [
             (["--int8"], "INT8"),
             (["--fp16"], "FP16"),
+            (["--fp8"], "FP8"),
             (["--tf32"], "TF32"),
             (["--allow-gpu-fallback"], "GPU_FALLBACK"),
             (["--precision-constraints", "obey"], "OBEY_PRECISION_CONSTRAINTS"),
@@ -64,6 +65,8 @@ class TestTrtConfigArgs:
     def test_flags(self, trt_config_args, args, flag):
         if flag == "TF32" and mod.version(trt.__version__) < mod.version("7.1"):
             pytest.skip("TF32 support was added in 7.1")
+        if flag == "FP8" and mod.version(trt.__version__) < mod.version("8.6"):
+            pytest.skip("FP8 support was added in 8.6")
 
         if (
             flag == "OBEY_PRECISION_CONSTRAINTS"
@@ -89,7 +92,7 @@ class TestTrtConfigArgs:
     )
     def test_workspace(self, trt_config_args, workspace, expected):
         trt_config_args.parse_args(["--workspace", workspace])
-        assert trt_config_args.workspace == expected
+        assert trt_config_args._workspace == expected
 
         builder, network = create_network()
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
@@ -229,8 +232,8 @@ class TestTrtConfigArgs:
                 str(regression_cutoff),
             ]
         )
-        assert trt_config_args.quantile == quantile
-        assert trt_config_args.regression_cutoff == regression_cutoff
+        assert trt_config_args._quantile == quantile
+        assert trt_config_args._regression_cutoff == regression_cutoff
 
         builder, network = create_network()
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
@@ -265,25 +268,29 @@ class TestTrtConfigArgs:
             ]
             assert config.get_flag(trt.BuilderFlag.INT8)
 
+    def test_config_script_default_func(self, trt_config_args):
+        trt_config_args.parse_args(["--trt-config-script", "example.py"])
+        assert trt_config_args.trt_config_func_name == "load_config"
+
     def test_config_script(self, trt_config_args):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
                 dedent(
                     """
-                from polygraphy.backend.trt import CreateConfig
-                from polygraphy import func
-                import tensorrt as trt
+                    from polygraphy.backend.trt import CreateConfig
+                    from polygraphy import func
+                    import tensorrt as trt
 
-                @func.extend(CreateConfig())
-                def my_load_config(config):
-                    config.set_flag(trt.BuilderFlag.FP16)
-            """
+                    @func.extend(CreateConfig())
+                    def my_load_config(config):
+                        config.set_flag(trt.BuilderFlag.FP16)
+                    """
                 )
             )
             f.flush()
             os.fsync(f.fileno())
 
-            trt_config_args.parse_args(["--trt-config-script", f.name, "--trt-config-func-name=my_load_config"])
+            trt_config_args.parse_args(["--trt-config-script", f"{f.name}:my_load_config"])
             assert trt_config_args.trt_config_script == f.name
             assert trt_config_args.trt_config_func_name == "my_load_config"
 
@@ -291,6 +298,35 @@ class TestTrtConfigArgs:
             with builder, network, trt_config_args.create_config(builder, network) as config:
                 assert isinstance(config, trt.IBuilderConfig)
                 assert config.get_flag(trt.BuilderFlag.FP16)
+
+    def test_config_postprocess_script_default_func(self, trt_config_args):
+        trt_config_args.parse_args(["--trt-config-postprocess-script", "example.py"])
+        assert trt_config_args.trt_config_postprocess_func_name == "postprocess_config"
+
+    def test_config_postprocess_script(self, trt_config_args):
+        with util.NamedTemporaryFile("w+", suffix=".py") as f:
+            f.write(
+                dedent(
+                    """
+                    import tensorrt as trt
+
+                    def my_postprocess_config(builder, network, config):
+                        config.set_flag(trt.BuilderFlag.FP16)
+                    """
+                )
+            )
+            f.flush()
+            os.fsync(f.fileno())
+
+            trt_config_args.parse_args(["--trt-config-postprocess-script", f"{f.name}:my_postprocess_config", "--int8"])
+            assert trt_config_args.trt_config_postprocess_script == f.name
+            assert trt_config_args.trt_config_postprocess_func_name == "my_postprocess_config"
+
+            builder, network = create_network()
+            with builder, network, trt_config_args.create_config(builder, network) as config:
+                assert isinstance(config, trt.IBuilderConfig)
+                assert config.get_flag(trt.BuilderFlag.FP16)
+                assert config.get_flag(trt.BuilderFlag.INT8)
 
     @pytest.mark.parametrize(
         "args",
@@ -357,10 +393,56 @@ class TestTrtConfigArgs:
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.5"), reason="Unsupported for TRT versions prior to 8.5"
     )
-    def test_preview_features(self, trt_config_args):
+    @pytest.mark.parametrize(
+        "preview_features",
+        [
+            [],
+            ["FASter_DYNAMIC_ShAPeS_0805"],
+            ["FASter_DYNAMIC_ShAPeS_0805", "DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805"],
+        ],
+    )
+    def test_preview_features(self, trt_config_args, preview_features):
         # Flag should be case-insensitive
-        trt_config_args.parse_args(["--preview-features", "FASter_DYNAMIC_ShAPeS_0805"])
+        trt_config_args.parse_args(["--preview-features"] + preview_features)
+        builder, network = create_network()
+
+        sanitized_preview_features = [pf.upper() for pf in preview_features]
+
+        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+            # Check that only the enabled preview features are on.
+            for name, pf in trt.PreviewFeature.__members__.items():
+                assert config.get_preview_feature(pf) == (name in sanitized_preview_features)
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
+    )
+    @pytest.mark.parametrize("level", range(5))
+    def test_builder_optimization_level(self, trt_config_args, level):
+        trt_config_args.parse_args(["--builder-optimization-level", str(level)])
+        assert trt_config_args.builder_optimization_level == level
+
         builder, network = create_network()
 
         with builder, network, trt_config_args.create_config(builder, network=network) as config:
-            assert config.get_preview_feature(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805)
+            assert config.builder_optimization_level == level
+
+    if mod.version(trt.__version__) >= mod.version("8.6"):
+
+        @pytest.mark.parametrize(
+            "level, expected",
+            [
+                ("none", trt.HardwareCompatibilityLevel.NONE),
+                ("AMPERe_plUS", trt.HardwareCompatibilityLevel.AMPERE_PLUS),
+                ("ampere_plus", trt.HardwareCompatibilityLevel.AMPERE_PLUS),
+            ],
+        )
+        def test_hardware_compatibility_level(self, trt_config_args, level, expected):
+            trt_config_args.parse_args(["--hardware-compatibility-level", str(level)])
+            assert (
+                str(trt_config_args.hardware_compatibility_level) == f"trt.HardwareCompatibilityLevel.{expected.name}"
+            )
+
+            builder, network = create_network()
+
+            with builder, network, trt_config_args.create_config(builder, network=network) as config:
+                assert config.hardware_compatibility_level == expected

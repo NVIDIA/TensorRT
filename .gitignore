@@ -7,3 +7,4 @@ build/
 *.sln
 *.vcxproj
 externals/
+**/.DS_Store

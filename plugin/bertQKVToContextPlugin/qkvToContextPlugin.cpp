@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,9 +34,7 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
-
-namespace bert
-{
+using namespace nvinfer1::plugin::bert;
 
 namespace
 {
@@ -228,52 +226,52 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
             ((in->dims.d[4]) == 1)            // for fc
             ;
     }
-    else
-    {                                // pos==1
-        if ((mHasImask && pos == 1)) // pos 1 is the mask
-        {
-            const auto* inMask = &inOut[1];
-            if (inMask->dims.d[1] != -1 && inMask->dims.d[1] != packedSize)
-            {
-                gLogError << "CustomEmbLayerNormPluginDynamic returned mask with pack size " << inMask->dims.d[1]
-                          << ", but " << QKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
-                          << std::endl;
-                return false;
-            }
 
-            // detect full mask and check that it was produced
-            return (inMask->type == DataType::kFLOAT) &&     // precision
-                (inMask->format == TensorFormat::kLINEAR) && // format
-                (inMask->dims.nbDims == 2) &&                // Bx2*maskSize
-                (inMask->dims.d[0] == in->dims.d[BDIM]);
+    // pos==1
+    if ((mHasImask && pos == 1)) // pos 1 is the mask
+    {
+        auto const* inMask = &inOut[1];
+        if (inMask->dims.d[1] != -1 && inMask->dims.d[1] != packedSize)
+        {
+            gLogError << "CustomEmbLayerNormPluginDynamic returned mask with pack size " << inMask->dims.d[1]
+                      << ", but " << QKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
+                      << std::endl;
+            return false;
         }
 
-        if (!mHasImask || pos == 2) // output pos
-        {
-            bool isFormatSupported = out->format == TensorFormat::kLINEAR;
-            if (mType == DataType::kINT8)
-            {
-                if (out->dims.d[HDIM] % 32U == 0)
-                {
-                    isFormatSupported = out->format == TensorFormat::kCHW32;
-                }
-                else
-                {
-                    isFormatSupported = out->format == TensorFormat::kCHW4;
-                }
-            }
-
-            return (in->type == out->type) &&                      // precision
-                isFormatSupported &&                               // format
-                (out->dims.nbDims == 5) &&                         // num dims
-                ((in->dims.d[HDIM] / 3) == (out->dims.d[HDIM])) && // div 3
-                ((out->dims.d[3]) == 1) &&                         // for fc
-                ((out->dims.d[4]) == 1) &&                         // for fc
-                ((out->dims.d[BDIM]) == in->dims.d[BDIM]) &&       // check B
-                ((out->dims.d[SDIM]) == in->dims.d[SDIM])          // check S
-                ;
-        }
+        // detect full mask and check that it was produced
+        return (inMask->type == DataType::kFLOAT) &&     // precision
+            (inMask->format == TensorFormat::kLINEAR) && // format
+            (inMask->dims.nbDims == 2) &&                // Bx2*maskSize
+            (inMask->dims.d[0] == in->dims.d[BDIM]);
     }
+
+    if (!mHasImask || pos == 2) // output pos
+    {
+        bool isFormatSupported = out->format == TensorFormat::kLINEAR;
+        if (mType == DataType::kINT8)
+        {
+            if (out->dims.d[HDIM] % 32U == 0)
+            {
+                isFormatSupported = out->format == TensorFormat::kCHW32;
+            }
+            else
+            {
+                isFormatSupported = out->format == TensorFormat::kCHW4;
+            }
+        }
+
+        return (in->type == out->type) &&                      // precision
+            isFormatSupported &&                               // format
+            (out->dims.nbDims == 5) &&                         // num dims
+            ((in->dims.d[HDIM] / 3) == (out->dims.d[HDIM])) && // div 3
+            ((out->dims.d[3]) == 1) &&                         // for fc
+            ((out->dims.d[4]) == 1) &&                         // for fc
+            ((out->dims.d[BDIM]) == in->dims.d[BDIM]) &&       // check B
+            ((out->dims.d[SDIM]) == in->dims.d[SDIM])          // check S
+            ;
+    }
+
     return false;
 }
 void QKVToContextPluginDynamic::configurePlugin(
@@ -1011,15 +1009,13 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* i
 
         return cudaGetLastError();
     }
-    else
-    {
-        PLUGIN_ASSERT(mS == inputDesc->dims.d[SDIM]);
-        PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
 
-        const void* maskPtr = mHasImask ? inputs[1] : nullptr;
-        this->dispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
-        return cudaGetLastError();
-    }
+    PLUGIN_ASSERT(mS == inputDesc->dims.d[SDIM]);
+    PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
+
+    void const* maskPtr = mHasImask ? inputs[1] : nullptr;
+    this->dispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+    return cudaGetLastError();
 }
 
 QKVToContextVarSeqlenPluginCreator::QKVToContextVarSeqlenPluginCreator()
@@ -1157,6 +1153,5 @@ const char* QKVToContextVarSeqlenPluginCreator::getPluginNamespace() const noexc
 {
     return mNamespace.c_str();
 }
-} // namespace bert
 
 #endif // CUDA_VERSION >= 10010

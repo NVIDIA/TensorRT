@@ -22,12 +22,53 @@ import re
 import shutil
 import subprocess as sp
 import time
+from types import MappingProxyType
 
 from polygraphy import config, util
-from polygraphy.json import load_json, save_json
+from polygraphy.json import load_json, save_json, Decoder, Encoder
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
+
+
+class IterationContext:
+    """
+    Tracks per-iteration state and other contextual information during iterative debugging.
+    """
+
+    def __init__(self, state: dict, iteration_info: dict, success: bool):
+        """
+        Args:
+            state (Dict[Any, Any]): The initial state of the context.
+            iteration_info (Dict[Any, Any]): The initial iteration information of the context.
+            success (bool): The initial success value of the context.
+        """
+        self.state = state
+        """Tracks internal per-iteration state"""
+        self.iteration_info = iteration_info
+        """Tracks per-iteration state that should be exposed to the user, e.g. current iteration number"""
+        self.success = success
+
+    def freeze(self):
+        """
+        Freeze this context so that the `state` and `iteration_info` cannot be modified.
+        """
+        self.state = MappingProxyType(self.state)
+        self.iteration_info = MappingProxyType(self.iteration_info)
+
+
+@Encoder.register(IterationContext)
+def encode(iter_context):
+    return {
+        "state": dict(iter_context.state),
+        "iteration_info": dict(iter_context.iteration_info),
+        "success": iter_context.success,
+    }
+
+
+@Decoder.register(IterationContext)
+def decode(dct):
+    return IterationContext(state=dct["state"], iteration_info=dct["iteration_info"], success=dct["success"])
 
 
 class CheckCmdArgs(BaseArgs):
@@ -499,28 +540,29 @@ class IterativeDebugArgs(BaseArgs):
                 advance_func()
 
         Args:
-            make_iter_art_func (Callable[[], Any]):
-                    A *stateless* callable generates the per iteration intermediate artifact.
-                    Any state should be managed in `advance_func`. This is critical to ensure that the
-                    debug replay mechanism works correctly.
+            make_iter_art_func (Callable[[IterationContext], None]):
+                    A stateless callable that generates the per iteration intermediate artifact.
+                    This callable may *write* state required by `advance_func` to `context.state` but not read from it.
+                    It may also write inforamtion to `iteration_info` but must not modify any other members of the context.
+                    This is critical to ensure that the debug replay mechanism works correctly.
 
                     This callback may call ``stop_iteration()`` or ``skip_iteration()`` to stop iteration completely,
                     or skip the current iteration respectively.
 
-                    If this callback has a return value, it will be forwarded to ``advance_func`` as a third argument.
-                    The return value must support JSON serialization.
+                    Any members set in the context must support JSON serialization.
 
-            advance_func (Callable[[int, bool], None]):
+            advance_func (Callable[[IterationContext], None]):
                     A callable which handles the success or failure of the check command and advances iteration.
 
-                    It should take at least one argument:
-                        1. `index`:
+                    The `context` includes at least the following information:
+                        1. context.iteration_info["iteration"]
                                 An integer representing the current iteration index.
-                        2. `success`:
+                        2. context.success:
                                 A boolean indicating whether the current iteration was successful.
+                        3. context.state:
+                                A dictionary that stores per-iteration state.
 
-                    If ``make_iter_art_func`` has a return value, ``advance_func`` may also take a third argument,
-                    which will receive the return value of ``make_iter_art_func``.
+                        `advance_func` may *read* from the context but not write to it.
 
                     This callback may call ``stop_iteration()`` to stop iteration completely.
                     If ``make_iter_art_func`` requests the iteration to be skipped, this callback will *not* be called.
@@ -558,7 +600,8 @@ class IterativeDebugArgs(BaseArgs):
 
             self.previous_suffixes.add(suffix)
 
-        def handle_until(index, success):
+        def handle_until(context: IterationContext):
+            index, success = context.iteration_info["iteration"], context.success
             if isinstance(self.until, str):
                 if (self.until == "good" and success) or (self.until == "bad" and not success):
                     self.arg_groups[IterativeDebugArgs].stop_iteration()
@@ -592,11 +635,14 @@ class IterativeDebugArgs(BaseArgs):
         # We don't actually want to loop forever. This many iterations ought to be enough for anybody.
         MAX_COUNT = 100000
         num_passed = 0
-        success = True
+
         for index in range(MAX_COUNT):
+
+            context = IterationContext(state={}, iteration_info={"iteration": index}, success=True)
 
             with contextlib.ExitStack() as stack, G_LOGGER.indent():
                 remaining = get_remaining_func() if get_remaining_func is not None else None
+
                 G_LOGGER.start(
                     f"RUNNING | Iteration {index + 1}{f' | Approximately {remaining} iteration(s) remaining' if remaining is not None else ''}"
                 )
@@ -616,29 +662,26 @@ class IterativeDebugArgs(BaseArgs):
 
                 start_time = time.time()
                 if debug_replay_key in debug_replay:
-                    success, extra_advance_args = debug_replay[debug_replay_key]
-                    G_LOGGER.info(f"Loading iteration information from debug replay: success={success}")
+                    context = debug_replay[debug_replay_key]
+                    G_LOGGER.info(f"Loading iteration information from debug replay: success={context.success}")
                 else:
                     # Ensure that the intermediate artifact will be removed at the end of the iteration if requested.
                     if self.iter_artifact_path and self.remove_intermediate:
                         stack.callback(try_remove(self.iter_artifact_path))
 
-                    if self.iteration_info_path:
-                        save_json({"iteration": index}, self.iteration_info_path)
-                        stack.callback(try_remove(self.iteration_info_path))
-
-                    extra_advance_args = []
                     do_check = True
                     if make_iter_art_func is not None:
                         try:
-                            ret = make_iter_art_func()
-                            if ret is not None:
-                                extra_advance_args = [ret]
+                            make_iter_art_func(context)
                         except IterativeDebugArgs.SkipIteration as err:
-                            success = err.success
+                            context.success = err.success
                             do_check = False
                         except StopIteration:
                             break
+
+                    if self.iteration_info_path:
+                        save_json(context.iteration_info, self.iteration_info_path)
+                        stack.callback(try_remove(self.iteration_info_path))
 
                     def save_replay(replay, description=None, suffix=None):
                         if self.save_debug_replay:
@@ -650,20 +693,25 @@ class IterativeDebugArgs(BaseArgs):
                     # We save the replay twice - first with a status of FAIL, and then with the real status.
                     # This way, if `run_check()` causes a crash, we can treat the iteration as a failure
                     # and skip it to avoid the crash when we reload the replay file.
-                    debug_replay[debug_replay_key] = [False, extra_advance_args]
+                    skip_current_context = copy.copy(context)
+                    skip_current_context.success = False
+                    debug_replay[debug_replay_key] = skip_current_context
                     save_replay(debug_replay, suffix="_skip_current")
 
                     if do_check:
-                        success = self.arg_groups[CheckCmdArgs].run_check(self.iter_artifact_path)
-                        self.arg_groups[ArtifactSortArgs].sort_artifacts(success, suffix=debug_replay_key)
+                        context.success = self.arg_groups[CheckCmdArgs].run_check(self.iter_artifact_path)
+                        self.arg_groups[ArtifactSortArgs].sort_artifacts(context.success, suffix=debug_replay_key)
 
-                    debug_replay[debug_replay_key] = [success, extra_advance_args]
+                    debug_replay[debug_replay_key] = context
                     save_replay(debug_replay, "debug replay")
 
-                log_status(success, start_time)
+                log_status(context.success, start_time)
+
+                # No further modifications should be made to the context
+                context.freeze()
 
                 try:
-                    advance_func(index, success, *extra_advance_args)
+                    advance_func(context)
                 except StopIteration:
                     break
         else:

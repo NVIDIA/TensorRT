@@ -251,6 +251,7 @@ class UseTfTrt(BaseLoader):
         self._graph = graph
         self.max_workspace_size = util.default(max_workspace_size, 1 << 24)
         self.fp16 = util.default(fp16, False)
+        self.fp8 = util.default(fp8, False)
         self.int8 = util.default(int8, False)
         self.max_batch_size = util.default(max_batch_size, 1)
         self.is_dynamic_op = is_dynamic_op
@@ -267,6 +268,7 @@ class UseTfTrt(BaseLoader):
 
         precision_mode = "FP16" if self.fp16 else "FP32"
         precision_mode = "INT8" if self.int8 else precision_mode
+        precision_mode = "FP8" if self.fp8 else precision_mode
 
         G_LOGGER.info(
             f"For TF-TRT, using outputs={output_names}, max_workspace_size_bytes={self.max_workspace_size}, max_batch_size={self.max_batch_size}, minimum_segment_size={self.minimum_segment_size}, is_dynamic_op={self.is_dynamic_op}, precision_mode={precision_mode}"

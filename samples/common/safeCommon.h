@@ -18,6 +18,7 @@
 #ifndef TENSORRT_SAFE_COMMON_H
 #define TENSORRT_SAFE_COMMON_H
 
+#include "cuda_runtime.h"
 #include "NvInferRuntimeCommon.h"
 #include <cstdlib>
 #include <iostream>

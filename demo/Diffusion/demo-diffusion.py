@@ -28,6 +28,7 @@ import torch
 from transformers import CLIPTokenizer
 import tensorrt as trt
 from utilities import Engine, DPMScheduler, LMSDiscreteScheduler, save_image, TRT_LOGGER
+import gc
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion Demo")
@@ -226,6 +227,10 @@ class DemoDiffusion:
                                     output_names = obj.get_output_names(),
                                     dynamic_axes=obj.get_dynamic_axes(),
                             )
+                        
+                        del model
+                        torch.cuda.empty_cache()
+                        gc.collect()
                     else:
                         print(f"Found cached model: {onnx_path}")
 

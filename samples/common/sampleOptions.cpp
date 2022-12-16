@@ -1232,19 +1232,21 @@ void AllOptions::parse(Arguments& arguments)
             auto checkSafeDLAFormats = [](std::vector<IOFormat> const& fmt) {
                 return fmt.empty() ? false : std::all_of(fmt.begin(), fmt.end(), [](IOFormat const& pair) {
                     bool supported{false};
-                    bool const isLINEAR{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kLINEAR)};
+                    bool const isDLA_LINEAR{
+                        pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kDLA_LINEAR)};
                     bool const isCHW4{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW4)};
                     bool const isCHW32{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW32)};
                     bool const isCHW16{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW16)};
-                    supported |= pair.first == nvinfer1::DataType::kINT8 && (isLINEAR || isCHW4 || isCHW32);
-                    supported |= pair.first == nvinfer1::DataType::kHALF && (isLINEAR || isCHW4 || isCHW16);
+                    supported |= pair.first == nvinfer1::DataType::kINT8 && (isDLA_LINEAR || isCHW4 || isCHW32);
+                    supported |= pair.first == nvinfer1::DataType::kHALF && (isDLA_LINEAR || isCHW4 || isCHW16);
                     return supported;
                 });
             };
             if (!checkSafeDLAFormats(build.inputFormats) || !checkSafeDLAFormats(build.outputFormats))
             {
                 throw std::invalid_argument(
-                    "I/O formats for safe DLA capability are restricted to fp16/int8:linear, fp16:chw16 or int8:chw32");
+                    "I/O formats for safe DLA capability are restricted to fp16/int8:dla_linear, fp16:chw16 or "
+                    "int8:chw32");
             }
             if (system.fallback)
             {

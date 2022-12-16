@@ -125,7 +125,7 @@ class BARTDecoderTorchFile(TorchModelFile):
         @staticmethod
         def _reorder_cache(past, beam_idx):
             return BartForConditionalGeneration._reorder_cache(past, beam_idx)
-            
+
         def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
             # cut decoder_input_ids if past is used
             if past is not None:
@@ -139,7 +139,7 @@ class BARTDecoderTorchFile(TorchModelFile):
             # To really enable KV cache in HuggingFace, these args must be passed. Just specifying use_cache = True in BartConfig is not enough. Also see the additional "past_key_values" fields in the forward() return below.
             if self.config.use_cache:
                 ret["use_cache"] = use_cache
-                ret["past_key_values"] = past   
+                ret["past_key_values"] = past
 
             return ret
 
@@ -198,10 +198,10 @@ class BARTDecoderONNXFile(ONNXModelFile):
 
 # TRT Engine File Encoding #
 class BARTDecoderTRTEngine(TRTEngineFile):
-    DEFAULT_TRT_WORKSPACE_MB = 3072
 
     def __init__(self, model, network_metadata):
         super().__init__(model, BARTDecoderConverter, network_metadata)
+        self.max_trt_workspace = BARTModelTRTConfig.MAX_DECODER_WORKSPACE_MB[network_metadata.variant]
 
     def get_network_definition(self, network_definition):
         return add_extra_fp32(network_definition)
@@ -211,10 +211,10 @@ class BARTDecoderTRTEngine(TRTEngineFile):
 
 
 class BARTEncoderTRTEngine(TRTEngineFile):
-    DEFAULT_TRT_WORKSPACE_MB = 2048
 
     def __init__(self, model, network_metadata):
         super().__init__(model, BARTEncoderConverter, network_metadata)
+        self.max_trt_workspace = 2048
 
     def get_network_definition(self, network_definition):
         return add_extra_fp32(network_definition)
@@ -281,7 +281,7 @@ class BARTDecoderConverter(ModelFileConverter):
                     **inputs.get_torch_dynamic_axis_encoding(),
                     **outputs.get_torch_dynamic_axis_encoding(),
                 },
-                training=False,
+                training=torch.onnx.TrainingMode.EVAL,
                 **opt_args
             )
         else:
@@ -289,21 +289,29 @@ class BARTDecoderConverter(ModelFileConverter):
             decoder_output = decoder_with_lm_head_and_bias(input_ids[:,:-1], encoder_hidden_states) # decoder output at t-1 step (logits, past_key_values from 0 to t-1)
             past_key_values = decoder_output[1]
 
+            decoder_root, decoder_fullname = os.path.split(output_fpath)
+            # Split kv and non kv onnx into separate folders to avoid weight overlap
+            non_kv_root = os.path.join(decoder_root, "non-kv")
+            kv_root = os.path.join(decoder_root, "kv")
+            decoder_name, decoder_ext = os.path.splitext(decoder_fullname)
+            non_kv_fpath = os.path.join(non_kv_root, decoder_name + "-non-kv" + decoder_ext)
+            kv_fpath = os.path.join(kv_root, decoder_fullname)
+
             # This code allows for huggingface compatible torch class to use onnx exporter (change just before onnx.export)
             old_forward = decoder_with_lm_head_and_bias.forward
             def _export_forward(input_ids, encoder_hidden_states, past_key_values):
                 result = old_forward(input_ids, encoder_hidden_states, past_key_values=past_key_values)
                 return (result[0], result[1])
             decoder_with_lm_head_and_bias.forward = _export_forward
-            
+
             torch.onnx.export(
                 decoder_with_lm_head_and_bias,
                 (input_ids[:,-1:], encoder_hidden_states,past_key_values),
-                # (1) input_ids should be the t token (last one) while past_key_values is 0 to t-1 caches 
+                # (1) input_ids should be the t token (last one) while past_key_values is 0 to t-1 caches
                 # (2) since past_key_values is kwargs, ideally use "(input_ids[:,-1:], encoder_hidden_states, {"past_key_values": past_key_values})",
-                # but onnx.export seems to unable to take kwargs properly (although PyTorch 1.11 claims it supports already). 
+                # but onnx.export seems to unable to take kwargs properly (although PyTorch 1.11 claims it supports already).
                 # Therefore, we need to wrap inside _export_forward() and make past_key_values indeed a kwargs
-                output_fpath,
+                kv_fpath,
                 export_params=True,
                 opset_version=12,
                 input_names=inputs.get_names(),
@@ -312,7 +320,7 @@ class BARTDecoderConverter(ModelFileConverter):
                     **inputs.get_torch_dynamic_axis_encoding(),
                     **outputs.get_torch_dynamic_axis_encoding(),
                 },
-                training=False,
+                training=torch.onnx.TrainingMode.EVAL,
                 **opt_args
             )
 
@@ -321,9 +329,6 @@ class BARTDecoderConverter(ModelFileConverter):
                 result = old_forward(input_ids, encoder_hidden_states, use_cache=use_cache)
                 return (result[0], result[1])
             decoder_with_lm_head_and_bias.forward = _export_forward
-            
-            fpath_root, fpath_ext = os.path.splitext(output_fpath)
-            output_fpath_non_kv = fpath_root + '-non-kv' + fpath_ext
 
             # inputs are same as non-kv model
             # outputs are same as kv model
@@ -334,7 +339,7 @@ class BARTDecoderConverter(ModelFileConverter):
             torch.onnx.export(
                 decoder_with_lm_head_and_bias,
                 (input_ids[:,-1:], encoder_hidden_states, True),
-                output_fpath_non_kv,
+                non_kv_fpath,
                 export_params=True,
                 opset_version=12,
                 input_names=inputs_non_kv.get_names(),
@@ -343,14 +348,19 @@ class BARTDecoderConverter(ModelFileConverter):
                     **inputs_non_kv.get_torch_dynamic_axis_encoding(),
                     **outputs.get_torch_dynamic_axis_encoding(),
                 },
-                training=False,
+                training=torch.onnx.TrainingMode.EVAL,
                 **opt_args
             )
-        
+
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for BART")
             # move_t5_cast_op(output_fpath, output_fpath) # BART doesn't have T5's Add-Cast-Pow ordering issue
-            clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
+            if network_metadata.other.kv_cache:
+                # both onnx files need clamp
+                clamp_weights_onnx_to_fp16_bounds(non_kv_fpath, non_kv_fpath)
+                clamp_weights_onnx_to_fp16_bounds(kv_fpath, kv_fpath)
+            else:
+                clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
 
         return BARTDecoderONNXFile(output_fpath, network_metadata)
 
@@ -396,7 +406,7 @@ class BARTEncoderConverter(ModelFileConverter):
                 **inputs.get_torch_dynamic_axis_encoding(),
                 **outputs.get_torch_dynamic_axis_encoding(),
             },
-            training=False,
+            training=torch.onnx.TrainingMode.EVAL,
             **opt_args
         )
 

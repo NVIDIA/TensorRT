@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
 unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin[] = {
@@ -6105,3 +6109,5 @@ unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin[] = {
 };
 unsigned int fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin_len = 73000;
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1

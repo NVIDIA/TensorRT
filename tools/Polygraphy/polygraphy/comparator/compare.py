@@ -525,11 +525,18 @@ class CompareFunc:
                         if val0 == out1_vals[index0]:
                             continue
 
-                        index1 = np.where(out1_vals == val0)[0]
+                        index1 = np.argwhere(out1_vals == val0).ravel()
+                        if index1.size < 1:
+                            G_LOGGER.error(f"FAILED | Value: {val0} not found in output")
+                            passed = False
+                            continue
+
+                        index1 = index1[0]
 
                         if abs(index1 - index0) > per_out_index_tol:
                             G_LOGGER.error(f"FAILED | Difference exceeds index tolerance ({per_out_index_tol})")
                             passed = False
+                            continue
 
                 # Log information about the outputs
                 hist_bin_range = (

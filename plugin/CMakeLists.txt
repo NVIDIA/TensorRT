@@ -31,6 +31,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ENABLED_SMS}")
 set(PLUGIN_SOURCES)
 set(PLUGIN_CU_SOURCES)
 
+
 set(PLUGIN_LISTS
     batchTilePlugin
     batchedNMSPlugin
@@ -166,6 +167,11 @@ target_link_libraries(${SHARED_TARGET}
     ${nvinfer_LIB_PATH}
     ${CMAKE_DL_LIBS}
 )
+
+# Needed when static linking CUDART
+if (NOT MSVC)
+    target_link_libraries(${SHARED_TARGET} Threads::Threads ${RT_LIB})
+endif()
 
 ################################## STATIC LIBRARY #######################################
 

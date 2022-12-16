@@ -45,7 +45,7 @@ Among other things, Polygraphy lets you:
 python -m pip install colored polygraphy --extra-index-url https://pypi.ngc.nvidia.com
 ```
 
-**NOTE:** *When using this method, the command-line toolkit will be installed into `${HOME}/.local/bin` by default.*
+**NOTE:** *On Linux, the command-line toolkit is usually installed to `${HOME}/.local/bin` by default.*
     *Make sure to add this directory to your `PATH` environment variable.*
 
 

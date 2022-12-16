@@ -24,12 +24,15 @@ The fundamental steps undertaken by `debug reduce` are as follows:
 1. Remove some nodes from the original graph and write a new model to `polygraphy_debug.onnx`
     (this path can be changed using the `--iter-artifact` option).
 
-2. Evaluate the model either interactively or automatically if a `--check` command is provided.
+2. Evaluate the model either interactively or, if a `--check` command is provided, automatically.
 
 3. Remove more nodes if the model still fails, otherwise add nodes back; Then, repeat the process.
 
 This guide provides some general information as well as tips and tricks on
 how to use `debug reduce` effectively.
+
+Also see the [general how-to guide for `debug` subtools](./use_debug_subtools_effectively.md),
+which includes information applicable to all the `debug` subtools.
 
 
 ## A Note On Models With Dynamic Input Shapes
@@ -114,7 +117,7 @@ number so you can easily correlate it with the logging output during reduction.
 ### Insights From Minimum Good Models
 
 In addition to minimum failing models, `debug reduce` can also generate minimum passing models.
-Generally, this is the smallest possible passing model that is larger than the minimal failing model.
+Generally, this is the passing model that is closest in size to the minimal failing model.
 Comparing this against the minimum failing model can yield additional insights on the root
 cause of a failure.
 
@@ -123,9 +126,9 @@ To make `debug reduce` save minimum passing models, use the `--min-good <path>` 
 
 ### Reduction Modes
 
-`debug reduce` offers multiple strategies to reduce the model: `bisect` operates in `O(log(N))` time,
-while `linear` operates in `O(N)` time but may lead to smaller models. A good compromise is to
-use `bisect` on the original model, then further reduce the result using `linear`.
+`debug reduce` offers multiple strategies to reduce the model, which you can specify with the `--mode` option:
+`bisect` operates in `O(log(N))` time, while `linear` operates in `O(N)` time but may lead to smaller models.
+A good compromise is to use `bisect` on the original model, then further reduce the result using `linear`.
 
 
 ## Further Reading

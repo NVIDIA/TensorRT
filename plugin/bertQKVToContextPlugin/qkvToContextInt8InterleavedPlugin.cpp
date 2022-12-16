@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,9 +30,7 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
-
-namespace bert
-{
+using namespace nvinfer1::plugin::bert;
 
 namespace
 {
@@ -48,8 +46,8 @@ REGISTER_TENSORRT_PLUGIN(QKVToContextInterleavedPluginCreator);
 
 constexpr uint32_t IIDX = 0; // index of the input tensor
 
-QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(
-    std::string const name, int const hiddenSize, int const numHeads, float const dqProbs, bool const useInt8ScaleMax)
+QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& name, int32_t const hiddenSize,
+    int32_t const numHeads, float const dqProbs, bool const useInt8ScaleMax)
     : mLayerName(name)
     , mS(0)
     , mB(0)
@@ -69,7 +67,7 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(
     mXmmaKernel = getXMMAKernelsV2(DATA_TYPE_INT8, mSM);
 }
 
-QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(const std::string name, const void* data, size_t length)
+QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& name, void const* data, size_t length)
     : mLayerName(name)
 {
     deserialize_value(&data, &length, &mNumHeads);
@@ -413,4 +411,3 @@ const char* QKVToContextInterleavedPluginCreator::getPluginNamespace() const noe
 {
     return mNamespace.c_str();
 }
-} // namespace bert

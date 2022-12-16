@@ -81,7 +81,7 @@ class TfTrtArgs(BaseArgs):
             loader_str = make_invocable(
                 "UseTfTrt",
                 loader_name,
-                max_workspace_size=self.arg_groups[TrtConfigArgs].workspace,
+                max_workspace_size=self.arg_groups[TrtConfigArgs]._workspace,
                 fp16=self.arg_groups[TrtConfigArgs].fp16,
                 int8=self.arg_groups[TrtConfigArgs].int8,
                 max_batch_size=self.arg_groups[TrtLegacyRunnerArgs].batch_size,

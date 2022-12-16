@@ -10,9 +10,27 @@ If you're using an ONNX model, try [sanitizing it](../examples/cli/surgeon/02_fo
 proceeding, as this may solve the problem in some cases.
 
 
+## Does Real Input Data Make A Difference?
+
+Some models may be sensitive to input data. For example, real inputs may result in better accuracy
+than randomly generated ones. Polygraphy offers multiple ways to supply real input
+data, outlined in [`run` example 05](../examples/cli/run/05_comparing_with_custom_input_data/).
+
+Does using real input data improve the accuracy?
+
+- Yes, accuracy is acceptable when using real input data.
+
+    This likely means there is no bug; rather, your model is sensitive to input data.
+
+- No, I still see accuracy issues even with real input data.
+
+    Go To: [Intermittent Or Not?](#intermittent-or-not)
+
+
 ## Intermittent Or Not?
 
 Is the issue intermittent between engine builds?
+
 - Yes, sometimes the accuracy issue disappears when I rebuild the engine.
 
     Go To: [Debugging Intermittent Accuracy Issues](#debugging-intermittent-accuracy-issues)
@@ -31,6 +49,7 @@ failure. Polygraphy includes a `debug build` subtool to help you find such tacti
 For more information, refer to [`debug` example 01](../examples/cli/debug/01_debugging_flaky_trt_tactics/).
 
 Were you able to find the failing tactic?
+
 - Yes, I know which tactic is faulty.
 
     Go To: [You Have A Minimal Failing Case!](#you-have-a-minimal-failing-case)
@@ -48,10 +67,11 @@ layer is causing the failure. Polygraphy includes a mechanism to mark all tensor
 as outputs so that they can be compared; however, this can potentially affect TensorRT's optimization
 process. Hence, we need to determine if we still observe the accuracy issue when all output tensors are marked.
 
-Refer to [this example](../examples/cli/run/01_comparing_frameworks/) for details on how to compare
+Refer to [this example](../examples/cli/run/01_comparing_frameworks/README.md#comparing-per-layer-outputs-between-onnx-runtime-and-tensorrt) for details on how to compare
 per-layer outputs before proceeding.
 
 Were you able to reproduce the accuracy failure when comparing layer-wise outputs?
+
 - Yes, the failure reprodces even if I mark other outputs in the network.
 
     Go To: [Extracting A Failing Subgraph](#extracting-a-failing-subgraph)
@@ -77,6 +97,7 @@ Next, we can extract a subgraph including just the problematic layer.
 For more information, refer to [`surgeon` example 01](../examples/cli/surgeon/01_isolating_subgraphs/).
 
 Does this isolated subgraph reproduce the problem?
+
 - Yes, the subgraph fails too.
 
     Go To: [You Have A Minimal Failing Case!](#you-have-a-minimal-failing-case)
@@ -95,6 +116,7 @@ subgraphs to find the smallest possible one that still fails. The `debug reduce`
 For more information, refer to [`debug` example 02](../examples/cli/debug/02_reducing_failing_onnx_models/).
 
 Does the reduced model fail?
+
 - Yes, the reduced model fails.
 
     Go To: [You Have A Minimal Failing Case!](#you-have-a-minimal-failing-case)

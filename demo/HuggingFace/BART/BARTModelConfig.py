@@ -96,6 +96,13 @@ BARTTRTBenchmarkingArgs = namedtuple("BARTTRTBenchmarkingArgs", ["input_seq_len"
 class BARTModelTRTConfig(NNConfig):
 
     TARGET_MODELS = ["facebook/bart-base", "facebook/bart-large", "facebook/bart-large-cnn", "facebook/mbart-large-50"]
+
+    MAX_DECODER_WORKSPACE_MB = {
+        TARGET_MODELS[0]: 3072,
+        TARGET_MODELS[1]: 3072,
+        TARGET_MODELS[2]: 3072,
+        TARGET_MODELS[3]: 3072,
+    }
     
     # bart-base: 12-layer, 768-hidden, 139M parameters
     # bart-large: 24-layer, 1024-hidden, 406M parameters

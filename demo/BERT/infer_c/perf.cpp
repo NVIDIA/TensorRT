@@ -52,6 +52,29 @@ void printHelpInfo()
     std::cout << std::endl;
 }
 
+void printDeviceInfo()
+{
+    int32_t device{};
+    gpuErrChk(cudaGetDevice(&device));
+
+    cudaDeviceProp properties{};
+    gpuErrChk(cudaGetDeviceProperties(&properties, device));
+
+    std::cout << "=== Device Information ===" << std::endl;
+    std::cout << "Selected Device: " << properties.name << std::endl;
+    std::cout << "Compute Capability: " << properties.major << "." << properties.minor << std::endl;
+    std::cout << "SMs: " << properties.multiProcessorCount << std::endl;
+    std::cout << "Compute Clock Rate: " << properties.clockRate / 1000000.0F << " GHz" << std::endl;
+    std::cout << "Device Global Memory: " << (properties.totalGlobalMem >> 20) << " MiB" << std::endl;
+    std::cout << "Shared Memory per SM: " << (properties.sharedMemPerMultiprocessor >> 10) << " KiB" << std::endl;
+    std::cout << "Memory Bus Width: " << properties.memoryBusWidth << " bits"
+              << " (ECC " << (properties.ECCEnabled != 0 ? "enabled" : "disabled") << ")" << std::endl;
+    std::cout << "Memory Clock Rate: " << properties.memoryClockRate / 1000000.0F << " GHz" << std::endl;
+    std::cout << "=== Software Information ===" << std::endl;
+    std::cout << "Build time TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR << "." << NV_TENSORRT_PATCH << std::endl;
+    std::cout << "Runtime linked TensorRT version: " << getInferLibVersion() << std::endl;
+}
+
 int main(int argc, char* argv[])
 {
 
@@ -70,6 +93,7 @@ int main(int argc, char* argv[])
         printHelpInfo();
         return EXIT_FAILURE;
     }
+    printDeviceInfo();
 
     if (args.batchSize.empty())
     {

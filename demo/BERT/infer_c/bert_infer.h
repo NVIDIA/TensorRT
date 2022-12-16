@@ -68,14 +68,14 @@ struct BertInference
         std::vector<char> bytes(fsize);
         input.read(bytes.data(), fsize);
 
-        auto runtime = TrtUniquePtr<IRuntime>(createInferRuntime(gLogger));
-        if (runtime == nullptr)
+        mRuntime = TrtUniquePtr<IRuntime>(createInferRuntime(gLogger));
+        if (mRuntime == nullptr)
         {
-            gLogError << "Error creating TRT runtime\n";
+            gLogError << "Error creating TRT mRuntime\n";
             exit(-1);
         }
 
-        mEngine = TrtUniquePtr<ICudaEngine>(runtime->deserializeCudaEngine(bytes.data(), bytes.size()));
+        mEngine = TrtUniquePtr<ICudaEngine>(mRuntime->deserializeCudaEngine(bytes.data(), bytes.size()));
         if (mEngine == nullptr)
         {
             gLogError << "Error deserializing CUDA engine\n";
@@ -338,6 +338,7 @@ struct BertInference
     const int mSeqLength;
     const bool mEnableGraph;
 
+    TrtUniquePtr<IRuntime> mRuntime{nullptr};
     TrtUniquePtr<ICudaEngine> mEngine{nullptr};
     TrtUniquePtr<IExecutionContext> mContext{nullptr};
     std::vector<void*> mBindings;

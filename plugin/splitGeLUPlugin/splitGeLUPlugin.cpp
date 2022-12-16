@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +26,8 @@ using nvinfer1::plugin::SplitGeLUPluginCreator;
 
 namespace
 {
-static char const* kSPLIT_GELU_PLUGIN_NAME{"SplitGeLU"};
-static char const* kSPLIT_GELU_PLUGIN_VERSION{"1"};
+static std::string const kSPLIT_GELU_PLUGIN_NAME{"SplitGeLU"};
+static std::string const kSPLIT_GELU_PLUGIN_VERSION{"1"};
 size_t constexpr kSERIALIZATION_SIZE{3 * sizeof(float)};
 } // namespace
 
@@ -38,9 +38,9 @@ std::vector<PluginField> SplitGeLUPluginCreator::mPluginAttributes;
 SplitGeLUPlugin::SplitGeLUPlugin(std::string const& name)
     : mName(name)
 {
-    mFDiv = 1.4140625f;
-    mFAdd = 1;
-    mFMul = 0.5f;
+    mFDiv = 1.4140625F;
+    mFAdd = 1.F;
+    mFMul = 0.5F;
 }
 
 SplitGeLUPlugin::SplitGeLUPlugin(std::string const& name, void const* buffer, size_t length)
@@ -49,8 +49,8 @@ SplitGeLUPlugin::SplitGeLUPlugin(std::string const& name, void const* buffer, si
     PLUGIN_VALIDATE(buffer != nullptr);
     PLUGIN_VALIDATE(length == kSERIALIZATION_SIZE);
 
-    char const* d = static_cast<char const*>(buffer);
-    char const* a = d;
+    auto const* d = static_cast<char const*>(buffer);
+    auto const* a = d;
 
     mFDiv = read<float>(d);
     mFAdd = read<float>(d);
@@ -81,28 +81,62 @@ int32_t SplitGeLUPlugin::getNbOutputs() const noexcept
 
 DataType SplitGeLUPlugin::getOutputDataType(int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    return inputTypes[0];
+    DataType ret{};
+    try
+    {
+        PLUGIN_VALIDATE(inputTypes != nullptr);
+        PLUGIN_VALIDATE(nbInputs > 0);
+        ret = inputTypes[0];
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return ret;
 }
 
 DimsExprs SplitGeLUPlugin::getOutputDimensions(
     int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
-    DimsExprs output = inputs[0];
-    output.d[2] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[0].d[2], *exprBuilder.constant(2));
-    return output;
+    DimsExprs ret{};
+    try
+    {
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(nbInputs > 0);
+        DimsExprs output = inputs[0];
+        PLUGIN_VALIDATE(output.nbDims >= 3);
+        output.d[2] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[0].d[2], *exprBuilder.constant(2));
+        ret = output;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return ret;
 }
 
 bool SplitGeLUPlugin::supportsFormatCombination(
     int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    switch (pos)
+    try
     {
-    case 0:
-        return (inOut[0].type == DataType::kFLOAT || inOut[0].type == DataType::kHALF)
-            && inOut[0].format == TensorFormat::kLINEAR;
-    case 1: return inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format;
-    default: // should NOT be here!
-        return false;
+        PLUGIN_VALIDATE(inOut != nullptr);
+        PLUGIN_VALIDATE(nbInputs + nbOutputs > 0);
+
+        PLUGIN_VALIDATE(pos >= 0 && pos <= 1);
+
+        if (pos == 0)
+        {
+            return (inOut[0].type == DataType::kFLOAT || inOut[0].type == DataType::kHALF)
+                && inOut[0].format == TensorFormat::kLINEAR;
+        }
+
+        PLUGIN_VALIDATE(pos < nbInputs + nbOutputs);
+        return inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
     }
     return false;
 }
@@ -121,23 +155,37 @@ size_t SplitGeLUPlugin::getWorkspaceSize(
 int32_t SplitGeLUPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-
-    const int32_t gridSize = inputDesc[0].dims.d[0] * inputDesc[0].dims.d[1];
-    const int32_t nHalfHiddenSize = inputDesc[0].dims.d[2] / 2; // HHS
-
-    if (inputDesc[0].type == DataType::kFLOAT)
+    try
     {
-        auto const input = static_cast<float const*>(inputs[0]);
-        auto output = static_cast<float*>(outputs[0]);
-        launchSplitGeLUKernel<float>(stream, gridSize, nHalfHiddenSize, input, output, mFDiv, mFAdd, mFMul);
+        PLUGIN_VALIDATE(inputDesc != nullptr);
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(inputs[0] != nullptr);
+        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(outputs[0] != nullptr);
+        PLUGIN_VALIDATE(outputDesc != nullptr);
+
+        int32_t const gridSize = inputDesc[0].dims.d[0] * inputDesc[0].dims.d[1];
+        int32_t const nHalfHiddenSize = inputDesc[0].dims.d[2] / 2; // HHS
+
+        if (inputDesc[0].type == DataType::kFLOAT)
+        {
+            auto const input = static_cast<float const*>(inputs[0]);
+            auto output = static_cast<float*>(outputs[0]);
+            launchSplitGeLUKernel<float>(stream, gridSize, nHalfHiddenSize, input, output, mFDiv, mFAdd, mFMul);
+        }
+        else
+        {
+            auto const input = static_cast<half const*>(inputs[0]);
+            auto output = static_cast<half*>(outputs[0]);
+            launchSplitGeLUKernel<half>(stream, gridSize, nHalfHiddenSize, input, output, mFDiv, mFAdd, mFMul);
+        }
+        return 0;
     }
-    else
+    catch (std::exception const& e)
     {
-        auto const input = static_cast<half const*>(inputs[0]);
-        auto output = static_cast<half*>(outputs[0]);
-        launchSplitGeLUKernel<half>(stream, gridSize, nHalfHiddenSize, input, output, mFDiv, mFAdd, mFMul);
+        caughtError(e);
     }
-    return 0;
+    return -1;
 }
 
 void SplitGeLUPlugin::destroy() noexcept
@@ -159,18 +207,33 @@ size_t SplitGeLUPlugin::getSerializationSize() const noexcept
 
 void SplitGeLUPlugin::serialize(void* buffer) const noexcept
 {
-    PLUGIN_ASSERT(buffer != nullptr);
-    char* d = static_cast<char*>(buffer);
-    char* a = d;
-    write(d, mFDiv); // float
-    write(d, mFAdd); // float
-    write(d, mFMul); // float
-    PLUGIN_ASSERT(d == a + getSerializationSize());
+    try
+    {
+        PLUGIN_VALIDATE(buffer != nullptr);
+        auto* d = static_cast<char*>(buffer);
+        auto* const a = d;
+        write(d, mFDiv); // float
+        write(d, mFAdd); // float
+        write(d, mFMul); // float
+        PLUGIN_VALIDATE(d == a + getSerializationSize());
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 void SplitGeLUPlugin::setPluginNamespace(char const* pluginNamespace) noexcept
 {
-    mNameSpace = pluginNamespace;
+    try
+    {
+        PLUGIN_VALIDATE(pluginNamespace != nullptr);
+        mNameSpace = pluginNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 char const* SplitGeLUPlugin::getPluginNamespace() const noexcept
@@ -181,12 +244,12 @@ char const* SplitGeLUPlugin::getPluginNamespace() const noexcept
 
 char const* SplitGeLUPlugin::getPluginType() const noexcept
 {
-    return kSPLIT_GELU_PLUGIN_NAME;
+    return kSPLIT_GELU_PLUGIN_NAME.c_str();
 }
 
 char const* SplitGeLUPlugin::getPluginVersion() const noexcept
 {
-    return kSPLIT_GELU_PLUGIN_VERSION;
+    return kSPLIT_GELU_PLUGIN_VERSION.c_str();
 }
 
 // class SplitGeLUPluginCreator
@@ -199,7 +262,7 @@ SplitGeLUPluginCreator::SplitGeLUPluginCreator()
 
 SplitGeLUPluginCreator::~SplitGeLUPluginCreator() {}
 
-IPluginV2* SplitGeLUPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2* SplitGeLUPluginCreator::createPlugin(char const* name, PluginFieldCollection const* /*fc*/) noexcept
 {
     try
     {
@@ -218,6 +281,7 @@ IPluginV2* SplitGeLUPluginCreator::deserializePlugin(
 {
     try
     {
+        PLUGIN_VALIDATE(name != nullptr);
         PLUGIN_VALIDATE(serialData != nullptr);
         return new SplitGeLUPlugin(name, serialData, serialLength);
     }
@@ -230,12 +294,12 @@ IPluginV2* SplitGeLUPluginCreator::deserializePlugin(
 
 char const* SplitGeLUPluginCreator::getPluginName() const noexcept
 {
-    return kSPLIT_GELU_PLUGIN_NAME;
+    return kSPLIT_GELU_PLUGIN_NAME.c_str();
 }
 
 char const* SplitGeLUPluginCreator::getPluginVersion() const noexcept
 {
-    return kSPLIT_GELU_PLUGIN_VERSION;
+    return kSPLIT_GELU_PLUGIN_VERSION.c_str();
 }
 
 PluginFieldCollection const* SplitGeLUPluginCreator::getFieldNames() noexcept

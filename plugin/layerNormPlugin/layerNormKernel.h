@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +17,12 @@
 #ifndef TRT_LAYERNORM_KERNEL_H
 #define TRT_LAYERNORM_KERNEL_H
 
-#include <cuda_runtime_api.h>
-#include <stdint.h>
-#include <cuda.h>
-#include "cuda_fp16.h"
-
 #include "common/checkMacrosPlugin.h"
+
+#include <cstdint>
+#include <cuda.h>
+#include <cuda_fp16.h>
+#include <cuda_runtime_api.h>
 
 using half = __half;
 

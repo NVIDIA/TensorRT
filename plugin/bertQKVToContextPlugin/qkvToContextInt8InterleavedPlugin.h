@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +25,10 @@
 #include <string>
 #include <vector>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
 static constexpr int32_t kSM_XAVIER = 72;
@@ -38,10 +42,10 @@ static constexpr int32_t kSM_HOPPER_100 = 90;
 class QKVToContextInterleavedPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    QKVToContextInterleavedPlugin(
-        std::string const name, int const hiddenSize, int const numHeads, float const dqProbs, bool const useInt8ScaleMax);
+    QKVToContextInterleavedPlugin(std::string const& name, int32_t const hiddenSize, int32_t const numHeads,
+        float const dqProbs, bool const useInt8ScaleMax);
 
-    QKVToContextInterleavedPlugin(const std::string name, const void* data, size_t length);
+    QKVToContextInterleavedPlugin(std::string const& name, void const* data, size_t length);
 
     // It doesn't make sense to make QKVToContextInterleavedPlugin without arguments, so we
     // delete default constructor.
@@ -81,7 +85,7 @@ protected:
     int getSMVersion() const noexcept;
 
 private:
-    const std::string mLayerName;
+    std::string const& mLayerName;
     std::string mNamespace;
 
     int mS;
@@ -123,4 +127,6 @@ private:
 };
 
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 #endif // TRT_QKV_TO_CONTEXT_INTERLEAVED_PLUGIN_H
