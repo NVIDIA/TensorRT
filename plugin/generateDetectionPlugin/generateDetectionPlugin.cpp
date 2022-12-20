@@ -236,17 +236,18 @@ void GenerateDetection::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-GenerateDetection::GenerateDetection(const void* data, size_t length)
+GenerateDetection::GenerateDetection(const void* data, size_t length) {}
+void GenerateDetection::deserialize(int8_t const* data, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
-    int num_classes = read<int>(d);
-    int keep_topk = read<int>(d);
+    auto const* d{data};
+    int32_t num_classes = read<int32_t>(d);
+    int32_t keep_topk = read<int32_t>(d);
     float score_threshold = read<float>(d);
     float iou_threshold = read<float>(d);
-    mMaxBatchSize = read<int>(d);
-    mAnchorsCnt = read<int>(d);
+    mMaxBatchSize = read<int32_t>(d);
+    mAnchorsCnt = read<int32_t>(d);
     mImageSize = read<nvinfer1::Dims3>(d);
-    PLUGIN_VALIDATE(d == a + length);
+    PLUGIN_VALIDATE(d == data + length);
 
     mNbClasses = num_classes;
     mKeepTopK = keep_topk;
@@ -289,15 +290,7 @@ Dims GenerateDetection::getOutputDimensions(int index, const Dims* inputs, int n
     check_valid_inputs(inputs, nbInputDims);
     PLUGIN_ASSERT(index == 0);
 
-    // [N, anchors, (y1, x1, y2, x2, class_id, score)]
-    nvinfer1::Dims detections;
-
-    detections.nbDims = 2;
-    // number of anchors
-    detections.d[0] = mKeepTopK;
-    detections.d[1] = 6;
-
-    return detections;
+    return {2, {mKeepTopK, 6}};
 }
 
 int32_t GenerateDetection::enqueue(

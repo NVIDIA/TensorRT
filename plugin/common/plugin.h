@@ -74,20 +74,22 @@ namespace plugin
 {
 
 // Write values into buffer
-template <typename T>
-void write(char*& buffer, const T& val)
+template <typename Type, typename BufferType>
+void write(BufferType*& buffer, const Type& val)
 {
-    std::memcpy(buffer, &val, sizeof(T));
-    buffer += sizeof(T);
+    static_assert(sizeof(BufferType) == 1, "BufferType must be a 1 byte type.");
+    std::memcpy(buffer, &val, sizeof(Type));
+    buffer += sizeof(Type);
 }
 
 // Read values from buffer
-template <typename T>
-T read(const char*& buffer)
+template <typename OutType, typename BufferType>
+OutType read(BufferType const*& buffer)
 {
-    T val{};
-    std::memcpy(&val, buffer, sizeof(T));
-    buffer += sizeof(T);
+    static_assert(sizeof(BufferType) == 1, "BufferType must be a 1 byte type.");
+    OutType val{};
+    std::memcpy(&val, static_cast<void const*>(buffer), sizeof(OutType));
+    buffer += sizeof(OutType);
     return val;
 }
 

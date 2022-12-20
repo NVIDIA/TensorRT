@@ -170,7 +170,7 @@ Dims SpecialSlice::getOutputDimensions(int index, const Dims* inputDims, int nbI
     PLUGIN_ASSERT(nbInputs == 1);
     check_valid_inputs(inputDims, nbInputs);
 
-    nvinfer1::Dims output;
+    nvinfer1::Dims output{};
     output.nbDims = inputDims[0].nbDims;
     // number of anchors
     output.d[0] = inputDims[0].d[0];

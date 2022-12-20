@@ -89,18 +89,19 @@ public:
     void detachFromContext() noexcept override;
 
 private:
+    void deserialize(int8_t const* data, size_t length);
     void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims) noexcept;
 
-    xy_t mPooledSize;
-    static const int mFeatureMapCount = 5; // p2, p3, p4, p5, p6(Maxpooling)
-    int mFeatureLength;
-    int mROICount;
-    float mThresh;
-    int mInputHeight;
-    int mInputWidth;
-    xy_t mFeatureSpatialSize[mFeatureMapCount];
+    xy_t mPooledSize{};
+    static const int32_t mFeatureMapCount = 5; // p2, p3, p4, p5, p6(Maxpooling)
+    int32_t mFeatureLength{};
+    int32_t mROICount{};
+    float mThresh{};
+    int32_t mInputHeight;
+    int32_t mInputWidth{};
+    xy_t mFeatureSpatialSize[mFeatureMapCount]{};
     std::string mNameSpace;
-    DataType mPrecision;
+    DataType mPrecision{};
 };
 
 class MultilevelCropAndResizePluginCreator : public nvinfer1::pluginInternal::BaseCreator

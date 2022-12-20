@@ -76,6 +76,8 @@ public:
         int nbOutputs) noexcept override;
 
 protected:
+    void deserialize(int8_t const* data, size_t length);
+
     EfficientNMSParameters mParam{};
     std::string mNamespace;
 };

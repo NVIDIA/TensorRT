@@ -273,14 +273,7 @@ Dims DetectionLayer::getOutputDimensions(int index, const Dims* inputs, int nbIn
     PLUGIN_ASSERT(index == 0);
 
     // [N, anchors, (y1, x1, y2, x2, class_id, score)]
-    nvinfer1::Dims detections;
-
-    detections.nbDims = 2;
-    // number of anchors
-    detections.d[0] = mKeepTopK;
-    detections.d[1] = 6;
-
-    return detections;
+    return {2, {mKeepTopK, 6}};
 }
 
 int DetectionLayer::enqueue(

@@ -34,15 +34,20 @@ const char* EFFICIENT_NMS_IMPLICIT_TFTRT_PLUGIN_NAME{"EfficientNMS_Implicit_TF_T
 } // namespace
 
 EfficientNMSImplicitTFTRTPlugin::EfficientNMSImplicitTFTRTPlugin(EfficientNMSParameters param)
-    : mParam(param)
+    : mParam(std::move(param))
 {
 }
 
-EfficientNMSImplicitTFTRTPlugin::EfficientNMSImplicitTFTRTPlugin(const void* data, size_t length)
+EfficientNMSImplicitTFTRTPlugin::EfficientNMSImplicitTFTRTPlugin(void const* data, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    deserialize(static_cast<int8_t const*>(data), length);
+}
+
+void EfficientNMSImplicitTFTRTPlugin::deserialize(int8_t const* data, size_t length)
+{
+    auto const* d{data};
     mParam = read<EfficientNMSParameters>(d);
-    PLUGIN_ASSERT(d == a + length);
+    PLUGIN_ASSERT(d == data + length);
 }
 
 const char* EfficientNMSImplicitTFTRTPlugin::getPluginType() const noexcept
@@ -105,7 +110,7 @@ Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(int outputIndex, const
 {
     try
     {
-        Dims out_dim;
+        Dims outDim{};
 
         // When pad per class is set, the output size may need to be reduced:
         // i.e.: outputBoxes = min(outputBoxes, outputBoxesPerClass * numClasses)
@@ -125,25 +130,25 @@ Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(int outputIndex, const
         // num_detections
         if (outputIndex == 0)
         {
-            out_dim.nbDims = 0;
-            out_dim.d[0] = 0;
+            outDim.nbDims = 0;
+            outDim.d[0] = 0;
         }
         // detection_boxes
         else if (outputIndex == 1)
         {
-            out_dim.nbDims = 2;
-            out_dim.d[0] = mParam.numOutputBoxes;
-            out_dim.d[1] = 4;
+            outDim.nbDims = 2;
+            outDim.d[0] = mParam.numOutputBoxes;
+            outDim.d[1] = 4;
         }
         // detection_scores: outputIndex == 2
         // detection_classes: outputIndex == 3
         else if (outputIndex == 2 || outputIndex == 3)
         {
-            out_dim.nbDims = 1;
-            out_dim.d[0] = mParam.numOutputBoxes;
+            outDim.nbDims = 1;
+            outDim.d[0] = mParam.numOutputBoxes;
         }
 
-        return out_dim;
+        return outDim;
     }
     catch (const std::exception& e)
     {

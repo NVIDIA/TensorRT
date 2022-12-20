@@ -113,7 +113,7 @@ Dims ResizeNearest::getOutputDimensions(int index, const Dims* inputDims, int nb
     PLUGIN_ASSERT(nbInputs == 1);
     nvinfer1::Dims const& input = inputDims[0];
     PLUGIN_ASSERT(index == 0);
-    nvinfer1::Dims output;
+    nvinfer1::Dims output{};
     output.nbDims = input.nbDims;
     for (int d = 0; d < input.nbDims; ++d)
     {
@@ -169,17 +169,22 @@ void ResizeNearest::serialize(void* buffer) const noexcept
 
 ResizeNearest::ResizeNearest(const void* data, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    deserialize(static_cast<int8_t const*>(data), length);
+}
+
+void ResizeNearest::deserialize(int8_t const* data, size_t length)
+{
+    auto const* d{data};
     mScale = read<float>(d);
     mInputDims = Dims3();
-    mInputDims.d[0] = read<int>(d);
-    mInputDims.d[1] = read<int>(d);
-    mInputDims.d[2] = read<int>(d);
+    mInputDims.d[0] = read<int32_t>(d);
+    mInputDims.d[1] = read<int32_t>(d);
+    mInputDims.d[2] = read<int32_t>(d);
     mOutputDims = Dims3();
-    mOutputDims.d[0] = read<int>(d);
-    mOutputDims.d[1] = read<int>(d);
-    mOutputDims.d[2] = read<int>(d);
-    PLUGIN_VALIDATE(d == a + length);
+    mOutputDims.d[0] = read<int32_t>(d);
+    mOutputDims.d[1] = read<int32_t>(d);
+    mOutputDims.d[2] = read<int32_t>(d);
+    PLUGIN_VALIDATE(d == data + length);
 }
 
 const char* ResizeNearest::getPluginType() const noexcept

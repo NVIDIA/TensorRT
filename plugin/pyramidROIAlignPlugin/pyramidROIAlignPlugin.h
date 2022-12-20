@@ -91,23 +91,24 @@ public:
     void detachFromContext() noexcept override;
 
 private:
+    void deserialize(int8_t const* data, size_t length);
     void check_valid_inputs(nvinfer1::Dims const* inputs, int32_t nbInputDims);
 
     static int32_t const mFeatureMapCount = 4;
 
-    xy_t mPooledSize;
-    xy_t mImageSize;
-    int32_t mFeatureLength;
-    int32_t mROICount;
-    int32_t mFPNScale;
-    int32_t mTransformCoords;
-    bool mAbsCoords;
-    bool mSwapCoords;
-    bool mPlusOneCoords;
-    int32_t mSamplingRatio;
+    xy_t mPooledSize{};
+    xy_t mImageSize{};
+    int32_t mFeatureLength{};
+    int32_t mROICount{};
+    int32_t mFPNScale{};
+    int32_t mTransformCoords{};
+    bool mAbsCoords{};
+    bool mSwapCoords{};
+    bool mPlusOneCoords{};
+    int32_t mSamplingRatio{};
     bool mIsLegacy{false};
-    xy_t mFeatureSpatialSize[mFeatureMapCount];
-    std::string mNameSpace;
+    xy_t mFeatureSpatialSize[mFeatureMapCount]{};
+    std::string mNameSpace{};
 };
 
 class PyramidROIAlignPluginCreator : public nvinfer1::pluginInternal::BaseCreator

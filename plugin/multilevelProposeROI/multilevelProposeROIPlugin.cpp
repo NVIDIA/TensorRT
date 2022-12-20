@@ -374,15 +374,7 @@ Dims MultilevelProposeROI::getOutputDimensions(int index, const Dims* inputs, in
     check_valid_inputs(inputs, nbInputDims);
     PLUGIN_ASSERT(index == 0);
 
-    // [N, anchors, (y1, x1, y2, x2)]
-    nvinfer1::Dims proposals;
-
-    proposals.nbDims = 2;
-    // number of keeping anchors
-    proposals.d[0] = mKeepTopK;
-    proposals.d[1] = 4;
-
-    return proposals;
+    return {2, {mKeepTopK, 4}};
 }
 
 void MultilevelProposeROI::generate_pyramid_anchors(nvinfer1::Dims const& imageSize)
