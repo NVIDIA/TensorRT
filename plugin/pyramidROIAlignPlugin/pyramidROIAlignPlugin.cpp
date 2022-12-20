@@ -273,7 +273,7 @@ Dims PyramidROIAlign::getOutputDimensions(int32_t index, Dims const* inputs, int
     check_valid_inputs(inputs, nbInputDims);
     PLUGIN_ASSERT(index == 0);
 
-    nvinfer1::Dims result;
+    nvinfer1::Dims result{};
     result.nbDims = 4;
 
     // mROICount
@@ -373,28 +373,32 @@ void PyramidROIAlign::serialize(void* buffer) const noexcept
 
 PyramidROIAlign::PyramidROIAlign(void const* data, size_t length)
 {
-    char const *d = reinterpret_cast<char const*>(data), *a = d;
-    mPooledSize = {read<int>(d), read<int>(d)};
-    mImageSize = {read<int>(d), read<int>(d)};
-    mFeatureLength = read<int>(d);
-    mROICount = read<int>(d);
-    mFPNScale = read<int>(d);
-    mTransformCoords = read<int>(d);
+    deserialize(static_cast<int8_t const*>(data), length);
+}
+void PyramidROIAlign::deserialize(int8_t const* data, size_t length)
+{
+    auto const* d{data};
+    mPooledSize = {read<int32_t>(d), read<int32_t>(d)};
+    mImageSize = {read<int32_t>(d), read<int32_t>(d)};
+    mFeatureLength = read<int32_t>(d);
+    mROICount = read<int32_t>(d);
+    mFPNScale = read<int32_t>(d);
+    mTransformCoords = read<int32_t>(d);
     mAbsCoords = read<bool>(d);
     mSwapCoords = read<bool>(d);
     mPlusOneCoords = read<bool>(d);
-    mSamplingRatio = read<int>(d);
+    mSamplingRatio = read<int32_t>(d);
     mIsLegacy = read<bool>(d);
-    mFeatureSpatialSize[0].y = read<int>(d);
-    mFeatureSpatialSize[0].x = read<int>(d);
-    mFeatureSpatialSize[1].y = read<int>(d);
-    mFeatureSpatialSize[1].x = read<int>(d);
-    mFeatureSpatialSize[2].y = read<int>(d);
-    mFeatureSpatialSize[2].x = read<int>(d);
-    mFeatureSpatialSize[3].y = read<int>(d);
-    mFeatureSpatialSize[3].x = read<int>(d);
+    mFeatureSpatialSize[0].y = read<int32_t>(d);
+    mFeatureSpatialSize[0].x = read<int32_t>(d);
+    mFeatureSpatialSize[1].y = read<int32_t>(d);
+    mFeatureSpatialSize[1].x = read<int32_t>(d);
+    mFeatureSpatialSize[2].y = read<int32_t>(d);
+    mFeatureSpatialSize[2].x = read<int32_t>(d);
+    mFeatureSpatialSize[3].y = read<int32_t>(d);
+    mFeatureSpatialSize[3].x = read<int32_t>(d);
 
-    PLUGIN_VALIDATE(d == a + length);
+    PLUGIN_VALIDATE(d == data + length);
 }
 
 // Return the DataType of the plugin output at the requested index

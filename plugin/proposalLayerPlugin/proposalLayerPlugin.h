@@ -90,24 +90,25 @@ public:
     void detachFromContext() noexcept override;
 
 private:
+    void deserialize(int8_t const* data, size_t length);
     void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims);
     void generate_pyramid_anchors(nvinfer1::Dims const& imageDims);
 
-    int mBackgroundLabel;
-    int mPreNMSTopK;
-    int mKeepTopK;
-    float mIOUThreshold;
+    int32_t mBackgroundLabel{};
+    int32_t mPreNMSTopK{};
+    int32_t mKeepTopK{};
+    float mIOUThreshold{};
 
-    int mMaxBatchSize;
-    int mAnchorsCnt;
-    std::shared_ptr<CudaBind<int>> mValidCnt; // valid cnt = number of input roi for every image.
+    int32_t mMaxBatchSize{};
+    int32_t mAnchorsCnt{};
+    std::shared_ptr<CudaBind<int32_t>> mValidCnt; // valid cnt = number of input roi for every image.
     std::shared_ptr<CudaBind<float>>
         mAnchorBoxesDevice; // [N, anchors(261888 for resnet101 + 1024*1024), (y1, x1, y2, x2)]
     std::vector<float> mAnchorBoxesHost;
 
-    nvinfer1::DataType mType;
-    nvinfer1::Dims mImageSize;
-    RefineNMSParameters mParam;
+    nvinfer1::DataType mType{};
+    nvinfer1::Dims mImageSize{};
+    RefineNMSParameters mParam{};
 
     std::string mNameSpace;
 };

@@ -235,14 +235,19 @@ void ProposalLayer::serialize(void* buffer) const noexcept
 
 ProposalLayer::ProposalLayer(const void* data, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
-    int prenms_topk = read<int>(d);
-    int keep_topk = read<int>(d);
+    deserialize(static_cast<int8_t const*>(data), length);
+}
+
+void ProposalLayer::deserialize(int8_t const* data, size_t length)
+{
+    auto const* d{data};
+    int32_t prenms_topk = read<int32_t>(d);
+    int32_t keep_topk = read<int32_t>(d);
     float iou_threshold = read<float>(d);
-    mMaxBatchSize = read<int>(d);
-    mAnchorsCnt = read<int>(d);
+    mMaxBatchSize = read<int32_t>(d);
+    mAnchorsCnt = read<int32_t>(d);
     mImageSize = read<nvinfer1::Dims3>(d);
-    PLUGIN_VALIDATE(d == a + length);
+    PLUGIN_VALIDATE(d == data + length);
 
     mBackgroundLabel = -1;
     mPreNMSTopK = prenms_topk;
@@ -285,15 +290,7 @@ Dims ProposalLayer::getOutputDimensions(int index, const Dims* inputs, int nbInp
     check_valid_inputs(inputs, nbInputDims);
     PLUGIN_ASSERT(index == 0);
 
-    // [N, anchors, (y1, x1, y2, x2)]
-    nvinfer1::Dims proposals;
-
-    proposals.nbDims = 2;
-    // number of keeping anchors
-    proposals.d[0] = mKeepTopK;
-    proposals.d[1] = 4;
-
-    return proposals;
+    return {2, {mKeepTopK, 4}};
 }
 
 void ProposalLayer::generate_pyramid_anchors(nvinfer1::Dims const& imageDims)

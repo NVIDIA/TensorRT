@@ -210,7 +210,7 @@ Dims MultilevelCropAndResize::getOutputDimensions(int index, const Dims* inputs,
     check_valid_inputs(inputs, nbInputDims);
     PLUGIN_ASSERT(index == 0);
 
-    nvinfer1::Dims result;
+    nvinfer1::Dims result{};
     result.nbDims = 4;
 
     // mROICount
@@ -264,24 +264,26 @@ void MultilevelCropAndResize::serialize(void* buffer) const noexcept
     write(d, mPrecision);
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
-
-MultilevelCropAndResize::MultilevelCropAndResize(const void* data, size_t length)
+MultilevelCropAndResize::MultilevelCropAndResize(void const* data, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
-    mPooledSize = {read<int>(d), read<int>(d)};
-    mFeatureLength = read<int>(d);
-    mROICount = read<int>(d);
-    mInputHeight = read<int>(d);
-    mInputWidth = read<int>(d);
+    deserialize(static_cast<int8_t const*>(data), length);
+}
+
+void MultilevelCropAndResize::deserialize(int8_t const* data, size_t length)
+{
+    auto const* d{data};
+    mFeatureLength = read<int32_t>(d);
+    mROICount = read<int32_t>(d);
+    mInputHeight = read<int32_t>(d);
+    mInputWidth = read<int32_t>(d);
     mThresh = read<float>(d);
     for (int i = 0; i < mFeatureMapCount; i++)
     {
-        mFeatureSpatialSize[i].y = read<int>(d);
-        mFeatureSpatialSize[i].x = read<int>(d);
+        mFeatureSpatialSize[i].y = read<int32_t>(d);
+        mFeatureSpatialSize[i].x = read<int32_t>(d);
     }
     mPrecision = read<DataType>(d);
-
-    PLUGIN_VALIDATE(d == a + length);
+    PLUGIN_VALIDATE(d == static_cast<int8_t const*>(data) + length);
 }
 
 // Return the DataType of the plugin output at the requested index

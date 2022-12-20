@@ -90,22 +90,23 @@ public:
     void detachFromContext() noexcept override;
 
 private:
+    void deserialize(int8_t const* data, size_t length);
     void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims) noexcept;
 
-    int mBackgroundLabel;
-    int mNbClasses;
-    int mKeepTopK;
-    float mScoreThreshold;
-    float mIOUThreshold;
+    int32_t mBackgroundLabel{};
+    int32_t mNbClasses{};
+    int32_t mKeepTopK{};
+    float mScoreThreshold{};
+    float mIOUThreshold{};
 
-    int mMaxBatchSize;
-    int mAnchorsCnt;
-    std::shared_ptr<CudaBind<int>> mValidCnt; // valid cnt = number of input rois for every image.
-    nvinfer1::DataType mType;
-    RefineNMSParameters mParam;
+    int32_t mMaxBatchSize{};
+    int32_t mAnchorsCnt{};
+    std::shared_ptr<CudaBind<int32_t>> mValidCnt; // valid cnt = number of input rois for every image.
+    nvinfer1::DataType mType{};
+    RefineNMSParameters mParam{};
     std::shared_ptr<CudaBind<float>> mRegWeightDevice;
 
-    nvinfer1::Dims mImageSize;
+    nvinfer1::Dims mImageSize{};
 
     std::string mNameSpace;
 };
@@ -129,10 +130,10 @@ public:
 
 private:
     static PluginFieldCollection mFC;
-    int mNbClasses;
-    int mKeepTopK;
-    float mScoreThreshold;
-    float mIOUThreshold;
+    int32_t mNbClasses{};
+    int32_t mKeepTopK{};
+    float mScoreThreshold{};
+    float mIOUThreshold{};
     static std::vector<PluginField> mPluginAttributes;
 };
 } // namespace plugin

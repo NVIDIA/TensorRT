@@ -86,9 +86,10 @@ public:
     void detachFromContext() noexcept override;
 
 private:
-    float mScale;
-    Dims mInputDims;
-    Dims mOutputDims;
+    void deserialize(int8_t const* data, size_t length);
+    float mScale{};
+    Dims mInputDims{};
+    Dims mOutputDims{};
     std::string mNameSpace;
 };
 
