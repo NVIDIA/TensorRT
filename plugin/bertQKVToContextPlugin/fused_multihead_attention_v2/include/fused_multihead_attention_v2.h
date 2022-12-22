@@ -22,6 +22,10 @@
 #include "common/bertCommon.h"
 #include <cstdint>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
 struct Fused_multihead_attention_params_v2
@@ -128,6 +132,10 @@ extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin[
 extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin[];
 extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin[];
 
+extern unsigned char cubin_fmha_v2_int8_64_64_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_il_int8_64_64_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_96_64_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_il_int8_96_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_512_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_512_32_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_256_32_sm80_cu_cubin[];
@@ -216,6 +224,10 @@ extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin_len;
 
+extern uint32_t cubin_fmha_v2_il_int8_96_64_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_il_int8_64_64_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_96_64_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_64_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_512_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_512_32_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_256_32_sm80_cu_cubin_len;
@@ -504,6 +516,15 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
     {DATA_TYPE_FP16, 384, 64, kSM_80, fused_multihead_attention_v2_fp16_384_64_kernel_sm80_cubin,
         fused_multihead_attention_v2_fp16_384_64_kernel_sm80_cubin_len,
         "fused_multihead_attention_v2_fp16_384_64_kernel_sm80", 114688, 256, 0, false},
+
+    {DATA_TYPE_INT8, 64, 64, kSM_80, cubin_fmha_v2_int8_64_64_sm80_cu_cubin, cubin_fmha_v2_int8_64_64_sm80_cu_cubin_len,
+        "fmha_v2_int8_64_64_sm80_kernel", 24576, 128, 0, false},
+    {DATA_TYPE_INT8, 96, 64, kSM_80, cubin_fmha_v2_int8_96_64_sm80_cu_cubin, cubin_fmha_v2_int8_96_64_sm80_cu_cubin_len,
+        "fmha_v2_int8_96_64_sm80_kernel", 28672, 128, 0, false},
+    {DATA_TYPE_INT8, 64, 64, kSM_80, cubin_fmha_v2_il_int8_64_64_sm80_cu_cubin,
+        cubin_fmha_v2_il_int8_64_64_sm80_cu_cubin_len, "fmha_v2_il_int8_64_64_sm80_kernel", 20480, 128, 0, true},
+    {DATA_TYPE_INT8, 96, 64, kSM_80, cubin_fmha_v2_il_int8_96_64_sm80_cu_cubin,
+        cubin_fmha_v2_il_int8_96_64_sm80_cu_cubin_len, "fmha_v2_il_int8_96_64_sm80_kernel", 22528, 128, 0, true},
 
     {DATA_TYPE_INT8, 128, 64, kSM_80, fused_multihead_attention_v2_int8_128_64_kernel_sm80_cubin,
         fused_multihead_attention_v2_int8_128_64_kernel_sm80_cubin_len,
@@ -930,4 +951,6 @@ inline const FusedMultiHeadAttentionXMMAKernelV2* getXMMAKernelsV2(Data_type typ
 }
 
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 #endif // _BERT_FMHAV2_FMHAV2
