@@ -29,14 +29,14 @@ using nvinfer1::plugin::InstanceNormalizationPluginCreator;
 using nvinfer1::plugin::InstanceNormalizationPluginCreatorV2;
 namespace
 {
-int32_t roundUp(int32_t m, int32_t n)
+int32_t divUp(int32_t m, int32_t n)
 {
     PLUGIN_ASSERT(m >= 0);
     PLUGIN_ASSERT(n > 0);
     // Use unsigned arithmetic to preclude overflow.
     auto const mu = static_cast<uint32_t>(m);
     auto const nu = static_cast<uint32_t>(n);
-    return ((mu + nu - 1U) / nu) * nu;
+    return (mu + nu - 1U) / nu;
 }
 } // namespace
 template <typename T, int32_t THREADS_PER_CTA>
@@ -269,11 +269,11 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             switch (type)
             {
             case nvinfer1::DataType::kFLOAT:
-                in3dReluActivation<float, kBLOCK_SZ><<<roundUp(count, kBLOCK_SZ), kBLOCK_SZ, 0, stream>>>(
+                in3dReluActivation<float, kBLOCK_SZ><<<divUp(count, kBLOCK_SZ), kBLOCK_SZ, 0, stream>>>(
                     static_cast<float*>(inOut), static_cast<float*>(inOut), mAlpha, count);
                 break;
             case nvinfer1::DataType::kHALF:
-                in3dReluActivation<__half, kBLOCK_SZ><<<roundUp(count, kBLOCK_SZ), kBLOCK_SZ, 0, stream>>>(
+                in3dReluActivation<__half, kBLOCK_SZ><<<divUp(count, kBLOCK_SZ), kBLOCK_SZ, 0, stream>>>(
                     static_cast<__half*>(inOut), static_cast<__half*>(inOut), mAlpha, count);
                 break;
             default: PLUGIN_ASSERT(0);
