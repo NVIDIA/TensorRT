@@ -16,9 +16,11 @@
  */
 
 #include "pillarScatter.h"
+#include "common/templates.h"
 #include <cstring>
 
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 using nvinfer1::plugin::PillarScatterPlugin;
 using nvinfer1::plugin::PillarScatterPluginCreator;
 
@@ -29,32 +31,15 @@ static const char* PLUGIN_NAME{"PillarScatterPlugin"};
 PluginFieldCollection PillarScatterPluginCreator::mFC{};
 std::vector<PluginField> PillarScatterPluginCreator::mPluginAttributes;
 
-// Helper function for serializing plugin
-template <typename T>
-void writeToBuffer(char*& buffer, const T& val)
-{
-    *reinterpret_cast<T*>(buffer) = val;
-    buffer += sizeof(T);
-}
-
-// Helper function for deserializing plugin
-template <typename T>
-T readFromBuffer(const char*& buffer)
-{
-    T val = *reinterpret_cast<const T*>(buffer);
-    buffer += sizeof(T);
-    return val;
-}
-
 PillarScatterPlugin::PillarScatterPlugin(size_t h, size_t w)
     : feature_y_size_(h)
     , feature_x_size_(w)
 {
 }
 
-PillarScatterPlugin::PillarScatterPlugin(const void* data, size_t length)
+PillarScatterPlugin::PillarScatterPlugin(void const* data, size_t length)
 {
-    const char* d = reinterpret_cast<const char*>(data);
+    auto const* d = toPointer<char const>(data);
     feature_y_size_ = readFromBuffer<size_t>(d);
     feature_x_size_ = readFromBuffer<size_t>(d);
 }

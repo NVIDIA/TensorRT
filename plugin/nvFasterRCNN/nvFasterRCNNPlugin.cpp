@@ -84,10 +84,13 @@ RPROIPlugin::RPROIPlugin(RPROIParams params, const float* anchorsRatios, const f
 }
 
 RPROIPlugin::RPROIPlugin(const void* data, size_t length)
-    : anchorsDev(nullptr)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
-    params = *reinterpret_cast<const RPROIParams*>(d);
+    serialize(static_cast<int8_t const*>(data), length);
+}
+void RPROIPlugin::serialize(int8_t const* data, size_t length)
+{
+    auto const* d{data};
+    params = *reinterpret_cast<RPROIParams const*>(d);
     d += sizeof(RPROIParams);
     A = read<int32_t>(d);
     C = read<int32_t>(d);
@@ -100,7 +103,7 @@ RPROIPlugin::RPROIPlugin(const void* data, size_t length)
     d += params.anchorsRatioCount * sizeof(float);
     anchorsScalesHost = copyToHost(d, params.anchorsScaleCount);
     d += params.anchorsScaleCount * sizeof(float);
-    PLUGIN_VALIDATE(d == a + length);
+    PLUGIN_VALIDATE(d == data + length);
 
     PLUGIN_CHECK(
         cudaMalloc((void**) &anchorsDev, 4 * params.anchorsRatioCount * params.anchorsScaleCount * sizeof(float)));

@@ -27,11 +27,11 @@ namespace plugin
 class BatchTilePlugin : public IPluginV2Ext
 {
 public:
-    BatchTilePlugin(const std::string name);
+    BatchTilePlugin(std::string const& name);
 
-    BatchTilePlugin(const std::string name, size_t copy_size);
+    BatchTilePlugin(std::string const& name, size_t copy_size);
 
-    BatchTilePlugin(const std::string name, const void* data, size_t length);
+    BatchTilePlugin(std::string const& name, void const* data, size_t length);
 
     BatchTilePlugin() = delete;
 
@@ -76,7 +76,7 @@ public:
     const char* getPluginNamespace() const noexcept override;
 
 private:
-    const std::string mLayerName;
+    std::string const& mLayerName;
     size_t mCopySize;
     std::string mNamespace;
 };

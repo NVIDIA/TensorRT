@@ -87,6 +87,7 @@ public:
     void detachFromContext() noexcept override;
 
 private:
+    void serialize(int8_t const* data, size_t length);
     float* copyToHost(const void* srcHostData, int count) noexcept;
 
     int copyFromHost(char* dstHostBuffer, const void* source, int count) const noexcept;
@@ -96,19 +97,24 @@ private:
     DLayout_t convertTensorFormat(const TensorFormat& srcFormat) const noexcept;
 
     // These won't be serialized
-    float* anchorsDev{nullptr};
+    float* anchorsDev{};
     std::string mPluginNamespace;
     const int32_t PluginNbInputs{4};
     const int32_t PluginNbOutputs{2};
     // this plugin may load the whole feature map in smem. we can set different smem size according to the device.
-    size_t deviceSmemSize{0};
+    size_t deviceSmemSize{};
 
     // These need to be serialized
-    RPROIParams params;
-    int32_t A, C, H, W;
-    float *anchorsRatiosHost{nullptr}, *anchorsScalesHost{nullptr};
-    DataType inFeatureType, outFeatureType;
-    DLayout_t inFeatureLayout;
+    RPROIParams params{};
+    int32_t A{};
+    int32_t C{};
+    int32_t H{};
+    int32_t W{};
+    float* anchorsRatiosHost{};
+    float* anchorsScalesHost{};
+    DataType inFeatureType{};
+    DataType outFeatureType{};
+    DLayout_t inFeatureLayout{};
 };
 
 class RPROIPluginCreator : public nvinfer1::pluginInternal::BaseCreator

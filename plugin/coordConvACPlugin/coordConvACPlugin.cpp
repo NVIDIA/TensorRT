@@ -46,17 +46,21 @@ CoordConvACPlugin::CoordConvACPlugin(nvinfer1::DataType iType, int iC, int iH, i
 {
 }
 
-CoordConvACPlugin::CoordConvACPlugin(const void* data, size_t length)
+CoordConvACPlugin::CoordConvACPlugin(void const* data, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    serialize(static_cast<uint8_t const*>(data), length);
+}
+void CoordConvACPlugin::serialize(uint8_t const* data, size_t length)
+{
+    auto const* d{data};
     iType = read<nvinfer1::DataType>(d);
-    iC = read<int>(d);
-    iH = read<int>(d);
-    iW = read<int>(d);
-    oC = read<int>(d);
-    oH = read<int>(d);
-    oW = read<int>(d);
-    PLUGIN_VALIDATE(d == a + length);
+    iC = read<int32_t>(d);
+    iH = read<int32_t>(d);
+    iW = read<int32_t>(d);
+    oC = read<int32_t>(d);
+    oH = read<int32_t>(d);
+    oW = read<int32_t>(d);
+    PLUGIN_VALIDATE(d == data + length);
 }
 
 int CoordConvACPlugin::getNbOutputs() const noexcept

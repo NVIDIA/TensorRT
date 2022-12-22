@@ -16,6 +16,7 @@
  */
 
 #include "decodeBbox3D.h"
+#include "common/templates.h"
 #include <cstring>
 #include <iostream>
 
@@ -40,33 +41,19 @@ static const char* PLUGIN_NAME{"DecodeBbox3DPlugin"};
 PluginFieldCollection DecodeBbox3DPluginCreator::mFC{};
 std::vector<PluginField> DecodeBbox3DPluginCreator::mPluginAttributes;
 
-// Helper function for serializing plugin
-template <typename T>
-void writeToBuffer(char*& buffer, const T& val)
-{
-    *reinterpret_cast<T*>(buffer) = val;
-    buffer += sizeof(T);
-}
-
-// Helper function for deserializing plugin
-template <typename T>
-T readFromBuffer(const char*& buffer)
-{
-    T val = *reinterpret_cast<const T*>(buffer);
-    buffer += sizeof(T);
-    return val;
-}
-
-DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max,
-            float z_min, float z_max,
-            int num_dir_bins, float dir_offset, float dir_limit_offset,
-            const std::vector<float>& anchor_bottom_height,
-            const std::vector<float>& anchors,
-            float score_thresh
-) : min_x_range_(x_min), max_x_range_(x_max), min_y_range_(y_min),
-    max_y_range_(y_max), min_z_range_(z_min), max_z_range_(z_max),
-    num_dir_bins_(num_dir_bins), dir_offset_(dir_offset),
-    dir_limit_offset_(dir_limit_offset), score_thresh_(score_thresh)
+DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max, float z_min, float z_max,
+    int32_t num_dir_bins, float dir_offset, float dir_limit_offset, std::vector<float> const& anchor_bottom_height,
+    std::vector<float> const& anchors, float score_thresh)
+    : min_x_range_(x_min)
+    , max_x_range_(x_max)
+    , min_y_range_(y_min)
+    , max_y_range_(y_max)
+    , min_z_range_(z_min)
+    , max_z_range_(z_max)
+    , num_dir_bins_(num_dir_bins)
+    , dir_offset_(dir_offset)
+    , dir_limit_offset_(dir_limit_offset)
+    , score_thresh_(score_thresh)
 {
     anchor_bottom_height_.clear();
     for(size_t i = 0; i < anchor_bottom_height.size(); i++)

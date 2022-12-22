@@ -16,6 +16,7 @@
  */
 
 #include "voxelGenerator.h"
+#include "common/templates.h"
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -40,23 +41,6 @@ static const char* PLUGIN_NAME{"VoxelGeneratorPlugin"};
 // Static class fields initialization
 PluginFieldCollection VoxelGeneratorPluginCreator::mFC{};
 std::vector<PluginField> VoxelGeneratorPluginCreator::mPluginAttributes;
-
-// Helper function for serializing plugin
-template <typename T>
-void writeToBuffer(char*& buffer, const T& val)
-{
-    *reinterpret_cast<T*>(buffer) = val;
-    buffer += sizeof(T);
-}
-
-// Helper function for deserializing plugin
-template <typename T>
-T readFromBuffer(const char*& buffer)
-{
-    T val = *reinterpret_cast<const T*>(buffer);
-    buffer += sizeof(T);
-    return val;
-}
 
 // Mimic np.round as in voxel generator in spconv implementation
 int32_t npRound(float x)

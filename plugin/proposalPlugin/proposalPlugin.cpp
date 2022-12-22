@@ -17,6 +17,7 @@
 
 #include "proposalPlugin.h"
 #include "NvInfer.h"
+#include "common/templates.h"
 #include <cmath>
 #include <cstring>
 #include <stdio.h>
@@ -40,24 +41,6 @@ static const float RPN_STD_SCALING{1.0f};
 // Static class fields initialization
 PluginFieldCollection ProposalBasePluginCreator::mFC{};
 std::vector<PluginField> ProposalBasePluginCreator::mPluginAttributes;
-
-// Helper function for serializing plugin
-template <typename T>
-void writeToBuffer(char*& buffer, const T& val)
-{
-    *reinterpret_cast<T*>(buffer) = val;
-    buffer += sizeof(T);
-}
-
-// Helper function for deserializing plugin
-template <typename T>
-T readFromBuffer(const char*& buffer)
-{
-    T val = *reinterpret_cast<const T*>(buffer);
-    buffer += sizeof(T);
-    return val;
-}
-
 ProposalPlugin::ProposalPlugin(int input_height, int input_width, int rpn_height, int rpn_width, float rpn_std_scaling,
     int rpn_stride, float bbox_min_size, float nms_iou_threshold, int pre_nms_top_n, int max_box_num,
     const float* anchor_sizes, int anc_size_num, const float* anchor_ratios, int anc_ratio_num)
