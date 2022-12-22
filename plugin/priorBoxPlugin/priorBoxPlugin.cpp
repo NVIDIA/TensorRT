@@ -136,34 +136,31 @@ void PriorBox::setupDeviceMemory() noexcept
     }
 }
 
-PriorBox::PriorBox(const void* data, size_t length)
+PriorBox::PriorBox(void const* data, size_t length)
 {
-    const char *d = static_cast<const char*>(data), *a = d;
+    serialize(static_cast<int8_t const*>(data), length);
+}
+void PriorBox::serialize(int8_t const* data, size_t length)
+{
+    auto const* d{data};
     mParam = read<PriorBoxParameters>(d);
 
-    auto readArray = [&d](const int32_t size, float*& array)
-    {
-        if (size > 0)
+    auto readArray = [&d](int32_t size, float*& array) {
+        auto ptrGuard = std::make_unique<float>(size);
+        for (auto i = 0; i < size; i++)
         {
-            array = new float[size];
-            for (auto i = 0; i < size; i++)
-            {
-                array[i] = read<float>(d);
-            }
+            ptrGuard.get()[i] = read<float>(d);
         }
-        else
-        {
-            array = nullptr;
-        }
+        array = ptrGuard.release();
     };
     readArray(mParam.numMinSize, mParam.minSize);
     readArray(mParam.numMaxSize, mParam.maxSize);
     readArray(mParam.numAspectRatios, mParam.aspectRatios);
 
-    mH = read<int>(d);
-    mW = read<int>(d);
+    mH = read<int32_t>(d);
+    mW = read<int32_t>(d);
 
-    PLUGIN_VALIDATE(d == a + length);
+    PLUGIN_VALIDATE(d == data + length);
 
     setupDeviceMemory();
 }

@@ -16,29 +16,14 @@
  */
 #include "batchTilePlugin.h"
 #include "common/dimsHelpers.h"
+#include "common/templates.h"
 
 #include <cuda_runtime.h>
 #include <iostream>
 #include <numeric>
 
-// Helper function for serializing plugin
-template <typename T>
-void writeToBuffer(char*& buffer, const T& val)
-{
-    *reinterpret_cast<T*>(buffer) = val;
-    buffer += sizeof(T);
-}
-
-// Helper function for deserializing plugin
-template <typename T>
-T readFromBuffer(const char*& buffer)
-{
-    T val = *reinterpret_cast<const T*>(buffer);
-    buffer += sizeof(T);
-    return val;
-}
-
 using namespace nvinfer1;
+using namespace nvinfer1::plugin;
 using nvinfer1::plugin::BatchTilePlugin;
 using nvinfer1::plugin::BatchTilePluginCreator;
 
@@ -47,21 +32,22 @@ static const char* BATCH_TILE_PLUGIN_NAME{"BatchTilePlugin_TRT"};
 
 PluginFieldCollection BatchTilePluginCreator::mFC{};
 
-BatchTilePlugin::BatchTilePlugin(const std::string name)
+BatchTilePlugin::BatchTilePlugin(std::string const& name)
     : mLayerName(name)
 {
 }
 
-BatchTilePlugin::BatchTilePlugin(const std::string name, size_t copy_size)
+BatchTilePlugin::BatchTilePlugin(std::string const& name, size_t copy_size)
     : mLayerName(name)
     , mCopySize(copy_size)
 {
 }
 
-BatchTilePlugin::BatchTilePlugin(const std::string name, const void* data, size_t length)
+BatchTilePlugin::BatchTilePlugin(std::string const& name, void const* data, size_t length)
     : mLayerName(name)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    auto const* d{toPointer<char const>(data)};
+    auto const* a{d};
     mCopySize = readFromBuffer<size_t>(d);
     PLUGIN_VALIDATE(d == a + length);
 }

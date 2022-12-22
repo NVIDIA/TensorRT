@@ -85,12 +85,13 @@ public:
     void detachFromContext() noexcept override;
 
 private:
+    void serialize(int8_t const* buffer, size_t length);
     void setupDeviceMemory() noexcept;
 
-    PriorBoxParameters mParam;
-    int32_t mNumPriors;
-    int32_t mH;
-    int32_t mW;
+    PriorBoxParameters mParam{};
+    int32_t mNumPriors{};
+    int32_t mH{};
+    int32_t mW{};
     Weights minSize{};      // not learnable weights
     Weights maxSize{};      // not learnable weights
     Weights aspectRatios{}; // not learnable weights

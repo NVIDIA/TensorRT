@@ -83,10 +83,15 @@ public:
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
 private:
-    DataType iType;
-    int iC, iH, iW;
-    int oC, oH, oW;
-    const char* mPluginNamespace;
+    void serialize(uint8_t const* data, size_t length);
+    DataType iType{};
+    int32_t iC{};
+    int32_t iH{};
+    int32_t iW{};
+    int32_t oC{};
+    int32_t oH{};
+    int32_t oW{};
+    char const* mPluginNamespace{};
 };
 
 class CoordConvACPluginCreator : public nvinfer1::pluginInternal::BaseCreator
