@@ -1,0 +1,119 @@
+---
+name: CustomQKVToContextWithPosBiasPluginDynamic
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    inputs:
+      - input
+      - input_mask
+      - rel_pos_bias
+    outputs:
+      - output
+    input_dims:
+      input: 5
+      input_mask: 2
+      rel_pos_bias: 2
+    input_dim_constraints:
+      - "input_2 == 3*hidden_size_0"
+    input_dim_range:
+      input:
+        min: "=1, =1, =1, =1, =1"
+        max: "=pinf, =256, =pinf, =1, =1"
+      input_mask: 
+        min: "=1, =1"
+        max: "=pinf, =65536"
+      rel_pos_bias: 
+        min: "=1, =1"
+        max: "=pinf, =65536"
+    output_dims:
+      output: "input_0, input_1, hidden_size_0, 1, 1"
+    attributes:
+      - type_id
+      - hidden_size
+      - num_heads
+      - has_mask
+      - qkv_scale
+      - dq_probs
+    supported_input_types:
+      combination1:
+        input: float16 
+        input_mask: float16
+        rel_pos_bias: float16
+      combination2:
+        input: int8 
+        input_mask: float16
+        rel_pos_bias: float16
+    attribute_types:
+      type_id: int32
+      hidden_size: int32
+      num_heads: int32
+      has_mask: int32
+      qkv_scale: float32
+      dq_probs: float32
+    attribute_dims:
+      type_id: 1
+      hidden_size: 1
+      num_heads: 1
+      has_mask: 1
+      qkv_scale: 1
+      dq_probs: 1
+    attribute_dim_range:
+      type_id:
+        min: "=1"
+        max: "=1"
+      hidden_size:
+        min: "=1"
+        max: "=1"
+      num_heads:
+        min: "=1"
+        max: "=1"
+      has_mask:
+        min: "=1"
+        max: "=1"
+      qkv_scale:
+        min: "=1"
+        max: "=1"
+      dq_probs:
+        min: "=1"
+        max: "=1"
+    attribute_options:
+      type_id:
+        - 0
+        - 1
+        - 2
+      hidden_size:
+        min: "0"
+        max: "=pinf"
+      num_heads:
+        min: "0"
+        max: "=pinf"
+      has_mask:
+        - 0
+        - 1
+      qkv_scale:
+        min: "0"
+        max: "=pinf"
+      dq_probs:
+        min: "0"
+        max: "=pinf"
+    attributes_required:
+      - type_id
+      - hidden_size
+      - num_heads
+      - has_mask
+    golden_io_path: "plugin/swinQKVToContextPlugin/CustomQKVToContextWithPosBiasPluginDynamic_PluginGoldenIO.json"
+    fp16_atol: 1e-3
+    fp16_rtol: 1e-3
+    configs:
+      config1:
+        input_types:
+          input: float16
+          input_mask: float16
+          rel_pos_bias: float16
+        attribute_options:
+          "type_id":
+            value: 1
+            shape: "1"
+        output_types:
+          output: float16
+...

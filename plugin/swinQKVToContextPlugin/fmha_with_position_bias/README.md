@@ -1,6 +1,10 @@
 # Fused multi-head attention with relative position bias kernel compilation
 
 This is used for swinQKVToContextPlugin in SWIN when run in fp16/int8 precision. 
+Three conditions for running the plugin:
+1. GPU device is of sm 75/80/86
+2. headSize = 32 
+3. seqlen <= 256.
 
 ## Steps for generating fused_mha_with_position_bias kernels (We can generate the kernels in computelab):
 
