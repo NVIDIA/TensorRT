@@ -314,12 +314,16 @@ __global__ void EfficientNMS(EfficientNMSParameters param, const int* topNumData
 
         for (int tile = 0; tile < numTiles; tile++)
         {
+            bool check_class = true;
+            if (!param.classAgnostic)
+               check_class = threadClass[tile] == testClass;
+
             // IOU
             if (boxIdx[tile] > i && // Make sure two different boxes are being tested, and that it's a higher index;
                 boxIdx[tile] < numSelectedBoxes && // Make sure the box is within numSelectedBoxes;
                 blockState == 1 &&                 // Signal that allows IOU checks to be performed;
                 threadState[tile] == 0 &&          // Make sure this box hasn't been either dropped or kept already;
-                threadClass[tile] == testClass &&  // Compare only boxes of matching classes;
+                check_class &&                     // Compare only boxes of matching classes when classAgnostic is false;
                 lte_mp(threadScore[tile], testScore) && // Make sure the sorting order of scores is as expected;
                 IOU<T>(param, threadBox[tile], testBox) >= param.iouThreshold) // And... IOU overlap.
             {
