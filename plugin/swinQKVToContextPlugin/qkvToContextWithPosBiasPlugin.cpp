@@ -49,7 +49,7 @@ REGISTER_TENSORRT_PLUGIN(QKVToContextWithPosBiasPluginCreator);
 
 QKVToContextWithPosBiasPlugin::QKVToContextWithPosBiasPlugin(std::string name, nvinfer1::DataType type,
     int32_t hiddenSize, int32_t numHeads, int32_t hasMask, float qkvScale, float dqProbs)
-    : mLayerName(name)
+    : mLayerName(std::move(name))
     , mType(type)
     , mS(0)
     , mB(0)
