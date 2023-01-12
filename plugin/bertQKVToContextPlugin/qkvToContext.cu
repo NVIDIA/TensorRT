@@ -1114,7 +1114,7 @@ public:
         size_t warps_n{1U};
         size_t warps_k{1U};
 
-        // [MLPINF-1894] IGMMA has a different warp group. 
+        // [MLPINF-1894] IGMMA has a different warp group.
         // TODO: add S==64/96 IGMMA support for sm==90
         if (sm == kSM_90 && (S == 128 || S == 192 || S == 256 || S == 384 || S == 512))
         {

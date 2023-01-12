@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef TRT_SWIN_FMHA_COMMON_H
-#define TRT_SWIN_FMHA_COMMON_H
+#ifndef TRT_FMHA_WITH_POSITION_BIAS_COMMON_H
+#define TRT_FMHA_WITH_POSITION_BIAS_COMMON_H
 
 #include "common/checkMacrosPlugin.h"
 #include "common/plugin.h"
@@ -37,4 +37,4 @@ enum DataType
 };
 } // namespace plugin
 } // namespace nvinfer1
-#endif // TRT_SWIN_FMHA_COMMON_H
+#endif // TRT_FMHA_WITH_POSITION_BIAS_COMMON_H
