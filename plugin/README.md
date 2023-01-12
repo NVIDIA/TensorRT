@@ -45,7 +45,6 @@
 | [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 1, 2, 3 |
 | [specialSlicePlugin](specialSlicePlugin) | SpecialSlice_TRT | 1 |
 | [splitPlugin](splitPlugin) | Split | 1 |
-| [swinQKVToContextPlugin](swinQKVToContextPlugin) | CustomQKVToContextWithPosBiasPluginDynamic | 1 |
 | [voxelGeneratorPlugin](voxelGeneratorPlugin) | VoxelGeneratorPlugin | 1 |
 
 ## Known Limitations
