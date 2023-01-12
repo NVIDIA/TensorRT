@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef _BERT_FMHA_FMHA_COMMON
-#define _BERT_FMHA_FMHA_COMMON
+#ifndef TRT_FUSED_MULTIHEAD_ATTENTION_COMMON_H
+#define TRT_FUSED_MULTIHEAD_ATTENTION_COMMON_H
 
 #include "common/checkMacrosPlugin.h"
 #include "common/plugin.h"
@@ -40,4 +40,4 @@ enum Data_type
 } // namespace bert
 } // namespace plugin
 } // namespace nvinfer1
-#endif // _BERT_FMHA_FMHA_COMMON
+#endif // TRT_FUSED_MULTIHEAD_ATTENTION_COMMON_H
