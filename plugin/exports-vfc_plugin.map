@@ -20,8 +20,5 @@
   global:
     getPluginCreators;
     setLoggerFinder;
-    extern "C++" {
-      nvinfer1::plugin::ROIAlign*;
-    };
   local: *;
 };
