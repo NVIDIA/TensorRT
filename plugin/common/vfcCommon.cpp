@@ -70,7 +70,7 @@ ILogger* getPluginLogger()
 } // namespace plugin
 } // namespace nvinfer1
 
-extern "C" IPluginCreator* const* getPluginCreators(int32_t& nbCreators)
+extern "C" TENSORRTAPI IPluginCreator* const* getPluginCreators(int32_t& nbCreators)
 {
     nbCreators = 1;
     static ROIAlignPluginCreator roiAlignCreator;
@@ -78,7 +78,7 @@ extern "C" IPluginCreator* const* getPluginCreators(int32_t& nbCreators)
     return pluginCreatorList;
 }
 
-extern "C" void setLoggerFinder(nvinfer1::plugin::LoggerFinder* finder)
+extern "C" TENSORRTAPI void setLoggerFinder(nvinfer1::plugin::LoggerFinder* finder)
 {
     nvinfer1::plugin::gLoggerFinder.setLoggerFinder(finder);
 }
