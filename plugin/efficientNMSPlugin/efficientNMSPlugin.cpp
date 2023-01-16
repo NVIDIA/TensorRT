@@ -33,15 +33,20 @@ const char* EFFICIENT_NMS_ONNX_PLUGIN_NAME{"EfficientNMS_ONNX_TRT"};
 } // namespace
 
 EfficientNMSPlugin::EfficientNMSPlugin(EfficientNMSParameters param)
-    : mParam(param)
+    : mParam(std::move(param))
 {
 }
 
-EfficientNMSPlugin::EfficientNMSPlugin(const void* data, size_t length)
+EfficientNMSPlugin::EfficientNMSPlugin(void const* data, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    serialize(static_cast<int8_t const*>(data), length);
+}
+
+void EfficientNMSPlugin::serialize(int8_t const* data, size_t length)
+{
+    auto const* d{data};
     mParam = read<EfficientNMSParameters>(d);
-    PLUGIN_VALIDATE(d == a + length);
+    PLUGIN_VALIDATE(d == data + length);
 }
 
 const char* EfficientNMSPlugin::getPluginType() const noexcept

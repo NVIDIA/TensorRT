@@ -67,6 +67,9 @@ protected:
     EfficientNMSParameters mParam{};
     bool initialized{false};
     std::string mNamespace;
+
+private:
+    void serialize(int8_t const* data, size_t length);
 };
 
 // Standard NMS Plugin Operation
