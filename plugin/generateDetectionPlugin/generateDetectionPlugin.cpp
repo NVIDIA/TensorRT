@@ -236,7 +236,11 @@ void GenerateDetection::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-GenerateDetection::GenerateDetection(const void* data, size_t length) {}
+GenerateDetection::GenerateDetection(void const* data, size_t length)
+{
+    deserialize(static_cast<int8_t const*>(data), length);
+}
+
 void GenerateDetection::deserialize(int8_t const* data, size_t length)
 {
     auto const* d{data};

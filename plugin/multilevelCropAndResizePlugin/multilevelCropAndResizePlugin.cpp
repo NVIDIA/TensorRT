@@ -272,6 +272,7 @@ MultilevelCropAndResize::MultilevelCropAndResize(void const* data, size_t length
 void MultilevelCropAndResize::deserialize(int8_t const* data, size_t length)
 {
     auto const* d{data};
+    mPooledSize = {read<int32_t>(d), read<int32_t>(d)};
     mFeatureLength = read<int32_t>(d);
     mROICount = read<int32_t>(d);
     mInputHeight = read<int32_t>(d);
