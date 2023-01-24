@@ -85,9 +85,10 @@ RPROIPlugin::RPROIPlugin(RPROIParams params, const float* anchorsRatios, const f
 
 RPROIPlugin::RPROIPlugin(const void* data, size_t length)
 {
-    serialize(static_cast<int8_t const*>(data), length);
+    deserialize(static_cast<int8_t const*>(data), length);
 }
-void RPROIPlugin::serialize(int8_t const* data, size_t length)
+
+void RPROIPlugin::deserialize(int8_t const* data, size_t length)
 {
     auto const* d{data};
     params = *reinterpret_cast<RPROIParams const*>(d);

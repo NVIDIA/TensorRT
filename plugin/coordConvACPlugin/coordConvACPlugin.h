@@ -83,7 +83,7 @@ public:
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
 private:
-    void serialize(uint8_t const* data, size_t length);
+    void deserialize(uint8_t const* data, size_t length);
     DataType iType{};
     int32_t iC{};
     int32_t iH{};
