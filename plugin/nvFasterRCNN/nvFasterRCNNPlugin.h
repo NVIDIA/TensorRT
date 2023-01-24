@@ -87,7 +87,7 @@ public:
     void detachFromContext() noexcept override;
 
 private:
-    void serialize(int8_t const* data, size_t length);
+    void deserialize(int8_t const* data, size_t length);
     float* copyToHost(const void* srcHostData, int count) noexcept;
 
     int copyFromHost(char* dstHostBuffer, const void* source, int count) const noexcept;

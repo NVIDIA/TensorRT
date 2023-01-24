@@ -85,16 +85,25 @@ public:
     void detachFromContext() noexcept override;
 
 private:
-    void serialize(int8_t const* buffer, size_t length);
+    void deserialize(uint8_t const* buffer, size_t length);
     void setupDeviceMemory() noexcept;
 
     PriorBoxParameters mParam{};
     int32_t mNumPriors{};
     int32_t mH{};
     int32_t mW{};
-    Weights minSize{};      // not learnable weights
-    Weights maxSize{};      // not learnable weights
-    Weights aspectRatios{}; // not learnable weights
+
+    // Arrays stored on the GPU.
+    Weights mMinSizeGPU{};      // not learnable weights
+    Weights mMaxSizeGPU{};      // not learnable weights
+    Weights mAspectRatiosGPU{}; // not learnable weights
+
+    // Arrays stored on the CPU.
+    // Data pointers in mParams point to these vectors.
+    std::vector<float> mMinSizeCPU;
+    std::vector<float> mMaxSizeCPU;
+    std::vector<float> mAspectRatiosCPU;
+
     std::string mPluginNamespace;
 };
 

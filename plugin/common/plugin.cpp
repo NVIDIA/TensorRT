@@ -29,12 +29,13 @@ void validateRequiredAttributesExist(std::set<std::string> requiredFieldNames, P
     }
     if (!requiredFieldNames.empty())
     {
-        std::stringstream msg{"PluginFieldCollection missing required fields: {"};
-        char const* seperator = "";
+        std::stringstream msg{};
+        msg << "PluginFieldCollection missing required fields: {";
+        char const* separator = "";
         for (auto const& field : requiredFieldNames)
         {
-            msg << seperator << field;
-            seperator = ", ";
+            msg << separator << field;
+            separator = ", ";
         }
         msg << "}";
         std::string msg_str = msg.str();

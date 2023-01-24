@@ -48,9 +48,9 @@ CoordConvACPlugin::CoordConvACPlugin(nvinfer1::DataType iType, int iC, int iH, i
 
 CoordConvACPlugin::CoordConvACPlugin(void const* data, size_t length)
 {
-    serialize(static_cast<uint8_t const*>(data), length);
+    deserialize(static_cast<uint8_t const*>(data), length);
 }
-void CoordConvACPlugin::serialize(uint8_t const* data, size_t length)
+void CoordConvACPlugin::deserialize(uint8_t const* data, size_t length)
 {
     auto const* d{data};
     iType = read<nvinfer1::DataType>(d);

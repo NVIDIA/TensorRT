@@ -39,10 +39,10 @@ EfficientNMSPlugin::EfficientNMSPlugin(EfficientNMSParameters param)
 
 EfficientNMSPlugin::EfficientNMSPlugin(void const* data, size_t length)
 {
-    serialize(static_cast<int8_t const*>(data), length);
+    deserialize(static_cast<int8_t const*>(data), length);
 }
 
-void EfficientNMSPlugin::serialize(int8_t const* data, size_t length)
+void EfficientNMSPlugin::deserialize(int8_t const* data, size_t length)
 {
     auto const* d{data};
     mParam = read<EfficientNMSParameters>(d);
