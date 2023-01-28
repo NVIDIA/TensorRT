@@ -47,7 +47,7 @@ class INoCopy
 {
 protected:
     INoCopy() = default;
-    virtual ~INoCopy() = default;
+    ~INoCopy() = default;
     INoCopy(const INoCopy& other) = delete;
     INoCopy& operator=(const INoCopy& other) = delete;
     INoCopy(INoCopy&& other) = delete;
