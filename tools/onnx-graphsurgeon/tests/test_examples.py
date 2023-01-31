@@ -72,6 +72,8 @@ def load_commands_from_readme(readme):
 
 def infer_model(path):
     model = onnx.load(path)
+    onnx.checker.check_model(model)
+
     graph = gs.import_onnx(model)
 
     feed_dict = {}

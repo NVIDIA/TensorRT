@@ -24,6 +24,7 @@ import onnx
 ##########################################################################################################
 # Register functions to simplify the graph building process later on.
 
+
 @gs.Graph.register()
 def conv(self, inp, weights, dilations, group, strides):
     out = self.layer(
@@ -49,6 +50,7 @@ def matmul(self, lhs, rhs):
     out.dtype = lhs.dtype
     return out
 
+
 ##########################################################################################################
 
 
@@ -67,4 +69,5 @@ matmul_out = graph.matmul(reshape_out, np.ones(shape=(21632, 10), dtype=np.float
 graph.outputs = [matmul_out]
 
 # Save graph
-onnx.save(gs.export_onnx(graph), "model.onnx")
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "model.onnx")

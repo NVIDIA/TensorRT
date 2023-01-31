@@ -95,4 +95,5 @@ graph.outputs = graph.add(*graph.mul(*dense, C), D)
 for out in graph.outputs:
     out.dtype = np.float32
 
-onnx.save(gs.export_onnx(graph), "model.onnx")
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "model.onnx")

@@ -74,8 +74,12 @@ partially_flattened = graph.reshape(graph.inputs[0], new_shape)
 # Finally, set up the outputs and export.
 flattened.name = "flattened"  # Rename output tensor to make it easy to find.
 flattened.dtype = np.float32  # NOTE: We must include dtype information for graph outputs
+flattened.shape = (gs.Tensor.DYNAMIC,)
 partially_flattened.name = "partially_flattened"
 partially_flattened.dtype = np.float32
+partially_flattened.shape = (gs.Tensor.DYNAMIC, 3, gs.Tensor.DYNAMIC)
 
 graph.outputs = [flattened, partially_flattened]
-onnx.save(gs.export_onnx(graph), "model.onnx")
+
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "model.onnx")
