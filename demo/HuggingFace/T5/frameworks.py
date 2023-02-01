@@ -95,6 +95,8 @@ class T5FHuggingFace(FrameworkCommand):
         # These ONNX models can be converted using special encoder and decoder classes.        
         encoder_onnx_model_fpath = os.path.join(encoder_onnx_root, metadata_serialized + "-encoder.onnx")
         decoder_onnx_model_fpath = os.path.join(decoder_onnx_root, metadata_serialized + "-decoder-with-lm-head.onnx")
+        if metadata.precision.fp16:
+            model = model.half()
 
         t5_encoder = T5EncoderTorchFile(model, metadata)
         t5_decoder = T5DecoderTorchFile(model, metadata)
