@@ -51,27 +51,18 @@ class T5Metadata(_T5Metadata, MetadataArgparseInteropMixin):
         network_group.add_argument(
             "--num-beams", type=int, default=1, help="Enables beam search during decoding."
         )
+        
+        network_group.add_argument(
+            "--fp16", action="store_true", help="Enables fp16 TensorRT tactics."
+        )
 
     @staticmethod
     def from_args(args: argparse.Namespace):
         return NetworkMetadata(
             variant=args.variant,
-            precision=Precision(fp16=False),
+            precision=Precision(fp16=args.fp16),
             other=T5Metadata(kv_cache=args.enable_kv_cache),
         )
-
-    @staticmethod
-    def add_inference_args(parser: argparse.ArgumentParser) -> None:
-        T5Metadata.add_args(parser)
-        inference_group = parser.add_argument_group("inference group")
-        inference_group.add_argument(
-            "--fp16", action="store_true", help="Enables fp16 TensorRT tactics."
-        )
-
-    @staticmethod
-    def from_inference_args(args: argparse.Namespace):
-        base_metadata = T5Metadata.from_args(args)
-        return base_metadata._replace(precision=Precision(fp16=args.fp16))
 
     @staticmethod
     def add_benchmarking_args(parser: argparse.ArgumentParser) -> None:

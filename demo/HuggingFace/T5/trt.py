@@ -31,7 +31,7 @@ if __name__ == "__main__":
 from polygraphy.backend.trt import Profile
 
 # tensorrt
-import tensorrt as trt 
+import tensorrt as trt
 
 # torch
 import torch
@@ -125,10 +125,11 @@ class T5TRTEncoder(TRTHFRunner):
         benchmarking_args: T5TRTBenchmarkingArgs = None
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
+        self.data_type = torch.float16 if network_metadata.precision.fp16 else torch.float32
         # In benchmarking mode, the max_sequence_length should be the designated input_profile_max_len
         if benchmarking_args is not None and benchmarking_args.input_profile_max_len is not None:
             self.max_sequence_length = benchmarking_args.input_profile_max_len
-        else: 
+        else:
             self.max_sequence_length = hf_config.d_model
         self.encoder_hidden_size = hf_config.d_model
         self.main_input_name = "input_ids"
@@ -145,7 +146,7 @@ class T5TRTEncoder(TRTHFRunner):
             "hidden_states": (self.batch_size, self.max_sequence_length, self.encoder_hidden_size)
         }
         self.output_types = {
-            "hidden_states": torch.float32
+            "hidden_states": self.data_type
         }
 
         self.bindings = self._allocate_memory(self.input_shapes, self.input_types, self.output_shapes, self.output_types)
@@ -183,7 +184,7 @@ class T5TRTEncoder(TRTHFRunner):
         hidden_states_output = self.outputs["hidden_states"]
         if is_cpu_mode:
             hidden_states_output = hidden_states_output.cpu()
-        
+
         folded = hidden_states_output[:bs * input_length * encoder_hidden_size].view(bs, input_length, encoder_hidden_size)
 
         return folded
@@ -198,22 +199,22 @@ class T5TRTDecoder(TRTHFRunner):
         batch_size: int = 1,
         num_beams: int = 1,
         benchmarking_args: T5TRTBenchmarkingArgs = None,
-        cache_type = torch.float32
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
-        
+        self.data_type = torch.float16 if network_metadata.precision.fp16 else torch.float32
+
         # In benchmarking mode, the max_sequence_length should be the user-provided input_profile_max_len
         if benchmarking_args is not None and benchmarking_args.input_profile_max_len is not None:
             self.max_input_length = benchmarking_args.input_profile_max_len
-        else: 
+        else:
             self.max_input_length = hf_config.d_model
-        
+
         # Similarly, the max_output_length should be the user-provided output_profile_max_len
         if benchmarking_args is not None and benchmarking_args.output_profile_max_len is not None:
             self.max_output_length = benchmarking_args.output_profile_max_len
-        else: 
+        else:
             self.max_output_length = hf_config.d_model
-        
+
         self.main_input_name = "input_ids"
         self.encoder_hidden_size = hf_config.d_model
         self.num_heads = hf_config.num_heads
@@ -224,7 +225,7 @@ class T5TRTDecoder(TRTHFRunner):
 
         hidden_states_profile_length = self.max_output_length if not self.config.use_cache else 1
         # Construct buffer for hidden states outputs
-        self.hidden_states = torch.zeros((self.batch_size * num_beams, hidden_states_profile_length, hf_config.vocab_size), dtype = torch.float32).cuda()
+        self.hidden_states = torch.zeros((self.batch_size * num_beams, hidden_states_profile_length, hf_config.vocab_size), dtype = self.data_type).cuda()
         self.bindings[self.trt_engine.get_binding_index("hidden_states")] = self.hidden_states.data_ptr()
 
         if self.config.use_cache:
@@ -241,7 +242,7 @@ class T5TRTDecoder(TRTHFRunner):
                 for code in ["key", "value"]:
                     # Allocate self attention buffer. The buffer is used both as inputs and outputs
                     self_attention_name = f"key_values.{i}.decoder.{code}"
-                    input_buffer = torch.zeros(self_attention_kv_shape, dtype = cache_type).cuda()
+                    input_buffer = torch.zeros(self_attention_kv_shape, dtype = self.data_type).cuda()
                     input_idx = self.trt_engine.get_binding_index("past_" + self_attention_name)
                     self.self_attention_cache[self_attention_name] = input_buffer
                     self.bindings[input_idx] = input_buffer.data_ptr()
@@ -251,7 +252,7 @@ class T5TRTDecoder(TRTHFRunner):
 
                     # Allocate cross attention buffer
                     cross_attention_past_name = f"past_key_values.{i}.encoder.{code}"
-                    cross_attention_buffer = torch.zeros(cross_attention_kv_shape, dtype = cache_type).cuda()
+                    cross_attention_buffer = torch.zeros(cross_attention_kv_shape, dtype = self.data_type).cuda()
                     cross_attention_idx = self.trt_engine.get_binding_index(cross_attention_past_name)
                     self.cross_attention_cache[cross_attention_past_name] = cross_attention_buffer
                     self.bindings[cross_attention_idx] = cross_attention_buffer.data_ptr()
@@ -266,7 +267,7 @@ class T5TRTDecoder(TRTHFRunner):
 
         self.return_device = "cuda"
         self.variant = network_metadata.variant # record variant name to later index the vocab_size in forward()
-    
+
     def set_encoder_hidden_states_for_inference_cycle(self, encoder_hidden_states):
         """Used to cache encoder hidden state runs across same encoder sessions"""
 
@@ -274,7 +275,7 @@ class T5TRTDecoder(TRTHFRunner):
             self.encoder_hidden_states = encoder_hidden_states.cuda()
         else:
             self.encoder_hidden_states = encoder_hidden_states
-        
+
         self.bindings[1] = self.encoder_hidden_states.data_ptr()
         self.persist_encoder_hidden_states = True
 
@@ -312,7 +313,7 @@ class T5TRTDecoder(TRTHFRunner):
         """
         self.return_device = return_device
         self.device = return_device
-    
+
     def _reorder_cache(self, past, beam_idx):
         # Reference: https://huggingface.co/transformers/v4.11.3/_modules/transformers/models/t5/modeling_t5.html
         # Note that for BART, this function is static, but for T5, it is not
@@ -386,7 +387,7 @@ class T5TRTDecoder(TRTHFRunner):
         # Launch TRT inference.
         assert self.trt_context.all_binding_shapes_specified
         self.trt_context.execute_v2(bindings=self.bindings)
-        
+
         logits = self.hidden_states[:,:input_length,:]
         if is_cpu_mode:
             logits = logits.cpu()
@@ -413,7 +414,7 @@ class T5TRTDecoder(TRTHFRunner):
 
     def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
         # In HuggingFace generation_utils.py, this function will be called at each decoding step, before running the decoder's forward().
-        
+
         if past is not None:
             input_ids = input_ids[:, -1:]
 
@@ -425,7 +426,7 @@ class T5TRTDecoder(TRTHFRunner):
         if self.config.use_cache:
             ret["use_cache"] = use_cache
             ret["past_key_values"] = past
-        
+
         return ret
 
     def reset(self):
@@ -483,10 +484,10 @@ class T5TRT(TRTInferenceCommand):
 
         if max_length is None:
             max_length = T5ModelTRTConfig.MAX_OUTPUT_LENGTH[self.metadata.variant]
-        
+
         if min_length is None:
             min_length = T5ModelTRTConfig.MIN_OUTPUT_LENGTH[self.metadata.variant]
-        
+
         encoder_last_hidden_state = self.t5_trt_encoder(input_ids=input_ids).to("cuda")
 
         decoder_output = self.t5_trt_decoder.generate(
@@ -525,14 +526,14 @@ class T5TRT(TRTInferenceCommand):
         else:
             input_seq_len = benchmarking_args.input_seq_len
             output_seq_len = benchmarking_args.output_seq_len
-     
+
             input_ids = torch.randint(0, hf_config.vocab_size, (batch_size, input_seq_len))
 
         encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             self.t5_trt_encoder, input_ids, timing_profile
         )
-        
-        # Need to feed the decoder a new empty input_ids for text generation. 
+
+        # Need to feed the decoder a new empty input_ids for text generation.
         decoder_output_len = output_seq_len // 2 if (not metadata.other.kv_cache) else 1
 
         decoder_input_ids = torch.full(
@@ -595,7 +596,7 @@ class T5TRT(TRTInferenceCommand):
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
             return BenchmarkingResult(median_runtime=runtime, models=models)
-        
+
         # Remove the padding and end tokens.
         semantic_outputs = tokenizer.decode(
             decoder_output[-1, :], skip_special_tokens=True
@@ -681,7 +682,7 @@ class T5TRT(TRTInferenceCommand):
         max_output_length = hf_config.d_model
         opt_input_seq_len = max_input_length // 2
         opt_output_seq_len = max_output_length // 2
-        
+
         # benchmarking flags
         if benchmarking_args is not None:
             max_input_length = benchmarking_args.input_profile_max_len
@@ -702,7 +703,7 @@ class T5TRT(TRTInferenceCommand):
 
         # Set up the non kv engine, used for non-kv mode and kv mode generation phase (1st decoder run uses the non-kv profile to generate kv cache)
         dec_profiles = Profile()
-        
+
         # for beam search, decoder engine's inputs are expanded `num_beams` times
         # optimization profiles should be changed accordingly, but onnx models can be shared across greedy/beam because the first dim (batch size) is already a dynamic value, so no change needed in export.py
         if not hf_config.use_cache:
@@ -726,7 +727,7 @@ class T5TRT(TRTInferenceCommand):
             opt=(batch_size * num_beams, opt_input_seq_len, encoder_hidden_size),
             max=(batch_size * num_beams, max_input_length, encoder_hidden_size),
         )
-        
+
         if hf_config.use_cache:
 
             num_heads = hf_config.num_heads
@@ -760,7 +761,7 @@ class T5TRT(TRTInferenceCommand):
                     f"past_key_values.{i}.encoder.value",
                     **cross_attention_profile
                 )
-        
+
         decoder_profiles = [dec_profiles]
 
         # Convert ONNX models to TRT engines.
@@ -775,7 +776,7 @@ class T5TRT(TRTInferenceCommand):
 
         if num_beams > 1:
             engine_tag += "-beam{}".format(num_beams)
-            
+
         preview_features = []
         if preview_dynamic_shapes:
             preview_features = [PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
@@ -866,7 +867,7 @@ class T5TRT(TRTInferenceCommand):
                         )
                     )
                     self.t5_trt_decoder.reset()
-                        
+
                 if perplexity_reference is not None:
                     assert len(network_input) == len(perplexity_reference), "Encoder and decoder inputs must pair up"
                     if metadata.other.kv_cache or (args.num_beams > 1):
@@ -888,12 +889,12 @@ class T5TRT(TRTInferenceCommand):
                 if args.input_profile_max_len is None or args.output_profile_max_len is None:
                     if args.input_seq_len is None or args.output_seq_len is None:
                         assert False, "Please provide at least one pair of inputs: [input/output]_seq_len or [input/output]_profile_max_len"
-                
+
                 input_profile_max_len = setup_benchmark_arg(args.input_profile_max_len, "input_profile_max_len", max_input_seq_len)
                 output_profile_max_len = setup_benchmark_arg(args.output_profile_max_len, "output_profile_max_len", max_output_seq_len)
                 input_seq_len = setup_benchmark_arg(args.input_seq_len, "input_seq_len", input_profile_max_len // 2)
                 output_seq_len = setup_benchmark_arg(args.output_seq_len, "output_seq_len", output_profile_max_len // 2)
-                
+
                 benchmarking_args = T5TRTBenchmarkingArgs(input_seq_len, output_seq_len, input_profile_max_len, output_profile_max_len)
 
                 # Assert to ensure the validity of benchmarking arguments
