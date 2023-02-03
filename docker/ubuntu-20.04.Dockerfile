@@ -21,7 +21,7 @@ ARG OS_VERSION=20.04
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 8.5.2.2
+ENV TRT_VERSION 8.5.3.1
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account

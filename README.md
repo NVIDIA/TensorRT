@@ -26,7 +26,7 @@ You can skip the **Build** section to enjoy TensorRT with Python.
 To build the TensorRT-OSS components, you will first need the following software packages.
 
 **TensorRT GA build**
-* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.5.2.2
+* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.5.3.1
 
 **System Packages**
 * [CUDA](https://developer.nvidia.com/cuda-toolkit)
@@ -80,8 +80,8 @@ To build the TensorRT-OSS components, you will first need the following software
 
     ```bash
     cd ~/Downloads
-    tar -xvzf TensorRT-8.5.1.7.Linux.x86_64-gnu.cuda-11.8.cudnn8.6.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-8.5.1.7
+    tar -xvzf TensorRT-8.5.3.1.Linux.x86_64-gnu.cuda-11.8.cudnn8.6.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-8.5.3.1
     ```
 
 

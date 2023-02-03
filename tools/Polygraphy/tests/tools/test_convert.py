@@ -96,9 +96,8 @@ class TestConvertToTrt:
 
             poly_convert(
                 [
-                    f.name,
+                    f"{f.name}:my_load_network",
                     "--model-type=trt-network-script",
-                    "--trt-network-func-name=my_load_network",
                     "--trt-config-script",
                     f.name,
                     "--convert-to=trt",

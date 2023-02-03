@@ -113,7 +113,7 @@ class LoggerArgs(BaseArgs):
             }[severity_level]
 
         self.verbosity = None
-        verbosity = args_util.parse_dict_with_default(args_util.get(args, "verbosity"))
+        verbosity = args_util.parse_arglist_to_dict(args_util.get(args, "verbosity"))
         if default_severity is not None:
             if verbosity is not None:
                 verbosity[""] = default_severity

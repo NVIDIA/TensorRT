@@ -43,11 +43,10 @@ script called `data_loader.py` and then use `polygraphy convert` to build the Te
 3. **[Optional]** Use the data loader directly from the API example.
 
     The method outlined here is so flexible that we can even use the data loader we defined in the API example!
-    We just need to set `--data-loader-func-name` since the example does not use `load_data` as the function name:
+    We just need to specify the function name since the example does not call it `load_data`:
 
     ```bash
     polygraphy convert identity.onnx --int8 \
-        --data-loader-script ../../../api/04_int8_calibration_in_tensorrt/example.py \
-        --data-loader-func-name calib_data \
+        --data-loader-script ../../../api/04_int8_calibration_in_tensorrt/example.py:calib_data \
         -o identity.engine
     ```

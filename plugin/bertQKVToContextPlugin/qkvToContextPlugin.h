@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,6 +28,10 @@
 #include <string>
 #include <vector>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
 
@@ -448,6 +452,8 @@ private:
 };
 
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 #endif // TRT_QKV_TO_CONTEXT_PLUGIN_H
 
 #endif // CUDA_VERSION >= 10010

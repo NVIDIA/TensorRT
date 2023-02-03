@@ -86,10 +86,13 @@ set(SAMPLE_DEP_LIBS
     ${CUBLAS_LIB}
     ${CUDNN_LIB}
     nvinfer
-    ${RT_LIB}
     ${CMAKE_DL_LIBS}
     ${CMAKE_THREAD_LIBS_INIT}
 )
+
+if (NOT MSVC)
+    list(APPEND SAMPLE_DEP_LIBS ${RT_LIB})
+endif()
 
 if(${PLUGINS_NEEDED})
     list(APPEND SAMPLE_DEP_LIBS nvinfer_plugin)

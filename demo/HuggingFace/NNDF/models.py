@@ -40,7 +40,7 @@ from torch import load, save
 from torch.nn import Module
 
 # tensorrt
-from tensorrt import PreviewFeature
+from tensorrt import PreviewFeature, MemoryPoolType
 
 # TRT-HuggingFace
 from NNDF.networks import NetworkMetadata
@@ -122,7 +122,7 @@ class ModelFileConverter:
             self.trt_inference_config = CreateConfig(
                 tf32=True,
                 fp16=network_metadata.precision.fp16,
-                max_workspace_size=result.DEFAULT_TRT_WORKSPACE_MB * 1024 * 1024,
+                memory_pool_limits = {MemoryPoolType.WORKSPACE: result.max_trt_workspace * 1024 * 1024},
                 profiles=profiles,
                 precision_constraints=("obey" if result.use_obey_precision_constraints() else None),
                 preview_features=preview_features
@@ -422,11 +422,29 @@ class ONNXModelFile(NNModelFile):
             return converter.torch_class(output_fpath, self.network_metadata)
 
         return converter.onnx_to_torch(output_fpath, self.fpath, self.network_metadata)
+    
+    def _cleanup_onnx_folder(self, folder_dir):
+        for d in os.listdir(folder_dir):
+            fpath = os.path.join(folder_dir, d)
+            # Remove everything related to onnx other than engine
+            if (os.path.isfile(fpath)) and (".engine" not in d):
+                os.remove(fpath)
 
     def cleanup(self) -> None:
         G_LOGGER.debug("Removing saved ONNX model from location: {}".format(self.fpath))
-        # Does not cleanup external data and weights.
-        os.remove(self.fpath)
+        if (not self.network_metadata.other.kv_cache) or ("encoder" in self.fpath):
+            # Clean up any onnx external files by removing integer named values and weight files
+            workspace_path = os.path.split(self.fpath)[0]
+            self._cleanup_onnx_folder(workspace_path)
+
+        else:
+            # In kv cache mode, hard to remove the decoder. Therefore need to search for temporary WAR.
+            decoder_path = os.path.split(self.fpath)[0]
+            decoder_non_kv_path = os.path.join(decoder_path, "non-kv")
+            decoder_kv_path = os.path.join(decoder_path, "kv")
+            # Remove kv and nonkv folder correspondingly.
+            self._cleanup_onnx_folder(decoder_non_kv_path)
+            self._cleanup_onnx_folder(decoder_kv_path)
 
     def as_trt_engine(
         self,
@@ -465,7 +483,6 @@ class ONNXModelFile(NNModelFile):
 
 
 class TRTEngineFile(NNModelFile):
-    DEFAULT_TRT_WORKSPACE_MB = 3072
 
     @abstractmethod
     def use_obey_precision_constraints(self):
@@ -485,6 +502,7 @@ class TRTEngineFile(NNModelFile):
     ):
         super().__init__(default_converter, network_metadata)
         self.fpath = model
+        self.max_trt_workspace = 3072
 
     def cleanup(self) -> None:
         G_LOGGER.debug("Removing saved engine model from location: {}".format(self.fpath))

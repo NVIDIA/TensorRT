@@ -271,6 +271,12 @@ class Optimizer():
                 else:
                     inputTensor = node.i().inputs[0]  # UNet and VAE
 
+                # The first axis to normalize from can be inferred from the size of the `axes`
+                # parameter of (any of) the `ReduceMean` node(s)
+                reduceMeanNode = node.o().o(0).o()
+                assert reduceMeanNode.op == "ReduceMean"
+                firstNormAxis = -1 * np.size(np.array(reduceMeanNode.attrs["axes"]))
+
                 gammaNode = node.o().o().o().o().o().o().o()
                 index = [type(i) == gs.ir.tensor.Constant for i in gammaNode.inputs].index(True)
                 gamma = np.array(deepcopy(gammaNode.inputs[index].values.tolist()), dtype=np.float32)
@@ -283,7 +289,7 @@ class Optimizer():
 
                 inputList = [inputTensor, constantGamma, constantBeta]
                 layerNormV = gs.Variable("LayerNormV-" + str(nLayerNormPlugin), np.dtype(np.float32), inputTensor.shape)
-                layerNormN = gs.Node("LayerNorm", "LayerNormN-" + str(nLayerNormPlugin), inputs=inputList, attrs=OrderedDict([('epsilon', 1.e-5)]), outputs=[layerNormV])
+                layerNormN = gs.Node("LayerNorm", "LayerNormN-" + str(nLayerNormPlugin), inputs=inputList, attrs=OrderedDict([('epsilon', 1.e-5), ('axis', firstNormAxis)]), outputs=[layerNormV])
                 self.graph.nodes.append(layerNormN)
                 nLayerNormPlugin += 1
 

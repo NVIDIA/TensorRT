@@ -22,6 +22,20 @@ from polygraphy.json import Decoder, Encoder, add_json_methods
 np = mod.lazy_import("numpy")
 
 
+class BoundedShape(list):
+    """
+    Represents a shape with min/max bounds.
+    """
+
+    def __init__(self, shape, min=None, max=None):
+        super().__init__(shape)
+        self.min = min
+        self.max = max
+
+    def __repr__(self):
+        return f"BoundedShape({list(self)}, min={self.min}, max={self.max})"
+
+
 class MetadataTuple:
     def __init__(self, dtype, shape):
         self.dtype = dtype
@@ -79,7 +93,7 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
             meta.add(name, arr.dtype, arr.shape)
         return meta
 
-    def add(self, name, dtype, shape):
+    def add(self, name, dtype, shape, min_shape=None, max_shape=None):
         """
         Convenience function for adding entries.
 
@@ -90,16 +104,28 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
                     The shape of the input. Dynamic dimensions may
                     be indicated by negative values, ``None``, or a string.
 
+            min_shape (Sequence[int]):
+                    The minimum valid shape for the input.
+                    If provided, this shape should not include any dynamic dimensions.
+            max_shape (Sequence[int]):
+                    The maximum valid shape for the input.
+                    If provided, this shape should not include any dynamic dimensions.
+
         Returns:
             The newly added entry.
         """
-        self[name] = MetadataTuple(dtype, shape)
+        self[name] = MetadataTuple(
+            dtype, BoundedShape(shape, min=min_shape, max=max_shape) if shape is not None else None
+        )
         return self
 
     def __repr__(self):
         ret = "TensorMetadata()"
         for name, (dtype, shape) in self.items():
-            ret += f".add('{name}', {dtype}, {shape})"
+            shape_str = f"{shape}"
+            if shape is not None:
+                shape_str = f"{list(shape)}, min_shape={shape.min}, max_shape={shape.max}"
+            ret += f".add('{name}', {dtype}, {shape_str})"
         return ret
 
     def __str__(self):

@@ -206,6 +206,7 @@ class TrtLegacyRunner(BaseRunner):
         max_batch_size=None,
         fp16=None,
         tf32=None,
+        fp8=None,
         load_engine=None,
         save_engine=None,
         layerwise=False,
@@ -225,6 +226,7 @@ class TrtLegacyRunner(BaseRunner):
             max_workspace_size (int): The maximum workspace size.
             max_batch_size (int): The maximum batch size.
             fp16 (bool): Whether to run in fp16 mode
+            fp8  (bool): Whether to run in fp8 mode            
             layerwise (bool): Whether to retrieve the outputs of every layer in the network.
             name (str):
                     The human-readable name prefix to use for this runner.
@@ -247,6 +249,7 @@ class TrtLegacyRunner(BaseRunner):
         self.network_loader = network_loader
         self.max_workspace_size = util.default(max_workspace_size, 1 << 24)
         self.fp16 = util.default(fp16, False)
+        self.fp8  = util.default(fp8, False)
         self.tf32 = util.default(tf32, False)
         self.load_engine = load_engine
 
@@ -319,6 +322,8 @@ class TrtLegacyRunner(BaseRunner):
                         config.clear_flag(trt.BuilderFlag.TF32)
                 if self.fp16:
                     config.set_flag(trt.BuilderFlag.FP16)
+                if self.fp8:
+                    config.set_flag(trt.BuilderFlag.FP8)
 
                 if self.int8:
                     config.set_flag(trt.BuilderFlag.INT8)
@@ -340,7 +345,7 @@ class TrtLegacyRunner(BaseRunner):
 
                 G_LOGGER.info(
                     f"Building engine: max workspace size={config.max_workspace_size} bytes, max batch size={builder.max_batch_size}, "
-                    f"fp16={self.fp16}, tf32={self.tf32}, int8={self.int8}"
+                    f"fp16={self.fp16}, tf32={self.tf32}, int8={self.int8}, fp8={self.fp8}"
                 )
                 self.engine = builder.build_engine(network, config)
 

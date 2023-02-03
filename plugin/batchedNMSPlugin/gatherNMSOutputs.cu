@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 #include "common/kernel.h"
+#include "common/kernels/saturate.h"
 #include "common/plugin.h"
 #include "cuda_fp16.h"
 #include "gatherNMSOutputs.h"
@@ -33,24 +34,6 @@ inline __device__ __half minus_fb(const __half& a, const __half& b)
 // overload for float
 inline __device__ float minus_fb(const float & a, const float & b) {
     return a - b;
-}
-
-template <typename T_BBOX>
-__device__ T_BBOX saturate(T_BBOX v)
-{
-    return max(min(v, T_BBOX(1)), T_BBOX(0));
-}
-
-template <>
-__device__ __half saturate(__half v)
-{
-#if __CUDA_ARCH__ >= 800
-    return __hmax(__hmin(v, __half(1)), __half(0));
-#elif __CUDA_ARCH__ >= 530
-    return __hge(v, __half(1)) ? __half(1) : (__hle(v, __half(0)) ? __half(0) : v);
-#else
-    return max(min(v, float(1)), float(0));
-#endif
 }
 
 template <typename T_BBOX, typename T_SCORE, unsigned nthds_per_cta>

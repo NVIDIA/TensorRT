@@ -163,7 +163,7 @@ def nptype(trt_type):
         float16: np.float16,
         int8: np.int8,
         int32: np.int32,
-        bool: np.bool,
+        bool: np.bool_,
         uint8: np.uint8,
     }
     if trt_type in mapping:

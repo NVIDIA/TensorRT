@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,16 +25,36 @@
 #include <string>
 #include <vector>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
+
+int32_t launch_small_hface(cudaStream_t stream, int32_t const ld, int32_t const total, int8_t const* input,
+    int8_t const* skip, half const* beta, half const* gamma, int8_t* output, float const dqScaleIn,
+    float const dqScaleSkip, float const qScale);
+
+int32_t launch_large_hface(cudaStream_t stream, int32_t const ld, int32_t const total, int8_t const* input,
+    int8_t const* skip, half const* beta, half const* gamma, int8_t* output, float const dqScaleIn,
+    float const dqScaleSkip, float const qScale);
+
+int32_t launch_small_mtron(cudaStream_t stream, int32_t const ld, int32_t const total, int8_t const* input,
+    int8_t const* skip, half const* beta, half const* gamma, int8_t* output, int8_t* preln, float const dqScaleIn,
+    float const dqScaleSkip, float const qScale, float const qSkipScale);
+
+int32_t launch_large_mtron(cudaStream_t stream, int32_t const ld, int32_t const total, int8_t const* input,
+    int8_t const* skip, half const* beta, half const* gamma, int8_t* output, int8_t* preln, float const dqScaleIn,
+    float const dqScaleSkip, float const qScale, float const qSkipScale);
 
 class SkipLayerNormInterleavedPluginBase : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     SkipLayerNormInterleavedPluginBase(
-        const std::string name, const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma);
+        std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 
-    SkipLayerNormInterleavedPluginBase(const std::string name, const void* data, size_t length);
+    SkipLayerNormInterleavedPluginBase(std::string const& name, void const* data, size_t length);
 
     // It doesn't make sense to make SkipLayerNormInterleavedPlugin without arguments, so we
     // delete default constructor.
@@ -63,7 +83,7 @@ public:
     const char* getPluginNamespace() const noexcept override;
 
 protected:
-    const std::string mLayerName;
+    std::string const& mLayerName;
     std::string mNamespace;
 
     bert::cuda_unique_ptr<void> mGammaDev;
@@ -80,9 +100,9 @@ class SkipLayerNormInterleavedPluginHFace : public SkipLayerNormInterleavedPlugi
 {
 public:
     SkipLayerNormInterleavedPluginHFace(
-        const std::string name, const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma);
+        std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 
-    SkipLayerNormInterleavedPluginHFace(const std::string name, const void* data, size_t length);
+    SkipLayerNormInterleavedPluginHFace(std::string const& name, const void* data, size_t length);
 
     // It doesn't make sense to make SkipLayerNormInterleavedPlugin without arguments, so we
     // delete default constructor.
@@ -105,9 +125,9 @@ class SkipLayerNormInterleavedPluginMTron : public SkipLayerNormInterleavedPlugi
 {
 public:
     SkipLayerNormInterleavedPluginMTron(
-        const std::string name, const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma);
+        std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 
-    SkipLayerNormInterleavedPluginMTron(const std::string name, const void* data, size_t length);
+    SkipLayerNormInterleavedPluginMTron(std::string const& name, void const* data, size_t length);
 
     // It doesn't make sense to make SkipLayerNormInterleavedPlugin without arguments, so we
     // delete default constructor.
@@ -170,4 +190,6 @@ public:
 };
 
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 #endif // TRT_SKIP_LAYER_NORM_INTERLEAVED_PLUGIN_H

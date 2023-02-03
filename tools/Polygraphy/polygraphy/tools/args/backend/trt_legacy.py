@@ -165,7 +165,7 @@ class TrtLegacyRunnerArgs(BaseRunnerArgs):
         runner_str = make_invocable(
             "TrtLegacyRunner",
             network_loader=loader_name,
-            max_workspace_size=self.arg_groups[TrtConfigArgs].workspace,
+            max_workspace_size=self.arg_groups[TrtConfigArgs]._workspace,
             max_batch_size=self.batch_size,
             fp16=self.arg_groups[TrtConfigArgs].fp16,
             tf32=self.arg_groups[TrtConfigArgs].tf32,
@@ -174,6 +174,7 @@ class TrtLegacyRunnerArgs(BaseRunnerArgs):
             layerwise=self.trt_outputs == constants.MARK_ALL,
             plugins=self.arg_groups[TrtLoadPluginsArgs].plugins,
             int8=self.arg_groups[TrtConfigArgs].int8,
+            fp8=self.arg_groups[TrtConfigArgs].fp8,
             calibrator=calibrator,
             use_dla=self.use_dla,
             allow_gpu_fallback=self.allow_gpu_fallback,

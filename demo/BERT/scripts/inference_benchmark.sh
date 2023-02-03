@@ -98,6 +98,7 @@ if [ "$arg_help" -eq "1" ]; then
 fi
 
 mkdir -p /workspace/TensorRT/demo/BERT/engines
+nvidia-smi -q
 
 # BERT BASE
 

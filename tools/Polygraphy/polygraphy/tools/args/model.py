@@ -114,11 +114,12 @@ class ModelArgs(BaseArgs):
         if self._required_model_type is None:
             self.group.add_argument(
                 "--model-type",
-                help="The type of the input model: {{'frozen': TensorFlow frozen graph, 'keras': Keras model, "
-                "'ckpt': TensorFlow checkpoint directory, 'onnx': ONNX model, 'engine': TensorRT engine, 'trt-network-script': "
+                help="The type of the input model: {{'frozen': TensorFlow frozen graph; 'keras': Keras model; "
+                "'ckpt': TensorFlow checkpoint directory; 'onnx': ONNX model; 'engine': TensorRT engine; 'trt-network-script': "
                 "A Python script that defines a `load_network` function that takes no arguments and returns a TensorRT Builder, "
-                "Network, and optionally Parser, "
-                "'uff': UFF file [deprecated], 'caffe': Caffe prototxt [deprecated]}}",
+                "Network, and optionally Parser. If the function name is not `load_network`, it can be specified after the model file, "
+                "separated by a colon. For example: `my_custom_script.py:my_func`; "
+                "'uff': UFF file [deprecated]; 'caffe': Caffe prototxt [deprecated]}}",
                 choices=ModelArgs.ModelType.VALID_TYPES,
                 default=None,
             )
@@ -143,14 +144,17 @@ class ModelArgs(BaseArgs):
             input_shapes (TensorMetadata): Input names and their shapes.
             path (str): Path to the model.
             model_type (ModelArgs.ModelType): The type of model.
+            extra_model_info (str):
+                    Any extra model information specified after the model argument, separated by a colon.
+                    The meaning of this information may be specific to each model type.
+                    In most cases, no extra model information is provided.
         """
 
-        def determine_model_type():
+        def determine_model_type(model_file):
             model_type = args_util.get(args, "model_type")
             if model_type is not None:
                 return model_type.lower()
 
-            model_file = args_util.get(args, "model_file")
             if model_file is None:
                 return None
 
@@ -179,23 +183,34 @@ class ModelArgs(BaseArgs):
                     return model_type
 
             G_LOGGER.critical(
-                f"Could not automatically determine model type for: {model_file}\nPlease explicitly specify the type with the --model-type option"
+                f"Could not automatically determine model type for: {model_file}"
+                f"\nPlease explicitly specify the type with the --model-type option"
             )
 
         self.input_shapes = TensorMetadata()
         if args_util.get(args, "input_shapes"):
             self.input_shapes = args_util.parse_meta(args_util.get(args, "input_shapes"), includes_dtype=False)
 
-        self.path = args_util.get(args, "model_file")
-        if self.path:
+        self.path = None
+        self.extra_model_info = None
+
+        self.path, self.extra_model_info = args_util.parse_script_and_func_name(args_util.get(args, "model_file"))
+
+        if self.path is not None:
             G_LOGGER.verbose(f"Model: {self.path}")
             if not os.path.exists(self.path):
                 G_LOGGER.warning(f"Model path does not exist: {self.path}")
             self.path = os.path.abspath(self.path)
 
-        model_type_str = self._required_model_type if self._required_model_type else determine_model_type()
+        model_type_str = self._required_model_type if self._required_model_type else determine_model_type(self.path)
         self.model_type = ModelArgs.ModelType(model_type_str) if model_type_str else None
-        if self.model_type == "trt-network-script" and (not self.path or not self.path.endswith(".py")):
-            G_LOGGER.critical(
-                f"TensorRT network scripts must exist and have '.py' extensions.\nNote: Provided network script path was: {self.path}"
-            )
+
+        # Set up extra_model_info defaults for each model type
+        if self.model_type == "trt-network-script":
+            if not self.path or not self.path.endswith(".py"):
+                G_LOGGER.critical(
+                    f"TensorRT network scripts must exist and have '.py' extensions.\n"
+                    f"Note: Provided network script path was: {self.path}"
+                )
+
+            self.extra_model_info = util.default(self.extra_model_info, "load_network")

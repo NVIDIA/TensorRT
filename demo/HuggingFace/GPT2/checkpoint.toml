@@ -1,7 +1,25 @@
+[GPT2.all.gpt2-medium.all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a Deep Learning compiler used for deep learning. TensorRT is a deep learning library for Python.\n\nTensorRT is a deep learning library for
+'''
+
 [GPT2.all.gpt2-large.all.generate]
 
 label = '''
 TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a Deep Learning compiler used for deep learning. TensorFlow is a high-performance, open-source, cross-platform, high-performance, machine
+'''
+
+[GPT2.all.gpt2-xl.all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe library is written in C++ and uses Boost.Python.\n\nThe library is available on GitHub.\n\nInstallation\n\nThe library is available on GitHub.\n
+'''
+
+[GPT2.all."EleutherAI/gpt-j-6B".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler that enables you to run deep learning models on NVIDIA GPUs.\n\nTensorRT is a deep learning compiler that enables you to run
 '''
 
 [GPT2.all.default.all.generate]
@@ -19,10 +37,28 @@ TensorRT is a Deep Learning compiler used for deep learning.\n\nThe main goal of
 label = '''
 TensorRT is a Deep Learning compiler used for deep learning.\n\nThe main goal of the project is to provide a way to build a deep learning framework that can be used to build a deep learning framework for a wide range of applications.\n'''
 
+[GPT2.all.gpt2-medium.all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on a large corpus of data, and the model is trained on a large number of training examples. The model is trained on a large number
+'''
+
 [GPT2.all.gpt2-large.all.generate_b]
 
 label = '''
 GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the following data:\n\nThe corpus consists of the following text files:\n\nThe corpus is split into two parts:\n\n
+'''
+
+[GPT2.all.gpt2-xl.all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the MNIST dataset, which contains over 100,000 handwritten digits. The training data is split into two parts: the training set and
+'''
+
+[GPT2.all."EleutherAI/gpt-j-6B".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-PT**: The same as GPT-2 but with the pretrained model.\n\n-   **
 '''
 
 [GPT2.all.default.all.generate_b]
@@ -35,10 +71,28 @@ label = '''
 GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is based on the following assumptions:\n\nThe model is based on the following assumptions:\n\nThe model is based on the following assumptions:\n
 '''
 
+[GPT2.all.gpt2-medium.all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours
+'''
+
 [GPT2.all.gpt2-large.all.generate_c]
 
 label = '''
 If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours
+'''
+
+[GPT2.all.gpt2-xl.all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours
+'''
+
+[GPT2.all."EleutherAI/gpt-j-6B".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to be in the same place.\n\nI am going to be in the same place.\n\nI am going to be in the same place
 '''
 
 [GPT2.all.default.all.generate_c]

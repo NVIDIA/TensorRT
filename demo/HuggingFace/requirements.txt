@@ -14,7 +14,10 @@
 # limitations under the License.
 #
 
-transformers==4.8.0
+huggingface-hub==0.11.0; python_version>="3.7"
+huggingface-hub==0.4.0; python_version<"3.7"
+transformers==4.20.0; python_version>="3.7"
+transformers==4.18.0; python_version<"3.7"
 torch <= 1.11
 sentencepiece==0.1.95; python_version<"3.10"
 sentencepiece==0.1.97; python_version>="3.10"

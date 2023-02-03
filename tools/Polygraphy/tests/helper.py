@@ -49,7 +49,7 @@ def is_file_non_empty(path):
     return not is_file_empty(path)
 
 
-def time_func(func, warm_up=50, iters=200):
+def time_func(func, warm_up=25, iters=100):
     for _ in range(warm_up):
         func()
 

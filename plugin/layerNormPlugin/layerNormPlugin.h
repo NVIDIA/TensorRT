@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,13 +17,14 @@
 #ifndef TRT_LAYERNORM_PLUGIN_H
 #define TRT_LAYERNORM_PLUGIN_H
 
-#include "common/plugin.h"
-#include <cuda_runtime_api.h>
-#include <stdint.h>
-#include <vector>
-
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
+
+#include "common/plugin.h"
+
+#include <cstdint>
+#include <cuda_runtime_api.h>
+#include <vector>
 
 namespace nvinfer1
 {
@@ -33,11 +34,16 @@ class LayerNormPlugin : public IPluginV2DynamicExt
 {
 public:
     LayerNormPlugin() = delete;
-    LayerNormPlugin(std::string const& name, float epsilon);
+    LayerNormPlugin(std::string const& name, float epsilon, int32_t axis);
     LayerNormPlugin(std::string const& name, void const* buffer, size_t length);
     ~LayerNormPlugin() override = default;
 
-    // Method inherited from IPluginV2
+    LayerNormPlugin(const LayerNormPlugin& /*other*/) = default;
+    LayerNormPlugin& operator=(const LayerNormPlugin& /*other*/) = delete;
+    LayerNormPlugin(LayerNormPlugin&& /*other*/) noexcept = delete;
+    LayerNormPlugin& operator=(LayerNormPlugin&& /*other*/) noexcept = delete;
+
+    // Methods inherited from IPluginV2
     char const* getPluginType() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     int32_t getNbOutputs() const noexcept override;
@@ -52,7 +58,7 @@ public:
     // Method inherited from IPluginV2Ext
     DataType getOutputDataType(int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    // Method inherited from IPluginV2DynamicExt
+    // Methods inherited from IPluginV2DynamicExt
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
         int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
@@ -66,9 +72,10 @@ public:
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
 private:
-    const std::string mName;
+    std::string mName;
     std::string mNameSpace;
-    float mEpsilon;
+    float mEpsilon{};
+    int32_t mAxis{};
 };
 
 class LayerNormPluginCreator : public nvinfer1::pluginInternal::BaseCreator
@@ -76,6 +83,12 @@ class LayerNormPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 public:
     LayerNormPluginCreator();
     ~LayerNormPluginCreator();
+    
+    LayerNormPluginCreator(const LayerNormPluginCreator& /*other*/) = delete;
+    LayerNormPluginCreator& operator=(const LayerNormPluginCreator& /*other*/) = delete;
+    LayerNormPluginCreator(LayerNormPluginCreator&& /*other*/) noexcept = delete;
+    LayerNormPluginCreator& operator=(LayerNormPluginCreator&& /*other*/) noexcept = delete;
+
     char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     PluginFieldCollection const* getFieldNames() noexcept override;

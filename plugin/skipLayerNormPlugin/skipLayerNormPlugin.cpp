@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,9 +27,9 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
+using namespace nvinfer1::plugin::bert;
 
-namespace bert
-{
+
 
 // Clip plugin specific constants
 namespace
@@ -961,6 +961,5 @@ const char* SkipLayerNormVarSeqlenPluginCreator::getPluginNamespace() const noex
 {
     return mNamespace.c_str();
 }
-} // namespace bert
 
 #endif // CUDA_VERSION >= 10010

@@ -15,7 +15,7 @@
 - [Examples](#examples)
 - [Python API Reference Documentation](#python-api-reference-documentation)
     - [Building Python API Documentation Locally](#building-python-api-documentation-locally)
-
+- [Deprecation Policy](#deprecation-policy)
 
 ## Introduction
 
@@ -24,6 +24,11 @@ The Polygraphy API consists broadly of two major components:
 
 **NOTE:** To help you get started with the API, you can use the [`run`](./tools/run/) tool
 with the `--gen-script` option to auto-generate template scripts that use the Polygraphy API.
+
+> :warning: Any APIs not documented in the [API reference documentation](#python-api-reference-documentation)
+    should be considered internal only and do not adhere to the [deprecation policy](#deprecation-policy)
+    as the public APIs do. Thus, they may be modified or removed at any time without warning.
+    Avoid using these internal APIs outside of Polygraphy!
 
 
 ## Backends

@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import os
+
 from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER, LogMode
@@ -155,7 +157,9 @@ def np_type_from_str(dt_str):
 
 
 @mod.export()
-def parse_tuple_list_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None):
+def parse_arglist_to_tuple_list(
+    arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+):
     """
     Generate a list of (key, value) pairs from a list of arguments of the form:
     ``<key><sep><val>``.
@@ -185,16 +189,23 @@ def parse_tuple_list_with_default(arg_lst, cast_to=None, sep=None, allow_empty_k
                 Defaults to True.
         treat_missing_sep_as_val (bool):
                 Whether the argument should be treated as a value with empty key
-                when separator is missing (see above).  Defaults to True.
+                when separator is missing (see above).
+                Defaults to True.
+        treat_unspecified_as_none (bool):
+                Whether to treat unspecified keys and values as `None`s instead of
+                empty strings.
+                Defaults to False.
+
     Returns:
         Optional[List[Tuple[str, obj]]]:
-            The parsed list, or None if arg_lst is None (indicating the flag
-            was not specified).
+                The parsed list, or None if arg_lst is None (indicating the flag
+                was not specified).
     """
     sep = util.default(sep, ":")
     cast_to = util.default(cast_to, cast)
     allow_empty_key = util.default(allow_empty_key, True)
     treat_missing_sep_as_val = util.default(treat_missing_sep_as_val, True)
+    treat_unspecified_as_none = util.default(treat_unspecified_as_none, False)
 
     if arg_lst is None:
         return None
@@ -203,57 +214,95 @@ def parse_tuple_list_with_default(arg_lst, cast_to=None, sep=None, allow_empty_k
     for arg in arg_lst:
         key, parsed_sep, val = arg.rpartition(sep)
 
-        if parsed_sep == '' and not treat_missing_sep_as_val:
+        if parsed_sep == "" and not treat_missing_sep_as_val:
             key, val = val, key
 
         if not key and not allow_empty_key:
             G_LOGGER.critical(
                 f"Could not parse argument: {arg}. Expected an argument in the format: `key{sep}value`.\n"
             )
-        ret.append((key, cast_to(val)))
+
+        val = cast_to(val)
+
+        if treat_unspecified_as_none:
+            key = key or None
+            val = val or None
+
+        ret.append((key, val))
+
     return ret
 
+
 @mod.export()
-def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None):
+def parse_arg_to_tuple(
+    arg, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+):
     """
-    Generate a dict from a list of arguments of the form:
-    ``<key><sep><val>``.
-
-    If the argument is missing a separator,
-
-    - If `treat_missing_sep_as_val` is True, then the argument is treated as a
-      value with empty key, i.e. it is parsed as ``<sep><val>``.
-    - If `treat_missing_sep_as_val` is False, then the argument is treated as a
-      key with empty value, i.e. it is parsed as ``<key><sep>``.
-
-    If `allow_empty_key` is False, then this function will log a critical error if
-    any empty keys are detected.
+    Similar to `parse_arglist_to_tuple_list` but operates on a single argument and returns a single tuple
+    instead of a list of tuples.
 
     Args:
-        arg_lst (List[str]):
-                The arguments to map.
+        arg (str): The argument.
 
-        cast_to (Callable):
-                A callable to cast types before adding them to the map.
-                Defaults to `cast()`.
-        sep (str):
-                The separator between the key and value strings.
-                Defaults to ":".
-        allow_empty_key (bool):
-                Whether empty keys should be allowed.
-                Defaults to True.
-        treat_missing_sep_as_val (bool):
-                Whether the argument should be treated as a value with empty key
-                when separator is missing (see above).  Defaults to True.
+    Returns:
+        Optional[Tuple[str, obj]]:
+                The parser key-value pair, or None if `arg` is None (indicating the flag
+                was not specified).
+    """
+    if arg is None:
+        return None
+
+    tuple_list = parse_arglist_to_tuple_list(
+        [arg], cast_to, sep, allow_empty_key, treat_missing_sep_as_val, treat_unspecified_as_none
+    )
+    if tuple_list is None:
+        return None
+
+    if len(tuple_list) != 1:
+        G_LOGGER.critical(
+            f"Failed to parse argument: {arg}. Expected an argument of the form: "
+            f"`key{sep}value`{f' or `value`' if allow_empty_key else ''}."
+        )
+    return tuple_list[0]
+
+
+@mod.export()
+def parse_arglist_to_dict(
+    arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+):
+    """
+    Similar to `parse_arglist_to_tuple_list` but returns a dictionary instead of a list of tuples.
+
     Returns:
         Optional[Dict[str, obj]]:
-            The parsed key-value map, or None if arg_lst is None (indicating the flag
-            was not specified).
+                The parsed key-value map, or None if arg_lst is None (indicating the flag
+                was not specified).
     """
-    tuple_list = parse_tuple_list_with_default(arg_lst, cast_to, sep, allow_empty_key, treat_missing_sep_as_val)
+    tuple_list = parse_arglist_to_tuple_list(
+        arg_lst, cast_to, sep, allow_empty_key, treat_missing_sep_as_val, treat_unspecified_as_none
+    )
     if tuple_list is None:
         return None
     return dict(tuple_list)
+
+
+@mod.export()
+def parse_script_and_func_name(arg, default_func_name=None):
+    if arg is None:
+        return None, None
+
+    # On Windows we need to split the drive letter (e.g. 'C:') so it's not confused with the script/function separator.
+    drive_letter, arg = os.path.splitdrive(arg)
+    script_and_func_name = parse_arg_to_tuple(arg, treat_missing_sep_as_val=False, treat_unspecified_as_none=True)
+    if script_and_func_name is not None:
+        script, func_name = script_and_func_name
+        func_name = util.default(func_name, default_func_name)
+    else:
+        script, func_name = None, None
+
+    script = drive_letter + script
+    return script, func_name
+
 
 @mod.deprecate(
     remove_in="0.45.0",

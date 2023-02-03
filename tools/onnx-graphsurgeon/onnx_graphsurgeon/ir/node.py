@@ -50,7 +50,7 @@ class Node(object):
         self.attrs = misc.default_value(attrs, OrderedDict())
         self.inputs = misc.SynchronizedList(self, field_name="outputs", initial=misc.default_value(inputs, []))
         self.outputs = misc.SynchronizedList(self, field_name="inputs", initial=misc.default_value(outputs, []))
-        self.domain = misc.default_value(name, "")
+        self.domain = domain
 
     def i(self, tensor_idx=0, producer_idx=0):
         """

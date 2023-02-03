@@ -37,8 +37,8 @@ class TestDataLoaderArgs:
         "case",
         [
             (["--seed=123"], ["seed"], [123]),
-            (["--int-min=23", "--int-max=94"], ["int_range"], [(23, 94)]),
-            (["--float-min=2.3", "--float-max=9.4"], ["float_range"], [(2.3, 9.4)]),
+            (["--int-min=23", "--int-max=94"], ["_int_range"], [(23, 94)]),
+            (["--float-min=2.3", "--float-max=9.4"], ["_float_range"], [(2.3, 9.4)]),
             ([], ["val_range"], [None], [(0.0, 1.0)]),  # When not specified, this should default to None.
             (["--val-range", "[0.0,2.3]"], ["val_range"], [{"": (0.0, 2.3)}]),
             (["--val-range", "[1,5]"], ["val_range"], [{"": (1, 5)}]),  # Should work for integral quantities
@@ -95,8 +95,11 @@ class TestDataLoaderArgs:
         for feed_dict in data_loader:
             assert feed_dict["test0"].shape == (4, 4)
 
-    def test_data_loader_script(self, data_loader_args):
+    def test_data_loader_script_default_func(self, data_loader_args):
+        data_loader_args.parse_args(["--data-loader-script", "example.py"])
+        assert data_loader_args.data_loader_func_name == "load_data"
 
+    def test_data_loader_script(self, data_loader_args):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
             f.write(
                 dedent(
@@ -112,7 +115,7 @@ class TestDataLoaderArgs:
             f.flush()
             os.fsync(f.fileno())
 
-            data_loader_args.parse_args(["--data-loader-script", f.name, "--data-loader-func-name=my_load_data"])
+            data_loader_args.parse_args(["--data-loader-script", f"{f.name}:my_load_data"])
 
             assert data_loader_args.data_loader_script == f.name
             assert data_loader_args.data_loader_func_name == "my_load_data"

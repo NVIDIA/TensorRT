@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,10 @@
 
 using namespace nvinfer1;
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
 
@@ -253,5 +257,6 @@ template int embSkipLayerNorm<half>(cudaStream_t, int32_t, int32_t, int32_t, int
     float const*, float const*, half const*, half const*, half const*, int32_t const, int32_t const, half*);
 
 } // namespace bert
-
+} // namespace plugin
+} // namespace nvinfer1
 #endif // CUDA_VERSION >= 10010

@@ -1,5 +1,17 @@
 # TensorRT OSS Release Changelog
 
+## [8.5.3 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3) - 2023-01-30
+
+TensorRT OSS release corresponding to TensorRT 8.5.3.1 GA release.
+- Updates since [TensorRT 8.5.2 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2).
+- Please refer to the [TensorRT 8.5.3 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3) for more information.
+
+Key Features and Updates:
+
+- Added the following HuggingFace demos: GPT-J-6B, GPT2-XL, and GPT2-Medium
+- Added nvinfer1::plugin namespace
+- Optimized KV Cache performance for T5
+
 ## [8.5.2 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2) - 2022-12-12
 
 TensorRT OSS release corresponding to TensorRT 8.5.2.2 GA release.

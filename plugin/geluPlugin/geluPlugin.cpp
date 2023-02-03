@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,9 +28,7 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
-
-namespace bert
-{
+using namespace nvinfer1::plugin::bert;
 
 namespace
 {
@@ -346,7 +344,5 @@ const char* GeluPluginDynamicCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
-
-} // namespace bert
 
 #endif // CUDA_VERSION >= 10010

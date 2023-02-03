@@ -207,7 +207,9 @@ API_EXAMPLES = [
     Example(["api", "05_using_tensorrt_network_api"]),
     Example(["api", "06_immediate_eval_api"], artifact_names=["identity.engine"]),
     Example(["api", "07_tensorrt_and_dynamic_shapes"], artifact_names=["dynamic_identity.engine"]),
-    Example(["api", "08_working_with_run_results_and_saved_inputs_manually"], artifact_names=["inputs.json", "outputs.json"]),
+    Example(
+        ["api", "08_working_with_run_results_and_saved_inputs_manually"], artifact_names=["inputs.json", "outputs.json"]
+    ),
 ]
 
 
@@ -332,8 +334,8 @@ if mod.has_mod("tensorflow"):
 @pytest.mark.parametrize("example", CLI_INSPECT_EXAMPLES, ids=lambda case: str(case))
 @pytest.mark.script_launch_mode("subprocess")
 def test_cli_inspect_examples(example, sandboxed_install_run):
-    if mod.version(trt.__version__) < mod.version("8.2") and example.path.endswith("02_inspecting_a_tensorrt_engine"):
-        pytest.skip("Engine layer inspection is not supported on older versions of TRT")
+    if mod.version(trt.__version__) < mod.version("8.5") and example.path.endswith("02_inspecting_a_tensorrt_engine"):
+        pytest.skip("Engine layer inspection example is not supported on older versions of TRT")
 
     if mod.version(trt.__version__) < mod.version("8.2") and example.path.endswith(
         "08_inspecting_tensorrt_onnx_support"
@@ -351,7 +353,7 @@ def test_cli_inspect_examples(example, sandboxed_install_run):
     actual_lines = [
         line
         for line in actual_output.splitlines()
-        if "[I] Loading " not in line and "[I] Saving" not in line and "[W] " not in line
+        if "[I] Loading " not in line and "[I] Saving" not in line and not line.startswith("[W]")
     ]
 
     expected_lines = expected_output.splitlines()

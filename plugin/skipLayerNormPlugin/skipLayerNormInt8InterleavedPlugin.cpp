@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,25 +25,7 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
-
-namespace bert
-{
-
-int32_t launch_small_hface(cudaStream_t stream, const int32_t ld, const int32_t total, const int8_t* input,
-    const int8_t* skip, const half* beta, const half* gamma, int8_t* output, const float dqScaleIn,
-    const float dqScaleSkip, const float qScale);
-
-int32_t launch_large_hface(cudaStream_t stream, const int32_t ld, const int32_t total, const int8_t* input,
-    const int8_t* skip, const half* beta, const half* gamma, int8_t* output, const float dqScaleIn,
-    const float dqScaleSkip, const float qScale);
-
-int32_t launch_small_mtron(cudaStream_t stream, const int32_t ld, const int32_t total, const int8_t* input,
-    const int8_t* skip, const half* beta, const half* gamma, int8_t* output, int8_t* preln, const float dqScaleIn,
-    const float dqScaleSkip, const float qScale, const float qSkipScale);
-
-int32_t launch_large_mtron(cudaStream_t stream, const int32_t ld, const int32_t total, const int8_t* input,
-    const int8_t* skip, const half* beta, const half* gamma, int8_t* output, int8_t* preln, const float dqScaleIn,
-    const float dqScaleSkip, const float qScale, const float qSkipScale);
+using namespace nvinfer1::plugin::bert;
 
 // Clip plugin specific constants
 namespace
@@ -73,7 +55,7 @@ static inline DataType getParamWordType(DataType cfgType)
 }
 
 SkipLayerNormInterleavedPluginBase::SkipLayerNormInterleavedPluginBase(
-    const std::string name, const Weights& beta, const Weights& gamma)
+    std::string const& name, Weights const& beta, Weights const& gamma)
     : mLayerName(name)
     , mGammaDev(nullptr)
     , mBetaDev(nullptr)
@@ -91,19 +73,19 @@ SkipLayerNormInterleavedPluginBase::SkipLayerNormInterleavedPluginBase(
 }
 
 SkipLayerNormInterleavedPluginHFace::SkipLayerNormInterleavedPluginHFace(
-    const std::string name, const Weights& beta, const Weights& gamma)
+    std::string const& name, Weights const& beta, Weights const& gamma)
     : SkipLayerNormInterleavedPluginBase(name, beta, gamma)
 {
 }
 
 SkipLayerNormInterleavedPluginMTron::SkipLayerNormInterleavedPluginMTron(
-    const std::string name, const Weights& beta, const Weights& gamma)
+    std::string const& name, Weights const& beta, Weights const& gamma)
     : SkipLayerNormInterleavedPluginBase(name, beta, gamma)
 {
 }
 
 SkipLayerNormInterleavedPluginBase::SkipLayerNormInterleavedPluginBase(
-    const std::string name, const void* data, size_t length)
+    std::string const& name, const void* data, size_t length)
     : mLayerName(name)
     , mGammaDev(nullptr)
     , mBetaDev(nullptr)
@@ -120,14 +102,14 @@ SkipLayerNormInterleavedPluginBase::SkipLayerNormInterleavedPluginBase(
 }
 
 SkipLayerNormInterleavedPluginHFace::SkipLayerNormInterleavedPluginHFace(
-    const std::string name, const void* data, size_t length)
+    std::string const& name, void const* data, size_t length)
     : SkipLayerNormInterleavedPluginBase(name, data, length)
 {
     BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace deserialize");
 }
 
 SkipLayerNormInterleavedPluginMTron::SkipLayerNormInterleavedPluginMTron(
-    const std::string name, const void* data, size_t length)
+    std::string const& name, void const* data, size_t length)
     : SkipLayerNormInterleavedPluginBase(name, data, length)
 {
     BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron deserialize");
@@ -262,14 +244,13 @@ int32_t SkipLayerNormInterleavedPluginHFace::enqueue(const PluginTensorDesc* inp
     {
         return launch_small_hface(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
     }
-    else
-    {
-        return launch_large_hface(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
-    }
+
+    return launch_large_hface(stream, ld, total, input, skip, beta, gamma, output, dqScaleIn, dqScaleSkip, qScale);
 }
 
-int32_t SkipLayerNormInterleavedPluginMTron::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t SkipLayerNormInterleavedPluginMTron::enqueue(PluginTensorDesc const* inputDesc,
+    PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
+    cudaStream_t stream) noexcept
 {
     // Input shape: 1x(hxd)xtotalx1
     const auto iDesc = inputDesc[0];
@@ -297,13 +278,9 @@ int32_t SkipLayerNormInterleavedPluginMTron::enqueue(const PluginTensorDesc* inp
         return launch_small_mtron(
             stream, ld, total, input, skip, beta, gamma, output, preln, dqScaleIn, dqScaleSkip, qScale, qSkipScale);
     }
-    else
-    {
-        return launch_large_mtron(
-            stream, ld, total, input, skip, beta, gamma, output, preln, dqScaleIn, dqScaleSkip, qScale, qSkipScale);
-    }
 
-    return 0;
+    return launch_large_mtron(
+        stream, ld, total, input, skip, beta, gamma, output, preln, dqScaleIn, dqScaleSkip, qScale, qSkipScale);
 }
 
 // IPluginV2Ext Methods
@@ -567,4 +544,3 @@ const char* SkipLayerNormInterleavedPluginBaseCreator::getPluginNamespace() cons
 {
     return mNamespace.c_str();
 }
-} // namespace bert

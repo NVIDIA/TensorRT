@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,17 +17,17 @@
 #ifndef TRT_SPLITGELU_KERNEL_H
 #define TRT_SPLITGELU_KERNEL_H
 
-#include "cuda_fp16.h"
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-#include <stdint.h>
-
 #include "common/checkMacrosPlugin.h"
+
+#include <cstdint>
+#include <cuda.h>
+#include <cuda_fp16.h>
+#include <cuda_runtime_api.h>
 
 using half = __half;
 
 template <typename T>
 int32_t launchSplitGeLUKernel(cudaStream_t stream, int32_t gridSize, int32_t nHalfHiddenSize, T const* input, T* output,
-    float const fDiv, float const fAdd, float const fMul);
+    float const fDivRecip, float const fAdd, float const fMul);
 
 #endif // TRT_SPLITGELU_KERNEL_H

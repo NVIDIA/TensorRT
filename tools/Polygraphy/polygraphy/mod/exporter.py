@@ -167,12 +167,18 @@ def export(funcify=False, func_name=None):
             init_args = ", ".join(param_names(init_params))
             call_impl_args = ", ".join(param_names(call_impl_params))
 
+            def pascal_to_snake(name):
+                return "".join(f"_{c.lower()}" if c.isupper() else c for c in name).lstrip("_")
+
+            nonlocal func_name
+            func_name = func_name or pascal_to_snake(loader.__name__)
+
             func_code = dedent(
                 f"""
-                def func_impl({signature}):
+                def {func_name}({signature}):
                     return loader_binding({init_args})({call_impl_args})
 
-                func_var = func_impl
+                func_var = {func_name}
                 """
             )
 
@@ -195,11 +201,6 @@ def export(funcify=False, func_name=None):
 
             # Now that the function has been defined, we just need to add it into the module's
             # __dict__ so it is accessible like a normal symbol.
-            def pascal_to_snake(name):
-                return "".join(f"_{c.lower()}" if c.isupper() else c for c in name).lstrip("_")
-
-            nonlocal func_name
-            func_name = func_name or pascal_to_snake(loader.__name__)
 
             _define_in_module(func_name, func, module)
 

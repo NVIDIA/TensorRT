@@ -1978,10 +1978,10 @@ public:
     //! For backwards compatibility with earlier versions of TensorRT, a bindingIndex that does not belong
     //! to the profile is corrected as described for getProfileDimensions().
     //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getProfileShape(). Difference between Execution and shape
+    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getShapeValues(). Difference between Execution and shape
     //! tensor is superficial since TensorRT 8.5.
     //!
-    //! \see getProfileDimensions() getProfileShape()
+    //! \see getProfileDimensions() getShapeValues()
     //!
     TRT_DEPRECATED int32_t const* getProfileShapeValues(
         int32_t profileIndex, int32_t inputIndex, OptProfileSelector select) const noexcept
@@ -2227,6 +2227,8 @@ public:
     //! \param tensorName name of the tensor
     //!
     virtual void notifyShape(char const* tensorName, Dims const& dims) noexcept = 0;
+
+    virtual ~IOutputAllocator() = default;
 };
 
 //!

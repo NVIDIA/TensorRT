@@ -148,14 +148,10 @@ class ComparatorCompareArgs(BaseArgs):
             help="[EXPERIMENTAL] Path to a Python script that defines a function that can compare two iteration results.  "
             "This function must have a signature of: `(IterationResult, IterationResult) -> OrderedDict[str, bool]`. "
             "For details, see the API documentation for `Comparator.compare_accuracy()`. "
-            "If provided, this will override all other comparison function options. ",
+            "If provided, this will override all other comparison function options. "
+            "By default, Polygraphy looks for a function called `compare_outputs`. You can specify a custom function name "
+            "by separating it with a colon. For example: `my_custom_script.py:my_func`",
             default=None,
-        )
-        self.group.add_argument(
-            "--compare-func-name",
-            help="[EXPERIMENTAL] When using a compare-func-script, this specifies the name of the function "
-            "that performs the comparison. Defaults to `compare_outputs`. ",
-            default="compare_outputs",
         )
         self.group.add_argument(
             "--load-outputs",
@@ -184,8 +180,10 @@ class ComparatorCompareArgs(BaseArgs):
         self.fail_fast = args_util.get(args, "fail_fast")
 
         self.compare_func = args_util.get(args, "compare")
-        self.compare_func_script = args_util.get(args, "compare_func_script")
-        self.compare_func_name = args_util.get(args, "compare_func_name")
+
+        self.compare_func_script, self.compare_func_name = args_util.parse_script_and_func_name(
+            args_util.get(args, "compare_func_script"), default_func_name="compare_outputs"
+        )
 
     def add_to_script_impl(self, script, results_name):
         """

@@ -31,12 +31,10 @@ _all_external_lazy_imports = set()
 
 # Sometimes the Python package name differs from the module name.
 _PKG_NAME_FROM_MODULE = {
-    "tensorrt": "nvidia-tensorrt",
 }
 
 # Some packages need additional flags to install correctly.
 _EXTRA_FLAGS_FOR_MODULE = {
-    "tensorrt": ["--extra-index-url=https://pypi.ngc.nvidia.com"],
     "onnx_graphsurgeon": ["--extra-index-url=https://pypi.ngc.nvidia.com"],
 }
 

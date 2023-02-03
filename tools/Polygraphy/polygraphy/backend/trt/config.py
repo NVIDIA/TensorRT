@@ -55,6 +55,9 @@ class CreateConfig(BaseLoader):
         preview_features=None,
         engine_capability=None,
         direct_io=None,
+        builder_optimization_level=None,
+        fp8=None,
+        hardware_compatibility_level=None,
     ):
         """
         Creates a TensorRT IBuilderConfig that can be used by EngineFromNetwork.
@@ -138,7 +141,8 @@ class CreateConfig(BaseLoader):
                     Defaults to False.
             preview_features (List[trt.PreviewFeature]):
                     The preview features to enable.
-                    Defaults to None.
+                    Use an empty list to disable all preview features.
+                    Defaults to TensorRT's default preview features.
             engine_capability (trt.EngineCapability):
                     The engine capability to build for.
                     Defaults to the default TensorRT engine capability.
@@ -146,6 +150,19 @@ class CreateConfig(BaseLoader):
                     Whether to disallow reformatting layers at network input/output tensors with
                     user-specified formats.
                     Defaults to False.
+            builder_optimization_level (int):
+                    The builder optimization level. A higher optimization level allows the optimizer to spend more time
+                    searching for optimization opportunities. The resulting engine may have better performance compared
+                    to an engine built with a lower optimization level.
+                    Refer to the TensorRT API documentation for details.
+                    Defaults to TensorRT's default optimization level.
+            fp8  (bool):
+                    Whether to build the engine with FP8 precision enabled.
+                    Defaults to False.
+            hardware_compatibility_level (trt.HardwareCompatibilityLevel):
+                    The hardware compatibiliity level. This allows engines built on one GPU architecture to work on GPUs
+                    of other architectures.
+                    Defaults to TensorRT's default hardware compatibility level.
         """
         self.max_workspace_size = max_workspace_size
         if max_workspace_size is not None:
@@ -154,6 +171,7 @@ class CreateConfig(BaseLoader):
         self.tf32 = util.default(tf32, False)
         self.fp16 = util.default(fp16, False)
         self.int8 = util.default(int8, False)
+        self.fp8 = util.default(fp8, False)
         self.profiles = util.default(profiles, [Profile()])
         self.calibrator = calibrator
         self.precision_constraints = precision_constraints
@@ -171,6 +189,8 @@ class CreateConfig(BaseLoader):
         self.preview_features = preview_features
         self.engine_capability = engine_capability
         self.direct_io = util.default(direct_io, False)
+        self.builder_optimization_level = builder_optimization_level
+        self.hardware_compatibility_level = hardware_compatibility_level
 
         if self.calibrator is not None and not self.int8:
             G_LOGGER.warning(
@@ -202,8 +222,11 @@ class CreateConfig(BaseLoader):
                 return try_run(lambda: config.set_flag(getattr(trt.BuilderFlag, flag_name)), flag_name.lower())
 
             if self.preview_features is not None:
-                for preview_feature in self.preview_features:
-                    try_run(lambda: config.set_preview_feature(preview_feature, True), "preview_features")
+                for preview_feature in trt.PreviewFeature.__members__.values():
+                    try_run(
+                        lambda: config.set_preview_feature(preview_feature, preview_feature in self.preview_features),
+                        "preview_features",
+                    )
 
             with G_LOGGER.indent():
                 G_LOGGER.verbose("Setting TensorRT Optimization Profiles")
@@ -254,6 +277,10 @@ class CreateConfig(BaseLoader):
 
             if self.fp16:
                 try_set_flag("FP16")
+
+
+            if self.fp8:
+                try_set_flag("FP8")
 
             if self.int8:
                 try_set_flag("INT8")
@@ -346,5 +373,69 @@ class CreateConfig(BaseLoader):
                     config.engine_capability = self.engine_capability
 
                 try_run(set_engine_cap, "engine_capability")
+
+            if self.builder_optimization_level is not None:
+
+                def set_builder_optimization_level():
+                    config.builder_optimization_level = self.builder_optimization_level
+
+                try_run(set_builder_optimization_level, "builder_optimization_level")
+
+            if self.hardware_compatibility_level is not None:
+
+                def set_hardware_compatibility_level():
+                    config.hardware_compatibility_level = self.hardware_compatibility_level
+
+                try_run(set_hardware_compatibility_level, "hardware_compatibility_level")
+
+            return config
+
+
+@mod.export(funcify=True)
+class PostprocessConfig(BaseLoader):
+    """
+    [EXPERIMENTAL] Functor that applies a given post-processing function to a TensorRT ``IBuilderConfig``.
+    """
+
+    def __init__(self, config, func):
+        """
+        Applies a given post-processing function to a TensorRT ``IBuilderConfig``.
+
+        Args:
+            config (Union[trt.IBuilderConfig, Callable[[trt.Builder, trt.INetworkDefinition], trt.IBuilderConfig]):
+                    A TensorRT IBuilderConfig or a callable that accepts a TensorRT builder and network and returns a config.
+            func (Callable[[trt.Builder, trt.INetworkDefinition, trt.IBuilderConfig], None])
+                    A callable which takes a builder, network, and config parameter and modifies the config in place.
+        """
+
+        self._config = config
+
+        # Sanity-check that the function passed in is callable
+        if not callable(func):
+            G_LOGGER.critical(f"Object {func} (of type {type(func)}) is not a callable.")
+
+        self._func = func
+
+    def call_impl(self, builder, network):
+        """
+        Args:
+            builder (trt.Builder):
+                    The TensorRT builder to use to create the configuration.
+            network (trt.INetworkDefinition):
+                    The TensorRT network for which to create the config. The network is used to
+                    automatically create a default optimization profile if none are provided.
+
+        Returns:
+            trt.IBuilderConfig:
+                    The modified builder configuration.
+        """
+        config, owns_config = util.invoke_if_callable(self._config, builder, network)
+
+        with contextlib.ExitStack() as stack:
+            if owns_config:
+                stack.enter_context(util.FreeOnException([config]))
+
+            self._func(builder, network, config)
+
 
             return config

@@ -27,7 +27,7 @@ from polygraphy.backend.trt import CreateConfig
 # create the builder configuration.
 #
 # TIP: If our function isn't called `load_config`, we can explicitly specify
-# the name with the `--trt-config-func-name` argument.
+# the name with the script argument, separated by a colon. For example: `create_config.py:my_func`.
 @func.extend(CreateConfig())
 def load_config(config):
     # NOTE: func.extend() causes the signature of this function to be `(builder, network) -> config`

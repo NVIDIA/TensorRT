@@ -92,17 +92,26 @@ GPT2TRTBenchmarkingArgs = namedtuple("GPT2BenchmarkingArgs", ["input_seq_len", "
 
 
 class GPT2ModelTRTConfig(NNConfig):
-    VOCAB_SIZE = 50257  # Vocabulary size of the GPT-2 model
-    TARGET_MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl"]
+    TARGET_MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "EleutherAI/gpt-j-6B"]
     NETWORK_DECODER_SEGMENT_NAME = "gpt2_decoder"
     NETWORK_SEGMENTS = [NETWORK_DECODER_SEGMENT_NAME]
     NETWORK_FULL_NAME = "full"
+
+    # Vocabulary size of the GPT-2 model
+    VOCAB_SIZE = {
+        TARGET_MODELS[0]: 50257,
+        TARGET_MODELS[1]: 50257,
+        TARGET_MODELS[2]: 50257,
+        TARGET_MODELS[3]: 50257,
+        TARGET_MODELS[4]: 50400,
+    }
 
     NUMBER_OF_LAYERS = {
         TARGET_MODELS[0]: 12,
         TARGET_MODELS[1]: 24,
         TARGET_MODELS[2]: 36,
         TARGET_MODELS[3]: 48,
+        TARGET_MODELS[4]: 28,
     }
 
     NUMBER_OF_HEADS = {
@@ -110,6 +119,7 @@ class GPT2ModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 16,
         TARGET_MODELS[2]: 20,
         TARGET_MODELS[3]: 25,
+        TARGET_MODELS[4]: 16,
     }
     # This corresponds to max_length in task_specific_params for text-generation.
     # Both input and output length should not exceed 50.
@@ -118,6 +128,7 @@ class GPT2ModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 50,
         TARGET_MODELS[2]: 50,
         TARGET_MODELS[3]: 50,
+        TARGET_MODELS[4]: 50,
     }
     
     # The maximum sequence length that this model might ever be used with. 
@@ -127,6 +138,7 @@ class GPT2ModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 1024,
         TARGET_MODELS[2]: 1024,
         TARGET_MODELS[3]: 1024,
+        TARGET_MODELS[4]: 2048,
     }
 
     # Dimensionality of the embeddings and hidden states.
@@ -135,6 +147,7 @@ class GPT2ModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 1024,
         TARGET_MODELS[2]: 1280,
         TARGET_MODELS[3]: 1600,
+        TARGET_MODELS[4]: 4096,
     }
 
     MIN_OUTPUT_LENGTH = {
@@ -142,6 +155,7 @@ class GPT2ModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 0,
         TARGET_MODELS[2]: 0,
         TARGET_MODELS[3]: 0,
+        TARGET_MODELS[4]: 0,
     }
 
     BOS_TOKEN_ID = 50256
@@ -166,12 +180,14 @@ class GPT2ModelTRTConfig(NNConfig):
 
     def get_python_requirements(self):
         base_requirements = super().get_python_requirements()
-        base_requirements.append("transformers==4.8.0")
+        base_requirements.append('transformers==4.20.0; python_version>="3.7"')
+        base_requirements.append('transformers==4.18.0; python_version<"3.7"')
         return base_requirements
     
     def get_metadata_string(self, metadata: NetworkMetadata) -> str:
         # Remove redundant GPT2 name
         metadata = metadata._replace(variant=metadata.variant.lstrip("GPT2-"))
+        metadata = metadata._replace(variant=metadata.variant.lstrip("EleutherAI/"))
         return super().get_metadata_string(metadata)
 
     @staticmethod
@@ -209,7 +225,7 @@ class GPT2ModelTRTConfig(NNConfig):
                 "logits": (
                     Dims.BATCH,
                     Dims.SEQUENCE,
-                    GPT2ModelTRTConfig.VOCAB_SIZE,
+                    GPT2ModelTRTConfig.VOCAB_SIZE[metadata.variant],
                 )
             }
         )

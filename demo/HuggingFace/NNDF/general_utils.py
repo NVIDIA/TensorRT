@@ -220,15 +220,67 @@ class NNFolderWorkspace:
         self.dpath = os.path.join(self.rootdir, self.network_name, metadata.variant)
         os.makedirs(self.dpath, exist_ok=True)
 
+    def set_model_path(self, metadata_serialized, is_encoder_decoder: bool) -> str:
+        '''
+        Create subdirectory for models with different config(e.g. kv cache)
+        '''
+        self.model_path = os.path.join(self.dpath, metadata_serialized)
+        self.decoder_path = os.path.join(self.model_path, "decoder")
+        os.makedirs(self.decoder_path, exist_ok=True)
+        if is_encoder_decoder:
+            self.encoder_path = os.path.join(self.model_path, "encoder")
+            os.makedirs(self.encoder_path, exist_ok=True)  
+        # For decoder only models, there is no encoder
+        else:
+            self.encoder_path = None
+
+        # If is kv cache mode, need to separate non kv mode and kv mode for decoder
+        if self.metadata.other.kv_cache:
+            self.decoder_non_kv_path = os.path.join(self.decoder_path, "non-kv")
+            self.decoder_kv_path = os.path.join(self.decoder_path, "kv")
+            os.makedirs(self.decoder_non_kv_path, exist_ok=True)
+            os.makedirs(self.decoder_kv_path, exist_ok=True)
+
+        return self.model_path, self.encoder_path, self.decoder_path
+    
     def get_path(self) -> str:
         return self.dpath
+    
+    def get_model_path(self) -> str:
+        return self.model_path
+    
+    def get_encoder_path(self) -> str:
+        return self.encoder_path
+    
+    def get_decoder_path(self) -> str:
+        return self.decoder_path
+    
+    def get_decoder_path_kv(self) -> (str, str):
+        if not self.metadata.other.kv_cache:
+            raise RuntimeError("Trying to access kv specific folder in non kv mode")
+        else:
+            return self.decoder_kv_path, self.decoder_non_kv_path
 
     def cleanup(self, force_remove: bool = False) -> None:
-        fpath = self.get_path()
+        '''
+        Cleanup would remove all the contents in the workspace.
+        '''
         if force_remove:
-            return shutil.rmtree(fpath)
-        remove_if_empty(
-            fpath,
-            success_msg="Sucessfully removed workspace.",
-            error_msg="Unable to remove workspace.",
-        )
+            return shutil.rmtree(self.dpath)
+        
+        if self.is_encoder_decoder_path_set:
+            if self.encoder_path is not None:
+                remove_if_empty(self.encoder_path)
+            if self.metadata.other.kv_cache:
+                remove_if_empty(
+                    self.decoder_kv_path
+                )
+                remove_if_empty(
+                    self.decoder_non_kv_path
+                )
+            remove_if_empty(
+                self.decoder_path
+            )
+        
+        remove_if_empty(self.model_path)
+        remove_if_empty(self.dpath)

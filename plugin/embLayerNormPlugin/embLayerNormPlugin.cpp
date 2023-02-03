@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,9 +28,9 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
+using namespace nvinfer1::plugin::bert;
 
-namespace bert
-{
+
 namespace
 {
 char const* EMB_LAYER_NORM_VERSION{"1"};
@@ -181,21 +181,18 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
             auto sel384 = exprBuilder.operation(DimensionOperation::kPROD, *is384, *cms384);
             auto maskSize = exprBuilder.operation(DimensionOperation::kSUM, *sel384, *sel128);
 
-            if (mMhaType == nvinfer1::DataType::kHALF)
-            {
-                // support 64, 96 only in fp16
-                auto cms64 = exprBuilder.constant(packedMaskSize64);
-                auto cms96 = exprBuilder.constant(packedMaskSize96);
-                auto c64 = exprBuilder.constant(64);
-                auto c96 = exprBuilder.constant(96);
+            // support 64, 96 in both int8 and fp16
+            auto cms64 = exprBuilder.constant(packedMaskSize64);
+            auto cms96 = exprBuilder.constant(packedMaskSize96);
+            auto c64 = exprBuilder.constant(64);
+            auto c96 = exprBuilder.constant(96);
 
-                auto is64 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c64);
-                auto is96 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c96);
-                auto sel64 = exprBuilder.operation(DimensionOperation::kPROD, *is64, *cms64);
-                auto sel96 = exprBuilder.operation(DimensionOperation::kPROD, *is96, *cms96);
-                auto maskSize2 = exprBuilder.operation(DimensionOperation::kSUM, *sel64, *sel96);
-                maskSize = exprBuilder.operation(DimensionOperation::kSUM, *maskSize, *maskSize2);
-            }
+            auto is64 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c64);
+            auto is96 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c96);
+            auto sel64 = exprBuilder.operation(DimensionOperation::kPROD, *is64, *cms64);
+            auto sel96 = exprBuilder.operation(DimensionOperation::kPROD, *is96, *cms96);
+            auto maskSize2 = exprBuilder.operation(DimensionOperation::kSUM, *sel64, *sel96);
+            maskSize = exprBuilder.operation(DimensionOperation::kSUM, *maskSize, *maskSize2);
 
             auto is0 = exprBuilder.operation(DimensionOperation::kEQUAL, *maskSize, *exprBuilder.constant(0));
             auto sel0 = exprBuilder.operation(DimensionOperation::kPROD, *is0, *cms0);
@@ -663,6 +660,5 @@ char const* EmbLayerNormPluginDynamicCreator::getPluginNamespace() const noexcep
 {
     return mNamespace.c_str();
 }
-} // namespace bert
 
 #endif // CUDA_VERSION >= 10010

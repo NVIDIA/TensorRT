@@ -27,7 +27,7 @@ parse_onnx = NetworkFromOnnxPath("identity.onnx")
 # use it directly in place of using a model file.
 #
 # TIP: If our function isn't called `load_network`, we can explicitly specify
-# the name with the `--trt-network-func-name` argument.
+# the name with the model argument, separated by a colon. For example, `define_network.py:my_func`.
 @func.extend(parse_onnx)
 def load_network(builder, network, parser):
     # NOTE: func.extend() causes the signature of this function to be `() -> (builder, network, parser)`

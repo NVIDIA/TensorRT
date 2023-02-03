@@ -27,6 +27,7 @@ from polygraphy.tools.args.base import BaseArgs
 ARG_CLASSES = [cls for cls in args_mod.__dict__.values() if inspect.isclass(cls) and issubclass(cls, BaseArgs)]
 
 USES_DEP_PAT = re.compile(r"self.arg_groups\[(.*?)\]")
+MEMBER_PAT = re.compile(r"self.(.*?)[ ,.\[]")
 
 
 class TestDocStrings:
@@ -54,3 +55,43 @@ class TestDocStrings:
                 documented_deps.add(line.lstrip("-").partition(":")[0].strip())
 
         assert documented_deps == deps, "Documented dependencies do not match actual dependencies"
+
+    # Checks that all members set by `parse` are documented.
+    #
+    # Note that this is a fairly dumb test in that it just looks for regexs matching `self.(.*)` to check
+    # whether those members are documented in `parse_impl`. `parse_impl` typically only *sets* members
+    # and doesn't use most members of the class, so this approach is generally ok.
+    #
+    # There are cases where we may not want to document some members, e.g. if they are deprecated.
+    # In those cases, you can prefix the member with a `_` and it will be ignored by
+    @pytest.mark.parametrize("arg_group_type", ARG_CLASSES)
+    def test_parse_docstring_documents_populated_members(self, arg_group_type):
+        code = inspect.getsource(arg_group_type.parse_impl)
+
+        def should_include_member(member):
+            if not member:
+                return False
+
+            EXCLUDE_PREFIXES = ["arg_groups", "_"]
+            if any(member.startswith(prefix) for prefix in EXCLUDE_PREFIXES):
+                return False
+
+            return True
+
+        members = {member for member in MEMBER_PAT.findall(code) if should_include_member(member)}
+
+        docstring = arg_group_type.parse_impl.__doc__
+        if docstring is None:
+            pytest.skip("parse_impl not required by this argument group")
+
+        doc_lines = [line.strip() for line in docstring.splitlines() if line.strip()]
+
+        attributes_doc_start = doc_lines.index("Attributes:")
+        assert attributes_doc_start >= 0, "Expected parse_impl docstring to contain an `Attributes:` section."
+
+        doc_lines = doc_lines[attributes_doc_start + 1 :]
+
+        documented_members = set([line.strip().split()[0] for line in doc_lines])
+
+        undocumented_members = members - documented_members
+        assert not undocumented_members, "Some members are not documented!"

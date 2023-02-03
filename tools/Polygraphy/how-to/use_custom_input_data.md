@@ -18,7 +18,7 @@ provides 2 ways to supply custom input data:
 
     *TIP: If you have an existing script that already defines such a function, you do **not** need to create*
         *a separate script just for the sake of `--data-loader-script`. You can simply use the existing script*
-        *and optionally use the `--data-loader-func-name` argument to specify the name of the function if it's not `load_data`*
+        *and specify the name of the function if it's not `load_data`*
 
 
 ## Further Reading

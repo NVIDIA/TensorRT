@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,10 +32,10 @@ struct mySum
 
 template <typename T, typename OP_T, int32_t TPB>
 __global__ void LayerNormSmallKernel(
-    int32_t const nHiddenDimension, T const* input, T const* gamma, T const* beta, T* output, float const epsilon)
+    int32_t const nHiddenDimension, float const floatDenominator, T const* input, T const* gamma, T const* beta, T* output, float const epsilon)
 {
     int32_t const index = blockIdx.x * nHiddenDimension + threadIdx.x;
-    T const denominator = T(1) / T(nHiddenDimension);
+    auto const denominator = static_cast<T>(floatDenominator);
     OP_T val = 0;
     kvp<OP_T> threadData(0, 0);
 
@@ -67,17 +67,16 @@ __global__ void LayerNormSmallKernel(
 }
 
 template __global__ void LayerNormSmallKernel<float, float, 32>(
-    int32_t const, float const*, float const*, float const*, float*, float const);
+    int32_t const, float const denominator, float const*, float const*, float const*, float*, float const);
 template __global__ void LayerNormSmallKernel<__half, float, 32>(
-    int32_t const, __half const*, __half const*, __half const*, __half*, float const);
+    int32_t const, float const denominator, __half const*, __half const*, __half const*, __half*, float const);
 
 template <typename T, typename OP_T, int32_t TPB, int32_t VPT>
 __global__ void LayerNormMediumKernel(
-    int32_t const nHiddenDimension, T const* input, T const* gamma, T const* beta, T* output, float const epsilon)
+    int32_t const nHiddenDimension, OP_T const denominator, T const* input, T const* gamma, T const* beta, T* output, float const epsilon)
 {
     int32_t const index = blockIdx.x * nHiddenDimension + threadIdx.x * VPT;
     T localX[VPT], localGamma[VPT], localBeta[VPT];
-    OP_T const denominator = OP_T(1) / OP_T(nHiddenDimension);
     kvp<OP_T> threadData(0, 0);
 
     copy<sizeof(T) * VPT>(&input[index], localX);
@@ -113,16 +112,15 @@ __global__ void LayerNormMediumKernel(
 }
 
 template __global__ void LayerNormMediumKernel<float, float, 64, 4>(
-    int32_t const, float const*, float const*, float const*, float*, float const);
+    int32_t const, float const denominator, float const*, float const*, float const*, float*, float const);
 template __global__ void LayerNormMediumKernel<__half, float, 64, 4>(
-    int32_t const, __half const*, __half const*, __half const*, __half*, float const);
+    int32_t const, float const denominator, __half const*, __half const*, __half const*, __half*, float const);
 
 template <typename T, typename OP_T, int32_t TPB>
 __global__ void LayerNormLargeKernel(
-    int32_t const nHiddenDimension, T const* input, T const* gamma, T const* beta, T* output, float const epsilon)
+    int32_t const nHiddenDimension, OP_T const denominator, T const* input, T const* gamma, T const* beta, T* output, float const epsilon)
 {
     int32_t const offset = blockIdx.x * nHiddenDimension;
-    OP_T const denominator = OP_T(1) / OP_T(nHiddenDimension);
     kvp<OP_T> threadData(0, 0);
 
     for (int32_t i = threadIdx.x; i < nHiddenDimension; i += TPB)
@@ -155,12 +153,12 @@ __global__ void LayerNormLargeKernel(
 }
 
 template __global__ void LayerNormLargeKernel<float, float, 256>(
-    int32_t const, float const*, float const*, float const*, float*, float const);
+    int32_t const, float const denominator, float const*, float const*, float const*, float*, float const);
 template __global__ void LayerNormLargeKernel<__half, float, 256>(
-    int32_t const, __half const*, __half const*, __half const*, __half*, float const);
+    int32_t const, float const denominator, __half const*, __half const*, __half const*, __half*, float const);
 
 template <int32_t TPB, int32_t VPT>
-__global__ void LayerNormQDQKernel(int32_t const nHiddenDimension, int8_t const* input, int8_t* output,
+__global__ void LayerNormQDQKernel(int32_t const nHiddenDimension, float const denominatorFloat, int8_t const* input, int8_t* output,
     __half const* gamma, __half const* beta, float const dqScaleIn, float const qScale, float const epsilon)
 {
     int32_t const index = nHiddenDimension * blockIdx.x + threadIdx.x * VPT;
@@ -168,9 +166,9 @@ __global__ void LayerNormQDQKernel(int32_t const nHiddenDimension, int8_t const*
     __half localXDQ[VPT], localBeta[VPT], localGamma[VPT];
 
     copy<sizeof(int8_t) * VPT>(&input[index], localX);
-    __half2 loc = __floats2half2_rn(0.f, 0.f);
+    __half2 loc = __floats2half2_rn(0.F, 0.F);
 
-    __half const denominator = __half(1) / __half(nHiddenDimension);
+    auto const denominator = static_cast<__half>(denominatorFloat);
 #pragma unroll
     for (int32_t it = 0; it < VPT; it++)
     {
@@ -213,9 +211,9 @@ __global__ void LayerNormQDQKernel(int32_t const nHiddenDimension, int8_t const*
 }
 
 template __global__ void LayerNormQDQKernel<32, 8>(
-    int32_t const, int8_t const*, int8_t*, __half const*, __half const*, float const, float const, float const);
+    int32_t const, float const, int8_t const*, int8_t*, __half const*, __half const*, float const, float const, float const);
 template __global__ void LayerNormQDQKernel<128, 8>(
-    int32_t const, int8_t const*, int8_t*, __half const*, __half const*, float const, float const, float const);
+    int32_t const, float const, int8_t const*, int8_t*, __half const*, __half const*, float const, float const, float const);
 
 
 
@@ -224,61 +222,69 @@ int32_t computeLayerNorm(int32_t const gridSize, int32_t const nHiddenDimension,
     T const* beta, T* output, float const epsilon, cudaStream_t stream)
 {
     constexpr int32_t VPT = 16 / sizeof(T);
+    auto const denominator = static_cast<float>(1) / static_cast<float>(nHiddenDimension);
     if (nHiddenDimension <= 32)
     {
         constexpr int32_t TPB = 32;
         (LayerNormSmallKernel<T, float, TPB>) <<<gridSize, TPB, 0, stream>>>(
-            nHiddenDimension, input, gamma, beta, output, epsilon);
+            nHiddenDimension, denominator, input, gamma, beta, output, epsilon);
     }
     else if (nHiddenDimension == 320)
     {
         constexpr int32_t TPB = 320 / VPT;
         (LayerNormMediumKernel<T, float, TPB, VPT>) <<<gridSize, TPB, 0, stream>>>(
-            nHiddenDimension, input, gamma, beta, output, epsilon);
+            nHiddenDimension, denominator, input, gamma, beta, output, epsilon);
     }
     else if (nHiddenDimension == 640)
     {
         constexpr int32_t TPB = 640 / VPT;
         (LayerNormMediumKernel<T, float, TPB, VPT>) <<<gridSize, TPB, 0, stream>>>(
-            nHiddenDimension, input, gamma, beta, output, epsilon);
+            nHiddenDimension, denominator, input, gamma, beta, output, epsilon);
     }
     else if (nHiddenDimension == 768)
     {
         constexpr int32_t TPB = 768 / VPT;
         (LayerNormMediumKernel<T, float, TPB, VPT>) <<<gridSize, TPB, 0, stream>>>(
-            nHiddenDimension, input, gamma, beta, output, epsilon);
+            nHiddenDimension, denominator, input, gamma, beta, output, epsilon);
     }
     else
     {
         constexpr int32_t TPB = 256;
         (LayerNormLargeKernel<T, float, TPB>) <<<gridSize, TPB, 0, stream>>>(
-            nHiddenDimension, input, gamma, beta, output, epsilon);
+            nHiddenDimension, denominator, input, gamma, beta, output, epsilon);
     }
     PLUGIN_CHECK_CUDA(cudaPeekAtLastError());
     return 0;
 }
 
-template int computeLayerNorm<float>(
-    int const, int const, float const*, float const*, float const*, float*, float const, cudaStream_t);
-template int computeLayerNorm<half>(
-    int const, int const, half const*, half const*, half const*, half*, float const, cudaStream_t);
+template int32_t computeLayerNorm<float>(
+    int32_t const, int32_t const, float const*, float const*, float const*, float*, float const, cudaStream_t);
+template int32_t computeLayerNorm<half>(
+    int32_t const, int32_t const, half const*, half const*, half const*, half*, float const, cudaStream_t);
 
 int32_t computeLayerNormQDQ(int32_t const gridSize, int32_t const nHiddenDimension, int8_t const* input,
     __half const* gamma, __half const* beta, int8_t* output, float const dqScaleIn, float const qScale,
     float const epsilon, cudaStream_t stream)
 {
+    PLUGIN_ASSERT(input != nullptr);
+    PLUGIN_ASSERT(gamma != nullptr);
+    PLUGIN_ASSERT(beta != nullptr);
+    PLUGIN_ASSERT(output != nullptr);
+
     constexpr int32_t VPT = 16 / sizeof(__half);
     if (nHiddenDimension == 256)
     {
         constexpr int32_t TPB = 256 / VPT;
+        auto const denominator = static_cast<float>(1) / static_cast<float>(nHiddenDimension);
         (LayerNormQDQKernel<TPB, VPT>) <<<gridSize, TPB, 0, stream>>>(
-            nHiddenDimension, input, output, gamma, beta, dqScaleIn, qScale, epsilon);
+            nHiddenDimension, denominator, input, output, gamma, beta, dqScaleIn, qScale, epsilon);
     }
     else if (nHiddenDimension == 1024)
     {
         constexpr int32_t TPB = 1024 / VPT;
+        auto const denominator = static_cast<float>(1) / static_cast<float>(nHiddenDimension);
         (LayerNormQDQKernel<TPB, VPT>) <<<gridSize, TPB, 0, stream>>>(
-            nHiddenDimension, input, output, gamma, beta, dqScaleIn, qScale, epsilon);
+            nHiddenDimension, denominator, input, output, gamma, beta, dqScaleIn, qScale, epsilon);
     }
     else
     {

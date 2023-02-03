@@ -200,7 +200,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar is_network_output: :class:`bool` Whether the tensor is a network output.
     :ivar dynamic_range: :class:`Tuple[float, float]` A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
-    :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormats.CHW4) | 1 << int(TensorFormat.CHW32)``.
+    :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
 )trtdoc";
 
 constexpr const char* set_dynamic_range = R"trtdoc(
@@ -1525,11 +1525,13 @@ namespace IGridSampleLayerDoc
 constexpr const char* descr = R"trtdoc(
     A grid sample layer in an :class:`INetworkDefinition` .
 
-    This layer interpolates an input tensor using a sampling grid tensor into an output tensor.
+    This layer uses an input tensor and a grid tensor to produce an interpolated output tensor.
+    The input and grid tensors must shape tensors of rank 4. The only supported SampleMode's are
+    trt.samplemode.CLAMP, trt.samplemode.FILL, and trt.samplemode.REFLECT.
 
-    :ivar interpolation: class:`InterpolationType` The interpolation type to use in the layer.
-    :ivar align_nodes: class:`int` the align mode to use in the layer
-    :ivar padding_mode: :class:`GridSamplePaddingMode` The padding mode to use in the layer.
+    :ivar interpolation: class:`InterpolationType` The interpolation type to use in the layer with a default of LINEAR.
+    :ivar align_nodes: class:`int` the align mode to use in the layer with a default of false.
+    :ivar padding_mode: :class:`GridSamplePaddingMode` The padding mode to use in the layer with a default of FILL.
 )trtdoc";
 } // namespace IGridSampleLayerDoc
 
@@ -2421,7 +2423,7 @@ constexpr const char* add_assertion = R"trtdoc(
 )trtdoc";
 
 constexpr const char* add_grid_sample = R"trtdoc(
-    Add a grid sample layer.
+    Creates a GridSample layer with a trt.InterpolationMode.LINEAR, unaligned corners, and trt.SampleMode.FILL for 4d-shape input tensors.
     See :class:`IGridSampleLayer` for more information.
 
     :arg input: The input tensor to the layer.

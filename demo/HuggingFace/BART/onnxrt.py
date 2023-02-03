@@ -30,7 +30,7 @@ if __name__ == "__main__":
     sys.path.append(project_root)
 
 # huggingface
-from transformers import BartTokenizer, BartConfig, PretrainedConfig
+from transformers import BartTokenizer, BartConfig, PretrainedConfig, MBart50Tokenizer
 from transformers.generation_utils import GenerationMixin
 from transformers.modeling_outputs import Seq2SeqLMOutput
 
@@ -125,8 +125,12 @@ class BARTONNXRT(OnnxRTCommand):
         benchmarking_mode: bool = False,
         benchmarking_args: BARTBenchmarkingArgs = None,
     ) -> NetworkResult:
+        
+        if "mbart" not in metadata.variant:
+            tokenizer = BartTokenizer.from_pretrained(metadata.variant)
+        else:
+            tokenizer = MBart50Tokenizer.from_pretrained(metadata.variant, src_lang="en_XX")
 
-        tokenizer = BartTokenizer.from_pretrained(metadata.variant)
         # Prepare the input tokens and find out output sequence length.
         if not benchmarking_mode:
             output_seq_len = BARTModelTRTConfig.MAX_OUTPUT_LENGTH[metadata.variant]
@@ -211,7 +215,7 @@ class BARTONNXRT(OnnxRTCommand):
 
         return NetworkResult(
             input=inference_input,
-            output_tensor=encoder_last_hidden_state,
+            output_tensor=decoder_output,
             semantic_output=semantic_outputs,
             median_runtime=runtime,
             models=models,

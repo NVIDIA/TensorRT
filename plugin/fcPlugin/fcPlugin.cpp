@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,9 +32,7 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
-
-namespace bert
-{
+using namespace nvinfer1::plugin::bert;
 
 // plugin specific constants
 namespace
@@ -582,7 +580,7 @@ int FCPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTens
 
             return cublasLtMatmul(mLtContext, g, mAlgo, workSpace, workspaceSize, stream);
         }
-        else if (mType == DataType::kHALF)
+        if (mType == DataType::kHALF)
         {
             const auto* const input = static_cast<const half*>(inputs[0]);
             auto* output = static_cast<half*>(outputs[0]);
@@ -814,6 +812,5 @@ const char* FCPluginDynamicCreator::getPluginNamespace() const noexcept
     return mNamespace.c_str();
 }
 
-} // namespace bert
 
 #endif // #if CUDA_VERSION >= 10010

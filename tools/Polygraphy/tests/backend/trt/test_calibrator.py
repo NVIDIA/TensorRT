@@ -23,6 +23,7 @@ from polygraphy.backend.trt import (
     CreateConfig,
     engine_from_network,
     get_trt_logger,
+    Profile,
     network_from_onnx_bytes,
 )
 from polygraphy.common import TensorMetadata
@@ -34,6 +35,13 @@ from tests.models.meta import ONNX_MODELS
 @pytest.fixture(scope="session")
 def identity_builder_network():
     builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity"].loader)
+    with builder, network, parser:
+        yield builder, network
+
+
+@pytest.fixture(scope="session")
+def dynamic_identity_builder_network():
+    builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["dynamic_identity"].loader)
     with builder, network, parser:
         yield builder, network
 
@@ -275,4 +283,25 @@ class TestCalibrator:
 
         with calibrator:
             assert (calibrator.get_batch(list(expected_meta.keys())) is not None) == should_pass
+        self.check_calibrator_cleanup(calibrator)
+
+    def test_calibrator_dynamic_shapes(self, dynamic_identity_builder_network):
+        builder, network = dynamic_identity_builder_network
+
+        SHAPES = [(1, 2, 1, 1), (1, 2, 3, 3)]
+
+        def generate_dynamic_shaped_data():
+            for shape in SHAPES:
+                yield {"X": np.ones(shape=shape, dtype=np.float32)}
+
+        calibrator = Calibrator(generate_dynamic_shaped_data())
+
+        create_config = CreateConfig(
+            int8=True,
+            calibrator=calibrator,
+            profiles=[Profile().add(name="X", min=(1, 2, 1, 1), opt=(1, 2, 2, 2), max=(1, 2, 4, 4))],
+        )
+        with engine_from_network((builder, network), create_config) as engine:
+            assert calibrator.num_batches == 2
+            assert engine
         self.check_calibrator_cleanup(calibrator)

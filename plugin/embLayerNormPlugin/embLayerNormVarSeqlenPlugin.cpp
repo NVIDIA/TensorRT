@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,24 +26,17 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
+using namespace nvinfer1::plugin::bert;
 
-namespace bert
-{
 // For full mask mode, we must produce the compressed mask format expected by the fused attention path. Currently, only
 // two sequence lengths are supported. We hard code the sizes here.
 // The number of threads per CTA: warps_m * warps_n * warps_k * 32;
-constexpr size_t threadsPerCta128 = 2 * 2 * 32;
 constexpr size_t threadsPerCta256 = 1 * 4 * 32;
-constexpr size_t threadsPerCta384 = 1 * 8 * 32;
 // The number of xmmas in the M dimension. We use one uint32_t per XMMA in the M dimension: (s + 16*warps_m - 1)
 // / (16*warps_m);
-constexpr size_t xmmasM128 = 4;
 constexpr size_t xmmasM256 = 16;
-constexpr size_t xmmasM384 = 24;
 // Packed mask size per batch. Layout is XMMAS_M * THREADS_PER_CTA.
-constexpr size_t packedMaskSize128 = xmmasM128 * threadsPerCta128;
 constexpr size_t packedMaskSize256 = xmmasM256 * threadsPerCta256;
-constexpr size_t packedMaskSize384 = xmmasM384 * threadsPerCta384;
 
 namespace
 {
@@ -403,7 +396,7 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputD
             return embSkipLayerNormHFace<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
                 cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
         }
-        else if (mType == DataType::kHALF)
+        if (mType == DataType::kHALF)
         {
             auto output = static_cast<half*>(outputs[0]);
             auto const wordEmb = static_cast<const half*>(mWordEmbDev.get());
@@ -473,7 +466,7 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputD
             return embSkipLayerNormMTron<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
                 cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);
         }
-        else if (mType == DataType::kHALF)
+        if (mType == DataType::kHALF)
         {
             auto output = static_cast<half*>(outputs[0]);
             auto skip = static_cast<half*>(outputs[1]);
@@ -841,4 +834,3 @@ char const* EmbLayerNormVarSeqlenPluginBaseCreator::getPluginNamespace() const n
 {
     return mNamespace.c_str();
 }
-} // namespace bert

@@ -54,7 +54,7 @@ class ComparatorPostprocessArgs(BaseArgs):
 
                         {"top_k": {"output1": 5, "output2": 6}}
         """
-        self.postprocess = args_util.parse_dict_with_default(args_util.get(args, "postprocess"))
+        self.postprocess = args_util.parse_arglist_to_dict(args_util.get(args, "postprocess"))
 
         postprocess = {}
         topk_key = inline(safe("top_k"))

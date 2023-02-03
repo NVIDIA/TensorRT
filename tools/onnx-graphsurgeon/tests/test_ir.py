@@ -220,6 +220,10 @@ class TestNode(object):
         assert input_node.o() == output_node
         assert input_node.o(1) == output_node2
 
+    def test_domain(self):
+        node = Node(op="Add", domain="test")
+        assert node.domain == "test"
+
 
 class TestNodeIO(object):
     def setup_method(self, field_names):

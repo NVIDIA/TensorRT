@@ -20,6 +20,10 @@
 #include "common/checkMacrosPlugin.h"
 #include "common/plugin.h"
 #include <cstdint>
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
 enum Data_type
@@ -34,4 +38,6 @@ enum Data_type
     DATA_TYPE_INT32
 };
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 #endif // _BERT_FMHA_FMHA_COMMON

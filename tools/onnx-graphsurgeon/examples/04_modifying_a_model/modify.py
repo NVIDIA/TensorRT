@@ -43,7 +43,6 @@ graph.outputs = [identity_out]
 # Therefore, you should only need to sort the graph when you have added new nodes out-of-order.
 # In this case, the identity node is already in the correct spot (it is the last node,
 # and was appended to the end of the list), but to be on the safer side, we can sort anyway.
-
-graph.cleanup(remove_unused_graph_inputs=True).toposort()
+graph.cleanup().toposort()
 
 onnx.save(gs.export_onnx(graph), "modified.onnx")

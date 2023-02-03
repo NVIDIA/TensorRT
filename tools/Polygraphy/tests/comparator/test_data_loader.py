@@ -20,6 +20,7 @@ import numpy as np
 from polygraphy.common import TensorMetadata
 from polygraphy.comparator import DataLoader
 from polygraphy.comparator.data_loader import DataLoaderCache
+from polygraphy import constants
 from tests.models.meta import ONNX_MODELS
 import pytest
 
@@ -47,6 +48,29 @@ class TestDataLoader:
 
         feed_dict = data_loader[0]
         assert tuple(feed_dict["X"].shape) == shape
+
+    @pytest.mark.parametrize(
+        "min_shape, max_shape, expected",
+        [
+            # When both min/max are set, use min.
+            ((2, 3, 2, 2), (4, 3, 2, 2), (2, 3, 2, 2)),
+            # When only one of min/max are set, use whichever one is set.
+            ((2, 3, 2, 2), None, (2, 3, 2, 2)),
+            (None, (4, 3, 2, 2), (4, 3, 2, 2)),
+            # When min/max are not set, override with the default shape value.
+            (None, None, (constants.DEFAULT_SHAPE_VALUE, 3, 2, 2)),
+        ],
+    )
+    def test_can_use_min_max_shape(self, min_shape, max_shape, expected):
+        shape = (-1, 3, 2, 2)
+
+        data_loader = DataLoader()
+        data_loader.input_metadata = TensorMetadata().add(
+            "X", dtype=np.float32, shape=shape, min_shape=min_shape, max_shape=max_shape
+        )
+
+        feed_dict = data_loader[0]
+        assert tuple(feed_dict["X"].shape) == expected
 
     @pytest.mark.parametrize("dtype", [np.int32, bool, np.float32, np.int64])
     @pytest.mark.parametrize("range_val", [0, 1])
