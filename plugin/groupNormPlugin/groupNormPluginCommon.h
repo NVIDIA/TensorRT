@@ -65,5 +65,7 @@ struct GroupNormNHWCParams
     float invHWC;
     // The precomputed number of groups per block.
     int32_t groupsPerBlock;
+    // For numerical stability, value added to variance before computing standard deviation
+    float epsilon;
 };
 #endif // TRT_GROUPNORM_PLUGIN_COMMON_H

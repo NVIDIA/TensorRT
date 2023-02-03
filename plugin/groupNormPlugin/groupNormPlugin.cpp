@@ -213,6 +213,7 @@ int32_t GroupNormPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensor
         mParams.hwc = mParams.hw * mParams.c;
         mParams.invHWC = 1.F / (float) (mParams.hw * mParams.cPerGroup);
         mParams.groupsPerBlock = cPerBlock / mParams.cPerGroup;
+        mParams.epsilon = mEpsilon;
 
         cudaMemsetAsync(mParams.redBuffer, 0, getWorkspaceSizeInBytes(), stream);
         groupNormNHWCSum(mParams, stream);
