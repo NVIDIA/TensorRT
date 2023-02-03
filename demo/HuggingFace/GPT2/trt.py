@@ -131,11 +131,11 @@ class GPT2TRTDecoder(TRTHFRunner):
         # In non-benchmarking mode, we are provided a text generation task. We need to use the max_length as max sequence length
         else:
             self.max_sequence_length = GPT2ModelTRTConfig.MAX_LENGTH[network_metadata.variant]
-        
+
         # Similarly, the max_output_length should be the user-provided output_profile_max_len if provided
         if benchmarking_args is not None and benchmarking_args.output_profile_max_len is not None:
             self.max_output_length = benchmarking_args.output_profile_max_len
-        else: 
+        else:
             self.max_output_length = self.max_sequence_length
 
         # We only have one profile to select so we can just grab the profile at the start of the class
@@ -174,7 +174,7 @@ class GPT2TRTDecoder(TRTHFRunner):
                 set_kv_data(self.output_shapes, "present", i, kv_shape_dict)
 
             self.kv_cache_binding_offset = 1 # 0: input_ids, kv cache input indices start from 1
-        
+
         self.bindings = self._allocate_memory(self.input_shapes, self.input_types, self.output_shapes, self.output_types)
         self.use_non_kv_engine = self.config.use_cache
         # This flag is true if and only if we are at the 1st step of decoding with kv cache. We need the special engine that
@@ -182,20 +182,20 @@ class GPT2TRTDecoder(TRTHFRunner):
         self.return_device = "cuda"
         self.device = "cuda"
         self.variant = network_metadata.variant
-    
+
     def reset(self):
         '''
         Resets the input specific fields after finishing a task.
         '''
         self.use_non_kv_engine = self.config.use_cache
-    
+
     def _set_non_kv_engine_for_kv_mode(self, trt_engine_file_non_kv: TRTEngineFile):
         # same steps in tensorrt_utils.py: TRTNativeRunner
         with open(trt_engine_file_non_kv.fpath, "rb") as f:
             self.trt_engine_non_kv = self.trt_runtime.deserialize_cuda_engine(f.read())
             self.trt_context_non_kv = self.trt_engine_non_kv.create_execution_context()
-        
-        # The only input for GPT2 is the inpud_ids. 
+
+        # The only input for GPT2 is the inpud_ids.
         input_name = "input_ids"
         self.input_types_non_kv = {input_name: self.input_types[input_name]}
         # non_kv engine profile is different from kv since it needs to accept input_ids.
@@ -223,30 +223,30 @@ class GPT2TRTDecoder(TRTHFRunner):
             # Output shape should be allocated from context size
             output_idx = self.trt_engine_non_kv.get_binding_index(output_name)
             bindings[output_idx] = output_array.data_ptr()
-        
+
         self.bindings_non_kv = bindings
 
         G_LOGGER.info("Non-KV cache engine setup is successful in KV cache mode.")
-    
+
     def prepare_inputs_for_generation(self, input_ids, past = None, use_cache = None, **kwargs):
         # TODO: add position_ids, token_type_ids support
         if past:
             input_ids = input_ids[:, -1:]
             self.use_non_kv_engine = False
-        
+
         return {
             "input_ids": input_ids,
             "past_key_values": past,
             "use_cache": use_cache,
         }
-    
+
     def set_return_device(self, return_device):
         """
         Sets the return device of the return via to(). Device name should be the same as torch devices: cuda, cpu, etc.
         This is used in our measurement code.
         """
         self.return_device = return_device
-    
+
     def _reorder_cache(self, past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the :obj:`past_key_values` cache if
@@ -257,7 +257,7 @@ class GPT2TRTDecoder(TRTHFRunner):
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past
         )
-        
+
     def forward(self, input_ids, *args, **kwargs):
         bs = input_ids.shape[0]
         input_length = input_ids.shape[1]
@@ -273,7 +273,7 @@ class GPT2TRTDecoder(TRTHFRunner):
         trt_context = self.trt_context_non_kv if non_kv_flag else self.trt_context
         bindings = self.bindings_non_kv if non_kv_flag else self.bindings
         inputs = self.inputs_non_kv if non_kv_flag else self.inputs
-        outputs = self.outputs_non_kv if non_kv_flag else self.outputs        
+        outputs = self.outputs_non_kv if non_kv_flag else self.outputs
 
         # Check if the input data is on CPU (which usually means the PyTorch does not support current GPU).
         is_cpu_mode = (input_ids.device == torch.device("cpu")) or (self.return_device == "cpu")
@@ -290,7 +290,7 @@ class GPT2TRTDecoder(TRTHFRunner):
 
         # Set the binding shape of input_ids, which should be (bs, input_length).
         trt_context.set_binding_shape(0, input_ids.shape)
-       
+
         if self.config.use_cache: # or use_cache
             if non_kv_flag:
                 # use non-kv engine, no additional inputs
@@ -298,14 +298,14 @@ class GPT2TRTDecoder(TRTHFRunner):
             else:
                 # use kv engine
                 # past_key_values set by prepare_inputs_for_generation() during HF e2e pipeline; if only test decoder, need to set this field
-                past_key_values = kwargs.get("past_key_values") 
+                past_key_values = kwargs.get("past_key_values")
                 past_decoder_length = past_key_values[0][0].size(2)
                 num_heads = self.num_heads
                 embedding_size_per_head = self.embedding_size_per_head
                 # Set the binding shape of self-attention KV caches, which should be (bs, num_heads, past_decoder_length, embedding_size_per_head).
                 self_attention_kv_shape = (bs, num_heads, past_decoder_length, embedding_size_per_head)
                 self_attention_kv_flatten_length = bs * num_heads * past_decoder_length * embedding_size_per_head
-                
+
                 for i in range(self.num_decoder_layers):
                     if past_key_values is not None:
                         if past_key_values[0][0].device == torch.device("cpu"):
@@ -334,9 +334,9 @@ class GPT2TRTDecoder(TRTHFRunner):
         logits_output = outputs["logits"]
         if is_cpu_mode:
             logits_output = logits_output.cpu()
-        
+
         folded = logits_output[:bs * input_length * vocab_size].view(bs, input_length, vocab_size)
-        
+
         present_key_values = None
         if self.config.use_cache:
             # 1st decoding step and steps after handle the outputs in the same way
@@ -358,7 +358,7 @@ class GPT2TRTDecoder(TRTHFRunner):
                 self_attn_v = self_attn_v_output[:self_attention_kv_flatten_length].view(*self_attention_kv_shape)
 
                 present_key_values += ((self_attn_k, self_attn_v), ) # make multi-dim tuple
-        
+
         return CausalLMOutputWithCrossAttentions(logits=folded.to(self.return_device), past_key_values = present_key_values)
 
 class GPT2TRT(TRTInferenceCommand):
@@ -416,8 +416,8 @@ class GPT2TRT(TRTInferenceCommand):
 
         # get single decoder iteration inference timing profile
         _, decoder_e2e_time = gpt2_inference(
-            self.gpt2_trt, 
-            expand_inputs_for_beam_search(input_ids, num_beams) if num_beams > 1 else input_ids, 
+            self.gpt2_trt,
+            expand_inputs_for_beam_search(input_ids, num_beams) if num_beams > 1 else input_ids,
             timing_profile,
             use_cache = metadata.other.kv_cache,
         )
@@ -494,14 +494,14 @@ class GPT2TRT(TRTInferenceCommand):
             self.gpt2_trt, ppl_input_ids, GPT2ModelTRTConfig.MAX_LENGTH[metadata.variant]
         )
         return perplexity
-    
+
     def _setup_engines(
         self,
         metadata: NetworkMetadata,
         hash_onnx_fpath: Dict[str, NetworkModel],
         batch_size: int,
         num_beams: int,
-        preview_dynamic_shapes: bool,
+        disable_preview_dynamic_shapes: bool,
         benchmarking_args: GPT2TRTBenchmarkingArgs = None,
         seq_tag: bool = False, # whether the benchmark engine tag format should be seq or max
     ) -> None:
@@ -525,7 +525,7 @@ class GPT2TRT(TRTInferenceCommand):
         max_output_length = GPT2ModelTRTConfig.MAX_LENGTH[metadata.variant]
         opt_input_seq_len = max_sequence_length // 2
         opt_output_seq_len = max_output_length // 2
-        
+
         # benchmarking flags
         if benchmarking_args is not None:
             max_sequence_length = benchmarking_args.input_profile_max_len
@@ -535,7 +535,7 @@ class GPT2TRT(TRTInferenceCommand):
 
        # Set up the non kv engine, used for non-kv mode and kv mode generation phase (1st decoder run uses the non-kv profile to generate kv cache)
         dec_profiles_non_kv = Profile()
-        
+
         # for beam search, decoder engine's inputs are expanded `num_beams` times
         # optimization profiles should be changed accordingly, but onnx models can be shared across greedy/beam because the first dim (batch size) is already a dynamic value, so no change needed in export.py
         dec_profiles_non_kv = dec_profiles_non_kv.add(
@@ -546,7 +546,7 @@ class GPT2TRT(TRTInferenceCommand):
         )
 
         decoder_profiles_non_kv = [dec_profiles_non_kv]
-        
+
         dec_profiles_kv = Profile()
         if metadata.other.kv_cache:
             # Note that the kv profile only accept length 1
@@ -565,7 +565,7 @@ class GPT2TRT(TRTInferenceCommand):
                 "opt": (batch_size * num_beams, num_heads, opt_output_seq_len - 1, embedding_size_per_head),
                 "max": (batch_size * num_beams, num_heads, max_output_length - 1, embedding_size_per_head),
             }
-            
+
             # TODO: move this logic (and some other similar place) into utils.
             for i in range(num_decoder_layers):
 
@@ -578,7 +578,7 @@ class GPT2TRT(TRTInferenceCommand):
                     **self_attention_profile
                 )
             decoder_profiles_kv = [dec_profiles_kv]
-        
+
         decoder_profiles = decoder_profiles_kv if (metadata.other.kv_cache) else decoder_profiles_non_kv
 
         # Convert ONNX models to TRT engines.
@@ -593,12 +593,13 @@ class GPT2TRT(TRTInferenceCommand):
 
         if num_beams > 1:
             engine_tag += "-beam{}".format(num_beams)
-            
+
         preview_features = []
-        if preview_dynamic_shapes:
-            preview_features = [PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
-            engine_tag += "-previewFasterDynamicShapes"
-        
+        if disable_preview_dynamic_shapes:
+            engine_tag += "-noPreviewFasterDynamicShapes"
+        else:
+            preview_features.append(PreviewFeature.FASTER_DYNAMIC_SHAPES_0805)
+
         if not metadata.other.kv_cache:
             self.gpt2_trt_engine = GPT2ONNXFile(
                 decoder_onnx_fpath, metadata
@@ -660,7 +661,7 @@ class GPT2TRT(TRTInferenceCommand):
         batch_size: int = 1,
         args: object = None,
         benchmarking_mode: bool = False,
-        preview_dynamic_shapes: bool = False,
+        disable_preview_dynamic_shapes: bool = False,
         perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
 
@@ -683,14 +684,14 @@ class GPT2TRT(TRTInferenceCommand):
         ppl_results = []
         try:
             if not benchmarking_mode:
-                self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes)
+                self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, disable_preview_dynamic_shapes)
                 for ninput in network_input:
                     inference_results.append(
                         self.execute_inference(
                             metadata, hash_onnx_fpath, ninput, timing_profile, batch_size, args.num_beams
                         )
                     )
-                    # reset the decoder 
+                    # reset the decoder
                     self.gpt2_trt.reset()
 
                 if perplexity_reference is not None:
@@ -704,7 +705,7 @@ class GPT2TRT(TRTInferenceCommand):
                             )
             else:
                 # Check that input_seq_len and output_seq_len is valid and within required range
-                max_input_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant] 
+                max_input_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
                 max_output_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
 
                 seq_tag = args.input_profile_max_len is None and args.output_profile_max_len is None
@@ -712,12 +713,12 @@ class GPT2TRT(TRTInferenceCommand):
                 if args.input_profile_max_len is None or args.output_profile_max_len is None:
                     if args.input_seq_len is None or args.output_seq_len is None:
                         assert False, "Please provide at least one pair of inputs: [input/output]_seq_len or [input/output]_profile_max_len"
-                
+
                 input_profile_max_len = setup_benchmark_arg(args.input_profile_max_len, "input_profile_max_len", max_input_seq_len)
                 output_profile_max_len = setup_benchmark_arg(args.output_profile_max_len, "output_profile_max_len", max_output_seq_len)
                 input_seq_len = setup_benchmark_arg(args.input_seq_len, "input_seq_len", input_profile_max_len // 2)
                 output_seq_len = setup_benchmark_arg(args.output_seq_len, "output_seq_len", output_profile_max_len // 2)
-                
+
                 benchmarking_args = GPT2TRTBenchmarkingArgs(input_seq_len, output_seq_len, input_profile_max_len, output_profile_max_len)
 
                 # Assert to ensure the validity of benchmarking arguments
@@ -728,7 +729,7 @@ class GPT2TRT(TRTInferenceCommand):
                 # GPT2 model requires output_seq_len > input_seq_len since it is a text generation model.
                 assert benchmarking_args.input_seq_len <= benchmarking_args.output_seq_len, "GPT2 model text generation requires output_seq_len > input_seq_len."
                 assert benchmarking_args.input_profile_max_len <= benchmarking_args.output_profile_max_len, "GPT2 model text generation requires output_profile_max_len > input_profile_max_len"
-                self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, preview_dynamic_shapes, benchmarking_args, seq_tag)
+                self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, disable_preview_dynamic_shapes, benchmarking_args, seq_tag)
                 inference_results = self.execute_inference(
                     metadata, hash_onnx_fpath, None, timing_profile, batch_size, args.num_beams, True, benchmarking_args
                 )

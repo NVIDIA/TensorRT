@@ -107,8 +107,8 @@ def engine_info(engine_filepath):
         print(final_binding_str)
 
 
-def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False, timing_cache=None, faster_dynamic_shapes=False):
-    if faster_dynamic_shapes and float(trt.__version__[:3]) < 8.5:
+def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False, timing_cache=None, disable_preview_dynamic_shapes=False):
+    if not disable_preview_dynamic_shapes and float(trt.__version__[:3]) < 8.5:
         print("Faster dynamic shapes preview feature is only supported on TRT 8.5+")
         sys.exit(1)
 
@@ -119,7 +119,7 @@ def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False, timing_ca
     config.max_workspace_size = max_ws
     if fp16:
         config.flags |= 1 << int(trt.BuilderFlag.FP16)
-    config.set_preview_feature(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805, faster_dynamic_shapes)
+    config.set_preview_feature(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805, not disable_preview_dynamic_shapes)
     profile = builder.create_optimization_profile()
     for s in shapes:
         profile.set_shape(s['name'], min=s['min'], opt=s['opt'], max=s['max'])

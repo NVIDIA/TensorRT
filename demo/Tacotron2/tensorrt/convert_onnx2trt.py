@@ -62,7 +62,7 @@ def parse_args(parser):
     parser.add_argument("-tcf", "--timing-cache-file", default=None, type=str,
                         help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later. The cache file is assumed to be used exclusively. It's the users' responsibility to create file lock to prevent accessing conflict.",
                         required=False)
-    parser.add_argument("--faster-dynamic-shapes", action="store_true", help="Enable dynamic shape preview feature.")
+    parser.add_argument("--disable-preview-dynamic-shapes", action="store_true", help="Disable dynamic shape preview feature.")
     parser.set_defaults(loop=int(trt.__version__[0]) >= 8)
 
     return parser
@@ -90,7 +90,7 @@ def main():
             {"name": "sequence_lengths", "min": (bs_min,),  "opt": (bs_opt,),    "max": (bs_max,)}]
     if args.encoder != "":
         print("Building Encoder ...")
-        encoder_engine = build_engine(args.encoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, faster_dynamic_shapes=args.faster_dynamic_shapes)
+        encoder_engine = build_engine(args.encoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, disable_preview_dynamic_shapes=args.disable_preview_dynamic_shapes)
         if encoder_engine is not None:
             with open(encoder_path, 'wb') as f:
                 f.write(encoder_engine.serialize())
@@ -113,7 +113,7 @@ def main():
                 {"name": "mask",                    "min": (bs_min,4),     "opt": (bs_opt,128),     "max": (bs_max,256)}]
         if args.decoder != "":
             print("Building Decoder with loop...")
-            decoder_engine = build_engine(args.decoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, faster_dynamic_shapes=args.faster_dynamic_shapes)
+            decoder_engine = build_engine(args.decoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, disable_preview_dynamic_shapes=args.disable_preview_dynamic_shapes)
             if decoder_engine is not None:
                 with open(decoder_path, 'wb') as f:
                     f.write(decoder_engine.serialize())
@@ -135,7 +135,7 @@ def main():
                 {"name": "mask",                  "min": (bs_min,4),     "opt": (bs_opt,128),     "max": (bs_max,256)}]
         if args.decoder != "":
             print("Building Decoder ...")
-            decoder_iter_engine = build_engine(args.decoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, faster_dynamic_shapes=args.faster_dynamic_shapes)
+            decoder_iter_engine = build_engine(args.decoder, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, disable_preview_dynamic_shapes=args.disable_preview_dynamic_shapes)
             if decoder_iter_engine is not None:
                 with open(decoder_path, 'wb') as f:
                     f.write(decoder_iter_engine.serialize())
@@ -147,7 +147,7 @@ def main():
     shapes=[{"name": "mel_outputs", "min": (bs_min,80,32), "opt": (bs_opt,80,768), "max": (bs_max,80,1664)}]
     if args.postnet != "":
         print("Building Postnet ...")
-        postnet_engine = build_engine(args.postnet, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, faster_dynamic_shapes=args.faster_dynamic_shapes)
+        postnet_engine = build_engine(args.postnet, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, disable_preview_dynamic_shapes=args.disable_preview_dynamic_shapes)
         if postnet_engine is not None:
             with open(postnet_path, 'wb') as f:
                 f.write(postnet_engine.serialize())
@@ -160,7 +160,7 @@ def main():
             {"name": "z",   "min": (bs_min,8,z_min,1),     "opt": (bs_opt,8,z_opt,1),     "max": (bs_max,8,z_max,1)}]
     if args.waveglow != "":
         print("Building WaveGlow ...")
-        waveglow_engine = build_engine(args.waveglow, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, faster_dynamic_shapes=args.faster_dynamic_shapes)
+        waveglow_engine = build_engine(args.waveglow, shapes=shapes, fp16=args.fp16, timing_cache=args.timing_cache_file, disable_preview_dynamic_shapes=args.disable_preview_dynamic_shapes)
         if waveglow_engine is not None:
             with open(waveglow_path, 'wb') as f:
                 f.write(waveglow_engine.serialize())
