@@ -8,7 +8,7 @@ namespace nvinfer1
 
 namespace plugin
 {
-class VCPluginLoggerFinder : public LoggerFinder
+class VCPluginLoggerFinder : public ILoggerFinder
 {
 public:
     ILogger* findLogger() override
@@ -26,9 +26,9 @@ VCPluginLoggerFinder gVCPluginLoggerFinder;
 //!
 //! \param setLoggerFinderFunc function in VC plugin library for setting logger finder.
 //!
-void setVCPluginLoggerFinder(std::function<void(LoggerFinder*)> setLoggerFinderFunc)
+void setVCPluginLoggerFinder(std::function<void(ILoggerFinder*)> setLoggerFinderFunc)
 {
-    setLoggerFinderFunc(static_cast<LoggerFinder*>(&gVCPluginLoggerFinder));
+    setLoggerFinderFunc(static_cast<ILoggerFinder*>(&gVCPluginLoggerFinder));
 }
 
 } // namespace plugin

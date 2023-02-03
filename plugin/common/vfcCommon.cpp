@@ -32,14 +32,14 @@ namespace plugin
 class ThreadSafeLoggerFinder
 {
 private:
-    LoggerFinder* mLoggerFinder{nullptr};
+    ILoggerFinder* mLoggerFinder{nullptr};
     std::mutex mMutex;
 
 public:
     ThreadSafeLoggerFinder() = default;
 
     //! Set the logger finder.
-    void setLoggerFinder(LoggerFinder* finder)
+    void setLoggerFinder(ILoggerFinder* finder)
     {
         std::lock_guard<std::mutex> lk(mMutex);
         if (mLoggerFinder == nullptr && finder != nullptr)
@@ -78,7 +78,7 @@ extern "C" TENSORRTAPI IPluginCreator* const* getPluginCreators(int32_t& nbCreat
     return pluginCreatorList;
 }
 
-extern "C" TENSORRTAPI void setLoggerFinder(nvinfer1::plugin::LoggerFinder* finder)
+extern "C" TENSORRTAPI void setLoggerFinder(nvinfer1::ILoggerFinder* finder)
 {
     nvinfer1::plugin::gLoggerFinder.setLoggerFinder(finder);
 }

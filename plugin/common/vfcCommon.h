@@ -27,32 +27,12 @@ namespace nvinfer1
 namespace plugin
 {
 
-//!
-//! \class LoggerFinder
-//!
-//! \brief It is a virtual base class to find a global logger.
-//! In the TRT runtime, we will implement a subclass of LoggerFinder() whose findLogger() method
-//! calls getLogger(), and create a global instance of that class to pass to loaded plugins.
-//!
-//!
-class LoggerFinder
-{
-public:
-    LoggerFinder() = default;
-    virtual ~LoggerFinder() = default;
-    virtual ILogger* findLogger() = 0;
-    LoggerFinder(LoggerFinder const&) = delete;
-    LoggerFinder(LoggerFinder&&) = delete;
-    LoggerFinder& operator=(LoggerFinder const&) & = delete;
-    LoggerFinder& operator=(LoggerFinder&&) & = delete;
-};
-
 ILogger* getPluginLogger();
 
 } // namespace plugin
 } // namespace nvinfer1
 
-extern "C" TENSORRTAPI void setLoggerFinder(nvinfer1::plugin::LoggerFinder* finder);
+extern "C" TENSORRTAPI void setLoggerFinder(nvinfer1::ILoggerFinder* finder);
 
 extern "C" TENSORRTAPI IPluginCreator* const* getPluginCreators(int32_t& nbCreators);
 #endif // TRT_PLUGIN_VFC_COMMON_H
