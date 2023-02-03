@@ -109,7 +109,7 @@ class ModelFileConverter:
             input_fpath (str): Input file location of the generated ONNX file.
             network_metadata (NetworkMetadata): Network metadata of the network being converted.
             profiles (List[polygraphy.backend.trt.Profile]): The optimization profiles used to build the engine.
-            preview_features (List[tensorrt.PreviewFeature]): The preview features to enable when building the engine.
+            preview_features (List[tensorrt.PreviewFeature]): The preview features to set when building the engine.
 
         Returns:
             TRTEngineFile: Newly generated engine.
@@ -463,7 +463,7 @@ class ONNXModelFile(NNModelFile):
             force_overwrite (bool): If the file already exists, tell whether or not to overwrite.
                                     Since torch models folders, can potentially erase entire folders.
             profiles (List[polygraphy.backend.trt.Profile]): The optimization profiles used to build the engine.
-            preview_features (List[tensorrt.PreviewFeature]): The preview features to enable when building the engine.
+            preview_features (List[tensorrt.PreviewFeature]): The preview features to set when building the engine.
         Return:
             (converter.trt_engine_class): Returns a converted instance of TRTEngineFile.
         """

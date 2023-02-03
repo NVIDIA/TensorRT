@@ -143,17 +143,16 @@ Notes:
 * K-V cache with beam search may have memory concurrency issues with TensorRT Optimization. We are currently working on this issue.
 
 
-## How to run with TensorRT `FASTER_DYNAMIC_SHAPES_0805` preview feature
+## How to run without the TensorRT `FASTER_DYNAMIC_SHAPES_0805` preview feature
 
-Use the `--preview-dynamic-shapes` option to enable this preview feature for BART, GPT2, or T5. This feature will significantly improve TensorRT engine build time.
+`FASTER_DYNAMIC_SHAPES_0805` significantly improves TensorRT engine build time and is enabled by default in TRT 8.6+. Use the `--disable-preview-dynamic-shapes` option to disable this preview feature for BART, GPT2, or T5. In rare cases, the runtime may increase, so we provide an option to disable it:
 
 ```python
-python3 run.py run BART trt --variant facebook/bart-base --working-dir temp --preview-dynamic-shapes
+python3 run.py run BART trt --variant facebook/bart-base --working-dir temp --disable-preview-dynamic-shapes
 ```
 
-Notes: 
-* preview feature functionality is only supported in TensorRT 8.5+.
-* preview argument is only for TensorRT runs. Hence, please avoid using `compare` action with `--preview-dynamic-shapes` since the syntax doesn't exist for `frameworks` and `onnxrt` runs. Instead, it is recommended to test TensorRT `run` command seperately to get the performance with preview feature functionality.
+Notes:
+* Preview argument is only for TensorRT runs. Hence, please avoid using `compare` action with `--disable-preview-dynamic-shapes` since the syntax doesn't exist for `frameworks` and `onnxrt` runs. Instead, it is recommended to test TensorRT `run` command seperately to obtain the performance without this preview feature.
 
 ## How to run in performance benchmarking mode
 

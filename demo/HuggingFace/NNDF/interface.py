@@ -336,7 +336,7 @@ class TRTInferenceCommand(NetworkCommand):
         batch_size: int = 1,
         args: object = None,
         benchmarking_mode: bool = False,
-        preview_dynamic_shapes: bool = False,
+        disable_preview_dynamic_shapes: bool = False,
         perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
         pass
@@ -360,7 +360,7 @@ class TRTInferenceCommand(NetworkCommand):
             batch_size=self._args.batch_size,
             args=self._args,
             benchmarking_mode=False,
-            preview_dynamic_shapes=self._args.preview_dynamic_shapes,
+            disable_preview_dynamic_shapes=self._args.disable_preview_dynamic_shapes,
             perplexity_reference=list(checkpoint.labels()),
         )
 
@@ -388,7 +388,7 @@ class TRTInferenceCommand(NetworkCommand):
             batch_size=self._args.batch_size,
             args=self._args,
             benchmarking_mode=True,
-            preview_dynamic_shapes=self._args.preview_dynamic_shapes
+            disable_preview_dynamic_shapes=self._args.disable_preview_dynamic_shapes
         )
 
         return network_results
@@ -397,8 +397,8 @@ class TRTInferenceCommand(NetworkCommand):
         super().add_args(parser)
         trt_group = parser.add_argument_group("trt")
         trt_group.add_argument(
-            "--preview-dynamic-shapes",
-            help="Use the FASTER_DYNAMIC_SHAPES_0805 preview feature when building the TensorRT engine",
+            "--disable-preview-dynamic-shapes",
+            help="Disable the FASTER_DYNAMIC_SHAPES_0805 preview feature when building the TensorRT engine",
             action="store_true",
         )
 
