@@ -293,7 +293,7 @@ class DemoDiffusion:
         """
         # Process inputs
         batch_size = len(prompt)
-        assert len(prompt) == len(negative_prompt)
+        # assert len(prompt) == len(negative_prompt)
 
         # Spatial dimensions of latent tensor
         latent_height = image_height // 8
