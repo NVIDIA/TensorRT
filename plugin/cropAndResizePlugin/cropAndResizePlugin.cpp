@@ -22,13 +22,10 @@
 #include <cstring>
 #include <vector>
 
-using namespace nvinfer1;
-using nvinfer1::plugin::CropAndResizePlugin;
-using nvinfer1::plugin::CropAndResizeDynamicPlugin;
-using nvinfer1::plugin::CropAndResizeBasePluginCreator;
-using nvinfer1::plugin::CropAndResizePluginCreator;
-using nvinfer1::plugin::CropAndResizeDynamicPluginCreator;
-
+namespace nvinfer1
+{
+namespace plugin
+{
 // plugin specific constants
 namespace
 {
@@ -576,3 +573,5 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
+} // namespace plugin
+} // namespace nvinfer1

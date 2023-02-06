@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 #include "common/kernels/kernel.h"
-
+namespace nvinfer1
+{
+namespace plugin
+{
 #define CUBLAS_CHECK(condition)                                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -89,3 +92,5 @@ pluginStatus_t scatterNDInference(
     scatterKernel<<<nRows, 1, 0, stream>>>(_output, _updates, transformedIdx, rowSize * 4, rowSize * 4);
     return STATUS_SUCCESS;
 }
+} // namespace plugin
+} // namespace nvinfer1

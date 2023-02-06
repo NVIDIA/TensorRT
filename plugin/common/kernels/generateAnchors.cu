@@ -16,7 +16,10 @@
  */
 #include "common/kernels/kernel.h"
 #include <cstdio>
-
+namespace nvinfer1
+{
+namespace plugin
+{
 pluginStatus_t generateAnchors_cpu(
     int numRatios, float* ratios, int numScales, float* scales, int baseSize, float* anchors)
 {
@@ -95,3 +98,5 @@ pluginStatus_t generateAnchors(cudaStream_t stream,
     CSC(cudaFreeHost(anchors_cpu), STATUS_FAILURE);
     return status;
 }
+} // namespace plugin
+} // namespace nvinfer1

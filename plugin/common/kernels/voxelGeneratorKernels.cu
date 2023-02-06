@@ -17,7 +17,10 @@
 
 #include <iostream>
 #include <cuda_runtime_api.h>
-
+namespace nvinfer1
+{
+namespace plugin
+{
 __global__ void generateVoxels_kernel(
         int max_num_points,
         float *points, unsigned int* points_size,
@@ -405,3 +408,5 @@ int generateFeatures_launch(
     }
     return err;
 }
+} // namespace plugin
+} // namespace nvinfer1

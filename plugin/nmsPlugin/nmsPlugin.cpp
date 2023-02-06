@@ -20,14 +20,10 @@
 #include <sstream>
 #include <vector>
 
-using namespace nvinfer1;
-using nvinfer1::plugin::DetectionOutput;
-using nvinfer1::plugin::DetectionOutputDynamic;
-using nvinfer1::plugin::DetectionOutputParameters;
-using nvinfer1::plugin::NMSPluginCreator;
-using nvinfer1::plugin::NMSDynamicPluginCreator;
-using nvinfer1::plugin::NMSBasePluginCreator;
-
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace
 {
 const char* NMS_PLUGIN_VERSION{"1"};
@@ -868,3 +864,5 @@ IPluginV2DynamicExt* NMSDynamicPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
+} // namespace plugin
+} // namespace nvinfer1

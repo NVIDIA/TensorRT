@@ -25,6 +25,10 @@
 #include <stdio.h>
 
 using namespace nvinfer1;
+namespace nvinfer1
+{
+namespace plugin
+{
 // CUB's bug workaround:
 // To work properly for large batch size CUB segmented sort needs ridiculous
 // workspace alignment.
@@ -433,3 +437,5 @@ pluginStatus_t nms(cudaStream_t stream,
     }
     return STATUS_BAD_PARAM;
 }
+} // namespace plugin
+} // namespace nvinfer1

@@ -19,8 +19,11 @@
 #include "cuda_fp16.h"
 #include <array>
 
-using namespace nvinfer1;
 
+namespace nvinfer1
+{
+namespace plugin
+{
 inline __device__ __half minus_fb(const __half& a, const __half& b)
 {
 #if __CUDA_ARCH__ >= 530
@@ -223,3 +226,5 @@ pluginStatus_t gatherTopDetections(
     }
     return STATUS_BAD_PARAM;
 }
+} // namespace plugin
+} // namespace nvinfer1

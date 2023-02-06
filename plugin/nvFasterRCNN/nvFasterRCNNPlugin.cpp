@@ -20,12 +20,10 @@
 #include <cublas_v2.h>
 #include <iostream>
 
-using namespace nvinfer1;
-using namespace nvinfer1::plugin;
-using nvinfer1::Dims;
-using nvinfer1::plugin::RPROIPlugin;
-using nvinfer1::plugin::RPROIPluginCreator;
-
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace
 {
 const char* RPROI_PLUGIN_VERSION{"1"};
@@ -541,3 +539,5 @@ IPluginV2Ext* RPROIPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
+} // namespace plugin
+} // namespace nvinfer1

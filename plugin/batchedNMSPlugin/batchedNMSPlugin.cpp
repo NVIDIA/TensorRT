@@ -23,13 +23,10 @@
 #include <sstream>
 #include <vector>
 
-using namespace nvinfer1;
-using nvinfer1::plugin::BatchedNMSBasePluginCreator;
-using nvinfer1::plugin::BatchedNMSDynamicPlugin;
-using nvinfer1::plugin::BatchedNMSDynamicPluginCreator;
-using nvinfer1::plugin::BatchedNMSPlugin;
-using nvinfer1::plugin::BatchedNMSPluginCreator;
-using nvinfer1::plugin::NMSParameters;
+namespace nvinfer1
+{
+namespace plugin
+{
 
 #define NVBUG_3321606_WAR 1
 
@@ -39,10 +36,6 @@ const char* NMS_PLUGIN_VERSION{"1"};
 const char* NMS_PLUGIN_NAMES[] = {"BatchedNMS_TRT", "BatchedNMSDynamic_TRT"};
 } // namespace
 
-namespace nvinfer1
-{
-namespace plugin
-{
 template <>
 void write<NMSParameters>(char*& buffer, const NMSParameters& val)
 {
@@ -58,8 +51,6 @@ void write<NMSParameters>(char*& buffer, const NMSParameters& val)
     param->isNormalized = val.isNormalized;
     buffer += sizeof(NMSParameters);
 }
-} // namespace plugin
-} // namespace nvinfer1
 
 PluginFieldCollection BatchedNMSBasePluginCreator::mFC{};
 std::vector<PluginField> BatchedNMSBasePluginCreator::mPluginAttributes;
@@ -889,3 +880,5 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
+} // namespace plugin
+} // namespace nvinfer1

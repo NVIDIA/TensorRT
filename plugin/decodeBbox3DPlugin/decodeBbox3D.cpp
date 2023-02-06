@@ -20,6 +20,10 @@
 #include <cstring>
 #include <iostream>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 #define checkCudaErrors(status)                                                                                        \
     {                                                                                                                  \
         if ((status) != 0)                                                                                             \
@@ -30,7 +34,6 @@
         }                                                                                                              \
     }
 
-using namespace nvinfer1;
 using nvinfer1::plugin::DecodeBbox3DPlugin;
 using nvinfer1::plugin::DecodeBbox3DPluginCreator;
 
@@ -480,3 +483,5 @@ const char* DecodeBbox3DPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
+} // namespace plugin
+} // namespace nvinfer1

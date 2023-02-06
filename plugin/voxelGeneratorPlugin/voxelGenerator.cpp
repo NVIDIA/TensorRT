@@ -21,6 +21,10 @@
 #include <cstring>
 #include <iostream>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 #define checkCudaErrors(status)                                                                                        \
     {                                                                                                                  \
         if ((status) != 0)                                                                                             \
@@ -469,3 +473,5 @@ const char* VoxelGeneratorPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
+} // namespace plugin
+} // namespace nvinfer1

@@ -19,6 +19,12 @@
 
 #include "common/plugin.h"
 
+namespace nvinfer1
+{
+namespace plugin
+{
 size_t detectionInferenceWorkspaceSize(bool shareLocation, int N, int C1, int C2, int numClasses, int numPredsPerClass,
     int topK, nvinfer1::DataType DT_BBOX, nvinfer1::DataType DT_SCORE);
+} // namespace plugin
+} // namespace nvinfer1
 #endif

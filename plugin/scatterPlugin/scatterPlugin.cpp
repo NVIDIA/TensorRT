@@ -21,11 +21,10 @@
 #include <cudnn.h>
 #include <iostream>
 #include <sstream>
-
-using namespace nvinfer1;
-
-using nvinfer1::plugin::ScatterND;
-using nvinfer1::plugin::ScatterNDPluginCreator;
+namespace nvinfer1
+{
+namespace plugin
+{
 
 namespace
 {
@@ -311,3 +310,5 @@ IPluginV2Ext* ScatterNDPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
+} // namespace plugin
+} // namespace nvinfer1

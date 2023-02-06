@@ -19,10 +19,10 @@
 #include "common/templates.h"
 #include <cstring>
 
-using namespace nvinfer1;
-using namespace nvinfer1::plugin;
-using nvinfer1::plugin::PillarScatterPlugin;
-using nvinfer1::plugin::PillarScatterPluginCreator;
+namespace nvinfer1
+{
+namespace plugin
+{
 
 static const char* PLUGIN_VERSION{"1"};
 static const char* PLUGIN_NAME{"PillarScatterPlugin"};
@@ -291,3 +291,5 @@ const char* PillarScatterPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
+} // namespace plugin
+} // namespace nvinfer1

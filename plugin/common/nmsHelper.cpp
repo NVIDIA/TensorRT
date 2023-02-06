@@ -19,8 +19,10 @@
 #include "cuda_fp16.h"
 #include <algorithm>
 
-using namespace nvinfer1;
-using namespace nvinfer1::plugin;
+namespace nvinfer1
+{
+namespace plugin
+{
 
 size_t detectionForwardBBoxDataSize(int N, int C1, DataType DT_BBOX)
 {
@@ -63,3 +65,5 @@ size_t detectionForwardPostNMSSize(int N, int numClasses, int topK)
     PLUGIN_ASSERT(sizeof(float) == sizeof(int));
     return N * numClasses * topK * sizeof(float);
 }
+} // namespace plugin
+} // namespace nvinfer1

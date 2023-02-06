@@ -18,8 +18,10 @@
 #include "common/kernels/kernel.h"
 #include "cuda_fp16.h"
 #include <array>
-using namespace nvinfer1;
-
+namespace nvinfer1
+{
+namespace plugin
+{
 template <typename T_BBOX>
 __device__ float bboxSize(const Bbox<T_BBOX>& bbox, const bool normalized)
 {
@@ -388,3 +390,5 @@ pluginStatus_t allClassNMS(cudaStream_t stream, const int num, const int num_cla
     }
     return STATUS_BAD_PARAM;
 }
+} // namespace plugin
+} // namespace nvinfer1

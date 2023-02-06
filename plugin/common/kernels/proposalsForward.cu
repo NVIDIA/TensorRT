@@ -18,6 +18,10 @@
 #include "common/kernels/kernel.h"
 
 using namespace nvinfer1;
+namespace nvinfer1
+{
+namespace plugin
+{
 // PROPOSALS INFERENCE
 pluginStatus_t proposalsInference(cudaStream_t stream, const int N, const int A, const int H, const int W,
     const int featureStride, const int preNmsTop, const int nmsMaxOut, const float iouThreshold, const float minBoxSize,
@@ -153,3 +157,5 @@ size_t proposalsInferenceWorkspaceSize(int N,
     wss[2] = proposalForwardFgScoresWorkspaceSize(N, A, H, W);
     return calculateTotalWorkspaceSize(wss, 3);
 }
+} // namespace plugin
+} // namespace nvinfer1

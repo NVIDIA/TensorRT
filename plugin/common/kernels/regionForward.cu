@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 #include "common/kernels/kernel.h"
-
+namespace nvinfer1
+{
+namespace plugin
+{
 template <unsigned nthdsPerCTA>
 __launch_bounds__(nthdsPerCTA) __global__ void softmaxKernel(const float* input, const int n, const int batch,
     const int batchOffset, const int groups, const int groupOffset, const int stride, const float temp, float* output)
@@ -133,3 +136,5 @@ pluginStatus_t regionInference(cudaStream_t stream, const int batch, const int C
     return regionGPU(
         stream, batch, C, H, W, num, coords, classes, hasSoftmaxTree, smTree, (const float*) input, (float*) output);
 }
+} // namespace plugin
+} // namespace nvinfer1

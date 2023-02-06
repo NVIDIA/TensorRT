@@ -17,6 +17,10 @@
 #include "common/kernels/kernel.h"
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
+namespace nvinfer1
+{
+namespace plugin
+{
 pluginStatus_t RPROIInferenceFused(cudaStream_t stream, const int N, const int A, const int C, const int H, const int W,
     const int poolingH, const int poolingW, const int featureStride, const int preNmsTop, const int nmsMaxOut,
     const float iouThreshold, const float minBoxSize, const float spatialScale, const float* imInfo,
@@ -89,3 +93,5 @@ size_t RPROIInferenceFusedWorkspaceSize(int N,
 {
     return proposalsInferenceWorkspaceSize(N, A, H, W, nmsMaxOut);
 }
+} // namespace plugin
+} // namespace nvinfer1
