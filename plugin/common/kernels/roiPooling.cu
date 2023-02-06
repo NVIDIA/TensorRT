@@ -22,8 +22,10 @@
 #include <cstdio>
 #include <math.h>
 #include <stdio.h>
-
-using namespace nvinfer1;
+namespace nvinfer1
+{
+namespace plugin
+{
 // This macro is to control shared memory usage. If set to 1, kernel loads the whole feature map
 // into shared memory for reuse; If set to 0, kernel loads data from global memory directly.
 // Roi pooling performance is data dependent. You can test which value is better to your data.
@@ -347,3 +349,5 @@ pluginStatus_t roiInference(cudaStream_t stream,
     }
     return STATUS_BAD_PARAM;
 }
+} // namespace plugin
+} // namespace nvinfer1

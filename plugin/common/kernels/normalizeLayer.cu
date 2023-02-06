@@ -16,7 +16,12 @@
  */
 #include "common/bboxUtils.h"
 #include "common/kernels/kernel.h"
+#include <cublas_v2.h>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 #define CUBLAS_CHECK(condition)                                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -26,19 +31,6 @@
             printf("%s %d CUBLAS FAIL %s\n", __FILE__, __LINE__, cublasGetErrorString(status));                        \
         }                                                                                                              \
     } while (0)
-namespace nvinfer1
-{
-namespace plugin
-{
-size_t normalizePluginWorkspaceSize(bool acrossSpatial, int C, int H, int W)
-{
-    if (acrossSpatial)
-        return sizeof(float) * C * H * W;
-    else
-        return (size_t) 0;
-}
-} // namespace plugin
-} // namespace nvinfer1
 
 size_t normalizePluginWorkspaceSize(bool acrossSpatial, int C, int H, int W)
 {
@@ -294,3 +286,5 @@ pluginStatus_t normalizeInference(
         return normalizeNotAcrossSpatialGpu(stream, channelShared, N, C, H, W, eps, scale, inputData, outputData);
     }
 }
+} // namespace plugin
+} // namespace nvinfer1

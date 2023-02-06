@@ -28,6 +28,10 @@
 #include <stdlib.h>
 #include <vector>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 #define PLUGIN_CHECK_CUDA(call)                                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -37,7 +41,6 @@
             return status;                                                                                             \
         }                                                                                                              \
     } while (0)
-
 template <typename TFloat>
 struct Bbox
 {
@@ -371,7 +374,6 @@ frcnnStatus_t nmsGpu(cudaStream_t stream, const int N, const int R, const int pr
 }
 // }}}
 
-// NMS LAUNCH CONFIG {{{
 typedef frcnnStatus_t (*nmsFun)(cudaStream_t,
                                 const int,   // N
                                 const int,   // R
@@ -687,3 +689,5 @@ int proposalInference_gpu(
 
     return STATUS_SUCCESS;
 }
+} // namespace plugin
+} // namespace nvinfer1

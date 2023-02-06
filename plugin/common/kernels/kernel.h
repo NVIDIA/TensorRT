@@ -25,7 +25,10 @@
 #include <cublas_v2.h>
 
 #define DEBUG_ENABLE 0
-
+namespace nvinfer1
+{
+namespace plugin
+{
 typedef enum
 {
     NCHW = 0,
@@ -266,4 +269,6 @@ int32_t generateFeatures_launch(int32_t batch_size, int32_t dense_pillar_num, fl
 
 
 #endif // TRT_RPNLAYER_H
+} // namespace plugin
+} // namespace nvinfer1
 #endif

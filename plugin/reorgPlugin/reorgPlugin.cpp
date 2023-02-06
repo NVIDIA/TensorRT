@@ -16,10 +16,10 @@
  */
 #include "reorgPlugin.h"
 
-using namespace nvinfer1;
-using nvinfer1::plugin::Reorg;
-using nvinfer1::plugin::ReorgPluginCreator;
-
+namespace nvinfer1
+{
+namespace plugin
+{
 static const char* REORG_PLUGIN_VERSION{"1"};
 static const char* REORG_PLUGIN_NAME{"Reorg_TRT"};
 PluginFieldCollection ReorgPluginCreator::mFC{};
@@ -251,3 +251,5 @@ IPluginV2Ext* ReorgPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
+} // namespace plugin
+} // namespace nvinfer1

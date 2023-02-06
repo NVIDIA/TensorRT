@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 #include "common/kernels/kernel.h"
-using namespace nvinfer1;
+namespace nvinfer1
+{
+namespace plugin
+{
 template <typename T>
 pluginStatus_t extractFgScores_gpu(cudaStream_t stream, int N, int A, int H, int W, const void* scores, void* fgScores)
 {
@@ -74,3 +77,5 @@ pluginStatus_t extractFgScores(cudaStream_t stream,
 
     return extractFgScores_gpu<float>(stream, N, A, H, W, scores, fgScores);
 }
+} // namespace plugin
+} // namespace nvinfer1

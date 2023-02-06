@@ -18,10 +18,10 @@
 #include "common/checkMacrosPlugin.h"
 #include "common/kernels/kernel.h"
 
-using namespace nvinfer1;
-using nvinfer1::plugin::LReluPluginCreator;
-using nvinfer1::plugin::LReLU;
-
+namespace nvinfer1
+{
+namespace plugin
+{
 static const char* LRELU_PLUGIN_VERSION{"1"};
 static const char* LRELU_PLUGIN_NAME{"LReLU_TRT"};
 PluginFieldCollection LReluPluginCreator::mFC{};
@@ -194,4 +194,6 @@ IPluginV2* LReluPluginCreator::deserializePlugin(const char* name, const void* s
     }
     return nullptr;
 }
+} // namespace plugin
+} // namespace nvinfer1
 // LeakReLU }}}

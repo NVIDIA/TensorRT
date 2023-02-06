@@ -18,6 +18,10 @@
 #include <iostream>
 #include <cuda_runtime_api.h>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 #define checkCudaErrors(status)                                   \
 {                                                                 \
   if (status != 0)                                                \
@@ -179,3 +183,5 @@ void  decodeBbox3DLaunch(
                  num_dir_bins);
   checkCudaErrors(cudaGetLastError());
 }
+} // namespace plugin
+} // namespace nvinfer1

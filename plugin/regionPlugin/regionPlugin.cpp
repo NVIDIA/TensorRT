@@ -17,12 +17,10 @@
 #include "regionPlugin.h"
 #include <cstring>
 
-using namespace nvinfer1;
-using namespace nvinfer1::plugin;
-using nvinfer1::plugin::Region;
-using nvinfer1::plugin::RegionParameters; // Needed for Windows Build
-using nvinfer1::plugin::RegionPluginCreator;
-
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace
 {
 const char* REGION_PLUGIN_VERSION{"1"};
@@ -562,3 +560,5 @@ IPluginV2Ext* RegionPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
+} // namespace plugin
+} // namespace nvinfer1

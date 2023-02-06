@@ -17,22 +17,6 @@
 
 #include "common/kernels/kernel.h"
 #include "common/plugin.h"
-using namespace nvinfer1;
-size_t detectionInferenceWorkspaceSize(bool shareLocation, int32_t N, int32_t C1, int32_t C2, int32_t numClasses,
-    int32_t numPredsPerClass, int32_t topK, DataType DT_BBOX, DataType DT_SCORE)
-{
-    size_t wss[7];
-    wss[0] = detectionForwardBBoxDataSize(N, C1, DT_BBOX);
-    wss[1] = detectionForwardBBoxPermuteSize(shareLocation, N, C1, DT_BBOX);
-    wss[2] = detectionForwardPreNMSSize(N, C2);
-    wss[3] = detectionForwardPreNMSSize(N, C2);
-    wss[4] = detectionForwardPostNMSSize(N, numClasses, topK);
-    wss[5] = detectionForwardPostNMSSize(N, numClasses, topK);
-    wss[6] = std::max(sortScoresPerClassWorkspaceSize(N, numClasses, numPredsPerClass, DT_SCORE),
-        sortScoresPerImageWorkspaceSize(N, numClasses * topK, DT_SCORE));
-    return calculateTotalWorkspaceSize(wss, 7);
-}
-
 namespace nvinfer1
 {
 namespace plugin

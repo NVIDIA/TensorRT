@@ -18,7 +18,10 @@
 #define TRT_BBOX_UTILS_H
 
 #include "common/plugin.h"
-
+namespace nvinfer1
+{
+namespace plugin
+{
 template <typename T>
 struct Bbox
 {
@@ -70,5 +73,6 @@ int8_t* nextWorkspacePtr(int8_t* ptr, uintptr_t previousWorkspaceSize);
 size_t dataTypeSize(nvinfer1::DataType dtype);
 
 void setUniformOffsets(cudaStream_t stream, int num_segments, int offset, int* d_offsets);
-
+} // namespace plugin
+} // namespace nvinfer1
 #endif
