@@ -1,0 +1,1 @@
+{"model_options": {"Format": "ONNX", "Model": "/home/nzmora/trt/trt-engine-explorer-OSS/examples/pytorch/resnet/generated/resnet-qat-residual-qgap.onnx"}, "build_options": {"Max batch": "explicit batch", "Memory Pools": "workspace", "minTiming": "1", "avgTiming": "8", "Precision": "FP32+FP16+INT8"}}

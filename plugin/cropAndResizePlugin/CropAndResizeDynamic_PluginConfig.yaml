@@ -1,0 +1,39 @@
+---
+name: CropAndResizeDynamic
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    inputs:
+      - feature_maps
+      - rois
+    outputs:
+      - pfmap
+    input_dims:
+      input1: 4
+      input2: 4
+    input_dim_constraints:
+      - "feature_maps_0 == rois_0"
+      - "rois_2 == 4"
+      - "rois_3 == 1"
+    output_dims:
+      pfmap: "feature_maps_0, rois_1, feature_maps_1, crop_width_0, crop_height_0"
+    attributes:
+      - crop_height
+      - crop_width
+    attribute_types:
+      crop_height: int32
+      crop_width: int32
+    attribute_length:
+      crop_height: 1
+      crop_width: 1
+    attribute_options:
+      crop_height:
+        min: "0"
+        max: "=pinf"
+      crop_width:
+        min: "0"
+        max: "=pinf"
+    attributes_required:
+      - crop_height
+      - crop_width
+...

@@ -1,0 +1,6 @@
+numpy==1.18.1; python_version<"3.8" and platform_system == "Windows"
+numpy==1.19.4; python_version<"3.8" and platform_system != "Windows"
+numpy==1.23.2; python_version>="3.8"
+Pillow
+pycuda<2021.1; python_version<"3.7"
+pycuda; python_version>="3.7"

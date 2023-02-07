@@ -1,0 +1,18 @@
+colored
+flaky==3.7.0
+numpy
+onnx_graphsurgeon>=0.3.21
+onnx==1.10.0
+onnxconverter_common==1.12.2
+onnxmltools==1.11.1
+onnxruntime==1.10.0
+protobuf==3.19.4
+pytest
+pytest-console-scripts
+pytest-virtualenv
+pytest-xdist
+requests==2.25.1
+sympy==1.9
+tensorflow<2.0; python_version<'3.8'
+tf2onnx
+wheel

@@ -1,0 +1,1 @@
+{"model_options": {"Format": "ONNX", "Model": "trt-engine-explorer-OSS/tests/inputs/mobilenet_v2_residuals.qat.onnx"}, "build_options": {"Max batch": "explicit batch", "Memory Pools": "workspace", "minTiming": "1", "avgTiming": "8", "Precision": "FP32+FP16+INT8"}}

@@ -1,0 +1,47 @@
+# Default requirements
+[T5.all.default.all.premise_a]
+
+input = '''
+premise: I hate pigeons. hypothesis: My feelings towards pigeons are filled with animosity.
+'''
+
+label = "entailment"
+
+
+[T5.all.default.all.translate_a]
+
+input = '''
+translate English to German: That is good.
+'''
+
+label = "Das ist gut."
+
+[T5.all.default.all.cola_a]
+
+input = '''
+cola sentence: All your base are belong to us.
+'''
+
+label = "unacceptable"
+
+[T5.all.default.all.premise_b]
+
+input = '''
+premise: If I fall asleep then I am going to wake up in 8 hours. hypothesis: I fell asleep but did not wake up in 8 hours.
+'''
+
+label = "contradiction"
+
+# t5-small is gets some results differently
+[T5.all.t5-small.all.premise_a]
+
+label = "contradiction"
+
+[T5.all.t5-small.all.cola_a]
+
+label = "acceptable"
+
+# t5-base also gets results differently
+[T5.all.t5-base.all.translate_a]
+
+label = "Das ist gut so."

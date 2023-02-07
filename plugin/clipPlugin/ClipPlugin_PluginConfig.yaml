@@ -1,0 +1,25 @@
+---
+name: Clip_TRT
+interface: "IPluginV2"
+versions:
+  "1":
+    attributes:
+      - clipMin
+      - clipMax
+    attribute_types:
+      clipMin: float32
+      clipMax: float32
+    attribute_length:
+      clipMin: 1
+      clipMax: 1
+    attribute_options:
+      clipMin:
+        min: "=ninf"
+        max: "=pinf"
+      clipMax:
+        min: "=ninf"
+        max: "=pinf"
+    attributes_required:
+      - clipMin
+      - clipMax
+...

@@ -1,0 +1,23 @@
+# Default requirements
+[BART.all.default.all.summarization]
+
+input = "NVIDIA TensorRT-based applications perform up to 36X faster than CPU-only platforms during inference, enabling developers to optimize neural network models trained on all major frameworks, calibrate for lower precision with high accuracy, and deploy to hyperscale data centers, embedded platforms, or automotive product platforms. TensorRT, built on the NVIDIA CUDA parallel programming model, enables developers to optimize inference by leveraging libraries, development tools, and technologies in CUDA-X for AI, autonomous machines, high performance computing, and graphics. With new NVIDIA Ampere Architecture GPUs, TensorRT also uses sparse tensor cores for an additional performance boost."
+
+[BART.all."facebook/bart-base".all.summarization]
+
+label = "NVIDIA TensorRT-based applications perform up to 36X faster than CPU-only platforms during inference, enabling developers to optimize neural network models trained on all major frameworks, calibrate for lower precision with high accuracy, and deploy to hyperscale data centers, embedded platforms, or automotive product platforms. TensorR, built on the NVIDIA CUDA parallel programming model, enables developers to accelerate inference by leveraging libraries, development tools, and technologies in CUDA-X for AI, autonomous machines, high performance computing, and graphics. With new NVIDIA Ampere Architecture GPUs, Tensor RT also uses sparse tensor cores for an additional performance boost."
+
+[BART.all."facebook/bart-large".all.summarization]
+
+label = "NVIDIA TensorRT-based applications perform up to 36X faster than CPU-only platforms during inference, enabling developers to optimize neural network models trained on all major frameworks, calibrate for lower precision with high accuracy, and deploy to hyperscale data centers, embedded platforms, or automotive product platforms. Tensor RT is the first GPU-based inference platform to use NVIDIA's CUDA-X architecture. TenseRT, built on the NVIDIA CUDA parallel programming model, enables developers to analyze neural network data and perform inference by leveraging libraries, development tools, and technologies in CUDA, including CUDA for AI, autonomous machines, high performance computing, and graphics. With new NVIDIA Ampere Architecture GPUs, TensorRex also uses sparse tensor cores for an additional performance boost."
+
+[BART.all."facebook/bart-large-cnn".all.summarization]
+
+label = "TensorRT-based applications perform up to 36X faster than CPU-only platforms during inference. TensorRT is built on the NVIDIA CUDA parallel programming model. With new NVIDIA Ampere Architecture GPUs, Tensor RT also uses sparse tensor cores for an additional performance boost."
+
+
+# There is a weird bug in Frameworks where the output is incorrect
+# when compared to OnnxRT. Frameworks only the first two sentence is generated.
+[BART.native."facebook/bart-large-cnn".summarization]
+
+label = "TensorRT-based applications perform up to 36X faster than CPU-only platforms during inference. TensorRT is built on the NVIDIA CUDA parallel programming model."

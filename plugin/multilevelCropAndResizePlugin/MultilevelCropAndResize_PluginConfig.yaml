@@ -1,0 +1,24 @@
+---
+name: MultilevelCropAndResize_TRT
+interface: "IPluginV2Ext"
+versions:
+  "1":
+    attributes:
+      - pooled_size
+      - image_size
+    attribute_types:
+      pooled_size: int32
+      image_size: int32
+    attribute_length:
+      pooled_size: 1
+      image_size: 3
+    attribute_options:
+      pooled_size:
+        min: "0"
+        max: "=pinf"
+      image_size:
+        min: "0, 0, 0"
+        max: "=pinf, =pinf, =pinf"
+    attributes_required:
+      - pooled_size
+...

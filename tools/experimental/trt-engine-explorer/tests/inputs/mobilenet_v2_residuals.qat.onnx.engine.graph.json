@@ -1,0 +1,1970 @@
+{"Layers": [{
+  "Name": "QuantizeLinear_2",
+  "LayerType": "Reformat",
+  "Inputs": [
+  {
+    "Name": "inputs.1",
+    "Location": "Device",
+    "Dimensions": [1,3,224,224],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "Outputs": [
+  {
+    "Name": "433",
+    "Location": "Device",
+    "Dimensions": [1,3,224,224],
+    "Format/Datatype": "Four wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Reformat",
+  "Origin": "QDQ",
+  "TacticValue": "0x0000000000000000"
+},{
+  "Name": "features.0.0.weight + QuantizeLinear_7 + Conv_9 + PWN(Clip_13)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "433",
+    "Location": "Device",
+    "Dimensions": [1,3,224,224],
+    "Format/Datatype": "Four wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "449",
+    "Location": "Device",
+    "Dimensions": [1,32,112,112],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 32,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 864},
+  "Bias": {"Type": "Float", "Count": 32},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "volta_int8x4_icudnn_int8x4_128x32_relu_xregs_small_c32_nn_v1",
+  "TacticValue": "0xa65a77b0f5044138"
+},{
+  "Name": "features.1.conv.0.0.weight + QuantizeLinear_21 + Conv_23 + PWN(Clip_27)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "449",
+    "Location": "Device",
+    "Dimensions": [1,32,112,112],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "465",
+    "Location": "Device",
+    "Dimensions": [1,32,112,112],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 32,
+  "Groups": 32,
+  "Weights": {"Type": "Int8", "Count": 288},
+  "Bias": {"Type": "Float", "Count": 32},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0x0000000000000001"
+},{
+  "Name": "features.1.conv.1.weight + QuantizeLinear_35 + Conv_37",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "465",
+    "Location": "Device",
+    "Dimensions": [1,32,112,112],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "478",
+    "Location": "Device",
+    "Dimensions": [1,16,112,112],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 16,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 512},
+  "Bias": {"Type": "Float", "Count": 16},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x235fad4a7171cb36"
+},{
+  "Name": "features.2.conv.0.0.weight + QuantizeLinear_46 + Conv_48 + PWN(Clip_52)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "478",
+    "Location": "Device",
+    "Dimensions": [1,16,112,112],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "494",
+    "Location": "Device",
+    "Dimensions": [1,96,112,112],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 96,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 1536},
+  "Bias": {"Type": "Float", "Count": 96},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x128x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0xa7ed996d55bb4583"
+},{
+  "Name": "features.2.conv.1.0.weight + QuantizeLinear_60 + Conv_62 + PWN(Clip_66)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "494",
+    "Location": "Device",
+    "Dimensions": [1,96,112,112],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "510",
+    "Location": "Device",
+    "Dimensions": [1,96,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 96,
+  "Groups": 96,
+  "Weights": {"Type": "Int8", "Count": 864},
+  "Bias": {"Type": "Float", "Count": 96},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0x000000000000000b"
+},{
+  "Name": "features.2.conv.2.weight + QuantizeLinear_74 + Conv_76",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "510",
+    "Location": "Device",
+    "Dimensions": [1,96,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "523",
+    "Location": "Device",
+    "Dimensions": [1,24,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 24,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 2304},
+  "Bias": {"Type": "Float", "Count": 24},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x235fad4a7171cb36"
+},{
+  "Name": "features.3.conv.0.0.weight + QuantizeLinear_91 + Conv_93 + PWN(Clip_97)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "523",
+    "Location": "Device",
+    "Dimensions": [1,24,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "545",
+    "Location": "Device",
+    "Dimensions": [1,144,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 144,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 3456},
+  "Bias": {"Type": "Float", "Count": 144},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x850b80ab7d925385"
+},{
+  "Name": "features.3.conv.1.0.weight + QuantizeLinear_105 + Conv_107 + PWN(Clip_111)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "545",
+    "Location": "Device",
+    "Dimensions": [1,144,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "561",
+    "Location": "Device",
+    "Dimensions": [1,144,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 144,
+  "Groups": 144,
+  "Weights": {"Type": "Int8", "Count": 1296},
+  "Bias": {"Type": "Float", "Count": 144},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0x0000000000000001"
+},{
+  "Name": "features.3.conv.2.weight + QuantizeLinear_119 + Conv_121 + Add_123",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "561",
+    "Location": "Device",
+    "Dimensions": [1,144,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "523",
+    "Location": "Device",
+    "Dimensions": [1,24,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "575",
+    "Location": "Device",
+    "Dimensions": [1,24,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 24,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 3456},
+  "Bias": {"Type": "Float", "Count": 24},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x235fad4a7171cb36"
+},{
+  "Name": "features.4.conv.0.0.weight + QuantizeLinear_131 + Conv_133 + PWN(Clip_137)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "575",
+    "Location": "Device",
+    "Dimensions": [1,24,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "591",
+    "Location": "Device",
+    "Dimensions": [1,144,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 144,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 3456},
+  "Bias": {"Type": "Float", "Count": 144},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x850b80ab7d925385"
+},{
+  "Name": "features.4.conv.1.0.weight + QuantizeLinear_145 + Conv_147 + PWN(Clip_151)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "591",
+    "Location": "Device",
+    "Dimensions": [1,144,56,56],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "607",
+    "Location": "Device",
+    "Dimensions": [1,144,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 144,
+  "Groups": 144,
+  "Weights": {"Type": "Int8", "Count": 1296},
+  "Bias": {"Type": "Float", "Count": 144},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.4.conv.2.weight + QuantizeLinear_159 + Conv_161",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "607",
+    "Location": "Device",
+    "Dimensions": [1,144,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "620",
+    "Location": "Device",
+    "Dimensions": [1,32,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 32,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 4608},
+  "Bias": {"Type": "Float", "Count": 32},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_t1r1s1",
+  "TacticValue": "0xb649da27d0e9770f"
+},{
+  "Name": "features.5.conv.0.0.weight + QuantizeLinear_176 + Conv_178 + PWN(Clip_182)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "620",
+    "Location": "Device",
+    "Dimensions": [1,32,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "642",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 192,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 6144},
+  "Bias": {"Type": "Float", "Count": 192},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x850b80ab7d925385"
+},{
+  "Name": "features.5.conv.1.0.weight + QuantizeLinear_190 + Conv_192 + PWN(Clip_196)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "642",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "658",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 192,
+  "Groups": 192,
+  "Weights": {"Type": "Int8", "Count": 1728},
+  "Bias": {"Type": "Float", "Count": 192},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.5.conv.2.weight + QuantizeLinear_204 + Conv_206 + Add_208",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "658",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "620",
+    "Location": "Device",
+    "Dimensions": [1,32,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "672",
+    "Location": "Device",
+    "Dimensions": [1,32,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 32,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 6144},
+  "Bias": {"Type": "Float", "Count": 32},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x2df835e0f3719216"
+},{
+  "Name": "features.6.conv.0.0.weight + QuantizeLinear_222 + Conv_224 + PWN(Clip_228)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "672",
+    "Location": "Device",
+    "Dimensions": [1,32,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "694",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 192,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 6144},
+  "Bias": {"Type": "Float", "Count": 192},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x850b80ab7d925385"
+},{
+  "Name": "features.6.conv.1.0.weight + QuantizeLinear_236 + Conv_238 + PWN(Clip_242)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "694",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "710",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 192,
+  "Groups": 192,
+  "Weights": {"Type": "Int8", "Count": 1728},
+  "Bias": {"Type": "Float", "Count": 192},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.6.conv.2.weight + QuantizeLinear_250 + Conv_252 + Add_254",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "710",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "672",
+    "Location": "Device",
+    "Dimensions": [1,32,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "724",
+    "Location": "Device",
+    "Dimensions": [1,32,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 32,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 6144},
+  "Bias": {"Type": "Float", "Count": 32},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x2df835e0f3719216"
+},{
+  "Name": "features.7.conv.0.0.weight + QuantizeLinear_262 + Conv_264 + PWN(Clip_268)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "724",
+    "Location": "Device",
+    "Dimensions": [1,32,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "740",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 192,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 6144},
+  "Bias": {"Type": "Float", "Count": 192},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x850b80ab7d925385"
+},{
+  "Name": "features.7.conv.1.0.weight + QuantizeLinear_276 + Conv_278 + PWN(Clip_282)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "740",
+    "Location": "Device",
+    "Dimensions": [1,192,28,28],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "756",
+    "Location": "Device",
+    "Dimensions": [1,192,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 192,
+  "Groups": 192,
+  "Weights": {"Type": "Int8", "Count": 1728},
+  "Bias": {"Type": "Float", "Count": 192},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.7.conv.2.weight + QuantizeLinear_290 + Conv_292",
+  "LayerType": "FusedConvActConvolution",
+  "Inputs": [
+  {
+    "Name": "756",
+    "Location": "Device",
+    "Dimensions": [1,192,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "769",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 12288},
+  "Bias": {"Type": "Float", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "ConvolutionTacticIndex": 102,
+  "TacticValue": "0x000000000066ffff"
+},{
+  "Name": "features.8.conv.0.0.weight + QuantizeLinear_307 + Conv_309 + PWN(Clip_313)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "769",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "791",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 384,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 24576},
+  "Bias": {"Type": "Float", "Count": 384},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_t1r1s1",
+  "TacticValue": "0x99d5ca59733a76be"
+},{
+  "Name": "features.8.conv.1.0.weight + QuantizeLinear_321 + Conv_323 + PWN(Clip_327)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "791",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "807",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 384,
+  "Groups": 384,
+  "Weights": {"Type": "Int8", "Count": 3456},
+  "Bias": {"Type": "Float", "Count": 384},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.8.conv.2.weight + QuantizeLinear_335 + Conv_337 + Add_339",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "807",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "769",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "821",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 24576},
+  "Bias": {"Type": "Float", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x235fad4a7171cb36"
+},{
+  "Name": "features.9.conv.0.0.weight + QuantizeLinear_353 + Conv_355 + PWN(Clip_359)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "821",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "843",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 384,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 24576},
+  "Bias": {"Type": "Float", "Count": 384},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_t1r1s1",
+  "TacticValue": "0x99d5ca59733a76be"
+},{
+  "Name": "features.9.conv.1.0.weight + QuantizeLinear_367 + Conv_369 + PWN(Clip_373)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "843",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "859",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 384,
+  "Groups": 384,
+  "Weights": {"Type": "Int8", "Count": 3456},
+  "Bias": {"Type": "Float", "Count": 384},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.9.conv.2.weight + QuantizeLinear_381 + Conv_383 + Add_385",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "859",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "821",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "873",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 24576},
+  "Bias": {"Type": "Float", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x235fad4a7171cb36"
+},{
+  "Name": "features.10.conv.0.0.weight + QuantizeLinear_399 + Conv_401 + PWN(Clip_405)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "873",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "895",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 384,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 24576},
+  "Bias": {"Type": "Float", "Count": 384},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_t1r1s1",
+  "TacticValue": "0x99d5ca59733a76be"
+},{
+  "Name": "features.10.conv.1.0.weight + QuantizeLinear_413 + Conv_415 + PWN(Clip_419)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "895",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "911",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 384,
+  "Groups": 384,
+  "Weights": {"Type": "Int8", "Count": 3456},
+  "Bias": {"Type": "Float", "Count": 384},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.10.conv.2.weight + QuantizeLinear_427 + Conv_429 + Add_431",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "911",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "873",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "925",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 64,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 24576},
+  "Bias": {"Type": "Float", "Count": 64},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x235fad4a7171cb36"
+},{
+  "Name": "features.11.conv.0.0.weight + QuantizeLinear_439 + Conv_441 + PWN(Clip_445)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "925",
+    "Location": "Device",
+    "Dimensions": [1,64,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "941",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 384,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 24576},
+  "Bias": {"Type": "Float", "Count": 384},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_t1r1s1",
+  "TacticValue": "0x99d5ca59733a76be"
+},{
+  "Name": "features.11.conv.1.0.weight + QuantizeLinear_453 + Conv_455 + PWN(Clip_459)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "941",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "957",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 384,
+  "Groups": 384,
+  "Weights": {"Type": "Int8", "Count": 3456},
+  "Bias": {"Type": "Float", "Count": 384},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.11.conv.2.weight + QuantizeLinear_467 + Conv_469",
+  "LayerType": "FusedConvActConvolution",
+  "Inputs": [
+  {
+    "Name": "957",
+    "Location": "Device",
+    "Dimensions": [1,384,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "970",
+    "Location": "Device",
+    "Dimensions": [1,96,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 96,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 36864},
+  "Bias": {"Type": "Float", "Count": 96},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "ConvolutionTacticIndex": 138,
+  "TacticValue": "0x00000000008affff"
+},{
+  "Name": "features.12.conv.0.0.weight + QuantizeLinear_484 + Conv_486 + PWN(Clip_490)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "970",
+    "Location": "Device",
+    "Dimensions": [1,96,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "992",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 576,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 55296},
+  "Bias": {"Type": "Float", "Count": 576},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x850b80ab7d925385"
+},{
+  "Name": "features.12.conv.1.0.weight + QuantizeLinear_498 + Conv_500 + PWN(Clip_504)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "992",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1008",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 576,
+  "Groups": 576,
+  "Weights": {"Type": "Int8", "Count": 5184},
+  "Bias": {"Type": "Float", "Count": 576},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0x0000000000000001"
+},{
+  "Name": "features.12.conv.2.weight + QuantizeLinear_512 + Conv_514 + Add_516",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1008",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "970",
+    "Location": "Device",
+    "Dimensions": [1,96,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1022",
+    "Location": "Device",
+    "Dimensions": [1,96,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 96,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 55296},
+  "Bias": {"Type": "Float", "Count": 96},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x2df835e0f3719216"
+},{
+  "Name": "features.13.conv.0.0.weight + QuantizeLinear_530 + Conv_532 + PWN(Clip_536)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1022",
+    "Location": "Device",
+    "Dimensions": [1,96,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1044",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 576,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 55296},
+  "Bias": {"Type": "Float", "Count": 576},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x850b80ab7d925385"
+},{
+  "Name": "features.13.conv.1.0.weight + QuantizeLinear_544 + Conv_546 + PWN(Clip_550)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "1044",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1060",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 576,
+  "Groups": 576,
+  "Weights": {"Type": "Int8", "Count": 5184},
+  "Bias": {"Type": "Float", "Count": 576},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0x0000000000000001"
+},{
+  "Name": "features.13.conv.2.weight + QuantizeLinear_558 + Conv_560 + Add_562",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1060",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "1022",
+    "Location": "Device",
+    "Dimensions": [1,96,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1074",
+    "Location": "Device",
+    "Dimensions": [1,96,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 96,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 55296},
+  "Bias": {"Type": "Float", "Count": 96},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x2df835e0f3719216"
+},{
+  "Name": "features.14.conv.0.0.weight + QuantizeLinear_570 + Conv_572 + PWN(Clip_576)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1074",
+    "Location": "Device",
+    "Dimensions": [1,96,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1090",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 576,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 55296},
+  "Bias": {"Type": "Float", "Count": 576},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize64x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x850b80ab7d925385"
+},{
+  "Name": "features.14.conv.1.0.weight + QuantizeLinear_584 + Conv_586 + PWN(Clip_590)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "1090",
+    "Location": "Device",
+    "Dimensions": [1,576,14,14],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1106",
+    "Location": "Device",
+    "Dimensions": [1,576,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [2,2],
+  "Dilation": [1,1],
+  "OutMaps": 576,
+  "Groups": 576,
+  "Weights": {"Type": "Int8", "Count": 5184},
+  "Bias": {"Type": "Float", "Count": 576},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.14.conv.2.weight + QuantizeLinear_598 + Conv_600",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1106",
+    "Location": "Device",
+    "Dimensions": [1,576,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1119",
+    "Location": "Device",
+    "Dimensions": [1,160,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 160,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 92160},
+  "Bias": {"Type": "Float", "Count": 160},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_t1r1s1",
+  "TacticValue": "0xc4dfbf32da2071d6"
+},{
+  "Name": "features.15.conv.0.0.weight + QuantizeLinear_615 + Conv_617 + PWN(Clip_621)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1119",
+    "Location": "Device",
+    "Dimensions": [1,160,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1141",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 960,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 153600},
+  "Bias": {"Type": "Float", "Count": 960},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x2df835e0f3719216"
+},{
+  "Name": "features.15.conv.1.0.weight + QuantizeLinear_629 + Conv_631 + PWN(Clip_635)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "1141",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1157",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 960,
+  "Groups": 960,
+  "Weights": {"Type": "Int8", "Count": 8640},
+  "Bias": {"Type": "Float", "Count": 960},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.15.conv.2.weight + QuantizeLinear_643 + Conv_645 + Add_647",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1157",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "1119",
+    "Location": "Device",
+    "Dimensions": [1,160,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1171",
+    "Location": "Device",
+    "Dimensions": [1,160,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 160,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 153600},
+  "Bias": {"Type": "Float", "Count": 160},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x8bac1801ff920aa5"
+},{
+  "Name": "features.16.conv.0.0.weight + QuantizeLinear_661 + Conv_663 + PWN(Clip_667)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1171",
+    "Location": "Device",
+    "Dimensions": [1,160,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1193",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 960,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 153600},
+  "Bias": {"Type": "Float", "Count": 960},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x2df835e0f3719216"
+},{
+  "Name": "features.16.conv.1.0.weight + QuantizeLinear_675 + Conv_677 + PWN(Clip_681)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "1193",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1209",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 960,
+  "Groups": 960,
+  "Weights": {"Type": "Int8", "Count": 8640},
+  "Bias": {"Type": "Float", "Count": 960},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.16.conv.2.weight + QuantizeLinear_689 + Conv_691 + Add_693",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1209",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  },
+  {
+    "Name": "1171",
+    "Location": "Device",
+    "Dimensions": [1,160,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1223",
+    "Location": "Device",
+    "Dimensions": [1,160,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 160,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 153600},
+  "Bias": {"Type": "Float", "Count": 160},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x8bac1801ff920aa5"
+},{
+  "Name": "features.17.conv.0.0.weight + QuantizeLinear_701 + Conv_703 + PWN(Clip_707)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1223",
+    "Location": "Device",
+    "Dimensions": [1,160,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1239",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 960,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 153600},
+  "Bias": {"Type": "Float", "Count": 960},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x64x64_stage1_warpsize2x2x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x2df835e0f3719216"
+},{
+  "Name": "features.17.conv.1.0.weight + QuantizeLinear_715 + Conv_717 + PWN(Clip_721)",
+  "LayerType": "CudaDepthwiseConvolution",
+  "Inputs": [
+  {
+    "Name": "1239",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1255",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [3,3],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [1,1],
+  "PostPadding": [1,1],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 960,
+  "Groups": 960,
+  "Weights": {"Type": "Int8", "Count": 8640},
+  "Bias": {"Type": "Float", "Count": 960},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,127.000000]",
+  "HasBias": 1,
+  "TacticValue": "0xfffffffffffffffc"
+},{
+  "Name": "features.17.conv.2.weight + QuantizeLinear_729 + Conv_731",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1255",
+    "Location": "Device",
+    "Dimensions": [1,960,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1268",
+    "Location": "Device",
+    "Dimensions": [1,320,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 320,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 307200},
+  "Bias": {"Type": "Float", "Count": 320},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm75_xmma_fprop_implicit_gemm_interleaved_i8i8_i8i32_f32_nchw_vect_c_32kcrs_vect_c_32_nchw_vect_c_32_tilesize32x32x64_stage1_warpsize2x1x1_g1_tensor8x8x16_simple_t1r1s1",
+  "TacticValue": "0x8bac1801ff920aa5"
+},{
+  "Name": "features.18.0.weight + QuantizeLinear_740 + Conv_742 + PWN(Clip_746)",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1268",
+    "Location": "Device",
+    "Dimensions": [1,320,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1281",
+    "Location": "Device",
+    "Dimensions": [1,1280,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major FP16 format"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1280,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 409600},
+  "Bias": {"Type": "Float", "Count": 1280},
+  "HasSparseWeights": 0,
+  "Activation": "CLIPPED_RELU",
+  "ParameterSubType": "[0.000000,6.000000]",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "turing_fp16_i8816cudnn_int8_128x128_ldg16_relu_small_nt_v1",
+  "TacticValue": "0x4e4e6b8f37d71713"
+},{
+  "Name": "Reformatting CopyNode for Input Tensor 0 to GlobalAveragePool_747",
+  "LayerType": "Reformat",
+  "Inputs": [
+  {
+    "Name": "1281",
+    "Location": "Device",
+    "Dimensions": [1,1280,7,7],
+    "Format/Datatype": "Thirty-two wide channel vectorized row major FP16 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to GlobalAveragePool_747",
+    "Location": "Device",
+    "Dimensions": [1,1280,7,7],
+    "Format/Datatype": "Two wide channel vectorized row major FP16 format"
+  }],
+  "ParameterType": "Reformat",
+  "Origin": "REFORMAT",
+  "TacticValue": "0x00000000000003e8"
+},{
+  "Name": "GlobalAveragePool_747",
+  "LayerType": "TiledPooling",
+  "Inputs": [
+  {
+    "Name": "Reformatted Input Tensor 0 to GlobalAveragePool_747",
+    "Location": "Device",
+    "Dimensions": [1,1280,7,7],
+    "Format/Datatype": "Two wide channel vectorized row major FP16 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1282",
+    "Location": "Device",
+    "Dimensions": [1,1280,1,1],
+    "Format/Datatype": "Two wide channel vectorized row major FP16 format"
+  }],
+  "ParameterType": "Pooling",
+  "PoolingType": "AVERAGE",
+  "WindowSize": [7,7],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "BlendFactor": 0,
+  "AverageCountExcludesPadding": 1,
+  "TacticValue": "0x00000000007f0101"
+},{
+  "Name": "QuantizeLinear_757",
+  "LayerType": "Reformat",
+  "Inputs": [
+  {
+    "Name": "1282",
+    "Location": "Device",
+    "Dimensions": [1,1280,1,1],
+    "Format/Datatype": "Two wide channel vectorized row major FP16 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "1292",
+    "Location": "Device",
+    "Dimensions": [1,1280,1,1],
+    "Format/Datatype": "Four wide channel vectorized row major Int8 format"
+  }],
+  "ParameterType": "Reformat",
+  "Origin": "QDQ",
+  "TacticValue": "0x00000000000003e8"
+},{
+  "Name": "classifier.1.weight + QuantizeLinear_762 + Gemm_764 + classifier.1.bias + (Unnamed Layer* 802) [Shuffle] + unsqueeze_node_after_classifier.1.bias + (Unnamed Layer* 802) [Shuffle]_(Unnamed Layer* 802) [Shuffle]_output + (Unnamed Layer* 803) [ElementWise]",
+  "LayerType": "CaskConvolution",
+  "Inputs": [
+  {
+    "Name": "1292",
+    "Location": "Device",
+    "Dimensions": [1,1280,1,1],
+    "Format/Datatype": "Four wide channel vectorized row major Int8 format"
+  }],
+  "Outputs": [
+  {
+    "Name": "(Unnamed Layer* 803) [ElementWise]_out_tensor",
+    "Location": "Device",
+    "Dimensions": [1,1000,1,1],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "ParameterType": "Convolution",
+  "Kernel": [1,1],
+  "PaddingMode": "kEXPLICIT_ROUND_DOWN",
+  "PrePadding": [0,0],
+  "PostPadding": [0,0],
+  "Stride": [1,1],
+  "Dilation": [1,1],
+  "OutMaps": 1000,
+  "Groups": 1,
+  "Weights": {"Type": "Int8", "Count": 1280000},
+  "Bias": {"Type": "Float", "Count": 1000},
+  "HasSparseWeights": 0,
+  "Activation": "NONE",
+  "HasBias": 1,
+  "HasReLU": 0,
+  "TacticName": "sm70_xmma_fprop_conv1x1_i8f32_f32_f32_nchw_vect_c_4kcrs_vect_c_4_nchw_simt_small_batch_bias_relu",
+  "TacticValue": "0xc073b0053ce90eac"
+},{
+  "Name": "copied_squeeze_after_(Unnamed Layer* 803) [ElementWise]",
+  "LayerType": "NoOp",
+  "Inputs": [
+  {
+    "Name": "(Unnamed Layer* 803) [ElementWise]_out_tensor",
+    "Location": "Device",
+    "Dimensions": [1,1000,1,1],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "Outputs": [
+  {
+    "Name": "1304",
+    "Location": "Device",
+    "Dimensions": [1,1000],
+    "Format/Datatype": "Row major linear FP32"
+  }],
+  "TacticValue": "0x0000000000000000"
+}],
+"Bindings": ["inputs.1"
+,"1304"
+]}

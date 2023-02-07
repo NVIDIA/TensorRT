@@ -1,0 +1,76 @@
+[
+  { "count" : 6610 }
+, { "name" : "QuantizeLinear_2", "timeMs" : 31.3879, "averageMs" : 0.00474854, "medianMs" : 0.004544, "percentage" : 1.00949 }
+, { "name" : "features.0.0.weight + QuantizeLinear_8 + Conv_12 + PWN(Clip_16)", "timeMs" : 57.6562, "averageMs" : 0.00872257, "medianMs" : 0.008608, "percentage" : 1.85433 }
+, { "name" : "features.1.conv.0.0.weight + QuantizeLinear_25 + Conv_29 + PWN(Clip_33)", "timeMs" : 39.2852, "averageMs" : 0.0059433, "medianMs" : 0.006016, "percentage" : 1.26349 }
+, { "name" : "features.1.conv.1.weight + QuantizeLinear_42 + Conv_46", "timeMs" : 45.9521, "averageMs" : 0.0069519, "medianMs" : 0.00688, "percentage" : 1.47791 }
+, { "name" : "features.2.conv.0.0.weight + QuantizeLinear_56 + Conv_60 + PWN(Clip_64)", "timeMs" : 55.0157, "averageMs" : 0.00832311, "medianMs" : 0.008192, "percentage" : 1.76941 }
+, { "name" : "features.2.conv.1.0.weight + QuantizeLinear_73 + Conv_77 + PWN(Clip_81)", "timeMs" : 38.4135, "averageMs" : 0.00581142, "medianMs" : 0.005888, "percentage" : 1.23545 }
+, { "name" : "features.2.conv.2.weight + QuantizeLinear_90 + Conv_94", "timeMs" : 51.867, "averageMs" : 0.00784674, "medianMs" : 0.007904, "percentage" : 1.66814 }
+, { "name" : "QuantizeLinear_98", "timeMs" : 35.9114, "averageMs" : 0.00543289, "medianMs" : 0.005536, "percentage" : 1.15498 }
+, { "name" : "features.3.conv.0.0.weight + QuantizeLinear_104 + Conv_108 + PWN(Clip_112)", "timeMs" : 45.5556, "averageMs" : 0.00689193, "medianMs" : 0.006784, "percentage" : 1.46516 }
+, { "name" : "features.3.conv.1.0.weight + QuantizeLinear_121 + Conv_125 + PWN(Clip_129)", "timeMs" : 36.2949, "averageMs" : 0.0054909, "medianMs" : 0.0056, "percentage" : 1.16731 }
+, { "name" : "features.3.conv.2.weight + QuantizeLinear_138 + Conv_142 + Add_144", "timeMs" : 56.8779, "averageMs" : 0.00860483, "medianMs" : 0.00848, "percentage" : 1.8293 }
+, { "name" : "QuantizeLinear_147", "timeMs" : 34.7805, "averageMs" : 0.0052618, "medianMs" : 0.005312, "percentage" : 1.11861 }
+, { "name" : "features.4.conv.0.0.weight + QuantizeLinear_153 + Conv_157 + PWN(Clip_161)", "timeMs" : 38.7649, "averageMs" : 0.00586459, "medianMs" : 0.005952, "percentage" : 1.24675 }
+, { "name" : "features.4.conv.1.0.weight + QuantizeLinear_170 + Conv_174 + PWN(Clip_178)", "timeMs" : 31.1478, "averageMs" : 0.00471222, "medianMs" : 0.004608, "percentage" : 1.00177 }
+, { "name" : "features.4.conv.2.weight + QuantizeLinear_187 + Conv_191", "timeMs" : 52.611, "averageMs" : 0.0079593, "medianMs" : 0.008032, "percentage" : 1.69207 }
+, { "name" : "QuantizeLinear_195", "timeMs" : 32.7078, "averageMs" : 0.00494824, "medianMs" : 0.004896, "percentage" : 1.05195 }
+, { "name" : "features.5.conv.0.0.weight + QuantizeLinear_201 + Conv_205 + PWN(Clip_209)", "timeMs" : 32.9945, "averageMs" : 0.0049916, "medianMs" : 0.004928, "percentage" : 1.06117 }
+, { "name" : "features.5.conv.1.0.weight + QuantizeLinear_218 + Conv_222 + PWN(Clip_226)", "timeMs" : 30.885, "averageMs" : 0.00467247, "medianMs" : 0.004576, "percentage" : 0.993322 }
+, { "name" : "features.5.conv.2.weight + QuantizeLinear_235 + Conv_239 + Add_241", "timeMs" : 56.7548, "averageMs" : 0.0085862, "medianMs" : 0.00848, "percentage" : 1.82534 }
+, { "name" : "QuantizeLinear_244", "timeMs" : 28.7851, "averageMs" : 0.00435478, "medianMs" : 0.004256, "percentage" : 0.925782 }
+, { "name" : "features.6.conv.0.0.weight + QuantizeLinear_250 + Conv_254 + PWN(Clip_258)", "timeMs" : 34.2202, "averageMs" : 0.00517704, "medianMs" : 0.005152, "percentage" : 1.10059 }
+, { "name" : "features.6.conv.1.0.weight + QuantizeLinear_267 + Conv_271 + PWN(Clip_275)", "timeMs" : 30.5639, "averageMs" : 0.00462388, "medianMs" : 0.004544, "percentage" : 0.982992 }
+, { "name" : "features.6.conv.2.weight + QuantizeLinear_284 + Conv_288 + Add_290", "timeMs" : 56.4474, "averageMs" : 0.0085397, "medianMs" : 0.008416, "percentage" : 1.81546 }
+, { "name" : "QuantizeLinear_293", "timeMs" : 29.9822, "averageMs" : 0.00453589, "medianMs" : 0.004448, "percentage" : 0.964285 }
+, { "name" : "features.7.conv.0.0.weight + QuantizeLinear_299 + Conv_303 + PWN(Clip_307)", "timeMs" : 35.7265, "averageMs" : 0.00540492, "medianMs" : 0.00544, "percentage" : 1.14903 }
+, { "name" : "features.7.conv.1.0.weight + QuantizeLinear_316 + Conv_320 + PWN(Clip_324)", "timeMs" : 29.7729, "averageMs" : 0.00450422, "medianMs" : 0.004416, "percentage" : 0.957553 }
+, { "name" : "features.7.conv.2.weight + QuantizeLinear_333 + Conv_337", "timeMs" : 52.2394, "averageMs" : 0.00790309, "medianMs" : 0.007936, "percentage" : 1.68012 }
+, { "name" : "QuantizeLinear_341", "timeMs" : 26.6918, "averageMs" : 0.0040381, "medianMs" : 0.004096, "percentage" : 0.85846 }
+, { "name" : "features.8.conv.0.0.weight + QuantizeLinear_347 + Conv_351 + PWN(Clip_355)", "timeMs" : 33.486, "averageMs" : 0.00506595, "medianMs" : 0.005024, "percentage" : 1.07697 }
+, { "name" : "features.8.conv.1.0.weight + QuantizeLinear_364 + Conv_368 + PWN(Clip_372)", "timeMs" : 28.9361, "averageMs" : 0.00437762, "medianMs" : 0.00432, "percentage" : 0.93064 }
+, { "name" : "features.8.conv.2.weight + QuantizeLinear_381 + Conv_385 + Add_387", "timeMs" : 69.6431, "averageMs" : 0.010536, "medianMs" : 0.010496, "percentage" : 2.23985 }
+, { "name" : "QuantizeLinear_390", "timeMs" : 27.1251, "averageMs" : 0.00410365, "medianMs" : 0.004096, "percentage" : 0.872396 }
+, { "name" : "features.9.conv.0.0.weight + QuantizeLinear_396 + Conv_400 + PWN(Clip_404)", "timeMs" : 35.1578, "averageMs" : 0.00531888, "medianMs" : 0.005376, "percentage" : 1.13074 }
+, { "name" : "features.9.conv.1.0.weight + QuantizeLinear_413 + Conv_417 + PWN(Clip_421)", "timeMs" : 29.8034, "averageMs" : 0.00450884, "medianMs" : 0.004448, "percentage" : 0.958535 }
+, { "name" : "features.9.conv.2.weight + QuantizeLinear_430 + Conv_434 + Add_436", "timeMs" : 70.1648, "averageMs" : 0.010615, "medianMs" : 0.01056, "percentage" : 2.25663 }
+, { "name" : "QuantizeLinear_439", "timeMs" : 29.5676, "averageMs" : 0.00447317, "medianMs" : 0.004416, "percentage" : 0.950951 }
+, { "name" : "features.10.conv.0.0.weight + QuantizeLinear_445 + Conv_449 + PWN(Clip_453)", "timeMs" : 32.9838, "averageMs" : 0.00498999, "medianMs" : 0.004928, "percentage" : 1.06082 }
+, { "name" : "features.10.conv.1.0.weight + QuantizeLinear_462 + Conv_466 + PWN(Clip_470)", "timeMs" : 30.1527, "averageMs" : 0.00456168, "medianMs" : 0.00448, "percentage" : 0.969769 }
+, { "name" : "features.10.conv.2.weight + QuantizeLinear_479 + Conv_483 + Add_485", "timeMs" : 68.9993, "averageMs" : 0.0104386, "medianMs" : 0.010368, "percentage" : 2.21915 }
+, { "name" : "QuantizeLinear_488", "timeMs" : 30.3462, "averageMs" : 0.00459095, "medianMs" : 0.004576, "percentage" : 0.97599 }
+, { "name" : "features.11.conv.0.0.weight + QuantizeLinear_494 + Conv_498 + PWN(Clip_502)", "timeMs" : 33.4613, "averageMs" : 0.00506222, "medianMs" : 0.005024, "percentage" : 1.07618 }
+, { "name" : "features.11.conv.1.0.weight + QuantizeLinear_511 + Conv_515 + PWN(Clip_519)", "timeMs" : 31.1561, "averageMs" : 0.00471347, "medianMs" : 0.004608, "percentage" : 1.00204 }
+, { "name" : "features.11.conv.2.weight + QuantizeLinear_528 + Conv_532", "timeMs" : 69.0954, "averageMs" : 0.0104532, "medianMs" : 0.0104, "percentage" : 2.22224 }
+, { "name" : "QuantizeLinear_536", "timeMs" : 32.2846, "averageMs" : 0.00488421, "medianMs" : 0.004864, "percentage" : 1.03833 }
+, { "name" : "features.12.conv.0.0.weight + QuantizeLinear_542 + Conv_546 + PWN(Clip_550)", "timeMs" : 38.2453, "averageMs" : 0.00578597, "medianMs" : 0.005888, "percentage" : 1.23004 }
+, { "name" : "features.12.conv.1.0.weight + QuantizeLinear_559 + Conv_563 + PWN(Clip_567)", "timeMs" : 31.7844, "averageMs" : 0.00480853, "medianMs" : 0.004736, "percentage" : 1.02225 }
+, { "name" : "features.12.conv.2.weight + QuantizeLinear_576 + Conv_580 + Add_582", "timeMs" : 82.5255, "averageMs" : 0.0124849, "medianMs" : 0.012448, "percentage" : 2.65418 }
+, { "name" : "QuantizeLinear_585", "timeMs" : 32.3854, "averageMs" : 0.00489945, "medianMs" : 0.004864, "percentage" : 1.04157 }
+, { "name" : "features.13.conv.0.0.weight + QuantizeLinear_591 + Conv_595 + PWN(Clip_599)", "timeMs" : 34.9426, "averageMs" : 0.00528633, "medianMs" : 0.00528, "percentage" : 1.12382 }
+, { "name" : "features.13.conv.1.0.weight + QuantizeLinear_608 + Conv_612 + PWN(Clip_616)", "timeMs" : 29.8811, "averageMs" : 0.00452059, "medianMs" : 0.00448, "percentage" : 0.961032 }
+, { "name" : "features.13.conv.2.weight + QuantizeLinear_625 + Conv_629 + Add_631", "timeMs" : 83.365, "averageMs" : 0.012612, "medianMs" : 0.012544, "percentage" : 2.68118 }
+, { "name" : "QuantizeLinear_634", "timeMs" : 32.2204, "averageMs" : 0.00487449, "medianMs" : 0.004864, "percentage" : 1.03627 }
+, { "name" : "features.14.conv.0.0.weight + QuantizeLinear_640 + Conv_644 + PWN(Clip_648)", "timeMs" : 37.8459, "averageMs" : 0.00572555, "medianMs" : 0.005824, "percentage" : 1.2172 }
+, { "name" : "features.14.conv.1.0.weight + QuantizeLinear_657 + Conv_661 + PWN(Clip_665)", "timeMs" : 33.5324, "averageMs" : 0.00507298, "medianMs" : 0.005024, "percentage" : 1.07847 }
+, { "name" : "features.14.conv.2.weight + QuantizeLinear_674 + Conv_678", "timeMs" : 81.5536, "averageMs" : 0.0123379, "medianMs" : 0.012288, "percentage" : 2.62292 }
+, { "name" : "QuantizeLinear_682", "timeMs" : 29.7522, "averageMs" : 0.0045011, "medianMs" : 0.004448, "percentage" : 0.956889 }
+, { "name" : "features.15.conv.0.0.weight + QuantizeLinear_688 + Conv_692 + PWN(Clip_696)", "timeMs" : 39.6036, "averageMs" : 0.00599147, "medianMs" : 0.00608, "percentage" : 1.27373 }
+, { "name" : "features.15.conv.1.0.weight + QuantizeLinear_705 + Conv_709 + PWN(Clip_713)", "timeMs" : 37.7723, "averageMs" : 0.00571442, "medianMs" : 0.005792, "percentage" : 1.21483 }
+, { "name" : "features.15.conv.2.weight + QuantizeLinear_722 + Conv_726 + Add_728", "timeMs" : 108.727, "averageMs" : 0.0164488, "medianMs" : 0.016384, "percentage" : 3.49685 }
+, { "name" : "QuantizeLinear_731", "timeMs" : 29.7281, "averageMs" : 0.00449744, "medianMs" : 0.004448, "percentage" : 0.956111 }
+, { "name" : "features.16.conv.0.0.weight + QuantizeLinear_737 + Conv_741 + PWN(Clip_745)", "timeMs" : 40.1566, "averageMs" : 0.00607512, "medianMs" : 0.006144, "percentage" : 1.29151 }
+, { "name" : "features.16.conv.1.0.weight + QuantizeLinear_754 + Conv_758 + PWN(Clip_762)", "timeMs" : 36.3423, "averageMs" : 0.00549808, "medianMs" : 0.0056, "percentage" : 1.16884 }
+, { "name" : "features.16.conv.2.weight + QuantizeLinear_771 + Conv_775 + Add_777", "timeMs" : 106.916, "averageMs" : 0.0161748, "medianMs" : 0.016256, "percentage" : 3.43861 }
+, { "name" : "QuantizeLinear_780", "timeMs" : 29.1695, "averageMs" : 0.00441294, "medianMs" : 0.004352, "percentage" : 0.938147 }
+, { "name" : "features.17.conv.0.0.weight + QuantizeLinear_786 + Conv_790 + PWN(Clip_794)", "timeMs" : 39.7552, "averageMs" : 0.0060144, "medianMs" : 0.00608, "percentage" : 1.2786 }
+, { "name" : "features.17.conv.1.0.weight + QuantizeLinear_803 + Conv_807 + PWN(Clip_811)", "timeMs" : 36.6032, "averageMs" : 0.00553755, "medianMs" : 0.005632, "percentage" : 1.17723 }
+, { "name" : "features.17.conv.2.weight + QuantizeLinear_820 + Conv_824", "timeMs" : 66.1113, "averageMs" : 0.0100017, "medianMs" : 0.010048, "percentage" : 2.12626 }
+, { "name" : "features.18.0.weight + QuantizeLinear_834 + Conv_838 + PWN(Clip_842)", "timeMs" : 68.4007, "averageMs" : 0.0103481, "medianMs" : 0.01024, "percentage" : 2.1999 }
+, { "name" : "Reformatting CopyNode for Input Tensor 0 to GlobalAveragePool_843", "timeMs" : 26.8927, "averageMs" : 0.00406848, "medianMs" : 0.004096, "percentage" : 0.864919 }
+, { "name" : "GlobalAveragePool_843", "timeMs" : 29.9127, "averageMs" : 0.00452537, "medianMs" : 0.004448, "percentage" : 0.962048 }
+, { "name" : "QuantizeLinear_854", "timeMs" : 25.864, "averageMs" : 0.00391285, "medianMs" : 0.003968, "percentage" : 0.831834 }
+, { "name" : "classifier.1.weight + QuantizeLinear_860 + Gemm_864 + classifier.1.bias + (Unnamed Layer* 849) [Shuffle] + unsqueeze_node_after_classifier.1.bias + (Unnamed Layer* 849) [Shuffle]_(Unnamed Layer* 849) [Shuffle]_output + (Unnamed Layer* 850) [ElementWise]", "timeMs" : 57.625, "averageMs" : 0.00871785, "medianMs" : 0.008608, "percentage" : 1.85333 }
+, { "name" : "copied_squeeze_after_(Unnamed Layer* 850) [ElementWise]", "timeMs" : 0, "averageMs" : 0, "medianMs" : 0, "percentage" : 0 }
+]

@@ -1,0 +1,25 @@
+---
+name: FlattenConcat_TRT
+interface: "IPluginV2Ext"
+versions:
+  "1":
+    attributes:
+      - axis
+      - ignoreBatch
+    attribute_types:
+      axis: int32
+      ignoreBatch: int32
+    attribute_length:
+      axis: 1
+      ignoreBatch: 1
+    attribute_options:
+      axis:
+        min: "=1"
+        max: "=3"
+      ignoreBatch:
+       - 0
+       - 1
+    attributes_required:
+      - axis
+      - ignoreBatch
+...

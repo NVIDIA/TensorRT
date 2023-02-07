@@ -1,0 +1,18 @@
+---
+name: Reorg_TRT
+interface: "IPluginV2Ext"
+versions:
+  "1":
+    attributes:
+      - stride
+    attribute_types:
+      stride: int32
+    attribute_length:
+      stride: 1
+    attribute_options:
+      stride:
+        min: "0"
+        max: "=pinf"
+    attributes_required:
+      - stride
+...

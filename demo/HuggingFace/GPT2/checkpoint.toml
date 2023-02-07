@@ -1,0 +1,52 @@
+[GPT2.all.gpt2-large.all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a Deep Learning compiler used for deep learning. TensorFlow is a high-performance, open-source, cross-platform, high-performance, machine
+'''
+
+[GPT2.all.default.all.generate]
+
+input = '''
+TensorRT is a Deep Learning compiler used for deep learning.
+'''
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe main goal of the project is to create a tool that can be used to train neural networks.\n\nThe main goal of the project is to create a tool that can
+'''
+
+[GPT2.all.default.fp16.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe main goal of the project is to provide a way to build a deep learning framework that can be used to build a deep learning framework for a wide range of applications.\n'''
+
+[GPT2.all.gpt2-large.all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the following data:\n\nThe corpus consists of the following text files:\n\nThe corpus is split into two parts:\n\n
+'''
+
+[GPT2.all.default.all.generate_b]
+
+input = '''
+GPT-2 is a transformer based model pretrained on a large corpus.
+'''
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is based on the following assumptions:\n\nThe model is based on the following assumptions:\n\nThe model is based on the following assumptions:\n
+'''
+
+[GPT2.all.gpt2-large.all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours
+'''
+
+[GPT2.all.default.all.generate_c]
+
+input = '''
+If I fall asleep then I am going to wake up in 8 hours.
+'''
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am not going to sleep for 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours
+'''

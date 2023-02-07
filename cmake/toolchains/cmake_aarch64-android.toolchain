@@ -1,0 +1,44 @@
+#
+# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+
+set(CMAKE_C_COMPILER $ENV{AARCH64_ANDROID_CC})
+set(CMAKE_CXX_COMPILER $ENV{AARCH64_ANDROID_CC})
+
+set(CMAKE_C_FLAGS "$ENV{AARCH64_ANDROID_CFLAGS} -pie -fPIE" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "" FORCE)
+
+set(CMAKE_C_COMPILER_TARGET aarch64-none-linux-android)
+set(CMAKE_CXX_COMPILER_TARGET aarch64-none-linux-android)
+
+set(CMAKE_C_COMPILER_FORCED TRUE)
+set(CMAKE_CXX_COMPILER_FORCED TRUE)
+
+set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_ROOT})
+set(CUDA_INCLUDE_DIRS ${CUDA_ROOT}/include)
+
+set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE STRING "" FORCE)
+set(CMAKE_CUDA_FLAGS "-I${CUDA_INCLUDE_DIRS} -Xcompiler=\"-fPIC ${CMAKE_CXX_FLAGS}\"" CACHE STRING "" FORCE)
+set(CMAKE_CUDA_COMPILER_FORCED TRUE)
+
+set(CUDA_LIBS -L${CUDA_ROOT}/lib64)
+
+set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcudart -lnvToolsExt -lculibos -lcudadevrt -llog)
+
+set(TRT_PLATFORM_ID "aarch64-android")

@@ -1,0 +1,10 @@
+# This file should contain the minimum possible packages to be able to import tensorrt and use it correctly.
+# This must succeed during builds, so be VERY CAREFUL when you add packages here.
+numpy==1.18.1; python_version < "3.8" and platform_system == "Windows"
+numpy==1.19.4; python_version < "3.8" and platform_system != "Windows"
+numpy==1.23.0; python_version >= "3.8" and python_version < "3.10"
+numpy==1.23.1; python_version >= "3.10"
+Pillow; python_version<"3.6"
+##PYTHON_BUILDDIR##/3.##PYTHON3_MINOR##/dist/tensorrt-##TENSORRT_VERSION##-cp3##PYTHON3_MINOR##-none-linux_##TARGET##.whl ; python_version=="3.##PYTHON3_MINOR##"
+##TENSORRT_ROOT##/python_builds/uff/uff-##UFF_VERSION##-py2.py3-none-any.whl
+##TENSORRT_ROOT##/python_builds/graphsurgeon/graphsurgeon-##GRAPHSURGEON_VERSION##-py2.py3-none-any.whl

@@ -1,0 +1,38 @@
+---
+name: ProposalLayer_TRT
+interface: "IPluginV2Ext"
+versions:
+  "1":
+    attributes:
+      - prenms_topk
+      - keep_topk
+      - iou_threshold
+      - image_size
+    attribute_types:
+      prenms_topk: int32
+      keep_topk: int32
+      iou_threshold: float32
+      image_size: int32
+    attribute_length:
+      prenms_topk: 1
+      keep_topk: 1
+      iou_threshold: 1
+      image_size: 3
+    attribute_options:
+      prenms_topk:
+        min: "0"
+        max: "=1024"
+      keep_topk:
+        min: "0"
+        max: "=pinf"
+      iou_threshold:
+        min: "0"
+        max: "=pinf"
+      image_size:
+        min: "=3, 0, 0"
+        max: "=3, =1024, =1024" # dims 2 & 3 are capped to avoid timeout
+    attributes_required:
+      - prenms_topk
+      - keep_topk
+      - iou_threshold
+...

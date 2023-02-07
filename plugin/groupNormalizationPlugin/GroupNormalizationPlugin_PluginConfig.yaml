@@ -1,0 +1,23 @@
+---
+name: GroupNormalizationPlugin
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    attributes:
+      - eps
+      - num_groups
+    attribute_types:
+      eps: float32
+      num_groups: int32
+    attribute_length:
+      eps: 1
+      num_groups: 1
+    attribute_options:
+      eps:
+        min: "0"
+        max: "=pinf"
+      num_groups:
+        min: "0"
+        max: "=pinf"
+    attributes_required: []
+...

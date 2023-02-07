@@ -1,0 +1,91 @@
+---
+name: CustomSkipLayerNormPluginDynamic
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    inputs:
+      - input
+      - skip
+    outputs:
+      - output
+    input_dims:
+      input: 5
+      skip: 5
+    input_dim_constraints:
+      - "input_2 == bias_2"
+      - "skip_0 == input_0"
+      - "skip_1 == input_1"
+      - "skip_2 == input_2"
+    input_dim_range:
+      input:
+        min: "=1, =1, =1, =1, =1"
+        max: "=pinf, =pinf, =pinf, =1, =1"
+      skip:
+        min: "=1, =1, =1, =1, =1"
+        max: "=pinf, =pinf, =pinf, =1, =1"
+    supported_input_types:
+      - combination1:
+          input: float32
+          skip: float32
+      - combination2:
+          input: float16
+          skip: float16
+    output_dims:
+      output: "input_0, input_1, input_2, input_3, input_4"
+    attributes:
+      - type_id
+      - ld
+      - beta
+      - gamma
+      - bias
+    attribute_types:
+      type_id: int32
+      ld: int32
+      beta: float32
+      gamma: float32
+      bias: float32
+    attribute_dims:
+      type_id: 1
+      ld: 1
+      beta: 3
+      gamma: 3
+      bias: 3
+    attribute_dim_range:
+      type_id:
+        min: "=1"
+        max: "=1"
+      ld:
+        min: "=1"
+        max: "=1"
+      beta:
+        min: "=1, =1, =1"
+        max: "=1, =1, =pinf"
+      gamma:
+        min: "=1, =1, =1"
+        max: "=1, =1, =pinf"
+      bias:
+        min: "=1, =1, =1"
+        max: "=1, =1, =pinf"
+    attribute_options:
+      type_id:
+        - 0
+        - 1
+        - 2
+      ld:
+        min: "=1"
+        max: "=pinf"
+      beta:
+        min: "=ninf"
+        max: "=pinf"
+      gamma:
+        min: "=ninf"
+        max: "=pinf"
+      bias:
+        min: "=ninf"
+        max: "=pinf"
+    attributes_required:
+      - type_id
+      - ld
+      - beta
+      - gamma
+...

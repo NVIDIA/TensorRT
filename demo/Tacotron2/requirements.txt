@@ -1,0 +1,10 @@
+pycuda
+matplotlib
+numpy
+inflect
+librosa
+scipy
+Unidecode
+git+https://github.com/NVIDIA/dllogger#egg=dllogger
+--extra-index-url https://pypi.ngc.nvidia.com
+onnx-graphsurgeon

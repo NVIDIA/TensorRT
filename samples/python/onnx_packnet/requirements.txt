@@ -1,0 +1,20 @@
+numpy==1.18.1; python_version<"3.8" and platform_system == "Windows"
+numpy==1.19.4; python_version<"3.8" and platform_system != "Windows"
+numpy==1.23.2; python_version>="3.8"
+-f https://download.pytorch.org/whl/torch_stable.html
+torch==1.9.0+cpu; python_version<"3.8" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+torchvision==0.10.0+cpu; python_version<"3.8" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+torch==1.11.0+cpu; python_version>="3.8" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+torchvision==0.12.0+cpu; python_version>="3.8" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+
+torch==1.9.0; python_version<"3.8" and (platform_machine=="aarch64" and sys.platform=="linux")
+torchvision==0.10.0; python_version<"3.8" and (platform_machine=="aarch64" and sys.platform=="linux")
+torch==1.11.0; python_version>="3.8" and (platform_machine=="aarch64" and sys.platform=="linux")
+torchvision==0.12.0; python_version>="3.8" and (platform_machine=="aarch64" and sys.platform=="linux")
+
+onnx==1.10.2; python_version<"3.8"
+onnx==1.12.0; python_version>="3.8"
+pycuda<2021.1; python_version<"3.7"
+pycuda; python_version>="3.7"
+--extra-index-url https://pypi.ngc.nvidia.com
+onnx-graphsurgeon

@@ -1,0 +1,9 @@
+numpy>=1.19.4
+pycuda>=2020.1
+Pillow
+onnx==1.9.0; python_version<"3.8"
+onnx==1.12.0; python_version>="3.8"
+onnxruntime==1.9.0; python_version<"3.8"
+onnxruntime==1.12.1; python_version>="3.8"
+tf2onnx==1.8.1
+git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI

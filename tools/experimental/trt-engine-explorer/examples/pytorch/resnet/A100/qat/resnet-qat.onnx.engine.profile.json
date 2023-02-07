@@ -1,0 +1,40 @@
+[
+  { "count" : 1 }
+, { "name" : "QuantizeLinear_2", "timeMs" : 0.06144, "averageMs" : 0.06144, "medianMs" : 0.06144, "percentage" : 5.60748 }
+, { "name" : "conv1.weight + QuantizeLinear_7 + Conv_9", "timeMs" : 0.201728, "averageMs" : 0.201728, "medianMs" : 0.201728, "percentage" : 18.4112 }
+, { "name" : "MaxPool_12", "timeMs" : 0.095232, "averageMs" : 0.095232, "medianMs" : 0.095232, "percentage" : 8.69159 }
+, { "name" : "Reformatting CopyNode for Output Tensor 0 to MaxPool_12", "timeMs" : 0.036864, "averageMs" : 0.036864, "medianMs" : 0.036864, "percentage" : 3.36449 }
+, { "name" : "QuantizeLinear_15", "timeMs" : 0.027648, "averageMs" : 0.027648, "medianMs" : 0.027648, "percentage" : 2.52336 }
+, { "name" : "layer1.0.conv1.weight + QuantizeLinear_20 + Conv_22", "timeMs" : 0.032768, "averageMs" : 0.032768, "medianMs" : 0.032768, "percentage" : 2.99065 }
+, { "name" : "layer1.0.conv2.weight + QuantizeLinear_32 + Conv_34 + Add_36 + Relu_37", "timeMs" : 0.036864, "averageMs" : 0.036864, "medianMs" : 0.036864, "percentage" : 3.36449 }
+, { "name" : "QuantizeLinear_40", "timeMs" : 0.027648, "averageMs" : 0.027648, "medianMs" : 0.027648, "percentage" : 2.52336 }
+, { "name" : "layer1.1.conv1.weight + QuantizeLinear_45 + Conv_47", "timeMs" : 0.032768, "averageMs" : 0.032768, "medianMs" : 0.032768, "percentage" : 2.99065 }
+, { "name" : "layer1.1.conv2.weight + QuantizeLinear_57 + Conv_59 + Add_61 + Relu_62", "timeMs" : 0.036864, "averageMs" : 0.036864, "medianMs" : 0.036864, "percentage" : 3.36449 }
+, { "name" : "QuantizeLinear_65", "timeMs" : 0.027648, "averageMs" : 0.027648, "medianMs" : 0.027648, "percentage" : 2.52336 }
+, { "name" : "layer2.0.conv1.weight + QuantizeLinear_70 + Conv_72", "timeMs" : 0.021504, "averageMs" : 0.021504, "medianMs" : 0.021504, "percentage" : 1.96262 }
+, { "name" : "layer2.0.conv2.weight + QuantizeLinear_82 + Conv_84", "timeMs" : 0.027648, "averageMs" : 0.027648, "medianMs" : 0.027648, "percentage" : 2.52336 }
+, { "name" : "layer2.0.downsample.0.weight + QuantizeLinear_93 + Conv_95 + Add_97 + Relu_98", "timeMs" : 0.016384, "averageMs" : 0.016384, "medianMs" : 0.016384, "percentage" : 1.49533 }
+, { "name" : "QuantizeLinear_101", "timeMs" : 0.018432, "averageMs" : 0.018432, "medianMs" : 0.018432, "percentage" : 1.68224 }
+, { "name" : "layer2.1.conv1.weight + QuantizeLinear_106 + Conv_108", "timeMs" : 0.026624, "averageMs" : 0.026624, "medianMs" : 0.026624, "percentage" : 2.42991 }
+, { "name" : "layer2.1.conv2.weight + QuantizeLinear_118 + Conv_120 + Add_122 + Relu_123", "timeMs" : 0.03072, "averageMs" : 0.03072, "medianMs" : 0.03072, "percentage" : 2.80374 }
+, { "name" : "QuantizeLinear_126", "timeMs" : 0.018432, "averageMs" : 0.018432, "medianMs" : 0.018432, "percentage" : 1.68224 }
+, { "name" : "layer3.0.conv1.weight + QuantizeLinear_131 + Conv_133", "timeMs" : 0.02048, "averageMs" : 0.02048, "medianMs" : 0.02048, "percentage" : 1.86916 }
+, { "name" : "layer3.0.conv2.weight + QuantizeLinear_143 + Conv_145", "timeMs" : 0.0256, "averageMs" : 0.0256, "medianMs" : 0.0256, "percentage" : 2.33645 }
+, { "name" : "layer3.0.downsample.0.weight + QuantizeLinear_154 + Conv_156 + Add_158 + Relu_159", "timeMs" : 0.013312, "averageMs" : 0.013312, "medianMs" : 0.013312, "percentage" : 1.21495 }
+, { "name" : "QuantizeLinear_162", "timeMs" : 0.014336, "averageMs" : 0.014336, "medianMs" : 0.014336, "percentage" : 1.30841 }
+, { "name" : "layer3.1.conv1.weight + QuantizeLinear_167 + Conv_169", "timeMs" : 0.026624, "averageMs" : 0.026624, "medianMs" : 0.026624, "percentage" : 2.42991 }
+, { "name" : "layer3.1.conv2.weight + QuantizeLinear_179 + Conv_181 + Add_183 + Relu_184", "timeMs" : 0.026624, "averageMs" : 0.026624, "medianMs" : 0.026624, "percentage" : 2.42991 }
+, { "name" : "QuantizeLinear_187", "timeMs" : 0.01536, "averageMs" : 0.01536, "medianMs" : 0.01536, "percentage" : 1.40187 }
+, { "name" : "layer4.0.conv1.weight + QuantizeLinear_192 + Conv_194", "timeMs" : 0.02048, "averageMs" : 0.02048, "medianMs" : 0.02048, "percentage" : 1.86916 }
+, { "name" : "layer4.0.conv2.weight + QuantizeLinear_204 + Conv_206", "timeMs" : 0.029696, "averageMs" : 0.029696, "medianMs" : 0.029696, "percentage" : 2.71028 }
+, { "name" : "layer4.0.downsample.0.weight + QuantizeLinear_215 + Conv_217 + Add_219 + Relu_220", "timeMs" : 0.011264, "averageMs" : 0.011264, "medianMs" : 0.011264, "percentage" : 1.02804 }
+, { "name" : "QuantizeLinear_223", "timeMs" : 0.014336, "averageMs" : 0.014336, "medianMs" : 0.014336, "percentage" : 1.30841 }
+, { "name" : "layer4.1.conv1.weight + QuantizeLinear_228 + Conv_230", "timeMs" : 0.028672, "averageMs" : 0.028672, "medianMs" : 0.028672, "percentage" : 2.61682 }
+, { "name" : "layer4.1.conv2.weight + QuantizeLinear_240 + Conv_242 + Add_244 + Relu_245", "timeMs" : 0.03072, "averageMs" : 0.03072, "medianMs" : 0.03072, "percentage" : 2.80374 }
+, { "name" : "Reformatting CopyNode for Input Tensor 0 to GlobalAveragePool_246", "timeMs" : 0.009216, "averageMs" : 0.009216, "medianMs" : 0.009216, "percentage" : 0.841122 }
+, { "name" : "GlobalAveragePool_246", "timeMs" : 0.011264, "averageMs" : 0.011264, "medianMs" : 0.011264, "percentage" : 1.02804 }
+, { "name" : "QuantizeLinear_250", "timeMs" : 0.007168, "averageMs" : 0.007168, "medianMs" : 0.007168, "percentage" : 0.654206 }
+, { "name" : "Reformatting CopyNode for Input Tensor 0 to fc.weight + QuantizeLinear_255 + Gemm_257 + fc.bias + (Unnamed Layer* 306) [Shuffle] + unsqueeze_node_after_fc.bias + (Unnamed Layer* 306) [Shuffle]_(Unnamed Layer* 306) [Shuffle]_output + (Unnamed Layer* 307) [ElementWise]", "timeMs" : 0, "averageMs" : 0, "medianMs" : 0, "percentage" : 0 }
+, { "name" : "fc.weight + QuantizeLinear_255 + Gemm_257 + fc.bias + (Unnamed Layer* 306) [Shuffle] + unsqueeze_node_after_fc.bias + (Unnamed Layer* 306) [Shuffle]_(Unnamed Layer* 306) [Shuffle]_output + (Unnamed Layer* 307) [ElementWise]", "timeMs" : 0.013312, "averageMs" : 0.013312, "medianMs" : 0.013312, "percentage" : 1.21495 }
+, { "name" : "copied_squeeze_after_(Unnamed Layer* 307) [ElementWise]", "timeMs" : 0, "averageMs" : 0, "medianMs" : 0, "percentage" : 0 }
+]

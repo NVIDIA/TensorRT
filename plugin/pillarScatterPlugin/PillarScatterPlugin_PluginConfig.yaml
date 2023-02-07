@@ -1,0 +1,18 @@
+---
+name: PillarScatterPlugin
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    attributes:
+      - dense_shape
+    attribute_types:
+      dense_shape: int32
+    attribute_length:
+      dense_shape: 2
+    attribute_options:
+      dense_shape:
+        min: "0, 0"
+        max: "=pinf, =pinf"
+    attributes_required:
+      - dense_shape
+...

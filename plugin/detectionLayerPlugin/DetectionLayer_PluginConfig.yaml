@@ -1,0 +1,39 @@
+---
+name: DetectionLayer_TRT
+interface: "IPluginV2Ext"
+versions:
+  "1":
+    attributes:
+      - num_classes
+      - keep_topk
+      - score_threshold
+      - iou_threshold
+    attribute_types:
+      num_classes: int32
+      keep_topk: int32
+      score_threshold: float32
+      iou_threshold: float32
+    attribute_length:
+      num_classes: 1
+      keep_topk: 1
+      score_threshold: 1
+      iou_threshold: 1
+    attribute_options:
+      num_classes:
+        min: "0"
+        max: "=pinf"
+      keep_topk:
+        min: "0"
+        max: "=pinf"
+      score_threshold:
+        min: "=0"
+        max: "=pinf"
+      iou_threshold:
+        min: "0"
+        max: "=pinf"
+    attributes_required:
+      - num_classes
+      - keep_topk
+      - score_threshold
+      - iou_threshold
+...

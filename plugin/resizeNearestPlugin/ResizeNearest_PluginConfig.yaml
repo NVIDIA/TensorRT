@@ -1,0 +1,18 @@
+---
+name: ResizeNearest_TRT
+interface: "IPluginV2Ext"
+versions:
+  "1":
+    attributes:
+      - scale
+    attribute_types:
+      scale: float32
+    attribute_length:
+      scale: 1
+    attribute_options:
+      scale:
+        min: "0"
+        max: "=pinf"
+    attributes_required:
+      - scale
+...

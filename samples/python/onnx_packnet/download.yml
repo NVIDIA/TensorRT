@@ -1,0 +1,5 @@
+sample: onnx_packnet
+files:
+  - path: samples/python/onnx_packnet/packnet-sfm-0.1.2.zip
+    url: https://github.com/TRI-ML/packnet-sfm/archive/v0.1.2.zip
+    checksum: 7a73db591d3955ccf407910cd928d9c0

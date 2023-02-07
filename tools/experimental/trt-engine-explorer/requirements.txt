@@ -1,0 +1,20 @@
+setuptools # for qgrid
+wheel # for qgrid
+protobuf==3.16.0
+onnx==1.12.0
+numpy
+pandas==1.1.5
+plotly
+qgrid
+graphviz
+jupyter
+netron
+openpyxl # for excel reporting
+ipywidgets==7.7.2
+ipyfilechooser
+jupyterlab
+jupyter-dash
+pytest
+dtale==2.2.0
+xlsxwriter
+Flask==2.0.0
