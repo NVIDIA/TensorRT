@@ -28,7 +28,7 @@ This plugin makes strong assumptions about its input:
     - The weight matrix W_qkv is NOT just the vertical concatenation of individual matrices `W_tmp = [W_q', W_k', W_v']'`, but to start with `W_tmp`, reshaping it into `[E, 3, N, H]` (where `N * H = E` and `N` is number of heads, `H` is head size) transposing it into `[E, N, 3, H]` and reshaping it back to `[E, 3 * E]`. The interpretation is to layout the k-th heads of Q, K and V next to each other, instead of first all N heads of Q, then all N heads of K, then all heads of V
 
 `input_mask`
-input_mask is a tensor of shape `[B]` where `B` is the batch size. The input mask is in the encoded in the format described in `embLayerNormPlugin`, and contains the number of valid elements from the start of the sequence.
+input_mask is a tensor of shape `[B, 1]` for unfused version and `B, XMMAS_M * THREADS_PER_CTA` for fused version. Here, `B` is the batch size; `XMMAS_M` and `THREADS_PER_CTA` are architecture specific, as defined in the source code. The input mask is encoded in the format described in `embLayerNormPlugin`, and contains the number of valid elements from the start of the sequence.
 If provided, the attention scores, i.e. the softmax distribution, are only computed over the elements designated as valid by the input mask
 
 
