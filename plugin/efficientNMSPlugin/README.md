@@ -98,7 +98,7 @@ The following four output tensors are generated:
 |`int`     |`max_output_boxes`        |The maximum number of detections to output per image.
 |`int`     |`background_class`        |The label ID for the background class. If there is no background class, set it to `-1`.
 |`bool`    |`score_activation` *      |Set to true to apply sigmoid activation to the confidence scores during NMS operation.
-|`bool`    |`class_agnostic`          |Set to true to do class-independent nms, otherwise, different class would do nms respectively.
+|`bool`    |`class_agnostic`          |Set to true to do class-independent NMS; otherwise, boxes of different classes would be considered separately during NMS.
 |`int`     |`box_coding`              |Coding type used for boxes (and anchors if applicable), 0 = BoxCorner, 1 = BoxCenterSize.
 
 Parameters marked with a `*` have a non-negligible effect on runtime latency. See the [Performance Tuning](#performance-tuning) section below for more details on how to set them optimally.
@@ -137,7 +137,7 @@ Depending on network configuration, it is usually more efficient to provide raw 
 
 #### Class Independent NMS
 
-Some object detection networks/architectures like YOLO series need to use class independent nms operations. Do class independent nms if `class_agnostic` is enabled, otherwise, different class would do nms respectively.
+Some object detection networks/architectures like YOLO series need to use class-independent NMS operations. If `class_agnostic` is enabled, class-independent NMS is performed; otherwise, different classes would do NMS separately.
 
 #### Using the Fused Box Decoder
 

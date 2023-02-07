@@ -496,7 +496,7 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(const char* name, c
             }
             if (!strcmp(attrName, "class_agnostic"))
             {
-                mParam.classAgnostic = *(static_cast<const bool*>(fields[i].data));
+                mParam.classAgnostic = *(static_cast<bool const*>(fields[i].data));
             }
             if (!strcmp(attrName, "box_coding"))
             {
