@@ -1,0 +1,133 @@
+---
+name: ModulatedDeformConv2d
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    inputs:
+      - x
+      - offset
+      - mask
+      - weight
+      - bias
+    outputs:
+      - output
+    input_dims:
+      x: 4
+      offset: 4
+      mask: 4
+      weight: 4
+      bias: 1
+    input_dim_constraints:
+      - "offset_0 == x_0"
+      - "mask_0 == x_0"
+      - "bias_0 == weight_0"
+      - "mask_2 == offset_2"
+      - "mask_3 == offset_3"
+    input_dim_range:
+      x:
+        min: "=1, =1, =1, =1"
+        max: "=pinf, =pinf, =pinf, =pinf"
+      offset:
+        min: "=1, =2, =1, =1"
+        max: "=pinf, =pinf, =pinf, =pinf"
+      mask:
+        min: "=1, =1, =1, =1"
+        max: "=pinf, =pinf, =pinf, =pinf"
+      weight:
+        min: "=1, =1, =1, =1"
+        max: "=pinf, =pinf, =pinf, =pinf"
+      bias:
+        min: "=1"
+        max: "=pinf"
+    supported_input_types:
+      combination1:
+        x: float32
+        offset: float32
+        mask: float32
+        weight: float32
+        bias: float32
+      combination2:
+        x: float16
+        offset: float16
+        mask: float16
+        weight: float16
+        bias: float16
+    output_dims:
+      output: "mask_0, weight_0, mask_2, mask_3"
+    attributes:
+      - stride
+      - padding
+      - dilation
+      - group
+      - deformable_group
+    attribute_types:
+      stride: int32
+      padding: int32
+      dilation: int32
+      group: int32
+      deformable_group: int32
+    attribute_dims:
+      stride: 2
+      padding: 2
+      dilation: 2
+      group: 1
+      deformable_group: 1
+    attribute_length:
+      stride: 2
+      padding: 2
+      dilation: 2
+      group: 1
+      deformable_group: 1
+    attribute_options:
+      stride:
+        min: "=1, =1"
+        max: "=pinf, =pinf"
+      padding: 
+        min: "=0, =0"
+        max: "=pinf, =pinf"
+      dilation: 
+        min: "=1, =1"
+        max: "=pinf, =pinf"
+      group: 
+        min: "=1"
+        max: "=pinf"
+      deformable_group: 
+        min: "=1"
+        max: "=pinf"
+    attribute_dim_range:
+      stride:
+        min: "=2"
+        max: "=2"
+      padding: 
+        min: "=2"
+        max: "=2"
+      dilation: 
+        min: "=2"
+        max: "=2"
+      group: 
+        min: "=1"
+        max: "=1"
+      deformable_group: 
+        min: "=1"
+        max: "=1"
+    attributes_required:
+      - stride
+      - padding
+      - dilation
+      - group
+      - deformable_group
+    golden_io_path: "plugin/modulatedDeformConvPlugin/CustomModulatedDeformConv2d_PluginGoldenIO.json"
+    abs_tol: 1e-5
+    rel_tol: 1e-5
+    configs:
+      config1:
+        input_types:
+          x: float32
+          offset: float32
+          mask: float32
+          weight: float32
+          bias: float32
+        attribute_options: []
+        output_types:
+          output: float32 
+...
