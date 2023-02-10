@@ -30,10 +30,6 @@
 #include <cuda_runtime.h>
 #include <vector>
 
-using namespace nvinfer1;
-using namespace nvinfer1::plugin;
-using namespace nvinfer1::plugin::bert;
-
 // plugin specific constants
 namespace
 {
