@@ -41,6 +41,13 @@ const char* FC_VERSION{"1"};
 const char* FC_NAME{"CustomFCPluginDynamic"};
 } // namespace
 
+namespace nvinfer1
+{
+namespace plugin
+{
+namespace bert
+{
+
 // Static class fields initialization
 PluginFieldCollection FCPluginDynamicCreator::mFC{};
 std::vector<PluginField> FCPluginDynamicCreator::mPluginAttributes;
@@ -812,5 +819,8 @@ const char* FCPluginDynamicCreator::getPluginNamespace() const noexcept
     return mNamespace.c_str();
 }
 
+} // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 
 #endif // #if CUDA_VERSION >= 10010
