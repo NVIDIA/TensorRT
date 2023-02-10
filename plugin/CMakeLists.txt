@@ -50,6 +50,7 @@ set(PLUGIN_LISTS
     groupNormalizationPlugin
     instanceNormalizationPlugin
     leakyReluPlugin
+    modulatedDeformConvPlugin
     multilevelCropAndResizePlugin
     multilevelProposeROI
     multiscaleDeformableAttnPlugin

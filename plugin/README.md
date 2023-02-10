@@ -26,6 +26,7 @@
 | [groupNormalizationPlugin](groupNormalizationPlugin) | GroupNormalizationPlugin | 1 |
 | [instanceNormalizationPlugin](instanceNormalizationPlugin) | InstanceNormalization_TRT | 1 |
 | [leakyReluPlugin](leakyReluPlugin) | LReLU_TRT | 1 |
+| [modulatedDeformConvPlugin](modulatedDeformConvPlugin) | ModulatedDeformConv2d | 1 |
 | [multilevelCropAndResizePlugin](multilevelCropAndResizePlugin) | MultilevelCropAndResize_TRT | 1 |
 | [multilevelProposeROI](multilevelProposeROI) | MultilevelProposeROI_TRT | 1 |
 | [multiscaleDeformableAttnPlugin](multiscaleDeformableAttnPlugin) | MultiscaleDeformableAttnPlugin_TRT | 1 |
