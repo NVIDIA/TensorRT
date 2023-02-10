@@ -850,12 +850,12 @@ public:
         return static_cast<uint64_t>(s) << 32 | (headsize << 2) | (interleaved ? 2U : 0U) | (unroll ? 1U : 0U);
     }
 
-    uint64_t hashID(const KernelMeta& kernelMeta) const override
+    virtual uint64_t hashID(const KernelMeta& kernelMeta) const
     {
         return hashID(kernelMeta.mS, kernelMeta.mD, kernelMeta.mInterleaved, kernelMeta.mUnrollStep);
     }
 
-    void run(Fused_multihead_attention_params_v2& params, cudaStream_t ss) const override
+    virtual void run(Fused_multihead_attention_params_v2& params, cudaStream_t ss) const
     {
         if (params.interleaved)
         {
@@ -913,7 +913,7 @@ public:
                       {kSM_90, bert::DATA_TYPE_INT8, 384, 8},
 #endif
                   };
-            for (uint32_t i = 0U; i < sizeof(unrollList) / sizeof(unrollList[0]); ++i)
+            for (uint32_t i = 0u; i < sizeof(unrollList) / sizeof(unrollList[0]); ++i)
             {
                 if (mSM == unrollList[i].mSM && mDataType == unrollList[i].mDataType && params.s == unrollList[i].mS
                     && params.b <= unrollList[i].mMaxBatch)
