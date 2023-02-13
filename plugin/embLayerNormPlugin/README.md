@@ -27,7 +27,7 @@ Assuming contiguous input masks, encodes the masks as a single number denoting t
 
 ### Structure
 
-The `embLayerNormPlugin` takes three inputs; `token_id`, `segmend_id`, and `input_mask`.
+The `embLayerNormPlugin` takes three inputs; `token_id`, `segment_id`, and `input_mask`.
 
 `token_id`
 An input sequence containing token ids. token_id is an `int32` tensor with shape `[S, B]` where `S` is the sequence length and `B` is the batch size.
