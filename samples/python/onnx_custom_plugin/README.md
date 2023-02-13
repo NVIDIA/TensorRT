@@ -96,12 +96,12 @@ python3 model.py
       mkdir build; pushd build
       cmake .. -G "Visual Studio 15 Win64" /
          -DTRT_LIB=C:\path\to\tensorrt\lib /
-         -DTRT_INCLUDE=C:\path\to\tensorrt\lib /
+         -DTRT_INCLUDE=C:\path\to\tensorrt\include /
          -DCUDA_INC_DIR="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v<CUDA_VERSION>\include" /
          -DCUDA_LIB_DIR="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v<CUDA_VERSION>\lib\x64"
       # NOTE: msbuild is usually located under C:\Program Files (x86)\Microsoft Visual Studio\2017\<EDITION>\MSBuild\<VERSION>\Bin
       #   You should add this path to your PATH environment variable.
-      msbuild ALL_BUILD.vcxproj
+      msbuild ALL_BUILD.vcxproj /p:Configuration=Release
       popd
       ```
 
