@@ -35,7 +35,7 @@ struct EfficientNMSParameters
     bool padOutputBoxesPerClass = false;
     int backgroundClass = -1;
     bool scoreSigmoid = false;
-    bool clipBoxes = false;
+    bool clipBoxes = true;
     int boxCoding = 0;
 
     // Related to NMS Internals
