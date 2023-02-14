@@ -22,6 +22,7 @@ set(STATIC_TARGET ${TARGET_NAME}_static)
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports.map)
+set(PLUGIN_EXPORT_DEF ${TARGET_DIR}/exports.def)
 
 if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
@@ -151,7 +152,11 @@ set_target_properties(${SHARED_TARGET} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
-set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
+if (MSVC)
+    set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "/DEF:${PLUGIN_EXPORT_DEF}")
+else()
+    set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
+endif()
 
 set_target_properties(${SHARED_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})
 
