@@ -105,7 +105,7 @@ def clamp_weights_onnx(onnx_input_fpath: str, onnx_output_fpath: str, min: float
             np.clip(node_attr.values, min, max, out=node_attr.values)
 
     model = gs.export_onnx(graph)
-    onnx.save(model, onnx_output_fpath, save_as_external_data=True)
+    onnx.save(model, onnx_output_fpath, save_as_external_data=False)
 
 
 def clamp_weights_onnx_to_fp16_bounds(onnx_input_fpath: str, onnx_output_fpath: str, ignore_nodes: List = None):
@@ -150,7 +150,7 @@ def move_t5_cast_op(onnx_input_fpath: str, onnx_output_fpath: str):
 
     graph.cleanup().toposort()
     model = gs.export_onnx(graph)
-    onnx.save(model, onnx_output_fpath, save_as_external_data=True)
+    onnx.save(model, onnx_output_fpath, save_as_external_data=False)
 
 # Helper Classes
 class TRTNativeRunner:

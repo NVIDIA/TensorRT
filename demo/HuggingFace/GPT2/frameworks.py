@@ -69,9 +69,6 @@ class GPT2HuggingFace(FrameworkCommand):
     def generate_and_download_framework(
         self, metadata: NetworkMetadata, workspace: NNFolderWorkspace
     ) -> NetworkModels:
-        cache_variant = False
-        if metadata.other.kv_cache:
-            cache_variant = True
 
         trt_gpt2_config = self.config
         metadata_serialized = trt_gpt2_config.get_metadata_string(metadata)
@@ -80,22 +77,17 @@ class GPT2HuggingFace(FrameworkCommand):
         # We keep track of the generated torch location for cleanup later
         self.torch_gpt2_dir = pytorch_model_dir
 
-        model = None
-        tfm_config = AutoConfig.from_pretrained(metadata.variant, use_cache=cache_variant)
-
         if not os.path.exists(pytorch_model_dir):
             # Generate the pre-trained weights
-            model = AutoModelForCausalLM.from_config(tfm_config).from_pretrained(metadata.variant)
-            model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
+            model = AutoModelForCausalLM.from_pretrained(metadata.variant, use_cache = metadata.other.kv_cache)
             model.save_pretrained(pytorch_model_dir)
             print("Pytorch Model saved to {}".format(pytorch_model_dir))
         else:
             print(
                 "Frameworks file already exists, skipping generation and loading from file instead."
             )
-            model = AutoModelForCausalLM.from_config(tfm_config).from_pretrained(pytorch_model_dir)
-            model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
-        
+            model = AutoModelForCausalLM.from_pretrained(pytorch_model_dir)
+
         onnx_model_fpath = os.path.join(onnx_root, metadata_serialized + ".onnx")
 
         gpt2 = GPT2TorchFile(model, metadata)
@@ -155,8 +147,11 @@ class GPT2HuggingFace(FrameworkCommand):
 
         # By default, HuggingFace model structure is one giant file.
         gpt2_torch_fpath = network_fpaths.torch[0].fpath
-        config = AutoConfig.from_pretrained(metadata.variant, use_cache=metadata.other.kv_cache)
-        gpt2_model = AutoModelForCausalLM.from_config(config).from_pretrained(gpt2_torch_fpath)
+        gpt2_model = AutoModelForCausalLM.from_pretrained(gpt2_torch_fpath)
+
+        if metadata.precision.fp16:
+            gpt2_model = gpt2_model.half()
+
         gpt2_torch = GPT2TorchFile.TorchModule(
             gpt2_model.transformer, gpt2_model.lm_head, gpt2_model.config
         )
@@ -177,7 +172,7 @@ class GPT2HuggingFace(FrameworkCommand):
     ) -> Union[NetworkResult, BenchmarkingResult]:
 
         tokenizer, gpt2_torch = self.setup_tokenizer_and_model(metadata, network_fpaths)
-
+        config = gpt2_torch.config
         # Prepare the input tokens and find out output sequence length.
         if not benchmarking_mode:
             output_seq_len = GPT2ModelTRTConfig.MAX_LENGTH[metadata.variant]
@@ -185,11 +180,15 @@ class GPT2HuggingFace(FrameworkCommand):
         else:
             input_seq_len = benchmarking_args.input_seq_len
             output_seq_len = benchmarking_args.output_seq_len
-            input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE[metadata.variant], (batch_size, input_seq_len))
+            input_ids = torch.randint(0, config.vocab_size, (batch_size, input_seq_len))
 
         # get single decoder iteration inference timing profile
         _, decoder_e2e_time = gpt2_inference(
-            gpt2_torch, input_ids, timing_profile, use_cuda=(not use_cpu)
+            gpt2_torch,
+            input_ids,
+            timing_profile,
+            use_cuda=(not use_cpu),
+            use_cache = metadata.other.kv_cache,
         )
 
         # get complete decoder inference result and its timing profile
@@ -305,7 +304,7 @@ class GPT2HuggingFace(FrameworkCommand):
     def args_to_network_metadata(self, args: argparse.Namespace) -> NetworkMetadata:
         return NetworkMetadata(
             variant=args.variant,
-            precision=Precision(fp16=False),
+            precision=Precision(fp16=args.fp16),
             other=self.config.MetadataClass(kv_cache=args.enable_kv_cache),
         )
 

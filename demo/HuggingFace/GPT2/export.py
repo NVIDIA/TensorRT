@@ -35,7 +35,7 @@ from torch.nn import Module
 
 # # huggingface
 from transformers.generation_utils import GenerationMixin
-from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers import GPT2Tokenizer
 
 # TRT-HuggingFace
@@ -69,23 +69,21 @@ class GPT2TorchFile(TorchModelFile):
             if past is not None:
                 input_ids = input_ids[:, -1:]
 
-            ret = {
+            return {
                 "input_ids": input_ids,
+                "use_cache": use_cache,
+                "past_key_values": past
             }
-
-            # To really enable KV cache in HuggingFace, these args must be passed. Just specifying use_cache = True in T5Config is not enough. Also see the additional "past_key_values" fields in the forward() return below.
-            if self.config.use_cache:
-                ret["use_cache"] = use_cache
-                ret["past_key_values"] = past
-
-            return ret
 
         def forward(self, input_ids, **kwargs):
             transformer_outputs = self.transformer(input_ids, **kwargs)
             hidden_states = transformer_outputs[0]
             lm_logits = self.lm_head(hidden_states)
 
-            return CausalLMOutputWithCrossAttentions(logits=lm_logits, past_key_values=transformer_outputs.past_key_values if self.config.use_cache else None,)
+            return CausalLMOutputWithPast(
+                logits=lm_logits, 
+                past_key_values=transformer_outputs.past_key_values
+            )
 
         def _reorder_cache(self, past, beam_idx):
             """
@@ -165,6 +163,9 @@ class GPT2Converter(ModelFileConverter):
         Returns:
             GPT2ONNXFile: ONNX GPT2 decoder object.
         """
+        # You should not run fp16 on CPU.
+        device = "cuda" if network_metadata.precision.fp16 else "cpu"
+        model = model.to(device)
         tokenizer = GPT2Tokenizer.from_pretrained(network_metadata.variant)
         input_ids = torch.tensor(
             [
@@ -172,7 +173,7 @@ class GPT2Converter(ModelFileConverter):
                     "Here is some text to encode Hello World", add_special_tokens=True
                 )
             ]
-        )
+        ).to(device)
 
         gpt2_model = GPT2TorchFile.TorchModule(
             model.transformer, model.lm_head, model.config
@@ -197,16 +198,17 @@ class GPT2Converter(ModelFileConverter):
             # This code regulates the number of output = 1 if non kv-cache mode is used.
             # Otherwise it will automatically output key value pairs
             old_forward = gpt2_model.forward
-            def _export_forward(*args, **kwargs):
-                result = old_forward(*args, **kwargs)
+            def _export_forward(input_ids, **kwargs):
+                result = old_forward(input_ids, use_cache = False, **kwargs)
                 return result[0]
             gpt2_model.forward = _export_forward
 
-            torch.onnx._export(
+            torch.onnx.export(
                 gpt2_model,
                 input_ids,
                 output_fpath,
                 opset_version=13,
+                do_constant_folding=True,
                 input_names=inputs.get_names(),
                 output_names=outputs.get_names(),
                 dynamic_axes={
@@ -217,60 +219,26 @@ class GPT2Converter(ModelFileConverter):
                 **opt_args
             )
         else:
-            decoder_output = gpt2_model(input_ids[:,:-1])
+            decoder_output = gpt2_model(input_ids, use_cache = True)
             past_key_values = decoder_output[1]
-
-            decoder_root, decoder_fullname = os.path.split(output_fpath)
-            # Split kv and non kv onnx into separate folders to avoid weight overlap
-            non_kv_root = os.path.join(decoder_root, "non-kv")
-            kv_root = os.path.join(decoder_root, "kv")
-            decoder_name, decoder_ext = os.path.splitext(decoder_fullname)
-            non_kv_fpath = os.path.join(non_kv_root, decoder_name + "-non-kv" + decoder_ext)
-            kv_fpath = os.path.join(kv_root, decoder_fullname)
 
             # Exporting the kv cache engine
             old_forward = gpt2_model.forward
-            def _export_forward(input_ids, past_key_values):
-                result = old_forward(input_ids, past_key_values=past_key_values)
+            def _export_forward(input_ids, past_key_values, **kwargs):
+                result = old_forward(input_ids, past_key_values=past_key_values, use_cache=True, **kwargs)
                 return (result[0], result[1])
             gpt2_model.forward = _export_forward
 
-            torch.onnx._export(
+            torch.onnx.export(
                 gpt2_model,
-                (input_ids[:,-1:], past_key_values),
-                kv_fpath,
+                (input_ids, past_key_values),
+                output_fpath,
                 opset_version=13,
+                do_constant_folding=True,
                 input_names=inputs.get_names(),
                 output_names=outputs.get_names(),
                 dynamic_axes={
                     **inputs.get_torch_dynamic_axis_encoding(),
-                    **outputs.get_torch_dynamic_axis_encoding(),
-                },
-                training=torch.onnx.TrainingMode.EVAL,
-                **opt_args
-            )
-
-            # dual-engine approach: also export non-kv onnx model. Note that this is different from the original "non-kv" model. This one traces the `use_cache` path and have present_key_values output
-            def _export_forward_non_kv(input_ids, use_cache):
-                result = old_forward(input_ids, use_cache=True)
-                return (result[0], result[1])
-            gpt2_model.forward = _export_forward_non_kv
-
-            # inputs are same as non-kv model
-            # outputs are same as kv model
-            dict_inputs = inputs.get_dims()
-            dict_inputs_non_kv = OrderedDict({"input_ids": dict_inputs["input_ids"]})
-            inputs_non_kv = Dims(dict_inputs_non_kv)
-            torch.onnx.export(
-                gpt2_model,
-                (input_ids, True),
-                non_kv_fpath,
-                export_params=True,
-                opset_version=13,
-                input_names=inputs_non_kv.get_names(),
-                output_names=outputs.get_names(),
-                dynamic_axes={
-                    **inputs_non_kv.get_torch_dynamic_axis_encoding(),
                     **outputs.get_torch_dynamic_axis_encoding(),
                 },
                 training=torch.onnx.TrainingMode.EVAL,

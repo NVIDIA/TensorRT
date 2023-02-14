@@ -85,7 +85,7 @@ class T5OnnxDecoder(OnnxHFRunner):
     def forward(self, input_ids, encoder_hidden_states, *args, **kwargs):
         # Unoptimized unconditional transfer to numpy for interfacing with polygraphy
         input_ids = input_ids.cpu().numpy().astype("int64")
-        data_type = "float16" if self.network_metadata.precision.fp16 else "float32"
+        data_type = "float32"
         encoder_hidden_states = encoder_hidden_states.cpu().numpy().astype(data_type)
 
         logits = self.trt_context.infer(

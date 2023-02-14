@@ -95,8 +95,6 @@ class T5FHuggingFace(FrameworkCommand):
         # These ONNX models can be converted using special encoder and decoder classes.        
         encoder_onnx_model_fpath = os.path.join(encoder_onnx_root, metadata_serialized + "-encoder.onnx")
         decoder_onnx_model_fpath = os.path.join(decoder_onnx_root, metadata_serialized + "-decoder-with-lm-head.onnx")
-        if metadata.precision.fp16:
-            model = model.half()
 
         t5_encoder = T5EncoderTorchFile(model, metadata)
         t5_decoder = T5DecoderTorchFile(model, metadata)
@@ -164,7 +162,8 @@ class T5FHuggingFace(FrameworkCommand):
         # By default, huggingface model structure is one giant file.
         t5_torch_fpath = network_fpaths.torch[0].fpath
         t5_model = T5ForConditionalGeneration.from_pretrained(t5_torch_fpath, use_cache=metadata.other.kv_cache)
-
+        if metadata.precision.fp16:
+            t5_model = t5_model.half()
         t5_torch_encoder = T5EncoderTorchFile.TorchModule(t5_model.encoder)
         t5_torch_decoder = T5DecoderTorchFile.TorchModule(
             t5_model.decoder, t5_model.lm_head, t5_model.config

@@ -36,8 +36,8 @@ from polygraphy.backend.trt import Profile
 import torch
 
 # huggingface
-from transformers import GPT2Tokenizer, GPT2Config
-from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+from transformers import GPT2Tokenizer, AutoConfig
+from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.configuration_utils import PretrainedConfig
 from transformers.generation_utils import GenerationMixin
 
@@ -122,12 +122,13 @@ class GPT2TRTDecoder(TRTHFRunner):
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
         self.network_metadata = network_metadata
+        self.data_type = torch.float32
         # In benchmarking mode, if input_profile_max is provided, should use that as max_sequence_length
         if benchmarking_args is not None:
             if benchmarking_args.input_profile_max_len is not None:
-                self.max_sequence_length = benchmarking_args.input_profile_max_len
+                self.max_input_length = benchmarking_args.input_profile_max_len
             else:
-                self.max_sequence_length = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[network_metadata.variant]
+                self.max_input_length = hf_config.n_positions
         # In non-benchmarking mode, we are provided a text generation task. We need to use the max_length as max sequence length
         else:
             self.max_sequence_length = GPT2ModelTRTConfig.MAX_LENGTH[network_metadata.variant]
@@ -138,101 +139,87 @@ class GPT2TRTDecoder(TRTHFRunner):
         else:
             self.max_output_length = self.max_sequence_length
 
-        # We only have one profile to select so we can just grab the profile at the start of the class
-        self.profile_idx = self.get_optimization_profile(batch_size=self.batch_size * num_beams, sequence_length=1)
-        input_profile_length = self.max_output_length if (not self.config.use_cache) else 1
-        self.input_shapes = {
-            "input_ids": (self.batch_size * num_beams, input_profile_length)
-        }
-        self.input_types = {
-            "input_ids": torch.int32
-        }
-
-        self.output_shapes = {
-            "logits": (self.batch_size * num_beams, self.max_output_length, GPT2ModelTRTConfig.VOCAB_SIZE[network_metadata.variant])
-        }
-        self.output_types = {
-            "logits": torch.float32
-        }
         self.main_input_name = "input_ids"
+        self.num_heads = self.config.n_head
+        self.embedding_size_per_head = self.config.n_embd // self.num_heads
+        self.num_decoder_layers = self.config.n_layer
 
-        self.num_heads = GPT2ModelTRTConfig.NUMBER_OF_HEADS[network_metadata.variant]
-        self.embedding_size_per_head = GPT2ModelTRTConfig.EMBEDDING_SIZE[network_metadata.variant] // self.num_heads
+        self.profile_idx = 0
+        self.bindings = [0] * self.trt_engine.num_bindings
+        self.logits = torch.zeros((self.batch_size * num_beams, self.max_output_length, hf_config.vocab_size), dtype = self.data_type).cuda()
+        self.bindings[self.trt_engine.get_binding_index("logits")] = self.logits.data_ptr()
+        # This will be used to calculate the offset for each binding
+        self.num_bindings = self.trt_engine.num_bindings // 2 if self.config.use_cache else self.trt_engine.num_bindings
 
         if self.config.use_cache:
-            self.num_decoder_layers = GPT2ModelTRTConfig.NUMBER_OF_LAYERS[network_metadata.variant]
+            self.bindings[self.trt_engine.get_binding_index("logits") + self.num_bindings] = self.logits.data_ptr()
+
+            # Setting input and output the same does not work for GPT2. Needs separate cache and copy the memory address after each iteration
+            self.self_attention_cache_1 = {}
+            self.self_attention_cache_2 = {}
+
+            self_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_output_length - 1, self.embedding_size_per_head)
+
             # Set kv cache shape and type
             for i in range(self.num_decoder_layers):
-                kv_type_dict = {"decoder": torch.float32}
-                set_kv_data(self.input_types, "past", i, kv_type_dict)
-                set_kv_data(self.output_types,"present", i, kv_type_dict)
+                for code in ["key", "value"]:
 
-                self_attention_kv_shape = (self.batch_size * num_beams, self.num_heads, self.max_output_length - 1, self.embedding_size_per_head)
-                kv_shape_dict = {"decoder": self_attention_kv_shape}
+                    self_attention_name = f"key_values.{i}.decoder.{code}"
+                    kv_buffer_1 = torch.zeros(self_attention_kv_shape, dtype = self.data_type).cuda()
+                    kv_buffer_2 = torch.zeros(self_attention_kv_shape, dtype = self.data_type).cuda()
+                    self.self_attention_cache_1[self_attention_name] = kv_buffer_1
+                    self.self_attention_cache_2[self_attention_name] = kv_buffer_2
 
-                set_kv_data(self.input_shapes, "past", i, kv_shape_dict)
-                set_kv_data(self.output_shapes, "present", i, kv_shape_dict)
+                    input_idx = self.trt_engine.get_binding_index("past_" + self_attention_name)
+                    output_idx = self.trt_engine.get_binding_index("present_" + self_attention_name)
+
+                    self.bindings[input_idx] = kv_buffer_1.data_ptr() # Generation phase
+                    self.bindings[output_idx] = kv_buffer_2.data_ptr()
+
+                    # Context mode will always use buffer 1 as output
+                    self.bindings[input_idx + self.num_bindings] = 0 # Context phase, should be 0
+                    self.bindings[output_idx + self.num_bindings] = kv_buffer_1.data_ptr()
 
             self.kv_cache_binding_offset = 1 # 0: input_ids, kv cache input indices start from 1
+            self.past_decoder_length = 0
+            self.use_cache_1_as_input = True
+            self._set_context_mode_trt_context()
 
-        self.bindings = self._allocate_memory(self.input_shapes, self.input_types, self.output_shapes, self.output_types)
-        self.use_non_kv_engine = self.config.use_cache
-        # This flag is true if and only if we are at the 1st step of decoding with kv cache. We need the special engine that
-        # only has input_ids as input and output both logits and kv-cache. After that, we can use the kvcache engine for trt
+        self.context_mode = self.config.use_cache
         self.return_device = "cuda"
         self.device = "cuda"
-        self.variant = network_metadata.variant
 
     def reset(self):
         '''
         Resets the input specific fields after finishing a task.
         '''
-        self.use_non_kv_engine = self.config.use_cache
+        self.context_mode = self.config.use_cache
 
-    def _set_non_kv_engine_for_kv_mode(self, trt_engine_file_non_kv: TRTEngineFile):
-        # same steps in tensorrt_utils.py: TRTNativeRunner
-        with open(trt_engine_file_non_kv.fpath, "rb") as f:
-            self.trt_engine_non_kv = self.trt_runtime.deserialize_cuda_engine(f.read())
-            self.trt_context_non_kv = self.trt_engine_non_kv.create_execution_context()
+    def _switch_input_output_binding(self):
+        '''
+        For kv cache mode, switch input and output pointers to avoid data concurrency issue and D2D copy
+        '''
+        # When context mode (output in cache 1) and cache 1 is used as inputs, no need to switch bindings
+        if not (self.use_cache_1_as_input and self.context_mode):
+            for i in range(self.num_decoder_layers):
+                for code in ["key", "value"]:
+                    self_attention_name = f"key_values.{i}.decoder.{code}"
+                    input_idx = self.trt_engine.get_binding_index("past_" + self_attention_name)
+                    output_idx = self.trt_engine.get_binding_index("present_" + self_attention_name)
 
-        # The only input for GPT2 is the inpud_ids.
-        input_name = "input_ids"
-        self.input_types_non_kv = {input_name: self.input_types[input_name]}
-        # non_kv engine profile is different from kv since it needs to accept input_ids.
-        self.input_shapes_non_kv = {input_name: (self.input_shapes[input_name][0], self.max_sequence_length)}
-
-        # Output is the same as kv
-        self.output_types_non_kv = copy.deepcopy(self.output_types)
-        self.output_shapes_non_kv = copy.deepcopy(self.output_shapes)
-
-        # follow same steps in _allocate_memory
-        self.inputs_non_kv = allocate_binding_buffer(self.input_types_non_kv, self.input_shapes_non_kv)
-        self.outputs_non_kv = allocate_binding_buffer(self.output_types_non_kv, self.output_shapes_non_kv)
-
-        bindings = [None] * self.trt_engine_non_kv.num_bindings
-
-        for input_name, input_array in self.inputs_non_kv.items():
-            # Allocate memory for inputs
-            input_idx = self.trt_engine_non_kv.get_binding_index(input_name)
-            self.trt_context_non_kv.set_binding_shape(input_idx, self.input_shapes_non_kv[input_name])
-            bindings[input_idx] = input_array.data_ptr()
-
-        assert self.trt_context_non_kv.all_binding_shapes_specified
-
-        for output_name, output_array in self.outputs_non_kv.items():
-            # Output shape should be allocated from context size
-            output_idx = self.trt_engine_non_kv.get_binding_index(output_name)
-            bindings[output_idx] = output_array.data_ptr()
-
-        self.bindings_non_kv = bindings
-
-        G_LOGGER.info("Non-KV cache engine setup is successful in KV cache mode.")
+                    # Switch generation mode kv cache bindings
+                    temp = self.bindings[output_idx]
+                    self.bindings[output_idx] = self.bindings[input_idx]
+                    self.bindings[input_idx] = temp
+            self.use_cache_1_as_input = not self.use_cache_1_as_input
 
     def prepare_inputs_for_generation(self, input_ids, past = None, use_cache = None, **kwargs):
         # TODO: add position_ids, token_type_ids support
-        if past:
+        if past is not None:
             input_ids = input_ids[:, -1:]
-            self.use_non_kv_engine = False
+            self.context_mode = False
+        else:
+            self.context_mode = self.config.use_cache
 
         return {
             "input_ids": input_ids,
@@ -258,108 +245,81 @@ class GPT2TRTDecoder(TRTHFRunner):
             for layer_past in past
         )
 
+    def _set_context_mode_trt_context(self):
+        # Create TRT context for context mode (1st decoder run) with optimization profile = 1
+        self.context_trt_context = self.trt_engine.create_execution_context()
+        self.context_trt_context.active_optimization_profile = 1
+
+
     def forward(self, input_ids, *args, **kwargs):
         bs = input_ids.shape[0]
         input_length = input_ids.shape[1]
-        vocab_size = GPT2ModelTRTConfig.VOCAB_SIZE[self.network_metadata.variant]
-        max_length = self.max_sequence_length
-        use_cache = kwargs.get("use_cache", False)
-        # flag for switch between dual engines
-        non_kv_flag = self.use_non_kv_engine or (self.config.use_cache and kwargs.get("past_key_values") is None)
-        # condition 1: during e2e decoding test, based on flag
-        # condition 2: during single-step decoder test, depending on whether past_key_values is empty
-        # note: without --enable-kv-cache arg, this flag should remain False
-        # denote as variable to allow switch between non-kv and kv engines in kv cache mode
-        trt_context = self.trt_context_non_kv if non_kv_flag else self.trt_context
-        bindings = self.bindings_non_kv if non_kv_flag else self.bindings
-        inputs = self.inputs_non_kv if non_kv_flag else self.inputs
-        outputs = self.outputs_non_kv if non_kv_flag else self.outputs
 
         # Check if the input data is on CPU (which usually means the PyTorch does not support current GPU).
         is_cpu_mode = (input_ids.device == torch.device("cpu")) or (self.return_device == "cpu")
 
-        # We allocate the buffers using max_length, but we only need to first portion of it, so copy the data into the
-        # first portion of the input buffer.
-        # TODO: Could we just reuse input_ids' data_ptr() as the first binding when input_ids is already contiguous to
-        # avoid an additional D2D?
         if is_cpu_mode:
-            inputs["input_ids"] = input_ids.int().flatten().contiguous().cuda()
-            bindings[0] = self.inputs["input_ids"].data_ptr()
-        else:
-            inputs["input_ids"][:bs * input_length] = input_ids.flatten()
+            input_ids = input_ids.int().cuda()
 
         # Set the binding shape of input_ids, which should be (bs, input_length).
-        trt_context.set_binding_shape(0, input_ids.shape)
+        if not self.context_mode:
+            self.bindings[0] = input_ids.int().data_ptr()
+            self.trt_context.set_binding_shape(0, input_ids.shape)
+        else:
+            self.bindings[self.num_bindings] = input_ids.int().data_ptr()
+            self.context_trt_context.set_binding_shape(self.num_bindings, input_ids.shape)
 
-        if self.config.use_cache: # or use_cache
-            if non_kv_flag:
-                # use non-kv engine, no additional inputs
-                past_decoder_length = 0
-            else:
-                # use kv engine
-                # past_key_values set by prepare_inputs_for_generation() during HF e2e pipeline; if only test decoder, need to set this field
-                past_key_values = kwargs.get("past_key_values")
-                past_decoder_length = past_key_values[0][0].size(2)
-                num_heads = self.num_heads
-                embedding_size_per_head = self.embedding_size_per_head
-                # Set the binding shape of self-attention KV caches, which should be (bs, num_heads, past_decoder_length, embedding_size_per_head).
-                self_attention_kv_shape = (bs, num_heads, past_decoder_length, embedding_size_per_head)
-                self_attention_kv_flatten_length = bs * num_heads * past_decoder_length * embedding_size_per_head
+        if self.config.use_cache:
+            if self.context_mode:
+                self.past_decoder_length = 0
 
-                for i in range(self.num_decoder_layers):
-                    if past_key_values is not None:
-                        if past_key_values[0][0].device == torch.device("cpu"):
-                            inputs[f"past_key_values.{i}.decoder.key"] = past_key_values[i][0].flatten().contiguous().cuda()
-                            bindings[self.kv_cache_binding_offset+2*i] = inputs[f"past_key_values.{i}.decoder.key"].data_ptr()
+            self_attention_kv_shape = (bs, self.num_heads, self.past_decoder_length, self.embedding_size_per_head)
 
-                            inputs[f"past_key_values.{i}.decoder.value"] = past_key_values[i][1].flatten().contiguous().cuda()
-                            bindings[self.kv_cache_binding_offset+2*i+1] = inputs[f"past_key_values.{i}.decoder.value"].data_ptr()
-
-                        else:
-                            inputs[f"past_key_values.{i}.decoder.key"][:self_attention_kv_flatten_length] = past_key_values[i][0].flatten()
-
-                            inputs[f"past_key_values.{i}.decoder.value"][:self_attention_kv_flatten_length] = past_key_values[i][1].flatten()
-
-                    trt_context.set_binding_shape(self.kv_cache_binding_offset+2*i, self_attention_kv_shape)
-                    trt_context.set_binding_shape(self.kv_cache_binding_offset+2*i + 1, self_attention_kv_shape)
+            for i in range(self.num_decoder_layers):
+                if not self.context_mode:
+                    # Optimization Profile 1 is generation phase with no kv inputs
+                    self.trt_context.set_binding_shape(self.kv_cache_binding_offset+2*i, self_attention_kv_shape)
+                    self.trt_context.set_binding_shape(self.kv_cache_binding_offset+2*i + 1, self_attention_kv_shape)
+                else:
+                    # Optimization Profile 0 is context phase with kv inputs
+                    self.context_trt_context.set_binding_shape(self.kv_cache_binding_offset+2*i + self.num_bindings, self_attention_kv_shape)
+                    self.context_trt_context.set_binding_shape(self.kv_cache_binding_offset+2*i + 1 + self.num_bindings, self_attention_kv_shape)
 
         # Launch TRT inference.
-        # TODO: Could we use execute_v2_async() instead of execute_v2()? Current profiling shows that there is a
-        # synchronization inside TRT's inference body, so this change may not be needed.
-        trt_context.execute_v2(bindings=bindings)
+        if not self.context_mode:
+            assert self.trt_context.all_binding_shapes_specified
+            self.trt_context.execute_v2(bindings=self.bindings)
+        else:
+            assert self.context_trt_context.all_binding_shapes_specified
+            self.context_trt_context.execute_v2(bindings=self.bindings)
 
-        # We allocate the buffers using max_length, but we only need to first portion of it, so get only the first
-        # portion of the output buffer and return that.
-        # TODO: Could we construct a Torch tensor using given data_ptr() to avoid this D2D copy?
-        logits_output = outputs["logits"]
+        # For bs > 1, this is required, so cannnot avoid this D2D copy
+        logits_length = bs * input_length * self.config.vocab_size
+        logits = self.logits.flatten()[:logits_length].view(bs, input_length, self.config.vocab_size)
+
         if is_cpu_mode:
-            logits_output = logits_output.cpu()
-
-        folded = logits_output[:bs * input_length * vocab_size].view(bs, input_length, vocab_size)
+            logits = logits.cpu()
 
         present_key_values = None
         if self.config.use_cache:
-            # 1st decoding step and steps after handle the outputs in the same way
+            self.past_decoder_length += input_length
+
             present_key_values = ()
-            curr_decoder_length = past_decoder_length + input_length
-            num_heads = self.num_heads
-            embedding_size_per_head = self.embedding_size_per_head
-            self_attention_kv_shape = (bs, num_heads, curr_decoder_length, embedding_size_per_head)
-            self_attention_kv_flatten_length = bs * num_heads * curr_decoder_length * embedding_size_per_head
+            self_attention_cache = self.self_attention_cache_1 if self.use_cache_1_as_input or (self.profile_idx == 0) else self.self_attention_cache_2
 
             for i in range(self.num_decoder_layers):
-                self_attn_k_output = outputs[f"present_key_values.{i}.decoder.key"]
-                self_attn_v_output = outputs[f"present_key_values.{i}.decoder.value"]
+
+                self_attention_k_output = self_attention_cache[f"key_values.{i}.decoder.key"]
+                self_attention_v_output = self_attention_cache[f"key_values.{i}.decoder.value"]
+
                 if is_cpu_mode:
-                    self_attn_k_output = self_attn_k_output.cpu()
-                    self_attn_v_output = self_attn_v_output.cpu()
+                    self_attention_k_output = self_attention_k_output.cpu()
+                    self_attention_v_output = self_attention_v_output.cpu()
 
-                self_attn_k = self_attn_k_output[:self_attention_kv_flatten_length].view(*self_attention_kv_shape)
-                self_attn_v = self_attn_v_output[:self_attention_kv_flatten_length].view(*self_attention_kv_shape)
+                present_key_values += ((self_attention_k_output, self_attention_v_output),)
 
-                present_key_values += ((self_attn_k, self_attn_v), ) # make multi-dim tuple
-
-        return CausalLMOutputWithCrossAttentions(logits=folded.to(self.return_device), past_key_values = present_key_values)
+            self._switch_input_output_binding()
+        return CausalLMOutputWithPast(logits=logits.to(self.return_device), past_key_values = present_key_values)
 
 class GPT2TRT(TRTInferenceCommand):
     def __init__(self):
@@ -381,9 +341,6 @@ class GPT2TRT(TRTInferenceCommand):
 
         if not keep_trt_engine:
             self.gpt2_trt_engine.cleanup()
-            # TODO: Avoid using workspace.metadata to handle non_kv removals.
-            if workspace.metadata.other.kv_cache:
-                self.gpt2_trt_engine_non_kv.cleanup()
 
         self.frameworks_cmd.cleanup(workspace, keep_onnx_model, keep_torch_model)
 
@@ -404,6 +361,7 @@ class GPT2TRT(TRTInferenceCommand):
         # GPT2 has no proper token set. Use custom token. Only "generate()" will auto
         # replace with EOS token when using generating mode
         tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        hf_config = self.gpt2_trt.config
 
         # Prepare the input tokens and find out output sequence length.
         if not benchmarking_mode:
@@ -412,7 +370,7 @@ class GPT2TRT(TRTInferenceCommand):
         else:
             input_seq_len = benchmarking_args.input_seq_len
             output_seq_len = benchmarking_args.output_seq_len
-            input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE[metadata.variant], (batch_size, input_seq_len))
+            input_ids = torch.randint(0, hf_config.vocab_size, (batch_size, input_seq_len))
 
         # get single decoder iteration inference timing profile
         _, decoder_e2e_time = gpt2_inference(
@@ -506,6 +464,11 @@ class GPT2TRT(TRTInferenceCommand):
         seq_tag: bool = False, # whether the benchmark engine tag format should be seq or max
     ) -> None:
 
+        hf_config = AutoConfig.from_pretrained(
+            metadata.variant,
+            use_cache=metadata.other.kv_cache
+        )
+
         # Output networks shall not exceed number of network segments explicitly defined by configuration file.
         assert len(hash_onnx_fpath) == len(
             GPT2ModelTRTConfig.NETWORK_SEGMENTS
@@ -533,53 +496,68 @@ class GPT2TRT(TRTInferenceCommand):
             opt_input_seq_len = benchmarking_args.input_seq_len
             opt_output_seq_len = benchmarking_args.output_seq_len
 
-       # Set up the non kv engine, used for non-kv mode and kv mode generation phase (1st decoder run uses the non-kv profile to generate kv cache)
-        dec_profiles_non_kv = Profile()
+        if not hf_config.use_cache:
+            # If not using kv cache, only input_ids is passed
+            decoder_profiles = [Profile().add(
+                "input_ids",
+                min=(batch_size * num_beams, 1),
+                opt=(batch_size * num_beams, opt_output_seq_len),
+                max=(batch_size * num_beams, max_output_length),
+            )]
+        else:
+            num_heads = hf_config.n_head
+            embedding_size_per_head = hf_config.n_embd // num_heads
+            num_layers = hf_config.n_layer
 
-        # for beam search, decoder engine's inputs are expanded `num_beams` times
-        # optimization profiles should be changed accordingly, but onnx models can be shared across greedy/beam because the first dim (batch size) is already a dynamic value, so no change needed in export.py
-        dec_profiles_non_kv = dec_profiles_non_kv.add(
-            "input_ids",
-            min=(batch_size * num_beams, 1),
-            opt=(batch_size * num_beams, opt_output_seq_len),
-            max=(batch_size * num_beams, max_output_length),
-        )
+            # context phase uses the provided input_ids to generate hidden states and self attention kv cache
+            # It is only used in the 1st decoder run.
+            dec_profiles_context = Profile().add(
+                "input_ids",
+                min=(batch_size * num_beams, 1),
+                opt=(batch_size * num_beams, opt_output_seq_len),
+                max=(batch_size * num_beams, max_output_length),
+            )
+            self_attention_profile_context = {
+                "min": (batch_size * num_beams, num_heads, 0, embedding_size_per_head),
+                "opt": (batch_size * num_beams, num_heads, 0, embedding_size_per_head),
+                "max": (batch_size * num_beams, num_heads, 0, embedding_size_per_head),
+            }
 
-        decoder_profiles_non_kv = [dec_profiles_non_kv]
-
-        dec_profiles_kv = Profile()
-        if metadata.other.kv_cache:
-            # Note that the kv profile only accept length 1
-            dec_profiles_kv = dec_profiles_kv.add(
+            # generation phase uses previous self attention kv cache with the last input_ids token to generate the next hidden states and self attention kv cache
+            # This optimization profile is used after the 1st decoder run.
+            dec_profiles_generation = Profile().add(
                 "input_ids",
                 min=(batch_size * num_beams, 1),
                 opt=(batch_size * num_beams, 1),
                 max=(batch_size * num_beams, 1),
             )
 
-            num_heads = GPT2ModelTRTConfig.NUMBER_OF_HEADS[metadata.variant]
-            embedding_size_per_head = GPT2ModelTRTConfig.EMBEDDING_SIZE[metadata.variant] // num_heads
-            num_decoder_layers = GPT2ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]
-            self_attention_profile = {
-                "min": (batch_size * num_beams, num_heads, 0, embedding_size_per_head),
+            self_attention_profile_generation = {
+                "min": (batch_size * num_beams, num_heads, 1, embedding_size_per_head),
                 "opt": (batch_size * num_beams, num_heads, opt_output_seq_len - 1, embedding_size_per_head),
                 "max": (batch_size * num_beams, num_heads, max_output_length - 1, embedding_size_per_head),
             }
 
-            # TODO: move this logic (and some other similar place) into utils.
-            for i in range(num_decoder_layers):
-
-                dec_profiles_kv = dec_profiles_kv.add(
+            for i in range(num_layers):
+                dec_profiles_context = dec_profiles_context.add(
                     f"past_key_values.{i}.decoder.key",
-                    **self_attention_profile
-                )
-                dec_profiles_kv = dec_profiles_kv.add(
+                    **self_attention_profile_context
+                ).add(
                     f"past_key_values.{i}.decoder.value",
-                    **self_attention_profile
+                    **self_attention_profile_context
                 )
-            decoder_profiles_kv = [dec_profiles_kv]
 
-        decoder_profiles = decoder_profiles_kv if (metadata.other.kv_cache) else decoder_profiles_non_kv
+                dec_profiles_generation = dec_profiles_generation.add(
+                    f"past_key_values.{i}.decoder.key",
+                    **self_attention_profile_generation
+                ).add(
+                    f"past_key_values.{i}.decoder.value",
+                    **self_attention_profile_generation
+                )
+
+            # TensorRT accepts multiple optimization engines for the same model.
+            # Profile 1 is only used in the first decoder iterations.
+            decoder_profiles = [dec_profiles_generation, dec_profiles_context]
 
         # Convert ONNX models to TRT engines.
         if benchmarking_args is None:
@@ -600,53 +578,16 @@ class GPT2TRT(TRTInferenceCommand):
         else:
             preview_features.append(PreviewFeature.FASTER_DYNAMIC_SHAPES_0805)
 
-        if not metadata.other.kv_cache:
-            self.gpt2_trt_engine = GPT2ONNXFile(
-                decoder_onnx_fpath, metadata
-            ).as_trt_engine(
-                os.path.splitext(decoder_onnx_fpath)[0] + "-{}.engine".format(engine_tag),
-                profiles=decoder_profiles,
-                preview_features=preview_features
-            )
-        else:
-            decoder_root, decoder_fullname = os.path.split(decoder_onnx_fpath)
-            # Split kv and non kv engines into separate folders to avoid weight overlap
-            non_kv_root = os.path.join(decoder_root, "non-kv")
-            kv_root = os.path.join(decoder_root, "kv")
-            decoder_name, decoder_ext = os.path.splitext(decoder_fullname)
-            decoder_onnx_non_kv_fpath = os.path.join(non_kv_root, decoder_name + "-non-kv" + decoder_ext)
-            decoder_onnx_kv_fpath = os.path.join(kv_root, decoder_fullname)
-            self.gpt2_trt_engine = GPT2ONNXFile(
-                decoder_onnx_kv_fpath, metadata
-            ).as_trt_engine(
-                os.path.splitext(decoder_onnx_kv_fpath)[0] + "-{}.engine".format(engine_tag),
-                profiles=decoder_profiles,
-                preview_features=preview_features
-            )
-            # dual-engine approach: still need to setup non-kv engine in kv mode
-            # note: workspace cleanup is not handled for these extra non-kv files
-            self.gpt2_trt_engine_non_kv = GPT2ONNXFile(
-                decoder_onnx_non_kv_fpath, metadata
-            ).as_trt_engine(
-                os.path.splitext(decoder_onnx_non_kv_fpath)[0] + "-{}.engine".format(engine_tag),
-                profiles=decoder_profiles_non_kv,
-                preview_features=preview_features
-            )
-
-
-        # Create GPT2TRTDecoder instances.
-        tfm_config = GPT2Config(
-            use_cache=metadata.other.kv_cache,
-            num_layers=GPT2ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
+        self.gpt2_trt_engine = GPT2ONNXFile(
+            decoder_onnx_fpath, metadata
+        ).as_trt_engine(
+            os.path.splitext(decoder_onnx_fpath)[0] + "-{}.engine".format(engine_tag),
+            profiles=decoder_profiles,
+            preview_features=preview_features
         )
-
         self.gpt2_trt = GPT2TRTDecoder(
-            self.gpt2_trt_engine, metadata, tfm_config, batch_size=batch_size, num_beams=num_beams, benchmarking_args = benchmarking_args
+            self.gpt2_trt_engine, metadata, hf_config, batch_size=batch_size, num_beams=num_beams, benchmarking_args = benchmarking_args
         )
-
-        if metadata.other.kv_cache:
-            # switch between GPT2TRT is impossible (becase HF decoding step is bound to one decoder). Therefore, we need to add the non-kv engines inside the same decoder --> decoder contains two TRT engines
-            self.gpt2_trt._set_non_kv_engine_for_kv_mode(self.gpt2_trt_engine_non_kv)
 
     def run_trt(
         self,
@@ -704,9 +645,10 @@ class GPT2TRT(TRTInferenceCommand):
                                 self.execute_calculate_perplexity(metadata, r)
                             )
             else:
+                hf_config = AutoConfig.from_pretrained(metadata.variant, use_cache = metadata.other.kv_cache)
                 # Check that input_seq_len and output_seq_len is valid and within required range
-                max_input_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
-                max_output_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+                max_input_seq_len = hf_config.n_positions
+                max_output_seq_len = hf_config.n_positions
 
                 seq_tag = args.input_profile_max_len is None and args.output_profile_max_len is None
                 # User must provide either a pair of profile_max_len or a profile of seq_len for input/output

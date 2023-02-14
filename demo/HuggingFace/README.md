@@ -127,9 +127,11 @@ python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --workin
 ```
 
 Notes:
-* For BART and GPT2, K-V cache decoder with TensorRT requires exporting 2 onnx files and building separate engines respectively, called "non-kv" and "kv". For the first decoder run, KV Cache needs to be generated with only `input_ids` and `encoder_hidden_states`(if encoder_decoder), which is named "non-kv". For the other decoder iterations, previous KV Cache and other inputs are passed into the model to generate the updated KV Cache and decoder_hidden_states, which is named "kv". Because current onnx export cannot handle dynamic number of inputs, 2 onnx files with slightly different configurations are used together.
-* For T5, the code has been optimized according to the latest TensorRT features. (1) Cross attention kv does not change throughout decoding session, so it is only calculated once at the first decoding session. `onnx.export` cannot handle this logic properly for HuggingFace, so we creates a "cross attention kv generator" using only `encoder_hidden_states`. (2) TensorRT's "zero tensor" feature is used for self attention kv cache growth starting at empty. (3) Self attention input and output are the same location to avoid D2D copy for kv cache. A similar optimization will be ported to all the models.
+* For T5, the code has been optimized according to the latest TensorRT features. (1) Cross attention kv does not change throughout decoding session, so it is only calculated once at the first decoding session. `onnx.export` cannot handle this logic properly for HuggingFace, so we create a "cross attention kv generator" using only `encoder_hidden_states`. (2) TensorRT's "zero tensor" feature is used for self attention kv cache growth starting at empty. (3) Self attention input and output are the same location to avoid D2D copy for kv cache. A similar optimization will be ported to BART.
 
+* For BART, we will be porting similar optimization from T5, but currently, K-V cache decoder with TensorRT requires exporting 2 onnx files and building separate engines respectively, called "non-kv" and "kv". For the first decoder run, KV Cache needs to be generated with only `input_ids` and `encoder_hidden_states`(if encoder_decoder), which is named "non-kv". For the other decoder iterations, previous KV Cache and other inputs are passed into the model to generate the updated KV Cache and decoder_hidden_states, which is named "kv". Because current onnx export cannot handle dynamic number of inputs, 2 onnx files with slightly different configurations are used together.
+
+* For GPT2, since it is decoder only, only self attention kv is needed, and it has 2 mode, corresonding to 2 optimization profiles for a single TensorRT engine: context mode which takes in `input_ids` with various length only and outputs `hidden_states` and self attention cache; generation mode, which takes in `input_ids` with seq_len = 1 and entire self attention kv cache, and outputs `hidden_states` with seq_len = 1 and kv cache with cum_seq_len (`past_decoder_length`) + 1. It has some memory concurrency issue that cannot let self attention input and output point to the same memory location, so it requires dual cache. 
 
 ## How to run with beam search
 
@@ -140,7 +142,7 @@ python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --workin
 ```
 
 Notes:
-* K-V cache with beam search may have memory concurrency issues with TensorRT Optimization. We are currently working on this issue.
+* K-V cache with beam search have memory concurrency issues with TensorRT Optimization. We are currently working on this issue.
 
 
 ## How to run without the TensorRT `FASTER_DYNAMIC_SHAPES_0805` preview feature
