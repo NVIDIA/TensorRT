@@ -125,7 +125,7 @@ class T5TRTEncoder(TRTHFRunner):
         benchmarking_args: T5TRTBenchmarkingArgs = None
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
-        self.data_type = torch.float16 if network_metadata.precision.fp16 else torch.float32
+        self.data_type = torch.float32
         # In benchmarking mode, the max_sequence_length should be the designated input_profile_max_len
         if benchmarking_args is not None and benchmarking_args.input_profile_max_len is not None:
             self.max_sequence_length = benchmarking_args.input_profile_max_len
@@ -201,7 +201,7 @@ class T5TRTDecoder(TRTHFRunner):
         benchmarking_args: T5TRTBenchmarkingArgs = None,
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
-        self.data_type = torch.float16 if network_metadata.precision.fp16 else torch.float32
+        self.data_type = torch.float32
 
         # In benchmarking mode, the max_sequence_length should be the user-provided input_profile_max_len
         if benchmarking_args is not None and benchmarking_args.input_profile_max_len is not None:

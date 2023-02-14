@@ -20,6 +20,10 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+# [1.3.4] - 2023-02-02
+- Changed GPT2 demo kv cache TRT to 1 engine, 2 optimization profiles 
+- Added fp16 support for GPT2
+
 # [1.3.3] - 2023-01-04
 - Deprecated max workspace size flag to memory pool limits for TensorRT
 - Added t5-11b support
