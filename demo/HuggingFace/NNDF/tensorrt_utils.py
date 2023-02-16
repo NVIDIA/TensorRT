@@ -132,16 +132,39 @@ def move_t5_cast_op(onnx_input_fpath: str, onnx_output_fpath: str):
                         found_pow = True
 
             if found_pow:
-                n.i().outputs = n.outputs
-                n.outputs.clear()
+                # Using Clip would be the simplest way, but unfortunately TRT refuses to put "Clip" on Myelin. The WAR
+                # is to insert a Max followed by a Min instead.
+                # Replace the Cast with Max + Min
+                n.op = "Max"
+                n.name = n.name.replace("Cast", "Max")
+                n.attrs = {}
+                lower_bound = gs.Constant(n.name + "/lower_bound", np.array(-64000.0, dtype=np.float32))
+                n.inputs = [n.inputs[0], lower_bound]
+
+                max_node_output = n.outputs[0]
+                # Max has already exist, avoid tensors with same names
+                max_node_output.name = max_node_output.name.replace("Cast", "ClipMax")
+
+                upper_bound = gs.Constant(n.name + "/upper_bound", np.array(64000.0, dtype=np.float32))
+                min_node_inputs = [max_node_output, upper_bound]
+
+                min_node_output = gs.Variable(max_node_output.name.replace("ClipMax", "ClipMin"), dtype = np.float32)
+                min_node = gs.Node(op="Min", inputs = min_node_inputs, outputs = [min_node_output], attrs = {})
+                graph.nodes.append(min_node)
+
+                for o in max_node_output.outputs:
+                    # To avoid loop in graph
+                    if o.op != "Min":
+                        o.inputs = [min_node_output if i == max_node_output else i for i in o.inputs]
 
     graph.cleanup().toposort()
+
     add_nodes = [node for node in graph.nodes if node.op == "Add"]
     for n in add_nodes:
-        if n.o().op == "Pow":
+        if n.o().o().o().op == "Pow":
             add_inputs = n.inputs
             outs = []
-            for i in  add_inputs:
+            for i in add_inputs:
                 identity_out = gs.Variable("identity_out" + i.name, dtype=np.float32)
                 new_cast = gs.Node(op="Cast", inputs=[i], outputs=[identity_out], attrs={"to": 1})
                 outs.append(identity_out)

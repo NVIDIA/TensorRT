@@ -469,4 +469,8 @@ class T5EncoderConverter(ModelFileConverter):
             **opt_args
         )
 
+        if network_metadata.precision.fp16:
+            move_t5_cast_op(output_fpath, output_fpath)
+            clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
+
         return T5EncoderONNXFile(output_fpath, network_metadata)
