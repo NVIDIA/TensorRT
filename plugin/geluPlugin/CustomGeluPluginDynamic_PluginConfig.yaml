@@ -21,7 +21,7 @@ versions:
       - combination2:
           input: float16
     output_dims:
-      output: “input_0, input_1, input_2, 1, 1”
+      output: "input_0, input_1, input_2, 1, 1"
     attributes:
       - type_id
       - bias

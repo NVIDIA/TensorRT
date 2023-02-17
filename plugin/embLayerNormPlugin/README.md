@@ -50,8 +50,10 @@ The final output embedding is the sum of embeddings for the token, the segment a
 
 
 `maskIdx`
-embedded_input is an `int32` tensor with shape `[B, packSize]` where `B` is batch size, `packSize` is the packed mask size that depends on the sequence length.
-The maskIdx is a more compact representation of the input mask, consisting of the number of valid elements, assuming that the original mask was contiguous.
+The `maskIdx` is a more compact representation of the input mask, consisting of the number of valid elements, assuming that the original mask was contiguous.
+For fixed sequence length version 1, the `maskIdx` is an `int32` tensor with shape `[B, packSize]` where `B` is batch size, `packSize` is the packed mask size that depends on the sequence length.
+For huggingface style variable sequence length version 2, the `maskIdx` is an `int32` empty tensor.
+For megatron style variable sequence length version 3, the `maskIdx` is a `half` tensor with shape `[B, S, 1, 1]` where `B` is batch size, `S` is the sequence length.
 
 
 ## Parameters

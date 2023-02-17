@@ -46,9 +46,8 @@ int32_t embSkipLayerNormMTron(cudaStream_t stream, int32_t ld, int32_t B, int32_
 class EmbLayerNormVarSeqlenPluginBase : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    EmbLayerNormVarSeqlenPluginBase(std::string const& name, nvinfer1::DataType const type,
-        nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& word_emb,
-        nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb);
+    EmbLayerNormVarSeqlenPluginBase(std::string const& name, DataType type, Weights const& beta, Weights const& gamma,
+        Weights const& word_emb, Weights const& pos_emb, Weights const& tok_emb, DataType maskType);
 
     EmbLayerNormVarSeqlenPluginBase(std::string const& name, void const* data, size_t length);
 
@@ -93,7 +92,8 @@ protected:
     bert::WeightsWithOwnership mWordEmb;
     bert::WeightsWithOwnership mTokEmb;
     bert::WeightsWithOwnership mPosEmb;
-    nvinfer1::DataType mType;
+    DataType mType{};
+    DataType mMaskType{};
 };
 
 class EmbLayerNormVarSeqlenPluginHFace : public EmbLayerNormVarSeqlenPluginBase
