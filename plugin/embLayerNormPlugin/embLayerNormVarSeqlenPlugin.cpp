@@ -28,16 +28,6 @@ using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 using namespace nvinfer1::plugin::bert;
 
-// For full mask mode, we must produce the compressed mask format expected by the fused attention path. Currently, only
-// two sequence lengths are supported. We hard code the sizes here.
-// The number of threads per CTA: warps_m * warps_n * warps_k * 32;
-constexpr size_t threadsPerCta256 = 1 * 4 * 32;
-// The number of xmmas in the M dimension. We use one uint32_t per XMMA in the M dimension: (s + 16*warps_m - 1)
-// / (16*warps_m);
-constexpr size_t xmmasM256 = 16;
-// Packed mask size per batch. Layout is XMMAS_M * THREADS_PER_CTA.
-constexpr size_t packedMaskSize256 = xmmasM256 * threadsPerCta256;
-
 namespace
 {
 char const* EMB_LAYER_NORM_VAR_SEQLEN_VERSION_HFACE{"2"};
@@ -52,11 +42,13 @@ std::vector<PluginField> EmbLayerNormVarSeqlenPluginBaseCreator::mPluginAttribut
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormVarSeqlenPluginHFaceCreator);
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormVarSeqlenPluginMTronCreator);
 
-EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(std::string const& name, DataType const type,
-    Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb)
+EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(std::string const& name, DataType type,
+    Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb,
+    DataType maskType)
     : mLayerName(name)
     , mLd(beta.count)
     , mType(type)
+    , mMaskType(maskType)
 {
     // Assuming Weights.count is the number of elements and not bytes
     PLUGIN_VALIDATE(beta.count == gamma.count);
@@ -98,6 +90,7 @@ EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(
     deserialize_value(&data, &length, &mWordVocabSize);
     deserialize_value(&data, &length, &mPosVocabSize);
     deserialize_value(&data, &length, &mTokVocabSize);
+    deserialize_value(&data, &length, &mMaskType);
 
     char const* d = static_cast<char const*>(data);
     mBeta.convertAndCopy(d, mLd, nvinfer1::DataType::kFLOAT);
@@ -117,7 +110,7 @@ EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(
 
 EmbLayerNormVarSeqlenPluginHFace::EmbLayerNormVarSeqlenPluginHFace(std::string const& name, DataType const type,
     Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb)
-    : EmbLayerNormVarSeqlenPluginBase(name, type, beta, gamma, wordEmb, posEmb, tokEmb)
+    : EmbLayerNormVarSeqlenPluginBase(name, type, beta, gamma, wordEmb, posEmb, tokEmb, DataType::kINT32)
 {
 }
 
@@ -130,7 +123,7 @@ EmbLayerNormVarSeqlenPluginHFace::EmbLayerNormVarSeqlenPluginHFace(
 
 EmbLayerNormVarSeqlenPluginMTron::EmbLayerNormVarSeqlenPluginMTron(std::string const& name, DataType const type,
     Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb)
-    : EmbLayerNormVarSeqlenPluginBase(name, type, beta, gamma, wordEmb, posEmb, tokEmb)
+    : EmbLayerNormVarSeqlenPluginBase(name, type, beta, gamma, wordEmb, posEmb, tokEmb, type)
 {
 }
 
@@ -203,21 +196,9 @@ DimsExprs EmbLayerNormVarSeqlenPluginHFace::getOutputDimensions(
         return ret;
     }
 
-    // This is a hack: we just report some mask size and rely the plugins to play nicely together.
-    //      At runtime, depending on the actual maxSeqlen, the size might be different.
-    int32_t maskSize_ = packedMaskSize384;
-
-    auto maskSize = exprBuilder.constant(maskSize_);
-    auto fp16maskSize = exprBuilder.operation(DimensionOperation::kPROD, *maskSize, *exprBuilder.constant(2));
-
-    auto Bplus1 = inputs[2].d[0];
-    auto one = exprBuilder.constant(1);
-    auto B = exprBuilder.operation(DimensionOperation::kSUB, *Bplus1, *one);
-
-    DimsExprs ret;
-    ret.nbDims = 2;
-    ret.d[0] = B;
-    ret.d[1] = fp16maskSize;
+    // Return empty tensor since this is dummy output, we do not delete it for backward compatibility.
+    DimsExprs ret{};
+    ret.nbDims = 0;
     return ret;
 }
 
@@ -281,7 +262,7 @@ bool EmbLayerNormVarSeqlenPluginBase::supportsFormatCombination(
             && desc.dims.d[2] == 1 && desc.dims.d[3] == 1;
     }
     // mask
-    return desc.type == DataType::kHALF;
+    return desc.type == mMaskType;
 }
 
 void checkConfigurationInputs(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
@@ -315,20 +296,10 @@ void EmbLayerNormVarSeqlenPluginHFace::configurePlugin(DynamicPluginTensorDesc c
     checkConfigurationInputs(inputs, nbInputs, outputs, nbOutputs);
     PLUGIN_ASSERT(static_cast<size_t>(outputs[0].desc.dims.d[1]) == static_cast<size_t>(mLd));
 
-    int32_t const B = inputs[2].desc.dims.d[0] - 1;
-
     // check mask
-    PLUGIN_ASSERT(outputs[1].desc.dims.nbDims == 2);
-    if (B > 0)
-    {
-        PLUGIN_ASSERT(outputs[1].desc.dims.d[0] == B);
-    }
-    PLUGIN_ASSERT((outputs[1].desc.dims.d[1] == 2 * packedMaskSize384)
-        || (outputs[1].desc.dims.d[1] == 2 * packedMaskSize128)
-        || (outputs[1].desc.dims.d[1] == 2 * packedMaskSize256));
-
+    PLUGIN_ASSERT(outputs[1].desc.dims.nbDims == 0);
     PLUGIN_ASSERT(outputs[0].desc.type == mType);
-    PLUGIN_ASSERT(outputs[1].desc.type == DataType::kHALF);
+    PLUGIN_ASSERT(outputs[1].desc.type == mMaskType);
 }
 
 void EmbLayerNormVarSeqlenPluginMTron::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
@@ -345,7 +316,7 @@ void EmbLayerNormVarSeqlenPluginMTron::configurePlugin(DynamicPluginTensorDesc c
     PLUGIN_ASSERT(outputs[1].desc.dims.d[3] == 1);
 
     PLUGIN_ASSERT(outputs[0].desc.type == mType);
-    PLUGIN_ASSERT(outputs[1].desc.type == mType);
+    PLUGIN_ASSERT(outputs[1].desc.type == mMaskType);
 }
 
 size_t EmbLayerNormVarSeqlenPluginBase::getWorkspaceSize(
@@ -498,14 +469,9 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputD
 DataType EmbLayerNormVarSeqlenPluginBase::getOutputDataType(
     int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-
     PLUGIN_ASSERT(index == 0 || index == 1);
-    if (index == 0)
-    {
-        PLUGIN_ASSERT(mType == DataType::kHALF || mType == DataType::kFLOAT);
-        return mType;
-    }
-    return DataType::kHALF;
+    PLUGIN_ASSERT(mType == DataType::kHALF || mType == DataType::kFLOAT);
+    return index == 0 ? mType : mMaskType;
 }
 
 // IPluginV2 Methods
@@ -563,6 +529,7 @@ size_t EmbLayerNormVarSeqlenPluginBase::getSerializationSize() const noexcept
         + wordSize * mLd * mWordVocabSize // word emb
         + wordSize * mLd * mPosVocabSize  // pos emb
         + wordSize * mLd * mTokVocabSize  // tok emb
+        + sizeof(mMaskType)               // mask type
         ;
 }
 
@@ -573,6 +540,7 @@ void EmbLayerNormVarSeqlenPluginBase::serialize(void* buffer) const noexcept
     serialize_value(&buffer, mWordVocabSize);
     serialize_value(&buffer, mPosVocabSize);
     serialize_value(&buffer, mTokVocabSize);
+    serialize_value(&buffer, mMaskType);
 
     char* d = static_cast<char*>(buffer);
     size_t const wordSize = getElementSize(mType);

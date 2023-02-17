@@ -93,7 +93,7 @@ bool PillarScatterPlugin::supportsFormatCombination(
     }
     if (pos == 3)
     {
-        return (in.type == inOut[0].type) && (in.format == TensorFormat::kLINEAR || in.format == TensorFormat::kHWC8);
+        return (in.type == inOut[0].type) && (in.format == TensorFormat::kLINEAR);
     }
     return false;
 }
