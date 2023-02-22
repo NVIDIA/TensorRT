@@ -162,7 +162,7 @@ The image to be inferred.
 
 1.  Download the [ONNX ResNet-50 model](https://github.com/onnx/models/tree/master/vision/classification/resnet/model).
     ```bash
-    wget https://s3.amazonaws.com/download.onnx/models/opset_9/resnet50.tar.gz -O $TRT_DATADIR/int8_api/resnet50.tar.gz
+    wget https://download.onnxruntime.ai/onnx/models/resnet50.tar.gz -O $TRT_DATADIR/int8_api/resnet50.tar.gz
     ```
 
 2.  Unpackage the model file.
