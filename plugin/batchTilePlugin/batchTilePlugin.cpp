@@ -19,16 +19,17 @@
 #include "common/templates.h"
 
 #include <cuda_runtime.h>
-#include <iostream>
-#include <numeric>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 using nvinfer1::plugin::BatchTilePlugin;
 using nvinfer1::plugin::BatchTilePluginCreator;
 
-static const char* BATCH_TILE_PLUGIN_VERSION{"1"};
-static const char* BATCH_TILE_PLUGIN_NAME{"BatchTilePlugin_TRT"};
+namespace
+{
+static char const* const kBATCH_TILE_PLUGIN_VERSION{"1"};
+static char const* const kBATCH_TILE_PLUGIN_NAME{"BatchTilePlugin_TRT"};
+} // namespace
 
 PluginFieldCollection BatchTilePluginCreator::mFC{};
 
@@ -46,73 +47,86 @@ BatchTilePlugin::BatchTilePlugin(std::string const& name, size_t copy_size)
 BatchTilePlugin::BatchTilePlugin(std::string const& name, void const* data, size_t length)
     : mLayerName(name)
 {
-    auto const* d{toPointer<char const>(data)};
+    auto const* d{toPointer<uint8_t const>(data)};
     auto const* a{d};
     mCopySize = readFromBuffer<size_t>(d);
     PLUGIN_VALIDATE(d == a + length);
 }
 
-int BatchTilePlugin::getNbOutputs() const noexcept
+int32_t BatchTilePlugin::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims BatchTilePlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims BatchTilePlugin::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     try
     {
-        PLUGIN_ASSERT(nbInputDims == 2);
-        PLUGIN_ASSERT(index == 0);
-        PLUGIN_ASSERT(inputs[1].nbDims == 4);
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(nbInputDims == 2);
+        PLUGIN_VALIDATE(index == 0);
+        PLUGIN_VALIDATE(inputs[1].nbDims == 4);
         return Dims3(inputs[1].d[1], inputs[1].d[2], inputs[1].d[3]);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
     return Dims{};
 }
 
-int BatchTilePlugin::initialize() noexcept
+int32_t BatchTilePlugin::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
-size_t BatchTilePlugin::getWorkspaceSize(int) const noexcept
+size_t BatchTilePlugin::getWorkspaceSize(int32_t) const noexcept
 {
     return 0;
 }
 
-DataType BatchTilePlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
-{
-    PLUGIN_ASSERT(index == 0);
-    return DataType::kFLOAT;
-}
-
-int BatchTilePlugin::enqueue(
-    int batchSize, const void* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
+DataType BatchTilePlugin::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     try
     {
-        char* output = reinterpret_cast<char*>(outputs[0]);
+        PLUGIN_VALIDATE(index == 0);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+
+    return DataType::kFLOAT;
+}
+
+int32_t BatchTilePlugin::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
+{
+    try
+    {
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(outputs != nullptr);
+        uint8_t* output = reinterpret_cast<uint8_t*>(outputs[0]);
         // expand to batch size
-        for (int i = 0; i < batchSize; i++)
+        for (int32_t i = 0; i < batchSize; i++)
         {
             PLUGIN_CHECK_CUDA(
                 cudaMemcpyAsync(output + i * mCopySize, inputs[1], mCopySize, cudaMemcpyDeviceToDevice, stream));
         }
         return STATUS_SUCCESS;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
-    return -1;
+    return STATUS_FAILURE;
 }
 
 void BatchTilePlugin::serialize(void* buffer) const noexcept
 {
-    char *d = reinterpret_cast<char*>(buffer), *a = d;
+    uint8_t* d = reinterpret_cast<uint8_t*>(buffer);
+    uint8_t* const a = d;
     writeToBuffer<size_t>(d, mCopySize);
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
@@ -121,27 +135,37 @@ void BatchTilePlugin::terminate() noexcept {}
 
 size_t BatchTilePlugin::getSerializationSize() const noexcept
 {
-    return sizeof(size_t);
+    return sizeof(mCopySize);
 }
 
-bool BatchTilePlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool BatchTilePlugin::isOutputBroadcastAcrossBatch(
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
-bool BatchTilePlugin::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool BatchTilePlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
-void BatchTilePlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void BatchTilePlugin::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
+    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
-    PLUGIN_ASSERT(nbOutputs == 1);
-    PLUGIN_ASSERT(inputDims[1].nbDims == 4);
-    PLUGIN_ASSERT(inputDims[1].d[0] == 1);
-    mCopySize = pluginInternal::volume(inputDims[1]) * sizeof(float);
+    try
+    {
+        PLUGIN_VALIDATE(inputDims != nullptr);
+        PLUGIN_VALIDATE(outputDims != nullptr);
+        PLUGIN_VALIDATE(nbOutputs == 1);
+        PLUGIN_VALIDATE(inputDims[1].nbDims == 4);
+        PLUGIN_VALIDATE(inputDims[1].d[0] == 1);
+        mCopySize = pluginInternal::volume(inputDims[1]) * sizeof(float);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 bool BatchTilePlugin::supportsFormat(DataType type, PluginFormat format) const noexcept
@@ -149,13 +173,13 @@ bool BatchTilePlugin::supportsFormat(DataType type, PluginFormat format) const n
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-const char* BatchTilePlugin::getPluginType() const noexcept
+char const* BatchTilePlugin::getPluginType() const noexcept
 {
-    return BATCH_TILE_PLUGIN_NAME;
+    return kBATCH_TILE_PLUGIN_NAME;
 }
-const char* BatchTilePlugin::getPluginVersion() const noexcept
+char const* BatchTilePlugin::getPluginVersion() const noexcept
 {
-    return BATCH_TILE_PLUGIN_VERSION;
+    return kBATCH_TILE_PLUGIN_VERSION;
 }
 
 void BatchTilePlugin::destroy() noexcept
@@ -171,19 +195,27 @@ IPluginV2Ext* BatchTilePlugin::clone() const noexcept
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
     return nullptr;
 }
 
-void BatchTilePlugin::setPluginNamespace(const char* libNamespace) noexcept
+void BatchTilePlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
-const char* BatchTilePlugin::getPluginNamespace() const noexcept
+char const* BatchTilePlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -194,56 +226,59 @@ BatchTilePluginCreator::BatchTilePluginCreator()
     mFC.fields = nullptr;
 }
 
-const char* BatchTilePluginCreator::getPluginName() const noexcept
+char const* BatchTilePluginCreator::getPluginName() const noexcept
 {
-    return BATCH_TILE_PLUGIN_NAME;
+    return kBATCH_TILE_PLUGIN_NAME;
 }
 
-const char* BatchTilePluginCreator::getPluginVersion() const noexcept
+char const* BatchTilePluginCreator::getPluginVersion() const noexcept
 {
-    return BATCH_TILE_PLUGIN_VERSION;
+    return kBATCH_TILE_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* BatchTilePluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* BatchTilePluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* BatchTilePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* BatchTilePluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(name != nullptr);
         auto* plugin = new BatchTilePlugin(name);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
     return nullptr;
 }
 
-void BatchTilePluginCreator::setPluginNamespace(const char* libNamespace) noexcept
+void BatchTilePluginCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
 }
 
 IPluginV2Ext* BatchTilePluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(name != nullptr);
         return new BatchTilePlugin(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

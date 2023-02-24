@@ -36,9 +36,9 @@ class InstanceNormalizationPlugin : public nvinfer1::IPluginV2DynamicExt
 
 public:
     InstanceNormalizationPlugin(float epsilon, nvinfer1::Weights const& scale, nvinfer1::Weights const& bias,
-        int32_t relu = 0, float alpha = 0.f);
+        int32_t relu = 0, float alpha = 0.F);
     InstanceNormalizationPlugin(float epsilon, std::vector<float> const& scale, std::vector<float> const& bias,
-        int32_t relu = 0, float alpha = 0.f);
+        int32_t relu = 0, float alpha = 0.F);
     InstanceNormalizationPlugin(void const* serialData, size_t serialLength);
 
     InstanceNormalizationPlugin() = delete;
@@ -160,12 +160,12 @@ class InstanceNormalizationPluginV2 final : public InstanceNormalizationPlugin
 {
 public:
     InstanceNormalizationPluginV2(float epsilon, nvinfer1::Weights const& scale, nvinfer1::Weights const& bias,
-        int32_t relu = 0, float alpha = 0.f)
+        int32_t relu = 0, float alpha = 0.F)
         : InstanceNormalizationPlugin(epsilon, scale, bias, relu, alpha)
     {
     }
     InstanceNormalizationPluginV2(float epsilon, std::vector<float> const& scale, std::vector<float> const& bias,
-        int32_t relu = 0, float alpha = 0.f)
+        int32_t relu = 0, float alpha = 0.F)
         : InstanceNormalizationPlugin(epsilon, scale, bias, relu, alpha)
     {
     }

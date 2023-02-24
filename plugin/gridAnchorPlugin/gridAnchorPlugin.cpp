@@ -72,9 +72,9 @@ GridAnchorGenerator::GridAnchorGenerator(const GridAnchorParameters* paramIn, in
             tmpScales[i] = (mParam[id].minSize + (mParam[id].maxSize - mParam[id].minSize) * id / (mNumLayers - 1));
         }
         // Add another 1.0f to tmpScales to prevent going out side of the vector in calculating the scale_next.
-        tmpScales.push_back(1.0f); // has 7 entries
+        tmpScales.push_back(1.0F); // has 7 entries
         // scale0 are for the first layer specifically
-        std::vector<float> scale0 = {0.1f, tmpScales[0], tmpScales[0]};
+        std::vector<float> scale0 = {0.1F, tmpScales[0], tmpScales[0]};
 
         std::vector<float> aspect_ratios;
         std::vector<float> scales;

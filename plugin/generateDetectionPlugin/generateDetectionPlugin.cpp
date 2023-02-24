@@ -136,8 +136,8 @@ GenerateDetection::GenerateDetection(int num_classes, int keep_topk, float score
     mBackgroundLabel = 0;
     PLUGIN_VALIDATE(mNbClasses > 0);
     PLUGIN_VALIDATE(mKeepTopK > 0);
-    PLUGIN_VALIDATE(score_threshold >= 0.0f);
-    PLUGIN_VALIDATE(iou_threshold > 0.0f);
+    PLUGIN_VALIDATE(score_threshold >= 0.0F);
+    PLUGIN_VALIDATE(iou_threshold > 0.0F);
     PLUGIN_VALIDATE(mImageSize.nbDims == 3);
     PLUGIN_VALIDATE(mImageSize.d[0] > 0 && mImageSize.d[1] > 0 && mImageSize.d[2] > 0);
 

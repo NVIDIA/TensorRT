@@ -25,22 +25,17 @@ namespace nvinfer1
 {
 namespace plugin
 {
-#define checkCudaErrors(status)                                                                                        \
-    {                                                                                                                  \
-        if ((status) != 0)                                                                                             \
-        {                                                                                                              \
-            std::cout << "Cuda failure: " << cudaGetErrorString(status) << " at line " << __LINE__ << " in file "      \
-                      << __FILE__ << " error status: " << (status) << std::endl;                                       \
-            abort();                                                                                                   \
-        }                                                                                                              \
-    }
 
 using namespace nvinfer1;
 using nvinfer1::plugin::VoxelGeneratorPlugin;
 using nvinfer1::plugin::VoxelGeneratorPluginCreator;
 
-static const char* PLUGIN_VERSION{"1"};
-static const char* PLUGIN_NAME{"VoxelGeneratorPlugin"};
+namespace
+{
+char const* const kVOXEL_GENERATOR_PLUGIN_VERSION{"1"};
+char const* const kVOXEL_GENERATOR_PLUGIN_NAME{"VoxelGeneratorPlugin"};
+size_t constexpr kSERIALIZATION_SIZE{9 * sizeof(float) + 7 * sizeof(int32_t)};
+} // namespace
 
 // Static class fields initialization
 PluginFieldCollection VoxelGeneratorPluginCreator::mFC{};
@@ -60,63 +55,74 @@ int32_t npRound(float x)
 
 VoxelGeneratorPlugin::VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin,
     float xMax, float yMin, float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ)
-    : pillarNum_(maxVoxels)
-    , pointNum_(maxPoints)
-    , featureNum_(voxelFeatures)
-    , min_x_range_(xMin)
-    , max_x_range_(xMax)
-    , min_y_range_(yMin)
-    , max_y_range_(yMax)
-    , min_z_range_(zMin)
-    , max_z_range_(zMax)
-    , pillar_x_size_(pillarX)
-    , pillar_y_size_(pillarY)
-    , pillar_z_size_(pillarZ)
+    : mPillarNum(maxVoxels)
+    , mPointNum(maxPoints)
+    , mFeatureNum(voxelFeatures)
+    , mMinXRange(xMin)
+    , mMaxXRange(xMax)
+    , mMinYRange(yMin)
+    , mMaxYRange(yMax)
+    , mMinZRange(zMin)
+    , mMaxZRange(zMax)
+    , mPillarXSize(pillarX)
+    , mPillarYSize(pillarY)
+    , mPillarZSize(pillarZ)
 {
 }
 
-VoxelGeneratorPlugin::VoxelGeneratorPlugin(
-    int max_voxels, int max_points, int voxel_features, float x_min,
-    float x_max, float y_min, float y_max, float z_min, float z_max,
-    float pillar_x, float pillar_y, float pillar_z, int point_features,
-    int grid_x, int grid_y, int grid_z
-) : pillarNum_(max_voxels), pointNum_(max_points), featureNum_(voxel_features),
-    min_x_range_(x_min), max_x_range_(x_max), min_y_range_(y_min),
-    max_y_range_(y_max), min_z_range_(z_min), max_z_range_(z_max),
-    pillar_x_size_(pillar_x), pillar_y_size_(pillar_y),
-    pillar_z_size_(pillar_z), pointFeatureNum_(point_features),
-    grid_x_size_(grid_x), grid_y_size_(grid_y), grid_z_size_(grid_z)
+VoxelGeneratorPlugin::VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin,
+    float xMax, float yMin, float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ,
+    int32_t pointFeatures, int32_t gridX, int32_t gridY, int32_t gridZ)
+    : mPillarNum(maxVoxels)
+    , mPointNum(maxPoints)
+    , mFeatureNum(voxelFeatures)
+    , mMinXRange(xMin)
+    , mMaxXRange(xMax)
+    , mMinYRange(yMin)
+    , mMaxYRange(yMax)
+    , mMinZRange(zMin)
+    , mMaxZRange(zMax)
+    , mPillarXSize(pillarX)
+    , mPillarYSize(pillarY)
+    , mPillarZSize(pillarZ)
+    , mPointFeatureNum(pointFeatures)
+    , mGridXSize(gridX)
+    , mGridYSize(gridY)
+    , mGridZSize(gridZ)
 {
 }
 
-VoxelGeneratorPlugin::VoxelGeneratorPlugin(const void* data, size_t length)
+VoxelGeneratorPlugin::VoxelGeneratorPlugin(void const* data, size_t length)
 {
-    const char* d = reinterpret_cast<const char*>(data);
-    pillarNum_ = readFromBuffer<int>(d);
-    pointNum_ = readFromBuffer<int>(d);
-    featureNum_ = readFromBuffer<int>(d);
-    min_x_range_ = readFromBuffer<float>(d);
-    max_x_range_ = readFromBuffer<float>(d);
-    min_y_range_ = readFromBuffer<float>(d);
-    max_y_range_ = readFromBuffer<float>(d);
-    min_z_range_ = readFromBuffer<float>(d);
-    max_z_range_ = readFromBuffer<float>(d);
-    pillar_x_size_ = readFromBuffer<float>(d);
-    pillar_y_size_ = readFromBuffer<float>(d);
-    pillar_z_size_ = readFromBuffer<float>(d);
-    pointFeatureNum_ = readFromBuffer<int>(d);
-    grid_x_size_ = readFromBuffer<int>(d);
-    grid_y_size_ = readFromBuffer<int>(d);
-    grid_z_size_ = readFromBuffer<int>(d);
+    PLUGIN_ASSERT(data != nullptr);
+    uint8_t const* d = reinterpret_cast<uint8_t const*>(data);
+    auto const *a = d;
+    mPillarNum = readFromBuffer<int32_t>(d);
+    mPointNum = readFromBuffer<int32_t>(d);
+    mFeatureNum = readFromBuffer<int32_t>(d);
+    mMinXRange = readFromBuffer<float>(d);
+    mMaxXRange = readFromBuffer<float>(d);
+    mMinYRange = readFromBuffer<float>(d);
+    mMaxYRange = readFromBuffer<float>(d);
+    mMinZRange = readFromBuffer<float>(d);
+    mMaxZRange = readFromBuffer<float>(d);
+    mPillarXSize = readFromBuffer<float>(d);
+    mPillarYSize = readFromBuffer<float>(d);
+    mPillarZSize = readFromBuffer<float>(d);
+    mPointFeatureNum = readFromBuffer<int32_t>(d);
+    mGridXSize = readFromBuffer<int32_t>(d);
+    mGridYSize = readFromBuffer<int32_t>(d);
+    mGridZSize = readFromBuffer<int32_t>(d);
+    PLUGIN_ASSERT(d == a + length);
 }
 
 nvinfer1::IPluginV2DynamicExt* VoxelGeneratorPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new VoxelGeneratorPlugin(pillarNum_, pointNum_, featureNum_, min_x_range_, max_x_range_,
-            min_y_range_, max_y_range_, min_z_range_, max_z_range_, pillar_x_size_, pillar_y_size_, pillar_z_size_,
-            pointFeatureNum_, grid_x_size_, grid_y_size_, grid_z_size_);
+        auto* plugin = new VoxelGeneratorPlugin(mPillarNum, mPointNum, mFeatureNum, mMinXRange, mMaxXRange, mMinYRange,
+            mMaxYRange, mMinZRange, mMaxZRange, mPillarXSize, mPillarYSize, mPillarZSize, mPointFeatureNum, mGridXSize,
+            mGridYSize, mGridZSize);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
@@ -127,226 +133,257 @@ nvinfer1::IPluginV2DynamicExt* VoxelGeneratorPlugin::clone() const noexcept
     return nullptr;
 }
 
-nvinfer1::DimsExprs VoxelGeneratorPlugin::getOutputDimensions(
-    int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+nvinfer1::DimsExprs VoxelGeneratorPlugin::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
+    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
-    PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
-    auto batch_size = inputs[0].d[0];
-    if (outputIndex == 0)
+    try
     {
-        nvinfer1::DimsExprs dim0{};
-        dim0.nbDims = 4;
-        dim0.d[0] = batch_size;
-        dim0.d[1] = exprBuilder.constant(pillarNum_);
-        dim0.d[2] = exprBuilder.constant(pointNum_);
-        dim0.d[3] = exprBuilder.constant(featureNum_);
-        return dim0;
+        PLUGIN_VALIDATE(outputIndex >= 0 && outputIndex < this->getNbOutputs());
+        auto batchSize = inputs[0].d[0];
+        if (outputIndex == 0)
+        {
+            nvinfer1::DimsExprs dim0{};
+            dim0.nbDims = 4;
+            dim0.d[0] = batchSize;
+            dim0.d[1] = exprBuilder.constant(mPillarNum);
+            dim0.d[2] = exprBuilder.constant(mPointNum);
+            dim0.d[3] = exprBuilder.constant(mFeatureNum);
+            return dim0;
+        }
+        if (outputIndex == 1)
+        {
+            nvinfer1::DimsExprs dim1{};
+            dim1.nbDims = 3;
+            dim1.d[0] = batchSize;
+            dim1.d[1] = exprBuilder.constant(mPillarNum);
+            dim1.d[2] = exprBuilder.constant(4);
+            return dim1;
+        }
+        nvinfer1::DimsExprs dim2{};
+        dim2.nbDims = 1;
+        dim2.d[0] = batchSize;
+        return dim2;
     }
-    if(outputIndex == 1){
-        nvinfer1::DimsExprs dim1{};
-        dim1.nbDims = 3;
-        dim1.d[0] = batch_size;
-        dim1.d[1] = exprBuilder.constant(pillarNum_);
-        dim1.d[2] = exprBuilder.constant(4);
-        return dim1;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
     }
-    nvinfer1::DimsExprs dim2{};
-    dim2.nbDims = 1;
-    dim2.d[0] = batch_size;
-    return dim2;
+    return nvinfer1::DimsExprs{};
 }
 
 bool VoxelGeneratorPlugin::supportsFormatCombination(
-    int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
+    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    PLUGIN_ASSERT(nbInputs == 2);
-    PLUGIN_ASSERT(nbOutputs == 3);
-    const PluginTensorDesc& in = inOut[pos];
-    if (pos == 0)       // PointCloud Array --- x, y, z, w
+    try
     {
-        return (in.type == nvinfer1::DataType::kFLOAT) && (in.format == TensorFormat::kLINEAR);
+        PLUGIN_VALIDATE(inOut != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 2);
+        PLUGIN_VALIDATE(nbOutputs == 3);
+        PluginTensorDesc const& in = inOut[pos];
+        if (pos == 0) // PointCloud Array --- x, y, z, w
+        {
+            return (in.type == nvinfer1::DataType::kFLOAT) && (in.format == TensorFormat::kLINEAR);
+        }
+        if (pos == 1) // Point Num
+        {
+            return (in.type == nvinfer1::DataType::kINT32) && (in.format == TensorFormat::kLINEAR);
+        }
+        if (pos == 2) // features, dim: pillarNum x pointNum x featureNum
+        {
+            return (in.type == nvinfer1::DataType::kFLOAT) && (in.format == TensorFormat::kLINEAR);
+        }
+        if (pos == 3) // pillarCoords, dim: 1 x 1 x pillarNum x 4
+        {
+            return (in.type == nvinfer1::DataType::kINT32) && (in.format == TensorFormat::kLINEAR);
+        }
+        if (pos == 4) // params, dim: 1 x 1 x 1 x 1
+        {
+            return (in.type == nvinfer1::DataType::kINT32) && (in.format == TensorFormat::kLINEAR);
+        }
+        return false;
     }
-    if (pos == 1)       // Point Num
+    catch (std::exception const& e)
     {
-        return (in.type == nvinfer1::DataType::kINT32) && (in.format == TensorFormat::kLINEAR);
-    }
-    if (pos == 2)       // features, dim: pillarNum x pointNum x featureNum
-    {
-        return (in.type == nvinfer1::DataType::kFLOAT) && (in.format == TensorFormat::kLINEAR);
-    }
-    if (pos == 3)       // pillarCoords, dim: 1 x 1 x pillarNum x 4
-    {
-        return (in.type == nvinfer1::DataType::kINT32) && (in.format == TensorFormat::kLINEAR);
-    }
-    if (pos == 4)       // params, dim: 1 x 1 x 1 x 1
-    {
-        return (in.type == nvinfer1::DataType::kINT32) && (in.format == TensorFormat::kLINEAR);
+        caughtError(e);
     }
     return false;
 }
 
-void VoxelGeneratorPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-    const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept
+void VoxelGeneratorPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
-    pointFeatureNum_ = in[0].desc.dims.d[2];
-    grid_x_size_ = npRound((max_x_range_ - min_x_range_) / pillar_x_size_);
-    grid_y_size_ = npRound((max_y_range_ - min_y_range_) / pillar_y_size_);
-    grid_z_size_ = npRound((max_z_range_ - min_z_range_) / pillar_z_size_);
+    try
+    {
+        PLUGIN_VALIDATE(in != nullptr);
+        PLUGIN_VALIDATE(out != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 2);
+        PLUGIN_VALIDATE(nbOutputs == 3);
+
+        mPointFeatureNum = in[0].desc.dims.d[2];
+        mGridXSize = npRound((mMaxXRange - mMinXRange) / mPillarXSize);
+        mGridYSize = npRound((mMaxYRange - mMinYRange) / mPillarYSize);
+        mGridZSize = npRound((mMaxZRange - mMinZRange) / mPillarZSize);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
-size_t VoxelGeneratorPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-    const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const noexcept
+size_t VoxelGeneratorPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
-    int batchSize = inputs[0].dims.d[0];
-    size_t mask_size = batchSize * grid_z_size_ * grid_y_size_ * grid_x_size_ * sizeof(unsigned int);
-    size_t voxels_size = batchSize * grid_z_size_ * grid_y_size_ * grid_x_size_ * pointNum_ * pointFeatureNum_
-                   * sizeof(float);
-    // the actual max pillar num cannot be determined, use upper bound
-    size_t voxel_features_size = voxels_size;
-    size_t voxel_num_points_size = mask_size;
-    size_t workspaces[4];
-    workspaces[0] = mask_size;
-    workspaces[1] = voxels_size;
-    workspaces[2] = voxel_features_size;
-    workspaces[3] = voxel_num_points_size;
-    return calculateTotalWorkspaceSize(workspaces, 4);
+    try
+    {
+        int32_t batchSize = inputs[0].dims.d[0];
+        size_t maskSize = batchSize * mGridZSize * mGridYSize * mGridXSize * sizeof(uint32_t);
+        size_t voxelsSize = batchSize * mGridZSize * mGridYSize * mGridXSize * mPointNum * mPointFeatureNum * sizeof(float);
+        // the actual max pillar num cannot be determined, use upper bound
+        size_t voxelFeaturesSize = voxelsSize;
+        size_t voxelNumPointsSize = maskSize;
+        size_t workspaces[4];
+        workspaces[0] = maskSize;
+        workspaces[1] = voxelsSize;
+        workspaces[2] = voxelFeaturesSize;
+        workspaces[3] = voxelNumPointsSize;
+        return calculateTotalWorkspaceSize(workspaces, 4);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return 0U;
 }
 
-int VoxelGeneratorPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
-    const nvinfer1::PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace,
+int32_t VoxelGeneratorPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
+    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
-    int batchSize = inputDesc[0].dims.d[0];
-    int maxNumPoints = inputDesc[0].dims.d[1];
-    //TRT-input
-    float * pointCloud = const_cast<float *>((const float *)inputs[0]);
-    unsigned int* pointNum = const_cast<unsigned int *>((const unsigned int *)inputs[1]);
-    //TRT-output
-    float *pillar_features_data = (float *)(outputs[0]);
-    unsigned int *coords_data = (unsigned int *)(outputs[1]);
-    unsigned int *params_data = (unsigned int *)(outputs[2]);
-    int dense_pillar_num = grid_z_size_ * grid_y_size_ * grid_x_size_;
-    size_t mask_size = batchSize * dense_pillar_num * sizeof(unsigned int);
-    size_t voxels_size = batchSize * dense_pillar_num * pointNum_ * pointFeatureNum_
-                   * sizeof(float);
-    size_t voxel_features_size = voxels_size;
-    size_t voxel_num_points_size = mask_size;
-    size_t workspaces[4];
-    workspaces[0] = mask_size;
-    workspaces[1] = voxels_size;
-    workspaces[2] = voxel_features_size;
-    workspaces[3] = voxel_num_points_size;
-    size_t total_workspace = calculateTotalWorkspaceSize(workspaces, 4);
-    unsigned int* mask_ = static_cast<unsigned int*>(workspace);
-    float* voxels_ = reinterpret_cast<float*>(
-        nextWorkspacePtr(reinterpret_cast<int8_t*>(mask_), mask_size)
-    );
-    float* voxel_features_ = reinterpret_cast<float*>(
-        nextWorkspacePtr(reinterpret_cast<int8_t*>(voxels_), voxels_size)
-    );
-    unsigned int* voxel_num_points_ = reinterpret_cast<unsigned int*>(
-        nextWorkspacePtr(reinterpret_cast<int8_t*>(voxel_features_), voxel_features_size)
-    );
-    // Initialize workspace memory
-    checkCudaErrors(cudaMemsetAsync(mask_, 0, total_workspace, stream));
-    unsigned int pillar_features_data_size = batchSize * pillarNum_ * pointNum_ * featureNum_ * sizeof(float);
-    unsigned int coords_data_size = batchSize * pillarNum_ * 4 * sizeof(unsigned int);
-    unsigned int params_data_size = batchSize * sizeof(unsigned int);
-    checkCudaErrors(cudaMemsetAsync(pillar_features_data, 0, pillar_features_data_size, stream));
-    checkCudaErrors(cudaMemsetAsync(coords_data, 0, coords_data_size, stream));
-    checkCudaErrors(cudaMemsetAsync(params_data, 0, params_data_size, stream));
-    // pointcloud + pointNum ---> mask_ + voxel_
-    generateVoxels_launch(
-          batchSize, maxNumPoints,
-          pointCloud, pointNum,
-          min_x_range_, max_x_range_,
-          min_y_range_, max_y_range_,
-          min_z_range_, max_z_range_,
-          pillar_x_size_, pillar_y_size_, pillar_z_size_,
-          grid_y_size_, grid_x_size_, pointFeatureNum_,
-          pointNum_, mask_, voxels_, stream);
-    // mask_ + voxel_ ---> params_data + voxel_features_ + voxel_num_points_ + coords_data
-    generateBaseFeatures_launch(
-        batchSize,
-        mask_, voxels_,
-        grid_y_size_, grid_x_size_,
-        params_data,
-        pillarNum_,
-        pointNum_,
-        pointFeatureNum_,
-        voxel_features_,
-        voxel_num_points_,
-        coords_data, stream);
-    generateFeatures_launch(
-        batchSize,
-        dense_pillar_num,
-        voxel_features_,
-        voxel_num_points_,
-        coords_data,
-        params_data,
-        pillar_x_size_, pillar_y_size_, pillar_z_size_,
-        min_x_range_, min_y_range_, min_z_range_,
-        featureNum_, pointNum_, pillarNum_, pointFeatureNum_,
-        pillar_features_data, stream);
-    return 0;
+    try
+    {
+        int32_t batchSize = inputDesc[0].dims.d[0];
+        int32_t maxNumPoints = inputDesc[0].dims.d[1];
+        // TRT-input
+        float* pointCloud = const_cast<float*>((float const*) inputs[0]);
+        uint32_t* pointNumPtr = const_cast<uint32_t*>((uint32_t const*) inputs[1]);
+        // TRT-output
+        float* pillarFeaturesData = static_cast<float*>(outputs[0]);
+        uint32_t* coordsData = static_cast<uint32_t*>(outputs[1]);
+        uint32_t* paramsData = static_cast<uint32_t*>(outputs[2]);
+        int32_t densePillarNum = mGridZSize * mGridYSize * mGridXSize;
+        size_t maskSize = batchSize * densePillarNum * sizeof(uint32_t);
+        size_t voxelsSize = batchSize * densePillarNum * mPointNum * mPointFeatureNum * sizeof(float);
+        size_t voxelFeaturesSize = voxelsSize;
+        size_t voxelNumPointsSize = maskSize;
+        size_t workspaces[4];
+        workspaces[0] = maskSize;
+        workspaces[1] = voxelsSize;
+        workspaces[2] = voxelFeaturesSize;
+        workspaces[3] = voxelNumPointsSize;
+        size_t totalWorkspace = calculateTotalWorkspaceSize(workspaces, 4);
+        uint32_t* mask = static_cast<uint32_t*>(workspace);
+        float* voxels = reinterpret_cast<float*>(nextWorkspacePtr(reinterpret_cast<int8_t*>(mask), maskSize));
+        float* voxelFeatures
+            = reinterpret_cast<float*>(nextWorkspacePtr(reinterpret_cast<int8_t*>(voxels), voxelsSize));
+        uint32_t* voxelNumPoints = reinterpret_cast<uint32_t*>(
+            nextWorkspacePtr(reinterpret_cast<int8_t*>(voxelFeatures), voxelFeaturesSize));
+        // Initialize workspace memory
+        PLUGIN_CUASSERT(cudaMemsetAsync(mask, 0, totalWorkspace, stream));
+        uint32_t pillarFeaturesDataSize = batchSize * mPillarNum * mPointNum * mFeatureNum * sizeof(float);
+        uint32_t coordsDataSize = batchSize * mPillarNum * 4 * sizeof(uint32_t);
+        uint32_t paramsDataSize = batchSize * sizeof(uint32_t);
+        PLUGIN_CUASSERT(cudaMemsetAsync(pillarFeaturesData, 0, pillarFeaturesDataSize, stream));
+        PLUGIN_CUASSERT(cudaMemsetAsync(coordsData, 0, coordsDataSize, stream));
+        PLUGIN_CUASSERT(cudaMemsetAsync(paramsData, 0, paramsDataSize, stream));
+        // pointcloud + pointNum ---> mask_ + voxel_
+        generateVoxels_launch(batchSize, maxNumPoints, pointCloud, pointNumPtr, mMinXRange, mMaxXRange, mMinYRange,
+            mMaxYRange, mMinZRange, mMaxZRange, mPillarXSize, mPillarYSize, mPillarZSize, mGridYSize, mGridXSize,
+            mPointFeatureNum, mPointNum, mask, voxels, stream);
+        // mask_ + voxel_ ---> params_data + voxel_features_ + voxel_num_points_ +
+        // coords_data
+        generateBaseFeatures_launch(batchSize, mask, voxels, mGridYSize, mGridXSize, paramsData, mPillarNum, mPointNum,
+            mPointFeatureNum, voxelFeatures, voxelNumPoints, coordsData, stream);
+        generateFeatures_launch(batchSize, densePillarNum, voxelFeatures, voxelNumPoints, coordsData, paramsData,
+            mPillarXSize, mPillarYSize, mPillarZSize, mMinXRange, mMinYRange, mMinZRange, mFeatureNum, mPointNum, mPillarNum,
+            mPointFeatureNum, pillarFeaturesData, stream);
+        return 0;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return -1;
 }
 
 nvinfer1::DataType VoxelGeneratorPlugin::getOutputDataType(
-    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    if(index == 0)
-      return inputTypes[0];
-    return inputTypes[1];
+    try
+    {
+        PLUGIN_VALIDATE(inputTypes != nullptr);
+        if (index == 0)
+        {
+            return inputTypes[0];
+        }
+        return inputTypes[1];
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nvinfer1::DataType{};
 }
 
-const char* VoxelGeneratorPlugin::getPluginType() const noexcept
+char const* VoxelGeneratorPlugin::getPluginType() const noexcept
 {
-    return PLUGIN_NAME;
+    return kVOXEL_GENERATOR_PLUGIN_NAME;
 }
 
-const char* VoxelGeneratorPlugin::getPluginVersion() const noexcept
+char const* VoxelGeneratorPlugin::getPluginVersion() const noexcept
 {
-    return PLUGIN_VERSION;
+    return kVOXEL_GENERATOR_PLUGIN_VERSION;
 }
 
-int VoxelGeneratorPlugin::getNbOutputs() const noexcept
+int32_t VoxelGeneratorPlugin::getNbOutputs() const noexcept
 {
     return 3;
 }
 
-int VoxelGeneratorPlugin::initialize() noexcept
+int32_t VoxelGeneratorPlugin::initialize() noexcept
 {
     return 0;
 }
 
-void VoxelGeneratorPlugin::terminate() noexcept
-{
-}
+void VoxelGeneratorPlugin::terminate() noexcept {}
 
 size_t VoxelGeneratorPlugin::getSerializationSize() const noexcept
 {
-    return 9 * sizeof(float) + 7 * sizeof(int);
+    return kSERIALIZATION_SIZE;
 }
 
 void VoxelGeneratorPlugin::serialize(void* buffer) const noexcept
 {
-    char* d = reinterpret_cast<char*>(buffer);
-    writeToBuffer<int>(d, pillarNum_);
-    writeToBuffer<int>(d, pointNum_);
-    writeToBuffer<int>(d, featureNum_);
-    writeToBuffer<float>(d, min_x_range_);
-    writeToBuffer<float>(d, max_x_range_);
-    writeToBuffer<float>(d, min_y_range_);
-    writeToBuffer<float>(d, max_y_range_);
-    writeToBuffer<float>(d, min_z_range_);
-    writeToBuffer<float>(d, max_z_range_);
-    writeToBuffer<float>(d, pillar_x_size_);
-    writeToBuffer<float>(d, pillar_y_size_);
-    writeToBuffer<float>(d, pillar_z_size_);
-    writeToBuffer<int>(d, pointFeatureNum_);
-    writeToBuffer<int>(d, grid_x_size_);
-    writeToBuffer<int>(d, grid_y_size_);
-    writeToBuffer<int>(d, grid_z_size_);
+
+    PLUGIN_ASSERT(buffer != nullptr);
+    uint8_t* d = reinterpret_cast<uint8_t*>(buffer);
+    auto *a = d;
+    writeToBuffer<int32_t>(d, mPillarNum);
+    writeToBuffer<int32_t>(d, mPointNum);
+    writeToBuffer<int32_t>(d, mFeatureNum);
+    writeToBuffer<float>(d, mMinXRange);
+    writeToBuffer<float>(d, mMaxXRange);
+    writeToBuffer<float>(d, mMinYRange);
+    writeToBuffer<float>(d, mMaxYRange);
+    writeToBuffer<float>(d, mMinZRange);
+    writeToBuffer<float>(d, mMaxZRange);
+    writeToBuffer<float>(d, mPillarXSize);
+    writeToBuffer<float>(d, mPillarYSize);
+    writeToBuffer<float>(d, mPillarZSize);
+    writeToBuffer<int32_t>(d, mPointFeatureNum);
+    writeToBuffer<int32_t>(d, mGridXSize);
+    writeToBuffer<int32_t>(d, mGridYSize);
+    writeToBuffer<int32_t>(d, mGridZSize);
+    PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
 void VoxelGeneratorPlugin::destroy() noexcept
@@ -354,12 +391,20 @@ void VoxelGeneratorPlugin::destroy() noexcept
     delete this;
 }
 
-void VoxelGeneratorPlugin::setPluginNamespace(const char* libNamespace) noexcept
+void VoxelGeneratorPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
-const char* VoxelGeneratorPlugin::getPluginNamespace() const noexcept
+char const* VoxelGeneratorPlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -376,71 +421,72 @@ VoxelGeneratorPluginCreator::VoxelGeneratorPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* VoxelGeneratorPluginCreator::getPluginName() const noexcept
+char const* VoxelGeneratorPluginCreator::getPluginName() const noexcept
 {
-    return PLUGIN_NAME;
+    return kVOXEL_GENERATOR_PLUGIN_NAME;
 }
 
-const char* VoxelGeneratorPluginCreator::getPluginVersion() const noexcept
+char const* VoxelGeneratorPluginCreator::getPluginVersion() const noexcept
 {
-    return PLUGIN_VERSION;
+    return kVOXEL_GENERATOR_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* VoxelGeneratorPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* VoxelGeneratorPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* VoxelGeneratorPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* VoxelGeneratorPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
-        const PluginField* fields = fc->fields;
-        int nbFields = fc->nbFields;
-        int max_points = 0;
-        int max_voxels = 0;
-        float point_cloud_range[6] = {0.0f};
-        int voxel_feature_num = 0;
-        float voxel_size[3] = {0.0f};
-        for (int i = 0; i < nbFields; ++i)
+        PLUGIN_VALIDATE(fc != nullptr);
+        PluginField const* fields = fc->fields;
+        int32_t nbFields = fc->nbFields;
+        int32_t maxPoints = 0;
+        int32_t maxVoxels = 0;
+        float pointCloudRange[6]{};
+        int32_t voxelFeatureNum = 0;
+        float voxelSize[3]{};
+        for (int32_t i = 0; i < nbFields; ++i)
         {
-            const char* attr_name = fields[i].name;
-            if (!strcmp(attr_name, "max_num_points_per_voxel"))
+            char const* attrName = fields[i].name;
+            if (!strcmp(attrName, "max_num_points_per_voxel"))
             {
-                const int* d = static_cast<const int*>(fields[i].data);
-                max_points = d[0];
+                int32_t const* d = static_cast<int32_t const*>(fields[i].data);
+                maxPoints = d[0];
             }
-            else if (!strcmp(attr_name, "max_voxels"))
+            else if (!strcmp(attrName, "max_voxels"))
             {
-                const int* d = static_cast<const int*>(fields[i].data);
-                max_voxels = d[0];
+                int32_t const* d = static_cast<int32_t const*>(fields[i].data);
+                maxVoxels = d[0];
             }
-            else if (!strcmp(attr_name, "point_cloud_range"))
+            else if (!strcmp(attrName, "point_cloud_range"))
             {
-                const float* d = static_cast<const float*>(fields[i].data);
-                point_cloud_range[0] = d[0];
-                point_cloud_range[1] = d[1];
-                point_cloud_range[2] = d[2];
-                point_cloud_range[3] = d[3];
-                point_cloud_range[4] = d[4];
-                point_cloud_range[5] = d[5];
+                float const* d = static_cast<float const*>(fields[i].data);
+                pointCloudRange[0] = d[0];
+                pointCloudRange[1] = d[1];
+                pointCloudRange[2] = d[2];
+                pointCloudRange[3] = d[3];
+                pointCloudRange[4] = d[4];
+                pointCloudRange[5] = d[5];
             }
-            else if (!strcmp(attr_name, "voxel_feature_num"))
+            else if (!strcmp(attrName, "voxel_feature_num"))
             {
-                const int* d = static_cast<const int*>(fields[i].data);
-                voxel_feature_num = d[0];
+                int32_t const* d = static_cast<int32_t const*>(fields[i].data);
+                voxelFeatureNum = d[0];
             }
-            else if (!strcmp(attr_name, "voxel_size"))
+            else if (!strcmp(attrName, "voxel_size"))
             {
-                const float* d = static_cast<const float*>(fields[i].data);
-                voxel_size[0] = d[0];
-                voxel_size[1] = d[1];
-                voxel_size[2] = d[2];
+                float const* d = static_cast<float const*>(fields[i].data);
+                voxelSize[0] = d[0];
+                voxelSize[1] = d[1];
+                voxelSize[2] = d[2];
             }
         }
-        IPluginV2* plugin = new VoxelGeneratorPlugin(max_voxels, max_points, voxel_feature_num, point_cloud_range[0],
-            point_cloud_range[3], point_cloud_range[1], point_cloud_range[4], point_cloud_range[2],
-            point_cloud_range[5], voxel_size[0], voxel_size[1], voxel_size[2]);
+        IPluginV2* plugin = new VoxelGeneratorPlugin(maxVoxels, maxPoints, voxelFeatureNum, pointCloudRange[0],
+            pointCloudRange[3], pointCloudRange[1], pointCloudRange[4], pointCloudRange[2], pointCloudRange[5],
+            voxelSize[0], voxelSize[1], voxelSize[2]);
         return plugin;
     }
     catch (std::exception const& e)
@@ -451,7 +497,7 @@ IPluginV2* VoxelGeneratorPluginCreator::createPlugin(const char* name, const Plu
 }
 
 IPluginV2* VoxelGeneratorPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -464,12 +510,20 @@ IPluginV2* VoxelGeneratorPluginCreator::deserializePlugin(
     return nullptr;
 }
 
-void VoxelGeneratorPluginCreator::setPluginNamespace(const char* libNamespace) noexcept
+void VoxelGeneratorPluginCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
-const char* VoxelGeneratorPluginCreator::getPluginNamespace() const noexcept
+char const* VoxelGeneratorPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }

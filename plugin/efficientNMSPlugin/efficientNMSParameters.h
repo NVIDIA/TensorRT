@@ -28,8 +28,8 @@ namespace plugin
 struct EfficientNMSParameters
 {
     // Related to NMS Options
-    float iouThreshold = 0.5f;
-    float scoreThreshold = 0.5f;
+    float iouThreshold = 0.5F;
+    float scoreThreshold = 0.5F;
     int numOutputBoxes = 100;
     int numOutputBoxesPerClass = -1;
     bool padOutputBoxesPerClass = false;

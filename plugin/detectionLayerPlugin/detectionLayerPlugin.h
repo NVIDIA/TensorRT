@@ -18,7 +18,6 @@
 #define TRT_DETECTION_LAYER_PLUGIN_H
 #include <cuda_runtime_api.h>
 #include <memory>
-#include <string.h>
 #include <string>
 #include <vector>
 
@@ -34,25 +33,25 @@ namespace plugin
 class DetectionLayer : public IPluginV2Ext
 {
 public:
-    DetectionLayer(int num_classes, int keep_topk, float score_threshold, float iou_threshold);
+    DetectionLayer(int32_t numClasses, int32_t keepTopk, float scoreThreshold, float iouThreshold);
 
-    DetectionLayer(const void* data, size_t length);
+    DetectionLayer(void const* data, size_t length);
 
     ~DetectionLayer() override = default;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
     void destroy() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
 
-    int enqueue(int batch_size, const void* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
@@ -61,43 +60,45 @@ public:
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
-    const char* getPluginType() const noexcept override;
+    char const* getPluginType() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
     IPluginV2Ext* clone() const noexcept override;
 
-    void setPluginNamespace(const char* libNamespace) noexcept override;
+    void setPluginNamespace(char const* libNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
+    bool isOutputBroadcastAcrossBatch(
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
-    void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
+        DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     void detachFromContext() noexcept override;
 
 private:
-    void check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims);
+    bool checkValidInputs(nvinfer1::Dims const* inputs, int32_t nbInputDims);
 
-    int mBackgroundLabel;
-    int mNbClasses;
-    int mKeepTopK;
+    int32_t mBackgroundLabel;
+    int32_t mNbClasses;
+    int32_t mKeepTopK;
     float mScoreThreshold;
     float mIOUThreshold;
 
-    int mMaxBatchSize;
-    int mAnchorsCnt;
-    std::shared_ptr<CudaBind<int>> mValidCnt; // valid cnt = number of input rois for every image.
+    int32_t mMaxBatchSize;
+    int32_t mAnchorsCnt;
+    std::shared_ptr<CudaBind<int32_t>> mValidCnt; // valid cnt = number of input rois for every image.
     nvinfer1::DataType mType;
     RefineNMSParameters mParam;
 
@@ -111,20 +112,20 @@ public:
 
     ~DetectionLayerPluginCreator() override{};
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    const PluginFieldCollection* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
+    IPluginV2Ext* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
 
-    IPluginV2Ext* deserializePlugin(const char* name, const void* data, size_t length) noexcept override;
+    IPluginV2Ext* deserializePlugin(char const* name, void const* data, size_t length) noexcept override;
 
 private:
     static PluginFieldCollection mFC;
-    int mNbClasses;
-    int mKeepTopK;
+    int32_t mNbClasses;
+    int32_t mKeepTopK;
     float mScoreThreshold;
     float mIOUThreshold;
     static std::vector<PluginField> mPluginAttributes;

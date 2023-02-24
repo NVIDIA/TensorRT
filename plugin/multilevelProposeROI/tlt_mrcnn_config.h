@@ -65,7 +65,7 @@ static const float RPN_ANCHOR_SCALE = 8;
 
 // Ratios of anchors at each cell (width,height)
 static const std::vector<std::pair<float, float>> ANCHOR_RATIOS
-    = {std::make_pair(1.0f, 1.0f), std::make_pair(1.4f, 0.7f), std::make_pair(0.7f, 1.4f)};
+    = {std::make_pair(1.0F, 1.0F), std::make_pair(1.4F, 0.7F), std::make_pair(0.7F, 1.4F)};
 
 // Anchor stride
 // If 1 then anchors are created for each cell in the backbone feature map.

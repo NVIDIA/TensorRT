@@ -37,8 +37,9 @@ using namespace nvinfer1::plugin::bert;
 // plugin specific constants
 namespace
 {
-const char* FC_VERSION{"1"};
-const char* FC_NAME{"CustomFCPluginDynamic"};
+char const* const kFC_VERSION{"1"};
+char const* const kFC_NAME{"CustomFCPluginDynamic"};
+constexpr size_t kMAX_WORKSPACE_BYTES = 4 * 1024 * 1024; // 4MiB
 } // namespace
 
 // Static class fields initialization
@@ -47,16 +48,15 @@ std::vector<PluginField> FCPluginDynamicCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(FCPluginDynamicCreator);
 
-constexpr size_t maxWorkspaceBytes = 4194304; // 4MB
-
 // Utility function to print customMatmulPerf_t structure
-static void printPerfStructure(const customMatmulPerf_t& perf, int const& m, int const& n, int const& k)
+static void printPerfStructure(customMatmulPerf_t const& perf, int32_t const m, int32_t const n, int32_t const k)
 {
     AlgoProps p;
     p.populate(perf.algo);
-    /* Calculate GFLOPS */
-    double timeAvg = perf.time * 1e-3; // Convert to seconds. It has been divided by kernelRepeats in customMatmulRun().
-    double gflop = (2 * static_cast<unsigned long long int>(m * n) * k) * 1e-9; // Real
+    // Calculate GFLOPS
+    double timeAvg
+        = perf.time * 1e-3; // Convert to seconds. It has been divided by kNB_KERNEL_REPEATS in customMatmulRun().
+    double gflop = (2 * static_cast<uint64_t>(m * n) * k) * 1e-9; // Real
 
     gLogVerbose << "Algo=" << p.algoId << " Tile=" << p.tile << " (" << matmulTileName[p.tile] << ") K=" << p.numSplitsK
                 << " Red.Sch.=" << p.reductionScheme << " Swiz=" << p.swizzle << " Cust=" << p.customOption
@@ -65,15 +65,15 @@ static void printPerfStructure(const customMatmulPerf_t& perf, int const& m, int
                 << std::endl;
 }
 
-static inline bool time_compare(const customMatmulPerf_t& perf_a, const customMatmulPerf_t& perf_b)
+static bool timeCompare(customMatmulPerf_t const& perf_a, customMatmulPerf_t const& perf_b)
 {
     return ((perf_a.status == CUBLAS_STATUS_SUCCESS) && (perf_a.time < perf_b.time));
 }
 
 static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the capabilities (required a GPU)
-    cublasLtMatmulDesc_t operationDesc, void const* alpha,       /* host or device pointer */
+    cublasLtMatmulDesc_t operationDesc, void const* alpha,       // host or device pointer
     void const* A, cublasLtMatrixLayout_t Adesc, void const* B, cublasLtMatrixLayout_t Bdesc,
-    void const* beta, /* host or device pointer */
+    void const* beta, // host or device pointer
     void const* C, cublasLtMatrixLayout_t Cdesc, void* D, cublasLtMatrixLayout_t Ddesc,
     cublasLtMatmulAlgo_t const& algo, void* workSpace, size_t workSpaceSizeInBytes, customMatmulPerf_t& perfResults,
     cudaStream_t stream, cudaEvent_t& startEvent, cudaEvent_t& stopEvent)
@@ -81,7 +81,7 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
 
     cublasLtMatmulHeuristicResult_t heurResult;
 
-    /* Looping over the Algo */
+    // Looping over the Algo
     cublasStatus_t algoStatus
         = cublasLtMatmulAlgoCheck(ltHandle, operationDesc, Adesc, Bdesc, Cdesc, Ddesc, &algo, &heurResult);
 
@@ -93,12 +93,11 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
             {
                 return CUBLAS_STATUS_INTERNAL_ERROR;
             }
-            for (int loop = 0; loop < kernelRepeats; loop++)
+            for (int32_t loop = 0; loop < kNB_KERNEL_REPEATS; loop++)
             {
-                cublasStatus_t oneRunStatus
-                    = cublasLtMatmul(ltHandle, operationDesc, alpha, /* host or device pointer */
-                        A, Adesc, B, Bdesc, beta,                    /* host or device pointer */
-                        C, Cdesc, D, Ddesc, &algo, workSpace, workSpaceSizeInBytes, stream);
+                cublasStatus_t oneRunStatus = cublasLtMatmul(ltHandle, operationDesc, alpha, // host or device pointer
+                    A, Adesc, B, Bdesc, beta,                                                // host or device pointer
+                    C, Cdesc, D, Ddesc, &algo, workSpace, workSpaceSizeInBytes, stream);
                 if (oneRunStatus != CUBLAS_STATUS_SUCCESS)
                 {
                     algoStatus = oneRunStatus;
@@ -120,7 +119,7 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
             }
             // For the moment only add successful findings
             perfResults.algo = algo;
-            perfResults.time = time / kernelRepeats; // Average time
+            perfResults.time = time / kNB_KERNEL_REPEATS; // Average time
             perfResults.workspaceSize = heurResult.workspaceSize;
             perfResults.wavesCount = heurResult.wavesCount;
         }
@@ -134,10 +133,10 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
 
 // Sample wrapper running through multiple algo and config attributes
 // combination for single precision gemm using cublasLt low-level API
-void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb, int const& m,
-    int const& n, int const& k, void const* alpha,                                  /* host pointer */
-    void const* A, int const& lda, void const* B, int const& ldb, void const* beta, /* host pointer */
-    void* C, int const& ldc, void* workSpace, size_t workSpaceSize,
+void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb, int32_t const& m,
+    int32_t const& n, int32_t const& k, void const* alpha,                                  // host pointer
+    void const* A, int32_t const& lda, void const* B, int32_t const& ldb, void const* beta, // host pointer
+    void* C, int32_t const& ldc, void* workSpace, size_t workSpaceSize,
 #if CUBLAS_VER_MAJOR < 11
     cudaDataType_t computeType,
 #else
@@ -150,21 +149,22 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     cublasStatus_t status = CUBLAS_STATUS_SUCCESS;
 
     cublasLtMatmulDesc_t operationDesc = nullptr;
-    cublasLtMatrixLayout_t Adesc = nullptr, Bdesc = nullptr, Cdesc = nullptr;
+    cublasLtMatrixLayout_t Adesc = nullptr;
+    cublasLtMatrixLayout_t Bdesc = nullptr;
+    cublasLtMatrixLayout_t Cdesc = nullptr;
     cublasLtMatmulPreference_t preference = nullptr;
 
-    cudaEvent_t startEvent = nullptr, stopEvent = nullptr;
+    cudaEvent_t startEvent = nullptr;
+    cudaEvent_t stopEvent = nullptr;
     cudaStream_t stream = nullptr;
 
-    // SplitK value that we are going to try when SplitK is supported for a given
-    // algo
-    const int splitKSequenceA[] = {2, 3, 4, 5, 6, 8, 12, 16, 32};
+    // SplitK value that we are going to try when SplitK is supported for a given algo.
+    int32_t const splitKSequenceA[] = {2, 3, 4, 5, 6, 8, 12, 16, 32};
 
     // Let try a fixed number of combinations
-    int algoCount = 0;
-    int nbAlgoIds = 0;
-    int algoIdA[algoIds];
-    // customMatmulPerf_t perfResults[algoCombinations];
+    int32_t algoCount = 0;
+    int32_t nbAlgoIds = 0;
+    int32_t algoIdA[kNB_ALGO_IDS];
 
     PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceCreate(&preference));
     PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceSetAttribute(
@@ -174,6 +174,7 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
         = Ctype == CUDA_R_16F ? CUBLASLT_NUMERICAL_IMPL_FLAGS_HMMA : CUBLASLT_NUMERICAL_IMPL_FLAGS_FMA;
     PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceSetAttribute(
         preference, CUBLASLT_MATMUL_PREF_IMPL_MASK, &numericImplPrefer, sizeof(numericImplPrefer)));
+
     // Create operation descriptor; see cublasLtMatmulDescAttributes_t for details
     // about defaults; here we just need to set the transforms for A and B
 #if CUBLAS_VER_MAJOR < 11
@@ -197,7 +198,7 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     // Request the 4 first AlgoId available for SGEMM ( computeType = scaleType =
     // Atype = Btype = Ctype = Dtype = CUDA_R_32F)
     PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoGetIds(
-        ltHandle, computeType, scaleType, Atype, Btype, Ctype, Ctype, algoIds, algoIdA, &nbAlgoIds));
+        ltHandle, computeType, scaleType, Atype, Btype, Ctype, Ctype, kNB_ALGO_IDS, algoIdA, &nbAlgoIds));
 
     gLogVerbose << "Number of algos" << nbAlgoIds << std::endl;
 
@@ -206,11 +207,11 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     PLUGIN_CUASSERT(cudaEventCreate(&stopEvent, cudaEventBlockingSync));
 
     // Loop over the Algo IDs
-    for (int idx = 0; (idx < nbAlgoIds) && (algoCount < algoCombinations); idx++)
+    for (int32_t idx = 0; (idx < nbAlgoIds) && (algoCount < kNB_ALGO_COMBINATIONS); idx++)
     {
         cublasLtMatmulAlgo_t algo;
         size_t sizeWritten = 0;
-        /* Initialize algo structure with given Algp ID */
+        // Initialize algo structure with given Algp ID.
         status
             = cublasLtMatmulAlgoInit(ltHandle, computeType, scaleType, Atype, Btype, Ctype, Ctype, algoIdA[idx], &algo);
         if (status != CUBLAS_STATUS_SUCCESS)
@@ -230,19 +231,23 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
         // Query the tiles enums supported by that algo
         PLUGIN_CUBLASASSERT(
             cublasLtMatmulAlgoCapGetAttribute(&algo, CUBLASLT_ALGO_CAP_TILE_IDS, nullptr, 0, &sizeWritten));
-        int nbTiles = int(sizeWritten / sizeof(int));
-        int* tileA = new int[nbTiles == 0 ? 1 : nbTiles];
+        int32_t nbTiles = int32_t(sizeWritten / sizeof(int32_t));
+        int32_t* tileA = new int32_t[nbTiles == 0 ? 1 : nbTiles];
         if (nbTiles == 0)
         {
             tileA[0] = CUBLASLT_MATMUL_TILE_UNDEFINED;
             nbTiles = 1;
         }
 
-        int splitkSupport, redMask, swizzlingMax, customOptionMax, epilogueMask;
+        int32_t splitkSupport;
+        int32_t redMask;
+        int32_t swizzlingMax;
+        int32_t customOptionMax;
+        int32_t epilogueMask;
         // Retrieve Algo Capabilities attributes to be able to setup loop over the
         // different combinations
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_TILE_IDS, tileA, sizeof(int) * nbTiles, &sizeWritten));
+            &algo, CUBLASLT_ALGO_CAP_TILE_IDS, tileA, sizeof(int32_t) * nbTiles, &sizeWritten));
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_SPLITK_SUPPORT, &splitkSupport, sizeof(splitkSupport), &sizeWritten));
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
@@ -255,37 +260,37 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_EPILOGUE_MASK, &epilogueMask, sizeof(epilogueMask), &sizeWritten));
 
-        /* Loop over the different tiles */
-        for (int tileIdx = 0; tileIdx < nbTiles; tileIdx++)
+        // Loop over the different tiles
+        for (int32_t tileIdx = 0; tileIdx < nbTiles; tileIdx++)
         {
-            /* Loop over the different custom option if any */
-            for (int customOption = 0; customOption <= customOptionMax; customOption++)
+            // Loop over the different custom option if any
+            for (int32_t customOption = 0; customOption <= customOptionMax; customOption++)
             {
                 PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
                     &algo, CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION, &customOption, sizeof(customOption)));
-                /* Loop over the CTAs swizzling support */
-                for (int k = 0; k <= swizzlingMax; k++)
+                // Loop over the CTAs swizzling support
+                for (int32_t k = 0; k <= swizzlingMax; k++)
                 {
-                    int splitK_trial = 0;
+                    int32_t splitkTrial = 0;
                     if (splitkSupport)
                     {
-                        splitK_trial += sizeof(splitKSequenceA) / sizeof(splitKSequenceA[0]);
+                        splitkTrial += sizeof(splitKSequenceA) / sizeof(splitKSequenceA[0]);
                     }
                     // Loop over the splitK value over a fixed sequence splitKSequenceA in
                     // addition to the case where splitK is not enabled
-                    for (int l = 0; (l < (1 + splitK_trial)) && (algoCount < algoCombinations); l++)
+                    for (int32_t l = 0; (l < (1 + splitkTrial)) && (algoCount < kNB_ALGO_COMBINATIONS); l++)
                     {
-                        /* Setup attribute of the algo to run */
+                        // Setup attribute of the algo to run
                         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_TILE_ID, &tileA[tileIdx], sizeof(tileA[tileIdx])));
-                        int splitK_val = 0;
-                        int redScheme = CUBLASLT_REDUCTION_SCHEME_NONE;
+                        int32_t splitK_val = 0;
+                        int32_t redScheme = CUBLASLT_REDUCTION_SCHEME_NONE;
                         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &splitK_val, sizeof(splitK_val)));
                         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &k, sizeof(k)));
                         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
-                            &algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &redScheme, sizeof(int)));
+                            &algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &redScheme, sizeof(int32_t)));
 
                         if (l > 0)
                         { // Split-K case
@@ -293,9 +298,9 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
                             PLUGIN_CUBLASASSERT(
                                 cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
                                     &splitKSequenceA[l - 1], sizeof(splitKSequenceA[l - 1])));
-                            /* Going over all the reduction scheme  */
-                            for (redScheme = 1; redScheme < static_cast<int>(CUBLASLT_REDUCTION_SCHEME_MASK)
-                                 && (algoCount < algoCombinations);
+                            // Going over all the reduction scheme
+                            for (redScheme = 1; redScheme < static_cast<int32_t>(CUBLASLT_REDUCTION_SCHEME_MASK)
+                                 && (algoCount < kNB_ALGO_COMBINATIONS);
                                  redScheme = redScheme << 1)
                             {
                                 if (redScheme & redMask)
@@ -303,15 +308,13 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
                                     PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
                                         &algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &redScheme, sizeof(redScheme)));
 
-                                    status
-                                        = customMatmulRun(ltHandle, operationDesc, alpha, /* host or device pointer */
-                                            A, Adesc, B, Bdesc, beta,                     /* host or device pointer */
-                                            C, Cdesc, C, Cdesc, algo, workSpace, workSpaceSize, perfResults[algoCount],
-                                            stream, startEvent, stopEvent);
+                                    status = customMatmulRun(ltHandle, operationDesc, alpha, // host or device pointer
+                                        A, Adesc, B, Bdesc, beta,                            // host or device pointer
+                                        C, Cdesc, C, Cdesc, algo, workSpace, workSpaceSize, perfResults[algoCount],
+                                        stream, startEvent, stopEvent);
                                     perfResults[algoCount].status = status;
                                     if (status == CUBLAS_STATUS_SUCCESS)
                                     {
-
                                         algoCount++;
                                     }
                                 } // end if
@@ -319,16 +322,18 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
                         }
                         else
                         { // Non-splitK case
-                            /* if user preference is ok with workspace */
-                            if (algoCount < algoCombinations)
+                            // if user preference is ok with workspace
+                            if (algoCount < kNB_ALGO_COMBINATIONS)
                             {
-                                status = customMatmulRun(ltHandle, operationDesc, alpha, /* host or device pointer */
-                                    A, Adesc, B, Bdesc, beta,                            /* host or device pointer */
+                                status = customMatmulRun(ltHandle, operationDesc, alpha, // host or device pointer
+                                    A, Adesc, B, Bdesc, beta,                            // host or device pointer
                                     C, Cdesc, C, Cdesc, algo, workSpace, workSpaceSize, perfResults[algoCount], stream,
                                     startEvent, stopEvent);
                                 perfResults[algoCount].status = status;
                                 if (status == CUBLAS_STATUS_SUCCESS)
+                                {
                                     algoCount++;
+                                }
                             }
                         }
                     } // end l
@@ -339,13 +344,15 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     } // end idx
 
     // Sort the results per run duration
-    std::sort(perfResults.begin(), perfResults.end(), time_compare);
+    std::sort(perfResults.begin(), perfResults.end(), timeCompare);
+
     // Print timing and perf details of the fastest combinations
-    // for (int i = 0; i < perfResults.size(); i++){
-    for (int i = 0; i < printAlgos; i++)
+    for (int32_t i = 0; i < kPRINT_ALGOS; i++)
     {
-        if (perfResults[i].time == 1000000.F)
+        if (perfResults[i].time == customMatmulPerf_t::kMAX_TIME)
+        {
             break;
+        }
         printPerfStructure(perfResults[i], m, n, k);
     }
 
@@ -359,7 +366,7 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     PLUGIN_CUASSERT(cudaEventDestroy(stopEvent));
 }
 
-FCPluginDynamic::FCPluginDynamic(const std::string name, const DataType type, const int outDim, const Weights& W)
+FCPluginDynamic::FCPluginDynamic(std::string const name, DataType const type, int32_t const outDim, Weights const& W)
     : mLayerName(name)
     , mType(type)
     , mOutDim(outDim)
@@ -374,7 +381,7 @@ FCPluginDynamic::FCPluginDynamic(const std::string name, const DataType type, co
     copyToDevice(mW, getWeightsSize(mW, mType), mWdev);
 }
 
-FCPluginDynamic::FCPluginDynamic(const std::string name, const void* data, size_t length)
+FCPluginDynamic::FCPluginDynamic(std::string const name, void const* data, size_t length)
     : mLayerName(name)
     , mWdev(nullptr)
 {
@@ -388,7 +395,7 @@ FCPluginDynamic::FCPluginDynamic(const std::string name, const void* data, size_
     deserialize_value(&data, &length, &mK);
     deserialize_value(&data, &length, &mAlgo);
 
-    const char* d = static_cast<const char*>(data);
+    char const* d = static_cast<char const*>(data);
 
     mW.convertAndCopy(d, mNumParams, mType);
     copyToDevice(mW, getWeightsSize(mW, mType), mWdev);
@@ -407,7 +414,7 @@ IPluginV2DynamicExt* FCPluginDynamic::clone() const noexcept
 
         return p;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -426,12 +433,13 @@ void FCPluginDynamic::detachFromContext() noexcept
 }
 
 DimsExprs FCPluginDynamic::getOutputDimensions(
-    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     try
     {
-        PLUGIN_ASSERT(nbInputs == 1);
-        PLUGIN_ASSERT(outputIndex == 0);
+        PLUGIN_VALIDATE(nbInputs == 1);
+        PLUGIN_VALIDATE(outputIndex == 0);
+        PLUGIN_VALIDATE(inputs != nullptr);
         DimsExprs ret;
         ret.nbDims = 5;
         ret.d[0] = inputs[0].d[0];
@@ -441,7 +449,7 @@ DimsExprs FCPluginDynamic::getOutputDimensions(
         ret.d[4] = exprBuilder.constant(1);
         return ret;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -449,43 +457,46 @@ DimsExprs FCPluginDynamic::getOutputDimensions(
 }
 
 bool FCPluginDynamic::supportsFormatCombination(
-    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1);
     PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(inOut != nullptr);
 
-    const PluginTensorDesc& in = inOut[pos];
+    PluginTensorDesc const& in = inOut[pos];
     if (pos == 0)
     {
         return (in.type == mType) && (in.format == TensorFormat::kLINEAR);
     }
-    const PluginTensorDesc& prev = inOut[pos - 1];
+    PluginTensorDesc const& prev = inOut[pos - 1];
 
     // output
     return in.type == prev.type && in.format == prev.format;
 }
 
-void FCPluginDynamic::configurePlugin(
-    const DynamicPluginTensorDesc* inputs, int nbInputs, const DynamicPluginTensorDesc* outputs, int nbOutputs) noexcept
+void FCPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
 {
     try
     {
         // Validate input arguments
-        PLUGIN_ASSERT(nbOutputs == 1);
-        PLUGIN_ASSERT(nbInputs == 1);
-        PLUGIN_ASSERT(mType == inputs[0].desc.type);
-        const auto& inDims0 = inputs[0].desc.dims;
+        PLUGIN_VALIDATE(nbOutputs == 1);
+        PLUGIN_VALIDATE(nbInputs == 1);
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(mType == inputs[0].desc.type);
+        auto const& inDims0 = inputs[0].desc.dims;
 
-        PLUGIN_ASSERT(inDims0.nbDims == 5);
+        PLUGIN_VALIDATE(inDims0.nbDims == 5);
         mK = inDims0.d[HDIM]; // hiddensize
         // PLUGIN_ASSERT(hiddenSize * mOutDim == mNumParams);
-        PLUGIN_ASSERT(inDims0.d[3] == 1);
-        PLUGIN_ASSERT(inDims0.d[4] == 1);
+        PLUGIN_VALIDATE(inDims0.d[3] == 1);
+        PLUGIN_VALIDATE(inDims0.d[4] == 1);
 
         // m and k are mOutDim
         // n is B*S
-        const int S = inputs->max.d[SDIM];
-        const int B = inputs->max.d[BDIM];
+        int32_t const S = inputs->max.d[SDIM];
+        int32_t const B = inputs->max.d[BDIM];
 
         mNmax = S * B;
 
@@ -495,18 +506,17 @@ void FCPluginDynamic::configurePlugin(
         if (mType == DataType::kFLOAT)
         {
             Gemm<float> g(mOutDim, mNmax, mK, false, false);
-            mLtContext.create(g, maxWorkspaceBytes);
+            mLtContext.create(g, kMAX_WORKSPACE_BYTES);
         }
         else if (mType == DataType::kHALF)
         {
             Gemm<half> g(mOutDim, mNmax, mK, false, false);
-            mLtContext.create(g, maxWorkspaceBytes);
+            mLtContext.create(g, kMAX_WORKSPACE_BYTES);
         }
         else
         {
-            gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType)
-                      << std::endl;
-            PLUGIN_ASSERT(false);
+            std::string const msg = "Unsupported type error, expected [kHALF,kFLOAT], but received ";
+            PLUGIN_VALIDATE(false, (msg + std::to_string(static_cast<int32_t>(mType))).c_str());
         }
 
         gLogVerbose << "FCPluginDynamic configurePlugin m=" << mOutDim << ", n=" << mNmax << ", k=" << mK << std::endl;
@@ -517,11 +527,11 @@ void FCPluginDynamic::configurePlugin(
             gLogVerbose << "FCPluginDynamic gemmSearch\n";
             if (mType == DataType::kFLOAT)
             {
-                mAlgo = gemmSearch<float>(mOutDim, mNmax, mK, maxWorkspaceBytes, actualWorkspace);
+                mAlgo = gemmSearch<float>(mOutDim, mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace);
             }
             else if (mType == DataType::kHALF)
             {
-                mAlgo = gemmSearch<half>(mOutDim, mNmax, mK, maxWorkspaceBytes, actualWorkspace);
+                mAlgo = gemmSearch<half>(mOutDim, mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace);
             }
         }
 
@@ -543,34 +553,34 @@ void FCPluginDynamic::configurePlugin(
                     << " Swiz=" << p.swizzle << " Cust=" << p.customOption << " numericImpl=" << p.numericImpl
                     << " ws=" << actualWorkspace << std::endl;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
 }
 
 size_t FCPluginDynamic::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
-    return maxWorkspaceBytes;
+    return kMAX_WORKSPACE_BYTES;
 }
 
-int FCPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workSpace, cudaStream_t stream) noexcept
+int32_t FCPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* workSpace, cudaStream_t stream) noexcept
 {
     try
     {
-        const size_t workspaceSize = getWorkspaceSize(inputDesc, 1, outputDesc, 1);
+        size_t const workspaceSize = getWorkspaceSize(inputDesc, 1, outputDesc, 1);
 
         int32_t const S = inputDesc->dims.d[SDIM];
         int32_t const B = inputDesc->dims.d[BDIM];
         int32_t const n = S * B;
-        PLUGIN_ASSERT(n >= 0);
+        PLUGIN_VALIDATE(n >= 0);
         mLtContext.setN(static_cast<uint64_t>(n));
 
         if (mType == DataType::kFLOAT)
         {
-            const auto* const input = static_cast<const float*>(inputs[0]);
+            auto const* const input = static_cast<float const*>(inputs[0]);
             auto* output = static_cast<float*>(outputs[0]);
 
             Gemm<float> g(mOutDim, n, mK, false, false);
@@ -586,7 +596,7 @@ int FCPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTens
         }
         if (mType == DataType::kHALF)
         {
-            const auto* const input = static_cast<const half*>(inputs[0]);
+            auto const* const input = static_cast<half const*>(inputs[0]);
             auto* output = static_cast<half*>(outputs[0]);
 
             Gemm<half> g(mOutDim, n, mK, false, false);
@@ -601,44 +611,45 @@ int FCPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTens
         }
         else
         {
-            gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType)
+            gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int32_t>(mType)
                       << std::endl;
             return STATUS_FAILURE;
         }
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
-    return -1;
+    return STATUS_FAILURE;
 }
 
 // IPluginV2Ext Methods
-DataType FCPluginDynamic::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept
+DataType FCPluginDynamic::getOutputDataType(int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     PLUGIN_ASSERT(nbInputs == 1);
+    PLUGIN_ASSERT(inputTypes != nullptr);
     PLUGIN_ASSERT(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
     return inputTypes[0];
 }
 
 // IPluginV2 Methods
-const char* FCPluginDynamic::getPluginType() const noexcept
+char const* FCPluginDynamic::getPluginType() const noexcept
 {
-    return FC_NAME;
+    return kFC_NAME;
 }
 
-const char* FCPluginDynamic::getPluginVersion() const noexcept
+char const* FCPluginDynamic::getPluginVersion() const noexcept
 {
-    return FC_VERSION;
+    return kFC_VERSION;
 }
 
-int FCPluginDynamic::getNbOutputs() const noexcept
+int32_t FCPluginDynamic::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-int FCPluginDynamic::initialize() noexcept
+int32_t FCPluginDynamic::initialize() noexcept
 {
     gLogVerbose << "FCPluginDynamic initialize\n";
     return 0;
@@ -679,19 +690,20 @@ void FCPluginDynamic::destroy() noexcept
     delete this;
 }
 
-void FCPluginDynamic::setPluginNamespace(const char* libNamespace) noexcept
+void FCPluginDynamic::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
 }
 
-const char* FCPluginDynamic::getPluginNamespace() const noexcept
+char const* FCPluginDynamic::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -709,48 +721,50 @@ FCPluginDynamicCreator::FCPluginDynamicCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* FCPluginDynamicCreator::getPluginName() const noexcept
+char const* FCPluginDynamicCreator::getPluginName() const noexcept
 {
-    return FC_NAME;
+    return kFC_NAME;
 }
 
-const char* FCPluginDynamicCreator::getPluginVersion() const noexcept
+char const* FCPluginDynamicCreator::getPluginVersion() const noexcept
 {
-    return FC_VERSION;
+    return kFC_VERSION;
 }
 
-const PluginFieldCollection* FCPluginDynamicCreator::getFieldNames() noexcept
+PluginFieldCollection const* FCPluginDynamicCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* FCPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* FCPluginDynamicCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
         gLogVerbose << "Creating FCPluginDynamicCreator...\n";
+        PLUGIN_VALIDATE(name != nullptr);
+        PLUGIN_VALIDATE(fc != nullptr);
 
         int32_t outDims = 0;
         int32_t typeId = -1;
-        Weights W{DataType::kFLOAT, nullptr, 0ll};
+        Weights W{DataType::kFLOAT, nullptr, 0LL};
         plugin::validateRequiredAttributesExist({"out_dims", "type_id", "W"}, fc);
 
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string field_name(fc->fields[i].name);
-            if (field_name.compare("out_dims") == 0)
+            std::string fieldName(fc->fields[i].name);
+            if (fieldName.compare("out_dims") == 0)
             {
-                outDims = static_cast<const int*>(fc->fields[i].data)[0];
+                outDims = static_cast<int32_t const*>(fc->fields[i].data)[0];
                 gLogVerbose << "Building outDims: " << outDims << std::endl;
             }
 
-            if (field_name.compare("type_id") == 0)
+            if (fieldName.compare("type_id") == 0)
             {
-                typeId = static_cast<const int*>(fc->fields[i].data)[0];
+                typeId = static_cast<int32_t const*>(fc->fields[i].data)[0];
                 gLogVerbose << "Building typeId: " << outDims << std::endl;
             }
 
-            if (field_name.compare("W") == 0)
+            if (fieldName.compare("W") == 0)
             {
                 gLogVerbose << "Building W...\n";
                 W.values = fc->fields[i].data;
@@ -764,7 +778,7 @@ IPluginV2* FCPluginDynamicCreator::createPlugin(const char* name, const PluginFi
         {
             gLogError << "Invalid output dimension" << std::endl;
         }
-        if (typeId < 0 || typeId > 3)
+        if (typeId < 0 || typeId > 1)
         {
             gLogError << "Invalid type id" << typeId << std::endl;
         }
@@ -776,7 +790,7 @@ IPluginV2* FCPluginDynamicCreator::createPlugin(const char* name, const PluginFi
         DataType type = static_cast<DataType>(typeId);
         return new FCPluginDynamic(name, type, outDims, W);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -784,7 +798,7 @@ IPluginV2* FCPluginDynamicCreator::createPlugin(const char* name, const PluginFi
 }
 
 IPluginV2* FCPluginDynamicCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call FCPluginDynamic::destroy()
@@ -792,29 +806,29 @@ IPluginV2* FCPluginDynamicCreator::deserializePlugin(
     {
         return new FCPluginDynamic(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
     return nullptr;
 }
 
-void FCPluginDynamicCreator::setPluginNamespace(const char* libNamespace) noexcept
+void FCPluginDynamicCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
 }
 
-const char* FCPluginDynamicCreator::getPluginNamespace() const noexcept
+char const* FCPluginDynamicCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
-
 
 #endif // #if CUDA_VERSION >= 10010
