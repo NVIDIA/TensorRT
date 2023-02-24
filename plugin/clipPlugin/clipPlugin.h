@@ -73,8 +73,8 @@ public:
 
 private:
     std::string mLayerName;
-    float mClipMin{0.0f};
-    float mClipMax{0.0f};
+    float mClipMin{0.0F};
+    float mClipMax{0.0F};
     DataType mDataType{DataType::kFLOAT};
     size_t mInputVolume{0};
 };

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#ifndef _VOXEL_GENERATOR_H_
-#define _VOXEL_GENERATOR_H_
+#ifndef TRT_VOXEL_GENERATOR_H
+#define TRT_VOXEL_GENERATOR_H
 
 #include "NvInferPlugin.h"
 #include "common/bboxUtils.h"
@@ -34,80 +34,74 @@ namespace plugin
 class VoxelGeneratorPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-
     VoxelGeneratorPlugin() = delete;
-    VoxelGeneratorPlugin(int max_voxels, int max_points, int voxel_features, float x_min,
-              float x_max, float y_min, float y_max, float z_min, float z_max,
-              float pillar_x, float pillar_y, float pillar_z);
-    VoxelGeneratorPlugin(int max_voxels, int max_points, int voxel_features, float x_min,
-              float x_max, float y_min, float y_max, float z_min, float z_max,
-              float pillar_x, float pillar_y, float pillar_z, int point_features,
-              int grid_x, int grid_y, int grid_z);
-    VoxelGeneratorPlugin(const void* data, size_t length);
+    VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin, float xMax, float yMin,
+        float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ);
+    VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin, float xMax, float yMin,
+        float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ, int32_t pointFeatures,
+        int32_t gridX, int32_t gridY, int32_t gridZ);
+    VoxelGeneratorPlugin(void const* data, size_t length);
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, 
-        const nvinfer1::DimsExprs* inputs, int nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, 
-        int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
-    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, 
-        const nvinfer1::PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, 
-        void* workspace, cudaStream_t stream) noexcept override;
+        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, 
-        int nbInputs) const noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
     // IPluginV2 Methods
-    const char* getPluginType() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    char const* getPluginType() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
     void destroy() noexcept override;
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     std::string mNamespace;
     // Shape Num for *input*
-    int pillarNum_;
-    int pointNum_;
-    int featureNum_;
-    float min_x_range_;
-    float max_x_range_;
-    float min_y_range_;
-    float max_y_range_;
-    float min_z_range_;
-    float max_z_range_;
-    float pillar_x_size_;
-    float pillar_y_size_;
-    float pillar_z_size_;
+    int32_t mPillarNum;
+    int32_t mPointNum;
+    int32_t mFeatureNum;
+    float mMinXRange;
+    float mMaxXRange;
+    float mMinYRange;
+    float mMaxYRange;
+    float mMinZRange;
+    float mMaxZRange;
+    float mPillarXSize;
+    float mPillarYSize;
+    float mPillarZSize;
     // feature number of pointcloud points: 4 or 5
-    int pointFeatureNum_;
-    int grid_x_size_;
-    int grid_y_size_;
-    int grid_z_size_;
+    int32_t mPointFeatureNum;
+    int32_t mGridXSize;
+    int32_t mGridYSize;
+    int32_t mGridZSize;
 };
 
 class VoxelGeneratorPluginCreator : public nvinfer1::IPluginCreator
 {
 public:
     VoxelGeneratorPluginCreator();
-    const char* getPluginName() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
-    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
-    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginName() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    nvinfer1::IPluginV2* deserializePlugin(
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     static nvinfer1::PluginFieldCollection mFC;

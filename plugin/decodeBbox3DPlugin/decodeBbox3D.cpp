@@ -389,13 +389,13 @@ IPluginV2* DecodeBbox3DPluginCreator::createPlugin(const char* name, const Plugi
     {
         const PluginField* fields = fc->fields;
         int nbFields = fc->nbFields;
-        float point_cloud_range[6] = {0.0f};
+        float point_cloud_range[6] = {0.0F};
         std::vector<float> anchors{};
         std::vector<float> anchor_bottom_height{};
-        float dir_offset = 0.78539f;
-        float dir_limit_offset = 0.0f;
+        float dir_offset = 0.78539F;
+        float dir_limit_offset = 0.0F;
         int num_dir_bins = 2;
-        float score_thresh = 0.1f;
+        float score_thresh = 0.1F;
         for (int i = 0; i < nbFields; ++i)
         {
             const char* attr_name = fields[i].name;

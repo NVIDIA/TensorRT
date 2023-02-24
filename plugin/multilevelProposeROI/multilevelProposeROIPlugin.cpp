@@ -139,8 +139,8 @@ MultilevelProposeROI::MultilevelProposeROI(
     mBackgroundLabel = -1;
     PLUGIN_VALIDATE(mPreNMSTopK > 0 && mPreNMSTopK <= 4096);
     PLUGIN_VALIDATE(mKeepTopK > 0);
-    PLUGIN_VALIDATE(mIOUThreshold >= 0.0f);
-    PLUGIN_VALIDATE(mFGThreshold >= 0.0f);
+    PLUGIN_VALIDATE(mIOUThreshold >= 0.0F);
+    PLUGIN_VALIDATE(mFGThreshold >= 0.0F);
     PLUGIN_VALIDATE(mImageSize.nbDims == 3);
     PLUGIN_VALIDATE(mImageSize.d[0] > 0 && mImageSize.d[1] > 0 && mImageSize.d[2] > 0);
 

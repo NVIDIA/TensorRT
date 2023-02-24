@@ -77,7 +77,7 @@ void findDivisor(int denom,
     // and we save shift_coeff as whatever further shift we have to do beyond
     // what the umulhi() implies.
     uint32_t p = 31 + find_log_2(denom, true);
-    uint32_t m = ((1ull << p) + (uint32_t) denom - 1) / (uint32_t) denom;
+    uint32_t m = ((1ULL << p) + (uint32_t) denom - 1) / (uint32_t) denom;
     mul_coeff = m;
     shift_coeff = p - 32;
 }

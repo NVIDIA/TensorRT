@@ -119,7 +119,7 @@ MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, const nvinfer1
     mInputHeight = imageSize.d[1];
     mInputWidth = imageSize.d[2];
     // Threshold to P3: Smaller -> P2
-    mThresh = (224 * 224) / (4.0f);
+    mThresh = (224 * 224) / (4.0F);
 }
 
 int MultilevelCropAndResize::getNbOutputs() const noexcept

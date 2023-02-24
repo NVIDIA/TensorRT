@@ -44,32 +44,32 @@ struct GemmTypes
 template <>
 struct GemmTypes<half>
 {
-    static const cudaDataType_t cudaTypeI = CUDA_R_16F;
+    static cudaDataType_t const cudaTypeI = CUDA_R_16F;
     using dataTypeI = half;
-    static const cudaDataType_t cudaTypeO = CUDA_R_16F;
+    static cudaDataType_t const cudaTypeO = CUDA_R_16F;
     using dataTypeO = half;
-    static const cudaDataType_t cudaTypeS = CUDA_R_16F;
+    static cudaDataType_t const cudaTypeS = CUDA_R_16F;
     using dataTypeS = half;
 #if CUBLAS_VER_MAJOR < 11
-    static const cudaDataType_t cudaTypeCom = CUDA_R_16F;
+    static cudaDataType_t const cudaTypeCom = CUDA_R_16F;
 #else
-    static const cublasComputeType_t cudaTypeCom = CUBLAS_COMPUTE_16F;
+    static cublasComputeType_t const cudaTypeCom = CUBLAS_COMPUTE_16F;
 #endif
 };
 
 template <>
 struct GemmTypes<float>
 {
-    static const cudaDataType_t cudaTypeI = CUDA_R_32F;
+    static cudaDataType_t const cudaTypeI = CUDA_R_32F;
     using dataTypeI = float;
-    static const cudaDataType_t cudaTypeO = CUDA_R_32F;
+    static cudaDataType_t const cudaTypeO = CUDA_R_32F;
     using dataTypeO = float;
-    static const cudaDataType_t cudaTypeS = CUDA_R_32F;
+    static cudaDataType_t const cudaTypeS = CUDA_R_32F;
     using dataTypeS = float;
 #if CUBLAS_VER_MAJOR < 11
-    static const cudaDataType_t cudaTypeCom = CUDA_R_32F;
+    static cudaDataType_t const cudaTypeCom = CUDA_R_32F;
 #else
-    static const cublasComputeType_t cudaTypeCom = CUBLAS_COMPUTE_32F;
+    static cublasComputeType_t const cudaTypeCom = CUBLAS_COMPUTE_32F;
 #endif
 };
 
@@ -80,7 +80,7 @@ struct Gemm
     typename Types::dataTypeI* A{nullptr};
     typename Types::dataTypeI* B{nullptr};
     typename Types::dataTypeO* C{nullptr};
-    int m, n, k, ldA, ldB, ldC, rA, rB, rC, cA, cB, cC;
+    int32_t m, n, k, ldA, ldB, ldC, rA, rB, rC, cA, cB, cC;
     size_t bytesA;
     size_t bytesB;
     size_t bytesC;
@@ -88,23 +88,24 @@ struct Gemm
     size_t elemA;
     size_t elemB;
     size_t elemC;
-    bool transA, transB;
+    bool transA;
+    bool transB;
 
     cublasOperation_t opA;
     cublasOperation_t opB;
 
-    const int word_size{sizeof(T)};
+    int32_t const word_size{sizeof(T)};
     typename Types::dataTypeS alpha;
     typename Types::dataTypeS beta;
 
     Gemm() {}
 
-    Gemm(int m_, int n_, int k_, bool tA, bool tB)
+    Gemm(int32_t m_, int32_t n_, int32_t k_, bool tA, bool tB)
     {
         init(m_, n_, k_, tA, tB);
     }
 
-    void init(int m_, int n_, int k_, bool tA, bool tB) noexcept
+    void init(int32_t m_, int32_t n_, int32_t k_, bool tA, bool tB) noexcept
     {
         m = m_;
         n = n_;
@@ -137,22 +138,23 @@ struct Gemm
     }
 };
 
-auto constexpr algoCombinations = 6000;
-auto constexpr algoIds = 40;
-auto constexpr printAlgos = 1;
-auto constexpr kernelRepeats = 10;
-auto constexpr threadsPerBlock = 1024;
+auto constexpr kNB_ALGO_COMBINATIONS = 6000;
+auto constexpr kNB_ALGO_IDS = 40;
+auto constexpr kPRINT_ALGOS = 1;
+auto constexpr kNB_KERNEL_REPEATS = 10;
+auto constexpr kTHREADS_PER_BLOCK = 1024;
 
-/* Structure to store information about different run trials */
+// Structure to store information about different run trials
 typedef struct customMatMultPerfType_t
 {
+    static constexpr float kMAX_TIME = 1000000.F;
     cublasLtMatmulAlgo_t algo;
     cublasStatus_t status;
-    float time{1000000.F};
+    float time{kMAX_TIME};
     size_t workspaceSize; // actual memory workspace needed
     cublasMath_t mathMode;
     cublasLtReductionScheme_t reductionScheme;
-    int customOption;
+    int32_t customOption;
     float wavesCount;
 } customMatmulPerf_t;
 
@@ -160,17 +162,17 @@ typedef struct customMatMultPerfType_t
 void LtGemmSearch(cublasLtHandle_t ltHandle,
                   cublasOperation_t transa,
                   cublasOperation_t transb,
-                  int const &m,
-                  int const &n,
-                  int const &k,
+                  int32_t const &m,
+                  int32_t const &n,
+                  int32_t const &k,
                   void const *alpha,
                   void const *A,
-                  int const &lda,
+                  int32_t const &lda,
                   void const *B,
-                  int const &ldb,
+                  int32_t const &ldb,
                   void const *beta,
                   void *C,
-                  int const &ldc,
+                  int32_t const &ldc,
                   void *workSpace,
                   size_t workSpaceSize,
                   cudaDataType_t computeType,
@@ -181,32 +183,34 @@ void LtGemmSearch(cublasLtHandle_t ltHandle,
                   std::vector<customMatmulPerf_t> &perfResults);
 // clang-format on
 template <typename T>
-void LtGemmSearch(cublasLtHandle_t ltHandle, const Gemm<T>& g, void* workSpace, size_t workSpaceSize,
+void LtGemmSearch(cublasLtHandle_t ltHandle, Gemm<T> const& g, void* workSpace, size_t workSpaceSize,
     std::vector<customMatmulPerf_t>& perfResults)
 {
     // clang-format off
-  LtGemmSearch(ltHandle,
-               g.opA,
-               g.opB,
-               g.m,
-               g.n,
-               g.k,
-               &g.alpha,
-               g.A,
-               g.ldA,
-               g.B,
-               g.ldB,
-               &g.beta,
-               g.C,
-               g.ldC,
-               workSpace,
-               workSpaceSize,
-               Gemm<T>::Types::cudaTypeCom,
-               Gemm<T>::Types::cudaTypeS,
-               Gemm<T>::Types::cudaTypeI,
-               Gemm<T>::Types::cudaTypeI,
-               Gemm<T>::Types::cudaTypeO,
-               perfResults);
+    LtGemmSearch(
+        ltHandle,
+        g.opA,
+        g.opB,
+        g.m,
+        g.n,
+        g.k,
+        &g.alpha,
+        g.A,
+        g.ldA,
+        g.B,
+        g.ldB,
+        &g.beta,
+        g.C,
+        g.ldC,
+        workSpace,
+        workSpaceSize,
+        Gemm<T>::Types::cudaTypeCom,
+        Gemm<T>::Types::cudaTypeS,
+        Gemm<T>::Types::cudaTypeI,
+        Gemm<T>::Types::cudaTypeI,
+        Gemm<T>::Types::cudaTypeO,
+        perfResults
+    );
     // clang-format on
 }
 
@@ -296,32 +300,33 @@ struct LtContext
 };
 
 template <typename T>
-cublasStatus_t inline cublasLtMatmul(
+cublasStatus_t cublasLtMatmul(
     LtContext& ctx, Gemm<T>& g, cublasLtMatmulAlgo_t algo, void* workspace, size_t workspaceSize, cudaStream_t stream)
 {
     // clang-format off
-     return cublasLtMatmul(ctx.cublas,
-                    ctx.operationDesc,
-                    &g.alpha,
-                    g.A,
-                    ctx.Adesc,
-                    g.B,
-                    ctx.Bdesc,
-                    &g.beta,
-                    g.C,
-                    ctx.Cdesc,
-                    g.C,
-                    ctx.Cdesc,
-                    &algo,
-                    workspace,
-                    workspaceSize,
-                    stream
-                    );
+    return cublasLtMatmul(
+        ctx.cublas,
+        ctx.operationDesc,
+        &g.alpha,
+        g.A,
+        ctx.Adesc,
+        g.B,
+        ctx.Bdesc,
+        &g.beta,
+        g.C,
+        ctx.Cdesc,
+        g.C,
+        ctx.Cdesc,
+        &algo,
+        workspace,
+        workspaceSize,
+        stream
+    );
     // clang-format on
 }
 
-/* CAUTION : must match cublasLtMatmulTile_t */
-const char* const matmulTileName[] = {
+// CAUTION : must match cublasLtMatmulTile_t
+char const* const matmulTileName[] = {
     "UNDEF",
     "8x8",
     "8x16",
@@ -360,9 +365,9 @@ struct AlgoProps
     int32_t reductionScheme;
     uint64_t numericImpl;
 
-    void populate(const cublasLtMatmulAlgo_t& algo)
+    void populate(cublasLtMatmulAlgo_t const& algo)
     {
-        const cublasLtMatmulAlgo_t* matmulAlgo = &algo;
+        cublasLtMatmulAlgo_t const* matmulAlgo = &algo;
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
             matmulAlgo, CUBLASLT_ALGO_CONFIG_ID, &algoId, sizeof(algoId), nullptr));
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
@@ -381,12 +386,11 @@ struct AlgoProps
 };
 
 template <typename T>
-inline cublasLtMatmulAlgo_t gemmSearch(
-    const int m, const int n, const int k, const size_t workspaceSize, size_t& actualWorkspace)
+cublasLtMatmulAlgo_t gemmSearch(
+    int32_t const m, int32_t const n, int32_t const k, size_t const workspaceSize, size_t& actualWorkspace)
 {
-
     Gemm<T> g(m, n, k, false, false);
-    std::vector<customMatmulPerf_t> perfResults(algoCombinations);
+    std::vector<customMatmulPerf_t> perfResults(kNB_ALGO_COMBINATIONS);
 
     PLUGIN_CUASSERT(cudaMalloc(reinterpret_cast<void**>(&g.A), g.bytesA));
     PLUGIN_CUASSERT(cudaMalloc(reinterpret_cast<void**>(&g.B), g.bytesB));
@@ -410,10 +414,9 @@ inline cublasLtMatmulAlgo_t gemmSearch(
 }
 
 template <typename T>
-inline cublasLtMatmulAlgo_t gemmSearch(Gemm<T>& g, const size_t workspaceSize, size_t& actualWorkspace)
+cublasLtMatmulAlgo_t gemmSearch(Gemm<T>& g, size_t const workspaceSize, size_t& actualWorkspace)
 {
-
-    std::vector<customMatmulPerf_t> perfResults(algoCombinations);
+    std::vector<customMatmulPerf_t> perfResults(kNB_ALGO_COMBINATIONS);
 
     PLUGIN_CUASSERT(cudaMalloc(&g.A, g.bytesA));
     PLUGIN_CUASSERT(cudaMalloc(&g.B, g.bytesB));
@@ -444,9 +447,9 @@ class FCPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     FCPluginDynamic(
-        const std::string name, const nvinfer1::DataType type, const int outDim, const nvinfer1::Weights& W);
+        std::string const name, nvinfer1::DataType const type, int32_t const outDim, const nvinfer1::Weights& W);
 
-    FCPluginDynamic(const std::string name, const void* data, size_t length);
+    FCPluginDynamic(std::string const name, void const* data, size_t length);
 
     // It doesn't make sense to make FCPluginDynamic without arguments, so we
     // delete default constructor.
@@ -454,45 +457,45 @@ public:
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
-    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-        noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     // IPluginV2 Methods
-    const char* getPluginType() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    char const* getPluginType() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
     void destroy() noexcept override;
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
-    void attachToContext(
-        cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    void attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext,
+        nvinfer1::IGpuAllocator* gpuAllocator) noexcept override;
     void detachFromContext() noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
-    const std::string mLayerName;
+    std::string const mLayerName;
     std::string mNamespace;
 
     nvinfer1::DataType mType;
     size_t mOutDim; // leading dim
     size_t mNumParams;
-    int mNmax;
-    int mK;
+    int32_t mNmax;
+    int32_t mK;
 
     cublasLtMatmulAlgo_t mAlgo;
 
@@ -507,19 +510,20 @@ class FCPluginDynamicCreator : public nvinfer1::IPluginCreator
 public:
     FCPluginDynamicCreator();
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
     const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
 
-    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    nvinfer1::IPluginV2* deserializePlugin(
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
 
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     static nvinfer1::PluginFieldCollection mFC;
