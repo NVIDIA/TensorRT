@@ -419,6 +419,7 @@ EfficientNMSPluginCreator::EfficientNMSPluginCreator()
     mPluginAttributes.emplace_back(PluginField("max_output_boxes", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("background_class", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("score_activation", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("class_agnostic", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("box_coding", nullptr, PluginFieldType::kINT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -483,6 +484,12 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(const char* name, c
                 auto const scoreSigmoid = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(scoreSigmoid == 0 || scoreSigmoid == 1);
                 mParam.scoreSigmoid = static_cast<bool>(scoreSigmoid);
+            }
+            if (!strcmp(attrName, "class_agnostic"))
+            {
+                auto const classAgnostic = *(static_cast<int32_t const*>(fields[i].data));
+                PLUGIN_VALIDATE(classAgnostic == 0 || classAgnostic == 1);
+                mParam.classAgnostic = static_cast<bool>(classAgnostic);
             }
             if (!strcmp(attrName, "box_coding"))
             {

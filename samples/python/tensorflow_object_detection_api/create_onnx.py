@@ -367,6 +367,7 @@ class TFODGraphSurgeon:
                 'score_threshold': max(0.01, score_threshold),
                 'iou_threshold': iou_threshold,
                 'score_activation': score_activation,
+                'class_agnostic': False,
                 'box_coding': 1,
             } 
         )
