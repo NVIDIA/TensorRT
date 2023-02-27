@@ -1,0 +1,80 @@
+{
+    "config1": [
+        {
+            "inputs": {
+                "boxes": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsIDYsIDQpLCB9ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoAAAAAAAAAAAAAgD8AAIA/AAAAAM3MzD0AAIA/zcyMPwAAAADNzMy9AACAP2ZmZj8AAAAAAAAgQQAAgD8AADBBAAAAAJqZIUEAAIA/mpkxQQAAAAAAAMhCAACAPwAAykI=",
+                    "polygraphy_class": "ndarray"
+                },
+                "scores": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBUcnVlLCAnc2hhcGUnOiAoMSwgNiwgMiksIH0gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAo9Clc+CtejPpqZmT6kcD0/zczMPbgeRT+uR2E+uB4FPgrXIz6PwnU9exRuPwrXIz8=",
+                    "polygraphy_class": "ndarray"
+                }
+            },
+            "attributes": {
+                "score_threshold": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsKSwgfSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoAAAAA",
+                    "polygraphy_class": "ndarray"
+                },
+                "iou_threshold": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsKSwgfSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoAAAA/",
+                    "polygraphy_class": "ndarray"
+                },
+                "max_output_boxes": 6,
+                "background_class": -1,
+                "score_activation": false,
+                "class_agnostic": false,
+                "box_coding": 0
+            },
+            "outputs": {
+                "num_detections": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGk0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsIDEpLCB9ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoGAAAA",
+                    "polygraphy_class": "ndarray"
+                },
+                "detection_boxes": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsIDYsIDQpLCB9ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoAAAAAmpkhQQAAgD+amTFBAAAAAAAAyEIAAIA/AADKQgAAAAAAACBBAACAPwAAMEEAAAAAAADIQgAAgD8AAMpCAAAAAM3MzD0AAIA/zcyMPwAAAAAAAAAAAACAPwAAgD8=",
+                    "polygraphy_class": "ndarray"
+                }
+            }
+        }
+    ],
+    "class_agnostic": [
+        {
+            "inputs": {
+                "boxes": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsIDYsIDQpLCB9ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoAAAAAAAAAAAAAgD8AAIA/AAAAAM3MzD0AAIA/zcyMPwAAAADNzMy9AACAP2ZmZj8AAAAAAAAgQQAAgD8AADBBAAAAAJqZIUEAAIA/mpkxQQAAAAAAAMhCAACAPwAAykI=",
+                    "polygraphy_class": "ndarray"
+                },
+                "scores": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBUcnVlLCAnc2hhcGUnOiAoMSwgNiwgMiksIH0gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAo9Clc+CtejPpqZmT6kcD0/zczMPbgeRT+uR2E+uB4FPgrXIz6PwnU9exRuPwrXIz8=",
+                    "polygraphy_class": "ndarray"
+                }
+            },
+            "attributes": {
+                "score_threshold": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsKSwgfSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoAAAAA",
+                    "polygraphy_class": "ndarray"
+                },
+                "iou_threshold": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsKSwgfSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoAAAA/",
+                    "polygraphy_class": "ndarray"
+                },
+                "max_output_boxes": 6,
+                "background_class": -1,
+                "score_activation": false,
+                "class_agnostic": true,
+                "box_coding": 0
+            },
+            "outputs": {
+                "num_detections": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGk0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsIDEpLCB9ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoDAAAA",
+                    "polygraphy_class": "ndarray"
+                },
+                "detection_boxes": {
+                    "array": "k05VTVBZAQB2AHsnZGVzY3InOiAnPGY0JywgJ2ZvcnRyYW5fb3JkZXInOiBGYWxzZSwgJ3NoYXBlJzogKDEsIDYsIDQpLCB9ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAoAAAAAmpkhQQAAgD+amTFBAAAAAAAAyEIAAIA/AADKQgAAAADNzMw9AACAP83MjD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                    "polygraphy_class": "ndarray"
+                }
+            }
+        }
+    ]
+}

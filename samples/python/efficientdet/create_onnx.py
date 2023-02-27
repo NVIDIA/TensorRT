@@ -386,6 +386,7 @@ class EfficientDetGraphSurgeon:
             'score_threshold': max(0.01, score_threshold),  # Keep threshold to at least 0.01 for better efficiency
             'iou_threshold': iou_threshold,
             'score_activation': True,
+            'class_agnostic': False,
             'box_coding': 1,
         }
         nms_output_classes_dtype = np.int32

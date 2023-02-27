@@ -37,6 +37,7 @@ struct EfficientNMSParameters
     bool scoreSigmoid = false;
     bool clipBoxes = false;
     int boxCoding = 0;
+    bool classAgnostic = false;
 
     // Related to NMS Internals
     int numSelectedBoxes = 4096;

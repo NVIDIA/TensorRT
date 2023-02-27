@@ -3,12 +3,22 @@ name: EfficientNMS_TRT
 interface: "IPluginV2DynamicExt"
 versions:
   "1":
+    inputs:
+      - boxes
+      - scores
+      - anchors
+    outputs:
+      - num_detections
+      - detection_boxes
+      - detection_scores
+      - detection_classes
     attributes:
       - score_threshold
       - iou_threshold
       - max_output_boxes
       - background_class
       - score_activation
+      - class_agnostic
       - box_coding
     attribute_types:
       score_threshold: float32
@@ -16,6 +26,7 @@ versions:
       max_output_boxes: int32
       background_class: int32
       score_activation: int32
+      class_agnostic: int32
       box_coding: int32
     attribute_length:
       score_threshold: 1
@@ -23,6 +34,7 @@ versions:
       max_output_boxes: 1
       background_class: 1
       score_activation: 1
+      class_agnostic: 1
       box_coding: 1
     attribute_options:
       score_threshold:
@@ -38,11 +50,14 @@ versions:
         min: "=ninf"
         max: "=pinf"
       score_activation:
-       - 0
-       - 1
+        - 0
+        - 1
+      class_agnostic:
+        - 0
+        - 1
       box_coding:
-       - 0
-       - 1
+        - 0
+        - 1
     attributes_required:
       - score_threshold
       - iou_threshold
@@ -50,4 +65,47 @@ versions:
       - background_class
       - score_activation
       - box_coding
-...
+    golden_io_path: "plugin/efficientNMSPlugin/EfficientNMSPlugin_PluginGoldenIO.json"
+    abs_tol: 1e-5
+    rel_tol: 1e-5
+    configs:
+      config1:
+        input_types:
+          boxes: float32
+          scores: float32
+        attribute_options:
+          "background_class":
+            value: -1
+            shape: "1"
+          "score_activation":
+            value: 0
+            shape: "1"
+          "class_agnostic":
+            value: 0
+            shape: "1"
+          "box_coding":
+            value: 0
+            shape: "1"
+        output_types:
+          num_detections: int32
+          detection_boxes: float32
+      class_agnostic:
+        input_types:
+          boxes: float32
+          scores: float32
+        attribute_options:
+          "background_class":
+            value: -1
+            shape: "1"
+          "score_activation":
+            value: 0
+            shape: "1"
+          "class_agnostic":
+            value: 1
+            shape: "1"
+          "box_coding":
+            value: 0
+            shape: "1"
+        output_types:
+          num_detections: int32
+          detection_boxes: float32
