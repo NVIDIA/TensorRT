@@ -28,8 +28,8 @@ using nvinfer1::plugin::NormalizePluginCreator;
 
 namespace
 {
-const char* NORMALIZE_PLUGIN_VERSION{"1"};
-const char* NORMALIZE_PLUGIN_NAME{"Normalize_TRT"};
+char const* const kNORMALIZE_PLUGIN_VERSION{"1"};
+char const* const kNORMALIZE_PLUGIN_NAME{"Normalize_TRT"};
 } // namespace
 
 PluginFieldCollection NormalizePluginCreator::mFC{};
@@ -47,8 +47,8 @@ Normalize::Normalize(Weights const* weights, int nbWeights, bool acrossSpatial, 
     mScalarScale = static_cast<float const*>(weights[0].values)[0];
 }
 
-Normalize::Normalize(
-    Weights const* weights, int nbWeights, float scalarScale, bool acrossSpatial, bool channelShared, float eps, int C, int H, int W)
+Normalize::Normalize(Weights const* weights, int nbWeights, float scalarScale, bool acrossSpatial, bool channelShared,
+    float eps, int C, int H, int W)
     : mScalarScale(scalarScale)
     , acrossSpatial(acrossSpatial)
     , channelShared(channelShared)
@@ -63,10 +63,10 @@ Normalize::Normalize(
     mWeights = copyToDevice(weights[0].values, weights[0].count);
 }
 
-Normalize::Normalize(const void* buffer, size_t length)
+Normalize::Normalize(void const* buffer, size_t length)
 {
-    const char *d = static_cast<const char*>(buffer);
-    const char *a = d;
+    char const* d = static_cast<char const*>(buffer);
+    char const* a = d;
     C = read<int>(d);
     H = read<int>(d);
     W = read<int>(d);
@@ -87,7 +87,7 @@ int Normalize::getNbOutputs() const noexcept
     return 1;
 }
 
-Dims Normalize::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims Normalize::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 1);
     PLUGIN_ASSERT(index == 0);
@@ -100,9 +100,7 @@ int Normalize::initialize() noexcept
     return STATUS_SUCCESS;
 }
 
-void Normalize::terminate() noexcept
-{
-}
+void Normalize::terminate() noexcept {}
 
 size_t Normalize::getWorkspaceSize(int maxBatchSize) const noexcept
 {
@@ -110,17 +108,18 @@ size_t Normalize::getWorkspaceSize(int maxBatchSize) const noexcept
 }
 
 int Normalize::enqueue(
-    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    const void* inputData = inputs[0];
+    void const* inputData = inputs[0];
     void* outputData = outputs[0];
 
     pluginStatus_t status;
 
-    if(acrossSpatial && channelShared) // Since cublasPointerMode_t is CUBLAS_POINTER_MODE_HOST, scale should be on the host
+    if (acrossSpatial
+        && channelShared) // Since cublasPointerMode_t is CUBLAS_POINTER_MODE_HOST, scale should be on the host
     {
         status = normalizeInference(stream, mCublas, acrossSpatial, channelShared, batchSize, C, H, W, eps,
-        &mScalarScale, inputData, outputData, workspace);
+            &mScalarScale, inputData, outputData, workspace);
     }
     else // No risk of device pointers being passed to cublas as alpha or beta
     {
@@ -158,7 +157,7 @@ bool Normalize::supportsFormat(DataType type, PluginFormat format) const noexcep
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-Weights Normalize::copyToDevice(const void* hostData, size_t count)
+Weights Normalize::copyToDevice(void const* hostData, size_t count)
 {
     void* deviceData;
     PLUGIN_CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
@@ -173,7 +172,7 @@ void Normalize::serializeFromDevice(char*& hostBuffer, Weights deviceWeights) co
     hostBuffer += deviceWeights.count * sizeof(float);
 }
 
-Weights Normalize::deserializeToDevice(const char*& hostBuffer, size_t count)
+Weights Normalize::deserializeToDevice(char const*& hostBuffer, size_t count)
 {
     Weights w = copyToDevice(hostBuffer, count);
     hostBuffer += count * sizeof(float);
@@ -181,25 +180,26 @@ Weights Normalize::deserializeToDevice(const char*& hostBuffer, size_t count)
 }
 
 // Set plugin namespace
-void Normalize::setPluginNamespace(const char* pluginNamespace) noexcept
+void Normalize::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* Normalize::getPluginNamespace() const noexcept
+char const* Normalize::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType Normalize::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType Normalize::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return DataType::kFLOAT;
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool Normalize::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool Normalize::isOutputBroadcastAcrossBatch(
+    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -211,9 +211,9 @@ bool Normalize::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 }
 
 // Configure the layer with input and output data types.
-void Normalize::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void Normalize::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     C = inputDims[0].d[0];
@@ -242,18 +242,16 @@ void Normalize::attachToContext(cudnnContext* cudnn, cublasContext* cublas, IGpu
 }
 
 // Detach the plugin object from its execution context.
-void Normalize::detachFromContext() noexcept
+void Normalize::detachFromContext() noexcept {}
+
+char const* Normalize::getPluginType() const noexcept
 {
+    return kNORMALIZE_PLUGIN_NAME;
 }
 
-const char* Normalize::getPluginType() const noexcept
+char const* Normalize::getPluginVersion() const noexcept
 {
-    return NORMALIZE_PLUGIN_NAME;
-}
-
-const char* Normalize::getPluginVersion() const noexcept
-{
-    return NORMALIZE_PLUGIN_VERSION;
+    return kNORMALIZE_PLUGIN_VERSION;
 }
 
 void Normalize::destroy() noexcept
@@ -268,7 +266,8 @@ IPluginV2Ext* Normalize::clone() const noexcept
     try
     {
         // Create a new instance
-        IPluginV2Ext* plugin = new Normalize(&mWeights, mNbWeights, mScalarScale, acrossSpatial, channelShared, eps, C, H, W);
+        IPluginV2Ext* plugin
+            = new Normalize(&mWeights, mNbWeights, mScalarScale, acrossSpatial, channelShared, eps, C, H, W);
 
         // Set the namespace
         plugin->setPluginNamespace(mPluginNamespace.c_str());
@@ -294,56 +293,56 @@ NormalizePluginCreator::NormalizePluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* NormalizePluginCreator::getPluginName() const noexcept
+char const* NormalizePluginCreator::getPluginName() const noexcept
 {
-    return NORMALIZE_PLUGIN_NAME;
+    return kNORMALIZE_PLUGIN_NAME;
 }
 
-const char* NormalizePluginCreator::getPluginVersion() const noexcept
+char const* NormalizePluginCreator::getPluginVersion() const noexcept
 {
-    return NORMALIZE_PLUGIN_VERSION;
+    return kNORMALIZE_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* NormalizePluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* NormalizePluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* NormalizePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* NormalizePluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
         std::vector<float> weightValues;
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
         for (int i = 0; i < fc->nbFields; ++i)
         {
-            const char* attrName = fields[i].name;
+            char const* attrName = fields[i].name;
             if (!strcmp(attrName, "nbWeights"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mNbWeights = *(static_cast<const int*>(fields[i].data));
+                mNbWeights = *(static_cast<int const*>(fields[i].data));
             }
             else if (!strcmp(attrName, "acrossSpatial"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mAcrossSpatial = *(static_cast<const bool*>(fields[i].data));
+                mAcrossSpatial = *(static_cast<bool const*>(fields[i].data));
             }
             else if (!strcmp(attrName, "channelShared"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mChannelShared = *(static_cast<const bool*>(fields[i].data));
+                mChannelShared = *(static_cast<bool const*>(fields[i].data));
             }
             else if (!strcmp(attrName, "eps"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mEps = *(static_cast<const float*>(fields[i].data));
+                mEps = *(static_cast<float const*>(fields[i].data));
             }
             else if (!strcmp(attrName, "weights"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int size = fields[i].length;
                 weightValues.reserve(size);
-                const auto* w = static_cast<const float*>(fields[i].data);
+                auto const* w = static_cast<float const*>(fields[i].data);
                 for (int j = 0; j < size; j++)
                 {
                     weightValues.push_back(*w);
@@ -365,7 +364,7 @@ IPluginV2Ext* NormalizePluginCreator::createPlugin(const char* name, const Plugi
 }
 
 IPluginV2Ext* NormalizePluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

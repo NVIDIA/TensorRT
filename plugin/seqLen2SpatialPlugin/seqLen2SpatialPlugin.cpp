@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#include "seqLen2SpatialKernel.h"
 #include "seqLen2SpatialPlugin.h"
+#include "seqLen2SpatialKernel.h"
 
 using namespace nvinfer1;
 using namespace plugin;

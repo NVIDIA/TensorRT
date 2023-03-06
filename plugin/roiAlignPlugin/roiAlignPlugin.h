@@ -33,8 +33,8 @@ namespace plugin
 class ROIAlign : public IPluginV2DynamicExt
 {
 public:
-    ROIAlign(
-        int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode, float spatialScale, int32_t aligned);
+    ROIAlign(int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode, float spatialScale,
+        int32_t aligned);
     ROIAlign(void const* data, size_t length);
     ROIAlign() = default;
     ~ROIAlign() override = default;
@@ -55,8 +55,8 @@ public:
     void setCaffeSemantics(bool caffeSemantics) noexcept;
 
     // IPluginV2Ext methods
-    nvinfer1::DataType getOutputDataType(int32_t index, nvinfer1::DataType const* inputType, int32_t nbInputs) const
-        noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputType, int32_t nbInputs) const noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;
@@ -73,7 +73,8 @@ public:
 
 private:
     void checkValidInputs(nvinfer1::DynamicPluginTensorDesc const* inputs, int32_t nbInputDims);
-    void validateAttributes(int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode, float spatialScale, int32_t aligned);
+    void validateAttributes(int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode,
+        float spatialScale, int32_t aligned);
 
     int32_t mOutputHeight{};
     int32_t mOutputWidth{};

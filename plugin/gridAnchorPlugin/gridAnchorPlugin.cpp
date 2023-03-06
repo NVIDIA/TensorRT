@@ -31,14 +31,14 @@ namespace plugin
 {
 namespace
 {
-std::string GRID_ANCHOR_PLUGIN_NAMES[] = {"GridAnchor_TRT", "GridAnchorRect_TRT"};
-const char* GRID_ANCHOR_PLUGIN_VERSION = "1";
+std::string const kGRID_ANCHOR_PLUGIN_NAMES[] = {"GridAnchor_TRT", "GridAnchorRect_TRT"};
+char const* const kGRID_ANCHOR_PLUGIN_VERSION = "1";
 } // namespace
 
 PluginFieldCollection GridAnchorBasePluginCreator::mFC{};
 std::vector<PluginField> GridAnchorBasePluginCreator::mPluginAttributes;
 
-GridAnchorGenerator::GridAnchorGenerator(const GridAnchorParameters* paramIn, int numLayers, const char* name)
+GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, int numLayers, char const* name)
     : mPluginName(name)
     , mNumLayers(numLayers)
 {
@@ -127,10 +127,10 @@ GridAnchorGenerator::GridAnchorGenerator(const GridAnchorParameters* paramIn, in
     }
 }
 
-GridAnchorGenerator::GridAnchorGenerator(const void* data, size_t length, const char* name)
+GridAnchorGenerator::GridAnchorGenerator(void const* data, size_t length, char const* name)
     : mPluginName(name)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    char const *d = reinterpret_cast<char const*>(data), *a = d;
     mNumLayers = read<int>(d);
     PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
     PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
@@ -180,7 +180,7 @@ int GridAnchorGenerator::getNbOutputs() const noexcept
     return mNumLayers;
 }
 
-Dims GridAnchorGenerator::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims GridAnchorGenerator::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
     // Particularity of the PriorBox layer: no batchSize dimension needed
     // 2 channels. First channel stores the mean of each prior coordinate.
@@ -201,7 +201,7 @@ size_t GridAnchorGenerator::getWorkspaceSize(int maxBatchSize) const noexcept
 }
 
 int GridAnchorGenerator::enqueue(
-    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     // Generate prior boxes for each layer
     for (int id = 0; id < mNumLayers; id++)
@@ -259,7 +259,7 @@ void GridAnchorGenerator::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-Weights GridAnchorGenerator::copyToDevice(const void* hostData, size_t count) noexcept
+Weights GridAnchorGenerator::copyToDevice(void const* hostData, size_t count) noexcept
 {
     void* deviceData;
     PLUGIN_CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
@@ -274,7 +274,7 @@ void GridAnchorGenerator::serializeFromDevice(char*& hostBuffer, Weights deviceW
     hostBuffer += deviceWeights.count * sizeof(float);
 }
 
-Weights GridAnchorGenerator::deserializeToDevice(const char*& hostBuffer, size_t count) noexcept
+Weights GridAnchorGenerator::deserializeToDevice(char const*& hostBuffer, size_t count) noexcept
 {
     Weights w = copyToDevice(hostBuffer, count);
     hostBuffer += count * sizeof(float);
@@ -285,31 +285,31 @@ bool GridAnchorGenerator::supportsFormat(DataType type, PluginFormat format) con
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-const char* GridAnchorGenerator::getPluginType() const noexcept
+char const* GridAnchorGenerator::getPluginType() const noexcept
 {
     return mPluginName.c_str();
 }
 
-const char* GridAnchorGenerator::getPluginVersion() const noexcept
+char const* GridAnchorGenerator::getPluginVersion() const noexcept
 {
-    return GRID_ANCHOR_PLUGIN_VERSION;
+    return kGRID_ANCHOR_PLUGIN_VERSION;
 }
 
 // Set plugin namespace
-void GridAnchorGenerator::setPluginNamespace(const char* pluginNamespace) noexcept
+void GridAnchorGenerator::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* GridAnchorGenerator::getPluginNamespace() const noexcept
+char const* GridAnchorGenerator::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 #include <iostream>
 // Return the DataType of the plugin output at the requested index
-DataType GridAnchorGenerator::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-    noexcept
+DataType GridAnchorGenerator::getOutputDataType(
+    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index < mNumLayers);
     return DataType::kFLOAT;
@@ -317,7 +317,7 @@ DataType GridAnchorGenerator::getOutputDataType(int index, const nvinfer1::DataT
 
 // Return true if output tensor is broadcast across a batch.
 bool GridAnchorGenerator::isOutputBroadcastAcrossBatch(
-    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -329,9 +329,9 @@ bool GridAnchorGenerator::canBroadcastInputAcrossBatch(int inputIndex) const noe
 }
 
 // Configure the layer with input and output data types.
-void GridAnchorGenerator::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void GridAnchorGenerator::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(nbOutputs == mNumLayers);
     PLUGIN_ASSERT(outputDims[0].nbDims == 3);
@@ -380,22 +380,22 @@ GridAnchorBasePluginCreator::GridAnchorBasePluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* GridAnchorBasePluginCreator::getPluginName() const noexcept
+char const* GridAnchorBasePluginCreator::getPluginName() const noexcept
 {
     return mPluginName.c_str();
 }
 
-const char* GridAnchorBasePluginCreator::getPluginVersion() const noexcept
+char const* GridAnchorBasePluginCreator::getPluginVersion() const noexcept
 {
-    return GRID_ANCHOR_PLUGIN_VERSION;
+    return kGRID_ANCHOR_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* GridAnchorBasePluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* GridAnchorBasePluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -404,33 +404,33 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
         std::vector<float> aspectRatios;
         std::vector<int> fMapShapes;
         std::vector<float> layerVariances;
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
 
-        const bool isFMapRect = (GRID_ANCHOR_PLUGIN_NAMES[1] == mPluginName);
+        bool const isFMapRect = (kGRID_ANCHOR_PLUGIN_NAMES[1] == mPluginName);
         for (int i = 0; i < fc->nbFields; ++i)
         {
-            const char* attrName = fields[i].name;
+            char const* attrName = fields[i].name;
             if (!strcmp(attrName, "numLayers"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                numLayers = static_cast<int>(*(static_cast<const int*>(fields[i].data)));
+                numLayers = static_cast<int>(*(static_cast<int const*>(fields[i].data)));
             }
             else if (!strcmp(attrName, "minSize"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                minScale = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
+                minScale = static_cast<float>(*(static_cast<float const*>(fields[i].data)));
             }
             else if (!strcmp(attrName, "maxSize"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                maxScale = static_cast<float>(*(static_cast<const float*>(fields[i].data)));
+                maxScale = static_cast<float>(*(static_cast<float const*>(fields[i].data)));
             }
             else if (!strcmp(attrName, "variance"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int size = fields[i].length;
                 layerVariances.reserve(size);
-                const auto* lVar = static_cast<const float*>(fields[i].data);
+                auto const* lVar = static_cast<float const*>(fields[i].data);
                 for (int j = 0; j < size; j++)
                 {
                     layerVariances.push_back(*lVar);
@@ -442,7 +442,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int size = fields[i].length;
                 aspectRatios.reserve(size);
-                const auto* aR = static_cast<const float*>(fields[i].data);
+                auto const* aR = static_cast<float const*>(fields[i].data);
                 for (int j = 0; j < size; j++)
                 {
                     aspectRatios.push_back(*aR);
@@ -455,7 +455,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
                 int size = fields[i].length;
                 PLUGIN_VALIDATE(!isFMapRect || (size % 2 == 0));
                 fMapShapes.reserve(size);
-                const int* fMap = static_cast<const int*>(fields[i].data);
+                int const* fMap = static_cast<int const*>(fields[i].data);
                 for (int j = 0; j < size; j++)
                 {
                     fMapShapes.push_back(*fMap);
@@ -468,7 +468,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
         std::vector<float> firstLayerAspectRatios;
 
         PLUGIN_VALIDATE(numLayers > 0);
-        const int numExpectedLayers = static_cast<int>(fMapShapes.size()) >> (isFMapRect ? 1 : 0);
+        int const numExpectedLayers = static_cast<int>(fMapShapes.size()) >> (isFMapRect ? 1 : 0);
         PLUGIN_VALIDATE(numExpectedLayers == numLayers);
 
         int numFirstLayerARs = 3;
@@ -512,7 +512,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(const char* name, const 
 }
 
 IPluginV2Ext* GridAnchorBasePluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -531,12 +531,12 @@ IPluginV2Ext* GridAnchorBasePluginCreator::deserializePlugin(
 
 GridAnchorPluginCreator::GridAnchorPluginCreator()
 {
-    mPluginName = GRID_ANCHOR_PLUGIN_NAMES[0];
+    mPluginName = kGRID_ANCHOR_PLUGIN_NAMES[0];
 }
 
 GridAnchorRectPluginCreator::GridAnchorRectPluginCreator()
 {
-    mPluginName = GRID_ANCHOR_PLUGIN_NAMES[1];
+    mPluginName = kGRID_ANCHOR_PLUGIN_NAMES[1];
 }
 
 } // namespace plugin

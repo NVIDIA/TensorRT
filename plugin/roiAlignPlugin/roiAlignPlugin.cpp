@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "roiAlignKernel.h"
 #include "roiAlignPlugin.h"
+#include "roiAlignKernel.h"
 #include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
 
@@ -65,8 +65,7 @@ PluginFieldCollection const* ROIAlignPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2DynamicExt* ROIAlignPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2DynamicExt* ROIAlignPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -184,13 +183,13 @@ bool ROIAlign::supportsFormatCombination(
     }
 
     // first input should be float16 or float32
-    if(pos == 0)
+    if (pos == 0)
     {
         return (inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF);
     }
 
     // batch_indices always has to be int32
-    if(pos == 2)
+    if (pos == 2)
     {
         return (inOut[pos].type == nvinfer1::DataType::kINT32);
     }
@@ -258,7 +257,8 @@ void ROIAlign::checkValidInputs(nvinfer1::DynamicPluginTensorDesc const* inputs,
     PLUGIN_ASSERT(rois.d[0] == batchIndices.d[0]);
 }
 
-void ROIAlign::validateAttributes(int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode, float spatialScale, int32_t aligned)
+void ROIAlign::validateAttributes(
+    int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode, float spatialScale, int32_t aligned)
 {
     PLUGIN_VALIDATE(outputHeight > 0);
     PLUGIN_VALIDATE(outputWidth > 0);
@@ -322,7 +322,8 @@ int32_t ROIAlign::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc co
         auto topData = static_cast<float*>(outputs[0]);
 
         return RoiAlignImpl<float>(stream, mMaxThreadsPerBlock, bottomData, mSpatialScale, mROICount, mFeatureLength,
-            mHeight, mWidth, mOutputHeight, mOutputWidth, mSamplingRatio, bottomRois, topData, mMode, batchIndicesPtr, mAligned);
+            mHeight, mWidth, mOutputHeight, mOutputWidth, mSamplingRatio, bottomRois, topData, mMode, batchIndicesPtr,
+            mAligned);
     }
     break;
     case nvinfer1::DataType::kHALF:
@@ -332,12 +333,12 @@ int32_t ROIAlign::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc co
         auto batchIndicesPtr = static_cast<int32_t const*>(inputs[2]);
         auto topData = static_cast<__half*>(outputs[0]);
 
-        return RoiAlignImpl<__half>(stream, mMaxThreadsPerBlock, bottomData, mSpatialScale, mROICount,
-            mFeatureLength, mHeight, mWidth, mOutputHeight, mOutputWidth, mSamplingRatio, bottomRois, topData, mMode, batchIndicesPtr, mAligned);
+        return RoiAlignImpl<__half>(stream, mMaxThreadsPerBlock, bottomData, mSpatialScale, mROICount, mFeatureLength,
+            mHeight, mWidth, mOutputHeight, mOutputWidth, mSamplingRatio, bottomRois, topData, mMode, batchIndicesPtr,
+            mAligned);
     }
     break;
-    default:
-        return -1;
+    default: return -1;
     }
 
     return 0;
@@ -351,8 +352,8 @@ size_t ROIAlign::getSerializationSize() const noexcept
 void ROIAlign::serialize(void* buffer) const noexcept
 {
     PLUGIN_VALIDATE(buffer != nullptr);
-    char *d = static_cast<char*>(buffer);
-    char *a = d;
+    char* d = static_cast<char*>(buffer);
+    char* a = d;
     write(d, mAligned);       // int32_t
     write(d, mMode);          // int32_t
     write(d, mOutputHeight);  // int32_t
@@ -384,8 +385,8 @@ ROIAlign::ROIAlign(void const* data, size_t length)
     PLUGIN_VALIDATE(data != nullptr);
     PLUGIN_VALIDATE(length == kSERIALIZATION_SIZE);
 
-    char const *d = static_cast<char const*>(data);
-    char const *a = d;
+    char const* d = static_cast<char const*>(data);
+    char const* a = d;
 
     mAligned = read<int32_t>(d);
     mMode = read<int32_t>(d);
@@ -403,8 +404,8 @@ ROIAlign::ROIAlign(void const* data, size_t length)
     validateAttributes(mOutputHeight, mOutputWidth, mSamplingRatio, mMode, mSpatialScale, mAligned);
 }
 
-DataType ROIAlign::getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const
-    noexcept
+DataType ROIAlign::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     PLUGIN_ASSERT(inputTypes != nullptr);
     PLUGIN_ASSERT(nbInputs == 3);

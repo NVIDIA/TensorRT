@@ -30,8 +30,8 @@ using namespace nvinfer1;
 using nvinfer1::plugin::FlattenConcat;
 using nvinfer1::plugin::FlattenConcatPluginCreator;
 
-static const char* FLATTENCONCAT_PLUGIN_VERSION{"1"};
-static const char* FLATTENCONCAT_PLUGIN_NAME{"FlattenConcat_TRT"};
+static char const* const kFLATTENCONCAT_PLUGIN_VERSION{"1"};
+static char const* const kFLATTENCONCAT_PLUGIN_NAME{"FlattenConcat_TRT"};
 
 PluginFieldCollection FlattenConcatPluginCreator::mFC{};
 std::vector<PluginField> FlattenConcatPluginCreator::mPluginAttributes;
@@ -44,7 +44,7 @@ FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch)
 }
 
 FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, int outputConcatAxis,
-    const int* inputConcatAxis, const size_t* copySize, nvinfer1::Dims const& chwDims)
+    int const* inputConcatAxis, size_t const* copySize, nvinfer1::Dims const& chwDims)
     : mCopySize(numInputs)
     , mInputConcatAxis(numInputs)
     , mIgnoreBatch(ignoreBatch)
@@ -59,10 +59,10 @@ FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, in
     std::copy(inputConcatAxis, inputConcatAxis + mNumInputs, mInputConcatAxis.begin());
 }
 
-FlattenConcat::FlattenConcat(const void* data, size_t length)
+FlattenConcat::FlattenConcat(void const* data, size_t length)
 {
-    const char* d = static_cast<const char*>(data);
-    const char* const a = d;
+    char const* d = static_cast<char const*>(data);
+    char const* const a = d;
     mIgnoreBatch = read<bool>(d);
     mConcatAxisID = read<int>(d);
     PLUGIN_VALIDATE(mConcatAxisID >= 1 && mConcatAxisID <= 3);
@@ -87,7 +87,7 @@ int FlattenConcat::getNbOutputs() const noexcept
     return 1;
 }
 
-Dims FlattenConcat::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims FlattenConcat::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
     try
     {
@@ -122,7 +122,7 @@ Dims FlattenConcat::getOutputDimensions(int index, const Dims* inputs, int nbInp
         return Dims3(mConcatAxisID == 1 ? outputConcatAxis : 1, mConcatAxisID == 2 ? outputConcatAxis : 1,
             mConcatAxisID == 3 ? outputConcatAxis : 1);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -142,7 +142,7 @@ size_t FlattenConcat::getWorkspaceSize(int) const noexcept
 }
 
 int FlattenConcat::enqueue(
-    int batchSize, const void* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
+    int batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
 {
     try
     {
@@ -160,7 +160,7 @@ int FlattenConcat::enqueue(
         int offset = 0;
         for (int i = 0; i < mNumInputs; ++i)
         {
-            const auto* input = static_cast<const float*>(inputs[i]);
+            auto const* input = static_cast<float const*>(inputs[i]);
             for (int n = 0; n < numConcats; ++n)
             {
                 auto status = cublasScopy(mCublas, mInputConcatAxis[i], input + n * mInputConcatAxis[i], 1,
@@ -176,7 +176,7 @@ int FlattenConcat::enqueue(
 
         return STATUS_SUCCESS;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -185,13 +185,14 @@ int FlattenConcat::enqueue(
 
 size_t FlattenConcat::getSerializationSize() const noexcept
 {
-    return sizeof(bool) + sizeof(int) * (3 + mNumInputs) + sizeof(nvinfer1::Dims) + (sizeof(decltype(mCopySize)::value_type) * mNumInputs);
+    return sizeof(bool) + sizeof(int) * (3 + mNumInputs) + sizeof(nvinfer1::Dims)
+        + (sizeof(decltype(mCopySize)::value_type) * mNumInputs);
 }
 
 void FlattenConcat::serialize(void* buffer) const noexcept
 {
     char* d = static_cast<char*>(buffer);
-    const char* const a = d;
+    char const* const a = d;
     write(d, mIgnoreBatch);
     write(d, mConcatAxisID);
     write(d, mOutputConcatAxis);
@@ -219,7 +220,8 @@ void FlattenConcat::attachToContext(
 void FlattenConcat::detachFromContext() noexcept {}
 
 // Return true if output tensor is broadcast across a batch.
-bool FlattenConcat::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool FlattenConcat::isOutputBroadcastAcrossBatch(
+    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -231,33 +233,33 @@ bool FlattenConcat::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 }
 
 // Set plugin namespace
-void FlattenConcat::setPluginNamespace(const char* pluginNamespace) noexcept
+void FlattenConcat::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     try
     {
         mPluginNamespace = pluginNamespace;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
 }
 
-const char* FlattenConcat::getPluginNamespace() const noexcept
+char const* FlattenConcat::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType FlattenConcat::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType FlattenConcat::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index < 3);
     return DataType::kFLOAT;
 }
 
-void FlattenConcat::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void FlattenConcat::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     try
     {
@@ -294,7 +296,7 @@ void FlattenConcat::configurePlugin(const Dims* inputDims, int nbInputs, const D
             mCopySize[i] = inputDims[i].d[0] * inputDims[i].d[1] * inputDims[i].d[2] * sizeof(float);
         }
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -304,12 +306,12 @@ bool FlattenConcat::supportsFormat(DataType type, PluginFormat format) const noe
 {
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
-const char* FlattenConcat::getPluginType() const noexcept
+char const* FlattenConcat::getPluginType() const noexcept
 {
     return "FlattenConcat_TRT";
 }
 
-const char* FlattenConcat::getPluginVersion() const noexcept
+char const* FlattenConcat::getPluginVersion() const noexcept
 {
     return "1";
 }
@@ -328,7 +330,7 @@ IPluginV2Ext* FlattenConcat::clone() const noexcept
         plugin->setPluginNamespace(mPluginNamespace.c_str());
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -345,39 +347,39 @@ FlattenConcatPluginCreator::FlattenConcatPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* FlattenConcatPluginCreator::getPluginName() const noexcept
+char const* FlattenConcatPluginCreator::getPluginName() const noexcept
 {
-    return FLATTENCONCAT_PLUGIN_NAME;
+    return kFLATTENCONCAT_PLUGIN_NAME;
 }
 
-const char* FlattenConcatPluginCreator::getPluginVersion() const noexcept
+char const* FlattenConcatPluginCreator::getPluginVersion() const noexcept
 {
-    return FLATTENCONCAT_PLUGIN_VERSION;
+    return kFLATTENCONCAT_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* FlattenConcatPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* FlattenConcatPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
         plugin::validateRequiredAttributesExist({"axis", "ignoreBatch"}, fc);
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            const char* attrName = fields[i].name;
+            char const* attrName = fields[i].name;
             if (!strcmp(attrName, "axis"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mConcatAxisID = *(static_cast<const int*>(fields[i].data));
+                mConcatAxisID = *(static_cast<int const*>(fields[i].data));
             }
             if (!strcmp(attrName, "ignoreBatch"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                auto ignoreBatch = *(static_cast<const int32_t*>(fields[i].data));
+                auto ignoreBatch = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(ignoreBatch == 0 || ignoreBatch == 1);
                 mIgnoreBatch = static_cast<bool>(ignoreBatch);
             }
@@ -387,7 +389,7 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(const char* name, const P
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -395,7 +397,7 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(const char* name, const P
 }
 
 IPluginV2Ext* FlattenConcatPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -405,7 +407,7 @@ IPluginV2Ext* FlattenConcatPluginCreator::deserializePlugin(
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

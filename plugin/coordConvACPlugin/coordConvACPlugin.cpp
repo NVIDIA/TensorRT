@@ -22,12 +22,12 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
-const int NUM_COORDCONV_CHANNELS = 2;
 
 namespace
 {
-const char* COORDCONV_AC_PLUGIN_VERSION{"1"};
-const char* COORDCONV_AC_PLUGIN_NAME{"CoordConvAC"};
+char const* const kCOORDCONV_AC_PLUGIN_VERSION{"1"};
+char const* const kCOORDCONV_AC_PLUGIN_NAME{"CoordConvAC"};
+int32_t const kNUM_COORDCONV_CHANNELS = 2;
 } // namespace
 
 PluginFieldCollection CoordConvACPluginCreator::mFC{};
@@ -75,7 +75,7 @@ int CoordConvACPlugin::initialize() noexcept
 
 void CoordConvACPlugin::terminate() noexcept {}
 
-Dims CoordConvACPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims CoordConvACPlugin::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
     PLUGIN_ASSERT(index == 0);
     PLUGIN_ASSERT(nbInputDims == 1);
@@ -86,7 +86,7 @@ Dims CoordConvACPlugin::getOutputDimensions(int index, const Dims* inputs, int n
     // NOLINTNEXTLINE(clang-analyzer-core.NullDereference)
     PLUGIN_ASSERT(inputs[0].nbDims == 3);
     dimsOutput.nbDims = inputs[0].nbDims;
-    dimsOutput.d[0] = inputs[0].d[0] + NUM_COORDCONV_CHANNELS;
+    dimsOutput.d[0] = inputs[0].d[0] + kNUM_COORDCONV_CHANNELS;
     dimsOutput.d[1] = inputs[0].d[1];
     dimsOutput.d[2] = inputs[0].d[2];
     return dimsOutput;
@@ -116,9 +116,9 @@ void CoordConvACPlugin::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-void CoordConvACPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, nvinfer1::PluginFormat format, int maxBatchSize) noexcept
+void CoordConvACPlugin::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, nvinfer1::PluginFormat format, int maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1);
     PLUGIN_ASSERT(nbOutputs == 1);
@@ -139,14 +139,14 @@ bool CoordConvACPlugin::supportsFormat(DataType type, PluginFormat format) const
     return ((type == DataType::kFLOAT || type == DataType::kHALF) && format == PluginFormat::kLINEAR);
 }
 
-const char* CoordConvACPlugin::getPluginType() const noexcept
+char const* CoordConvACPlugin::getPluginType() const noexcept
 {
-    return COORDCONV_AC_PLUGIN_NAME;
+    return kCOORDCONV_AC_PLUGIN_NAME;
 }
 
-const char* CoordConvACPlugin::getPluginVersion() const noexcept
+char const* CoordConvACPlugin::getPluginVersion() const noexcept
 {
-    return COORDCONV_AC_PLUGIN_VERSION;
+    return kCOORDCONV_AC_PLUGIN_VERSION;
 }
 
 void CoordConvACPlugin::destroy() noexcept
@@ -169,24 +169,24 @@ IPluginV2Ext* CoordConvACPlugin::clone() const noexcept
     return nullptr;
 }
 
-void CoordConvACPlugin::setPluginNamespace(const char* pluginNamespace) noexcept
+void CoordConvACPlugin::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* CoordConvACPlugin::getPluginNamespace() const noexcept
+char const* CoordConvACPlugin::getPluginNamespace() const noexcept
 {
     return mPluginNamespace;
 }
 
 nvinfer1::DataType CoordConvACPlugin::getOutputDataType(
-    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     return inputTypes[0];
 }
 
 bool CoordConvACPlugin::isOutputBroadcastAcrossBatch(
-    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -199,22 +199,22 @@ bool CoordConvACPlugin::canBroadcastInputAcrossBatch(int inputIndex) const noexc
 // Plugin creator
 CoordConvACPluginCreator::CoordConvACPluginCreator() {}
 
-const char* CoordConvACPluginCreator::getPluginName() const noexcept
+char const* CoordConvACPluginCreator::getPluginName() const noexcept
 {
-    return COORDCONV_AC_PLUGIN_NAME;
+    return kCOORDCONV_AC_PLUGIN_NAME;
 }
 
-const char* CoordConvACPluginCreator::getPluginVersion() const noexcept
+char const* CoordConvACPluginCreator::getPluginVersion() const noexcept
 {
-    return COORDCONV_AC_PLUGIN_VERSION;
+    return kCOORDCONV_AC_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* CoordConvACPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* CoordConvACPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* CoordConvACPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* CoordConvACPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -230,7 +230,7 @@ IPluginV2Ext* CoordConvACPluginCreator::createPlugin(const char* name, const Plu
 }
 
 IPluginV2Ext* CoordConvACPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

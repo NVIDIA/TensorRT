@@ -47,7 +47,7 @@ namespace plugin
 class ModulatedDeformableConvPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    ModulatedDeformableConvPluginDynamic(const std::string& name, const nvinfer1::Dims stride,
+    ModulatedDeformableConvPluginDynamic(std::string const& name, const nvinfer1::Dims stride,
         const nvinfer1::Dims padding, const nvinfer1::Dims dilation, int32_t const deformableGroup,
         int32_t const group);
 

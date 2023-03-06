@@ -38,9 +38,9 @@ using namespace nvinfer1::plugin::bert;
 
 namespace
 {
-const char* QKV_TO_CONTEXT_PLUGIN_VERSION{"1"};
-const char* QKV_TO_CONTEXT_VAR_SEQLEN_PLUGIN_VERSION{"2"};
-const char* QKV_TO_CONTEXT_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
+char const* const kQKV_TO_CONTEXT_PLUGIN_VERSION{"1"};
+char const* const kQKV_TO_CONTEXT_VAR_SEQLEN_PLUGIN_VERSION{"2"};
+char const* const kQKV_TO_CONTEXT_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
@@ -59,7 +59,7 @@ std::vector<PluginField> QKVToContextVarSeqlenPluginCreator::mPluginAttributes;
 REGISTER_TENSORRT_PLUGIN(QKVToContextVarSeqlenPluginCreator);
 
 QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, const DataType type,
-    const int32_t hiddenSize, const int32_t numHeads, const float dqProbs, bool hasImask)
+    const int32_t hiddenSize, const int32_t numHeads, float const dqProbs, bool hasImask)
     : mLayerName(name)
     , mS(0)
     , mB(0)
@@ -74,7 +74,7 @@ QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, con
     mSM = getSMVersion();
 }
 
-QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, const void* data, size_t length)
+QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, void const* data, size_t length)
     : mLayerName(name)
 {
     BERT_DEBUG_MSG("QKV Deser Start");
@@ -148,25 +148,25 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextPluginDynamic::clone() const noexcept
 }
 
 DimsExprs QKVToContextPluginDynamic::getOutputDimensions(
-    int32_t outputIndex, const DimsExprs* inputs, int32_t /*nbInputs*/, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t /*nbInputs*/, IExprBuilder& exprBuilder) noexcept
 {
     // Input is BxSx3*N*H, output should be BxSxN*H
     PLUGIN_ASSERT(outputIndex == 0);
     // Copy over everything
     DimsExprs output(inputs[IIDX]);
     // Divide last dim by three
-    const auto* three = exprBuilder.constant(3);
+    auto const* three = exprBuilder.constant(3);
     output.d[HDIM] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[IIDX].d[HDIM], *three);
     return output;
 }
 bool QKVToContextPluginDynamic::supportsFormatCombination(
-    int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t /*nbOutputs*/) noexcept
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t /*nbOutputs*/) noexcept
 {
     PLUGIN_ASSERT(pos >= 0);
     PLUGIN_ASSERT(pos < 2 + mHasImask);
     PLUGIN_ASSERT(nbInputs == 1 + mHasImask);
-    const auto* in = inOut;
-    const auto* out = inOut + nbInputs;
+    auto const* in = inOut;
+    auto const* out = inOut + nbInputs;
     int32_t packedSize = getMHAMaskPackedSize(mSM, mType, in->dims.d[SDIM]);
 
     // we only support int8 IO in fused mha runner, and we only support fused mha runner on Xavier, Turing and Ampere
@@ -174,19 +174,19 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
     {
         if (mSM != kSM_75 && mSM != kSM_80 && mSM != kSM_86 && mSM != kSM_87 && mSM != kSM_89 && mSM != kSM_90)
         {
-            gLogError << "INT8 IO is only supported on Turing, Ampere and Hopper for plugin " << QKV_TO_CONTEXT_PLUGIN_NAME
-                      << std::endl;
+            gLogError << "INT8 IO is only supported on Turing, Ampere and Hopper for plugin "
+                      << kQKV_TO_CONTEXT_PLUGIN_NAME << std::endl;
             return false;
         }
         if (in->dims.d[SDIM] == -1)
         {
             gLogError << "INT8 IO not support dynamic shape in sequence dimension for plugin "
-                      << QKV_TO_CONTEXT_PLUGIN_NAME << std::endl;
+                      << kQKV_TO_CONTEXT_PLUGIN_NAME << std::endl;
             return false;
         }
         if (packedSize == unfusedMaskSize)
         {
-            gLogError << "INT8 IO only support sequence length 128,384 for plugin " << QKV_TO_CONTEXT_PLUGIN_NAME
+            gLogError << "INT8 IO only support sequence length 128,384 for plugin " << kQKV_TO_CONTEXT_PLUGIN_NAME
                       << std::endl;
             return false;
         }
@@ -197,7 +197,7 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
         {
             gLogError
                 << "Half-precision floating-point is only supported on compute capability 5.3 and later for plugin "
-                << QKV_TO_CONTEXT_PLUGIN_NAME << std::endl;
+                << kQKV_TO_CONTEXT_PLUGIN_NAME << std::endl;
             return false;
         }
     }
@@ -234,7 +234,7 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
         if (inMask->dims.d[1] != -1 && inMask->dims.d[1] != packedSize)
         {
             gLogError << "CustomEmbLayerNormPluginDynamic returned mask with pack size " << inMask->dims.d[1]
-                      << ", but " << QKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
+                      << ", but " << kQKV_TO_CONTEXT_PLUGIN_NAME << " expects mask pack size " << packedSize
                       << std::endl;
             return false;
         }
@@ -275,13 +275,13 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
     return false;
 }
 void QKVToContextPluginDynamic::configurePlugin(
-    const DynamicPluginTensorDesc* in, int32_t nbInputs, const DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept
+    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1 + mHasImask);
     PLUGIN_ASSERT(nbOutputs == 1);
-    const PluginTensorDesc& inDesc = in[IIDX].desc;
+    PluginTensorDesc const& inDesc = in[IIDX].desc;
     TRT_UNUSED inDesc;
-    const PluginTensorDesc& outDesc = out->desc;
+    PluginTensorDesc const& outDesc = out->desc;
     TRT_UNUSED outDesc;
     PLUGIN_ASSERT(mType == inDesc.type);
     PLUGIN_ASSERT(mType == outDesc.type);
@@ -290,7 +290,7 @@ void QKVToContextPluginDynamic::configurePlugin(
     PLUGIN_ASSERT(inDesc.dims.d[HDIM] == 3 * outDesc.dims.d[HDIM]);
     if (mHasImask)
     {
-        const PluginTensorDesc& maskDesc = in[MIDX].desc;
+        PluginTensorDesc const& maskDesc = in[MIDX].desc;
         TRT_UNUSED maskDesc;
         PLUGIN_ASSERT(maskDesc.dims.d[0] == inDesc.dims.d[BDIM]);
     }
@@ -341,8 +341,8 @@ void QKVToContextPluginDynamic::configurePlugin(
     }
 }
 
-size_t QKVToContextPluginDynamic::getWorkspaceSize(const PluginTensorDesc* /*inputs*/, int32_t /*nbInputs*/,
-    const PluginTensorDesc* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
+size_t QKVToContextPluginDynamic::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     // only unfused kernel need workspace, and we need larger workspace for larger sequence length
     // we have already setup unfusedDispatcher with max sequence in configurePlugin
@@ -353,22 +353,23 @@ size_t QKVToContextPluginDynamic::getWorkspaceSize(const PluginTensorDesc* /*inp
 
 // IPluginV2Ext Methods
 DataType QKVToContextPluginDynamic::getOutputDataType(
-    int32_t index, const nvinfer1::DataType* inputTypes, int32_t /*nbInputs*/) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
-    PLUGIN_ASSERT(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF || inputTypes[0] == DataType::kINT8);
+    PLUGIN_ASSERT(
+        inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF || inputTypes[0] == DataType::kINT8);
     return inputTypes[0];
 }
 
 // IPluginV2 Methods
-const char* QKVToContextPluginDynamic::getPluginType() const noexcept
+char const* QKVToContextPluginDynamic::getPluginType() const noexcept
 {
-    return QKV_TO_CONTEXT_PLUGIN_NAME;
+    return kQKV_TO_CONTEXT_PLUGIN_NAME;
 }
 
-const char* QKVToContextPluginDynamic::getPluginVersion() const noexcept
+char const* QKVToContextPluginDynamic::getPluginVersion() const noexcept
 {
-    return QKV_TO_CONTEXT_PLUGIN_VERSION;
+    return kQKV_TO_CONTEXT_PLUGIN_VERSION;
 }
 
 int32_t QKVToContextPluginDynamic::getNbOutputs() const noexcept
@@ -421,18 +422,18 @@ void QKVToContextPluginDynamic::destroy() noexcept
     delete this;
 }
 
-void QKVToContextPluginDynamic::setPluginNamespace(const char* libNamespace) noexcept
+void QKVToContextPluginDynamic::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* QKVToContextPluginDynamic::getPluginNamespace() const noexcept
+char const* QKVToContextPluginDynamic::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
 
-int32_t QKVToContextPluginDynamic::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t QKVToContextPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     PLUGIN_ASSERT(mS == inputDesc->dims.d[SDIM]);
     PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
@@ -470,22 +471,22 @@ QKVToContextPluginDynamicCreator::QKVToContextPluginDynamicCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* QKVToContextPluginDynamicCreator::getPluginName() const noexcept
+char const* QKVToContextPluginDynamicCreator::getPluginName() const noexcept
 {
-    return QKV_TO_CONTEXT_PLUGIN_NAME;
+    return kQKV_TO_CONTEXT_PLUGIN_NAME;
 }
 
-const char* QKVToContextPluginDynamicCreator::getPluginVersion() const noexcept
+char const* QKVToContextPluginDynamicCreator::getPluginVersion() const noexcept
 {
-    return QKV_TO_CONTEXT_PLUGIN_VERSION;
+    return kQKV_TO_CONTEXT_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* QKVToContextPluginDynamicCreator::getFieldNames() noexcept
+PluginFieldCollection const* QKVToContextPluginDynamicCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* QKVToContextPluginDynamicCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* QKVToContextPluginDynamicCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -564,25 +565,26 @@ IPluginV2* QKVToContextPluginDynamicCreator::createPlugin(const char* name, cons
 }
 
 IPluginV2* QKVToContextPluginDynamicCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)  noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call QKVToContextPluginDynamic::destroy()
     return new QKVToContextPluginDynamic(name, serialData, serialLength);
 }
 
-void QKVToContextPluginDynamicCreator::setPluginNamespace(const char* libNamespace) noexcept
+void QKVToContextPluginDynamicCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* QKVToContextPluginDynamicCreator::getPluginNamespace() const noexcept
+char const* QKVToContextPluginDynamicCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
 
 QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name, DataType const type,
-    int32_t const hiddenSize, int32_t const numHeads, float const dqProbs, bool hasImask, bool varSeqlen, bool useInt8ScaleMax)
+    int32_t const hiddenSize, int32_t const numHeads, float const dqProbs, bool hasImask, bool varSeqlen,
+    bool useInt8ScaleMax)
     : mLayerName(name)
     , mS(0)
     , mB(0)
@@ -602,7 +604,8 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        PLUGIN_ASSERT((mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75 || mSM == kSM_72)
+        PLUGIN_ASSERT((mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80
+                          || mSM == kSM_75 || mSM == kSM_72)
             && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
@@ -610,7 +613,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     }
 }
 
-QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(const std::string name, const void* data, size_t length)
+QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(const std::string name, void const* data, size_t length)
     : mLayerName(name)
 {
     BERT_DEBUG_MSG("QKV Deser Start");
@@ -642,7 +645,8 @@ void QKVToContextVarSeqlenPlugin::createMHARunner()
         return;
     }
 
-    if (mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75 || mSM == kSM_72)
+    if (mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75
+        || mSM == kSM_72)
     {
         int32_t headSize = mHeadSize;
         if (mHeadSize != 32 && mHeadSize != 64)
@@ -693,26 +697,27 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextVarSeqlenPlugin::clone() const noexce
 }
 
 DimsExprs QKVToContextVarSeqlenPlugin::getOutputDimensions(
-    int32_t outputIndex, const DimsExprs* inputs, int32_t /*nbInputs*/, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t /*nbInputs*/, IExprBuilder& exprBuilder) noexcept
 {
     // Input is BxSx3*N*H, output should be BxSxN*H
     PLUGIN_ASSERT(outputIndex == 0);
     // Copy over everything
     DimsExprs output(inputs[IIDX]);
     // Divide last dim by three
-    const auto* three = exprBuilder.constant(3);
+    auto const* three = exprBuilder.constant(3);
     output.d[mHdim] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[IIDX].d[mHdim], *three);
     return output;
 }
 
 bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
-    int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     // we only support int8 IO in fused mha runner, and we only support fused mha runner on Turing and Ampere
-    if (mType == DataType::kINT8 && mSM != kSM_90 && mSM != kSM_89 && mSM != kSM_87 && mSM != kSM_86 && mSM != kSM_80 && mSM != kSM_75 && mSM != kSM_72)
+    if (mType == DataType::kINT8 && mSM != kSM_90 && mSM != kSM_89 && mSM != kSM_87 && mSM != kSM_86 && mSM != kSM_80
+        && mSM != kSM_75 && mSM != kSM_72)
     {
         BERT_DEBUG_VALUE(
-            "INT8 IO is only supported on Xavier, Turing and Ampere for plugin ", QKV_TO_CONTEXT_PLUGIN_NAME);
+            "INT8 IO is only supported on Xavier, Turing and Ampere for plugin ", kQKV_TO_CONTEXT_PLUGIN_NAME);
         return false;
     }
 
@@ -720,8 +725,8 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     PLUGIN_ASSERT(pos < 2 + mHasImask + 2 * mUseVarSeqlen);
     PLUGIN_ASSERT(nbInputs == 1 + mHasImask + 2 * mUseVarSeqlen);
     PLUGIN_ASSERT(nbOutputs == 1);
-    const auto* in = inOut;
-    const auto* out = inOut + nbInputs;
+    auto const* in = inOut;
+    auto const* out = inOut + nbInputs;
     if (mUseVarSeqlen)
     {
         PLUGIN_ASSERT((mType == DataType::kHALF || mType == DataType::kINT8)
@@ -730,11 +735,11 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
         PLUGIN_ASSERT(nbInputs == 4 && "for varseqlen, expected 4 inputs");
     }
 
-    const auto inDims = in->dims;
+    auto const inDims = in->dims;
     // const auto inType = in->type;
     // const auto inFmt = in->format;
     // const auto outType = out->type;
-    const auto outDims = out->dims;
+    auto const outDims = out->dims;
     // const auto outFmt = out->format;
 
     auto supportedFormat = TensorFormat::kLINEAR;
@@ -753,7 +758,7 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
 
     if (pos == 0 || pos == nbInputs)
     { // check input and output
-        const auto& desc = inOut[pos];
+        auto const& desc = inOut[pos];
         return (desc.type == mType) &&               // check type
             (desc.format == supportedFormat) &&      // check format
             (desc.dims.nbDims == supportedNbDims) && // check dims:
@@ -766,7 +771,7 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     PLUGIN_ASSERT(mHasImask);
     if (pos == 1)
     { // must be input mask
-        const auto* mask = &inOut[pos];
+        auto const* mask = &inOut[pos];
         if (mUseVarSeqlen)
         {
             // dummy input
@@ -781,7 +786,7 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     if (pos == 2)
     { // must be cuSeqlens
         // cuSeqlens is a int array of size B+1
-        const auto* seqlens = &inOut[pos];
+        auto const* seqlens = &inOut[pos];
         return (seqlens->type == DataType::kINT32) && (seqlens->format == TensorFormat::kLINEAR);
     }
     if (pos == 3)
@@ -793,13 +798,13 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
 }
 
 void QKVToContextVarSeqlenPlugin::configurePlugin(
-    const DynamicPluginTensorDesc* in, int32_t nbInputs, const DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept
+    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1 + mHasImask + 2 * mUseVarSeqlen);
     PLUGIN_ASSERT(nbOutputs == 1);
-    const PluginTensorDesc& inDesc = in[IIDX].desc;
+    PluginTensorDesc const& inDesc = in[IIDX].desc;
     TRT_UNUSED inDesc;
-    const PluginTensorDesc& outDesc = out->desc;
+    PluginTensorDesc const& outDesc = out->desc;
     TRT_UNUSED outDesc;
     PLUGIN_ASSERT(mType == inDesc.type);
     PLUGIN_ASSERT(mType == outDesc.type);
@@ -810,7 +815,7 @@ void QKVToContextVarSeqlenPlugin::configurePlugin(
         PLUGIN_ASSERT(inDesc.dims.d[mHdim] == 3 * outDesc.dims.d[mHdim]);
         if (mHasImask)
         {
-            const PluginTensorDesc& maskDesc = in[MIDX].desc;
+            PluginTensorDesc const& maskDesc = in[MIDX].desc;
             TRT_UNUSED maskDesc;
             PLUGIN_ASSERT(maskDesc.dims.d[0] == inDesc.dims.d[BDIM]);
         }
@@ -838,7 +843,7 @@ void QKVToContextVarSeqlenPlugin::configurePlugin(
 }
 
 size_t QKVToContextVarSeqlenPlugin::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int32_t nbInputs, const PluginTensorDesc* outputs, int32_t nbOutputs) const noexcept
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
     size_t paddingWorkpaceSize = 0;
     if (patcher)
@@ -850,22 +855,23 @@ size_t QKVToContextVarSeqlenPlugin::getWorkspaceSize(
 
 // IPluginV2Ext Methods
 DataType QKVToContextVarSeqlenPlugin::getOutputDataType(
-    int32_t index, const nvinfer1::DataType* inputTypes, int32_t /*nbInputs*/) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
-    PLUGIN_ASSERT(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF || inputTypes[0] == DataType::kINT8);
+    PLUGIN_ASSERT(
+        inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF || inputTypes[0] == DataType::kINT8);
     return inputTypes[0];
 }
 
 // IPluginV2 Methods
-const char* QKVToContextVarSeqlenPlugin::getPluginType() const noexcept
+char const* QKVToContextVarSeqlenPlugin::getPluginType() const noexcept
 {
-    return QKV_TO_CONTEXT_PLUGIN_NAME;
+    return kQKV_TO_CONTEXT_PLUGIN_NAME;
 }
 
-const char* QKVToContextVarSeqlenPlugin::getPluginVersion() const noexcept
+char const* QKVToContextVarSeqlenPlugin::getPluginVersion() const noexcept
 {
-    return QKV_TO_CONTEXT_VAR_SEQLEN_PLUGIN_VERSION;
+    return kQKV_TO_CONTEXT_VAR_SEQLEN_PLUGIN_VERSION;
 }
 
 int32_t QKVToContextVarSeqlenPlugin::getNbOutputs() const noexcept
@@ -910,18 +916,18 @@ void QKVToContextVarSeqlenPlugin::destroy() noexcept
     delete this;
 }
 
-void QKVToContextVarSeqlenPlugin::setPluginNamespace(const char* libNamespace) noexcept
+void QKVToContextVarSeqlenPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* QKVToContextVarSeqlenPlugin::getPluginNamespace() const noexcept
+char const* QKVToContextVarSeqlenPlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
 
-int32_t QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc,
-    const nvinfer1::PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace,
+int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
+    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
 
@@ -948,11 +954,10 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(const nvinfer1::PluginTensorDesc* i
         else if (maxS <= 192)
         {
             S = 192;
-            if(mType == DataType::kHALF)
+            if (mType == DataType::kHALF)
             {
                 S = 256;
             }
-
         }
         else if (maxS <= 256)
         {
@@ -1033,22 +1038,22 @@ QKVToContextVarSeqlenPluginCreator::QKVToContextVarSeqlenPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* QKVToContextVarSeqlenPluginCreator::getPluginName() const noexcept
+char const* QKVToContextVarSeqlenPluginCreator::getPluginName() const noexcept
 {
-    return QKV_TO_CONTEXT_PLUGIN_NAME;
+    return kQKV_TO_CONTEXT_PLUGIN_NAME;
 }
 
-const char* QKVToContextVarSeqlenPluginCreator::getPluginVersion() const noexcept
+char const* QKVToContextVarSeqlenPluginCreator::getPluginVersion() const noexcept
 {
-    return QKV_TO_CONTEXT_VAR_SEQLEN_PLUGIN_VERSION;
+    return kQKV_TO_CONTEXT_VAR_SEQLEN_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* QKVToContextVarSeqlenPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* QKVToContextVarSeqlenPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* QKVToContextVarSeqlenPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* QKVToContextVarSeqlenPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     BERT_DEBUG_MSG("Creating QKV2ContextPlugin...");
 
@@ -1131,25 +1136,25 @@ IPluginV2* QKVToContextVarSeqlenPluginCreator::createPlugin(const char* name, co
 
     auto const useInt8ScaleMaxFlag = static_cast<bool>(useInt8ScaleMax);
 
-    QKVToContextVarSeqlenPlugin* p
-        = new QKVToContextVarSeqlenPlugin(name, type, hiddenSize, numHeads, dqProbs, hasMask, varSeqlen, useInt8ScaleMaxFlag);
+    QKVToContextVarSeqlenPlugin* p = new QKVToContextVarSeqlenPlugin(
+        name, type, hiddenSize, numHeads, dqProbs, hasMask, varSeqlen, useInt8ScaleMaxFlag);
     return p;
 }
 
 IPluginV2* QKVToContextVarSeqlenPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)  noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     // This object will be deleted when the network is destroyed, which will
     // call QKVToContextVarSeqlenPlugin::destroy()
     return new QKVToContextVarSeqlenPlugin(name, serialData, serialLength);
 }
 
-void QKVToContextVarSeqlenPluginCreator::setPluginNamespace(const char* libNamespace) noexcept
+void QKVToContextVarSeqlenPluginCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* QKVToContextVarSeqlenPluginCreator::getPluginNamespace() const noexcept
+char const* QKVToContextVarSeqlenPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }

@@ -112,7 +112,8 @@ DEVICE_FUNCTION void toFloat(float (&dst)[2 * N], int32_t (&src)[N], float scale
 template <int32_t N, bool DO_SCALE = false>
 DEVICE_FUNCTION void toFloat(float (&dst)[4 * N], int32_t (&src)[N], float scale = 1.f)
 {
-    union Pack_t {
+    union Pack_t
+    {
         int8_t x[4];
         int32_t val;
     };
@@ -150,14 +151,14 @@ template <typename T>
 DEVICE_FUNCTION void ldgStream(int32_t (&dst)[1], T const* gmem)
 {
     uint32_t tmp;
-    asm volatile("ld.global.cs.nc.s32 %0, [%1];" : "=r"(tmp) : "l"((const uint32_t*) gmem));
+    asm volatile("ld.global.cs.nc.s32 %0, [%1];" : "=r"(tmp) : "l"((uint32_t const*) gmem));
     dst[0] = tmp;
 }
 
 template <typename T>
 DEVICE_FUNCTION void ldg(int32_t (&dst)[2], T const* gmem)
 {
-    int2 tmp = __ldg((const int2*) gmem);
+    int2 tmp = __ldg((int2 const*) gmem);
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 }
@@ -166,30 +167,30 @@ template <typename T>
 DEVICE_FUNCTION void ldgStream(int32_t (&dst)[2], T const* gmem)
 {
     int2 tmp;
-    asm volatile("ld.global.cs.nc.v2.s32 {%0,%1}, [%2];" : "=r"(tmp.x), "=r"(tmp.y) : "l"((const int2*) gmem));
+    asm volatile("ld.global.cs.nc.v2.s32 {%0,%1}, [%2];" : "=r"(tmp.x), "=r"(tmp.y) : "l"((int2 const*) gmem));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 }
 
-DEVICE_FUNCTION void ldg(int32_t (&dst)[2], const uint16_t* gmem)
+DEVICE_FUNCTION void ldg(int32_t (&dst)[2], uint16_t const* gmem)
 {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 320
-    int2 tmp = __ldg((const int2*) gmem);
+    int2 tmp = __ldg((int2 const*) gmem);
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 #endif
 }
 
-DEVICE_FUNCTION void ldgStream(int32_t (&dst)[2], const uint16_t* gmem)
+DEVICE_FUNCTION void ldgStream(int32_t (&dst)[2], uint16_t const* gmem)
 {
     int2 tmp;
-    asm volatile("ld.global.cs.nc.v2.s32 {%0,%1}, [%2];" : "=r"(tmp.x), "=r"(tmp.y) : "l"((const int2*) gmem));
+    asm volatile("ld.global.cs.nc.v2.s32 {%0,%1}, [%2];" : "=r"(tmp.x), "=r"(tmp.y) : "l"((int2 const*) gmem));
     dst[0] = tmp.x;
     dst[1] = tmp.y;
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void ldg(float (&dst)[N], const uint16_t* gmem)
+DEVICE_FUNCTION void ldg(float (&dst)[N], uint16_t const* gmem)
 {
     int32_t tmp[N / 2];
     ldg(tmp, gmem);
@@ -197,7 +198,7 @@ DEVICE_FUNCTION void ldg(float (&dst)[N], const uint16_t* gmem)
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void ldgStream(float (&dst)[N], const uint16_t* gmem)
+DEVICE_FUNCTION void ldgStream(float (&dst)[N], uint16_t const* gmem)
 {
     int32_t tmp[N / 2];
     ldgStream(tmp, gmem);
@@ -205,7 +206,7 @@ DEVICE_FUNCTION void ldgStream(float (&dst)[N], const uint16_t* gmem)
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void ldg(float (&dst)[N], const int8_t* gmem)
+DEVICE_FUNCTION void ldg(float (&dst)[N], int8_t const* gmem)
 {
     int32_t tmp[N / 4];
     ldg(tmp, gmem);
@@ -213,7 +214,7 @@ DEVICE_FUNCTION void ldg(float (&dst)[N], const int8_t* gmem)
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void ldgStream(float (&dst)[N], const int8_t* gmem)
+DEVICE_FUNCTION void ldgStream(float (&dst)[N], int8_t const* gmem)
 {
     int32_t tmp[N / 4];
     ldgStream(tmp, gmem);
@@ -294,7 +295,7 @@ DEVICE_FUNCTION void readFromGmem(float (&dst)[4], float const* gmem, int32_t id
 }
 
 template <int32_t N>
-DEVICE_FUNCTION void readFromGmem(float (&dst)[N], const __half* gmem, int32_t idx)
+DEVICE_FUNCTION void readFromGmem(float (&dst)[N], __half const* gmem, int32_t idx)
 {
     int32_t ival[N / 2];
     if (N == 4)

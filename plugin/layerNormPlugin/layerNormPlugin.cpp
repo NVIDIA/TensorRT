@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+#include "layerNormPlugin.h"
 #include "common/dimsHelpers.h"
 #include "layerNormKernel.h"
-#include "layerNormPlugin.h"
 
 using namespace nvinfer1;
 using namespace plugin;

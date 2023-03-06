@@ -26,8 +26,8 @@ using nvinfer1::plugin::PyramidROIAlignPluginCreator;
 
 namespace
 {
-char const* PYRAMIDROIALGIN_PLUGIN_VERSION{"1"};
-char const* PYRAMIDROIALGIN_PLUGIN_NAME{"PyramidROIAlign_TRT"};
+char const* const kPYRAMIDROIALGIN_PLUGIN_VERSION{"1"};
+char const* const kPYRAMIDROIALGIN_PLUGIN_NAME{"PyramidROIAlign_TRT"};
 } // namespace
 
 PluginFieldCollection PyramidROIAlignPluginCreator::mFC{};
@@ -52,12 +52,12 @@ PyramidROIAlignPluginCreator::PyramidROIAlignPluginCreator()
 
 char const* PyramidROIAlignPluginCreator::getPluginName() const noexcept
 {
-    return PYRAMIDROIALGIN_PLUGIN_NAME;
+    return kPYRAMIDROIALGIN_PLUGIN_NAME;
 }
 
 char const* PyramidROIAlignPluginCreator::getPluginVersion() const noexcept
 {
-    return PYRAMIDROIALGIN_PLUGIN_VERSION;
+    return kPYRAMIDROIALGIN_PLUGIN_VERSION;
 }
 
 PluginFieldCollection const* PyramidROIAlignPluginCreator::getFieldNames() noexcept
@@ -144,8 +144,8 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
                 legacy = *(static_cast<int32_t const*>(fields[i].data));
             }
         }
-        return new PyramidROIAlign(
-            pooledSize, transformCoords, absCoords, swapCoords, plusOneCoords, samplingRatio, legacy, imageSize, fpnScale);
+        return new PyramidROIAlign(pooledSize, transformCoords, absCoords, swapCoords, plusOneCoords, samplingRatio,
+            legacy, imageSize, fpnScale);
     }
     catch (std::exception const& e)
     {
@@ -214,12 +214,12 @@ bool PyramidROIAlign::supportsFormat(DataType type, PluginFormat format) const n
 
 char const* PyramidROIAlign::getPluginType() const noexcept
 {
-    return PYRAMIDROIALGIN_PLUGIN_NAME;
+    return kPYRAMIDROIALGIN_PLUGIN_NAME;
 }
 
 char const* PyramidROIAlign::getPluginVersion() const noexcept
 {
-    return PYRAMIDROIALGIN_PLUGIN_VERSION;
+    return kPYRAMIDROIALGIN_PLUGIN_VERSION;
 }
 
 IPluginV2Ext* PyramidROIAlign::clone() const noexcept
@@ -304,10 +304,11 @@ int32_t PyramidROIAlign::enqueue(
         mSwapCoords = true;
         mAbsCoords = false;
         mSamplingRatio = 1;
-        float const firstThreshold = (224 * 224 * 2.0f / (MaskRCNNConfig::IMAGE_SHAPE.d[1] * MaskRCNNConfig::IMAGE_SHAPE.d[2])) / (4.0 * 4.0f);
-        status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstThreshold,
-            mTransformCoords, mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1],
-            mFeatureSpatialSize, pooled, mPooledSize);
+        float const firstThreshold
+            = (224 * 224 * 2.F / (MaskRCNNConfig::IMAGE_SHAPE.d[1] * MaskRCNNConfig::IMAGE_SHAPE.d[2])) / (4.F * 4.F);
+        status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstThreshold, mTransformCoords,
+            mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1], mFeatureSpatialSize, pooled,
+            mPooledSize);
     }
     else
     {
@@ -321,9 +322,9 @@ int32_t PyramidROIAlign::enqueue(
         // Furthermore, the roiAlign kernel expects a first threshold instead. This is
         // the *area* of an ROI but for one level down, i.e. at the P2->P3 transition.
         float const firstThreshold = normScale * normScale / 4.F;
-        status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstThreshold,
-            mTransformCoords, mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1],
-            mFeatureSpatialSize, pooled, mPooledSize);
+        status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstThreshold, mTransformCoords,
+            mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1], mFeatureSpatialSize, pooled,
+            mPooledSize);
     }
     return status;
 }

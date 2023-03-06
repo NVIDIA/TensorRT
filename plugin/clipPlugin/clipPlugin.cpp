@@ -31,8 +31,8 @@ using namespace nvinfer1;
 using nvinfer1::plugin::ClipPluginCreator;
 using nvinfer1::plugin::ClipPlugin;
 
-static const char* CLIP_PLUGIN_VERSION{"1"};
-static const char* CLIP_PLUGIN_NAME{"Clip_TRT"};
+static char const* const kCLIP_PLUGIN_VERSION{"1"};
+static char const* const kCLIP_PLUGIN_NAME{"Clip_TRT"};
 PluginFieldCollection ClipPluginCreator::mFC{};
 std::vector<PluginField> ClipPluginCreator::mPluginAttributes;
 
@@ -43,11 +43,11 @@ ClipPlugin::ClipPlugin(std::string name, float clipMin, float clipMax)
 {
 }
 
-ClipPlugin::ClipPlugin(std::string name, const void* data, size_t length)
+ClipPlugin::ClipPlugin(std::string name, void const* data, size_t length)
     : mLayerName(std::move(name))
 {
     // Deserialize in the same order as serialization
-    const char *d = static_cast<const char *>(data), *a = d;
+    char const *d = static_cast<char const*>(data), *a = d;
 
     mClipMin = read<float>(d);
     mClipMax = read<float>(d);
@@ -57,14 +57,14 @@ ClipPlugin::ClipPlugin(std::string name, const void* data, size_t length)
     PLUGIN_VALIDATE(d == (a + length));
 }
 
-const char* ClipPlugin::getPluginType() const noexcept
+char const* ClipPlugin::getPluginType() const noexcept
 {
-    return CLIP_PLUGIN_NAME;
+    return kCLIP_PLUGIN_NAME;
 }
 
-const char* ClipPlugin::getPluginVersion() const noexcept
+char const* ClipPlugin::getPluginVersion() const noexcept
 {
-    return CLIP_PLUGIN_VERSION;
+    return kCLIP_PLUGIN_VERSION;
 }
 
 int ClipPlugin::getNbOutputs() const noexcept
@@ -72,7 +72,7 @@ int ClipPlugin::getNbOutputs() const noexcept
     return 1;
 }
 
-Dims ClipPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims ClipPlugin::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 1);
     PLUGIN_ASSERT(index == 0);
@@ -85,7 +85,7 @@ int ClipPlugin::initialize() noexcept
 }
 
 int ClipPlugin::enqueue(
-    int batchSize, const void* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
+    int batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
 {
     try
     {
@@ -100,7 +100,7 @@ int ClipPlugin::enqueue(
 
         return status;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -114,9 +114,9 @@ size_t ClipPlugin::getSerializationSize() const noexcept
 
 void ClipPlugin::serialize(void* buffer) const noexcept
 {
-    char *d = static_cast<char *>(buffer), *a = d;
+    char *d = static_cast<char*>(buffer), *a = d;
 
-    //Serialize plugin data
+    // Serialize plugin data
     nvinfer1::plugin::write(d, mClipMin);
     nvinfer1::plugin::write(d, mClipMax);
     nvinfer1::plugin::write(d, mDataType);
@@ -130,7 +130,7 @@ void ClipPlugin::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-void ClipPlugin::configureWithFormat(const Dims* inputs, int nbInputs, const Dims* outputs, int nbOutputs,
+void ClipPlugin::configureWithFormat(Dims const* inputs, int nbInputs, Dims const* outputs, int nbOutputs,
     DataType type, PluginFormat format, int) noexcept
 {
     PLUGIN_ASSERT(nbOutputs == 1);
@@ -163,13 +163,14 @@ bool ClipPlugin::supportsFormat(DataType type, PluginFormat format) const noexce
     return true;
 }
 
-void ClipPlugin::terminate() noexcept
-{
-}
+void ClipPlugin::terminate() noexcept {}
 
 ClipPlugin::~ClipPlugin() = default;
 
-void ClipPlugin::destroy() noexcept { delete this; }
+void ClipPlugin::destroy() noexcept
+{
+    delete this;
+}
 
 IPluginV2* ClipPlugin::clone() const noexcept
 {
@@ -180,7 +181,7 @@ IPluginV2* ClipPlugin::clone() const noexcept
         ret->setPluginNamespace(mNamespace.c_str());
         return ret;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -197,27 +198,27 @@ ClipPluginCreator::ClipPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* ClipPluginCreator::getPluginName() const noexcept
+char const* ClipPluginCreator::getPluginName() const noexcept
 {
-    return CLIP_PLUGIN_NAME;
+    return kCLIP_PLUGIN_NAME;
 }
 
-const char* ClipPluginCreator::getPluginVersion() const noexcept
+char const* ClipPluginCreator::getPluginVersion() const noexcept
 {
-    return CLIP_PLUGIN_VERSION;
+    return kCLIP_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* ClipPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* ClipPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* ClipPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* ClipPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
         float clipMin = 0.0, clipMax = 0.0;
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
 
         plugin::validateRequiredAttributesExist({"clipMin", "clipMax"}, fc);
         PLUGIN_VALIDATE(fc->nbFields == 2);
@@ -227,25 +228,25 @@ IPluginV2* ClipPluginCreator::createPlugin(const char* name, const PluginFieldCo
             if (strcmp(fields[i].name, "clipMin") == 0)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                clipMin = *(static_cast<const float*>(fields[i].data));
+                clipMin = *(static_cast<float const*>(fields[i].data));
             }
             else if (strcmp(fields[i].name, "clipMax") == 0)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                clipMax = *(static_cast<const float*>(fields[i].data));
+                clipMax = *(static_cast<float const*>(fields[i].data));
             }
         }
 
         return new ClipPlugin(name, clipMin, clipMax);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
     return nullptr;
 }
 
-IPluginV2* ClipPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2* ClipPluginCreator::deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -253,7 +254,7 @@ IPluginV2* ClipPluginCreator::deserializePlugin(const char* name, const void* se
         // call ClipPlugin::destroy()
         return new ClipPlugin(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

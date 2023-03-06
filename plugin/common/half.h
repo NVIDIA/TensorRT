@@ -24,7 +24,6 @@
 #pragma GCC diagnostic ignored "-Wparentheses"
 #endif
 
-
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmismatched-tags"
@@ -39,4 +38,3 @@
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
-

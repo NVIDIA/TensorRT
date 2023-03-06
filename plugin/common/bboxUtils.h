@@ -54,13 +54,13 @@ struct BboxInfo
 };
 
 template <typename TFloat>
-bool operator<(const Bbox<TFloat>& lhs, const Bbox<TFloat>& rhs)
+bool operator<(Bbox<TFloat> const& lhs, Bbox<TFloat> const& rhs)
 {
     return lhs.x1 < rhs.x1;
 }
 
 template <typename TFloat>
-bool operator==(const Bbox<TFloat>& lhs, const Bbox<TFloat>& rhs)
+bool operator==(Bbox<TFloat> const& lhs, Bbox<TFloat> const& rhs)
 {
     return lhs.x1 == rhs.x1 && lhs.y1 == rhs.y1 && lhs.x2 == rhs.x2 && lhs.y2 == rhs.y2;
 }

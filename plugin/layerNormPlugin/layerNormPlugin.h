@@ -38,8 +38,8 @@ public:
     LayerNormPlugin(std::string const& name, void const* buffer, size_t length);
     ~LayerNormPlugin() override = default;
 
-    LayerNormPlugin(const LayerNormPlugin& /*other*/) = default;
-    LayerNormPlugin& operator=(const LayerNormPlugin& /*other*/) = delete;
+    LayerNormPlugin(LayerNormPlugin const& /*other*/) = default;
+    LayerNormPlugin& operator=(LayerNormPlugin const& /*other*/) = delete;
     LayerNormPlugin(LayerNormPlugin&& /*other*/) noexcept = delete;
     LayerNormPlugin& operator=(LayerNormPlugin&& /*other*/) noexcept = delete;
 
@@ -84,8 +84,8 @@ public:
     LayerNormPluginCreator();
     ~LayerNormPluginCreator() override;
 
-    LayerNormPluginCreator(const LayerNormPluginCreator& /*other*/) = delete;
-    LayerNormPluginCreator& operator=(const LayerNormPluginCreator& /*other*/) = delete;
+    LayerNormPluginCreator(LayerNormPluginCreator const& /*other*/) = delete;
+    LayerNormPluginCreator& operator=(LayerNormPluginCreator const& /*other*/) = delete;
     LayerNormPluginCreator(LayerNormPluginCreator&& /*other*/) noexcept = delete;
     LayerNormPluginCreator& operator=(LayerNormPluginCreator&& /*other*/) noexcept = delete;
 

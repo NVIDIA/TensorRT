@@ -28,8 +28,8 @@
 
 namespace
 {
-constexpr const char* SPLIT_PLUGIN_VERSION{"1"};
-constexpr const char* SPLIT_PLUGIN_NAME{"Split"};
+constexpr char const* SPLIT_PLUGIN_VERSION{"1"};
+constexpr char const* SPLIT_PLUGIN_NAME{"Split"};
 } // namespace
 
 namespace nvinfer1
@@ -49,6 +49,7 @@ class SplitPlugin final : public nvinfer1::IPluginV2DynamicExt
     using IPluginV2::getWorkspaceSize;
     using IPluginV2::enqueue;
     using IPluginV2Ext::configurePlugin;
+
 protected:
     void deserialize(void const* serialData, size_t serialLength) noexcept
     {
@@ -83,14 +84,18 @@ public:
         this->deserialize(serialData, serialLength);
     }
 
-  bool supportsFormatCombination(int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-  nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept override;
-  int initialize() noexcept override;
-  void terminate() noexcept override;
-  void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-  int enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
-  nvinfer1::DimsExprs getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    bool supportsFormatCombination(
+        int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+    int initialize() noexcept override;
+    void terminate() noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept override;
+    int enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
+        void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, nvinfer1::DimsExprs const* inputs, int nbInputs,
+        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
 
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override
     {
@@ -100,21 +105,21 @@ public:
     {
         delete this;
     }
-    const char* getPluginVersion() const noexcept override
+    char const* getPluginVersion() const noexcept override
     {
         return SPLIT_PLUGIN_VERSION;
     }
-    const char* getPluginType() const noexcept override
+    char const* getPluginType() const noexcept override
     {
         return SPLIT_PLUGIN_NAME;
     }
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* /*inputs*/, int /*nbInputs*/,
-        const nvinfer1::PluginTensorDesc* /*outputs*/, int /*nbOutputs*/) const noexcept override
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/, int /*nbInputs*/,
+        nvinfer1::PluginTensorDesc const* /*outputs*/, int /*nbOutputs*/) const noexcept override
     {
         return 0;
     }
-    void setPluginNamespace(const char* /*pluginNamespace*/) noexcept override {}
-    const char* getPluginNamespace() const noexcept override
+    void setPluginNamespace(char const* /*pluginNamespace*/) noexcept override {}
+    char const* getPluginNamespace() const noexcept override
     {
         return "";
     }
@@ -136,41 +141,41 @@ public:
 
     ~SplitPluginCreator() override {}
 
-    const char* getPluginName() const noexcept override
+    char const* getPluginName() const noexcept override
     {
         return SPLIT_PLUGIN_NAME;
     }
 
-    const char* getPluginVersion() const noexcept override
+    char const* getPluginVersion() const noexcept override
     {
         return SPLIT_PLUGIN_VERSION;
     }
 
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override
+    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override
     {
         std::cerr << "Function not implemented" << std::endl;
         return nullptr;
     }
 
     nvinfer1::IPluginV2DynamicExt* createPlugin(
-        const char* /*name*/, const nvinfer1::PluginFieldCollection* /*fc*/) noexcept override
+        char const* /*name*/, nvinfer1::PluginFieldCollection const* /*fc*/) noexcept override
     {
         std::cerr << "Function not implemented" << std::endl;
         return nullptr;
     }
 
     nvinfer1::IPluginV2DynamicExt* deserializePlugin(
-        const char* /*name*/, const void* serialData, size_t serialLength) noexcept override
+        char const* /*name*/, void const* serialData, size_t serialLength) noexcept override
     {
         return new SplitPlugin{serialData, serialLength};
     }
 
-    void setPluginNamespace(const char* libNamespace) noexcept override
+    void setPluginNamespace(char const* libNamespace) noexcept override
     {
         mNamespace = libNamespace;
     }
 
-    const char* getPluginNamespace() const noexcept override
+    char const* getPluginNamespace() const noexcept override
     {
         return mNamespace.c_str();
     }

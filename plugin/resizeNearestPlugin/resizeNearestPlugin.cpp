@@ -29,8 +29,8 @@ using nvinfer1::plugin::ResizeNearestPluginCreator;
 
 namespace
 {
-const char* RESIZE_PLUGIN_VERSION{"1"};
-const char* RESIZE_PLUGIN_NAME{"ResizeNearest_TRT"};
+char const* const kRESIZE_PLUGIN_VERSION{"1"};
+char const* const kRESIZE_PLUGIN_NAME{"ResizeNearest_TRT"};
 } // namespace
 
 PluginFieldCollection ResizeNearestPluginCreator::mFC{};
@@ -45,27 +45,27 @@ ResizeNearestPluginCreator::ResizeNearestPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* ResizeNearestPluginCreator::getPluginName() const noexcept
+char const* ResizeNearestPluginCreator::getPluginName() const noexcept
 {
-    return RESIZE_PLUGIN_NAME;
+    return kRESIZE_PLUGIN_NAME;
 }
 
-const char* ResizeNearestPluginCreator::getPluginVersion() const noexcept
+char const* ResizeNearestPluginCreator::getPluginVersion() const noexcept
 {
-    return RESIZE_PLUGIN_VERSION;
+    return kRESIZE_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* ResizeNearestPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* ResizeNearestPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
         plugin::validateRequiredAttributesExist({"scale"}, fc);
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             char const* attrName = fields[i].name;
@@ -84,7 +84,7 @@ IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(const char* name, const P
     return nullptr;
 }
 
-IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
+IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(char const* name, void const* data, size_t length) noexcept
 {
     try
     {
@@ -108,7 +108,7 @@ int ResizeNearest::getNbOutputs() const noexcept
     return 1;
 }
 
-Dims ResizeNearest::getOutputDimensions(int index, const Dims* inputDims, int nbInputs) noexcept
+Dims ResizeNearest::getOutputDimensions(int index, Dims const* inputDims, int nbInputs) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1);
     nvinfer1::Dims const& input = inputDims[0];
@@ -134,9 +134,7 @@ int ResizeNearest::initialize() noexcept
     return 0;
 }
 
-void ResizeNearest::terminate() noexcept
-{
-}
+void ResizeNearest::terminate() noexcept {}
 
 void ResizeNearest::destroy() noexcept
 {
@@ -167,7 +165,7 @@ void ResizeNearest::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-ResizeNearest::ResizeNearest(const void* data, size_t length)
+ResizeNearest::ResizeNearest(void const* data, size_t length)
 {
     deserialize(static_cast<int8_t const*>(data), length);
 }
@@ -187,12 +185,12 @@ void ResizeNearest::deserialize(int8_t const* data, size_t length)
     PLUGIN_VALIDATE(d == data + length);
 }
 
-const char* ResizeNearest::getPluginType() const noexcept
+char const* ResizeNearest::getPluginType() const noexcept
 {
     return "ResizeNearest_TRT";
 }
 
-const char* ResizeNearest::getPluginVersion() const noexcept
+char const* ResizeNearest::getPluginVersion() const noexcept
 {
     return "1";
 }
@@ -212,12 +210,12 @@ IPluginV2Ext* ResizeNearest::clone() const noexcept
     return nullptr;
 }
 
-void ResizeNearest::setPluginNamespace(const char* libNamespace) noexcept
+void ResizeNearest::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNameSpace = libNamespace;
 }
 
-const char* ResizeNearest::getPluginNamespace() const noexcept
+char const* ResizeNearest::getPluginNamespace() const noexcept
 {
     return mNameSpace.c_str();
 }
@@ -228,7 +226,7 @@ bool ResizeNearest::supportsFormat(DataType type, PluginFormat format) const noe
 }
 
 int ResizeNearest::enqueue(
-    int batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    int batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     int nchan = mOutputDims.d[0];
@@ -248,7 +246,7 @@ int ResizeNearest::enqueue(
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType ResizeNearest::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType ResizeNearest::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
     PLUGIN_ASSERT(index == 0);
@@ -258,7 +256,8 @@ DataType ResizeNearest::getOutputDataType(int index, const nvinfer1::DataType* i
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool ResizeNearest::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool ResizeNearest::isOutputBroadcastAcrossBatch(
+    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -270,9 +269,9 @@ bool ResizeNearest::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 }
 
 // Configure the layer with input and output data types.
-void ResizeNearest::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void ResizeNearest::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1);
     mInputDims = inputDims[0];

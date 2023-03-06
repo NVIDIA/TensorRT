@@ -30,7 +30,6 @@ using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 using namespace nvinfer1::plugin::bert;
 
-
 namespace
 {
 char const* EMB_LAYER_NORM_VERSION{"1"};
@@ -166,7 +165,8 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
         auto cms0 = exprBuilder.constant(unfusedMaskSize);
 
         // this code must match getMHAMaskPackedSize in bertCommon.h
-        bool const isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87 || mSM == kSM_89 ||mSM == kSM_90);
+        bool const isSmOK
+            = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87 || mSM == kSM_89 || mSM == kSM_90);
         bool const isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
         if (mUseFullMask || (isSmOK && isPrecisionOK))
         {
@@ -206,7 +206,7 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
 
         return ret;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -321,14 +321,14 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
         auto const segmentIds = static_cast<int32_t const*>(inputs[1]);
         auto const inputMask = static_cast<int32_t const*>(inputs[2]);
 
-        const float* beta = mBetaDev.get();
-        const float* gamma = mGammaDev.get();
+        float const* beta = mBetaDev.get();
+        float const* gamma = mGammaDev.get();
         if (mType == DataType::kFLOAT)
         {
             auto output = static_cast<float*>(outputs[0]);
-            auto const wordEmb = static_cast<const float*>(mWordEmbDev.get());
-            auto const tokEmb = static_cast<const float*>(mTokEmbDev.get());
-            auto const posEmb = static_cast<const float*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<float const*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<float const*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
             status = embSkipLayerNorm<float>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta,
                 gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
 
@@ -340,9 +340,9 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
         else if (mType == DataType::kHALF)
         {
             auto output = static_cast<half*>(outputs[0]);
-            auto const wordEmb = static_cast<const half*>(mWordEmbDev.get());
-            auto const tokEmb = static_cast<const half*>(mTokEmbDev.get());
-            auto const posEmb = static_cast<const half*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<half const*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<half const*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
             status = embSkipLayerNorm<half>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta,
                 gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
 
@@ -524,12 +524,12 @@ char const* EmbLayerNormPluginDynamicCreator::getPluginVersion() const noexcept
     return EMB_LAYER_NORM_VERSION;
 }
 
-const PluginFieldCollection* EmbLayerNormPluginDynamicCreator::getFieldNames() noexcept
+PluginFieldCollection const* EmbLayerNormPluginDynamicCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(char const* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -637,7 +637,7 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::deserializePlugin(
         // call EmbLayerNormPluginDynamic::destroy()
         return new EmbLayerNormPluginDynamic(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -650,7 +650,7 @@ void EmbLayerNormPluginDynamicCreator::setPluginNamespace(char const* libNamespa
     {
         mNamespace = libNamespace;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

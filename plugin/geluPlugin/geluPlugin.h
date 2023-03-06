@@ -33,22 +33,22 @@ namespace plugin
 namespace bert
 {
 
-int computeGelu(cudaStream_t stream, int n, const float* input, float* output);
+int computeGelu(cudaStream_t stream, int n, float const* input, float* output);
 
-int computeGelu(cudaStream_t stream, int n, const half* input, half* output);
-
-int computeGeluBias(
-    float* output, const float* input, const float* bias, const int ld, const int cols, cudaStream_t stream);
+int computeGelu(cudaStream_t stream, int n, half const* input, half* output);
 
 int computeGeluBias(
-    half* output, const half* input, const half* bias, const int ld, const int cols, cudaStream_t stream);
+    float* output, float const* input, float const* bias, int const ld, int const cols, cudaStream_t stream);
+
+int computeGeluBias(
+    half* output, half const* input, half const* bias, int const ld, int const cols, cudaStream_t stream);
 
 class GeluPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    GeluPluginDynamic(const std::string name, const nvinfer1::DataType type, const nvinfer1::Weights& bias);
+    GeluPluginDynamic(const std::string name, const nvinfer1::DataType type, nvinfer1::Weights const& bias);
 
-    GeluPluginDynamic(const std::string name, const void* data, size_t length);
+    GeluPluginDynamic(const std::string name, void const* data, size_t length);
 
     // It doesn't make sense to make GeluPluginDynamic without arguments, so we delete
     // default constructor.
@@ -56,32 +56,32 @@ public:
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, const nvinfer1::DimsExprs* inputs, int nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, nvinfer1::DimsExprs const* inputs, int nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
-    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+        int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int nbOutputs) const noexcept override;
+    int enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-        noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
 
     // IPluginV2 Methods
-    const char* getPluginType() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginType() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
     int getNbOutputs() const noexcept override;
     int initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
     void destroy() noexcept override;
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     const std::string mLayerName;
@@ -103,19 +103,20 @@ class GeluPluginDynamicCreator : public nvinfer1::IPluginCreator
 public:
     GeluPluginDynamicCreator();
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
 
-    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    nvinfer1::IPluginV2* deserializePlugin(
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
 
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     static nvinfer1::PluginFieldCollection mFC;

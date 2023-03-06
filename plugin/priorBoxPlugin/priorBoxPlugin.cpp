@@ -178,7 +178,7 @@ int32_t PriorBox::getNbOutputs() const noexcept
 }
 
 // Computes and returns the output dimensions
-Dims PriorBox::getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims) noexcept
+Dims PriorBox::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     PLUGIN_VALIDATE(nbInputDims == 2);
     // Only one output from the plugin layer
@@ -304,7 +304,7 @@ char const* PriorBox::getPluginNamespace() const noexcept
 
 // Return the DataType of the plugin output at the requested index.
 DataType PriorBox::getOutputDataType(
-    int32_t index, const nvinfer1::DataType* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Two outputs
     PLUGIN_VALIDATE(index == 0 || index == 1);
@@ -312,7 +312,8 @@ DataType PriorBox::getOutputDataType(
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool PriorBox::isOutputBroadcastAcrossBatch(int32_t /*outputIndex*/, const bool* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
+bool PriorBox::isOutputBroadcastAcrossBatch(
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
@@ -351,7 +352,10 @@ void PriorBox::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims con
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void PriorBox::attachToContext(cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept {}
+void PriorBox::attachToContext(
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
+{
+}
 
 // Detach the plugin object from its execution context.
 void PriorBox::detachFromContext() noexcept {}
@@ -390,7 +394,7 @@ char const* PriorBoxPluginCreator::getPluginVersion() const noexcept
     return kPRIOR_BOX_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* PriorBoxPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* PriorBoxPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }

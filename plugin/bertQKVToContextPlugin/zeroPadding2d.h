@@ -44,11 +44,11 @@ public:
     size_t getWorkspaceSize(int32_t sumSeqLen, int32_t numHeads);
     void* get16BytesAlignedPointer(void* workspace, size_t offset);
     cudaError_t pad(
-        const void* src, void* workspace, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, cudaStream_t stream);
+        void const* src, void* workspace, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, cudaStream_t stream);
     cudaError_t unpad(
-        const void* workspace, void* dst, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, cudaStream_t stream);
-    MhaRunParameter patchMhaArgs(const nvinfer1::PluginTensorDesc* inputDesc,
-        const nvinfer1::PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs,
+        void const* workspace, void* dst, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, cudaStream_t stream);
+    MhaRunParameter patchMhaArgs(nvinfer1::PluginTensorDesc const* inputDesc,
+        nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs,
         void* paddingWorkspace, int32_t sumSeqLen, int32_t numHeads);
 
 private:

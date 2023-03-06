@@ -20,16 +20,16 @@ namespace nvinfer1
 {
 namespace plugin
 {
-static const char* REORG_PLUGIN_VERSION{"1"};
-static const char* REORG_PLUGIN_NAME{"Reorg_TRT"};
+static char const* const kREORG_PLUGIN_VERSION{"1"};
+static char const* const kREORG_PLUGIN_NAME{"Reorg_TRT"};
 PluginFieldCollection ReorgPluginCreator::mFC{};
 std::vector<PluginField> ReorgPluginCreator::mPluginAttributes;
 
 Reorg::Reorg(int C, int H, int W, int stride)
-    : C(C),
-      H(H),
-      W(W), 
-      stride(stride)
+    : C(C)
+    , H(H)
+    , W(W)
+    , stride(stride)
 {
 }
 
@@ -38,9 +38,9 @@ Reorg::Reorg(int stride)
 {
 }
 
-Reorg::Reorg(const void* buffer, size_t length)
+Reorg::Reorg(void const* buffer, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(buffer), *a = d;
+    char const *d = reinterpret_cast<char const*>(buffer), *a = d;
     C = read<int>(d);
     H = read<int>(d);
     W = read<int>(d);
@@ -53,7 +53,7 @@ int Reorg::getNbOutputs() const noexcept
     return 1;
 }
 
-Dims Reorg::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims Reorg::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 1);
     PLUGIN_ASSERT(index == 0);
@@ -61,11 +61,11 @@ Dims Reorg::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) 
 }
 
 int Reorg::enqueue(
-    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    const void* inputData = inputs[0];
+    void const* inputData = inputs[0];
     void* outputData = outputs[0];
-    pluginStatus_t status = reorgInference(stream, batchSize, C, H, W, stride, inputData, outputData);    
+    pluginStatus_t status = reorgInference(stream, batchSize, C, H, W, stride, inputData, outputData);
     return status;
 }
 
@@ -102,14 +102,14 @@ size_t Reorg::getWorkspaceSize(int maxBatchSize) const noexcept
     return 0;
 }
 
-const char* Reorg::getPluginType() const noexcept
+char const* Reorg::getPluginType() const noexcept
 {
-    return REORG_PLUGIN_NAME;
+    return kREORG_PLUGIN_NAME;
 }
 
-const char* Reorg::getPluginVersion() const noexcept
+char const* Reorg::getPluginVersion() const noexcept
 {
-    return REORG_PLUGIN_VERSION;
+    return kREORG_PLUGIN_VERSION;
 }
 
 void Reorg::destroy() noexcept
@@ -118,18 +118,18 @@ void Reorg::destroy() noexcept
 }
 
 // Set plugin namespace
-void Reorg::setPluginNamespace(const char* pluginNamespace) noexcept
+void Reorg::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     mPluginNamespace = pluginNamespace;
 }
 
-const char* Reorg::getPluginNamespace() const noexcept
+char const* Reorg::getPluginNamespace() const noexcept
 {
     return mPluginNamespace.c_str();
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType Reorg::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType Reorg::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
     PLUGIN_ASSERT(index == 0);
@@ -139,7 +139,7 @@ DataType Reorg::getOutputDataType(int index, const nvinfer1::DataType* inputType
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool Reorg::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool Reorg::isOutputBroadcastAcrossBatch(int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -151,9 +151,9 @@ bool Reorg::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 }
 
 // Configure the layer with input and output data types.
-void Reorg::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void Reorg::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     PLUGIN_ASSERT(nbInputs == 1);
@@ -167,7 +167,10 @@ void Reorg::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* out
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void Reorg::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept {}
+void Reorg::attachToContext(
+    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+{
+}
 
 // Detach the plugin object from its execution context.
 void Reorg::detachFromContext() noexcept {}
@@ -196,26 +199,26 @@ ReorgPluginCreator::ReorgPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* ReorgPluginCreator::getPluginName() const noexcept
+char const* ReorgPluginCreator::getPluginName() const noexcept
 {
-    return REORG_PLUGIN_NAME;
+    return kREORG_PLUGIN_NAME;
 }
 
-const char* ReorgPluginCreator::getPluginVersion() const noexcept
+char const* ReorgPluginCreator::getPluginVersion() const noexcept
 {
-    return REORG_PLUGIN_VERSION;
+    return kREORG_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* ReorgPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* ReorgPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* ReorgPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* ReorgPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
         PLUGIN_VALIDATE(fc->nbFields == 1);
         PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kINT32);
         PLUGIN_VALIDATE(!strcmp(fields[0].name, "stride"));
@@ -235,7 +238,7 @@ IPluginV2Ext* ReorgPluginCreator::createPlugin(const char* name, const PluginFie
 }
 
 IPluginV2Ext* ReorgPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

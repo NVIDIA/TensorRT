@@ -20,7 +20,7 @@
 
 pluginStatus_t gatherNMSOutputs(cudaStream_t stream, bool shareLocation, int numImages, int numPredsPerClass,
     int numClasses, int topK, int keepTopK, nvinfer1::DataType DT_BBOX, nvinfer1::DataType DT_SCORE,
-    const void* indices, const void* scores, const void* bboxData, void* keepCount, void* nmsedBoxes, void* nmsedScores,
-    void* nmsedClasses, bool clipBoxes, const float scoreShift);
+    void const* indices, void const* scores, void const* bboxData, void* keepCount, void* nmsedBoxes, void* nmsedScores,
+    void* nmsedClasses, bool clipBoxes, float const scoreShift);
 
 #endif

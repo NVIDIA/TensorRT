@@ -34,50 +34,39 @@ class DecodeBbox3DPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     DecodeBbox3DPlugin() = delete;
-    DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max,
-              float z_min, float z_max,
-              int num_dir_bins, float dir_offset, float dir_limit_offset,
-              const std::vector<float>& anchor_bottom_height,
-              const std::vector<float>& anchors,
-              float score_thresh);
-    DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max,
-              float z_min, float z_max,
-              int num_dir_bins, float dir_offset, float dir_limit_offset,
-              const std::vector<float>& anchor_bottom_height,
-              const std::vector<float>& anchors,
-              float score_thresh,
-              int feature_h, int feature_w);
-    DecodeBbox3DPlugin(const void* data, size_t length);
+    DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max, float z_min, float z_max, int num_dir_bins,
+        float dir_offset, float dir_limit_offset, std::vector<float> const& anchor_bottom_height,
+        std::vector<float> const& anchors, float score_thresh);
+    DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max, float z_min, float z_max, int num_dir_bins,
+        float dir_offset, float dir_limit_offset, std::vector<float> const& anchor_bottom_height,
+        std::vector<float> const& anchors, float score_thresh, int feature_h, int feature_w);
+    DecodeBbox3DPlugin(void const* data, size_t length);
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, 
-        const nvinfer1::DimsExprs* inputs, int nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, nvinfer1::DimsExprs const* inputs, int nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, 
-        int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int nbOutputs) const noexcept override;
-    int enqueue(const nvinfer1::PluginTensorDesc* inputDesc, 
-        const nvinfer1::PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, 
-        void* workspace, cudaStream_t stream) noexcept override;
+        int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int nbOutputs) const noexcept override;
+    int enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, 
-        int nbInputs) const noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
     // IPluginV2 Methods
-    const char* getPluginType() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginType() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
     int getNbOutputs() const noexcept override;
     int initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
     void destroy() noexcept override;
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     std::string mNamespace;
@@ -102,13 +91,14 @@ class DecodeBbox3DPluginCreator : public nvinfer1::IPluginCreator
 {
 public:
     DecodeBbox3DPluginCreator();
-    const char* getPluginName() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
-    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
-    nvinfer1::IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginName() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    nvinfer1::IPluginV2* deserializePlugin(
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     static nvinfer1::PluginFieldCollection mFC;
