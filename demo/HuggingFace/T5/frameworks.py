@@ -162,8 +162,11 @@ class T5FHuggingFace(FrameworkCommand):
         # By default, huggingface model structure is one giant file.
         t5_torch_fpath = network_fpaths.torch[0].fpath
         t5_model = T5ForConditionalGeneration.from_pretrained(t5_torch_fpath, use_cache=metadata.other.kv_cache)
-        if metadata.precision.fp16:
-            t5_model = t5_model.half()
+        # Framework fp16 does not support cpu mode for T5
+        # TODO: Enable true frameworks fp16. CUDA 11.4 so far does not support model.half() for PyTorch 1.13.
+        # if metadata.precision.fp16:
+        #     t5_model = t5_model.cuda().half()
+
         t5_torch_encoder = T5EncoderTorchFile.TorchModule(t5_model.encoder)
         t5_torch_decoder = T5DecoderTorchFile.TorchModule(
             t5_model.decoder, t5_model.lm_head, t5_model.config

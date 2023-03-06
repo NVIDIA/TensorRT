@@ -296,12 +296,10 @@ class T5DecoderConverter(ModelFileConverter):
         Returns:
             T5DecoderONNXFile: ONNX decoder object.
         """
-
-        # fp16 PyTorch model on CPU has operations that does not support Half type for onnx.export
-        device = 'cuda' if network_metadata.precision.fp16 else 'cpu'
-
+        # TODO: CPU and GPU PyTorch models may use different operations and might perform differently.
+        # Adding a device parameter to the class may help
+        device = model.device
         input_ids = torch.tensor([[42] * 10]).to(device)
-        model = model.to(device)
         # Exporting the decoder requires a basic instance of the encoder
         # Create one temporarily
         simplified_encoder = T5EncoderTorchFile.TorchModule(model.encoder)
@@ -439,9 +437,8 @@ class T5EncoderConverter(ModelFileConverter):
         Returns:
             Tuple[str]: Names of generated models
         """
-        device = 'cuda' if network_metadata.precision.fp16 else 'cpu'
+        device = model.device
         input_ids = torch.tensor([[42] * 10]).to(device)
-        model = model.to(device)
         simplified_encoder = T5EncoderTorchFile.TorchModule(model.encoder)
         inputs = T5ModelTRTConfig.get_input_dims(network_metadata)["encoder"]
         outputs = T5ModelTRTConfig.get_output_dims(network_metadata)["encoder"]

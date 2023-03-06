@@ -148,9 +148,10 @@ class GPT2HuggingFace(FrameworkCommand):
         # By default, HuggingFace model structure is one giant file.
         gpt2_torch_fpath = network_fpaths.torch[0].fpath
         gpt2_model = AutoModelForCausalLM.from_pretrained(gpt2_torch_fpath)
-
-        if metadata.precision.fp16:
-            gpt2_model = gpt2_model.half()
+        # Framework fp16 does not support cpu mode for GPT2
+        # TODO: Enable true fp16. Using cuda 11.4 with PyTorch 1.13 will cause issue for this function.
+        # if metadata.precision.fp16:
+        #     gpt2_model = gpt2_model.cuda().half()
 
         gpt2_torch = GPT2TorchFile.TorchModule(
             gpt2_model.transformer, gpt2_model.lm_head, gpt2_model.config
