@@ -28,11 +28,6 @@ Dependencies required for this sample
 pip3 install -r requirements.txt
 ```
 
-On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
-```bash
-export PATH=${PATH}:/usr/local/cuda/bin/
-```
-
 2. TensorRT
 
 3. [ONNX-GraphSurgeon](https://github.com/NVIDIA/TensorRT/tree/main/tools/onnx-graphsurgeon)

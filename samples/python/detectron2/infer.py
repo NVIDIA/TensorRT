@@ -20,11 +20,12 @@ import sys
 import argparse
 import numpy as np
 import tensorrt as trt
-from cuda import cuda
+from cuda import cudart
 from image_batcher import ImageBatcher
-from build_engine import _cuda_error_check
 from visualize import visualize_detections
 
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+import common
 
 class TensorRTInfer:
     """
@@ -40,9 +41,10 @@ class TensorRTInfer:
         self.logger = trt.Logger(trt.Logger.ERROR)
         trt.init_libnvinfer_plugins(self.logger, namespace="")
         with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
+            assert runtime
             self.engine = runtime.deserialize_cuda_engine(f.read())
-        self.context = self.engine.create_execution_context()
         assert self.engine
+        self.context = self.engine.create_execution_context()
         assert self.context
 
         # Setup I/O bindings
@@ -61,7 +63,7 @@ class TensorRTInfer:
             size = np.dtype(trt.nptype(dtype)).itemsize
             for s in shape:
                 size *= s
-            allocation = _cuda_error_check(cuda.cuMemAlloc(size))
+            allocation = common.cuda_call(cudart.cudaMalloc(size))
             binding = {
                 'index': i,
                 'name': name,
@@ -113,19 +115,11 @@ class TensorRTInfer:
             outputs.append(np.zeros(shape, dtype))
 
         # Process I/O and execute the network.
-        _cuda_error_check(
-            cuda.cuMemcpyHtoD(
-                self.inputs[0]['allocation'], 
-                np.ascontiguousarray(batch), 
-                self.inputs[0]['size']))
+        common.memcpy_host_to_device(self.inputs[0]['allocation'], np.ascontiguousarray(batch))
 
         self.context.execute_v2(self.allocations)
         for o in range(len(outputs)):
-            _cuda_error_check(
-                cuda.cuMemcpyDtoH(
-                    outputs[o],
-                    self.outputs[o]['allocation'],
-                    self.outputs[o]['size']))
+            common.memcpy_device_to_host(outputs[o], self.outputs[o]['allocation'])
 
         # Process the results.
         nums = outputs[0]
@@ -141,15 +135,15 @@ class TensorRTInfer:
                 # Select a mask.
                 mask = masks[i][n]
 
-                # Calculate scaling values for bboxes. 
-                scale = self.inputs[0]['shape'][2]                 
+                # Calculate scaling values for bboxes.
+                scale = self.inputs[0]['shape'][2]
                 scale /= scales[i]
                 scale_y = scale
                 scale_x = scale
-                
+
                 if nms_threshold and scores[i][n] < nms_threshold:
                     continue
-                # Append to detections          
+                # Append to detections
                 detections[i].append({
                     'ymin': boxes[i][n][0] * scale_y,
                     'xmin': boxes[i][n][1] * scale_x,
@@ -195,10 +189,10 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input", default=None, help="Path to the image or directory to process")
     parser.add_argument("-c", "--det2_config", help="The Detectron 2 config file (.yaml) for the model", type=str)
     parser.add_argument("-o", "--output", default=None, help="Directory where to save the visualization results")
-    parser.add_argument("-t", "--nms_threshold", type=float, 
+    parser.add_argument("-t", "--nms_threshold", type=float,
                         help="Override the score threshold for the NMS operation, if higher than the threshold in the engine.")
-    parser.add_argument("--iou_threshold", default=0.5, type=float, 
-                        help="Select the IoU threshold for the mask segmentation. Range is 0 to 1. Pixel values more than threshold will become 1, less 0")                                                              
+    parser.add_argument("--iou_threshold", default=0.5, type=float,
+                        help="Select the IoU threshold for the mask segmentation. Range is 0 to 1. Pixel values more than threshold will become 1, less 0")
     args = parser.parse_args()
     if not all([args.engine, args.input, args.output, args.det2_config]):
         parser.print_help()

@@ -31,6 +31,7 @@
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
 #include "logger.h"
+#include "sampleEntrypoints.h"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -38,6 +39,7 @@
 #include <cstring>
 #include <cuda_runtime_api.h>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
@@ -126,7 +128,7 @@ struct SimpleProfiler : public nvinfer1::IProfiler
         int count{0};
     };
 
-    virtual void reportLayerTime(const char* layerName, float ms) noexcept
+    void reportLayerTime(const char* layerName, float ms) noexcept override
     {
         mProfile[layerName].count++;
         mProfile[layerName].time += ms;
@@ -329,7 +331,7 @@ public:
     {
         mData = new ElemType[size];
     };
-    ~TypedHostMemory() noexcept
+    ~TypedHostMemory() noexcept override
     {
         delete[](ElemType*) mData;
     }
@@ -635,7 +637,8 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
     case nvinfer1::DataType::kHALF: return 2;
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
-    case nvinfer1::DataType::kINT8: return 1;
+    case nvinfer1::DataType::kINT8:
+    case nvinfer1::DataType::kFP8: return 1;
     }
     return 0;
 }
@@ -819,11 +822,11 @@ public:
         CHECK(cudaEventDestroy(mStart));
         CHECK(cudaEventDestroy(mStop));
     }
-    void start()
+    void start() override
     {
         CHECK(cudaEventRecord(mStart, mStream));
     }
-    void stop()
+    void stop() override
     {
         CHECK(cudaEventRecord(mStop, mStream));
         float ms{0.0f};
@@ -843,11 +846,11 @@ class CpuTimer : public TimerBase
 public:
     using clock_type = Clock;
 
-    void start()
+    void start() override
     {
         mStart = Clock::now();
     }
-    void stop()
+    void stop() override
     {
         mStop = Clock::now();
         mMs += std::chrono::duration<float, std::milli>{mStop - mStart}.count();
@@ -888,30 +891,93 @@ inline int getW(const nvinfer1::Dims& d)
     return d.nbDims >= 1 ? d.d[d.nbDims - 1] : 1;
 }
 
-inline void loadLibrary(const std::string& path)
+//! Platform-agnostic wrapper around dynamic libraries.
+class DynamicLibrary
 {
-#ifdef _MSC_VER
-    void* handle = LoadLibrary(path.c_str());
-#else
-    int32_t flags{RTLD_LAZY};
+public:
+    explicit DynamicLibrary(std::string const& name)
+        : mLibName{name}
+    {
+#if defined(_WIN32)
+        mHandle = LoadLibrary(name.c_str());
+#else // defined(_WIN32)
+        int32_t flags{RTLD_LAZY};
 #if ENABLE_ASAN
-    // https://github.com/google/sanitizers/issues/89
-    // asan doesn't handle module unloading correctly and there are no plans on doing
-    // so. In order to get proper stack traces, don't delete the shared library on
-    // close so that asan can resolve the symbols correctly.
-    flags |= RTLD_NODELETE;
+        // https://github.com/google/sanitizers/issues/89
+        // asan doesn't handle module unloading correctly and there are no plans on doing
+        // so. In order to get proper stack traces, don't delete the shared library on
+        // close so that asan can resolve the symbols correctly.
+        flags |= RTLD_NODELETE;
 #endif // ENABLE_ASAN
 
-    void* handle = dlopen(path.c_str(), flags);
+        mHandle = dlopen(name.c_str(), flags);
+#endif // defined(_WIN32)
+
+        if (mHandle == nullptr)
+        {
+            std::string errorStr{};
+#if !defined(_WIN32)
+            errorStr = std::string{" due to "} + std::string{dlerror()};
 #endif
-    if (handle == nullptr)
-    {
-#ifdef _MSC_VER
-        sample::gLogError << "Could not load plugin library: " << path << std::endl;
-#else
-        sample::gLogError << "Could not load plugin library: " << path << ", due to: " << dlerror() << std::endl;
-#endif
+            throw std::runtime_error("Unable to open library: " + name + errorStr);
+        }
     }
+
+    DynamicLibrary(DynamicLibrary const&) = delete;
+    DynamicLibrary(DynamicLibrary const&&) = delete;
+
+    //!
+    //! Retrieve a function symbol from the loaded library.
+    //!
+    //! \return the loaded symbol on success
+    //! \throw std::invalid_argument if loading the symbol failed.
+    //!
+    template <typename Signature>
+    std::function<Signature> symbolAddress(char const* name)
+    {
+        if (mHandle == nullptr)
+        {
+            throw std::runtime_error("Handle to library is nullptr.");
+        }
+        void* ret;
+#if defined(_MSC_VER)
+        ret = static_cast<void*>(GetProcAddress(static_cast<HMODULE>(mHandle), name));
+#else
+        ret = dlsym(mHandle, name);
+#endif
+        if (ret == nullptr)
+        {
+            std::string const kERROR_MSG(mLibName + ": error loading symbol: " + std::string(name));
+            throw std::invalid_argument(kERROR_MSG);
+        }
+        return reinterpret_cast<Signature*>(ret);
+    }
+
+    ~DynamicLibrary()
+    {
+        try
+        {
+#if defined(_WIN32)
+            ASSERT(static_cast<bool>(FreeLibrary(static_cast<HMODULE>(mHandle))));
+#else
+            ASSERT(dlclose(mHandle) == 0);
+#endif
+        }
+        catch (...)
+        {
+            sample::gLogError << "Unable to close library: " << mLibName << std::endl;
+        }
+    }
+
+private:
+    std::string mLibName{}; //!< Name of the DynamicLibrary
+    void* mHandle{};        //!< Handle to the DynamicLibrary
+};
+
+inline std::unique_ptr<DynamicLibrary> loadLibrary(std::string const& path)
+{
+    // make_unique not available until C++14 - we still need to support C++11 builds.
+    return std::unique_ptr<DynamicLibrary>(new DynamicLibrary{path});
 }
 
 inline int32_t getSMVersion()
@@ -950,7 +1016,7 @@ inline int32_t getMaxPersistentCacheSize()
 
 inline bool isDataTypeSupported(nvinfer1::DataType dataType)
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(createBuilder());
     if (!builder)
     {
         return false;
@@ -1065,7 +1131,7 @@ private:
 #endif
 };
 
-inline std::vector<char> loadTimingCacheFile(const std::string inFileName)
+inline std::vector<char> loadTimingCacheFile(std::string const& inFileName)
 {
     std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(inFileName)};
     std::ifstream iFile(inFileName, std::ios::in | std::ios::binary);
@@ -1085,7 +1151,7 @@ inline std::vector<char> loadTimingCacheFile(const std::string inFileName)
     return content;
 }
 
-inline void saveTimingCacheFile(const std::string outFileName, const nvinfer1::IHostMemory* blob)
+inline void saveTimingCacheFile(std::string const& outFileName, nvinfer1::IHostMemory const* blob)
 {
     std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(outFileName)};
     std::ofstream oFile(outFileName, std::ios::out | std::ios::binary);
@@ -1099,12 +1165,13 @@ inline void saveTimingCacheFile(const std::string outFileName, const nvinfer1::I
     sample::gLogInfo << "Saved " << blob->size() << " bytes of timing cache to " << outFileName << std::endl;
 }
 
-inline void updateTimingCacheFile(std::string const fileName, nvinfer1::ITimingCache const* timingCache)
+inline void updateTimingCacheFile(std::string const& fileName, nvinfer1::ITimingCache const* timingCache)
 {
     // Prepare empty timingCache in case that there is no existing file to read
-    std::unique_ptr<nvinfer1::IBuilder> builder{nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger())};
+    std::unique_ptr<nvinfer1::IBuilder> builder{createBuilder()};
     std::unique_ptr<nvinfer1::IBuilderConfig> config{builder->createBuilderConfig()};
-    std::unique_ptr<nvinfer1::ITimingCache> fileTimingCache{config->createTimingCache(static_cast<const void*>(nullptr), 0)};
+    std::unique_ptr<nvinfer1::ITimingCache> fileTimingCache{
+        config->createTimingCache(static_cast<const void*>(nullptr), 0)};
 
     std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(fileName)};
     std::ifstream iFile(fileName, std::ios::in | std::ios::binary);

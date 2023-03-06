@@ -23,6 +23,10 @@
 //! Command: ./sample_named_dimensions [-h or --help] [-d=/path/to/data/dir or --datadir=/path/to/data/dir]
 //!
 
+// Define TRT entrypoints used in common code
+#define DEFINE_TRT_ENTRYPOINTS 1
+#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
+
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"

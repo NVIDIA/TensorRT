@@ -33,11 +33,6 @@ You will also need the latest `onnx_graphsurgeon` python module. If not already 
 pip3 install onnx-graphsurgeon --index-url https://pypi.ngc.nvidia.com
 ```
 
-On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
-```bash
-export PATH=${PATH}:/usr/local/cuda/bin/
-```
-
 ## Model Conversion
 
 The workflow to convert an EfficientNet model is basically TensorFlow → ONNX → TensorRT, and so parts of this process require TensorFlow to be installed. If you are performing this conversion to run inference on the edge, such as for NVIDIA Jetson devices, it might be easier to do the ONNX conversion on a PC first.

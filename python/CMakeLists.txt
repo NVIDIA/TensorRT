@@ -1,11 +1,11 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+
 # http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 
 cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 project(PyTensorRT LANGUAGES CXX C)
@@ -33,7 +34,7 @@ endfunction()
 
 # -------- CMAKE OPTIONS --------
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tensorrt/)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${TENSORRT_MODULE}/)
 set(CPP_STANDARD 11 CACHE STRING "CPP Standard Version")
 set(CMAKE_CXX_STANDARD ${CPP_STANDARD})
 
@@ -41,8 +42,6 @@ if (NOT MSVC)
     # This allows us to use TRT libs shipped with standalone wheels.
     set(CMAKE_SHARED_LINKER_FLAGS -Wl,-rpath=$ORIGIN)
 endif()
-
-set(PY_MODULE_NAME tensorrt)
 
 # -------- PATHS --------
 message(STATUS "EXT_PATH: ${EXT_PATH}")
@@ -66,11 +65,25 @@ message(STATUS "ONNX_INC_DIR: ${ONNX_INC_DIR}")
 message(STATUS "PYBIND11_DIR: ${PYBIND11_DIR}")
 
 # Source Files
-file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
+if(${TENSORRT_MODULE} STREQUAL "tensorrt")
+    # tensorrt full dependencies
+    file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
+else()
+    # tensorrt_lean and tensorrt_dispatch dependencies
+    set(SOURCE_FILES
+        src/pyTensorRT.cpp
+        src/utils.cpp
+        src/infer/pyCore.cpp
+        src/infer/pyPlugin.cpp
+        src/infer/pyFoundationalTypes.cpp)
+endif()
 
 set(PYTHON python${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION})
 set(PYTHON_LIB_NAME python${PYTHON_MAJOR_VERSION}${PYTHON_MINOR_VERSION})
 message(STATUS "PYTHON: ${PYTHON}")
+message(STATUS "TENSORRT_MODULE: ${TENSORRT_MODULE}")
+
+set(PY_MODULE_NAME ${TENSORRT_MODULE})
 
 # Find headers
 if (MSVC)
@@ -101,6 +114,8 @@ include_directories(${TENSORRT_ROOT}/include ${PROJECT_SOURCE_DIR}/include ${CUD
 link_directories(${TENSORRT_BUILD})
 
 if (MSVC)
+    message(STATUS "include_dirs: ${MSVC_COMPILER_DIR}/include ${MSVC_COMPILER_DIR}/../ucrt/include ${NV_WDKSDK_INC}/um ${NV_WDKSDK_INC}/shared")
+    message(STATUS "link dirs: ${PY_LIB_DIR} ${NV_WDKSDK_LIB}/um/x64 ${MSVC_COMPILER_DIR}/lib/amd64 ${MSVC_COMPILER_DIR}/../ucrt/lib/x64")
     include_directories(${MSVC_COMPILER_DIR}/include ${MSVC_COMPILER_DIR}/../ucrt/include ${NV_WDKSDK_INC}/um ${NV_WDKSDK_INC}/shared)
     link_directories(${PY_LIB_DIR} ${NV_WDKSDK_LIB}/um/x64 ${MSVC_COMPILER_DIR}/lib/amd64 ${MSVC_COMPILER_DIR}/../ucrt/lib/x64)
 endif()
@@ -125,12 +140,30 @@ if(${NV_TARGET_OS} MATCHES "wddm2")
     endif()
 endif()
 
+# ---------- MODULE DEPENDENCIES ----------
+add_compile_definitions(TENSORRT_MODULE=${TENSORRT_MODULE})
+
+if ("${TRT_VCAST}" STREQUAL "1" OR "${TRT_VCAST_SAFE}" STREQUAL "1")
+    set(vfc_suffix "_static")
+else()
+    set(vfc_suffix "")
+endif()
+
+if (${TENSORRT_MODULE} STREQUAL "tensorrt")
+    set(TRT_LIBS nvinfer nvonnxparser nvparsers nvinfer_plugin)
+elseif (${TENSORRT_MODULE} STREQUAL "tensorrt_lean")
+    set(TRT_LIBS "nvinfer_lean${vfc_suffix}")
+elseif (${TENSORRT_MODULE} STREQUAL "tensorrt_dispatch")
+    set(TRT_LIBS "nvinfer_dispatch${vfc_suffix}")
+else()
+    message(FATAL_ERROR "Unknown TensorRT module " ${TENSORRT_MODULE})
+endif()
+
+
 # -------- START BUILD PROCESS --------
 message(STATUS "Building in ${CMAKE_BUILD_TYPE} mode")
 if (ENABLE_INETWORK_SERIALIZE)
-    set(TRT_LIBS nvinfer nvonnxparser nvparsers nvinfer_plugin nvserialize)
-else()
-    set(TRT_LIBS nvinfer nvonnxparser nvparsers nvinfer_plugin)
+    set(TRT_LIBS ${TRT_LIBS} nvserialize)
 endif()
 
 # -------- BUILDING --------

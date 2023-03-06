@@ -109,7 +109,7 @@ class DetectionLayerPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 public:
     DetectionLayerPluginCreator();
 
-    ~DetectionLayerPluginCreator(){};
+    ~DetectionLayerPluginCreator() override{};
 
     const char* getPluginName() const noexcept override;
 

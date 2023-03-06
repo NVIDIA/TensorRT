@@ -62,7 +62,7 @@ public:
     }
 
 protected:
-    ~ParserOnnxConfig()
+    ~ParserOnnxConfig() override
     {
 #ifdef ONNX_DEBUG
         if (isDebug())
@@ -73,62 +73,62 @@ protected:
     }
 
 public:
-    virtual void setModelDtype(const nvinfer1::DataType modelDtype) noexcept
+    void setModelDtype(const nvinfer1::DataType modelDtype) noexcept override
     {
         mModelDtype = modelDtype;
     }
 
-    virtual nvinfer1::DataType getModelDtype() const noexcept
+    nvinfer1::DataType getModelDtype() const noexcept override
     {
         return mModelDtype;
     }
 
-    virtual const char* getModelFileName() const noexcept
+    const char* getModelFileName() const noexcept override
     {
         return mModelFilename.c_str();
     }
-    virtual void setModelFileName(const char* onnxFilename) noexcept
+    void setModelFileName(const char* onnxFilename) noexcept override
     {
         mModelFilename = std::string(onnxFilename);
     }
-    virtual nvonnxparser::IOnnxConfig::Verbosity getVerbosityLevel() const noexcept
+    nvonnxparser::IOnnxConfig::Verbosity getVerbosityLevel() const noexcept override
     {
         return mVerbosity;
     }
-    virtual void addVerbosity() noexcept
+    void addVerbosity() noexcept override
     {
         ++mVerbosity;
     }
-    virtual void reduceVerbosity() noexcept
+    void reduceVerbosity() noexcept override
     {
         --mVerbosity;
     }
-    virtual void setVerbosityLevel(nvonnxparser::IOnnxConfig::Verbosity verbosity) noexcept
+    void setVerbosityLevel(nvonnxparser::IOnnxConfig::Verbosity verbosity) noexcept override
     {
         mVerbosity = verbosity;
     }
 
-    virtual const char* getTextFileName() const noexcept
+    const char* getTextFileName() const noexcept override
     {
         return mTextFilename.c_str();
     }
-    virtual void setTextFileName(const char* textFilename) noexcept
+    void setTextFileName(const char* textFilename) noexcept override
     {
         mTextFilename = std::string(textFilename);
     }
-    virtual const char* getFullTextFileName() const noexcept
+    const char* getFullTextFileName() const noexcept override
     {
         return mFullTextFilename.c_str();
     }
-    virtual void setFullTextFileName(const char* fullTextFilename) noexcept
+    void setFullTextFileName(const char* fullTextFilename) noexcept override
     {
         mFullTextFilename = std::string(fullTextFilename);
     }
-    virtual bool getPrintLayerInfo() const noexcept
+    bool getPrintLayerInfo() const noexcept override
     {
         return mPrintLayercInfo;
     }
-    virtual void setPrintLayerInfo(bool src) noexcept
+    void setPrintLayerInfo(bool src) noexcept override
     {
         mPrintLayercInfo = src;
     } //!< get the boolean variable corresponding to the Layer Info, see getPrintLayerInfo()
@@ -142,7 +142,7 @@ public:
 #endif
     }
 
-    virtual void destroy() noexcept
+    void destroy() noexcept override
     {
         delete this;
     }

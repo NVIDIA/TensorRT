@@ -108,7 +108,7 @@ class MultilevelCropAndResizePluginCreator : public nvinfer1::pluginInternal::Ba
 public:
     MultilevelCropAndResizePluginCreator() noexcept;
 
-    ~MultilevelCropAndResizePluginCreator() noexcept {};
+    ~MultilevelCropAndResizePluginCreator() noexcept override{};
 
     const char* getPluginName() const noexcept override;
 

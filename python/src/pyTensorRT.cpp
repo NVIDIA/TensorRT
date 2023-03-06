@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,13 +23,21 @@
 
 namespace tensorrt
 {
-PYBIND11_MODULE(tensorrt, m)
+PYBIND11_MODULE(TENSORRT_MODULE, m)
 {
     // Python strings can be automatically converted to FallbackStrings,
     // whose lifetime is tied to TRT objects that reference, but do not own, a string.
     // See ForwardDeclarations.h for more information about FallbackString.
     // Note that we cannot allow Python to deallocate this string, hence the py::nodelete.
-    py::class_<FallbackString, std::unique_ptr<FallbackString, py::nodelete>>(m, "FallbackString")
+    //
+    // Important: *All* Python enum and class interfaces exported by this module *must* be
+    // declared with py::module_local() scope, so that multiple TRT runtime modules
+    // (e.g. tensorrt_lean and tensorrt_dispatch) may be imported by the same Python script
+    // without conflicts.
+    //
+    // See https://pybind11.readthedocs.io/en/stable/advanced/classes.html#module-local-class-bindings
+    // for more information.
+    py::class_<FallbackString, std::unique_ptr<FallbackString, py::nodelete>>(m, "FallbackString", py::module_local())
         .def(py::init<std::string>())
         .def(py::init<py::str>());
     py::implicitly_convertible<std::string, FallbackString>();
@@ -43,13 +51,17 @@ PYBIND11_MODULE(tensorrt, m)
     // TODO: Maybe use actual forward declarations and define functions later.
     bindFoundationalTypes(m);
     bindPlugin(m);
+#if EXPORT_ALL_BINDINGS
     bindInt8(m);
     bindGraph(m);
     bindAlgorithm(m);
+#endif
     bindCore(m);
+#if EXPORT_ALL_BINDINGS
     // Parsers
     bindOnnx(m);
     bindUff(m);
     bindCaffe(m);
+#endif
 }
 } // namespace tensorrt

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,11 +29,14 @@ using ssize_t = int64_t;
 
 #include <pybind11/pybind11.h>
 
-#include "NvCaffeParser.h"
-#include "NvInfer.h"
-#include "NvInferPlugin.h"
-#include "NvUffParser.h"
-#include "onnx/NvOnnxParser.h"
+// True if we are building full TensorRT bindings (as opposed to lean/dispatch bindings).
+#if defined(tensorrt_EXPORTS)
+#define EXPORT_ALL_BINDINGS 1
+#else
+#define EXPORT_ALL_BINDINGS 0
+#endif
+
+#include "NvInferRuntimeCommon.h"
 
 // We need to avoid making copies of PluginField because it does not own any of it's members.
 // When there are multiple PluginFields pointing to the same data in Python, bad things happen.
@@ -73,14 +76,18 @@ struct FallbackString
 // Infer
 void bindFoundationalTypes(py::module& m);
 void bindPlugin(py::module& m);
+#if EXPORT_ALL_BINDINGS
 void bindInt8(py::module& m);
 void bindGraph(py::module& m);
 void bindAlgorithm(py::module& m);
+#endif
 void bindCore(py::module& m);
 // Parsers
+#if EXPORT_ALL_BINDINGS
 void bindOnnx(py::module& m);
 void bindUff(py::module& m);
 void bindCaffe(py::module& m);
+#endif
 } // namespace tensorrt
 
 #endif // TRT_PYTHON_FORWARD_DECLARATIONS_H

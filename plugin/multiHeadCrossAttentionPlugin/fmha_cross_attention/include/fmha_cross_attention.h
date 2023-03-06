@@ -373,12 +373,12 @@ public:
         return static_cast<uint64_t>(s) << 32 | (headsize << 2) | (interleaved ? 2U : 0U) | (unroll ? 1U : 0U);
     }
 
-    uint64_t hashID(Fused_multihead_attention_params_mhca const& param) const
+    uint64_t hashID(Fused_multihead_attention_params_mhca const& param) const override
     {
         return hashID(param.s, param.d_padded, param.interleaved, param.force_unroll);
     }
 
-    uint64_t hashID(KernelMeta const& kernelMeta) const
+    uint64_t hashID(KernelMeta const& kernelMeta) const override
     {
         return hashID(kernelMeta.mS, kernelMeta.mD, kernelMeta.mInterleaved, kernelMeta.mUnrollStep > 0);
     }

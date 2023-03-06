@@ -32,7 +32,8 @@ size_t dataTypeSize(nvinfer1::DataType dataType)
     case nvinfer1::DataType::kHALF: return 2U;
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
-    case nvinfer1::DataType::kINT8: return 1U;
+    case nvinfer1::DataType::kINT8:
+    case nvinfer1::DataType::kFP8: return 1U;
     }
     return 0;
 }
@@ -126,11 +127,9 @@ bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings,
             throw std::invalid_argument(
                 "The number of inputIOFormats must match network's inputs or be one for broadcasting.");
         }
-        else
-        {
-            throw std::invalid_argument(
-                "The number of outputIOFormats must match network's outputs or be one for broadcasting.");
-        }
+
+        throw std::invalid_argument(
+            "The number of outputIOFormats must match network's outputs or be one for broadcasting.");
     }
     return broadcast;
 }
@@ -368,7 +367,8 @@ void sparsify(Weights const& weights, int32_t k, int32_t trs, std::vector<int8_t
     case DataType::kINT8:
     case DataType::kINT32:
     case DataType::kUINT8:
-    case DataType::kBOOL: break;
+    case DataType::kBOOL:
+    case DataType::kFP8: break;
     }
 }
 

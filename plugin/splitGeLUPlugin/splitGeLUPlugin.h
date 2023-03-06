@@ -82,7 +82,7 @@ class SplitGeLUPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     SplitGeLUPluginCreator();
-    ~SplitGeLUPluginCreator();
+    ~SplitGeLUPluginCreator() override;
 
     SplitGeLUPluginCreator(SplitGeLUPluginCreator const& /*other*/) = delete;
     SplitGeLUPluginCreator& operator=(SplitGeLUPluginCreator const& /*other*/) = delete;

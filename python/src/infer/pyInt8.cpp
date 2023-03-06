@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -271,13 +271,13 @@ void docWriteCalibrationCache(T&, py::buffer)
 
 void bindInt8(py::module& m)
 {
-    py::enum_<CalibrationAlgoType>(m, "CalibrationAlgoType", CalibrationAlgoTypeDoc::descr)
+    py::enum_<CalibrationAlgoType>(m, "CalibrationAlgoType", CalibrationAlgoTypeDoc::descr, py::module_local())
         .value("LEGACY_CALIBRATION", CalibrationAlgoType::kLEGACY_CALIBRATION)
         .value("ENTROPY_CALIBRATION", CalibrationAlgoType::kENTROPY_CALIBRATION)
         .value("ENTROPY_CALIBRATION_2", CalibrationAlgoType::kENTROPY_CALIBRATION_2)
         .value("MINMAX_CALIBRATION", CalibrationAlgoType::kMINMAX_CALIBRATION);
 
-    py::class_<IInt8Calibrator, pyIInt8Calibrator>(m, "IInt8Calibrator", IInt8CalibratorDoc::descr)
+    py::class_<IInt8Calibrator, pyIInt8Calibrator>(m, "IInt8Calibrator", IInt8CalibratorDoc::descr, py::module_local())
         .def(py::init<>())
         .def("get_batch_size", &IInt8Calibrator::getBatchSize, IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8Calibrator::getAlgorithm, IInt8CalibratorDoc::get_algorithm)
@@ -289,7 +289,7 @@ void bindInt8(py::module& m)
             IInt8CalibratorDoc::write_calibration_cache);
 
     py::class_<IInt8LegacyCalibrator, IInt8Calibrator, pyIInt8LegacyCalibrator>(
-        m, "IInt8LegacyCalibrator", IInt8LegacyCalibratorDoc::descr)
+        m, "IInt8LegacyCalibrator", IInt8LegacyCalibratorDoc::descr, py::module_local())
         .def(py::init<>())
         .def("get_batch_size", &IInt8LegacyCalibrator::getBatchSize, IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8LegacyCalibrator::getAlgorithm, IInt8LegacyCalibratorDoc::get_algorithm)
@@ -301,7 +301,7 @@ void bindInt8(py::module& m)
             IInt8CalibratorDoc::write_calibration_cache);
 
     py::class_<IInt8EntropyCalibrator, IInt8Calibrator, pyCalibratorTrampoline<IInt8EntropyCalibrator>>(
-        m, "IInt8EntropyCalibrator", IInt8EntropyCalibratorDoc::descr)
+        m, "IInt8EntropyCalibrator", IInt8EntropyCalibratorDoc::descr, py::module_local())
         .def(py::init<>())
         .def("get_batch_size", &IInt8EntropyCalibrator::getBatchSize, IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8EntropyCalibrator::getAlgorithm, IInt8EntropyCalibratorDoc::get_algorithm)
@@ -313,7 +313,7 @@ void bindInt8(py::module& m)
             IInt8CalibratorDoc::write_calibration_cache);
 
     py::class_<IInt8EntropyCalibrator2, IInt8Calibrator, pyCalibratorTrampoline<IInt8EntropyCalibrator2>>(
-        m, "IInt8EntropyCalibrator2", IInt8EntropyCalibrator2Doc::descr)
+        m, "IInt8EntropyCalibrator2", IInt8EntropyCalibrator2Doc::descr, py::module_local())
         .def(py::init<>())
         .def("get_batch_size", &IInt8EntropyCalibrator2::getBatchSize, IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8EntropyCalibrator2::getAlgorithm, IInt8EntropyCalibrator2Doc::get_algorithm)
@@ -325,7 +325,7 @@ void bindInt8(py::module& m)
             IInt8CalibratorDoc::write_calibration_cache);
 
     py::class_<IInt8MinMaxCalibrator, IInt8Calibrator, pyCalibratorTrampoline<IInt8MinMaxCalibrator>>(
-        m, "IInt8MinMaxCalibrator", IInt8MinMaxCalibratorDoc::descr)
+        m, "IInt8MinMaxCalibrator", IInt8MinMaxCalibratorDoc::descr, py::module_local())
         .def(py::init<>())
         .def("get_batch_size", &IInt8MinMaxCalibrator::getBatchSize, IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8MinMaxCalibrator::getAlgorithm, IInt8MinMaxCalibratorDoc::get_algorithm)

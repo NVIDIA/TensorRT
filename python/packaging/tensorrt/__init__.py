@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,7 +51,7 @@ def find_lib(name):
 
 if sys.platform.startswith("win"):
     # Order matters here because of dependencies
-    LIBRARIES = [
+    LIBRARIES = {"tensorrt": [
         "nvinfer.dll",
         "cublas64_##CUDA_MAJOR##.dll",
         "cublasLt64_##CUDA_MAJOR##.dll",
@@ -59,15 +59,21 @@ if sys.platform.startswith("win"):
         "nvinfer_plugin.dll",
         "nvonnxparser.dll",
         "nvparsers.dll",
-    ]
+    ],
+    "tensorrt_dispatch": [
+        "nvinfer_dispatch.dll",
+    ],
+    "tensorrt_lean": [
+        "nvinfer_lean.dll",
+    ]}["##TENSORRT_MODULE##"]
 
     for lib in LIBRARIES:
         ctypes.CDLL(find_lib(lib))
 
 
-from .tensorrt import *
+from .##TENSORRT_MODULE## import *
 
-__version__ = "##TENSORRT_VERSION##"
+__version__ = "##TENSORRT_PYTHON_VERSION##"
 
 
 # Provides Python's `with` syntax
@@ -92,9 +98,6 @@ def common_exit(this, exc_type, exc_value, traceback):
 ILogger.__enter__ = common_enter
 ILogger.__exit__ = lambda this, exc_type, exc_value, traceback: None
 
-Builder.__enter__ = common_enter
-Builder.__exit__ = common_exit
-
 ICudaEngine.__enter__ = common_enter
 ICudaEngine.__exit__ = common_exit
 
@@ -104,26 +107,31 @@ IExecutionContext.__exit__ = common_exit
 Runtime.__enter__ = common_enter
 Runtime.__exit__ = common_exit
 
-INetworkDefinition.__enter__ = common_enter
-INetworkDefinition.__exit__ = common_exit
-
-UffParser.__enter__ = common_enter
-UffParser.__exit__ = common_exit
-
-CaffeParser.__enter__ = common_enter
-CaffeParser.__exit__ = common_exit
-
-OnnxParser.__enter__ = common_enter
-OnnxParser.__exit__ = common_exit
-
 IHostMemory.__enter__ = common_enter
 IHostMemory.__exit__ = common_exit
 
-Refitter.__enter__ = common_enter
-Refitter.__exit__ = common_exit
+if "##TENSORRT_MODULE##" == "tensorrt":
+    Builder.__enter__ = common_enter
+    Builder.__exit__ = common_exit
 
-IBuilderConfig.__enter__ = common_enter
-IBuilderConfig.__exit__ = common_exit
+    INetworkDefinition.__enter__ = common_enter
+    INetworkDefinition.__exit__ = common_exit
+
+    UffParser.__enter__ = common_enter
+    UffParser.__exit__ = common_exit
+
+    CaffeParser.__enter__ = common_enter
+    CaffeParser.__exit__ = common_exit
+
+    OnnxParser.__enter__ = common_enter
+    OnnxParser.__exit__ = common_exit
+
+
+    Refitter.__enter__ = common_enter
+    Refitter.__exit__ = common_exit
+
+    IBuilderConfig.__enter__ = common_enter
+    IBuilderConfig.__exit__ = common_exit
 
 
 # Add logger severity into the default implementation to preserve backwards compatibility.
@@ -165,6 +173,7 @@ def nptype(trt_type):
         int32: np.int32,
         bool: np.bool_,
         uint8: np.uint8,
+        # Note: fp8 has no equivalent numpy type
     }
     if trt_type in mapping:
         return mapping[trt_type]
@@ -187,6 +196,7 @@ def _itemsize(trt_type):
         int32: 4,
         bool: 1,
         uint8: 1,
+        fp8: 1,
     }
     if trt_type in mapping:
         return mapping[trt_type]

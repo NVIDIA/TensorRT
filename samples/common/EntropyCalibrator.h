@@ -29,8 +29,8 @@ template <typename TBatchStream>
 class EntropyCalibratorImpl
 {
 public:
-    EntropyCalibratorImpl(
-        TBatchStream stream, int firstBatch, std::string networkName, const char* inputBlobName, bool readCache = true)
+    EntropyCalibratorImpl(TBatchStream const& stream, int firstBatch, std::string const& networkName,
+        const char* inputBlobName, bool readCache = true)
         : mStream{stream}
         , mCalibrationTableName("CalibrationTable" + networkName)
         , mInputBlobName(inputBlobName)
@@ -103,8 +103,8 @@ template <typename TBatchStream>
 class Int8EntropyCalibrator2 : public nvinfer1::IInt8EntropyCalibrator2
 {
 public:
-    Int8EntropyCalibrator2(
-        TBatchStream stream, int firstBatch, const char* networkName, const char* inputBlobName, bool readCache = true)
+    Int8EntropyCalibrator2(TBatchStream const& stream, int32_t firstBatch, const char* networkName,
+        const char* inputBlobName, bool readCache = true)
         : mImpl(stream, firstBatch, networkName, inputBlobName, readCache)
     {
     }

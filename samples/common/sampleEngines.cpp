@@ -16,6 +16,7 @@
  */
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -40,10 +41,6 @@
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
-#if !defined(_WIN32)
-#include <dlfcn.h>
-#endif
-
 using namespace nvinfer1;
 
 namespace sample
@@ -56,7 +53,7 @@ struct CaffeBufferShutter
 {
     ~CaffeBufferShutter()
     {
-        nvcaffeparser1::shutdownProtobufLibrary();
+        shutdownCaffeParser();
     }
 };
 
@@ -64,7 +61,7 @@ struct UffBufferShutter
 {
     ~UffBufferShutter()
     {
-        nvuffparser::shutdownProtobufLibrary();
+        shutdownUffParser();
     }
 };
 
@@ -108,14 +105,43 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
         using duration = std::chrono::duration<float>;
         time_point const deserializeStartTime{std::chrono::high_resolution_clock::now()};
 
-        std::unique_ptr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-        SMP_RETVAL_IF_FALSE(runtime != nullptr, "Runtime creation failed", nullptr, sample::gLogError);
+        if (mLeanDLLPath.empty())
+        {
+            mRuntime.reset(createRuntime());
+        }
+        else
+        {
+            mParentRuntime.reset(createRuntime());
+            ASSERT(mParentRuntime.get() != nullptr);
+
+            mRuntime.reset(mParentRuntime->loadRuntime(mLeanDLLPath.c_str()));
+        }
+        ASSERT(mRuntime.get() != nullptr);
+
+        if (mVersionCompatible)
+        {
+            // Application needs to opt into allowing deserialization of engines with embedded lean runtime.
+            mRuntime->setEngineHostCodeAllowed(true);
+        }
+
+        if (!mTempdir.empty())
+        {
+            mRuntime->setTemporaryDirectory(mTempdir.c_str());
+        }
+
+        mRuntime->setTempfileControlFlags(mTempfileControls);
+
+        SMP_RETVAL_IF_FALSE(mRuntime != nullptr, "runtime creation failed", nullptr, sample::gLogError);
         if (mDLACore != -1)
         {
-            runtime->setDLACore(mDLACore);
+            mRuntime->setDLACore(mDLACore);
         }
-        runtime->setErrorRecorder(&gRecorder);
-        mEngine.reset(runtime->deserializeCudaEngine(mEngineBlob.data(), mEngineBlob.size()));
+        mRuntime->setErrorRecorder(&gRecorder);
+        for (auto const& pluginPath : mDynamicPlugins)
+        {
+            mRuntime->getPluginRegistry().loadLibrary(pluginPath.c_str());
+        }
+        mEngine.reset(mRuntime->deserializeCudaEngine(mEngineBlob.data(), mEngineBlob.size()));
         SMP_RETVAL_IF_FALSE(mEngine != nullptr, "Engine deserialization failed", nullptr, sample::gLogError);
 
         time_point const deserializeEndTime{std::chrono::high_resolution_clock::now()};
@@ -128,9 +154,7 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
 
 nvinfer1::ICudaEngine* LazilyDeserializedEngine::release()
 {
-    auto* engine = get();
-    mEngine.release();
-    return engine;
+    return mEngine.release();
 }
 
 nvinfer1::safe::ICudaEngine* LazilyDeserializedEngine::getSafe()
@@ -195,9 +219,29 @@ void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::
     }
 }
 
-Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& network, std::ostream& err)
+//!
+//! \brief Generate a network definition for a given model
+//!
+//! \param[in] model Model options for this network
+//! \param[in,out] network Network storing the parsed results
+//! \param[in,out] err Error stream
+//! \param[out] vcPluginLibrariesUsed If not nullptr, will be populated with paths to VC plugin libraries required by
+//! the parsed network.
+//!
+//! \return Parser The parser used to initialize the network and that holds the weights for the network, or an invalid
+//! parser (the returned parser converts to false if tested)
+//!
+//! Constant input dimensions in the model must not be changed in the corresponding
+//! network definition, because its correctness may rely on the constants.
+//!
+//! \see Parser::operator bool()
+//!
+Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& network, std::ostream& err,
+    std::vector<std::string>* vcPluginLibrariesUsed)
 {
-    sample::gLogInfo << "Start parsing network model" << std::endl;
+    sample::gLogInfo << "Start parsing network model." << std::endl;
+    auto const tBegin = std::chrono::high_resolution_clock::now();
+
     Parser parser;
     std::string const& modelName = model.baseModel.model;
     switch (model.baseModel.format)
@@ -205,7 +249,7 @@ Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& n
     case ModelFormat::kCAFFE:
     {
         using namespace nvcaffeparser1;
-        parser.caffeParser.reset(createCaffeParser());
+        parser.caffeParser.reset(sampleCreateCaffeParser());
         CaffeBufferShutter bufferShutter;
         auto const* const blobNameToTensor = parser.caffeParser->parse(
             model.prototxt.c_str(), modelName.empty() ? nullptr : modelName.c_str(), network, DataType::kFLOAT);
@@ -231,7 +275,7 @@ Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& n
     case ModelFormat::kUFF:
     {
         using namespace nvuffparser;
-        parser.uffParser.reset(createUffParser());
+        parser.uffParser.reset(sampleCreateUffParser());
         UffBufferShutter bufferShutter;
         for (auto const& s : model.uffInputs.inputs)
         {
@@ -265,19 +309,41 @@ Parser modelToNetwork(const ModelOptions& model, nvinfer1::INetworkDefinition& n
     case ModelFormat::kONNX:
     {
         using namespace nvonnxparser;
-        parser.onnxParser.reset(createParser(network, sample::gLogger.getTRTLogger()));
+        parser.onnxParser.reset(createONNXParser(network));
         if (!parser.onnxParser->parseFromFile(
                 model.baseModel.model.c_str(), static_cast<int>(sample::gLogger.getReportableSeverity())))
         {
             err << "Failed to parse onnx file" << std::endl;
             parser.onnxParser.reset();
         }
+        if (vcPluginLibrariesUsed && parser.onnxParser.get())
+        {
+            int64_t nbPluginLibs;
+            char const* const* pluginLibArray = parser.onnxParser->getUsedVCPluginLibraries(nbPluginLibs);
+            if (nbPluginLibs >= 0)
+            {
+                vcPluginLibrariesUsed->reserve(nbPluginLibs);
+                for (int64_t i = 0; i < nbPluginLibs; ++i)
+                {
+                    sample::gLogInfo << "Using VC plugin library " << pluginLibArray[i] << std::endl;
+                    vcPluginLibrariesUsed->emplace_back(std::string{pluginLibArray[i]});
+                }
+            }
+            else
+            {
+                sample::gLogWarning << "Failure to query VC plugin libraries required by parsed ONNX network"
+                                    << std::endl;
+            }
+        }
         break;
     }
     case ModelFormat::kANY: break;
     }
 
-    sample::gLogInfo << "Finish parsing network model" << std::endl;
+    auto const tEnd = std::chrono::high_resolution_clock::now();
+    float const parseTime = std::chrono::duration<float>(tEnd - tBegin).count();
+
+    sample::gLogInfo << "Finished parsing network model. Parse time: " << parseTime << std::endl;
     return parser;
 }
 
@@ -558,6 +624,21 @@ void setLayerOutputTypes(INetworkDefinition& network, LayerOutputTypes const& la
     }
 }
 
+void setLayerDeviceTypes(
+    INetworkDefinition const& network, IBuilderConfig& config, LayerDeviceTypes const& layerDeviceTypes)
+{
+    for (int32_t layerIdx = 0; layerIdx < network.getNbLayers(); ++layerIdx)
+    {
+        auto* layer = network.getLayer(layerIdx);
+        auto const layerName = layer->getName();
+        if (layerDeviceTypes.find(layerName) != layerDeviceTypes.end())
+        {
+            DeviceType const deviceType = layerDeviceTypes.at(layerName);
+            config.setDeviceType(layer, deviceType);
+        }
+    }
+}
+
 void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
 {
     auto const roundToBytes = [](double const sizeInMB) { return static_cast<size_t>(sizeInMB * (1 << 20)); };
@@ -590,6 +671,7 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
     };
     setFlag(PreviewFeature::kFASTER_DYNAMIC_SHAPES_0805);
     setFlag(PreviewFeature::kDISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805);
+    setFlag(PreviewFeature::kPROFILE_SHARING_0806);
 }
 
 } // namespace
@@ -661,6 +743,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
                 // User did not specify a floating-point format.  Default to kFLOAT.
                 input->setType(DataType::kFLOAT);
                 break;
+            case DataType::kFP8: ASSERT(!"FP8 is not supported"); break;
             }
             input->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
         }
@@ -803,6 +886,8 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setFlag(BuilderFlag::kENABLE_TACTIC_HEURISTIC);
     }
 
+    config.setBuilderOptimizationLevel(build.builderOptimizationLevel);
+
     if (build.timingCacheMode == TimingCacheMode::kDISABLE)
     {
         config.setFlag(BuilderFlag::kDISABLE_TIMING_CACHE);
@@ -816,6 +901,27 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     if (build.refittable)
     {
         config.setFlag(BuilderFlag::kREFIT);
+    }
+
+    if (build.versionCompatible)
+    {
+        config.setFlag(BuilderFlag::kVERSION_COMPATIBLE);
+    }
+
+    std::vector<char const*> pluginPaths;
+    for (auto const& pluginPath : sys.setPluginsToSerialize)
+    {
+        sample::gLogVerbose << "Setting plugin to serialize: " << pluginPath << std::endl;
+        pluginPaths.push_back(pluginPath.c_str());
+    }
+    if (!pluginPaths.empty())
+    {
+        config.setPluginsToSerialize(pluginPaths.data(), pluginPaths.size());
+    }
+
+    if (build.excludeLeanRuntime)
+    {
+        config.setFlag(BuilderFlag::kEXCLUDE_LEAN_RUNTIME);
     }
 
     if (build.sparsity != SparsityFlag::kDISABLE)
@@ -839,6 +945,14 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     if (build.int8)
     {
         config.setFlag(BuilderFlag::kINT8);
+    }
+
+    SMP_RETVAL_IF_FALSE(!(build.int8 && build.fp8),
+        "FP8 and INT8 precisions have been specified", false, err);
+
+    if (build.fp8)
+    {
+        config.setFlag(BuilderFlag::kFP8);
     }
 
     if (build.int8 && !build.fp16)
@@ -968,6 +1082,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         setLayerOutputTypes(network, build.layerOutputTypes);
     }
 
+    if (!build.layerDeviceTypes.empty())
+    {
+        setLayerDeviceTypes(network, config, build.layerDeviceTypes);
+    }
+
     if (build.safe)
     {
         config.setEngineCapability(sys.DLACore != -1 ? EngineCapability::kDLA_STANDALONE : EngineCapability::kSAFETY);
@@ -1013,6 +1132,13 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         tacticSources |= build.enabledTactics;
         tacticSources &= ~build.disabledTactics;
         config.setTacticSources(tacticSources);
+    }
+
+    config.setHardwareCompatibilityLevel(build.hardwareCompatibilityLevel);
+
+    if (build.maxAuxStreams != defaultMaxAuxStreams)
+    {
+        config.setMaxAuxStreams(build.maxAuxStreams);
     }
 
     return true;
@@ -1071,19 +1197,55 @@ bool networkToSerializedEngine(
 //!
 //! \brief Parse a given model, create a network and an engine.
 //!
-bool modelToBuildEnv(const ModelOptions& model, BuildOptions const& build, SystemOptions const& sys,
-    BuildEnvironment& env, std::ostream& err)
+bool modelToBuildEnv(
+    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err)
 {
-    env.builder.reset(createInferBuilder(sample::gLogger.getTRTLogger()));
+    env.builder.reset(createBuilder());
     SMP_RETVAL_IF_FALSE(env.builder != nullptr, "Builder creation failed", false, err);
     env.builder->setErrorRecorder(&gRecorder);
     auto networkFlags
         = (build.maxBatch) ? 0U : 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
 
+    for (auto const& pluginPath : sys.dynamicPlugins)
+    {
+        env.builder->getPluginRegistry().loadLibrary(pluginPath.c_str());
+    }
     env.network.reset(env.builder->createNetworkV2(networkFlags));
+
+    std::vector<std::string> vcPluginLibrariesUsed;
     SMP_RETVAL_IF_FALSE(env.network != nullptr, "Network creation failed", false, err);
-    env.parser = modelToNetwork(model, *env.network, err);
+    env.parser = modelToNetwork(model, *env.network, err, build.versionCompatible ? &vcPluginLibrariesUsed : nullptr);
     SMP_RETVAL_IF_FALSE(env.parser.operator bool(), "Parsing model failed", false, err);
+
+    if (build.versionCompatible && !sys.ignoreParsedPluginLibs && !vcPluginLibrariesUsed.empty())
+    {
+        sample::gLogInfo << "The following plugin libraries were identified by the parser as required for a "
+                            "version-compatible engine:"
+                         << std::endl;
+        for (auto const& lib : vcPluginLibrariesUsed)
+        {
+            sample::gLogInfo << "    " << lib << std::endl;
+        }
+        if (!build.excludeLeanRuntime)
+        {
+            sample::gLogInfo << "These libraries will be added to --setPluginsToSerialize since --excludeLeanRuntime "
+                                "was not specified."
+                             << std::endl;
+            std::copy(vcPluginLibrariesUsed.begin(), vcPluginLibrariesUsed.end(),
+                std::back_inserter(sys.setPluginsToSerialize));
+        }
+        sample::gLogInfo << "These libraries will be added to --dynamicPlugins for use at inference time." << std::endl;
+        std::copy(vcPluginLibrariesUsed.begin(), vcPluginLibrariesUsed.end(), std::back_inserter(sys.dynamicPlugins));
+
+        // Implicitly-added plugins from ONNX parser should be loaded into plugin registry as well.
+        for (auto const& pluginPath : vcPluginLibrariesUsed)
+        {
+            env.builder->getPluginRegistry().loadLibrary(pluginPath.c_str());
+        }
+
+        sample::gLogInfo << "Use --ignoreParsedPluginLibs to disable this behavior." << std::endl;
+    }
+
     SMP_RETVAL_IF_FALSE(
         networkToSerializedEngine(build, sys, *env.builder, env, err), "Building engine failed", false, err);
     return true;
@@ -1154,7 +1316,7 @@ bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, Bui
 
 void dumpRefittable(nvinfer1::ICudaEngine& engine)
 {
-    std::unique_ptr<IRefitter> refitter{createInferRefitter(engine, sample::gLogger.getTRTLogger())};
+    std::unique_ptr<IRefitter> refitter{createRefitter(engine)};
     if (refitter == nullptr)
     {
         sample::gLogError << "Failed to create a refitter." << std::endl;
@@ -1173,7 +1335,7 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine)
 
 ICudaEngine* loadEngine(std::string const& engine, int32_t DLACore, std::ostream& err)
 {
-    BuildEnvironment env(false, DLACore);
+    BuildEnvironment env(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
     return loadEngineToBuildEnv(engine, false, env, err) ? env.engine.release() : nullptr;
 }
 
@@ -1197,10 +1359,10 @@ bool saveEngine(const ICudaEngine& engine, std::string const& fileName, std::ost
     return !engineFile.fail();
 }
 
-bool getEngineBuildEnv(const ModelOptions& model, BuildOptions const& build, SystemOptions const& sys,
-    BuildEnvironment& env, std::ostream& err)
+bool getEngineBuildEnv(
+    const ModelOptions& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err)
 {
-    bool createEngineSuccess {false};
+    bool createEngineSuccess{false};
 
     if (build.load)
     {
@@ -1240,6 +1402,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
         case DataType::kINT32: return {std::make_pair(WeightsRole::kCONSTANT, weights)};
         case DataType::kBOOL:
         case DataType::kUINT8:
+        case DataType::kFP8:
             // Refit not supported for these types.
             break;
         }
@@ -1271,6 +1434,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
     }
     case LayerType::kACTIVATION:
     case LayerType::kASSERTION:
+    case LayerType::kCAST:
     case LayerType::kCONCATENATION:
     case LayerType::kCONDITION:
     case LayerType::kCONDITIONAL_INPUT:
@@ -1288,6 +1452,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
     case LayerType::kMATRIX_MULTIPLY:
     case LayerType::kNMS:
     case LayerType::kNON_ZERO:
+    case LayerType::kNORMALIZATION:
     case LayerType::kONE_HOT:
     case LayerType::kPADDING:
     case LayerType::kPARAMETRIC_RELU:
@@ -1299,6 +1464,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
     case LayerType::kRECURRENCE:
     case LayerType::kREDUCE:
     case LayerType::kRESIZE:
+    case LayerType::kREVERSE_SEQUENCE:
     case LayerType::kRNN_V2:
     case LayerType::kSCATTER:
     case LayerType::kSELECT:
@@ -1319,7 +1485,7 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
     using durationMs = std::chrono::duration<float, std::milli>;
 
     auto const nbLayers = network.getNbLayers();
-    std::unique_ptr<IRefitter> refitter{createInferRefitter(engine, sample::gLogger.getTRTLogger())};
+    std::unique_ptr<IRefitter> refitter{createRefitter(engine)};
     // Set max threads that can be used by refitter.
     if (multiThreading && !refitter->setMaxThreads(10))
     {

@@ -22,16 +22,10 @@ import argparse
 
 import numpy as np
 import tensorrt as trt
-import pycuda.driver as cuda
+from cuda import cudart
 
-# Use autoprimaryctx if available (pycuda >= 2021.1) to
-# prevent issues with other modules that rely on the primary
-# device context.
-try:
-    import pycuda.autoprimaryctx
-except ModuleNotFoundError:
-    import pycuda.autoinit
-
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+import common
 
 from image_batcher import ImageBatcher
 
@@ -63,7 +57,7 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
         """
         self.image_batcher = image_batcher
         size = int(np.dtype(self.image_batcher.dtype).itemsize * np.prod(self.image_batcher.shape))
-        self.batch_allocation = cuda.mem_alloc(size)
+        self.batch_allocation = common.cuda_call(cudart.cudaMalloc(size))
         self.batch_generator = self.image_batcher.get_batch()
 
     def get_batch_size(self):
@@ -88,7 +82,7 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
         try:
             batch, _, _ = next(self.batch_generator)
             log.info("Calibrating image {} / {}".format(self.image_batcher.image_index, self.image_batcher.num_images))
-            cuda.memcpy_htod(self.batch_allocation, np.ascontiguousarray(batch))
+            common.memcpy_host_to_device(self.batch_allocation, np.ascontiguousarray(batch))
             return [int(self.batch_allocation)]
         except StopIteration:
             log.info("Finished calibration batches")

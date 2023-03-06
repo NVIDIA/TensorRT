@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,7 @@
 
 // Implementation of PyBind11 Binding Code for UffParser
 #include "ForwardDeclarations.h"
+#include "NvUffParser.h"
 #include "parsers/pyUffDoc.h"
 #include "utils.h"
 
@@ -35,12 +36,12 @@ static const auto uff_parse_buffer = [](IUffParser& self, py::buffer& buffer, nv
 
 void bindUff(py::module& m)
 {
-    py::enum_<UffInputOrder>(m, "UffInputOrder", UffInputOrderDoc::descr)
+    py::enum_<UffInputOrder>(m, "UffInputOrder", UffInputOrderDoc::descr, py::module_local())
         .value("NCHW", UffInputOrder::kNCHW)
         .value("NHWC", UffInputOrder::kNHWC)
         .value("NC", UffInputOrder::kNC);
 
-    py::enum_<FieldType>(m, "FieldType", FieldTypeDoc::descr)
+    py::enum_<FieldType>(m, "FieldType", FieldTypeDoc::descr, py::module_local())
         .value("FLOAT", FieldType::kFLOAT)
         .value("INT32", FieldType::kINT32)
         .value("CHAR", FieldType::kCHAR)
@@ -48,18 +49,19 @@ void bindUff(py::module& m)
         .value("DATATYPE", FieldType::kDATATYPE)
         .value("UNKNOWN", FieldType::kUNKNOWN);
 
-    py::class_<FieldMap>(m, "FieldMap", FieldMapDoc::descr)
+    py::class_<FieldMap>(m, "FieldMap", FieldMapDoc::descr, py::module_local())
         .def(py::init<const char*, const void*, const FieldType, int>(), "name"_a, "data"_a, "type"_a, "length"_a = 1)
         .def_readwrite("name", &FieldMap::name)
         .def_readwrite("data", &FieldMap::data)
         .def_readwrite("type", &FieldMap::type)
         .def_readwrite("length", &FieldMap::length);
 
-    py::class_<FieldCollection>(m, "FieldCollection", FieldCollectionDoc::descr)
+    py::class_<FieldCollection>(m, "FieldCollection", FieldCollectionDoc::descr, py::module_local())
         .def_readwrite("num_fields", &FieldCollection::nbFields)
         .def_readwrite("fields", &FieldCollection::fields);
 
-    py::class_<IUffParser, std::unique_ptr<IUffParser, py::nodelete>>(m, "UffParser", UffParserDoc::descr)
+    py::class_<IUffParser, std::unique_ptr<IUffParser, py::nodelete>>(
+        m, "UffParser", UffParserDoc::descr, py::module_local())
         .def(py::init(&createUffParser))
         .def_property_readonly("uff_required_version_major", &IUffParser::getUffRequiredVersionMajor)
         .def_property_readonly("uff_required_version_minor", &IUffParser::getUffRequiredVersionMinor)

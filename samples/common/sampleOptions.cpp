@@ -82,7 +82,7 @@ template <>
 nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
 {
     const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
-        {"fp16", nvinfer1::DataType::kHALF}, {"int8", nvinfer1::DataType::kINT8},
+        {"fp16", nvinfer1::DataType::kHALF}, {"int8", nvinfer1::DataType::kINT8}, {"fp8", nvinfer1::DataType::kFP8},
         {"int32", nvinfer1::DataType::kINT32}};
     const auto& dt = strToDT.find(option);
     if (dt == strToDT.end())
@@ -90,6 +90,21 @@ nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
         throw std::invalid_argument("Invalid DataType " + option);
     }
     return dt->second;
+}
+
+template <>
+nvinfer1::DeviceType stringToValue<nvinfer1::DeviceType>(std::string const& option)
+{
+    std::unordered_map<std::string, nvinfer1::DeviceType> const strToDevice = {
+        {"GPU", nvinfer1::DeviceType::kGPU},
+        {"DLA", nvinfer1::DeviceType::kDLA},
+    };
+    auto const& device = strToDevice.find(option);
+    if (device == strToDevice.end())
+    {
+        throw std::invalid_argument("Invalid Device Type " + option);
+    }
+    return device->second;
 }
 
 template <>
@@ -101,7 +116,8 @@ nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(const std::string
         {"hwc8", nvinfer1::TensorFormat::kHWC8}, {"chw16", nvinfer1::TensorFormat::kCHW16},
         {"chw32", nvinfer1::TensorFormat::kCHW32}, {"dhwc8", nvinfer1::TensorFormat::kDHWC8},
         {"cdhw32", nvinfer1::TensorFormat::kCDHW32}, {"hwc", nvinfer1::TensorFormat::kHWC},
-        {"dla_linear", nvinfer1::TensorFormat::kDLA_LINEAR}, {"dla_hwc4", nvinfer1::TensorFormat::kDLA_HWC4}};
+        {"dhwc", nvinfer1::TensorFormat::kDHWC}, {"dla_linear", nvinfer1::TensorFormat::kDLA_LINEAR},
+        {"dla_hwc4", nvinfer1::TensorFormat::kDLA_HWC4}};
     nvinfer1::TensorFormats formats{};
     for (auto f : optionStrings)
     {
@@ -169,20 +185,18 @@ std::pair<std::string, T> splitNameAndValue(const std::string& s)
         valueString = quoteNameRange[2].substr(1);
         return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
     }
-    else
+
+    // Split on the last :
+    std::vector<std::string> nameRange{splitToStringVec(s, ':')};
+    // Everything before the last : is the name
+    tensorName = nameRange[0];
+    for (size_t i = 1; i < nameRange.size() - 1; i++)
     {
-        // Split on the last :
-        std::vector<std::string> nameRange{ splitToStringVec(s, ':') };
-        // Everything before the last : is the name
-        tensorName = nameRange[0];
-        for (size_t i = 1; i < nameRange.size() - 1; i++)
-        {
-            tensorName += ":" + nameRange[i];
-        }
-        // Value is the string element after the last :
-        valueString = nameRange[nameRange.size() - 1];
-        return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
+        tensorName += ":" + nameRange[i];
     }
+    // Value is the string element after the last :
+    valueString = nameRange[nameRange.size() - 1];
+    return std::pair<std::string, T>(tensorName, stringToValue<T>(valueString));
 }
 
 template <typename T>
@@ -272,14 +286,14 @@ bool getAndDelRepeatedOption(Arguments& arguments, const std::string& option, st
     return true;
 }
 
-void insertShapesBuild(std::unordered_map<std::string, ShapeRange>& shapes, nvinfer1::OptProfileSelector selector,
+void insertShapesBuild(BuildOptions::ShapeProfile& shapes, nvinfer1::OptProfileSelector selector,
     const std::string& name, const std::vector<int32_t>& dims)
 {
     shapes[name][static_cast<size_t>(selector)] = dims;
 }
 
-void insertShapesInference(std::unordered_map<std::string, std::vector<int32_t>>& shapes, const std::string& name,
-    const std::vector<int32_t>& dims)
+void insertShapesInference(
+    InferenceOptions::ShapeProfile& shapes, std::string const& name, std::vector<int32_t> const& dims)
 {
     shapes[name] = dims;
 }
@@ -288,7 +302,7 @@ std::string removeSingleQuotationMarks(std::string& str)
 {
     std::vector<std::string> strList{splitToStringVec(str, '\'')};
     // Remove all the escaped single quotation marks
-    std::string retVal = "";
+    std::string retVal;
     // Do not really care about unterminated sequences
     for (size_t i = 0; i < strList.size(); i++)
     {
@@ -336,7 +350,25 @@ void getLayerOutputTypes(Arguments& arguments, char const* argument, LayerOutput
     }
 }
 
-bool getShapesBuild(Arguments& arguments, std::unordered_map<std::string, ShapeRange>& shapes, char const* argument,
+void getLayerDeviceTypes(Arguments& arguments, char const* argument, LayerDeviceTypes& layerDeviceTypes)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    // The layerDeviceTypes flag contains comma-separated layerName:deviceType pairs.
+    std::vector<std::string> deviceList{splitToStringVec(list, ',')};
+    for (auto const& s : deviceList)
+    {
+        auto nameDevicePair = splitNameAndValue<std::string>(s);
+        auto const layerName = removeSingleQuotationMarks(nameDevicePair.first);
+        layerDeviceTypes[layerName] = stringToValue<nvinfer1::DeviceType>(nameDevicePair.second);
+    }
+}
+
+bool getShapesBuild(Arguments& arguments, BuildOptions::ShapeProfile& shapes, char const* argument,
     nvinfer1::OptProfileSelector selector)
 {
     std::string list;
@@ -352,8 +384,7 @@ bool getShapesBuild(Arguments& arguments, std::unordered_map<std::string, ShapeR
     return retVal;
 }
 
-bool getShapesInference(
-    Arguments& arguments, std::unordered_map<std::string, std::vector<int32_t>>& shapes, const char* argument)
+bool getShapesInference(Arguments& arguments, InferenceOptions::ShapeProfile& shapes, const char* argument)
 {
     std::string list;
     bool retVal = getAndDelOption(arguments, argument, list);
@@ -368,9 +399,9 @@ bool getShapesInference(
     return retVal;
 }
 
-void fillShapes(std::unordered_map<std::string, ShapeRange>& shapes, std::string const& name,
-    ShapeRange const& sourceShapeRange, nvinfer1::OptProfileSelector minDimsSource,
-    nvinfer1::OptProfileSelector optDimsSource, nvinfer1::OptProfileSelector maxDimsSource)
+void fillShapes(BuildOptions::ShapeProfile& shapes, std::string const& name, ShapeRange const& sourceShapeRange,
+    nvinfer1::OptProfileSelector minDimsSource, nvinfer1::OptProfileSelector optDimsSource,
+    nvinfer1::OptProfileSelector maxDimsSource)
 {
     insertShapesBuild(
         shapes, nvinfer1::OptProfileSelector::kMIN, name, sourceShapeRange[static_cast<size_t>(minDimsSource)]);
@@ -380,8 +411,7 @@ void fillShapes(std::unordered_map<std::string, ShapeRange>& shapes, std::string
         shapes, nvinfer1::OptProfileSelector::kMAX, name, sourceShapeRange[static_cast<size_t>(maxDimsSource)]);
 }
 
-void processShapes(
-    std::unordered_map<std::string, ShapeRange>& shapes, bool minShapes, bool optShapes, bool maxShapes, bool calib)
+void processShapes(BuildOptions::ShapeProfile& shapes, bool minShapes, bool optShapes, bool maxShapes, bool calib)
 {
     // Only accept optShapes only or all three of minShapes, optShapes, maxShapes when calib is set
     if (((minShapes || maxShapes) && !optShapes)   // minShapes only, maxShapes only, both minShapes and maxShapes
@@ -400,7 +430,7 @@ void processShapes(
         return;
     }
 
-    std::unordered_map<std::string, ShapeRange> newShapes;
+    BuildOptions::ShapeProfile newShapes;
     for (auto& s : shapes)
     {
         nvinfer1::OptProfileSelector minDimsSource, optDimsSource, maxDimsSource;
@@ -533,6 +563,10 @@ std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
     {
         os << "+INT8";
     }
+    if (options.fp8)
+    {
+        os << "+FP8";
+    }
     if (options.precisionConstraints == PrecisionConstraints::kOBEY)
     {
         os << " (obey precision constraints)";
@@ -541,6 +575,20 @@ std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
     {
         os << " (prefer precision constraints)";
     }
+    return os;
+}
+
+std::ostream& printTempfileControls(std::ostream& os, TempfileControlFlags const tempfileControls)
+{
+    auto getFlag = [&](TempfileControlFlag f) -> char const* {
+        bool allowed = !!(tempfileControls & (1U << static_cast<int64_t>(f)));
+        return allowed ? "allow" : "deny";
+    };
+    auto const inMemory = getFlag(TempfileControlFlag::kALLOW_IN_MEMORY_FILES);
+    auto const temporary = getFlag(TempfileControlFlag::kALLOW_TEMPORARY_FILES);
+
+    os << "{ in_memory: " << inMemory << ", temporary: " << temporary << " }";
+
     return os;
 }
 
@@ -600,6 +648,7 @@ std::string previewFeatureToString(PreviewFeature feature)
     {
     case PreviewFeature::kFASTER_DYNAMIC_SHAPES_0805: return "kFASTER_DYNAMIC_SHAPES_0805";
     case PreviewFeature::kDISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805: return "kDISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805";
+    case PreviewFeature::kPROFILE_SHARING_0806: return "kPROFILE_SHARING_0806";
     }
     return "Invalid Preview Feature";
     // clang-format on
@@ -623,6 +672,7 @@ std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
 
     addFlag(PreviewFeature::kFASTER_DYNAMIC_SHAPES_0805);
     addFlag(PreviewFeature::kDISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805);
+    addFlag(PreviewFeature::kPROFILE_SHARING_0806);
 
     return os;
 }
@@ -745,6 +795,54 @@ void ModelOptions::parse(Arguments& arguments)
     }
 }
 
+void getTempfileControls(Arguments& arguments, char const* argument, TempfileControlFlags& tempfileControls)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    std::vector<std::string> controlList{splitToStringVec(list, ',')};
+    for (auto const& s : controlList)
+    {
+        auto controlAllowPair = splitNameAndValue<std::string>(s);
+        bool allowed{false};
+        int32_t offset{-1};
+
+        if (controlAllowPair.second.compare("allow") == 0)
+        {
+            allowed = true;
+        }
+        else if (controlAllowPair.second.compare("deny") != 0)
+        {
+            throw std::invalid_argument("--tempfileControls value should be `deny` or `allow`");
+        }
+
+        if (controlAllowPair.first.compare("in_memory") == 0)
+        {
+            offset = static_cast<int32_t>(TempfileControlFlag::kALLOW_IN_MEMORY_FILES);
+        }
+        else if (controlAllowPair.first.compare("temporary") == 0)
+        {
+            offset = static_cast<int32_t>(TempfileControlFlag::kALLOW_TEMPORARY_FILES);
+        }
+        else
+        {
+            throw std::invalid_argument(std::string{"Unknown --tempfileControls key "} + controlAllowPair.first);
+        }
+
+        if (allowed)
+        {
+            tempfileControls |= (1U << offset);
+        }
+        else
+        {
+            tempfileControls &= ~(1U << offset);
+        }
+    }
+}
+
 void BuildOptions::parse(Arguments& arguments)
 {
     auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
@@ -840,14 +938,32 @@ void BuildOptions::parse(Arguments& arguments)
     }
 
     getAndDelOption(arguments, "--refit", refittable);
+
+    // --vc and --versionCompatible are synonyms
+    getAndDelOption(arguments, "--vc", versionCompatible);
+    if (!versionCompatible)
+    {
+        getAndDelOption(arguments, "--versionCompatible", versionCompatible);
+    }
+
+    getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
+
     getAndDelNegOption(arguments, "--noTF32", tf32);
     getAndDelOption(arguments, "--fp16", fp16);
     getAndDelOption(arguments, "--int8", int8);
+    getAndDelOption(arguments, "--fp8", fp8);
+    if (fp8 && int8)
+    {
+        throw std::invalid_argument("Invalid usage, fp8 and int8 aren't allowed to be enabled together.");
+    }
     getAndDelOption(arguments, "--safe", safe);
     getAndDelOption(arguments, "--consistency", consistency);
     getAndDelOption(arguments, "--restricted", restricted);
-    getAndDelOption(arguments, "--buildOnly", buildOnly);
-
+    if (getAndDelOption(arguments, "--buildOnly", skipInference))
+    {
+        sample::gLogWarning << "--buildOnly flag has been deprecated by --skipInference flag." << std::endl;
+    }
+    getAndDelOption(arguments, "--skipInference", skipInference);
     getAndDelOption(arguments, "--directIO", directIO);
 
     std::string precisionConstraintsString;
@@ -871,10 +987,11 @@ void BuildOptions::parse(Arguments& arguments)
 
     getLayerPrecisions(arguments, "--layerPrecisions", layerPrecisions);
     getLayerOutputTypes(arguments, "--layerOutputTypes", layerOutputTypes);
+    getLayerDeviceTypes(arguments, "--layerDeviceTypes", layerDeviceTypes);
 
     if (layerPrecisions.empty() && layerOutputTypes.empty() && precisionConstraints != PrecisionConstraints::kNONE)
     {
-        sample::gLogWarning << "When --precisionConstraints flag is set to \"obey\" or \"prefer\", please add "
+        sample::gLogWarning << R"(When --precisionConstraints flag is set to "obey" or "prefer", please add )"
                             << "--layerPrecision/--layerOutputTypes flags to set layer-wise precisions and output "
                             << "types." << std::endl;
     }
@@ -882,7 +999,7 @@ void BuildOptions::parse(Arguments& arguments)
         && precisionConstraints == PrecisionConstraints::kNONE)
     {
         sample::gLogWarning << "--layerPrecision/--layerOutputTypes flags have no effect when --precisionConstraints "
-                            << "flag is set to \"none\"." << std::endl;
+                            << R"(flag is set to "none".)" << std::endl;
     }
 
     getAndDelOption(arguments, "--sparsity", sparsity);
@@ -1029,6 +1146,25 @@ void BuildOptions::parse(Arguments& arguments)
         timingCacheMode = TimingCacheMode::kLOCAL;
     }
     getAndDelOption(arguments, "--heuristic", heuristic);
+    getAndDelOption(arguments, "--builderOptimizationLevel", builderOptimizationLevel);
+
+    std::string hardwareCompatibleArgs;
+    getAndDelOption(arguments, "--hardwareCompatibilityLevel", hardwareCompatibleArgs);
+    if (hardwareCompatibleArgs == "none" || hardwareCompatibleArgs.empty())
+    {
+        hardwareCompatibilityLevel = HardwareCompatibilityLevel::kNONE;
+    }
+    else if (samplesCommon::toLower(hardwareCompatibleArgs) == "ampere+")
+    {
+        hardwareCompatibilityLevel = HardwareCompatibilityLevel::kAMPERE_PLUS;
+    }
+    else
+    {
+        throw std::invalid_argument(std::string("Unknown hardwareCompatibilityLevel: ") + hardwareCompatibleArgs
+            + ". Valid options: none, ampere+.");
+    }
+
+    getAndDelOption(arguments, "--maxAuxStreams", maxAuxStreams);
 
     std::string previewFeaturesBuf;
     getAndDelOption(arguments, "--preview", previewFeaturesBuf);
@@ -1043,13 +1179,17 @@ void BuildOptions::parse(Arguments& arguments)
         else if (featureName.front() != '-')
         {
             throw std::invalid_argument(
-                "Tactic source must be prefixed with + or -, indicating whether it should be enabled or disabled "
+                "Preview features must be prefixed with + or -, indicating whether it should be enabled or disabled "
                 "respectively.");
         }
         featureName.erase(0, 1);
 
         PreviewFeature feat{};
-        if (featureName == "fasterDynamicShapes0805")
+        if (featureName == "profileSharing0806")
+        {
+            feat = PreviewFeature::kPROFILE_SHARING_0806;
+        }
+        else if (featureName == "fasterDynamicShapes0805")
         {
             feat = PreviewFeature::kFASTER_DYNAMIC_SHAPES_0805;
         }
@@ -1063,6 +1203,42 @@ void BuildOptions::parse(Arguments& arguments)
         }
         previewFeatures[static_cast<int32_t>(feat)] = enable;
     }
+
+    getAndDelOption(arguments, "--tempdir", tempdir);
+    getTempfileControls(arguments, "--tempfileControls", tempfileControls);
+
+    std::string runtimeMode;
+    getAndDelOption(arguments, "--useRuntime", runtimeMode);
+    if (runtimeMode == "full")
+    {
+        useRuntime = RuntimeMode::kFULL;
+    }
+    else if (runtimeMode == "dispatch")
+    {
+        useRuntime = RuntimeMode::kDISPATCH;
+    }
+    else if (runtimeMode == "lean")
+    {
+        useRuntime = RuntimeMode::kLEAN;
+    }
+    else if (!runtimeMode.empty())
+    {
+        throw std::invalid_argument(std::string("Unknown useRuntime: ") + runtimeMode);
+    }
+
+    if ((useRuntime == RuntimeMode::kDISPATCH || useRuntime == RuntimeMode::kLEAN) && !versionCompatible)
+    {
+        versionCompatible = true;
+        sample::gLogWarning << "Implicitly enabling --versionCompatible since --useRuntime=" << runtimeMode
+                            << " is set." << std::endl;
+    }
+
+    if (useRuntime != RuntimeMode::kFULL && !load)
+    {
+        throw std::invalid_argument(std::string("Building a TensorRT engine requires --useRuntime=full."));
+    }
+
+    getAndDelOption(arguments, "--leanDLLPath", leanDLLPath);
 }
 
 void SystemOptions::parse(Arguments& arguments)
@@ -1073,13 +1249,33 @@ void SystemOptions::parse(Arguments& arguments)
     std::string pluginName;
     while (getAndDelOption(arguments, "--plugins", pluginName))
     {
+        sample::gLogWarning << "--plugins flag has been deprecated, use --staticPlugins flag instead." << std::endl;
         plugins.emplace_back(pluginName);
     }
+    while (getAndDelOption(arguments, "--staticPlugins", pluginName))
+    {
+        plugins.emplace_back(pluginName);
+    }
+    while (getAndDelOption(arguments, "--setPluginsToSerialize", pluginName))
+    {
+        setPluginsToSerialize.emplace_back(pluginName);
+    }
+    while (getAndDelOption(arguments, "--dynamicPlugins", pluginName))
+    {
+        dynamicPlugins.emplace_back(pluginName);
+    }
+    getAndDelOption(arguments, "--ignoreParsedPluginLibs", ignoreParsedPluginLibs);
 }
 
 void InferenceOptions::parse(Arguments& arguments)
 {
-    getAndDelOption(arguments, "--streams", streams);
+
+    if (getAndDelOption(arguments, "--streams", infStreams))
+    {
+        sample::gLogWarning << "--streams flag has been deprecated, use --infStreams flag instead." << std::endl;
+    }
+    getAndDelOption(arguments, "--infStreams", infStreams);
+
     getAndDelOption(arguments, "--iterations", iterations);
     getAndDelOption(arguments, "--duration", duration);
     getAndDelOption(arguments, "--warmUp", warmup);
@@ -1115,6 +1311,7 @@ void ReportingOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--verbose", verbose);
     getAndDelOption(arguments, "--dumpRefit", refit);
     getAndDelOption(arguments, "--dumpOutput", output);
+    getAndDelOption(arguments, "--dumpRawBindingsToFile", dumpRawBindings);
     getAndDelOption(arguments, "--dumpProfile", profile);
     getAndDelOption(arguments, "--dumpLayerInfo", layerInfo);
     getAndDelOption(arguments, "--exportTimes", exportTimes);
@@ -1174,6 +1371,11 @@ void AllOptions::parse(Arguments& arguments)
             "are provided. Please use --optShapes and --shapes to set input shapes instead.");
     }
 
+    if (build.useRuntime != RuntimeMode::kFULL && inference.timeRefit)
+    {
+        throw std::invalid_argument("--timeRefit requires --useRuntime=full.");
+    }
+
     // If batch and/or maxBatch is not set and the engine has implicit batch dim, set them to default values.
     if (!detectedExplicitBatch)
     {
@@ -1195,23 +1397,23 @@ void AllOptions::parse(Arguments& arguments)
         }
     }
 
-    if (build.shapes.empty() && !inference.shapes.empty())
+    // Propagate shape profile between builder and inference
+    for (auto const& s : build.shapes)
     {
-        // If --shapes are provided but --optShapes are not, assume that optShapes is the same as shapes.
-        for (auto& s : inference.shapes)
-        {
-            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kMIN, s.first, s.second);
-            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kOPT, s.first, s.second);
-            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kMAX, s.first, s.second);
-        }
-    }
-    else if (!build.shapes.empty() && inference.shapes.empty())
-    {
-        // If --optShapes are provided but --shapes are not, assume that shapes is the same as optShapes.
-        for (auto& s : build.shapes)
+        if (inference.shapes.find(s.first) == inference.shapes.end())
         {
             insertShapesInference(
                 inference.shapes, s.first, s.second[static_cast<size_t>(nvinfer1::OptProfileSelector::kOPT)]);
+        }
+    }
+    for (auto const& s : inference.shapes)
+    {
+        if (build.shapes.find(s.first) == build.shapes.end())
+        {
+            // assume min/opt/max all the same
+            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kMIN, s.first, s.second);
+            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kOPT, s.first, s.second);
+            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kMAX, s.first, s.second);
         }
     }
 
@@ -1292,6 +1494,11 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--std", standard);
     std::string pluginName;
     while (getAndDelOption(arguments, "--plugins", pluginName))
+    {
+        sample::gLogWarning << "--plugins flag has been deprecated, use --staticPlugins flag instead." << std::endl;
+        plugins.emplace_back(pluginName);
+    }
+    while (getAndDelOption(arguments, "--staticPlugins", pluginName))
     {
         plugins.emplace_back(pluginName);
     }
@@ -1415,7 +1622,12 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype)
     }
     case nvinfer1::DataType::kUINT8:
     {
-        os << "UInt8";
+        os << "uint8";
+        break;
+    }
+    case nvinfer1::DataType::kFP8:
+    {
+        os << "fp8";
         break;
     }
     }
@@ -1486,6 +1698,11 @@ std::ostream& operator<<(std::ostream& os, IOFormat const& format)
                 os << "hwc";
                 break;
             }
+            case nvinfer1::TensorFormat::kDHWC:
+            {
+                os << "dhwc";
+                break;
+            }
             case nvinfer1::TensorFormat::kDLA_LINEAR:
             {
                 os << "dla_linear";
@@ -1498,6 +1715,24 @@ std::ostream& operator<<(std::ostream& os, IOFormat const& format)
             }
             }
         }
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType)
+{
+    switch (devType)
+    {
+    case nvinfer1::DeviceType::kGPU:
+    {
+        os << "GPU";
+        break;
+    }
+    case nvinfer1::DeviceType::kDLA:
+    {
+        os << "DLA";
+        break;
+    }
     }
     return os;
 }
@@ -1528,6 +1763,16 @@ std::ostream& operator<<(std::ostream& os, LayerPrecisions const& layerPrecision
     return os;
 }
 
+std::ostream& operator<<(std::ostream& os, LayerDeviceTypes const& layerDeviceTypes)
+{
+    int32_t i = 0;
+    for (auto const& layerDevicePair : layerDeviceTypes)
+    {
+        os << (i++ ? ", " : "") << layerDevicePair.first << ":" << layerDevicePair.second;
+    }
+    return os;
+}
+
 std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
 {
     // clang-format off
@@ -1539,13 +1784,19 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "avgTiming: "      << options.avgTiming                                                                       << std::endl <<
           "Precision: ";        printPrecision(os, options)                                                             << std::endl <<
           "LayerPrecisions: " << options.layerPrecisions                                                                << std::endl <<
+          "Layer Device Types: " << options.layerDeviceTypes                                                            << std::endl <<
           "Calibration: "    << (options.int8 && options.calibration.empty() ? "Dynamic" : options.calibration.c_str()) << std::endl <<
           "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
+          "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
+          "TensorRT runtime: " << options.useRuntime << std::endl <<
+          "Lean DLL Path: " << options.leanDLLPath << std::endl <<
+          "Tempfile Controls: "; printTempfileControls(os, options.tempfileControls)                                    << std::endl <<
+          "Exclude Lean Runtime: " << boolToEnabled(options.excludeLeanRuntime)                                         << std::endl <<
           "Sparsity: ";         printSparsity(os, options)                                                              << std::endl <<
           "Safe mode: "      << boolToEnabled(options.safe)                                                             << std::endl <<
           "DirectIO mode: "  << boolToEnabled(options.directIO)                                                         << std::endl <<
           "Restricted mode: " << boolToEnabled(options.restricted)                                                      << std::endl <<
-          "Build only: "     << boolToEnabled(options.buildOnly)                                                        << std::endl <<
+          "Skip inference: "     << boolToEnabled(options.skipInference)                                                << std::endl <<
           "Save engine: "    << (options.save ? options.engine : "")                                                    << std::endl <<
           "Load engine: "    << (options.load ? options.engine : "")                                                    << std::endl <<
           "Profiling verbosity: " << static_cast<int32_t>(options.profilingVerbosity)                                   << std::endl <<
@@ -1553,7 +1804,9 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "timingCacheMode: ";  printTimingCache(os, options.timingCacheMode)                                           << std::endl <<
           "timingCacheFile: " << options.timingCacheFile                                                                << std::endl <<
           "Heuristic: "       << boolToEnabled(options.heuristic)                                                       << std::endl <<
-          "Preview Features: "; printPreviewFlags(os, options)                                                          << std::endl;
+          "Preview Features: "; printPreviewFlags(os, options)                                                          << std::endl <<
+          "MaxAuxStreams: "   << options.maxAuxStreams                                                                  << std::endl <<
+          "BuilderOptimizationLevel: " << options.builderOptimizationLevel                                              << std::endl;
     // clang-format on
 
     auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats) {
@@ -1594,6 +1847,25 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
     }
     os << std::endl;
 
+    os << "setPluginsToSerialize:";
+
+    for (const auto& p : options.setPluginsToSerialize)
+    {
+        os << " " << p;
+    }
+    os << std::endl;
+
+    os << "dynamicPlugins:";
+
+    for (const auto& p : options.dynamicPlugins)
+    {
+        os << " " << p;
+    }
+    os << std::endl;
+
+    os << "ignoreParsedPluginLibs: " << options.ignoreParsedPluginLibs << std::endl;
+    os << std::endl;
+
     return os;
     // clang-format on
 }
@@ -1618,7 +1890,7 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
                                         << options.warmup     << "ms warm up)"                  << std::endl <<
           "Sleep time: "                << options.sleep      << "ms"                           << std::endl <<
           "Idle time: "                 << options.idle       << "ms"                           << std::endl <<
-          "Streams: "                   << options.streams                                      << std::endl <<
+          "Inference Streams: "         << options.infStreams                                   << std::endl <<
           "ExposeDMA: "                 << boolToEnabled(!options.overlap)                      << std::endl <<
           "Data transfers: "            << boolToEnabled(!options.skipTransfers)                << std::endl <<
           "Spin-wait: "                 << boolToEnabled(options.spin)                          << std::endl <<
@@ -1688,6 +1960,10 @@ std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options)
     {
         os << " + INT8";
     }
+    if (options.fp8)
+    {
+        os << " + FP8";
+    }
     os << std::endl;
     os << "Calibration file: " << options.calibFile << std::endl;
     os << "Serialized Network: " << options.serialized << std::endl;
@@ -1742,108 +2018,148 @@ void ModelOptions::help(std::ostream& os)
 void BuildOptions::help(std::ostream& os)
 {
     // clang-format off
-    os << "=== Build Options ==="                                                                                                            "\n"
-          "  --maxBatch                  Set max batch size and build an implicit batch engine (default = same size as --batch)"             "\n"
-          "                              This option should not be used when the input model is ONNX or when dynamic shapes are provided."   "\n"
-          "  --minShapes=spec            Build with dynamic shapes using a profile with the min shapes provided"                             "\n"
-          "  --optShapes=spec            Build with dynamic shapes using a profile with the opt shapes provided"                             "\n"
-          "  --maxShapes=spec            Build with dynamic shapes using a profile with the max shapes provided"                             "\n"
-          "  --minShapesCalib=spec       Calibrate with dynamic shapes using a profile with the min shapes provided"                         "\n"
-          "  --optShapesCalib=spec       Calibrate with dynamic shapes using a profile with the opt shapes provided"                         "\n"
-          "  --maxShapesCalib=spec       Calibrate with dynamic shapes using a profile with the max shapes provided"                         "\n"
-          "                              Note: All three of min, opt and max shapes must be supplied."                                       "\n"
-          "                                    However, if only opt shapes is supplied then it will be expanded so"                          "\n"
-          "                                    that min shapes and max shapes are set to the same values as opt shapes."                     "\n"
-          "                                    Input names can be wrapped with escaped single quotes (ex: \\\'Input:0\\\')."                 "\n"
-          "                              Example input shapes spec: input0:1x3x256x256,input1:1x3x128x128"                                   "\n"
-          "                              Each input shape is supplied as a key-value pair where key is the input name and"                   "\n"
-          "                              value is the dimensions (including the batch dimension) to be used for that input."                 "\n"
-          "                              Each key-value pair has the key and value separated using a colon (:)."                             "\n"
-          "                              Multiple input shapes can be provided via comma-separated key-value pairs."                         "\n"
-          "  --inputIOFormats=spec       Type and format of each of the input tensors (default = all inputs in fp32:chw)"                    "\n"
-          "                              See --outputIOFormats help for the grammar of type and format list."                                "\n"
-          "                              Note: If this option is specified, please set comma-separated types and formats for all"            "\n"
-          "                                    inputs following the same order as network inputs ID (even if only one input"                 "\n"
-          "                                    needs specifying IO format) or set the type and format once for broadcasting."                "\n"
-          "  --outputIOFormats=spec      Type and format of each of the output tensors (default = all outputs in fp32:chw)"                  "\n"
-          "                              Note: If this option is specified, please set comma-separated types and formats for all"            "\n"
-          "                                    outputs following the same order as network outputs ID (even if only one output"              "\n"
-          "                                    needs specifying IO format) or set the type and format once for broadcasting."                "\n"
-          "                              IO Formats: spec  ::= IOfmt[\",\"spec]"                                                             "\n"
-          "                                          IOfmt ::= type:fmt"                                                                     "\n"
-          "                                          type  ::= \"fp32\"|\"fp16\"|\"int32\"|\"int8\""                                         "\n"
-          "                                          fmt   ::= (\"chw\"|\"chw2\"|\"chw4\"|\"hwc8\"|\"chw16\"|\"chw32\"|\"dhwc8\"|"           "\n"
-          "                                                     \"cdhw32\"|\"hwc\"|\"dla_linear\"|\"dla_hwc4\")[\"+\"fmt]"                   "\n"
-          "  --workspace=N               Set workspace size in MiB."                                                                         "\n"
-          "  --memPoolSize=poolspec      Specify the size constraints of the designated memory pool(s) in MiB."                              "\n"
-          "                              Note: Also accepts decimal sizes, e.g. 0.25MiB. Will be rounded down to the nearest integer bytes." "\n"
-          "                              Pool constraint: poolspec ::= poolfmt[\",\"poolspec]"                                               "\n"
-          "                                               poolfmt ::= pool:sizeInMiB"                                                        "\n"
-          "                                               pool ::= \"workspace\"|\"dlaSRAM\"|\"dlaLocalDRAM\"|\"dlaGlobalDRAM\""             "\n"
-          "  --profilingVerbosity=mode   Specify profiling verbosity. mode ::= layer_names_only|detailed|none (default = layer_names_only)"  "\n"
-          "  --minTiming=M               Set the minimum number of iterations used in kernel selection (default = "
-                                                                                                           << defaultMinTiming << ")"        "\n"
-          "  --avgTiming=M               Set the number of times averaged in each iteration for kernel selection (default = "
-                                                                                                           << defaultAvgTiming << ")"        "\n"
-          "  --refit                     Mark the engine as refittable. This will allow the inspection of refittable layers "                "\n"
-          "                              and weights within the engine."                                                                     "\n"
-          "  --sparsity=spec             Control sparsity (default = disabled). "                                                            "\n"
-          "                              Sparsity: spec ::= \"disable\", \"enable\", \"force\""                                              "\n"
-          "                              Note: Description about each of these options is as below"                                          "\n"
-          "                                    disable = do not enable sparse tactics in the builder (this is the default)"                  "\n"
-          "                                    enable  = enable sparse tactics in the builder (but these tactics will only be"               "\n"
-          "                                              considered if the weights have the right sparsity pattern)"                         "\n"
-          "                                    force   = enable sparse tactics in the builder and force-overwrite the weights to have"       "\n"
-          "                                              a sparsity pattern (even if you loaded a model yourself)"                           "\n"
-          "  --noTF32                    Disable tf32 precision (default is to enable tf32, in addition to fp32)"                            "\n"
-          "  --fp16                      Enable fp16 precision, in addition to fp32 (default = disabled)"                                    "\n"
-          "  --int8                      Enable int8 precision, in addition to fp32 (default = disabled)"                                    "\n"
-          "  --best                      Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
-          "  --directIO                  Avoid reformatting at network boundaries. (default = disabled)"                                     "\n"
-          "  --precisionConstraints=spec Control precision constraint setting. (default = none)"                                             "\n"
-          "                                  Precision Constaints: spec ::= \"none\" | \"obey\" | \"prefer\""                                "\n"
-          "                                  none = no constraints"                                                                          "\n"
-          "                                  prefer = meet precision constraints set by --layerPrecisions/--layerOutputTypes if possible"    "\n"
-          "                                  obey = meet precision constraints set by --layerPrecisions/--layerOutputTypes or fail"          "\n"
-          "                                         otherwise"                                                                               "\n"
-          "  --layerPrecisions=spec      Control per-layer precision constraints. Effective only when precisionConstraints is set to"        "\n"
-          "                              \"obey\" or \"prefer\". (default = none)"                                                           "\n"
-          "                              The specs are read left-to-right, and later ones override earlier ones. \"*\" can be used as a"     "\n"
-          "                              layerName to specify the default precision for all the unspecified layers."                         "\n"
-          "                              Per-layer precision spec ::= layerPrecision[\",\"spec]"                                             "\n"
-          "                                                  layerPrecision ::= layerName\":\"precision"                                     "\n"
-          "                                                  precision ::= \"fp32\"|\"fp16\"|\"int32\"|\"int8\""                             "\n"
-          "  --layerOutputTypes=spec     Control per-layer output type constraints. Effective only when precisionConstraints is set to"      "\n"
-          "                              \"obey\" or \"prefer\". (default = none)"                                                           "\n"
-          "                              The specs are read left-to-right, and later ones override earlier ones. \"*\" can be used as a"     "\n"
-          "                              layerName to specify the default precision for all the unspecified layers. If a layer has more than""\n"
-          "                              one output, then multiple types separated by \"+\" can be provided for this layer."                 "\n"
-          "                              Per-layer output type spec ::= layerOutputTypes[\",\"spec]"                                         "\n"
-          "                                                    layerOutputTypes ::= layerName\":\"type"                                      "\n"
-          "                                                    type ::= \"fp32\"|\"fp16\"|\"int32\"|\"int8\"[\"+\"type]"                     "\n"
-          "  --calib=<file>              Read INT8 calibration cache file"                                                                   "\n"
-          "  --safe                      Enable build safety certified engine"                                                               "\n"
-          "  --consistency               Perform consistency checking on safety certified engine"                                            "\n"
-          "  --restricted                Enable safety scope checking with kSAFETY_SCOPE build flag"                                         "\n"
-          "  --saveEngine=<file>         Save the serialized engine"                                                                         "\n"
-          "  --loadEngine=<file>         Load a serialized engine"                                                                           "\n"
-          "  --tacticSources=tactics     Specify the tactics to be used by adding (+) or removing (-) tactics from the default "             "\n"
-          "                              tactic sources (default = all available tactics)."                                                  "\n"
-          "                              Note: Currently only cuDNN, cuBLAS, cuBLAS-LT, and edge mask convolutions are listed as optional"   "\n"
-          "                                    tactics."                                                                                     "\n"
-          "                              Tactic Sources: tactics ::= [\",\"tactic]"                                                          "\n"
-          "                                              tactic  ::= (+|-)lib"                                                               "\n"
-          "                                              lib     ::= \"CUBLAS\"|\"CUBLAS_LT\"|\"CUDNN\"|\"EDGE_MASK_CONVOLUTIONS\""          "\n"
-          "                                                          |\"JIT_CONVOLUTIONS\""                                                  "\n"
-          "                              For example, to disable cudnn and enable cublas: --tacticSources=-CUDNN,+CUBLAS"                    "\n"
-          "  --noBuilderCache            Disable timing cache in builder (default is to enable timing cache)"                                "\n"
-          "  --heuristic                 Enable tactic selection heuristic in builder (default is to disable the heuristic)"                 "\n"
-          "  --timingCacheFile=<file>    Save/load the serialized global timing cache"                                                       "\n"
-          "  --preview=features          Specify preview feature to be used by adding (+) or removing (-) preview features from the default" "\n"
-          "                              Preview Features: features ::= [\",\"feature]"                                                      "\n"
-          "                                                feature  ::= (+|-)flag"                                                           "\n"
-          "                                                flag     ::= \"fasterDynamicShapes0805\""                                         "\n"
-          "                                                             |\"disableExternalTacticSourcesForCore0805\""                        "\n"
+    os << "=== Build Options ==="                                                                                                                   "\n"
+          "  --maxBatch                         Set max batch size and build an implicit batch engine (default = same size as --batch)"             "\n"
+          "                                     This option should not be used when the input model is ONNX or when dynamic shapes are provided."   "\n"
+          "  --minShapes=spec                   Build with dynamic shapes using a profile with the min shapes provided"                             "\n"
+          "  --optShapes=spec                   Build with dynamic shapes using a profile with the opt shapes provided"                             "\n"
+          "  --maxShapes=spec                   Build with dynamic shapes using a profile with the max shapes provided"                             "\n"
+          "  --minShapesCalib=spec              Calibrate with dynamic shapes using a profile with the min shapes provided"                         "\n"
+          "  --optShapesCalib=spec              Calibrate with dynamic shapes using a profile with the opt shapes provided"                         "\n"
+          "  --maxShapesCalib=spec              Calibrate with dynamic shapes using a profile with the max shapes provided"                         "\n"
+          "                                     Note: All three of min, opt and max shapes must be supplied."                                       "\n"
+          "                                           However, if only opt shapes is supplied then it will be expanded so"                          "\n"
+          "                                           that min shapes and max shapes are set to the same values as opt shapes."                     "\n"
+          "                                           Input names can be wrapped with escaped single quotes (ex: 'Input:0')."                       "\n"
+          "                                     Example input shapes spec: input0:1x3x256x256,input1:1x3x128x128"                                   "\n"
+          "                                     Each input shape is supplied as a key-value pair where key is the input name and"                   "\n"
+          "                                     value is the dimensions (including the batch dimension) to be used for that input."                 "\n"
+          "                                     Each key-value pair has the key and value separated using a colon (:)."                             "\n"
+          "                                     Multiple input shapes can be provided via comma-separated key-value pairs."                         "\n"
+          "  --inputIOFormats=spec              Type and format of each of the input tensors (default = all inputs in fp32:chw)"                    "\n"
+          "                                     See --outputIOFormats help for the grammar of type and format list."                                "\n"
+          "                                     Note: If this option is specified, please set comma-separated types and formats for all"            "\n"
+          "                                           inputs following the same order as network inputs ID (even if only one input"                 "\n"
+          "                                           needs specifying IO format) or set the type and format once for broadcasting."                "\n"
+          "  --outputIOFormats=spec             Type and format of each of the output tensors (default = all outputs in fp32:chw)"                  "\n"
+          "                                     Note: If this option is specified, please set comma-separated types and formats for all"            "\n"
+          "                                           outputs following the same order as network outputs ID (even if only one output"              "\n"
+          "                                           needs specifying IO format) or set the type and format once for broadcasting."                "\n"
+          R"(                                     IO Formats: spec  ::= IOfmt[","spec])"                                                            "\n"
+          "                                                 IOfmt ::= type:fmt"                                                                     "\n"
+          R"(                                               type  ::= "fp32"|"fp16"|"int32"|"int8")"                                                "\n"
+          R"(                                               fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
+          R"(                                                          "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                            "\n"
+          "  --workspace=N                      Set workspace size in MiB."                                                                         "\n"
+          "  --memPoolSize=poolspec             Specify the size constraints of the designated memory pool(s) in MiB."                              "\n"
+          "                                     Note: Also accepts decimal sizes, e.g. 0.25MiB. Will be rounded down to the nearest integer bytes." "\n"
+          R"(                                   Pool constraint: poolspec ::= poolfmt[","poolspec])"                                                "\n"
+          "                                                      poolfmt ::= pool:sizeInMiB"                                                        "\n"
+          R"(                                                    pool ::= "workspace"|"dlaSRAM"|"dlaLocalDRAM"|"dlaGlobalDRAM")"                    "\n"
+          "  --profilingVerbosity=mode          Specify profiling verbosity. mode ::= layer_names_only|detailed|none (default = layer_names_only)"  "\n"
+          "  --minTiming=M                      Set the minimum number of iterations used in kernel selection (default = "
+                                                                                                                  << defaultMinTiming << ")"        "\n"
+          "  --avgTiming=M                      Set the number of times averaged in each iteration for kernel selection (default = "
+                                                                                                                  << defaultAvgTiming << ")"        "\n"
+          "  --refit                            Mark the engine as refittable. This will allow the inspection of refittable layers "                "\n"
+          "                                     and weights within the engine."                                                                     "\n"
+          "  --versionCompatible, --vc          Mark the engine as version compatible. This allows the engine to be used with newer versions"       "\n"
+          "                                     of TensorRT on the same host OS, as well as TensorRT's dispatch and lean runtimes."                 "\n"
+          "                                     Only supported with explicit batch."                                                                "\n"
+          R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"      "\n"
+          "                                     not support building an engine."                                                                    "\n"
+          R"(                                           runtime::= "full"|"lean"|"dispatch")"                                                       "\n"
+          "  --leanDLLPath=<file>               External lean runtime DLL to use in version compatiable mode."                                      "\n"
+          "  --excludeLeanRuntime               When --versionCompatible is enabled, this flag indicates that the generated engine should"          "\n"
+          "                                     not include an embedded lean runtime. If this is set, the user must explicitly specify a"           "\n"
+          "                                     valid lean runtime to use when loading the engine.  Only supported with explicit batch"             "\n"
+          "                                     and weights within the engine."                                                                     "\n"
+          "  --sparsity=spec                    Control sparsity (default = disabled). "                                                            "\n"
+          R"(                                   Sparsity: spec ::= "disable", "enable", "force")"                                                   "\n"
+          "                                     Note: Description about each of these options is as below"                                          "\n"
+          "                                           disable = do not enable sparse tactics in the builder (this is the default)"                  "\n"
+          "                                           enable  = enable sparse tactics in the builder (but these tactics will only be"               "\n"
+          "                                                     considered if the weights have the right sparsity pattern)"                         "\n"
+          "                                           force   = enable sparse tactics in the builder and force-overwrite the weights to have"       "\n"
+          "                                                     a sparsity pattern (even if you loaded a model yourself)"                           "\n"
+          "  --noTF32                           Disable tf32 precision (default is to enable tf32, in addition to fp32)"                            "\n"
+          "  --fp16                             Enable fp16 precision, in addition to fp32 (default = disabled)"                                    "\n"
+          "  --int8                             Enable int8 precision, in addition to fp32 (default = disabled)"                                    "\n"
+          "  --fp8                              Enable fp8 precision, in addition to fp32 (default = disabled)"                                     "\n"
+          "  --best                             Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
+          "  --directIO                         Avoid reformatting at network boundaries. (default = disabled)"                                     "\n"
+          "  --precisionConstraints=spec        Control precision constraint setting. (default = none)"                                             "\n"
+          R"(                                       Precision Constraints: spec ::= "none" | "obey" | "prefer")"                                    "\n"
+          "                                         none = no constraints"                                                                          "\n"
+          "                                         prefer = meet precision constraints set by --layerPrecisions/--layerOutputTypes if possible"    "\n"
+          "                                         obey = meet precision constraints set by --layerPrecisions/--layerOutputTypes or fail"          "\n"
+          "                                                otherwise"                                                                               "\n"
+          "  --layerPrecisions=spec             Control per-layer precision constraints. Effective only when precisionConstraints is set to"        "\n"
+          R"(                                   "obey" or "prefer". (default = none))"                                                              "\n"
+          R"(                                   The specs are read left-to-right, and later ones override earlier ones. "*" can be used as a)"      "\n"
+          "                                     layerName to specify the default precision for all the unspecified layers."                         "\n"
+          R"(                                   Per-layer precision spec ::= layerPrecision[","spec])"                                              "\n"
+          R"(                                                       layerPrecision ::= layerName":"precision)"                                      "\n"
+          R"(                                                       precision ::= "fp32"|"fp16"|"int32"|"int8")"                                    "\n"
+          "  --layerOutputTypes=spec            Control per-layer output type constraints. Effective only when precisionConstraints is set to"      "\n"
+          R"(                                   "obey" or "prefer". (default = none)"                                                               "\n"
+          R"(                                   The specs are read left-to-right, and later ones override earlier ones. "*" can be used as a)"      "\n"
+          "                                     layerName to specify the default precision for all the unspecified layers. If a layer has more than""\n"
+          R"(                                   one output, then multiple types separated by "+" can be provided for this layer.)"                  "\n"
+          R"(                                   Per-layer output type spec ::= layerOutputTypes[","spec])"                                          "\n"
+          R"(                                                         layerOutputTypes ::= layerName":"type)"                                       "\n"
+          R"(                                                         type ::= "fp32"|"fp16"|"int32"|"int8"["+"type])"                              "\n"
+          "  --layerDeviceTypes=spec            Specify layer-specific device type."                                                                "\n"
+          "                                     The specs are read left-to-right, and later ones override earlier ones. If a layer does not have"   "\n"
+          "                                     a device type specified, the layer will opt for the default device type."                           "\n"
+          R"(                                   Per-layer device type spec ::= layerDeviceTypePair[","spec])"                                       "\n"
+          R"(                                                         layerDeviceTypePair ::= layerName":"deviceType)"                              "\n"
+          R"(                                                           deviceType ::= "GPU"|"DLA")"                                                "\n"
+          "  --calib=<file>                     Read INT8 calibration cache file"                                                                   "\n"
+          "  --safe                             Enable build safety certified engine"                                                               "\n"
+          "  --consistency                      Perform consistency checking on safety certified engine"                                            "\n"
+          "  --restricted                       Enable safety scope checking with kSAFETY_SCOPE build flag"                                         "\n"
+          "  --saveEngine=<file>                Save the serialized engine"                                                                         "\n"
+          "  --loadEngine=<file>                Load a serialized engine"                                                                           "\n"
+          "  --tacticSources=tactics            Specify the tactics to be used by adding (+) or removing (-) tactics from the default "             "\n"
+          "                                     tactic sources (default = all available tactics)."                                                  "\n"
+          "                                     Note: Currently only cuDNN, cuBLAS, cuBLAS-LT, and edge mask convolutions are listed as optional"   "\n"
+          "                                           tactics."                                                                                     "\n"
+          R"(                                   Tactic Sources: tactics ::= [","tactic])"                                                           "\n"
+          "                                                     tactic  ::= (+|-)lib"                                                               "\n"
+          R"(                                                   lib     ::= "CUBLAS"|"CUBLAS_LT"|"CUDNN"|"EDGE_MASK_CONVOLUTIONS")"                 "\n"
+          R"(                                                               |"JIT_CONVOLUTIONS")"                                                   "\n"
+          "                                     For example, to disable cudnn and enable cublas: --tacticSources=-CUDNN,+CUBLAS"                    "\n"
+          "  --noBuilderCache                   Disable timing cache in builder (default is to enable timing cache)"                                "\n"
+          "  --heuristic                        Enable tactic selection heuristic in builder (default is to disable the heuristic)"                 "\n"
+          "  --timingCacheFile=<file>           Save/load the serialized global timing cache"                                                       "\n"
+          "  --preview=features                 Specify preview feature to be used by adding (+) or removing (-) preview features from the default" "\n"
+          R"(                                   Preview Features: features ::= [","feature])"                                                       "\n"
+          "                                                       feature  ::= (+|-)flag"                                                           "\n"
+          R"(                                                     flag     ::= "fasterDynamicShapes0805")"                                          "\n"
+          R"(                                                                  |"disableExternalTacticSourcesForCore0805")"                         "\n"
+          R"(                                                                  |"profileSharing0806")"                                              "\n"
+          "  --builderOptimizationLevel         Set the builder optimization level. (default is 3"                                                 "\n"
+          "                                     Higher level allows TensorRT to spend more building time for more optimization options."            "\n"
+          "                                     The default level is 3. Valid values include integers from 0 to the maximum optimization level,"    "\n"
+          "                                     which is currently 5."                                                                              "\n"
+          "  --hardwareCompatibilityLevel=mode  Make the engine file compatible with other GPU architectures. (default = none)"                     "\n"
+          R"(                                   Hardware Compatibility Level: mode ::= "none" | "ampere+")"                                         "\n"
+          "                                         none = no compatibility"                                                                        "\n"
+          "                                         ampere+ = compatible with Ampere and newer GPUs"                                                "\n"
+          "  --tempdir=<dir>                    Overrides the default temporary directory TensorRT will use when creating temporary files."         "\n"
+          "                                     See IRuntime::setTemporaryDirectory API documentation for more information."                        "\n"
+          "  --tempfileControls=controls        Controls what TensorRT is allowed to use when creating temporary executable files."                 "\n"
+          "                                     Should be a comma-separated list with entries in the format (in_memory|temporary):(allow|deny)."    "\n"
+          "                                     in_memory: Controls whether TensorRT is allowed to create temporary in-memory executable files."    "\n"
+          "                                     temporary: Controls whether TensorRT is allowed to create temporary executable files in the"        "\n"
+          "                                                filesystem (in the directory given by --tempdir)."                                       "\n"
+          "                                     For example, to allow in-memory files and disallow temporary files:"                                "\n"
+          "                                         --tempfileControls=in_memory:allow,temporary:deny"                                              "\n"
+          R"(                                   If a flag is unspecified, the default behavior is "allow".)"                                        "\n"
+          "  --maxAuxStreams=N                  Set maximum number of auxiliary streams per inference stream that TRT is allowed to use to run "    "\n"
+          "                                     kernels in parallel if the network contains ops that can run in parallel, with the cost of more "   "\n"
+          "                                     memory usage. Set this to 0 for optimal memory usage. (default = using heuristics)"                 "\n"
           ;
     // clang-format on
     os << std::flush;
@@ -1856,8 +2172,13 @@ void SystemOptions::help(std::ostream& os)
           "  --device=N                  Select cuda device N (default = "         << defaultDevice << ")" << std::endl <<
           "  --useDLACore=N              Select DLA core N for layers that support DLA (default = none)"   << std::endl <<
           "  --allowGPUFallback          When DLA is enabled, allow GPU fallback for unsupported layers "
-                                                                                    "(default = disabled)" << std::endl;
-    os << "  --plugins                   Plugin library (.so) to load (can be specified multiple times)"   << std::endl;
+                                                                                    "(default = disabled)" << std::endl <<
+          "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl <<
+          "  --dynamicPlugins            Plugin library (.so) to load dynamically and may be serialized with the engine if they are included in --setPluginsToSerialize (can be specified multiple times)" << std::endl <<
+          "  --setPluginsToSerialize     Plugin library (.so) to be serialized with the engine (can be specified multiple times)" << std::endl <<
+          "  --ignoreParsedPluginLibs    By default, when building a version-compatible engine, plugin libraries specified by the ONNX parser " << std::endl <<
+          "                              are implicitly serialized with the engine (unless --excludeLeanRuntime is specified) and loaded dynamically. " << std::endl <<
+          "                              Enable this flag to ignore these plugin libraries instead." << std::endl;
     // clang-format on
 }
 
@@ -1869,7 +2190,7 @@ void InferenceOptions::help(std::ostream& os)
           "                              This option should not be used when the engine is built from an ONNX model or when dynamic" << std::endl <<
           "                              shapes are provided when the engine is built."                                              << std::endl <<
           "  --shapes=spec               Set input shapes for dynamic shapes inference inputs."                                      << std::endl <<
-          "                              Note: Input names can be wrapped with escaped single quotes (ex: \\\'Input:0\\\')."         << std::endl <<
+          R"(                              Note: Input names can be wrapped with escaped single quotes (ex: 'Input:0').)"            << std::endl <<
           "                              Example input shapes spec: input0:1x3x256x256, input1:1x3x128x128"                          << std::endl <<
           "                              Each input shape is supplied as a key-value pair where key is the input name and"           << std::endl <<
           "                              value is the dimensions (including the batch dimension) to be used for that input."         << std::endl <<
@@ -1877,8 +2198,8 @@ void InferenceOptions::help(std::ostream& os)
           "                              Multiple input shapes can be provided via comma-separated key-value pairs."                 << std::endl <<
           "  --loadInputs=spec           Load input values from files (default = generate random inputs). Input names can be "
                                                                                        "wrapped with single quotes (ex: 'Input:0')"  << std::endl <<
-          "                              Input values spec ::= Ival[\",\"spec]"                                                      << std::endl <<
-          "                                           Ival ::= name\":\"file"                                                        << std::endl <<
+          R"(                            Input values spec ::= Ival[","spec])"                                                       << std::endl <<
+          R"(                                         Ival ::= name":"file)"                                                         << std::endl <<
           "  --iterations=N              Run at least N inference iterations (default = "               << defaultIterations << ")"  << std::endl <<
           "  --warmUp=N                  Run for N milliseconds to warmup before measuring performance (default = "
                                                                                                             << defaultWarmUp << ")"  << std::endl <<
@@ -1888,7 +2209,7 @@ void InferenceOptions::help(std::ostream& os)
                                                                                                "(default = " << defaultSleep << ")"  << std::endl <<
           "  --idleTime=N                Sleep N milliseconds between two continuous iterations"
                                                                                                "(default = " << defaultIdle << ")"   << std::endl <<
-          "  --streams=N                 Instantiate N engines to use concurrently (default = "            << defaultStreams << ")"  << std::endl <<
+          "  --infStreams=N              Instantiate N engines to run inference concurrently (default = "  << defaultStreams << ")"  << std::endl <<
           "  --exposeDMA                 Serialize DMA transfers to and from device (default = disabled)."                           << std::endl <<
           "  --noDataTransfers           Disable DMA transfers to and from device (default = enabled)."                              << std::endl <<
           "  --useManagedMemory          Use managed memory instead of separate host and device allocations (default = disabled)."   << std::endl <<
@@ -1902,7 +2223,7 @@ void InferenceOptions::help(std::ostream& os)
           "  --timeRefit                 Time the amount of time it takes to refit the engine before inference."                     << std::endl <<
           "  --separateProfileRun        Do not attach the profiler in the benchmark run; if profiling is enabled, a second "
                                                                                 "profile run will be executed (default = disabled)"  << std::endl <<
-          "  --buildOnly                 Exit after the engine has been built and skip inference perf measurement "
+          "  --skipInference             Exit after the engine has been built and skip inference perf measurement "
                                                                                                              "(default = disabled)"  << std::endl <<
           "  --persistentCacheRatio      Set the persistentCacheLimit in ratio, 0.5 represent half of max persistent L2 size "
                                                                                                                     "(default = 0)"  << std::endl;
@@ -1922,6 +2243,8 @@ void ReportingOptions::help(std::ostream& os)
           "  --dumpRefit                 Print the refittable layers and weights from a refittable "
                                         "engine"                                                         << std::endl <<
           "  --dumpOutput                Print the output tensor(s) of the last inference iteration "
+                                                                                  "(default = disabled)" << std::endl <<
+          "  --dumpRawBindingsToFile     Print the input/output tensor(s) of the last inference iteration to file"
                                                                                   "(default = disabled)" << std::endl <<
           "  --dumpProfile               Print profile information per layer (default = disabled)"       << std::endl <<
           "  --dumpLayerInfo             Print layer information of the engine to console "
@@ -2001,23 +2324,23 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
           "                              Note: If this option is specified, please set comma-separated types and formats for all"            << std::endl <<
           "                                    outputs following the same order as network outputs ID (even if only one output"              << std::endl <<
           "                                    needs specifying IO format) or set the type and format once for broadcasting."                << std::endl <<
-          "                              IO Formats: spec  ::= IOfmt[\",\"spec]"                                                             << std::endl <<
+          R"(                            IO Formats: spec  ::= IOfmt[","spec])"                                                              << std::endl <<
           "                                          IOfmt ::= type:fmt"                                                                     << std::endl <<
-          "                                          type  ::= \"fp32\"|\"fp16\"|\"int32\"|\"int8\""                                         << std::endl <<
-          "                                          fmt   ::= (\"chw\"|\"chw2\"|\"chw4\"|\"hwc8\"|\"chw16\"|\"chw32\"|\"dhwc8\"|"           << std::endl <<
-          "                                                     \"cdhw32\"|\"hwc\"|\"dla_linear\"|\"dla_hwc4\")[\"+\"fmt]"                   << std::endl <<
+          R"(                                          type  ::= "fp32"|"fp16"|"int32"|"int8")"                                              << std::endl <<
+          R"(                                          fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                      << std::endl <<
+          R"(                                                     "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                          << std::endl <<
           "  --int8                      Enable int8 precision, in addition to fp16 (default = disabled)"                                    << std::endl <<
           "  --consistency               Enable consistency check for serialized engine, (default = disabled)"                               << std::endl <<
           "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<
           "  --serialized=<file>         Save the serialized network"                                                                        << std::endl <<
-          "  --plugins                   Plugin library (.so) to load (can be specified multiple times)"                                     << std::endl <<
+          "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)"                          << std::endl <<
           "  --verbose or -v             Use verbose logging (default = false)"                                                              << std::endl <<
           "  --help or -h                Print this message"                                                                                 << std::endl <<
           "  --noBuilderCache            Disable timing cache in builder (default is to enable timing cache)"                                << std::endl <<
           "  --timingCacheFile=<file>    Save/load the serialized global timing cache"                                                       << std::endl <<
           "  --sparsity=spec             Control sparsity (default = disabled). "                                                            << std::endl <<
-          "                              Sparsity: spec ::= \"disable\", \"enable\", \"force\""                                              << std::endl <<
+          R"(                              Sparsity: spec ::= "disable", "enable", "force")"                                                 << std::endl <<
           "                              Note: Description about each of these options is as below"                                          << std::endl <<
           "                                    disable = do not enable sparse tactics in the builder (this is the default)"                  << std::endl <<
           "                                    enable  = enable sparse tactics in the builder (but these tactics will only be"               << std::endl <<

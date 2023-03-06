@@ -38,11 +38,6 @@ This sample converts the Pytorch graph into ONNX and uses ONNX-parser included i
 
 On PowerPC systems, you will need to manually install PyTorch using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
 
-On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
-```bash
-export PATH=${PATH}:/usr/local/cuda/bin/
-```
-
 
 ## Running the sample
 

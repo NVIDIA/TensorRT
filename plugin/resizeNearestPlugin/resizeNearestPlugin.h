@@ -97,7 +97,7 @@ class ResizeNearestPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 public:
     ResizeNearestPluginCreator();
 
-    ~ResizeNearestPluginCreator(){};
+    ~ResizeNearestPluginCreator() override{};
 
     const char* getPluginName() const noexcept override;
 

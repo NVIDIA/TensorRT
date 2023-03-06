@@ -22,7 +22,7 @@ import argparse
 
 import numpy as np
 import tensorrt as trt
-from cuda import cuda
+from cuda import cudart
 
 from image_batcher import ImageBatcher
 
@@ -30,18 +30,8 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("EngineBuilder").setLevel(logging.INFO)
 log = logging.getLogger("EngineBuilder")
 
-def _cuda_error_check(args):
-    """CUDA error checking."""
-    err, ret = args[0], args[1:]
-    if isinstance(err, cuda.CUresult):
-      if err != cuda.CUresult.CUDA_SUCCESS:
-        raise RuntimeError("Cuda Error: {}".format(err))
-    else:
-      raise RuntimeError("Unknown error type: {}".format(err))
-    # Special case so that no unpacking is needed at call-site.
-    if len(ret) == 1:
-      return ret[0]
-    return ret
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+import common
 
 class EngineCalibrator(trt.IInt8MinMaxCalibrator):
     """
@@ -66,7 +56,7 @@ class EngineCalibrator(trt.IInt8MinMaxCalibrator):
         """
         self.image_batcher = image_batcher
         self.size = int(np.dtype(self.image_batcher.dtype).itemsize * np.prod(self.image_batcher.shape))
-        self.batch_allocation = _cuda_error_check(cuda.cuMemAlloc(self.size))
+        self.batch_allocation = common.cuda_call(cudart.cudaMalloc(self.size))
         self.batch_generator = self.image_batcher.get_batch()
 
     def get_batch_size(self):
@@ -91,11 +81,7 @@ class EngineCalibrator(trt.IInt8MinMaxCalibrator):
         try:
             batch, _, _ = next(self.batch_generator)
             log.info("Calibrating image {} / {}".format(self.image_batcher.image_index, self.image_batcher.num_images))
-            _cuda_error_check(
-                cuda.cuMemcpyHtoD(
-                    self.batch_allocation, 
-                    np.ascontiguousarray(batch), 
-                    self.size))
+            common.memcpy_host_to_device(self.batch_allocation, np.ascontiguousarray(batch))
 
             return [int(self.batch_allocation)]
         except StopIteration:

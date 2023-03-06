@@ -43,10 +43,10 @@ public:
     bool supportsFormatCombination(
         int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
 
-    void configurePlugin(const DynamicPluginTensorDesc* in, int32_t nbInputs,
-        const DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept override;
+    void configurePlugin(const DynamicPluginTensorDesc* in, int32_t nbInputs, const DynamicPluginTensorDesc* out,
+        int32_t nbOutputs) noexcept override;
 
-    virtual size_t getWorkspaceSize(const PluginTensorDesc* inputs, int32_t nbInputs, const PluginTensorDesc* outputs,
+    size_t getWorkspaceSize(const PluginTensorDesc* inputs, int32_t nbInputs, const PluginTensorDesc* outputs,
         int32_t nbOutputs) const noexcept override;
 
     int initialize() noexcept override;

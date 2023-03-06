@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,6 +49,7 @@ constexpr const char* RAGGED_SOFTMAX = R"trtdoc(Ragged softmax layer)trtdoc";
 constexpr const char* CONSTANT = R"trtdoc(Constant layer)trtdoc";
 constexpr const char* RNN_V2 = R"trtdoc(RNNv2 layer)trtdoc";
 constexpr const char* IDENTITY = R"trtdoc(Identity layer)trtdoc";
+constexpr const char* CAST = R"trtdoc(Cast layer)trtdoc";
 constexpr const char* PLUGIN_V2 = R"trtdoc(PluginV2 layer)trtdoc";
 constexpr const char* SLICE = R"trtdoc(Slice layer)trtdoc";
 constexpr const char* SHAPE = R"trtdoc(Shape layer)trtdoc";
@@ -70,6 +71,8 @@ constexpr const char* CONDITIONAL_INPUT = R"trtdoc(If-conditional input layer)tr
 constexpr const char* EINSUM = R"trtdoc(Einsum layer)trtdoc";
 constexpr const char* ONE_HOT = R"trtdoc(OneHot layer)trtdoc";
 constexpr char const* NON_ZERO = R"trtdoc(NonZero layer)trtdoc";
+constexpr char const* REVERSE_SEQUENCE = R"trtdoc(ReverseSequence layer)trtdoc";
+constexpr char const* NORMALIZATION = R"trtdoc(Normalization layer)trtdoc";
 
 } // namespace LayerTypeDoc
 
@@ -180,6 +183,10 @@ constexpr const char* HWC16 = R"trtdoc(
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to the array with dimensions [N][H][W][(C+15)/16*16], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][h][w][c].
 )trtdoc";
 
+constexpr const char* DHWC = R"trtdoc(
+    Non-vectorized channel-last format. This format is bound to FP32.  It is only available for dimensions >= 4.
+)trtdoc";
+
 } // namespace TensorFormatDoc
 
 namespace ITensorDoc
@@ -254,6 +261,7 @@ constexpr const char* descr = R"trtdoc(
     Base class for all layer classes in an :class:`INetworkDefinition` .
 
     :ivar name: :class:`str` The name of the layer.
+    :ival metadata: :class:`str` The per-layer metadata.
     :ivar type: :class:`LayerType` The type of the layer.
     :ivar num_inputs: :class:`int` The number of inputs of the layer.
     :ivar num_outputs: :class:`int` The number of outputs of the layer.
@@ -490,7 +498,7 @@ constexpr const char* descr = R"trtdoc(
 
     This layer applies a per-element computation to its input:
 
-    :math:`output = (input * scale + shift) ^ power`
+    :math:`output = (input * scale + shift) ^ {power}`
 
     The coefficients can be applied on a per-tensor, per-channel, or per-element basis.
 
@@ -793,8 +801,8 @@ constexpr const char* descr = R"trtdoc(
 
     :ivar num_layers: :class:`int` The layer count of the RNN.
     :ivar hidden_size: :class:`int` The hidden size of the RNN.
-    :ivar max_seq_length: :class:`int` The maximum sequence length of the RNN
-    :ivar data_length: :class:`int` The length of the data being processed by the RNN for use in computing other values.
+    :ivar max_seq_length: :class:`int` The maximum sequence length of the RNN.
+    :ivar data_length: :class:`int` The embedding length of the RNN.
 
     :ivar seq_lengths: :class:`ITensor` Individual sequence lengths in the batch with the :class:`ITensor` provided.
         The :attr:`seq_lengths` :class:`ITensor` should be a {N1, ..., Np} tensor, where N1..Np are the index dimensions
@@ -890,8 +898,11 @@ constexpr const char* CEIL = R"trtdoc(Ceiling)trtdoc";
 constexpr const char* FLOOR = R"trtdoc(Floor)trtdoc";
 constexpr const char* ERF = R"trtdoc(Gauss error function)trtdoc";
 constexpr const char* NOT = R"trtdoc(Not)trtdoc";
-constexpr const char* SIGN = R"trtdoc(Sign. If input > 0, output 1; if input < 0, output -1; if input == 0, output 0.)trtdoc";
-constexpr const char* ROUND = R"trtdoc(Round to nearest even for float datatype.)trtdoc";
+constexpr const char* SIGN
+    = R"trtdoc(Sign. If input > 0, output 1; if input < 0, output -1; if input == 0, output 0.)trtdoc";
+constexpr const char* ROUND = R"trtdoc(Round to nearest even for floating-point data type.)trtdoc";
+constexpr const char* ISINF
+    = R"trtdoc(Return true if the input value equals +/- infinity for floating-point data type.)trtdoc";
 } // namespace UnaryOperationDoc
 
 namespace IUnaryLayerDoc
@@ -1101,8 +1112,28 @@ constexpr const char* descr = R"trtdoc(
 
     :ivar op: :class:`TopKOperation` The operation for the layer.
     :ivar k: :class:`TopKOperation` the k value for the layer. Currently only values up to 3840 are supported.
+        Use the set_input() method with index 1 to pass in dynamic k as a tensor.
     :ivar axes: :class:`TopKOperation` The axes along which to reduce.
 )trtdoc";
+
+constexpr const char* set_input = R"trtdoc(
+    Sets the input tensor for the given index. The index must be 0 or 1 for a TopK layer.
+
+    The indices are as follows:
+
+    =====   ==================================================================================
+    Index   Description
+    =====   ==================================================================================
+        0     Input data tensor.
+        1     A scalar Int32 tensor containing a positive value corresponding to the number
+                of top elements to retrieve. Values larger than 3840 will result in a runtime
+                error. If provided, this will override the static k value in calculations.
+    =====   ==================================================================================
+
+    :arg index: The index of the input tensor.
+    :arg tensor: The input tensor.
+)trtdoc";
+
 } // namespace ITopKLayerDoc
 
 namespace MatrixOperationDoc
@@ -1166,6 +1197,17 @@ constexpr const char* descr = R"trtdoc(
     ``uint8`` -> (``float32`` | ``float16``)
 )trtdoc";
 } // namespace IIdentityLayerDoc
+
+namespace ICastLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A layer that represents the cast function.
+
+    This layer casts the element of a given input tensor to a specified data type and returns an output tensor of the same shape in the converted type.
+
+    Conversions between all types except FP8 is supported.
+)trtdoc";
+} // namespace ICastLayerDoc
 
 namespace IConstantLayerDoc
 {
@@ -1526,12 +1568,12 @@ constexpr const char* descr = R"trtdoc(
     A grid sample layer in an :class:`INetworkDefinition` .
 
     This layer uses an input tensor and a grid tensor to produce an interpolated output tensor.
-    The input and grid tensors must shape tensors of rank 4. The only supported SampleMode's are
+    The input and grid tensors must shape tensors of rank 4. The only supported `SampleMode` s are
     trt.samplemode.CLAMP, trt.samplemode.FILL, and trt.samplemode.REFLECT.
 
-    :ivar interpolation: class:`InterpolationType` The interpolation type to use in the layer with a default of LINEAR.
-    :ivar align_nodes: class:`int` the align mode to use in the layer with a default of false.
-    :ivar padding_mode: :class:`GridSamplePaddingMode` The padding mode to use in the layer with a default of FILL.
+    :ivar interpolation_mode: class:`InterpolationMode` The interpolation type to use. Defaults to LINEAR.
+    :ivar align_corners: class:`bool` the align mode to use. Defaults to False.
+    :ivar sample_mode: :class:`SampleMode` The sample mode to use. Defaults to FILL.
 )trtdoc";
 } // namespace IGridSampleLayerDoc
 
@@ -1930,6 +1972,44 @@ constexpr char const* descr = R"trtdoc(
     The output shape is always `{D, C}`, where `D` is the number of dimensions of the input and `C` is the number of non-zero values.
 )trtdoc";
 } // namespace INonZeroLayerDoc
+
+namespace IReverseSequenceLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A ReverseSequence layer in an :class:`INetworkDefinition` .
+
+    This layer performs batch-wise reversal, which slices the input tensor along the axis ``batch_axis``. For the
+    ``i``-th slice, the operation reverses the first ``N`` elements, specified by the corresponding ``i``-th value
+    in ``sequence_lens``, along ``sequence_axis`` and keeps the remaining elements unchanged. The output tensor will
+    have the same shape as the input tensor.
+
+    :ivar batch_axis: :class:`int` The batch axis. Default: 1.
+    :ivar sequence_axis: :class:`int` The sequence axis. Default: 0.
+)trtdoc";
+} // namespace IReverseSequenceLayerDoc
+
+namespace INormalizationLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A Normalization layer in an :class:`INetworkDefinition` .
+
+    The normalization layer performs the following operation:
+
+    X - input Tensor
+    Y - output Tensor
+    S - scale Tensor
+    B - bias Tensor
+
+    Y = (X - Mean(X, axes)) / Sqrt(Variance(X) + epsilon) * S + B
+
+    Where Mean(X, axes) is a reduction over a set of axes, and Variance(X) = Mean((X - Mean(X, axes)) ^ 2, axes).
+
+    :ivar epsilon: :class:`float` The epsilon value used for the normalization calculation. Default: 1e-5F.
+    :ivar axes: :class:`int` The reduction axes for the normalization calculation.
+    :ivar num_groups: :class:`int` The number of groups to split the channels into for the normalization calculation. Default: 1.
+    :ivar compute_precision: :class:`DataType` The datatype used for the compute precision of this layer. By default TensorRT will run the normalization computation in DataType.kFLOAT32 even in mixed precision mode regardless of any set builder flags to avoid overflow errors. ILayer.precision and ILayer.set_output_type can still be set to control input and output types of this layer. Only DataType.kFLOAT32 and DataType.kHALF are valid for this member. Default: Datatype.FLOAT.
+)trtdoc";
+} // namespace INormalizationLayerDoc
 
 namespace INetworkDefinitionDoc
 {
@@ -2366,6 +2446,16 @@ constexpr const char* add_identity = R"trtdoc(
     :returns: The new identity layer, or :class:`None` if it could not be created.
 )trtdoc";
 
+constexpr const char* add_cast = R"trtdoc(
+    Add a cast layer.
+    See :class:`ICastLayer` for more information.
+
+    :arg input: The input tensor to the layer.
+    :arg to_type: The data type the output tensor should be cast into.
+
+    :returns: The new cast layer, or :class:`None` if it could not be created.
+)trtdoc";
+
 constexpr const char* add_parametric_relu = R"trtdoc(
         Add a parametric ReLU layer.
         See :class:`IParametricReLULayer` for more information.
@@ -2555,6 +2645,12 @@ constexpr const char* get_output = R"trtdoc(
     :returns: The tensor, or :class:`None` if it is out of range.
 )trtdoc";
 
+constexpr const char* builder = R"trtdoc(
+    The builder from which this INetworkDefinition was created.
+
+    See :class:`IBuilder` for more information.
+)trtdoc";
+
 constexpr const char* serialize = R"trtdoc(
     Serialize the network to a stream.
 
@@ -2605,6 +2701,31 @@ constexpr char const* add_non_zero = R"trtdoc(
     :arg input: The input tensor to the layer.
 
     :returns: the new NonZero layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr char const* add_reverse_sequence = R"trtdoc(
+    Adds a ReverseSequence layer to the network.
+    See :class:`IReverseSequenceLayer` for more information.
+
+    :arg input: The input tensor to the layer.
+    :arg sequence_lens: 1D tensor specifying lengths of sequences to reverse in a batch. The length of ``sequence_lens`` must be equal to the size of the dimension in ``input`` specified by ``batch_axis``.
+
+    :returns: the new ReverseSequence layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr char const* add_normalization = R"trtdoc(
+    Adds a Normalization layer to the network.
+    See :class:`Normalization` for more information.
+
+    :arg input: The input tensor to the layer.
+    :arg scale: The scale tensor used to scale the normalized output.
+    :arg bias: The bias tensor used to scale the normalized output.
+    :arg axesMask: The axes on which to perform mean calculations.
+        The bit in position i of bitmask axes corresponds to explicit dimension i of the result.
+        E.g., the least significant bit corresponds to the first explicit dimension and the next to least
+        significant bit corresponds to the second explicit dimension.
+
+    :returns: the new Normalization layer, or :class:`None` if it could not be created.
 )trtdoc";
 
 } // namespace INetworkDefinitionDoc

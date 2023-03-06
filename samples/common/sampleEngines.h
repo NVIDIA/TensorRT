@@ -59,7 +59,14 @@ public:
     //!
     //! \brief Constructor of LazilyDeserializedEngine.
     //!
-    LazilyDeserializedEngine(bool isSafe, int32_t DLACore) : mIsSafe(isSafe), mDLACore(DLACore)
+    LazilyDeserializedEngine(bool isSafe, bool versionCompatible, int32_t DLACore, std::string const& tempdir,
+        nvinfer1::TempfileControlFlags tempfileControls, std::string const& leanDLLPath)
+        : mIsSafe(isSafe)
+        , mVersionCompatible(versionCompatible)
+        , mDLACore(DLACore)
+        , mTempdir(tempdir)
+        , mTempfileControls(tempfileControls)
+        , mLeanDLLPath(leanDLLPath)
     {
     }
 
@@ -69,10 +76,15 @@ public:
     LazilyDeserializedEngine(LazilyDeserializedEngine&& other)
     {
         mIsSafe = other.mIsSafe;
+        mVersionCompatible = other.mVersionCompatible;
         mDLACore = other.mDLACore;
         mEngineBlob = std::move(other.mEngineBlob);
         mEngine = std::move(other.mEngine);
         mSafeEngine = std::move(other.mSafeEngine);
+        mTempdir = std::move(other.mTempdir);
+        mTempfileControls = other.mTempfileControls;
+        mLeanDLLPath = std::move(other.mLeanDLLPath);
+        mDynamicPlugins = std::move(other.mDynamicPlugins);
     }
 
     //!
@@ -130,12 +142,43 @@ public:
         return mIsSafe;
     }
 
+    void setDynamicPlugins(std::vector<std::string> const& dynamicPlugins)
+    {
+        mDynamicPlugins = dynamicPlugins;
+    }
+
 private:
     bool mIsSafe{false};
+    bool mVersionCompatible{false};
     int32_t mDLACore{-1};
     std::vector<uint8_t> mEngineBlob;
-    std::unique_ptr<nvinfer1::ICudaEngine> mEngine;
-    std::unique_ptr<nvinfer1::safe::ICudaEngine> mSafeEngine;
+
+    std::string mTempdir{};
+    nvinfer1::TempfileControlFlags mTempfileControls{getTempfileControlDefaults()};
+    std::string mLeanDLLPath{};
+    std::vector<std::string> mDynamicPlugins;
+
+    //! \name Owned TensorRT objects
+    //! Per TensorRT object lifetime requirements as outlined in the developer guide,
+    //! the runtime must remain live while any engines created by the runtime are live.
+    //! DO NOT ADJUST the declaration order here: runtime -> (engine|safeEngine).
+    //! Destruction occurs in reverse declaration order: (engine|safeEngine) -> runtime.
+    //!@{
+
+    //! The runtime used to track parent of mRuntime if one exists.
+    //! Needed to load mRuntime if lean.so is supplied through file system path.
+    std::unique_ptr<nvinfer1::IRuntime> mParentRuntime{};
+
+    //! The runtime that is used to deserialize the engine.
+    std::unique_ptr<nvinfer1::IRuntime> mRuntime{};
+
+    //! If mIsSafe is false, this points to the deserialized std engine
+    std::unique_ptr<nvinfer1::ICudaEngine> mEngine{};
+
+    //! If mIsSafe is true, this points to the deserialized safe engine
+    std::unique_ptr<nvinfer1::safe::ICudaEngine> mSafeEngine{};
+
+    //!@}
 };
 
 struct BuildEnvironment
@@ -143,31 +186,33 @@ struct BuildEnvironment
     BuildEnvironment() = delete;
     BuildEnvironment(BuildEnvironment const& other) = delete;
     BuildEnvironment(BuildEnvironment&& other) = delete;
-    BuildEnvironment(bool isSafe, int32_t DLACore) : engine(isSafe, DLACore)
+    BuildEnvironment(bool isSafe, bool versionCompatible, int32_t DLACore, std::string const& tempdir,
+        nvinfer1::TempfileControlFlags tempfileControls, std::string const& leanDLLPath = "")
+        : engine(isSafe, versionCompatible, DLACore, tempdir, tempfileControls, leanDLLPath)
     {
     }
 
-    //! Do NOT adjust the declare sequence here: builder -> network -> parser.
-    //! So that when ~BuildEnvironment() executes, the destroy sequence is: parser -> network -> builder.
-    //! Else we will violates TRT object lifetime requirement in the developer guide.
-    std::unique_ptr<nvinfer1::IBuilder> builder;
-    std::unique_ptr<nvinfer1::INetworkDefinition> network;
-    Parser parser;
-    LazilyDeserializedEngine engine;
-};
+    //! \name Owned TensorRT objects
+    //! Per TensorRT object lifetime requirements as outlined in the developer guide,
+    //! factory objects must remain live while the objects created by those factories
+    //! are live (with the exception of builder -> engine).
+    //! DO NOT ADJUST the declaration order here: builder -> network -> parser.
+    //! Destruction occurs in reverse declaration order: parser -> network -> builder.
+    //!@{
 
-//!
-//! \brief Generate a network definition for a given model
-//!
-//! \return Parser The parser used to initialize the network and that holds the weights for the network, or an invalid
-//! parser (the returned parser converts to false if tested)
-//!
-//! Constant input dimensions in the model must not be changed in the corresponding
-//! network definition, because its correctness may rely on the constants.
-//!
-//! \see Parser::operator bool()
-//!
-Parser modelToNetwork(ModelOptions const& model, nvinfer1::INetworkDefinition& network, std::ostream& err);
+    //! The builder used to build the engine.
+    std::unique_ptr<nvinfer1::IBuilder> builder;
+
+    //! The network used by the builder.
+    std::unique_ptr<nvinfer1::INetworkDefinition> network;
+
+    //! The parser used to specify the network.
+    Parser parser;
+
+    //! The engine.
+    LazilyDeserializedEngine engine;
+    //!@}
+};
 
 //!
 //! \brief Set up network and config
@@ -202,8 +247,8 @@ bool saveEngine(nvinfer1::ICudaEngine const& engine, std::string const& fileName
 //!
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
-bool getEngineBuildEnv(ModelOptions const& model, BuildOptions const& build, SystemOptions const& sys,
-    BuildEnvironment& env, std::ostream& err);
+bool getEngineBuildEnv(
+    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err);
 
 //!
 //! \brief Create a serialized network

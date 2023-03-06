@@ -25,5 +25,4 @@ SET(SAMPLE_SOURCES
 
 set(SAMPLE_PARSERS "caffe" "uff" "onnx")
 
-set(PLUGINS_NEEDED ON)
 include(../CMakeSamplesTemplate.txt)

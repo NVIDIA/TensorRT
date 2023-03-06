@@ -22,14 +22,6 @@ import sys
 import model
 import numpy as np
 
-# Use autoprimaryctx if available (pycuda >= 2021.1) to
-# prevent issues with other modules that rely on the primary
-# device context.
-try:
-    import pycuda.autoprimaryctx
-except ModuleNotFoundError:
-    import pycuda.autoinit
-
 import tensorrt as trt
 
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
@@ -153,6 +145,7 @@ def main():
     # The common.do_inference function will return a list of outputs - we only have one in this case.
     [output] = common.do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
     pred = np.argmax(output)
+    common.free_buffers(inputs, outputs, stream)
     print("Test Case: " + str(case_num))
     print("Prediction: " + str(pred))
 

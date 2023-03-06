@@ -18,16 +18,6 @@
 import os
 import sys
 
-# Use autoprimaryctx if available (pycuda >= 2021.1) to
-# prevent issues with other modules that rely on the primary
-# device context.
-try:
-    import pycuda.autoprimaryctx
-except ModuleNotFoundError:
-    import pycuda.autoinit
-import pycuda.driver as cuda
-
-import sys
 import tensorrt as trt
 
 from model import TRT_MODEL_PATH
@@ -116,36 +106,6 @@ def load_test_case(inputs, context_text, query_text, trt_context):
     for i, arr in enumerate([cw_flat, cc_flat, qw_flat, qc_flat]):
         inputs[i].host = arr
 
-# Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
-def allocate_buffers(engine):
-    inputs = []
-    outputs = []
-    bindings = []
-    stream = cuda.Stream()
-    for binding in engine:
-        if engine.get_tensor_mode(binding) == trt.TensorIOMode.INPUT:
-            # Our input tensors have dynamic shape.
-            # We only added 1 optimization profile, its index is 0
-            profile = 0
-            # -1th profile contains the MAX size tensor shape
-            max_shape = engine.get_tensor_profile_shape(binding, profile)[-1]
-        else:
-            # The output tensor sizes are not dynamic
-            max_shape = engine.get_tensor_shape(binding)
-        size = trt.volume(max_shape)
-        dtype = trt.nptype(engine.get_tensor_dtype(binding))
-        # Allocate host and device buffers
-        host_mem = cuda.pagelocked_empty(size, dtype)
-        device_mem = cuda.mem_alloc(host_mem.nbytes)
-        # Append the device buffer to device bindings.
-        bindings.append(int(device_mem))
-        # Append to the appropriate list.
-        if engine.get_tensor_mode(binding) == trt.TensorIOMode.INPUT:
-            inputs.append(common.HostDeviceMem(host_mem, device_mem))
-        else:
-            outputs.append(common.HostDeviceMem(host_mem, device_mem))
-    return inputs, outputs, bindings, stream
-
 
 def main():
     # Load the shared object file containing the Hardmax plugin implementation.
@@ -174,7 +134,7 @@ def main():
         print("Engine plan not saved. Building new engine...")
         engine = build_engine(TRT_MODEL_PATH)
 
-    inputs, outputs, bindings, stream = allocate_buffers(engine)
+    inputs, outputs, bindings, stream = common.allocate_buffers(engine, profile_idx=0)
 
     testcases = [
         ('Garry the lion is 5 years old. He lives in the savanna.', 'Where does the lion live?'),
@@ -206,6 +166,7 @@ def main():
         answer = context_words[start : end + 1].flatten()
         print(f"Model prediction: ", " ".join(answer))
         print()
+    common.free_buffers(inputs, outputs, stream)
     print("Passed")
 
 if __name__ == "__main__":

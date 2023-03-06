@@ -125,7 +125,7 @@ class MultilevelProposeROIPluginCreator : public nvinfer1::pluginInternal::BaseC
 public:
     MultilevelProposeROIPluginCreator() noexcept;
 
-    ~MultilevelProposeROIPluginCreator() noexcept {};
+    ~MultilevelProposeROIPluginCreator() noexcept override{};
 
     const char* getPluginName() const noexcept override;
 

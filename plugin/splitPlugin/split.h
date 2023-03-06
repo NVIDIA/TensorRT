@@ -134,41 +134,43 @@ class SplitPluginCreator : public nvinfer1::IPluginCreator
 public:
     SplitPluginCreator() {}
 
-    ~SplitPluginCreator() {}
+    ~SplitPluginCreator() override {}
 
-    const char* getPluginName() const noexcept
+    const char* getPluginName() const noexcept override
     {
         return SPLIT_PLUGIN_NAME;
     }
 
-    const char* getPluginVersion() const noexcept
+    const char* getPluginVersion() const noexcept override
     {
         return SPLIT_PLUGIN_VERSION;
     }
 
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept
+    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override
     {
         std::cerr << "Function not implemented" << std::endl;
         return nullptr;
     }
 
-    nvinfer1::IPluginV2DynamicExt* createPlugin(const char* /*name*/, const nvinfer1::PluginFieldCollection* /*fc*/) noexcept
+    nvinfer1::IPluginV2DynamicExt* createPlugin(
+        const char* /*name*/, const nvinfer1::PluginFieldCollection* /*fc*/) noexcept override
     {
         std::cerr << "Function not implemented" << std::endl;
         return nullptr;
     }
 
-    nvinfer1::IPluginV2DynamicExt* deserializePlugin(const char* /*name*/, const void* serialData, size_t serialLength) noexcept
+    nvinfer1::IPluginV2DynamicExt* deserializePlugin(
+        const char* /*name*/, const void* serialData, size_t serialLength) noexcept override
     {
         return new SplitPlugin{serialData, serialLength};
     }
 
-    void setPluginNamespace(const char* libNamespace) noexcept
+    void setPluginNamespace(const char* libNamespace) noexcept override
     {
         mNamespace = libNamespace;
     }
 
-    const char* getPluginNamespace() const noexcept
+    const char* getPluginNamespace() const noexcept override
     {
         return mNamespace.c_str();
     }

@@ -192,7 +192,7 @@ PerformanceResult getPerformanceResult(std::vector<InferenceTime> const& timings
 }
 
 void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, std::vector<float> const& percentiles,
-    int32_t batchSize, std::ostream& osInfo, std::ostream& osWarning, std::ostream& osVerbose)
+    int32_t batchSize, int32_t infStreams, std::ostream& osInfo, std::ostream& osWarning, std::ostream& osVerbose)
 {
     float const throughput = batchSize * timings.size() / walltimeMs * 1000;
 
@@ -269,6 +269,13 @@ void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, st
                   << "stability." << std::endl;
     }
 
+    // Report warnings if multiple inference streams are used.
+    if (infStreams > 1)
+    {
+        osWarning << "* Multiple inference streams are used. Latencies may not be accurate since inferences may run in "
+                  << "  parallel. Please use \"Throughput\" as the performance metric instead." << std::endl;
+    }
+
     // Explain what the metrics mean.
     osInfo << "Explanations of the performance metrics are printed in the verbose logs." << std::endl;
     printMetricExplanations(osVerbose);
@@ -276,9 +283,11 @@ void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, st
     osInfo << std::endl;
 }
 
-void printPerformanceReport(std::vector<InferenceTrace> const& trace, const ReportingOptions& reporting, float warmupMs,
-    int32_t batchSize, std::ostream& osInfo, std::ostream& osWarning, std::ostream& osVerbose)
+void printPerformanceReport(std::vector<InferenceTrace> const& trace, ReportingOptions const& reportingOpts,
+    InferenceOptions const& infOpts, std::ostream& osInfo, std::ostream& osWarning, std::ostream& osVerbose)
 {
+    int32_t batchSize = infOpts.batch;
+    float const warmupMs = infOpts.warmup;
     auto const isNotWarmup = [&warmupMs](const InferenceTrace& a) { return a.computeStart >= warmupMs; };
     auto const noWarmup = std::find_if(trace.begin(), trace.end(), isNotWarmup);
     int32_t const warmups = noWarmup - trace.begin();
@@ -291,12 +300,13 @@ void printPerformanceReport(std::vector<InferenceTrace> const& trace, const Repo
 
     std::vector<InferenceTime> timings(trace.size() - warmups);
     std::transform(noWarmup, trace.end(), timings.begin(), traceToTiming);
-    printTiming(timings, reporting.avgs, osInfo);
-    printEpilog(timings, benchTime, reporting.percentiles, batchSize, osInfo, osWarning, osVerbose);
+    printTiming(timings, reportingOpts.avgs, osInfo);
+    printEpilog(
+        timings, benchTime, reportingOpts.percentiles, batchSize, infOpts.infStreams, osInfo, osWarning, osVerbose);
 
-    if (!reporting.exportTimes.empty())
+    if (!reportingOpts.exportTimes.empty())
     {
-        exportJSONTrace(trace, reporting.exportTimes, warmups);
+        exportJSONTrace(trace, reportingOpts.exportTimes, warmups);
     }
 }
 
@@ -408,11 +418,11 @@ void Profiler::exportJSONProfile(std::string const& fileName) const noexcept
     for (auto const& l : mLayers)
     {
         // clang-format off
-        os << ", {" << " \"name\" : \""      << l.name << "\""
-                       ", \"timeMs\" : "     << getTotalTime(l)
-           <<          ", \"averageMs\" : "  << getAvgTime(l)
-           <<          ", \"medianMs\" : "  << getMedianTime(l)
-           <<          ", \"percentage\" : " << getTotalTime(l) / totalTimeMs * 100
+        os << ", {" << R"( "name" : ")"      << l.name << R"(")"
+                       R"(, "timeMs" : )"     << getTotalTime(l)
+           <<          R"(, "averageMs" : )"  << getAvgTime(l)
+           <<          R"(, "medianMs" : )"  << getMedianTime(l)
+           <<          R"(, "percentage" : )" << getTotalTime(l) / totalTimeMs * 100
            << " }"  << std::endl;
         // clang-format on
     }
@@ -432,10 +442,22 @@ void dumpOutputs(ContextType const& context, Bindings const& bindings, std::ostr
     bindings.dumpOutputs(context, os);
 }
 
-template 
+template
 void dumpOutputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
-template 
+template
 void dumpOutputs(nvinfer1::safe::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
+
+template <typename ContextType>
+void dumpRawBindingsToFiles(ContextType const& context, Bindings const& bindings, std::ostream& os)
+{
+    bindings.dumpRawBindingToFiles(context, os);
+}
+
+template
+void dumpRawBindingsToFiles(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
+
+template
+void dumpRawBindingsToFiles(nvinfer1::safe::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
 
 template <typename ContextType>
 void exportJSONOutput(
@@ -448,9 +470,9 @@ void exportJSONOutput(
     for (auto const& binding : output)
     {
         // clang-format off
-        os << sep << "{ \"name\" : \"" << binding.first << "\"" << std::endl;
+        os << sep << R"({ "name" : ")" << binding.first << "\"" << std::endl;
         sep = ", ";
-        os << "  " << sep << "\"dimensions\" : \"";
+        os << "  " << sep << R"("dimensions" : ")";
         bindings.dumpBindingDimensions(binding.second, context, os);
         os << "\"" << std::endl;
         os << "  " << sep << "\"values\" : [ ";
@@ -461,10 +483,97 @@ void exportJSONOutput(
     os << "]" << std::endl;
 }
 
-template 
+template
 void exportJSONOutput(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
 
-template 
-void exportJSONOutput(nvinfer1::safe::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
+template void exportJSONOutput(nvinfer1::safe::IExecutionContext const& context, Bindings const& bindings,
+    std::string const& fileName, int32_t batch);
+
+bool printLayerInfo(
+    ReportingOptions const& reporting, nvinfer1::ICudaEngine* engine, nvinfer1::IExecutionContext* context)
+{
+    if (reporting.layerInfo)
+    {
+        sample::gLogInfo << "Layer Information:" << std::endl;
+        sample::gLogInfo << getLayerInformation(engine, context, nvinfer1::LayerInformationFormat::kONELINE)
+                         << std::flush;
+    }
+    if (!reporting.exportLayerInfo.empty())
+    {
+        std::ofstream os(reporting.exportLayerInfo, std::ofstream::trunc);
+        os << getLayerInformation(engine, context, nvinfer1::LayerInformationFormat::kJSON) << std::flush;
+    }
+    return true;
+}
+
+void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnvironment& iEnv)
+{
+    if (reporting.profile)
+    {
+        iEnv.profiler->print(sample::gLogInfo);
+    }
+    if (!reporting.exportProfile.empty())
+    {
+        iEnv.profiler->exportJSONProfile(reporting.exportProfile);
+    }
+
+    // Print an warning about total per-layer latency when auxiliary streams are used.
+    if (!iEnv.safe && (reporting.profile || !reporting.exportProfile.empty()))
+    {
+        int32_t const nbAuxStreams = iEnv.engine.get()->getNbAuxStreams();
+        if (nbAuxStreams > 0)
+        {
+            sample::gLogWarning << "The engine uses " << nbAuxStreams << " auxiliary streams, so the \"Total\" latency "
+                                << "may not be accurate because some layers may have run in parallel!" << std::endl;
+        }
+    }
+}
+
+namespace details
+{
+template <typename ContextType>
+void dump(std::unique_ptr<ContextType> const& context, std::unique_ptr<Bindings> const& binding,
+    ReportingOptions const& reporting, int32_t batch)
+{
+    if (!context)
+    {
+        sample::gLogError << "Empty context! Skip printing outputs." << std::endl;
+        return;
+    }
+    if (reporting.output)
+    {
+        dumpOutputs(*context, *binding, sample::gLogInfo);
+    }
+    if (reporting.dumpRawBindings)
+    {
+        dumpRawBindingsToFiles(*context, *binding, sample::gLogInfo);
+    }
+    if (!reporting.exportOutput.empty())
+    {
+        exportJSONOutput(*context, *binding, reporting.exportOutput, batch);
+    }
+}
+} // namespace details
+
+void printOutput(ReportingOptions const& reporting, InferenceEnvironment const& iEnv, int32_t batch)
+{
+    auto const& binding = iEnv.bindings.at(0);
+    if (!binding)
+    {
+        sample::gLogError << "Empty bindings! Skip printing outputs." << std::endl;
+        return;
+    }
+
+    if (iEnv.safe)
+    {
+        auto const& context = iEnv.safeContexts.at(0);
+        details::dump(context, binding, reporting, batch);
+    }
+    else
+    {
+        auto const& context = iEnv.contexts.at(0);
+        details::dump(context, binding, reporting, batch);
+    }
+}
 
 } // namespace sample

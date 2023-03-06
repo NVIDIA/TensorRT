@@ -391,34 +391,34 @@ public:
 class DiscreteMirroredBuffer : public IMirroredBuffer
 {
 public:
-    void allocate(size_t size)
+    void allocate(size_t size) override
     {
         mSize = size;
         mHostBuffer.allocate(size);
         mDeviceBuffer.allocate(size);
     }
 
-    void* getDeviceBuffer() const
+    void* getDeviceBuffer() const override
     {
         return mDeviceBuffer.get();
     }
 
-    void* getHostBuffer() const
+    void* getHostBuffer() const override
     {
         return mHostBuffer.get();
     }
 
-    void hostToDevice(TrtCudaStream& stream)
+    void hostToDevice(TrtCudaStream& stream) override
     {
         cudaCheck(cudaMemcpyAsync(mDeviceBuffer.get(), mHostBuffer.get(), mSize, cudaMemcpyHostToDevice, stream.get()));
     }
 
-    void deviceToHost(TrtCudaStream& stream)
+    void deviceToHost(TrtCudaStream& stream) override
     {
         cudaCheck(cudaMemcpyAsync(mHostBuffer.get(), mDeviceBuffer.get(), mSize, cudaMemcpyDeviceToHost, stream.get()));
     }
 
-    size_t getSize() const
+    size_t getSize() const override
     {
         return mSize;
     }
@@ -435,33 +435,33 @@ private:
 class UnifiedMirroredBuffer : public IMirroredBuffer
 {
 public:
-    void allocate(size_t size)
+    void allocate(size_t size) override
     {
         mSize = size;
         mBuffer.allocate(size);
     }
 
-    void* getDeviceBuffer() const
+    void* getDeviceBuffer() const override
     {
         return mBuffer.get();
     }
 
-    void* getHostBuffer() const
+    void* getHostBuffer() const override
     {
         return mBuffer.get();
     }
 
-    void hostToDevice(TrtCudaStream& stream)
+    void hostToDevice(TrtCudaStream& stream) override
     {
         // Does nothing since we are using unified memory.
     }
 
-    void deviceToHost(TrtCudaStream& stream)
+    void deviceToHost(TrtCudaStream& stream) override
     {
         // Does nothing since we are using unified memory.
     }
 
-    size_t getSize() const
+    size_t getSize() const override
     {
         return mSize;
     }
@@ -504,7 +504,7 @@ public:
         return mBuffer.get();
     }
 
-    virtual ~OutputAllocator() {}
+    ~OutputAllocator() override {}
 
 private:
     std::unique_ptr<IMirroredBuffer> mBuffer;
@@ -523,12 +523,15 @@ inline void setCudaDevice(int device, std::ostream& os)
     os << "Selected Device: "      << properties.name                                               << std::endl;
     os << "Compute Capability: "   << properties.major << "." << properties.minor                   << std::endl;
     os << "SMs: "                  << properties.multiProcessorCount                                << std::endl;
-    os << "Compute Clock Rate: "   << properties.clockRate / 1000000.0F << " GHz"                   << std::endl;
     os << "Device Global Memory: " << (properties.totalGlobalMem >> 20) << " MiB"                   << std::endl;
     os << "Shared Memory per SM: " << (properties.sharedMemPerMultiprocessor >> 10) << " KiB"       << std::endl;
     os << "Memory Bus Width: "     << properties.memoryBusWidth << " bits"
                         << " (ECC " << (properties.ECCEnabled != 0 ? "enabled" : "disabled") << ")" << std::endl;
-    os << "Memory Clock Rate: "    << properties.memoryClockRate / 1000000.0F << " GHz"             << std::endl;
+    os << "Application Compute Clock Rate: "   << properties.clockRate / 1000000.0F << " GHz"       << std::endl;
+    os << "Application Memory Clock Rate: "    << properties.memoryClockRate / 1000000.0F << " GHz" << std::endl;
+    os << std::endl;
+    os << "Note: The application clock rates do not reflect the actual clock rates that the GPU is "
+                                                                         << "currently running at." << std::endl;
     // clang-format on
 }
 

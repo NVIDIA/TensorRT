@@ -54,11 +54,6 @@ To run this sample you must be using Python 3.6 or newer.
 
 On PowerPC systems, you will need to manually install PyTorch using IBM's [PowerAI](https://www.ibm.com/support/knowledgecenter/SS5SF7_1.6.0/navigation/pai_install.htm).
 
-On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
-```bash
-export PATH=${PATH}:/usr/local/cuda/bin/
-```
-
 2. The MNIST dataset can be found under the data directory (usually `/usr/src/tensorrt/data/mnist`) if using the TensorRT containers. It is also bundled along with the [TensorRT tarball](https://developer.nvidia.com/nvidia-tensorrt-download).
 
 ## Running the sample

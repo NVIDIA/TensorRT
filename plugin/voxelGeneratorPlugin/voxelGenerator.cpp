@@ -16,21 +16,19 @@
  */
 
 #include "voxelGenerator.h"
+#include <cmath>
 #include <cstring>
 #include <iostream>
 
-#define checkCudaErrors(status)                                   \
-{                                                                 \
-  if (status != 0)                                                \
-  {                                                               \
-    std::cout << "Cuda failure: " << cudaGetErrorString(status)   \
-              << " at line " << __LINE__                          \
-              << " in file " << __FILE__                          \
-              << " error status: " << status                      \
-              << std::endl;                                       \
-              abort();                                            \
-    }                                                             \
-}
+#define checkCudaErrors(status)                                                                                        \
+    {                                                                                                                  \
+        if (status != 0)                                                                                               \
+        {                                                                                                              \
+            std::cout << "Cuda failure: " << cudaGetErrorString(status) << " at line " << __LINE__ << " in file "      \
+                      << __FILE__ << " error status: " << status << std::endl;                                         \
+            abort();                                                                                                   \
+        }                                                                                                              \
+    }
 
 using namespace nvinfer1;
 using nvinfer1::plugin::VoxelGeneratorPlugin;
@@ -61,24 +59,31 @@ T readFromBuffer(const char*& buffer)
 }
 
 // Mimic np.round as in voxel generator in spconv implementation
-int np_round(float x) {
-  // half way round to nearest-even
-  int x2 = int(x * 2.0f);
-  if(x != int(x) && x2 == x * 2.0f) {
-    return int(x / 2.0f + 0.5f) * 2;
-  }
-  return int(x + 0.5f);
+int32_t npRound(float x)
+{
+    // half way round to nearest-even
+    int32_t x2 = lround(x * 2.0F);
+    if (x != static_cast<int32_t>(x) && x2 == x * 2.0F)
+    {
+        return lround(x / 2.0F + 0.5F) * 2;
+    }
+    return lround(x + 0.5F);
 }
 
-VoxelGeneratorPlugin::VoxelGeneratorPlugin(
-    int max_voxels, int max_points, int voxel_features, float x_min,
-    float x_max, float y_min, float y_max, float z_min, float z_max,
-    float pillar_x, float pillar_y, float pillar_z
-) : pillarNum_(max_voxels), pointNum_(max_points), featureNum_(voxel_features),
-    min_x_range_(x_min), max_x_range_(x_max), min_y_range_(y_min),
-    max_y_range_(y_max), min_z_range_(z_min), max_z_range_(z_max),
-    pillar_x_size_(pillar_x), pillar_y_size_(pillar_y),
-    pillar_z_size_(pillar_z)
+VoxelGeneratorPlugin::VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin,
+    float xMax, float yMin, float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ)
+    : pillarNum_(maxVoxels)
+    , pointNum_(maxPoints)
+    , featureNum_(voxelFeatures)
+    , min_x_range_(xMin)
+    , max_x_range_(xMax)
+    , min_y_range_(yMin)
+    , max_y_range_(yMax)
+    , min_z_range_(zMin)
+    , max_z_range_(zMax)
+    , pillar_x_size_(pillarX)
+    , pillar_y_size_(pillarY)
+    , pillar_z_size_(pillarZ)
 {
 }
 
@@ -196,9 +201,9 @@ void VoxelGeneratorPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDe
     const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept
 {
     pointFeatureNum_ = in[0].desc.dims.d[2];
-    grid_x_size_ = np_round((max_x_range_ - min_x_range_) / pillar_x_size_);
-    grid_y_size_ = np_round((max_y_range_ - min_y_range_) / pillar_y_size_);
-    grid_z_size_ = np_round((max_z_range_ - min_z_range_) / pillar_z_size_);
+    grid_x_size_ = npRound((max_x_range_ - min_x_range_) / pillar_x_size_);
+    grid_y_size_ = npRound((max_y_range_ - min_y_range_) / pillar_y_size_);
+    grid_z_size_ = npRound((max_z_range_ - min_z_range_) / pillar_z_size_);
 }
 
 size_t VoxelGeneratorPlugin::getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int nbInputs,

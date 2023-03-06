@@ -1,3 +1,6 @@
 pyyaml
 requests
 tqdm
+numpy==1.18.1; python_version<"3.8" and platform_system == "Windows"
+numpy==1.19.4; python_version<"3.8" and platform_system != "Windows"
+numpy==1.23.2; python_version>="3.8"

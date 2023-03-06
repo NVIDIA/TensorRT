@@ -18,21 +18,13 @@
 import os
 import sys
 import time
-import ctypes
 import argparse
 import numpy as np
 import tensorrt as trt
+from cuda import cudart
 
-import pycuda.driver as cuda
-
-# Use autoprimaryctx if available (pycuda >= 2021.1) to
-# prevent issues with other modules that rely on the primary
-# device context.
-try:
-    import pycuda.autoprimaryctx
-except ModuleNotFoundError:
-    import pycuda.autoinit
-
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+import common
 
 from image_batcher import ImageBatcher
 from visualize import visualize_detections
@@ -80,7 +72,7 @@ class TensorRTInfer:
             size = dtype.itemsize
             for s in shape:
                 size *= s
-            allocation = cuda.mem_alloc(size)
+            allocation = common.cuda_call(cudart.cudaMalloc(size))
             host_allocation = None if is_input else np.zeros(shape, dtype)
             binding = {
                 "index": i,
@@ -128,10 +120,10 @@ class TensorRTInfer:
         :return A list of outputs as numpy arrays.
         """
         # Copy I/O and Execute
-        cuda.memcpy_htod(self.inputs[0]['allocation'], batch)
+        common.memcpy_host_to_device(self.inputs[0]['allocation'], batch)
         self.context.execute_v2(self.allocations)
         for o in range(len(self.outputs)):
-            cuda.memcpy_dtoh(self.outputs[o]['host_allocation'], self.outputs[o]['allocation'])
+            common.memcpy_device_to_host(self.outputs[o]['host_allocation'], self.outputs[o]['allocation'])
         return [o['host_allocation'] for o in self.outputs]
 
     def process(self, batch, scales=None, nms_threshold=None):

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
  * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
@@ -13,7 +13,8 @@
 #ifndef NV_INFER_SAFE_RUNTIME_H
 #define NV_INFER_SAFE_RUNTIME_H
 
-#include "NvInferRuntimeCommon.h"
+#include "NvInferRuntimeBase.h"
+#include "NvInferRuntimePlugin.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -716,7 +717,7 @@ public:
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
 
     //!
-    //! \brief Asynchronously execute inference on a batch.
+    //! \brief Enqueue inference of a batch on a stream.
     //!
     //! This method requires an array of input and output buffers. The mapping from tensor names to indices can be
     //! queried using safe::ICudaEngine::getBindingIndex().
@@ -921,7 +922,7 @@ public:
     virtual void* getOutputTensorAddress(AsciiChar const* tensorName) const noexcept = 0;
 
     //!
-    //! \brief Asynchronously execute inference.
+    //! \brief Enqueue inference on a stream.
     //!
     //! Modifying or releasing memory that has been registered for the tensors before stream
     //! synchronization or the event passed to setInputConsumedEvent has been being triggered results in undefined
@@ -936,6 +937,129 @@ public:
     //!   - Thread-safe: Yes
     //!
     virtual bool enqueueV3(cudaStream_t stream) noexcept = 0;
+};
+
+//!
+//! \class IPluginRegistry
+//!
+//! \brief Single registration point for all plugins in an application. It is
+//! used to find plugin implementations during engine deserialization.
+//! Internally, the plugin registry is considered to be a singleton so all
+//! plugins in an application are part of the same global registry.
+//! Note that the plugin registry is only supported for plugins of type
+//! IPluginV2 and should also have a corresponding IPluginCreator implementation.
+//!
+//! \see IPluginV2 and IPluginCreator
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+//! \warning IPluginRegistry::setErrorRecorder() must be called to register
+//! an error recorder with the registry before using other methods in the registry.
+//!
+
+class IPluginRegistry
+{
+public:
+    //!
+    //! \brief Register a plugin creator. Returns false if one with same type
+    //! is already registered.
+    //!
+    //! \warning The string pluginNamespace must be 1024 bytes or less including the NULL terminator and must be NULL
+    //! terminated.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes; calls to this method will be synchronized by a mutex.
+    //!
+    virtual bool registerCreator(IPluginCreator& creator, AsciiChar const* const pluginNamespace) noexcept = 0;
+
+    //!
+    //! \brief Return all the registered plugin creators and the number of
+    //! registered plugin creators. Returns nullptr if none found.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
+    virtual IPluginCreator* const* getPluginCreatorList(int32_t* const numCreators) const noexcept = 0;
+
+    //!
+    //! \brief Return plugin creator based on plugin name, version, and
+    //! namespace associated with plugin during network creation.
+    //!
+    //! \warning The strings pluginName, pluginVersion, and pluginNamespace must be 1024 bytes or less including the
+    //! NULL terminator and must be NULL terminated.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual IPluginCreator* getPluginCreator(AsciiChar const* const pluginName, AsciiChar const* const pluginVersion,
+        AsciiChar const* const pluginNamespace = "") noexcept
+        = 0;
+
+    //!
+    //! \brief Set the ErrorRecorder for this interface
+    //!
+    //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
+    //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
+    //! a recorder has been registered.
+    //!
+    //! \param recorder The error recorder to register with this interface.
+    //
+    //! \see getErrorRecorder()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
+    virtual void setErrorRecorder(IErrorRecorder* const recorder) noexcept = 0;
+
+    //!
+    //! \brief Get the ErrorRecorder assigned to this interface.
+    //!
+    //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
+    //! so a nullptr will be returned if setErrorRecorder has not been called, or an ErrorRecorder has not been
+    //! inherited.
+    //!
+    //! \return A pointer to the IErrorRecorder object that has been registered.
+    //!
+    //! \see setErrorRecorder()
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
+
+    //!
+    //! \brief Deregister a previously registered plugin creator.
+    //!
+    //! Since there may be a desire to limit the number of plugins,
+    //! this function provides a mechanism for removing plugin creators registered in TensorRT.
+    //! The plugin creator that is specified by \p creator is removed from TensorRT and no longer tracked.
+    //!
+    //! \return True if the plugin creator was deregistered, false if it was not found in the registry or otherwise
+    //! could
+    //!     not be deregistered.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes
+    //!
+    virtual bool deregisterCreator(IPluginCreator const& creator) noexcept = 0;
+
+    // @cond SuppressDoxyWarnings
+    IPluginRegistry() = default;
+    IPluginRegistry(IPluginRegistry const&) = delete;
+    IPluginRegistry(IPluginRegistry&&) = delete;
+    IPluginRegistry& operator=(IPluginRegistry const&) & = delete;
+    IPluginRegistry& operator=(IPluginRegistry&&) & = delete;
+    // @endcond
+
+protected:
+    virtual ~IPluginRegistry() noexcept = default;
 };
 
 //!
@@ -956,7 +1080,7 @@ IRuntime* createInferRuntime(ILogger& logger) noexcept;
 //! - Allowed context for the API call
 //!   - Thread-safe: Yes
 //!
-extern "C" TENSORRTAPI nvinfer1::IPluginRegistry* getSafePluginRegistry() noexcept;
+extern "C" TENSORRTAPI IPluginRegistry* getSafePluginRegistry() noexcept;
 
 //!
 //! \brief Register the plugin creator to the registry
