@@ -163,9 +163,8 @@ class GPT2Converter(ModelFileConverter):
         Returns:
             GPT2ONNXFile: ONNX GPT2 decoder object.
         """
-        # You should not run fp16 on CPU.
-        device = "cuda" if network_metadata.precision.fp16 else "cpu"
-        model = model.to(device)
+        # Currently does not support exporting GPU models to onnx.
+        device = model.device
         tokenizer = GPT2Tokenizer.from_pretrained(network_metadata.variant)
         input_ids = torch.tensor(
             [

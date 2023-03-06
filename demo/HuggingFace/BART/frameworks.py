@@ -225,8 +225,15 @@ class BARTHuggingFace(FrameworkCommand):
         encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             BART_torch_encoder, input_ids, timing_profile, use_cuda=(not use_cpu)
         )
+        
+        # Need to feed the decoder a new empty input_ids for text generation.
+        decoder_output_len = output_seq_len // 2 if (not metadata.other.kv_cache) else 1
+        decoder_input_ids = torch.full(
+            (batch_size, decoder_output_len), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
+        )
+
         _, decoder_e2e_time = decoder_inference(
-            BART_torch_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=(not use_cpu), use_cache=metadata.other.kv_cache
+            BART_torch_decoder, decoder_input_ids, encoder_last_hidden_state, timing_profile, use_cuda=(not use_cpu), use_cache=metadata.other.kv_cache
         )
 
         if num_beams == 1:
