@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,6 +41,7 @@ size_t size(nvinfer1::DataType type)
     case nvinfer1::DataType::kINT32: return 4;
     case nvinfer1::DataType::kBOOL: return 1;
     case nvinfer1::DataType::kUINT8: return 1;
+    case nvinfer1::DataType::kFP8: return 1;
     }
     return -1;
 }
@@ -56,6 +57,7 @@ py::dtype nptype(nvinfer1::DataType type)
     case nvinfer1::DataType::kINT32: return py::dtype("i4");
     case nvinfer1::DataType::kBOOL: return py::dtype("b1");
     case nvinfer1::DataType::kUINT8: return py::dtype("u1");
+    case nvinfer1::DataType::kFP8: return py::dtype("f1");
     }
     return py::dtype("unknown");
 }

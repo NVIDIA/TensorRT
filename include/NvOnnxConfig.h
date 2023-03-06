@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
  * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
@@ -61,9 +61,9 @@ public:
     //!
     //! \brief Get the Model Data Type.
     //!
-    //! \return DataType nvinfer1::DataType
+    //! \return the data type of the model.
     //!
-    //! \see setModelDtype() and #DataType
+    //! \see setModelDtype() and DataType
     //!
     virtual nvinfer1::DataType getModelDtype() const noexcept = 0;
 

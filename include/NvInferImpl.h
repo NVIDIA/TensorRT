@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
  * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
@@ -28,6 +28,7 @@ class IAlgorithmIOInfo;
 class IAlgorithmSelector;
 class IAlgorithmVariant;
 class IAssertionLayer;
+class IBuilder;
 class IBuilderConfig;
 class IConcatenationLayer;
 class IConditionLayer;
@@ -47,6 +48,7 @@ class IGatherLayer;
 class IGridSampleLayer;
 class IHostMemory;
 class IIdentityLayer;
+class ICastLayer;
 class IIfConditional;
 class IIfConditionalInputLayer;
 class IIfConditionalOutputLayer;
@@ -58,6 +60,7 @@ class ILoopOutputLayer;
 class ILRNLayer;
 class IMatrixMultiplyLayer;
 class INetworkDefinition;
+class INormalizationLayer;
 class INMSLayer;
 class INonZeroLayer;
 class IOneHotLayer;
@@ -69,6 +72,7 @@ class IPlugin;
 class IPluginExt;
 class IPluginFactory;
 class IPluginLayer;
+class IPluginRegistry;
 class IPluginV2Layer;
 class IPoolingLayer;
 class IProfiler;
@@ -77,7 +81,9 @@ class IRaggedSoftMaxLayer;
 class IRecurrenceLayer;
 class IReduceLayer;
 class IResizeLayer;
+class IReverseSequenceLayer;
 class IRNNv2Layer;
+class IRuntime;
 class IScaleLayer;
 class IScatterLayer;
 class ISelectLayer;
@@ -133,12 +139,14 @@ enum class TripLimit : int32_t;
 enum class UnaryOperation : int32_t;
 enum class WeightsRole : int32_t;
 enum class PreviewFeature : int32_t;
+enum class HardwareCompatibilityLevel : int32_t;
 
 using TacticSources = uint32_t;
 using TensorFormats = uint32_t;
 using BuilderFlags = uint32_t;
 using NetworkDefinitionCreationFlags = uint32_t;
 using QuantizationFlags = uint32_t;
+using TempfileControlFlags = uint32_t;
 using ResizeMode = InterpolationMode;
 using SliceMode = SampleMode;
 
@@ -197,6 +205,16 @@ public:
     virtual ILogger* getLogger() const noexcept = 0;
     virtual bool setMaxThreads(int32_t maxThreads) noexcept = 0;
     virtual int32_t getMaxThreads() const noexcept = 0;
+    virtual void setTemporaryDirectory(char const*) noexcept = 0;
+    virtual char const* getTemporaryDirectory() const noexcept = 0;
+    virtual void setTempfileControlFlags(TempfileControlFlags) noexcept = 0;
+    virtual TempfileControlFlags getTempfileControlFlags() const noexcept = 0;
+    virtual IRuntime* getPImpl() noexcept = 0;
+    virtual IPluginRegistry& getPluginRegistry() noexcept = 0;
+    virtual void setPluginRegistryParent(IPluginRegistry* parent) noexcept = 0;
+    virtual IRuntime* loadRuntime(char const* path) noexcept = 0;
+    virtual void setEngineHostCodeAllowed(bool allowed) noexcept = 0;
+    virtual bool getEngineHostCodeAllowed() const noexcept = 0;
 };
 
 class VRefitter : public VRoot
@@ -285,6 +303,9 @@ public:
         char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept = 0;
     virtual int32_t getNbIOTensors() const noexcept = 0;
     virtual char const* getIOTensorName(int32_t index) const noexcept = 0;
+    virtual HardwareCompatibilityLevel getHardwareCompatibilityLevel() const noexcept = 0;
+    virtual ICudaEngine* getPImpl() noexcept = 0;
+    virtual int32_t getNbAuxStreams() const noexcept = 0;
 };
 
 class VExecutionContext : public VRoot
@@ -339,6 +360,8 @@ public:
     virtual size_t getPersistentCacheLimit() const noexcept = 0;
     virtual bool setNvtxVerbosity(ProfilingVerbosity verbosity) noexcept = 0;
     virtual ProfilingVerbosity getNvtxVerbosity() const noexcept = 0;
+    virtual IExecutionContext* getPImpl() noexcept = 0;
+    virtual void setAuxStreams(cudaStream_t* auxStreams, int32_t nbStreams) noexcept = 0;
 };
 
 class VEngineInspector : public VRoot
@@ -350,6 +373,7 @@ public:
     virtual char const* getEngineInformation(LayerInformationFormat format) const noexcept = 0;
     virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
+    virtual IEngineInspector* getPImpl() noexcept = 0;
 };
 
 class VTensor : public VRoot
@@ -398,6 +422,8 @@ public:
     virtual DataType getOutputType(int32_t index) const noexcept = 0;
     virtual bool outputTypeIsSet(int32_t index) const noexcept = 0;
     virtual void resetOutputType(int32_t index) noexcept = 0;
+    virtual void setMetadata(char const* docString) noexcept = 0;
+    virtual char const* getMetadata() const noexcept = 0;
 };
 
 class VConvolutionLayer : public VRoot
@@ -656,8 +682,8 @@ public:
     virtual Dims getReshapeDimensions() const noexcept = 0;
     virtual void setSecondTranspose(Permutation const& permutation) noexcept = 0;
     virtual Permutation const& getSecondTranspose() const noexcept = 0;
-    virtual void setZeroIsPlaceholder(bool zeroIsPlaceholder) = 0;
-    virtual bool getZeroIsPlaceholder() const = 0;
+    virtual void setZeroIsPlaceholder(bool zeroIsPlaceholder) noexcept = 0;
+    virtual bool getZeroIsPlaceholder() const noexcept = 0;
 };
 
 class VSliceLayer : public VRoot
@@ -709,6 +735,13 @@ public:
 class VIdentityLayer : public VRoot
 {
 public:
+};
+
+class VCastLayer : public VRoot
+{
+public:
+    virtual void setToType(DataType toType) noexcept = 0;
+    virtual DataType getToType() const noexcept = 0;
 };
 
 class VConstantLayer : public VRoot
@@ -904,6 +937,29 @@ public:
     virtual int32_t getTopKBoxLimit() const noexcept = 0;
 }; // class VNMSLayer
 
+class VReverseSequenceLayer : public VRoot
+{
+public:
+    virtual void setBatchAxis(int32_t batchAxis) noexcept = 0;
+    virtual int32_t getBatchAxis() const noexcept = 0;
+
+    virtual void setSequenceAxis(int32_t sequenceAxis) noexcept = 0;
+    virtual int32_t getSequenceAxis() const noexcept = 0;
+}; // class VReverseSequenceLayer
+
+class VNormalizationLayer : public VRoot
+{
+public:
+    virtual void setEpsilon(float eps) noexcept = 0;
+    virtual float getEpsilon() const noexcept = 0;
+    virtual void setAxes(uint32_t axesMask) noexcept = 0;
+    virtual uint32_t getAxes() const noexcept = 0;
+    virtual void setNbGroups(int32_t nbGroups) noexcept = 0;
+    virtual int32_t getNbGroups() const noexcept = 0;
+    virtual void setComputePrecision(DataType type) noexcept = 0;
+    virtual DataType getComputePrecision() const noexcept = 0;
+}; // class VNormalizationLayer
+
 class VNetworkDefinition : public VRoot
 {
 public:
@@ -945,8 +1001,7 @@ public:
         = 0;
     virtual IConstantLayer* addConstant(Dims dimensions, Weights weights) noexcept = 0;
     virtual IRNNv2Layer* addRNNv2(
-        ITensor& input, int32_t layerCount, int32_t hiddenSize, int32_t maxSeqLen, RNNOperation op) noexcept
-        = 0;
+        ITensor& input, int32_t layerCount, int32_t hiddenSize, int32_t maxSeqLen, RNNOperation op) noexcept = 0;
     virtual IIdentityLayer* addIdentity(ITensor& input) noexcept = 0;
     virtual void removeTensor(ITensor& tensor) noexcept = 0;
     virtual void unmarkOutput(ITensor& tensor) noexcept = 0;
@@ -989,6 +1044,11 @@ public:
     virtual INonZeroLayer* addNonZero(ITensor& input) noexcept = 0;
     virtual IGridSampleLayer* addGridSample(ITensor& input, ITensor& grid) noexcept = 0;
     virtual INMSLayer* addNMS(ITensor& boxes, ITensor& scores, ITensor& maxOutputBoxesPerClass) noexcept = 0;
+    virtual IReverseSequenceLayer* addReverseSequence(ITensor& input, ITensor& sequenceLens) noexcept = 0;
+    virtual INormalizationLayer* addNormalization(
+        ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept = 0;
+    virtual ICastLayer* addCast(ITensor& input, DataType toType) noexcept = 0;
+    virtual IBuilder& getBuilder() const noexcept = 0;
 };
 
 class VAlgorithmIOInfo : public VRoot
@@ -997,6 +1057,8 @@ public:
     virtual TensorFormat getTensorFormat() const noexcept = 0;
     virtual DataType getDataType() const noexcept = 0;
     virtual Dims getStrides() const noexcept = 0;
+    virtual int64_t getVectorizedDim() const noexcept = 0;
+    virtual int64_t getComponentsPerElement() const noexcept = 0;
 };
 
 class VAlgorithmVariant : public VRoot
@@ -1085,6 +1147,15 @@ public:
     virtual std::size_t getMemoryPoolLimit(MemoryPoolType pool) const noexcept = 0;
     virtual void setPreviewFeature(PreviewFeature feature, bool enable) noexcept = 0;
     virtual bool getPreviewFeature(PreviewFeature feature) const noexcept = 0;
+    virtual void setBuilderOptimizationLevel(int32_t level) noexcept = 0;
+    virtual int32_t getBuilderOptimizationLevel() const noexcept = 0;
+    virtual void setHardwareCompatibilityLevel(HardwareCompatibilityLevel hardwareCompatibilityLevel) noexcept = 0;
+    virtual HardwareCompatibilityLevel getHardwareCompatibilityLevel() const noexcept = 0;
+    virtual void setPluginsToSerialize(char const* const* paths, int32_t nbPaths) noexcept = 0;
+    virtual char const* getPluginToSerialize(int32_t index) const noexcept = 0;
+    virtual int32_t getNbPluginsToSerialize() const noexcept = 0;
+    virtual void setMaxAuxStreams(int32_t nbStreams) noexcept = 0;
+    virtual int32_t getMaxAuxStreams() const noexcept = 0;
 };
 
 class VBuilder : public VRoot
@@ -1112,6 +1183,7 @@ public:
     virtual ILogger* getLogger() const noexcept = 0;
     virtual bool setMaxThreads(int32_t maxThreads) noexcept = 0;
     virtual int32_t getMaxThreads() const noexcept = 0;
+    virtual IPluginRegistry& getPluginRegistry() noexcept = 0;
 };
 
 } // namespace apiv

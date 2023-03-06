@@ -39,7 +39,7 @@ public:
     FMHCAPlugin(std::string const& name);
     FMHCAPlugin(std::string const& name, void const* data, size_t length);
     FMHCAPlugin() = delete;
-    ~FMHCAPlugin() = default;
+    ~FMHCAPlugin() override = default;
 
     void init(bool loadCubins = false);
 
@@ -105,7 +105,7 @@ class FMHCAPluginCreator : public IPluginCreator
 {
 public:
     FMHCAPluginCreator();
-    ~FMHCAPluginCreator() = default;
+    ~FMHCAPluginCreator() override = default;
 
     IPluginV2* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
     IPluginV2* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept override;

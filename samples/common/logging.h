@@ -163,7 +163,7 @@ public:
     }
     LogStreamConsumer(const LogStreamConsumer& other) = delete;
     LogStreamConsumer() = delete;
-    ~LogStreamConsumer() = default;
+    ~LogStreamConsumer() override = default;
     LogStreamConsumer& operator=(const LogStreamConsumer&) = delete;
     LogStreamConsumer& operator=(LogStreamConsumer&&) = delete;
 

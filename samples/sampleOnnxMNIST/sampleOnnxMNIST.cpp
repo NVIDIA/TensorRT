@@ -24,6 +24,10 @@
 //! [--useDLACore=<int>]
 //!
 
+// Define TRT entrypoints used in common code
+#define DEFINE_TRT_ENTRYPOINTS 1
+#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
+
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"
@@ -51,6 +55,7 @@ class SampleOnnxMNIST
 public:
     SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params)
         : mParams(params)
+        , mRuntime(nullptr)
         , mEngine(nullptr)
     {
     }
@@ -72,6 +77,7 @@ private:
     nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
     int mNumber{0};             //!< The number to classify
 
+    std::shared_ptr<nvinfer1::IRuntime> mRuntime;   //!< The TensorRT runtime used to deserialize the engine
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
     //!
@@ -148,14 +154,14 @@ bool SampleOnnxMNIST::build()
         return false;
     }
 
-    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    if (!runtime)
+    mRuntime = std::shared_ptr<nvinfer1::IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+    if (!mRuntime)
     {
         return false;
     }
 
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -198,7 +204,7 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
-        samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
@@ -291,11 +297,11 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 {
     const int outputSize = mOutputDims.d[1];
     float* output = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
-    float val{0.0f};
+    float val{0.0F};
     int idx{0};
 
     // Calculate Softmax
-    float sum{0.0f};
+    float sum{0.0F};
     for (int i = 0; i < outputSize; i++)
     {
         output[i] = exp(output[i]);
@@ -314,12 +320,12 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 
         sample::gLogInfo << " Prob " << i << "  " << std::fixed << std::setw(5) << std::setprecision(4) << output[i]
                          << " "
-                         << "Class " << i << ": " << std::string(int(std::floor(output[i] * 10 + 0.5f)), '*')
+                         << "Class " << i << ": " << std::string(int(std::floor(output[i] * 10 + 0.5F)), '*')
                          << std::endl;
     }
     sample::gLogInfo << std::endl;
 
-    return idx == mNumber && val > 0.9f;
+    return idx == mNumber && val > 0.9F;
 }
 
 //!

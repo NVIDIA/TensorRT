@@ -55,11 +55,6 @@ For specific software versions, see the [TensorRT Installation Guide](https://do
 pip3 install -r requirements.txt
 ```
 
-On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
-```bash
-export PATH=${PATH}:/usr/local/cuda/bin/
-```
-
 2. [Install CMake](https://cmake.org/download/).
 
 3. (For Windows builds) [Visual Studio](https://visualstudio.microsoft.com/vs/older-downloads/) 2017 Community or Enterprise edition

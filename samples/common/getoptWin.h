@@ -54,7 +54,7 @@ extern "C"
 
     WINGETOPT_API extern char* optarg; /* pointer to argument of current option  */
 
-    extern int getopt(int nargc, char* const* nargv, const char* options);
+    extern int getopt(int nargc, char* const* nargv, char const* options);
 
 #ifdef _BSD_SOURCE
 /*
@@ -90,7 +90,7 @@ extern "C"
 
     struct option /* specification for a long form option...	*/
     {
-        const char* name; /* option name, without leading hyphens */
+        char const* name; /* option name, without leading hyphens */
         int has_arg;      /* does it take an argument?		*/
         int* flag;        /* where to save its status, or NULL	*/
         int val;          /* its associated status value		*/
@@ -104,9 +104,9 @@ extern "C"
     };
 
     extern int getopt_long(
-        int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx);
+        int nargc, char* const* nargv, char const* options, const struct option* long_options, int* idx);
     extern int getopt_long_only(
-        int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx);
+        int nargc, char* const* nargv, char const* options, const struct option* long_options, int* idx);
 /*
  * Previous MinGW implementation had...
  */

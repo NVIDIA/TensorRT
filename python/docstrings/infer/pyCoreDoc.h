@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -124,7 +124,7 @@ constexpr char const* descr = R"trtdoc(
 constexpr char const* report_layer_time = R"trtdoc(
     Reports time in milliseconds for each layer. This function must be overriden a derived class.
 
-    :arg layer_name: The name of the layer, set when constructing the :class:`INetworkDefinition` .
+    :arg layer_name: The name of the layer, set when constructing the :class:`INetworkDefinition` . If the engine is built with profiling verbosity set to NONE, the layerName is the decimal index of the layer.
     :arg ms: The time in milliseconds to execute the layer.
 )trtdoc";
 } // namespace IProfilerDoc
@@ -667,6 +667,20 @@ constexpr char const* execute_async_v3 = R"trtdoc(
     :arg stream_handle: The cuda stream on which the inference kernels will be enqueued.
 )trtdoc";
 
+constexpr char const* set_aux_streams = R"trtdoc(
+    Set the auxiliary streams that TensorRT should launch kernels on in the next execute_async_v3() call.
+
+    If set, TensorRT will launch the kernels that are supposed to run on the auxiliary streams using the streams provided by the user with this API. If this API is not called before the execute_async_v3() call, then TensorRT will use the auxiliary streams created by TensorRT internally.
+
+    TensorRT will always insert event synchronizations between the main stream provided via execute_async_v3() call and the auxiliary streams:
+     - At the beginning of the execute_async_v3() call, TensorRT will make sure that all the auxiliary streams wait on the activities on the main stream.
+     - At the end of the execute_async_v3() call, TensorRT will make sure that the main stream wait on the activities on all the auxiliary streams.
+
+    The provided auxiliary streams must not be the default stream and must all be different to avoid deadlocks.
+
+    :arg aux_streams: A list of cuda streams. If the length of the list is greater than engine.num_aux_streams, then only the first "engine.num_aux_streams" streams will be used. If the length is less than engine.num_aux_streams, such as an empty list, then TensorRT will use the provided streams for the first few auxiliary streams, and will create additional streams internally for the rest of the auxiliary streams.
+)trtdoc";
+
 } // namespace IExecutionContextDoc
 
 namespace ICudaEngineDoc
@@ -690,6 +704,8 @@ constexpr char const* descr = R"trtdoc(
     :ivar engine_capability: :class:`EngineCapability` The engine capability. See :class:`EngineCapability` for details.
     :ivar tactic_sources: :class:`int` The tactic sources required by this engine.
     :ivar profiling_verbosity: The profiling verbosity the builder config was set to when the engine was built.
+    :ivar hardware_compatibility_level: The hardware compatibility level of the engine.
+    :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.
 )trtdoc";
 
 constexpr char const* get_binding_index = R"trtdoc(
@@ -1067,7 +1083,11 @@ constexpr char const* DIRECT_IO
 constexpr char const* REJECT_EMPTY_ALGORITHMS
     = R"trtdoc(Fail if IAlgorithmSelector.select_algorithms returns an empty set of algorithms.)trtdoc";
 constexpr char const* ENABLE_TACTIC_HEURISTIC
-    = R"trtdoc(Enable heuristic-based tactic selection for shorter engine generation time. The performance of the generated engine may not be as performant as a profiling-based builder.)trtdoc";
+    = R"trtdoc([DEPRECATED] Enable heuristic-based tactic selection for shorter engine generation time. The performance of the generated engine may not be as performant as a profiling-based builder.)trtdoc";
+constexpr char const* VERSION_COMPATIBLE
+    = R"trtdoc(Restrict to lean runtime operators to provide version forward compatibility for the plan files.)trtdoc";
+constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
+constexpr char const* FP8 = R"trtdoc(Enable FP8 layer selection)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1095,6 +1115,14 @@ constexpr char const* DLA_GLOBAL_DRAM = R"trtdoc(
     The size of this pool must be at least 4 KiB and must be a power of 2.
     This defaults to 512 MiB.
 )trtdoc";
+constexpr char const* TACTIC_DRAM = R"trtdoc(
+    kTACTIC_DRAM is the host DRAM used by the optimizer to
+    run tactics. On embedded devices, where host and device memory are unified, this includes all device
+    memory required by TensorRT to build the network up to the point of each memory allocation.
+    This defaults to 75% of totalGlobalMem as reported by cudaGetDeviceProperties when
+    cudaGetDeviceProperties.embedded is true, and 100% otherwise.
+)trtdoc";
+
 } // namespace MemoryPoolTypeDoc
 
 namespace QuantizationFlagDoc
@@ -1126,7 +1154,28 @@ constexpr char const* DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 = R"trtdoc(
     application's plugins to support nullptr handles.
     The default value for this flag is off.
 )trtdoc";
+constexpr char const* PROFILE_SHARING_0806 = R"trtdoc(
+    Allows optimization profiles to be shared across execution contexts. This will become the default behavior in TensorRT 9.0 and the flag defaults to false.
+)trtdoc";
 } // namespace PreviewFeatureDoc
+
+namespace HardwareCompatibilityLevelDoc
+{
+constexpr char const* descr = R"trtdoc(
+    Describes requirements of compatibility with GPU architectures other than that of the GPU on which the engine was
+    built. Levels except kNONE are only supported for engines built on NVIDIA Ampere and later GPUs.
+    Note that compatibility with future hardware depends on CUDA forward compatibility support.
+)trtdoc";
+constexpr char const* NONE = R"trtdoc(
+    Do not require hardware compatibility with GPU architectures other than that of the GPU on which the engine was built.
+)trtdoc";
+constexpr char const* AMPERE_PLUS = R"trtdoc(
+    Require that the engine is compatible with Ampere and newer GPUs. This will limit the max shared memory usage to
+    48KiB, may reduce the number of available tactics for each layer, and may prevent some fusions from occurring.
+    Thus this can decrease the performance, especially for tf32 models.
+    This option will disable cuDNN, cuBLAS, and cuBLAS LT as tactic sources.
+)trtdoc";
+} // namespace HardwareCompatibilityLevelDoc
 
 namespace NetworkDefinitionCreationFlagDoc
 {
@@ -1145,6 +1194,31 @@ constexpr char const* descr = R"trtdoc(Device types that TensorRT can execute on
 constexpr char const* GPU = R"trtdoc(GPU device)trtdoc";
 constexpr char const* DLA = R"trtdoc(DLA core)trtdoc";
 } // namespace DeviceTypeDoc
+
+namespace TempfileControlFlagDoc
+{
+constexpr char const* descr = R"trtdoc(
+Flags used to control TensorRT's behavior when creating executable temporary files.
+
+On some platforms the TensorRT runtime may need to create files in a temporary directory or use platform-specific
+APIs to create files in-memory to load temporary DLLs that implement runtime code. These flags allow the
+application to explicitly control TensorRT's use of these files. This will preclude the use of certain TensorRT
+APIs for deserializing and loading lean runtimes.
+
+These should be treated as bit offsets, e.g. in order to allow in-memory files for a given :class:`IRuntime`:
+
+.. code-block:: python
+
+    runtime.tempfile_control_flags |= (1 << int(TempfileControlFlag.ALLOW_IN_MEMORY_FILES))
+
+)trtdoc";
+
+constexpr char const* ALLOW_IN_MEMORY_FILES
+    = R"trtdoc(Allow creating and loading files in-memory (or unnamed files).)trtdoc";
+constexpr char const* ALLOW_TEMPORARY_FILES
+    = R"trtdoc(Allow creating and loading named files in a temporary directory on the filesystem.)trtdoc";
+
+} // namespace TempfileControlFlagDoc
 
 namespace ProfilingVerbosityDoc
 {
@@ -1281,6 +1355,10 @@ constexpr char const* descr = R"trtdoc(
         :ivar profiling_verbosity: Profiling verbosity in NVTX annotations.
         :ivar engine_capability: The desired engine capability. See :class:`EngineCapability` for details.
         :ivar algorithm_selector: The :class:`IAlgorithmSelector` to use.
+        :ivar builder_optimization_level: The builder optimization level which TensorRT should build the engine at. Setting a higher optimization level allows TensorRT to spend longer engine building time searching for more optimization options. The resulting engine may have better performance compared to an engine built with a lower optimization level. The default optimization level is 3. Valid values include integers from 0 to the maximum optimization level, which is currently 5. Setting it to be greater than the maximum level results in identical behavior to the maximum level.
+        :ivar hardware_compatibility_level: Hardware compatibility allows an engine compatible with GPU architectures other than that of the GPU on which the engine was built.
+        :ivar plugins_to_serialize: The plugin libraries to be serialized with forward-compatible engines.
+        :ivar max_aux_streams: The maximum number of auxiliary streams that TRT is allowed to use. If the network contains operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the one provided to the IExecutionContext::enqueueV3() call. The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on whether enabling multi-stream would improve the performance. This behavior can be overridden by calling this API to set the maximum number of auxiliary streams explicitly. Set this to 0 to enforce single-stream inference. The resulting engine may use fewer auxiliary streams than the maximum if the network does not contain enough parallelism or if TensorRT determines that using more auxiliary streams does not help improve the performance. Allowing more auxiliary streams does not always give better performance since there will be synchronizations overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by cross-stream synchronizations. Using more auxiliary leads to more memory usage at runtime since some activation memory blocks will not be able to be reused.
     )trtdoc";
 
 constexpr char const* set_memory_pool_limit = R"trtdoc(
@@ -1586,6 +1664,12 @@ constexpr char const* is_network_supported = R"trtdoc(
 constexpr char const* reset = R"trtdoc(
     Resets the builder state to default values.
 )trtdoc";
+
+constexpr char const* get_plugin_registry = R"trtdoc(
+    Get the local plugin registry that can be used by the builder.
+
+    :returns: The local plugin registry that can be used by the builder.
+)trtdoc";
 } // namespace BuilderDoc
 
 namespace RuntimeDoc
@@ -1600,6 +1684,13 @@ constexpr char const* descr = R"trtdoc(
     :ivar num_DLA_cores: :class:`int` The number of DLA engines available to this builder.
     :ivar logger: :class:`ILogger` The logger provided when creating the refitter.
     :ivar max_threads: :class:`int` The maximum thread that can be used by the :class:`Runtime`.
+    :ivar temporary_directory: :class:`str` The temporary directory to use when loading executable code for engines.  If set to None (the default), TensorRT will
+                                            attempt to find a suitable directory for use using platform-specific heuristics:
+                                            - On UNIX/Linux platforms, TensorRT will first try the TMPDIR environment variable, then fall back to /tmp
+                                            - On Windows, TensorRT will try the TEMP environment variable.
+    :ivar tempfile_control_flags: :class:`int` Flags which control whether TensorRT is allowed to create in-memory or temporary files.
+                                               See :class:`TempfileControlFlag` for details.
+    :ivar engine_host_code_allowed: :class:`bool` Whether this runtime is allowed to deserialize engines that contain host executable code (Default: False).
 
 )trtdoc";
 
@@ -1613,6 +1704,25 @@ constexpr char const* deserialize_cuda_engine = R"trtdoc(
     :arg serialized_engine: The :class:`buffer` that holds the serialized :class:`ICudaEngine` .
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
+)trtdoc";
+
+constexpr char const* get_plugin_registry = R"trtdoc(
+    Get the local plugin registry that can be used by the runtime.
+
+    :returns: The local plugin registry that can be used by the runtime.
+)trtdoc";
+
+constexpr char const* load_runtime = R"trtdoc(
+    Load IRuntime from the file.
+
+    This method loads a runtime library from a shared library file. The runtime can
+    then be used to execute a plan file built with BuilderFlag.VERSION_COMPATIBLE
+    and BuilderFlag.EXCLUDE_LEAN_RUNTIME both set and built with the same version
+    of TensorRT as the loaded runtime library.
+
+    :ivar path: Path to the runtime lean library.
+
+    :returns: The :class:`IRuntime`, or None if it could not be loaded.
 )trtdoc";
 
 } // namespace RuntimeDoc
@@ -1779,7 +1889,18 @@ constexpr char const* RESIZABLE = R"trtdoc(TensorRT may call realloc() on this a
 
 namespace GpuAllocatorDoc
 {
-constexpr char const* descr = R"trtdoc(Application-implemented class for controlling allocation on the GPU.)trtdoc";
+constexpr char const* descr = R"trtdoc(Application-implemented class for controlling allocation on the GPU.
+
+To implement a custom allocator, ensure that you explicitly instantiate the base class in :func:`__init__` :
+::
+
+    class MyAllocator(trt.IGpuAllocator):
+        def __init__(self):
+            trt.IGpuAllocator.__init__(self)
+
+        ...
+
+)trtdoc";
 
 constexpr char const* allocate = R"trtdoc(
     A callback implemented by the application to handle acquisition of GPU memory.

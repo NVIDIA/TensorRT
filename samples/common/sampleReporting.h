@@ -25,6 +25,7 @@
 #include "NvInfer.h"
 
 #include "sampleDevice.h"
+#include "sampleInference.h"
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
@@ -157,8 +158,8 @@ void printMetricExplanations(std::ostream& os);
 //!
 //! \brief Print and summarize a timing trace
 //!
-void printPerformanceReport(std::vector<InferenceTrace> const& trace, ReportingOptions const& reporting, float warmupMs,
-    int32_t batchSize, std::ostream& osInfo, std::ostream& osWarning, std::ostream& osVerbose);
+void printPerformanceReport(std::vector<InferenceTrace> const& trace, ReportingOptions const& reportingOpts,
+    InferenceOptions const& infOpts, std::ostream& osInfo, std::ostream& osWarning, std::ostream& osVerbose);
 
 //!
 //! \brief Export a timing trace to JSON file
@@ -176,6 +177,9 @@ void dumpInputs(nvinfer1::IExecutionContext const& context, Bindings const& bind
 //!
 template <typename ContextType>
 void dumpOutputs(ContextType const& context, Bindings const& bindings, std::ostream& os);
+
+template <typename ContextType>
+void dumpRawBindingsToFiles(ContextType const& context, Bindings const& bindings, std::ostream& os);
 
 //!
 //! \brief Export output tensors to JSON file
@@ -273,6 +277,25 @@ private:
     std::vector<LayerProfile>::iterator mIterator{mLayers.begin()};
     int32_t mUpdatesCount{0};
 };
+
+//!
+//! \brief Print layer info to logger or export it to output JSON file.
+//!
+bool printLayerInfo(
+    ReportingOptions const& reporting, nvinfer1::ICudaEngine* engine, nvinfer1::IExecutionContext* context);
+
+//! Forward declaration.
+struct InferenceEnvironment;
+
+//!
+//! \brief Print per-layer perf profile data to logger or export it to output JSON file.
+//!
+void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnvironment& iEnv);
+
+//!
+//! \brief Print binding output values to logger or export them to output JSON file.
+//!
+void printOutput(ReportingOptions const& reporting, InferenceEnvironment const& iEnv, int32_t batch);
 
 } // namespace sample
 

@@ -49,8 +49,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "getoptWin.h"
 #include <errno.h>
-#include <getopt.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,8 +92,8 @@ static char EMSG[] = "";
 #define EMSG ""
 #endif
 
-static int getopt_internal(int, char* const*, const char*, const struct option*, int*, int);
-static int parse_long_options(char* const*, const char*, const struct option*, int*, int);
+static int getopt_internal(int, char* const*, char const*, const struct option*, int*, int);
+static int parse_long_options(char* const*, char const*, const struct option*, int*, int);
 static int gcd(int, int);
 static void permute_args(int, int, int, char* const*);
 
@@ -104,14 +104,14 @@ static int nonopt_start = -1; /* first non option argument (for permute) */
 static int nonopt_end = -1;   /* first option after non options (for permute) */
 
 /* Error messages */
-static const char recargchar[] = "option requires an argument -- %c";
-static const char recargstring[] = "option requires an argument -- %s";
-static const char ambig[] = "ambiguous option -- %.*s";
-static const char noarg[] = "option doesn't take an argument -- %.*s";
-static const char illoptchar[] = "unknown option -- %c";
-static const char illoptstring[] = "unknown option -- %s";
+static char const recargchar[] = "option requires an argument -- %c";
+static char const recargstring[] = "option requires an argument -- %s";
+static char const ambig[] = "ambiguous option -- %.*s";
+static char const noarg[] = "option doesn't take an argument -- %.*s";
+static char const illoptchar[] = "unknown option -- %c";
+static char const illoptstring[] = "unknown option -- %s";
 
-static void _vwarnx(const char* fmt, va_list ap)
+static void _vwarnx(char const* fmt, va_list ap)
 {
     (void) fprintf(stderr, "%s: ", __progname);
     if (fmt != NULL)
@@ -119,7 +119,7 @@ static void _vwarnx(const char* fmt, va_list ap)
     (void) fprintf(stderr, "\n");
 }
 
-static void warnx(const char* fmt, ...)
+static void warnx(char const* fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -188,7 +188,7 @@ static void permute_args(int panonopt_start, int panonopt_end, int opt_end, char
  * Returns -1 if short_too is set and the option does not match long_options.
  */
 static int parse_long_options(
-    char* const* nargv, const char* options, const struct option* long_options, int* idx, int short_too)
+    char* const* nargv, char const* options, const struct option* long_options, int* idx, int short_too)
 {
     char *current_argv, *has_equal;
     size_t current_argv_len;
@@ -321,9 +321,9 @@ static int parse_long_options(
  *	Parse argc/argv argument vector.  Called by user level routines.
  */
 static int getopt_internal(
-    int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx, int flags)
+    int nargc, char* const* nargv, char const* options, const struct option* long_options, int* idx, int flags)
 {
-    const char* oli; /* option letter list index */
+    char const* oli; /* option letter list index */
     int optchar, short_too;
     static int posixly_correct = -1;
 
@@ -532,7 +532,7 @@ start:
  *
  * [eventually this will replace the BSD getopt]
  */
-int getopt(int nargc, char* const* nargv, const char* options)
+int getopt(int nargc, char* const* nargv, char const* options)
 {
 
     /*
@@ -551,7 +551,7 @@ int getopt(int nargc, char* const* nargv, const char* options)
  * getopt_long --
  *	Parse argc/argv argument vector.
  */
-int getopt_long(int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx)
+int getopt_long(int nargc, char* const* nargv, char const* options, const struct option* long_options, int* idx)
 {
 
     return (getopt_internal(nargc, nargv, options, long_options, idx, FLAG_PERMUTE));
@@ -561,7 +561,7 @@ int getopt_long(int nargc, char* const* nargv, const char* options, const struct
  * getopt_long_only --
  *	Parse argc/argv argument vector.
  */
-int getopt_long_only(int nargc, char* const* nargv, const char* options, const struct option* long_options, int* idx)
+int getopt_long_only(int nargc, char* const* nargv, char const* options, const struct option* long_options, int* idx)
 {
 
     return (getopt_internal(nargc, nargv, options, long_options, idx, FLAG_PERMUTE | FLAG_LONGONLY));

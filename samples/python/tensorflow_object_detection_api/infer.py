@@ -17,26 +17,16 @@
 
 import os
 import sys
-import time
-import ctypes
 import argparse
 import numpy as np
 import tensorrt as trt
+from cuda import cudart
 
-import pycuda.driver as cuda
-
-# Use autoprimaryctx if available (pycuda >= 2021.1) to
-# prevent issues with other modules that rely on the primary
-# device context.
-try:
-    import pycuda.autoprimaryctx
-except ModuleNotFoundError:
-    import pycuda.autoinit
-
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+import common
 
 from image_batcher import ImageBatcher
 from visualize import visualize_detections
-
 
 class TensorRTInfer:
     """
@@ -76,7 +66,7 @@ class TensorRTInfer:
             size = np.dtype(trt.nptype(dtype)).itemsize
             for s in shape:
                 size *= s
-            allocation = cuda.mem_alloc(size)
+            allocation = common.cuda_call(cudart.cudaMalloc(size))
             binding = {
                 'index': i,
                 'name': name,
@@ -127,10 +117,10 @@ class TensorRTInfer:
             outputs.append(np.zeros(shape, dtype))
 
         # Process I/O and execute the network
-        cuda.memcpy_htod(self.inputs[0]['allocation'], np.ascontiguousarray(batch))
+        common.memcpy_host_to_device(self.inputs[0]['allocation'], np.ascontiguousarray(batch))
         self.context.execute_v2(self.allocations)
         for o in range(len(outputs)):
-            cuda.memcpy_dtoh(outputs[o], self.outputs[o]['allocation'])
+            common.memcpy_device_to_host(outputs[o], self.outputs[o]['allocation'])
 
         # Process the results
         nums = outputs[0]

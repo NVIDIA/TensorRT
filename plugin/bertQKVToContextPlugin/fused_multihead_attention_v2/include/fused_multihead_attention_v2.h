@@ -814,12 +814,12 @@ public:
         return static_cast<uint64_t>(s) << 32 | (headsize << 2) | (interleaved ? 2U : 0U) | (unroll ? 1U : 0U);
     }
 
-    virtual uint64_t hashID(const KernelMeta& kernelMeta) const
+    uint64_t hashID(const KernelMeta& kernelMeta) const override
     {
         return hashID(kernelMeta.mS, kernelMeta.mD, kernelMeta.mInterleaved, kernelMeta.mUnrollStep);
     }
 
-    virtual void run(Fused_multihead_attention_params_v2& params, cudaStream_t ss) const
+    void run(Fused_multihead_attention_params_v2& params, cudaStream_t ss) const override
     {
         if (params.interleaved)
         {

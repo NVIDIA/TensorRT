@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -86,6 +86,40 @@ constexpr const char* clear_errors = R"trtdoc(
     Clear errors from prior calls to :func:`parse`
 )trtdoc";
 
+constexpr const char* clear_flag = R"trtdoc(
+    Clears the parser flag from the enabled flags.
+
+    :arg flag: The flag to clear.
+)trtdoc";
+
+constexpr const char* get_flag = R"trtdoc(
+    Check if a build mode flag is set.
+
+    :arg flag: The flag to check.
+
+    :returns: A `bool` indicating whether the flag is set.
+)trtdoc";
+
+constexpr const char* set_flag = R"trtdoc(
+    Add the input parser flag to the already enabled flags.
+
+    :arg flag: The flag to set.
+)trtdoc";
+
+constexpr const char* get_used_vc_plugin_libraries = R"trtdoc(
+    Query the plugin libraries needed to implement operations used by the parser in a version-compatible engine.
+
+    This provides a list of plugin libraries on the filesystem needed to implement operations
+    in the parsed network.  If you are building a version-compatible engine using this network,
+    provide this list to IBuilderConfig.set_plugins_to_serialize() to serialize these plugins along
+    with the version-compatible engine, or, if you want to ship these plugin libraries externally
+    to the engine, ensure that IPluginRegistry.load_library() is used to load these libraries in the
+    appropriate runtime before deserializing the corresponding engine.
+
+    :returns: List[str] List of plugin libraries found by the parser.
+
+    :raises: :class:`RuntimeError` if an internal error occurred when trying to fetch the list of plugin libraries.
+)trtdoc";
 } // namespace OnnxParserDoc
 
 namespace ErrorCodeDoc
@@ -94,6 +128,19 @@ constexpr const char* descr = R"trtdoc(
     The type of parser error
 )trtdoc";
 } // namespace ErrorCodeDoc
+
+namespace OnnxParserFlagDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Flags that control how an ONNX model gets parsed.
+)trtdoc";
+constexpr const char* VERSION_COMPATIBLE = R"trtdoc(
+   Parse the ONNX model into the INetworkDefinition with the intention of building a version-compatible engine in TensorRT 8.6.
+   This flag is planned to be deprecated in TensorRT 8.7, and removed in TensorRT 9.0.
+   This will choose TensorRT's native InstanceNormalization implementation over the plugin implementation.
+   There may be performance degradations when this flag is enabled.
+)trtdoc";
+} // namespace OnnxParserFlagDoc
 
 namespace ParserErrorDoc
 {

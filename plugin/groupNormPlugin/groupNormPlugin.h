@@ -88,7 +88,7 @@ class GroupNormPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     GroupNormPluginCreator();
-    ~GroupNormPluginCreator();
+    ~GroupNormPluginCreator() override;
 
     GroupNormPluginCreator(const GroupNormPluginCreator& /*other*/) = delete;
     GroupNormPluginCreator& operator=(const GroupNormPluginCreator& /*other*/) = delete;

@@ -153,8 +153,8 @@ private:
 class BatchStream : public IBatchStream
 {
 public:
-    BatchStream(
-        int batchSize, int maxBatches, std::string prefix, std::string suffix, std::vector<std::string> directories)
+    BatchStream(int batchSize, int maxBatches, std::string const& prefix, std::string const& suffix,
+        std::vector<std::string> const& directories)
         : mBatchSize(batchSize)
         , mMaxBatches(maxBatches)
         , mPrefix(prefix)
@@ -180,13 +180,13 @@ public:
         reset(0);
     }
 
-    BatchStream(int batchSize, int maxBatches, std::string prefix, std::vector<std::string> directories)
+    BatchStream(int batchSize, int maxBatches, std::string const& prefix, std::vector<std::string> const& directories)
         : BatchStream(batchSize, maxBatches, prefix, ".batch", directories)
     {
     }
 
-    BatchStream(
-        int batchSize, int maxBatches, nvinfer1::Dims dims, std::string listFile, std::vector<std::string> directories)
+    BatchStream(int batchSize, int maxBatches, nvinfer1::Dims const& dims, std::string const& listFile,
+        std::vector<std::string> const& directories)
         : mBatchSize(batchSize)
         , mMaxBatches(maxBatches)
         , mDims(dims)

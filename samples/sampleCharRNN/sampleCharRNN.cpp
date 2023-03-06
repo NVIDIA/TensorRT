@@ -24,6 +24,9 @@
 //! Command: ./sample_char_rnn [-h or --help] [-d or --datadir=<path to data directory>]
 //!
 
+// Define TRT entrypoints used in common code
+#define DEFINE_TRT_ENTRYPOINTS 1
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -217,6 +220,7 @@ private:
     //!
     void copyRNNOutputsToInputs(samplesCommon::BufferManager& buffers);
 
+    std::shared_ptr<nvinfer1::IRuntime> mRuntime{nullptr}; //!< The TensorRT runtime used to run the network
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
 };
 
@@ -811,14 +815,14 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
         return;
     }
 
-    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    if (!runtime)
+    mRuntime = std::shared_ptr<nvinfer1::IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+    if (!mRuntime)
     {
         return;
     }
 
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
 }
 
 //!

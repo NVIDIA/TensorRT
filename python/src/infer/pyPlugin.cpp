@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,10 +22,16 @@
 #include <cuda_runtime_api.h>
 #include <pybind11/stl.h>
 
+#if EXPORT_ALL_BINDINGS
+#include "NvInferPlugin.h"
+#endif
+
 namespace tensorrt
 {
 using namespace nvinfer1;
+#if EXPORT_ALL_BINDINGS
 using namespace nvinfer1::plugin;
+#endif
 
 constexpr PluginFieldCollection EMPTY_PLUGIN_FIELD_COLLECTION{0, nullptr};
 
@@ -150,7 +156,7 @@ static const auto deserialize_plugin = [](IPluginCreator& self, std::string cons
 
 void bindPlugin(py::module& m)
 {
-    py::class_<IPluginV2>(m, "IPluginV2", IPluginV2Doc::descr)
+    py::class_<IPluginV2>(m, "IPluginV2", IPluginV2Doc::descr, py::module_local())
         .def_property_readonly("num_outputs", &IPluginV2::getNbOutputs)
         .def_property_readonly("tensorrt_version", &IPluginV2::getTensorRTVersion)
         .def_property_readonly("plugin_type", &IPluginV2::getPluginType)
@@ -173,7 +179,7 @@ void bindPlugin(py::module& m)
         .def("destroy", &IPluginV2::destroy, IPluginV2Doc::destroy)
         .def("clone", &IPluginV2::clone, IPluginV2Doc::clone);
 
-    py::class_<IPluginV2Ext, IPluginV2>(m, "IPluginV2Ext", IPluginV2ExtDoc::descr)
+    py::class_<IPluginV2Ext, IPluginV2>(m, "IPluginV2Ext", IPluginV2ExtDoc::descr, py::module_local())
         .def("get_output_data_type", lambdas::get_output_data_type, "index"_a, "input_types"_a,
             IPluginV2ExtDoc::get_output_data_type)
         .def("configure_plugin", lambdas::configure_plugin, "input_shapes"_a, "output_shapes"_a, "input_types"_a,
@@ -185,7 +191,7 @@ void bindPlugin(py::module& m)
         .def("clone", &IPluginV2Ext::clone, IPluginV2ExtDoc::clone);
     ;
 
-    py::enum_<PluginFieldType>(m, "PluginFieldType", PluginFieldTypeDoc::descr)
+    py::enum_<PluginFieldType>(m, "PluginFieldType", PluginFieldTypeDoc::descr, py::module_local())
         .value("FLOAT16", PluginFieldType::kFLOAT16)
         .value("FLOAT32", PluginFieldType::kFLOAT32)
         .value("FLOAT64", PluginFieldType::kFLOAT64)
@@ -196,14 +202,16 @@ void bindPlugin(py::module& m)
         .value("DIMS", PluginFieldType::kDIMS)
         .value("UNKNOWN", PluginFieldType::kUNKNOWN);
 
-    py::class_<PluginField>(m, "PluginField", PluginFieldDoc::descr)
+    py::class_<PluginField>(m, "PluginField", PluginFieldDoc::descr, py::module_local())
         .def(py::init(lambdas::plugin_field_default_constructor), "name"_a = "", py::keep_alive<1, 2>{})
         .def(py::init(lambdas::plugin_field_constructor), "name"_a, "data"_a,
             "type"_a = nvinfer1::PluginFieldType::kUNKNOWN, py::keep_alive<1, 2>{}, py::keep_alive<1, 3>{})
-        .def_property("name", [](PluginField& self) { return self.name; },
+        .def_property(
+            "name", [](PluginField& self) { return self.name; },
             py::cpp_function(
                 [](PluginField& self, FallbackString& name) { self.name = name.c_str(); }, py::keep_alive<1, 2>{}))
-        .def_property("data", [](PluginField& self) { return self.data; },
+        .def_property(
+            "data", [](PluginField& self) { return self.data; },
             py::cpp_function(
                 [](PluginField& self, py::buffer& buffer) {
                     py::buffer_info info = buffer.request();
@@ -214,7 +222,7 @@ void bindPlugin(py::module& m)
         .def_readwrite("size", &PluginField::length);
 
     // PluginFieldCollection behaves like an iterable, and can be constructed from iterables.
-    py::class_<PluginFieldCollection>(m, "PluginFieldCollection_", PluginFieldCollectionDoc::descr)
+    py::class_<PluginFieldCollection>(m, "PluginFieldCollection_", PluginFieldCollectionDoc::descr, py::module_local())
         .def(py::init<>(lambdas::plugin_field_collection_constructor), py::keep_alive<1, 2>{})
         .def("__len__", [](PluginFieldCollection& self) { return self.nbFields; })
         .def("__getitem__", [](PluginFieldCollection& self, int32_t const index) {
@@ -226,7 +234,7 @@ void bindPlugin(py::module& m)
     // which can then be converted to an actual C++ PluginFieldCollection.
     py::implicitly_convertible<std::vector<nvinfer1::PluginField>, PluginFieldCollection>();
 
-    py::class_<IPluginCreator>(m, "IPluginCreator", IPluginCreatorDoc::descr)
+    py::class_<IPluginCreator>(m, "IPluginCreator", IPluginCreatorDoc::descr, py::module_local())
         .def_property_readonly("tensorrt_version", &IPluginCreator::getTensorRTVersion)
         .def_property_readonly("name", &IPluginCreator::getPluginName)
         .def_property_readonly("plugin_version", &IPluginCreator::getPluginVersion)
@@ -239,7 +247,7 @@ void bindPlugin(py::module& m)
             IPluginCreatorDoc::deserialize_plugin);
 
     py::class_<IPluginRegistry, std::unique_ptr<IPluginRegistry, py::nodelete>>(
-        m, "IPluginRegistry", IPluginRegistryDoc::descr)
+        m, "IPluginRegistry", IPluginRegistryDoc::descr, py::module_local())
         .def_property_readonly("plugin_creator_list", lambdas::get_plugin_creator_list)
         .def("register_creator", &IPluginRegistry::registerCreator, "creator"_a, "plugin_namespace"_a = "",
             py::keep_alive<1, 2>{}, IPluginRegistryDoc::register_creator)
@@ -248,14 +256,23 @@ void bindPlugin(py::module& m)
         .def("get_plugin_creator", &IPluginRegistry::getPluginCreator, "type"_a, "version"_a, "plugin_namespace"_a = "",
             py::return_value_policy::reference_internal, IPluginRegistryDoc::get_plugin_creator)
         .def_property("error_recorder", &IPluginRegistry::getErrorRecorder,
-            py::cpp_function(&IPluginRegistry::setErrorRecorder, py::keep_alive<1, 2>{}));
+            py::cpp_function(&IPluginRegistry::setErrorRecorder, py::keep_alive<1, 2>{}))
+        .def_property("parent_search_enabled", &IPluginRegistry::isParentSearchEnabled,
+            py::cpp_function(&IPluginRegistry::setParentSearchEnabled, py::keep_alive<1, 2>{}))
+        .def("load_library", &IPluginRegistry::loadLibrary, "plugin_path"_a,
+            py::return_value_policy::reference_internal, IPluginRegistryDoc::load_library)
+        .def("deregister_library", &IPluginRegistry::deregisterLibrary, "handle"_a,
+            IPluginRegistryDoc::deregister_library);
 
     m.def("get_plugin_registry", &getPluginRegistry, py::return_value_policy::reference,
         FreeFunctionsDoc::get_plugin_registry);
+
+#if EXPORT_ALL_BINDINGS
     m.def("get_builder_plugin_registry", &getBuilderPluginRegistry, py::return_value_policy::reference,
         FreeFunctionsDoc::get_builder_plugin_registry);
     m.def("init_libnvinfer_plugins", &initLibNvInferPlugins, "logger"_a, "namespace"_a,
         FreeFunctionsDoc::init_libnvinfer_plugins);
+#endif
 
 } // Plugin
 } // namespace tensorrt

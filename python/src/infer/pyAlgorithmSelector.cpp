@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -76,7 +76,7 @@ public:
             catch (const py::cast_error& e)
             {
                 std::cerr << "[ERROR] Return value of select_algorithms() could not be interpreted as a List[int]"
-                        << std::endl;
+                          << std::endl;
                 return -1;
             }
 
@@ -145,27 +145,32 @@ void bindAlgorithm(py::module& m)
 {
     // IAlgorithmIOInfo
     py::class_<IAlgorithmIOInfo, std::unique_ptr<IAlgorithmIOInfo, py::nodelete>>(
-        m, "IAlgorithmIOInfo", IAlgorithmIOInfoDOC::descr)
-        .def_property_readonly("tensor_format", &IAlgorithmIOInfo::getTensorFormat)
+        m, "IAlgorithmIOInfo", IAlgorithmIOInfoDOC::descr, py::module_local())
+        .def_property_readonly("tensor_format",
+            utils::deprecateMember(
+                &IAlgorithmIOInfo::getTensorFormat, "the strides, data type, and vectorization information"))
         .def_property_readonly("dtype", &IAlgorithmIOInfo::getDataType)
-        .def_property_readonly("strides", &IAlgorithmIOInfo::getStrides);
+        .def_property_readonly("strides", &IAlgorithmIOInfo::getStrides)
+        .def_property_readonly("vectorized_dim", &IAlgorithmIOInfo::getVectorizedDim)
+        .def_property_readonly("components_per_element", &IAlgorithmIOInfo::getComponentsPerElement);
 
     // IAlgorithmVariant
     py::class_<IAlgorithmVariant, std::unique_ptr<IAlgorithmVariant, py::nodelete>>(
-        m, "IAlgorithmVariant", IAlgorithmVariantDOC::descr)
+        m, "IAlgorithmVariant", IAlgorithmVariantDOC::descr, py::module_local())
         .def_property_readonly("implementation", &IAlgorithmVariant::getImplementation)
         .def_property_readonly("tactic", &IAlgorithmVariant::getTactic);
 
     // IAlgorithmContext
     py::class_<IAlgorithmContext, std::unique_ptr<IAlgorithmContext, py::nodelete>>(
-        m, "IAlgorithmContext", IAlgorithmContextDoc::descr)
+        m, "IAlgorithmContext", IAlgorithmContextDoc::descr, py::module_local())
         .def_property_readonly("name", &IAlgorithmContext::getName)
         .def("get_shape", lambdas::get_shape, "index"_a, IAlgorithmContextDoc::get_shape)
         .def_property_readonly("num_inputs", &IAlgorithmContext::getNbInputs)
         .def_property_readonly("num_outputs", &IAlgorithmContext::getNbOutputs);
 
     // IAlgorithm
-    py::class_<IAlgorithm, std::unique_ptr<IAlgorithm, py::nodelete>>(m, "IAlgorithm", IAlgorithmDoc::descr)
+    py::class_<IAlgorithm, std::unique_ptr<IAlgorithm, py::nodelete>>(
+        m, "IAlgorithm", IAlgorithmDoc::descr, py::module_local())
         .def("get_algorithm_io_info", &IAlgorithm::getAlgorithmIOInfoByIndex, "index"_a,
             IAlgorithmDoc::get_algorithm_io_info, py::return_value_policy::reference_internal)
         .def_property_readonly("algorithm_variant", &IAlgorithm::getAlgorithmVariant)
@@ -173,7 +178,8 @@ void bindAlgorithm(py::module& m)
         .def_property_readonly("workspace_size", &IAlgorithm::getWorkspaceSize);
 
     // IAlgorithmSelector
-    py::class_<IAlgorithmSelector, IAlgorithmSelectorTrampoline>(m, "IAlgorithmSelector", IAlgorithmSelectorDoc::descr)
+    py::class_<IAlgorithmSelector, IAlgorithmSelectorTrampoline>(
+        m, "IAlgorithmSelector", IAlgorithmSelectorDoc::descr, py::module_local())
         .def(py::init_alias<>()) // Always initialize trampoline class.
         .def(
             "select_algorithms", &select_algorithms, "context"_a, "choices"_a, IAlgorithmSelectorDoc::select_algorithms)

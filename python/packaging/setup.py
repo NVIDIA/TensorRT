@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +16,12 @@
 #
 
 try:
-    from setuptools import setup, find_packages
+    from setuptools import setup
 except ImportError:
-    from distutils.core import setup, find_packages
+    from distutils.core import setup
 import os
 
+tensorrt_module = "##TENSORRT_MODULE##"
 
 def is_standalone():
     return os.environ.get("STANDALONE") == "1"
@@ -41,22 +42,24 @@ def get_requirements():
         return "-cu{cuda_major}".format(cuda_major=cuda_major)
 
     if is_standalone():
-        return [
-            "nvidia-cuda-runtime" + get_version_range(),
-            "nvidia-cudnn" + get_version_range(),
-            "nvidia-cublas" + get_version_range(),
-        ]
+        reqs = [ "nvidia-cuda-runtime" + get_version_range() ]
+        if tensorrt_module == "tensorrt":
+            reqs +=  [
+                "nvidia-cudnn" + get_version_range(),
+                "nvidia-cublas" + get_version_range(),
+            ]
+        return reqs
     return []
 
 
-name = "tensorrt"
+name = tensorrt_module
 # Only standalone wheels need to be disambiguated. Otherwise, the entire tar/deb/rpm is DLA/non-DLA.
 if is_standalone() and is_dla():
     name += "-dla"
 
 setup(
     name=name,
-    version="##TENSORRT_VERSION##",
+    version="##TENSORRT_PYTHON_VERSION##",
     description="A high performance deep learning inference library",
     long_description="A high performance deep learning inference library",
     author="NVIDIA Corporation",
@@ -66,10 +69,10 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=find_packages(),
+    packages=[tensorrt_module],
     install_requires=get_requirements(),
     extras_require={"numpy": "numpy"},
-    package_data={"tensorrt": ["*.so*", "*.pyd", "*.pdb"]},
+    package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

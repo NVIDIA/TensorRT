@@ -25,6 +25,9 @@
 //! It can be run with the following command line:
 //! Command: ./sample_algorithm_selector [-h or --help] [-d=/path/to/data/dir or --datadir=/path/to/data/dir]
 
+// Define TRT entrypoints used in common code
+#define DEFINE_TRT_ENTRYPOINTS 1
+
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"
@@ -105,6 +108,14 @@ public:
                               << "\n";
                 algorithmFile << static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getDataType())
                               << "\n";
+                Dims const strides = algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getStrides();
+                algorithmFile << strides.nbDims << "\n";
+                for (int32_t idx = 0; idx < strides.nbDims; ++idx)
+                {
+                    algorithmFile << strides.d[idx] << "\n";
+                }
+                algorithmFile << algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getVectorizedDim() << "\n";
+                algorithmFile << algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getComponentsPerElement() << "\n";
             }
         }
         algorithmFile.close();
@@ -185,10 +196,19 @@ public:
             auto nbFormats = algoItem.nbInputs + algoItem.nbOutputs;
             for (auto j = 0; j < nbFormats; j++)
             {
-                ASSERT(algoItem.formats[j].first
+                ASSERT(algoItem.inOutIOInfo[j].tensorFormat
                     == static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getTensorFormat()));
-                ASSERT(algoItem.formats[j].second
+                ASSERT(algoItem.inOutIOInfo[j].dataType
                     == static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getDataType()));
+                Dims const strides = algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getStrides();
+                Dims const cacheStrides = algoItem.inOutIOInfo[j].strides;
+                ASSERT(cacheStrides.nbDims == strides.nbDims);
+                ASSERT(!strides.nbDims || std::equal(strides.d, strides.d + strides.nbDims, cacheStrides.d));
+
+                ASSERT(algoItem.inOutIOInfo[j].vectorDim
+                    == algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getVectorizedDim());
+                ASSERT(algoItem.inOutIOInfo[j].nbScalarsPerVector
+                    == algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getComponentsPerElement());
             }
         }
     }
@@ -223,13 +243,27 @@ public:
             algoItem.nbOutputs = std::stoi(line);
 
             int32_t const nbFormats = algoItem.nbInputs + algoItem.nbOutputs;
-            algoItem.formats.resize(nbFormats);
+            algoItem.inOutIOInfo.resize(nbFormats);
             for (int32_t i = 0; i < nbFormats; i++)
             {
                 getline(algorithmFile, line);
-                algoItem.formats[i].first = std::stoi(line);
+                algoItem.inOutIOInfo[i].tensorFormat = std::stoi(line);
                 getline(algorithmFile, line);
-                algoItem.formats[i].second = std::stoi(line);
+                algoItem.inOutIOInfo[i].dataType = std::stoi(line);
+
+                getline(algorithmFile, line);
+                algoItem.inOutIOInfo[i].strides.nbDims = std::stoi(line);
+                for (int32_t idx = 0; idx < algoItem.inOutIOInfo[i].strides.nbDims; ++idx)
+                {
+                    getline(algorithmFile, line);
+                    algoItem.inOutIOInfo[i].strides.d[idx] = std::stoi(line);
+                }
+
+                getline(algorithmFile, line);
+                algoItem.inOutIOInfo[i].vectorDim = std::stoi(line);
+
+                getline(algorithmFile, line);
+                algoItem.inOutIOInfo[i].nbScalarsPerVector = std::stoi(line);
             }
             choiceMap[layerName] = std::move(algoItem);
         }
@@ -237,15 +271,24 @@ public:
     }
 
 private:
+    struct AlgorithmIOCache
+    {
+        int32_t tensorFormat{};
+        int32_t dataType{};
+        Dims strides{};
+        int64_t vectorDim{};
+        int64_t nbScalarsPerVector{};
+    };
+
     struct AlgorithmCacheItem
     {
-        int64_t implementation;
-        int64_t tactic;
-        int32_t nbInputs;
-        int32_t nbOutputs;
-        std::vector<std::pair<int32_t, int32_t>> formats;
+        int64_t implementation{};
+        int64_t tactic{};
+        int32_t nbInputs{};
+        int32_t nbOutputs{};
+        std::vector<AlgorithmIOCache> inOutIOInfo{};
     };
-    std::unordered_map<std::string, AlgorithmCacheItem> choiceMap;
+    std::unordered_map<std::string, AlgorithmCacheItem> choiceMap{};
 
     //! The combination of implementation, tactic and input/output formats is unique to an algorithm,
     //! and can be used to check if two algorithms are same.
@@ -261,10 +304,28 @@ private:
         auto const nbFormats = algoCacheItem.nbInputs + algoCacheItem.nbOutputs;
         for (auto j = 0; j < nbFormats; j++)
         {
-            if (algoCacheItem.formats[j].first
+            if (algoCacheItem.inOutIOInfo[j].tensorFormat
                     != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getTensorFormat())
-                || algoCacheItem.formats[j].second
-                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getDataType()))
+                || algoCacheItem.inOutIOInfo[j].dataType
+                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getDataType())
+
+                || algoCacheItem.inOutIOInfo[j].vectorDim
+                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getVectorizedDim())
+
+                || algoCacheItem.inOutIOInfo[j].nbScalarsPerVector
+                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getComponentsPerElement())
+
+            )
+            {
+                return false;
+            }
+            Dims const cacheStride = algoCacheItem.inOutIOInfo[j].strides;
+            Dims const strides = algoChoice.getAlgorithmIOInfoByIndex(j)->getStrides();
+            if (cacheStride.nbDims != strides.nbDims)
+            {
+                return false;
+            }
+            if (cacheStride.nbDims && !std::equal(strides.d, strides.d + strides.nbDims, cacheStride.d))
             {
                 return false;
             }
@@ -351,6 +412,7 @@ private:
     bool verifyOutput(samplesCommon::BufferManager const& buffers, std::string const& outputTensorName,
         int32_t groundTruthDigit) const;
 
+    SampleUniquePtr<IRuntime> mRuntime{};
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network.
 
     samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
@@ -421,8 +483,11 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
         config->clearFlag(BuilderFlag::kREJECT_EMPTY_ALGORITHMS);
     }
 
-    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    if (!runtime)
+    if (!mRuntime)
+    {
+        mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+    }
+    if (!mRuntime)
     {
         return false;
     }
@@ -442,7 +507,7 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
     }
 
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -515,7 +580,7 @@ bool SampleAlgorithmSelector::verifyOutput(
     {
         sample::gLogInfo << " Prob " << i << "  " << std::fixed << std::setw(5) << std::setprecision(4) << prob[i]
                          << " "
-                         << "Class " << i << ": " << std::string(int32_t(std::floor(prob[i] * 10 + 0.5f)), '*')
+                         << "Class " << i << ": " << std::string(int32_t(std::floor(prob[i] * 10 + 0.5F)), '*')
                          << std::endl;
     }
     sample::gLogInfo << std::endl;
@@ -549,7 +614,7 @@ bool SampleAlgorithmSelector::constructNetwork(SampleUniquePtr<nvinfer1::IBuilde
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
-        samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);

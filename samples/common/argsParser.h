@@ -17,14 +17,14 @@
 #ifndef TENSORRT_ARGS_PARSER_H
 #define TENSORRT_ARGS_PARSER_H
 
-#include <string>
-#include <vector>
 #ifdef _MSC_VER
-#include "..\common\windows\getopt.h"
+#include "getOptWin.h"
 #else
 #include <getopt.h>
 #endif
 #include <iostream>
+#include <string>
+#include <vector>
 
 namespace samplesCommon
 {

@@ -45,7 +45,7 @@ class SampleErrorRecorder : public IErrorRecorder
 public:
     SampleErrorRecorder() = default;
 
-    virtual ~SampleErrorRecorder() noexcept {}
+    ~SampleErrorRecorder() noexcept override {}
     int32_t getNbErrors() const noexcept final
     {
         return mErrorStack.size();

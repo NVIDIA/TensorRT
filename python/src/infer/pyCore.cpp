@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -168,6 +168,11 @@ std::vector<int32_t> context_get_shape(IExecutionContext& self, int32_t binding)
     return shape;
 };
 
+void set_aux_streams(IExecutionContext& self, std::vector<size_t> streamHandle)
+{
+    self.setAuxStreams(reinterpret_cast<cudaStream_t*>(streamHandle.data()), static_cast<int32_t>(streamHandle.size()));
+}
+
 // For IRuntime
 static const auto runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffer& serializedEngine) {
     py::buffer_info info = serializedEngine.request();
@@ -265,6 +270,32 @@ static const auto netconfig_set_profile_stream = [](IBuilderConfig& self, size_t
 static const auto netconfig_create_timing_cache = [](IBuilderConfig& self, py::buffer& serializedTimingCache) {
     py::buffer_info info = serializedTimingCache.request();
     return self.createTimingCache(info.ptr, info.size * info.itemsize);
+};
+
+static const auto get_plugins_to_serialize = [](IBuilderConfig& self) {
+    std::vector<std::string> paths;
+    int64_t const nbPlugins = self.getNbPluginsToSerialize();
+    if (nbPlugins < 0)
+    {
+        utils::throwPyError(PyExc_RuntimeError, "Internal error");
+    }
+
+    paths.reserve(nbPlugins);
+    for (int64_t i = 0; i < nbPlugins; ++i)
+    {
+        paths.emplace_back(std::string{self.getPluginToSerialize(i)});
+    }
+    return paths;
+};
+
+static const auto set_plugins_to_serialize = [](IBuilderConfig& self, std::vector<std::string> const& paths) {
+    std::vector<char const*> cStrings;
+    cStrings.reserve(paths.size());
+    for (auto const& path : paths)
+    {
+        cStrings.push_back(path.c_str());
+    }
+    self.setPluginsToSerialize(reinterpret_cast<char const* const*>(cStrings.data()), cStrings.size());
 };
 
 // For IRefitter
@@ -512,10 +543,11 @@ void bindCore(py::module& m)
         }
     };
 
-    py::class_<ILogger, PyLogger> baseLoggerBinding{m, "ILogger", ILoggerDoc::descr};
+    py::class_<ILogger, PyLogger> baseLoggerBinding{m, "ILogger", ILoggerDoc::descr, py::module_local()};
     baseLoggerBinding.def(py::init<>()).def("log", &ILogger::log, "severity"_a, "msg"_a, ILoggerDoc::log);
 
-    py::enum_<ILogger::Severity>(baseLoggerBinding, "Severity", py::arithmetic(), SeverityDoc::descr)
+    py::enum_<ILogger::Severity>(
+        baseLoggerBinding, "Severity", py::arithmetic(), SeverityDoc::descr, py::module_local())
         .value("INTERNAL_ERROR", ILogger::Severity::kINTERNAL_ERROR, SeverityDoc::internal_error)
         .value("ERROR", ILogger::Severity::kERROR, SeverityDoc::error)
         .value("WARNING", ILogger::Severity::kWARNING, SeverityDoc::warning)
@@ -583,7 +615,7 @@ void bindCore(py::module& m)
         Severity mMinSeverity;
     };
 
-    py::class_<DefaultLogger, ILogger>(m, "Logger", LoggerDoc::descr)
+    py::class_<DefaultLogger, ILogger>(m, "Logger", LoggerDoc::descr, py::module_local())
         .def(py::init<ILogger::Severity>(), "min_severity"_a = ILogger::Severity::kWARNING)
         .def_readwrite("min_severity", &DefaultLogger::mMinSeverity)
         .def("log", &DefaultLogger::log, "severity"_a, "msg"_a, LoggerDoc::log);
@@ -608,7 +640,7 @@ void bindCore(py::module& m)
         }
     };
 
-    py::class_<IProfiler, PyProfiler>(m, "IProfiler", IProfilerDoc::descr)
+    py::class_<IProfiler, PyProfiler>(m, "IProfiler", IProfilerDoc::descr, py::module_local())
         .def(py::init<>())
         .def("report_layer_time", &IProfiler::reportLayerTime, "layer_name"_a, "ms"_a, IProfilerDoc::report_layer_time);
 
@@ -621,12 +653,12 @@ void bindCore(py::module& m)
         }
     };
 
-    py::class_<DefaultProfiler, IProfiler>(m, "Profiler", ProfilerDoc::descr)
+    py::class_<DefaultProfiler, IProfiler>(m, "Profiler", ProfilerDoc::descr, py::module_local())
         .def(py::init<>())
         .def("report_layer_time", &IProfiler::reportLayerTime, "layer_name"_a, "ms"_a, ProfilerDoc::report_layer_time);
 
     py::class_<IOptimizationProfile, std::unique_ptr<IOptimizationProfile, py::nodelete>>(
-        m, "IOptimizationProfile", IOptimizationProfileDoc::descr)
+        m, "IOptimizationProfile", IOptimizationProfileDoc::descr, py::module_local())
         .def("set_shape", lambdas::opt_profile_set_shape, "input"_a, "min"_a, "opt"_a, "max"_a,
             IOptimizationProfileDoc::set_shape)
         .def("get_shape", lambdas::opt_profile_get_shape, "input"_a, IOptimizationProfileDoc::get_shape)
@@ -639,7 +671,7 @@ void bindCore(py::module& m)
         .def("__nonzero__", &IOptimizationProfile::isValid)
         .def("__bool__", &IOptimizationProfile::isValid);
 
-    py::enum_<ErrorCode>(m, "ErrorCodeTRT", py::arithmetic{}, ErrorCodeDoc::descr)
+    py::enum_<ErrorCode>(m, "ErrorCodeTRT", py::arithmetic{}, ErrorCodeDoc::descr, py::module_local())
         .value("SUCCESS", ErrorCode::kSUCCESS, ErrorCodeDoc::SUCCESS)
         .value("UNSPECIFIED_ERROR", ErrorCode::kUNSPECIFIED_ERROR, ErrorCodeDoc::UNSPECIFIED_ERROR)
         .value("INTERNAL_ERROR", ErrorCode::kINTERNAL_ERROR, ErrorCodeDoc::INTERNAL_ERROR)
@@ -772,7 +804,7 @@ void bindCore(py::module& m)
         int32_t mRefCount{0};
     };
 
-    py::class_<IErrorRecorder, PyErrorRecorder>(m, "IErrorRecorder", IErrorRecorderDoc::descr)
+    py::class_<IErrorRecorder, PyErrorRecorder>(m, "IErrorRecorder", IErrorRecorderDoc::descr, py::module_local())
         .def(py::init<>())
         .def_property_readonly("MAX_DESC_LENGTH", []() { return IErrorRecorder::kMAX_DESC_LENGTH; })
         .def("num_errors", &IErrorRecorder::getNbErrors, IErrorRecorderDoc::get_num_errors)
@@ -782,7 +814,7 @@ void bindCore(py::module& m)
         .def("clear", &IErrorRecorder::clear, IErrorRecorderDoc::clear)
         .def("report_error", &IErrorRecorder::reportError, IErrorRecorderDoc::report_error);
 
-    py::class_<IExecutionContext>(m, "IExecutionContext", IExecutionContextDoc::descr)
+    py::class_<IExecutionContext>(m, "IExecutionContext", IExecutionContextDoc::descr, py::module_local())
         .def("execute", utils::deprecate(lambdas::execute, "execute_v2"), "batch_size"_a = 1, "bindings"_a,
             IExecutionContextDoc::execute, py::call_guard<py::gil_scoped_release>{})
         .def("execute_async", utils::deprecate(lambdas::execute_async, "execute_async_v2"), "batch_size"_a = 1,
@@ -813,7 +845,7 @@ void bindCore(py::module& m)
             "shape"_a, IExecutionContextDoc::set_shape_input)
         .def("get_shape", utils::deprecate(lambdas::context_get_shape, "get_tensor_address"), "binding"_a,
             IExecutionContextDoc::get_shape)
-        // enqueueV3 related APIs.
+        // Start of enqueueV3 related APIs.
         .def("get_tensor_strides", &IExecutionContext::getTensorStrides, "name"_a,
             IExecutionContextDoc::get_tensor_strides)
         .def("set_input_shape", &IExecutionContext::setInputShape, "name"_a, "shape"_a,
@@ -838,6 +870,7 @@ void bindCore(py::module& m)
             py::call_guard<py::gil_scoped_release>{})
         .def("execute_async_v3", lambdas::execute_async_v3, "stream_handle"_a, IExecutionContextDoc::execute_async_v3,
             py::call_guard<py::gil_scoped_release>{})
+        // End of enqueueV3 related APIs.
         .def_property_readonly("all_binding_shapes_specified", &IExecutionContext::allInputDimensionsSpecified)
         .def_property_readonly("all_shape_inputs_specified", &IExecutionContext::allInputShapesSpecified)
         .def("set_optimization_profile_async", lambdas::context_set_optimization_profile_async, "profile_index"_a,
@@ -851,9 +884,10 @@ void bindCore(py::module& m)
         .def_property("persistent_cache_limit", &IExecutionContext::getPersistentCacheLimit,
             &IExecutionContext::setPersistentCacheLimit)
         .def_property("nvtx_verbosity", &IExecutionContext::getNvtxVerbosity, &IExecutionContext::setNvtxVerbosity)
+        .def("set_aux_streams", lambdas::set_aux_streams, "aux_streams"_a, IExecutionContextDoc::set_aux_streams)
         .def("__del__", &utils::doNothingDel<IExecutionContext>);
 
-    py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr)
+    py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr, py::module_local())
         .def_property_readonly("num_bindings", &ICudaEngine::getNbBindings)
         .def("__len__", &ICudaEngine::getNbBindings)
         .def("__getitem__",
@@ -924,7 +958,7 @@ void bindCore(py::module& m)
         .def("get_binding_vectorized_dim",
             utils::deprecateMember(&ICudaEngine::getBindingVectorizedDim, "get_tensor_vectorized_dim"), "index"_a,
             ICudaEngineDoc::get_binding_vectorized_dim)
-        // enqueueV3 related APIs.
+        // Start of enqueueV3 related APIs.
         .def_property_readonly("num_io_tensors", &ICudaEngine::getNbIOTensors)
         .def("get_tensor_name", &ICudaEngine::getIOTensorName, "index"_a, ICudaEngineDoc::get_tensor_name)
         .def("get_tensor_mode", &ICudaEngine::getTensorIOMode, "name"_a, ICudaEngineDoc::get_tensor_mode)
@@ -943,17 +977,21 @@ void bindCore(py::module& m)
             ICudaEngineDoc::get_tensor_vectorized_dim)
         .def("get_tensor_profile_shape", lambdas::get_tensor_profile_shape, "name"_a, "profile_index"_a,
             ICudaEngineDoc::get_tensor_profile_shape)
+        // End of enqueueV3 related APIs.
         .def_property("error_recorder", &ICudaEngine::getErrorRecorder,
             py::cpp_function(&ICudaEngine::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property_readonly("tactic_sources", &ICudaEngine::getTacticSources)
         .def_property_readonly("profiling_verbosity", &ICudaEngine::getProfilingVerbosity)
-        .def("__del__", &utils::doNothingDel<ICudaEngine>)
-        .def("create_engine_inspector", &ICudaEngine::createEngineInspector, ICudaEngineDoc::create_engine_inspector);
+        .def("create_engine_inspector",
+            &ICudaEngine::createEngineInspector, ICudaEngineDoc::create_engine_inspector, py::keep_alive<0, 1>{})
+        .def_property_readonly("hardware_compatibility_level", &ICudaEngine::getHardwareCompatibilityLevel)
+        .def_property_readonly("num_aux_streams", &ICudaEngine::getNbAuxStreams)
+        .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
-    py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr)
+    py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
         .value("RESIZABLE", AllocatorFlag::kRESIZABLE, AllocatorFlagDoc::RESIZABLE);
 
-    py::class_<IGpuAllocator, PyGpuAllocator>(m, "IGpuAllocator", GpuAllocatorDoc::descr)
+    py::class_<IGpuAllocator, PyGpuAllocator>(m, "IGpuAllocator", GpuAllocatorDoc::descr, py::module_local())
         .def(py::init<>())
         .def("allocate", &IGpuAllocator::allocate, "size"_a, "alignment"_a, "flags"_a, GpuAllocatorDoc::allocate)
         .def("reallocate", &IGpuAllocator::reallocate, "address"_a, "alignment"_a, "new_size"_a,
@@ -961,14 +999,16 @@ void bindCore(py::module& m)
         .def("free", &IGpuAllocator::free, "memory"_a, GpuAllocatorDoc::free)
         .def("deallocate", &IGpuAllocator::deallocate, "memory"_a, GpuAllocatorDoc::deallocate);
 
-    py::class_<IOutputAllocator, PyOutputAllocator>(m, "IOutputAllocator", OutputAllocatorDoc::descr)
+    py::class_<IOutputAllocator, PyOutputAllocator>(
+        m, "IOutputAllocator", OutputAllocatorDoc::descr, py::module_local())
         .def(py::init<>())
         .def_property_readonly("tensorrt_version", &IOutputAllocator::getInterfaceVersion)
         .def("reallocate_output", &IOutputAllocator::reallocateOutput, "tensor_name"_a, "memory"_a, "size"_a,
             "alignment"_a, OutputAllocatorDoc::reallocate_output)
-        .def("notify_shape", &IOutputAllocator::notifyShape, "tensor_name"_a, "shape"_a, OutputAllocatorDoc::notify_shape);
+        .def("notify_shape", &IOutputAllocator::notifyShape, "tensor_name"_a, "shape"_a,
+            OutputAllocatorDoc::notify_shape);
 
-    py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr)
+    py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr, py::module_local())
         .value("FP16", BuilderFlag::kFP16, BuilderFlagDoc::FP16)
         .value("INT8", BuilderFlag::kINT8, BuilderFlagDoc::INT8)
         .value("DEBUG", BuilderFlag::kDEBUG, BuilderFlagDoc::DEBUG)
@@ -979,54 +1019,74 @@ void bindCore(py::module& m)
         .value("TF32", BuilderFlag::kTF32, BuilderFlagDoc::TF32)
         .value("SPARSE_WEIGHTS", BuilderFlag::kSPARSE_WEIGHTS, BuilderFlagDoc::SPARSE_WEIGHTS)
         .value("SAFETY_SCOPE", BuilderFlag::kSAFETY_SCOPE, BuilderFlagDoc::SAFETY_SCOPE)
-        .value("OBEY_PRECISION_CONSTRAINTS", BuilderFlag::kOBEY_PRECISION_CONSTRAINTS, BuilderFlagDoc::OBEY_PRECISION_CONSTRAINTS)
-        .value("PREFER_PRECISION_CONSTRAINTS", BuilderFlag::kPREFER_PRECISION_CONSTRAINTS, BuilderFlagDoc::PREFER_PRECISION_CONSTRAINTS)
+        .value("OBEY_PRECISION_CONSTRAINTS", BuilderFlag::kOBEY_PRECISION_CONSTRAINTS,
+            BuilderFlagDoc::OBEY_PRECISION_CONSTRAINTS)
+        .value("PREFER_PRECISION_CONSTRAINTS", BuilderFlag::kPREFER_PRECISION_CONSTRAINTS,
+            BuilderFlagDoc::PREFER_PRECISION_CONSTRAINTS)
         .value("DIRECT_IO", BuilderFlag::kDIRECT_IO, BuilderFlagDoc::DIRECT_IO)
-        .value("REJECT_EMPTY_ALGORITHMS", BuilderFlag::kREJECT_EMPTY_ALGORITHMS, BuilderFlagDoc::REJECT_EMPTY_ALGORITHMS)
-        .value("ENABLE_TACTIC_HEURISTIC", BuilderFlag::kENABLE_TACTIC_HEURISTIC, BuilderFlagDoc::ENABLE_TACTIC_HEURISTIC);
+        .value(
+            "REJECT_EMPTY_ALGORITHMS", BuilderFlag::kREJECT_EMPTY_ALGORITHMS, BuilderFlagDoc::REJECT_EMPTY_ALGORITHMS)
+        .value(
+            "ENABLE_TACTIC_HEURISTIC", BuilderFlag::kENABLE_TACTIC_HEURISTIC, BuilderFlagDoc::ENABLE_TACTIC_HEURISTIC)
+        .value("VERSION_COMPATIBLE", BuilderFlag::kVERSION_COMPATIBLE, BuilderFlagDoc::VERSION_COMPATIBLE)
+        .value("EXCLUDE_LEAN_RUNTIME", BuilderFlag::kEXCLUDE_LEAN_RUNTIME, BuilderFlagDoc::EXCLUDE_LEAN_RUNTIME)
+        .value("FP8", BuilderFlag::kFP8, BuilderFlagDoc::FP8);
 
-    py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr)
+    py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
         .value("DLA_MANAGED_SRAM", MemoryPoolType::kDLA_MANAGED_SRAM, MemoryPoolTypeDoc::DLA_MANAGED_SRAM)
         .value("DLA_LOCAL_DRAM", MemoryPoolType::kDLA_LOCAL_DRAM, MemoryPoolTypeDoc::DLA_LOCAL_DRAM)
-        .value("DLA_GLOBAL_DRAM", MemoryPoolType::kDLA_GLOBAL_DRAM, MemoryPoolTypeDoc::DLA_GLOBAL_DRAM);
+        .value("DLA_GLOBAL_DRAM", MemoryPoolType::kDLA_GLOBAL_DRAM, MemoryPoolTypeDoc::DLA_GLOBAL_DRAM)
+        .value("TACTIC_DRAM", MemoryPoolType::kTACTIC_DRAM, MemoryPoolTypeDoc::TACTIC_DRAM);
 
-    py::enum_<QuantizationFlag>(m, "QuantizationFlag", py::arithmetic{}, QuantizationFlagDoc::descr)
+    py::enum_<QuantizationFlag>(m, "QuantizationFlag", py::arithmetic{}, QuantizationFlagDoc::descr, py::module_local())
         .value("CALIBRATE_BEFORE_FUSION", QuantizationFlag::kCALIBRATE_BEFORE_FUSION,
             QuantizationFlagDoc::CALIBRATE_BEFORE_FUSION);
 
-    py::enum_<PreviewFeature>(m, "PreviewFeature", PreviewFeatureDoc::descr)
+    py::enum_<PreviewFeature>(m, "PreviewFeature", PreviewFeatureDoc::descr, py::module_local())
         .value("FASTER_DYNAMIC_SHAPES_0805", PreviewFeature::kFASTER_DYNAMIC_SHAPES_0805,
             PreviewFeatureDoc::FASTER_DYNAMIC_SHAPES_0805)
         .value("DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805",
             PreviewFeature::kDISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805,
-            PreviewFeatureDoc::DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805);
+            PreviewFeatureDoc::DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805)
+        .value("PROFILE_SHARING_0806", PreviewFeature::kPROFILE_SHARING_0806, PreviewFeatureDoc::PROFILE_SHARING_0806);
 
-    py::enum_<DeviceType>(m, "DeviceType", DeviceTypeDoc::descr)
+    py::enum_<HardwareCompatibilityLevel>(
+        m, "HardwareCompatibilityLevel", HardwareCompatibilityLevelDoc::descr, py::module_local())
+        .value("NONE", HardwareCompatibilityLevel::kNONE, HardwareCompatibilityLevelDoc::NONE)
+        .value("AMPERE_PLUS", HardwareCompatibilityLevel::kAMPERE_PLUS, HardwareCompatibilityLevelDoc::AMPERE_PLUS);
+
+    py::enum_<DeviceType>(m, "DeviceType", DeviceTypeDoc::descr, py::module_local())
         .value("GPU", DeviceType::kGPU, DeviceTypeDoc::GPU)
         .value("DLA", DeviceType::kDLA, DeviceTypeDoc::DLA);
 
+    py::enum_<TempfileControlFlag>(m, "TempfileControlFlag", TempfileControlFlagDoc::descr, py::module_local())
+        .value("ALLOW_IN_MEMORY_FILES", TempfileControlFlag::kALLOW_IN_MEMORY_FILES,
+            TempfileControlFlagDoc::ALLOW_IN_MEMORY_FILES)
+        .value("ALLOW_TEMPORARY_FILES", TempfileControlFlag::kALLOW_TEMPORARY_FILES,
+            TempfileControlFlagDoc::ALLOW_TEMPORARY_FILES);
+
     // Bind to a Python enum called ProfilingVerbosity.
-    py::enum_<ProfilingVerbosity>(m, "ProfilingVerbosity", ProfilingVerbosityDoc::descr)
+    py::enum_<ProfilingVerbosity>(m, "ProfilingVerbosity", ProfilingVerbosityDoc::descr, py::module_local())
         .value("LAYER_NAMES_ONLY", ProfilingVerbosity::kLAYER_NAMES_ONLY, ProfilingVerbosityDoc::LAYER_NAMES_ONLY)
         .value("DETAILED", ProfilingVerbosity::kDETAILED, ProfilingVerbosityDoc::DETAILED)
         .value("NONE", ProfilingVerbosity::kNONE, ProfilingVerbosityDoc::NONE)
         .value("DEFAULT", ProfilingVerbosity::kDEFAULT, ProfilingVerbosityDoc::DEFAULT)
         .value("VERBOSE", ProfilingVerbosity::kVERBOSE, ProfilingVerbosityDoc::VERBOSE);
 
-    py::enum_<TensorIOMode>(m, "TensorIOMode", TensorIOModeDoc::descr)
+    py::enum_<TensorIOMode>(m, "TensorIOMode", TensorIOModeDoc::descr, py::module_local())
         .value("NONE", TensorIOMode::kNONE, TensorIOModeDoc::NONE)
         .value("INPUT", TensorIOMode::kINPUT, TensorIOModeDoc::INPUT)
         .value("OUTPUT", TensorIOMode::kOUTPUT, TensorIOModeDoc::OUTPUT);
 
-    py::enum_<TacticSource>(m, "TacticSource", py::arithmetic{}, TacticSourceDoc::descr)
+    py::enum_<TacticSource>(m, "TacticSource", py::arithmetic{}, TacticSourceDoc::descr, py::module_local())
         .value("CUBLAS", TacticSource::kCUBLAS, TacticSourceDoc::CUBLAS)
         .value("CUBLAS_LT", TacticSource::kCUBLAS_LT, TacticSourceDoc::CUBLAS_LT)
         .value("CUDNN", TacticSource::kCUDNN, TacticSourceDoc::CUDNN)
         .value("EDGE_MASK_CONVOLUTIONS", TacticSource::kEDGE_MASK_CONVOLUTIONS, TacticSourceDoc::EDGE_MASK_CONVOLUTIONS)
         .value("JIT_CONVOLUTIONS", TacticSource::kJIT_CONVOLUTIONS, TacticSourceDoc::JIT_CONVOLUTIONS);
 
-    py::enum_<EngineCapability>(m, "EngineCapability", py::arithmetic{}, EngineCapabilityDoc::descr)
+    py::enum_<EngineCapability>(m, "EngineCapability", py::arithmetic{}, EngineCapabilityDoc::descr, py::module_local())
         .value("DEFAULT", EngineCapability::kDEFAULT, EngineCapabilityDoc::DEFAULT)
         .value("SAFE_GPU", EngineCapability::kSAFE_GPU, EngineCapabilityDoc::SAFE_GPU)
         .value("SAFE_DLA", EngineCapability::kSAFE_DLA, EngineCapabilityDoc::SAFE_DLA)
@@ -1034,16 +1094,17 @@ void bindCore(py::module& m)
         .value("SAFETY", EngineCapability::kSAFETY, EngineCapabilityDoc::SAFETY)
         .value("DLA_STANDALONE", EngineCapability::kDLA_STANDALONE, EngineCapabilityDoc::DLA_STANDALONE);
 
-    py::enum_<LayerInformationFormat>(m, "LayerInformationFormat", LayerInformationFormatDoc::descr)
+    py::enum_<LayerInformationFormat>(m, "LayerInformationFormat", LayerInformationFormatDoc::descr, py::module_local())
         .value("ONELINE", LayerInformationFormat::kONELINE, LayerInformationFormatDoc::ONELINE)
         .value("JSON", LayerInformationFormat::kJSON, LayerInformationFormatDoc::JSON);
 
-    py::class_<ITimingCache>(m, "ITimingCache", ITimingCacheDoc::descr)
+    py::class_<ITimingCache>(m, "ITimingCache", ITimingCacheDoc::descr, py::module_local())
         .def("serialize", &ITimingCache::serialize, ITimingCacheDoc::serialize)
         .def("combine", &ITimingCache::combine, "input_cache"_a, "ignore_mismatch"_a, ITimingCacheDoc::combine)
         .def("reset", &ITimingCache::reset, ITimingCacheDoc::reset);
 
-    py::class_<IBuilderConfig>(m, "IBuilderConfig", IBuilderConfigDoc::descr)
+#if EXPORT_ALL_BINDINGS
+    py::class_<IBuilderConfig>(m, "IBuilderConfig", IBuilderConfigDoc::descr, py::module_local())
         .def_property("min_timing_iterations",
             utils::deprecateMember(&IBuilderConfig::getMinTimingIterations, "get_avg_timing_iterations"),
             utils::deprecateMember(&IBuilderConfig::setMinTimingIterations, "set_avg_timing_iterations"))
@@ -1105,25 +1166,31 @@ void bindCore(py::module& m)
             IBuilderConfigDoc::set_preview_feature)
         .def("get_preview_feature", &IBuilderConfig::getPreviewFeature, "feature"_a,
             IBuilderConfigDoc::get_preview_feature)
+        .def_property("builder_optimization_level", &IBuilderConfig::getBuilderOptimizationLevel,
+            &IBuilderConfig::setBuilderOptimizationLevel)
+        .def_property("hardware_compatibility_level", &IBuilderConfig::getHardwareCompatibilityLevel,
+            &IBuilderConfig::setHardwareCompatibilityLevel)
+        .def_property("plugins_to_serialize", lambdas::get_plugins_to_serialize, lambdas::set_plugins_to_serialize)
+        .def_property("max_aux_streams", &IBuilderConfig::getMaxAuxStreams, &IBuilderConfig::setMaxAuxStreams)
         .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
-    py::enum_<NetworkDefinitionCreationFlag>(
-        m, "NetworkDefinitionCreationFlag", py::arithmetic{}, NetworkDefinitionCreationFlagDoc::descr)
+    py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},
+        NetworkDefinitionCreationFlagDoc::descr, py::module_local())
         .value("EXPLICIT_BATCH", NetworkDefinitionCreationFlag::kEXPLICIT_BATCH,
             NetworkDefinitionCreationFlagDoc::EXPLICIT_BATCH)
         .value("EXPLICIT_PRECISION", NetworkDefinitionCreationFlag::kEXPLICIT_PRECISION,
             NetworkDefinitionCreationFlagDoc::EXPLICIT_PRECISION);
 
     // Builder
-    py::class_<IBuilder>(m, "Builder", BuilderDoc::descr)
+    py::class_<IBuilder>(m, "Builder", BuilderDoc::descr, py::module_local())
         .def(py::init(&nvinfer1::createInferBuilder), "logger"_a, BuilderDoc::init, py::keep_alive<1, 2>{})
         .def("create_network", &IBuilder::createNetworkV2, "flags"_a = 0U, BuilderDoc::create_network,
             py::keep_alive<0, 1>{})
         .def_property("max_batch_size",
-            utils::deprecateMember(&IBuilder::getMaxBatchSize,
-                "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"),
-            utils::deprecateMember(&IBuilder::setMaxBatchSize,
-                "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"))
+            utils::deprecateMember(
+                &IBuilder::getMaxBatchSize, "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"),
+            utils::deprecateMember(
+                &IBuilder::setMaxBatchSize, "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"))
         .def_property_readonly("platform_has_tf32", &IBuilder::platformHasTf32)
         .def_property_readonly("platform_has_fast_fp16", &IBuilder::platformHasFastFp16)
         .def_property_readonly("platform_has_fast_int8", &IBuilder::platformHasFastInt8)
@@ -1146,10 +1213,13 @@ void bindCore(py::module& m)
         .def_property_readonly("logger", &IBuilder::getLogger)
         .def_property("max_threads", &IBuilder::getMaxThreads, &IBuilder::setMaxThreads)
         .def("reset", &IBuilder::reset, BuilderDoc::reset)
+        .def("get_plugin_registry", &IBuilder::getPluginRegistry, py::return_value_policy::reference_internal,
+            BuilderDoc::get_plugin_registry)
         .def("__del__", &utils::doNothingDel<IBuilder>);
+#endif // EXPORT_ALL_BINDINGS
 
     // Runtime
-    py::class_<IRuntime>(m, "Runtime", RuntimeDoc::descr)
+    py::class_<IRuntime>(m, "Runtime", RuntimeDoc::descr, py::module_local())
         .def(py::init(&nvinfer1::createInferRuntime), "logger"_a, RuntimeDoc::init, py::keep_alive<1, 2>{})
         .def("deserialize_cuda_engine", lambdas::runtime_deserialize_cuda_engine, "serialized_engine"_a,
             RuntimeDoc::deserialize_cuda_engine, py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
@@ -1160,10 +1230,18 @@ void bindCore(py::module& m)
             py::cpp_function(&IRuntime::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property_readonly("logger", &IRuntime::getLogger)
         .def_property("max_threads", &IRuntime::getMaxThreads, &IRuntime::setMaxThreads)
+        .def_property("temporary_directory", &IRuntime::getTemporaryDirectory, &IRuntime::setTemporaryDirectory)
+        .def_property("tempfile_control_flags", &IRuntime::getTempfileControlFlags, &IRuntime::setTempfileControlFlags)
+        .def("get_plugin_registry", &IRuntime::getPluginRegistry, py::return_value_policy::reference_internal,
+            RuntimeDoc::get_plugin_registry)
+        .def("load_runtime", &IRuntime::loadRuntime, "path"_a, RuntimeDoc::load_runtime)
+        .def_property(
+            "engine_host_code_allowed", &IRuntime::getEngineHostCodeAllowed, &IRuntime::setEngineHostCodeAllowed)
         .def("__del__", &utils::doNothingDel<IRuntime>);
 
+#if EXPORT_ALL_BINDINGS
     // EngineInspector
-    py::class_<IEngineInspector>(m, "EngineInspector", RuntimeInspectorDoc::descr)
+    py::class_<IEngineInspector>(m, "EngineInspector", RuntimeInspectorDoc::descr, py::module_local())
         .def_property(
             "execution_context", &IEngineInspector::getExecutionContext, &IEngineInspector::setExecutionContext)
         .def("get_layer_information", &IEngineInspector::getLayerInformation, "layer_index"_a, "format"_a,
@@ -1174,7 +1252,7 @@ void bindCore(py::module& m)
             py::cpp_function(&IEngineInspector::setErrorRecorder, py::keep_alive<1, 2>{}));
 
     // Refitter
-    py::class_<IRefitter>(m, "Refitter", RefitterDoc::descr)
+    py::class_<IRefitter>(m, "Refitter", RefitterDoc::descr, py::module_local())
         .def(py::init(&nvinfer1::createInferRefitter), "engine"_a, "logger"_a, py::keep_alive<1, 2>{},
             py::keep_alive<1, 3>{}, RefitterDoc::init)
         .def("set_weights", &IRefitter::setWeights, "layer_name"_a, "role"_a, "weights"_a, py::keep_alive<1, 4>{},
@@ -1196,6 +1274,7 @@ void bindCore(py::module& m)
         .def_property_readonly("logger", &IRefitter::getLogger)
         .def_property("max_threads", &IRefitter::getMaxThreads, &IRefitter::setMaxThreads)
         .def("__del__", &utils::doNothingDel<IRefitter>);
+#endif // EXPORT_ALL_BINDINGS
 }
 
 } // namespace tensorrt

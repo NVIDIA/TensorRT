@@ -24,6 +24,8 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <set>
+#include <sstream>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -215,7 +217,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
         // Release serialized blob to save memory space.
         iEnv.engine.releaseBlob();
 
-        for (int32_t s = 0; s < inference.streams; ++s)
+        for (int32_t s = 0; s < inference.infStreams; ++s)
         {
             auto ec = safeEngine->createExecutionContext();
             if (ec == nullptr)
@@ -249,7 +251,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     // Release serialized blob to save memory space.
     iEnv.engine.releaseBlob();
 
-    for (int32_t s = 0; s < inference.streams; ++s)
+    for (int32_t s = 0; s < inference.infStreams; ++s)
     {
         auto ec = engine->createExecutionContext();
         if (ec == nullptr)
@@ -313,13 +315,13 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                 isShapeInferenceIO = engine->isShapeBinding(b);
             }
             bool const hasRuntimeDim = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; });
+            auto const shape = inference.shapes.find(name);
             if (hasRuntimeDim || isShapeInferenceIO)
             {
                 // Set shapeData to either dimensions of the input (if it has a dynamic shape)
                 // or set to values of the input (if it is an input shape tensor).
                 std::vector<int32_t> shapeData;
 
-                auto const shape = inference.shapes.find(name);
                 if (shape == inference.shapes.end())
                 {
                     // No information provided. Use default value for missing data.
@@ -361,7 +363,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                 {
                     // Save the data in iEnv, in a way that it's address does not change
                     // before enqueueV2 or enqueueV3 is called.
-                    iEnv.inputShapeTensorValues.emplace_back(std::move(shapeData));
+                    iEnv.inputShapeTensorValues.emplace_back(shapeData);
                     shapeTensorData = iEnv.inputShapeTensorValues.back().data();
                 }
 
@@ -403,6 +405,17 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                     }
                 }
             }
+            else if (nbOptProfiles && shape != inference.shapes.end())
+            {
+                // Check if the provided shape matches the static dimensions in the engine.
+                for (auto& c : iEnv.contexts)
+                {
+                    if (!c->setInputShape(name, toDims(shape->second)))
+                    {
+                        return false;
+                    }
+                }
+            }
         }
     }
 
@@ -417,7 +430,7 @@ TaskInferenceEnvironment::TaskInferenceEnvironment(
     , device(deviceId)
     , batch(bs)
 {
-    BuildEnvironment bEnv(false, DLACore);
+    BuildEnvironment bEnv(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
     loadEngineToBuildEnv(engineFile, false, bEnv, sample::gLogError);
     std::unique_ptr<InferenceEnvironment> tmp(new InferenceEnvironment(bEnv));
     iEnv = std::move(tmp);
@@ -1023,8 +1036,8 @@ bool runInference(
     // When multiple streams are used, trtexec can run inference in two modes:
     // (1) if inference.threads is true, then run each stream on each thread.
     // (2) if inference.threads is false, then run all streams on the same thread.
-    int32_t const numThreads = inference.threads ? inference.streams : 1;
-    int32_t const streamsPerThread = inference.threads ? 1 : inference.streams;
+    int32_t const numThreads = inference.threads ? inference.infStreams : 1;
+    int32_t const streamsPerThread = inference.threads ? 1 : inference.infStreams;
 
     std::vector<std::thread> threads;
     for (int32_t threadIdx = 0; threadIdx < numThreads; ++threadIdx)
@@ -1101,10 +1114,10 @@ size_t reportGpuMemory()
 } // namespace
 
 //! Returns true if deserialization is slower than expected or fails.
-bool timeDeserialize(InferenceEnvironment& iEnv)
+bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys)
 {
     constexpr int32_t kNB_ITERS{20};
-    std::unique_ptr<IRuntime> rt{createInferRuntime(sample::gLogger.getTRTLogger())};
+    std::unique_ptr<IRuntime> rt{createRuntime()};
     std::unique_ptr<ICudaEngine> engine;
 
     std::unique_ptr<safe::IRuntime> safeRT{sample::createSafeInferRuntime(sample::gLogger.getTRTLogger())};
@@ -1128,7 +1141,12 @@ bool timeDeserialize(InferenceEnvironment& iEnv)
         }
         else
         {
-            engine.reset(rt->deserializeCudaEngine(iEnv.engine.getBlob().data(), iEnv.engine.getBlob().size(), nullptr));
+            for (auto const& pluginPath : sys.dynamicPlugins)
+            {
+                rt->getPluginRegistry().loadLibrary(pluginPath.c_str());
+            }
+            engine.reset(
+                rt->deserializeCudaEngine(iEnv.engine.getBlob().data(), iEnv.engine.getBlob().size(), nullptr));
             deserializeOK = (engine != nullptr);
         }
         auto endClock = std::chrono::high_resolution_clock::now();
@@ -1190,7 +1208,7 @@ bool timeDeserialize(InferenceEnvironment& iEnv)
 std::string getLayerInformation(
     nvinfer1::ICudaEngine* engine, nvinfer1::IExecutionContext* context, nvinfer1::LayerInformationFormat format)
 {
-    auto runtime = std::unique_ptr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+    auto runtime = std::unique_ptr<IRuntime>{createRuntime()};
     auto inspector = std::unique_ptr<IEngineInspector>(engine->createEngineInspector());
     if (context != nullptr)
     {
@@ -1239,6 +1257,7 @@ void Binding::fill()
         fillBuffer<uint8_t>(buffer->getHostBuffer(), volume, 0, 255);
         break;
     }
+    case nvinfer1::DataType::kFP8: ASSERT(!"FP8 is not supported");
     }
 }
 
@@ -1286,6 +1305,7 @@ void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim,
         dumpBuffer<uint8_t>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
+    case nvinfer1::DataType::kFP8: ASSERT(!"FP8 is not supported");
     }
 }
 
@@ -1423,6 +1443,104 @@ void Bindings::dumpBindingValues<nvinfer1::IExecutionContext>(nvinfer1::IExecuti
     mBindings[binding].dump(os, dims, strides, vectorDim, spv, separator);
 }
 
+namespace {
+
+std::string genFilenameSafeString(std::string const& s)
+{
+    std::string res = s;
+    static std::string const allowedSpecialChars{"._-,"};
+    for (auto& c : res)
+    {
+        if (!isalnum(c) && allowedSpecialChars.find(c) == std::string::npos)
+        {
+            c = '_';
+        }
+    }
+    return res;
+}
+
+template <typename ContextType>
+Dims getBindingDimensions(ContextType const& /*context*/, int32_t /*binding*/)
+{
+    ASSERT(0 && "Unimplemented");
+}
+
+template <>
+Dims getBindingDimensions(nvinfer1::IExecutionContext const& context, int32_t binding)
+{
+    return context.getBindingDimensions(binding);
+}
+
+template <>
+Dims getBindingDimensions(nvinfer1::safe::IExecutionContext const& context, int32_t binding)
+{
+    return context.getEngine().getBindingDimensions(binding);
+}
+
+inline std::ostream& operator<<(std::ostream& o, nvinfer1::DataType dt)
+{
+    switch (dt)
+    {
+    case DataType::kINT32: o << "Int32"; break;
+    case DataType::kFLOAT: o << "Float"; break;
+    case DataType::kHALF: o << "Half"; break;
+    case DataType::kINT8: o << "Int8"; break;
+    case DataType::kUINT8: o << "UInt8"; break;
+    case DataType::kBOOL: o << "Bool"; break;
+    case DataType::kFP8: o << "Float8"; break;
+    }
+    return o;
+}
+
+} // namespace
+
+template <typename ContextType>
+void Bindings::dumpRawBindingToFiles(ContextType const& context, std::ostream& os) const
+{
+    os << "Dumping I/O Bindings to RAW Files:" << std::endl;
+    for (auto const& n : mNames)
+    {
+        auto name = n.first;
+        auto bIndex = n.second;
+        auto const& binding = mBindings[bIndex];
+        void* outputBuffer{};
+        if (binding.outputAllocator != nullptr)
+        {
+            outputBuffer = binding.outputAllocator->getBuffer()->getHostBuffer();
+        }
+        else
+        {
+            outputBuffer = binding.buffer->getHostBuffer();
+        }
+
+        Dims dims = getBindingDimensions(context, bIndex);
+        std::string dimsStr;
+        std::string dotStr;
+
+        for (int32_t i = 0; i < dims.nbDims; i++)
+        {
+            dimsStr += dotStr + std::to_string(dims.d[i]);
+            dotStr = ".";
+        }
+
+        std::string const bindingTypeStr = (binding.isInput ? "input" : "output");
+
+        std::stringstream fileName;
+        fileName << genFilenameSafeString(name) << "." << bindingTypeStr << "." << dimsStr << "." << binding.dataType << ".raw";
+
+        os << "Writing file for " << bindingTypeStr << " binding " << name << " (with datatype " << binding.dataType
+            << " and dimensions " << dimsStr << ") to " << fileName.str() << std::endl;
+
+        std::ofstream f(fileName.str(), std::ios::out | std::ios::binary);
+        ASSERT(f && "Cannot open file for write");
+        f.write(static_cast<char*>(outputBuffer), binding.volume * samplesCommon::elementSize(binding.dataType));
+        f.close();
+    }
+}
+
+template
+void Bindings::dumpRawBindingToFiles<nvinfer1::IExecutionContext>(nvinfer1::IExecutionContext const& context, std::ostream& os) const;
+
 template <>
 void Bindings::dumpBindingDimensions<nvinfer1::IExecutionContext>(int binding, nvinfer1::IExecutionContext const& context, std::ostream& os) const
 {
@@ -1450,6 +1568,9 @@ void Bindings::dumpBindingValues<nvinfer1::safe::IExecutionContext>(nvinfer1::sa
 
     mBindings[binding].dump(os, dims, strides, vectorDim, spv, separator);
 }
+
+template
+void Bindings::dumpRawBindingToFiles<nvinfer1::safe::IExecutionContext>(nvinfer1::safe::IExecutionContext const& context, std::ostream& os) const;
 
 std::unordered_map<std::string, int> Bindings::getBindings(std::function<bool(Binding const&)> predicate) const
 {

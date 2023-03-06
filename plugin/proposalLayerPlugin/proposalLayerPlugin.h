@@ -117,7 +117,7 @@ class ProposalLayerPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 public:
     ProposalLayerPluginCreator();
 
-    ~ProposalLayerPluginCreator(){};
+    ~ProposalLayerPluginCreator() override{};
 
     const char* getPluginName() const noexcept override;
 

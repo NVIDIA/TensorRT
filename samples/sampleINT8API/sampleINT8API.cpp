@@ -24,6 +24,10 @@
 //! [-m modelfile] [-s per_tensor_dynamic_range_file] [-i image_file] [-r reference_file] [-d path/to/data/dir]
 //! [--verbose] [-useDLA <id>]
 
+// Define TRT entrypoints used in common code
+#define DEFINE_TRT_ENTRYPOINTS 1
+#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
+
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"
@@ -374,6 +378,7 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
                     case DataType::kHALF: val = static_cast<const half_float::half*>(wts.values)[wb]; break;
                     case DataType::kINT32: val = static_cast<const int32_t*>(wts.values)[wb]; break;
                     case DataType::kUINT8: val = static_cast<uint8_t const*>(wts.values)[wb]; break;
+                    case DataType::kFP8: ASSERT(!"FP8 is not supported"); break;
                     }
                     max = std::max(max, std::abs(val));
                 }
@@ -418,7 +423,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
     int height = mParams.mPreproc.inputDims.at(2);
     int width = mParams.mPreproc.inputDims.at(3);
     int max{0};
-    std::string magic{""};
+    std::string magic;
 
     std::vector<uint8_t> fileData(channels * height * width);
 

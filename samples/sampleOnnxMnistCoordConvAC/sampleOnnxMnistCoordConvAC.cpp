@@ -24,6 +24,10 @@
 //! [--useDLACore=<int>]
 //!
 
+// Define TRT entrypoints used in common code
+#define DEFINE_TRT_ENTRYPOINTS 1
+#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
+
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"
@@ -206,7 +210,7 @@ bool SampleOnnxMnistCoordConvAC::constructNetwork(SampleUniquePtr<nvinfer1::IBui
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
-        samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
@@ -299,11 +303,11 @@ bool SampleOnnxMnistCoordConvAC::verifyOutput(const samplesCommon::BufferManager
 {
     const int outputSize = mOutputDims.d[1];
     float* output = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
-    float val{0.0f};
+    float val{0.0F};
     int idx{0};
 
     // Calculate Softmax
-    float sum{0.0f};
+    float sum{0.0F};
     for (int i = 0; i < outputSize; i++)
     {
         output[i] = exp(output[i]);
@@ -322,12 +326,12 @@ bool SampleOnnxMnistCoordConvAC::verifyOutput(const samplesCommon::BufferManager
 
         sample::gLogInfo << " Prob " << i << "  " << std::fixed << std::setw(5) << std::setprecision(4) << output[i]
                          << " "
-                         << "Class " << i << ": " << std::string(int(std::floor(output[i] * 10 + 0.5f)), '*')
+                         << "Class " << i << ": " << std::string(int(std::floor(output[i] * 10 + 0.5F)), '*')
                          << std::endl;
     }
     sample::gLogInfo << std::endl;
 
-    return idx == mNumber && val > 0.9f;
+    return idx == mNumber && val > 0.9F;
 }
 
 //!

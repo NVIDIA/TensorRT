@@ -20,15 +20,6 @@ from __future__ import print_function
 
 import numpy as np
 import tensorrt as trt
-import pycuda.driver as cuda
-
-# Use autoprimaryctx if available (pycuda >= 2021.1) to
-# prevent issues with other modules that rely on the primary
-# device context.
-try:
-    import pycuda.autoprimaryctx
-except ModuleNotFoundError:
-    import pycuda.autoinit
 
 from PIL import ImageDraw
 
@@ -179,6 +170,9 @@ def main():
     output_image_path = "dog_bboxes.png"
     obj_detected_img.save(output_image_path, "PNG")
     print("Saved image with bounding boxes of detected objects to {}.".format(output_image_path))
+
+    # Free host and device memory used for inputs and outputs
+    common.free_buffers(inputs, outputs, stream)
 
 
 if __name__ == "__main__":

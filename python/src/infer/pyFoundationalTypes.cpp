@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -172,13 +172,14 @@ static const auto host_memory_buffer_interface = [](IHostMemory& self) -> py::bu
 void bindFoundationalTypes(py::module& m)
 {
     // Bind the top level DataType enum.
-    py::enum_<DataType>(m, "DataType", DataTypeDoc::descr)
+    py::enum_<DataType>(m, "DataType", DataTypeDoc::descr, py::module_local())
         .value("FLOAT", DataType::kFLOAT, DataTypeDoc::float32)
         .value("HALF", DataType::kHALF, DataTypeDoc::float16)
         .value("INT8", DataType::kINT8, DataTypeDoc::int8)
         .value("INT32", DataType::kINT32, DataTypeDoc::int32)
         .value("BOOL", DataType::kBOOL, DataTypeDoc::boolean)
-        .value("UINT8", DataType::kUINT8, DataTypeDoc::uint8); // DataType
+        .value("UINT8", DataType::kUINT8, DataTypeDoc::uint8)
+        .value("FP8", DataType::kFP8, DataTypeDoc::fp8); // DataType
 
     // Also create direct mappings (so we can call trt.float32, for example).
     m.attr("float32") = DataType::kFLOAT;
@@ -187,8 +188,9 @@ void bindFoundationalTypes(py::module& m)
     m.attr("int32") = DataType::kINT32;
     m.attr("bool") = DataType::kBOOL;
     m.attr("uint8") = DataType::kUINT8;
+    m.attr("fp8") = DataType::kFP8;
 
-    py::enum_<WeightsRole>(m, "WeightsRole", WeightsRoleDoc::descr)
+    py::enum_<WeightsRole>(m, "WeightsRole", WeightsRoleDoc::descr, py::module_local())
         .value("KERNEL", WeightsRole::kKERNEL, WeightsRoleDoc::KERNEL)
         .value("BIAS", WeightsRole::kBIAS, WeightsRoleDoc::BIAS)
         .value("SHIFT", WeightsRole::kSHIFT, WeightsRoleDoc::SHIFT)
@@ -197,7 +199,7 @@ void bindFoundationalTypes(py::module& m)
         .value("ANY", WeightsRole::kANY, WeightsRoleDoc::ANY); // WeightsRole
 
     // Weights
-    py::class_<Weights>(m, "Weights", WeightsDoc::descr)
+    py::class_<Weights>(m, "Weights", WeightsDoc::descr, py::module_local())
         // Can construct an empty weights object with type. Defaults to float32.
         .def(py::init(lambdas::weights_datatype_constructor), "type"_a = DataType::kFLOAT, WeightsDoc::init_type)
         // Allows for construction through any contiguous numpy array. It then keeps a pointer to that buffer
@@ -214,7 +216,7 @@ void bindFoundationalTypes(py::module& m)
     py::implicitly_convertible<py::array, Weights>();
 
     // Dims
-    py::class_<Dims>(m, "Dims", DimsDoc::descr)
+    py::class_<Dims>(m, "Dims", DimsDoc::descr, py::module_local())
         .def(py::init<>())
         // Allows for construction from python lists and tuples.
         .def(py::init(lambdas::dims_vector_constructor), "shape"_a)
@@ -238,7 +240,7 @@ void bindFoundationalTypes(py::module& m)
     py::implicitly_convertible<std::vector<int32_t>, Dims>();
 
     // 2D
-    py::class_<Dims2, Dims>(m, "Dims2", Dims2Doc::descr)
+    py::class_<Dims2, Dims>(m, "Dims2", Dims2Doc::descr, py::module_local())
         .def(py::init<>())
         .def(py::init<int32_t, int32_t>(), "dim0"_a, "dim1"_a)
         // Allows for construction from a tuple/list.
@@ -246,20 +248,21 @@ void bindFoundationalTypes(py::module& m)
 
     py::implicitly_convertible<std::vector<int32_t>, Dims2>();
 
-    py::class_<DimsHW, Dims2>(m, "DimsHW", DimsHWDoc::descr)
+    py::class_<DimsHW, Dims2>(m, "DimsHW", DimsHWDoc::descr, py::module_local())
         .def(py::init<>())
         .def(py::init<int32_t, int32_t>(), "h"_a, "w"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dimshw_vector_constructor), "shape"_a)
         // Expose these functions as attributes in Python.
-        .def_property("h", [](DimsHW const& dims) { return dims.h(); }, [](DimsHW& dims, int32_t i) { dims.h() = i; })
+        .def_property(
+            "h", [](DimsHW const& dims) { return dims.h(); }, [](DimsHW& dims, int32_t i) { dims.h() = i; })
         .def_property(
             "w", [](DimsHW const& dims) { return dims.w(); }, [](DimsHW& dims, int32_t i) { dims.w() = i; }); // DimsHW
 
     py::implicitly_convertible<std::vector<int32_t>, DimsHW>();
 
     // 3D
-    py::class_<Dims3, Dims>(m, "Dims3", Dims3Doc::descr)
+    py::class_<Dims3, Dims>(m, "Dims3", Dims3Doc::descr, py::module_local())
         .def(py::init<>())
         .def(py::init<int32_t, int32_t, int32_t>(), "dim0"_a, "dim1"_a, "dim2"_a)
         // Allows for construction from a tuple/list.
@@ -268,7 +271,7 @@ void bindFoundationalTypes(py::module& m)
     py::implicitly_convertible<std::vector<int32_t>, Dims3>();
 
     // 4D
-    py::class_<Dims4, Dims>(m, "Dims4", Dims4Doc::descr)
+    py::class_<Dims4, Dims>(m, "Dims4", Dims4Doc::descr, py::module_local())
         .def(py::init<>())
         .def(py::init<int32_t, int32_t, int32_t, int32_t>(), "dim0"_a, "dim1"_a, "dim2"_a, "dim3"_a)
         // Allows for construction from a tuple/list.
@@ -276,7 +279,7 @@ void bindFoundationalTypes(py::module& m)
 
     py::implicitly_convertible<std::vector<int32_t>, Dims4>();
 
-    py::class_<IHostMemory>(m, "IHostMemory", py::buffer_protocol(), IHostMemoryDoc::descr)
+    py::class_<IHostMemory>(m, "IHostMemory", py::buffer_protocol(), IHostMemoryDoc::descr, py::module_local())
         .def_property_readonly("dtype", [](IHostMemory const& mem) { return mem.type(); })
         .def_property_readonly("nbytes", [](IHostMemory const& mem) { return mem.size(); })
         // Expose buffer interface.

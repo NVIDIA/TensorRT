@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,6 +46,13 @@ constexpr char const* uint8 = R"trtdoc(
     to integer values by truncating towards zero. This conversion has undefined behavior for
     floating point values outside the range [0.0f, 256.0) after truncation.
     ``uint8`` conversions are not supported for {``int8``, ``int32``, ``bool``}.
+)trtdoc";
+constexpr char const* fp8 = R"trtdoc(
+    Signed 8-bit floating point with 1 sign bit, 4 exponent bits, 3 mantissa
+    bits, and exponent-bias 7.
+
+    .. warning::
+       fp8 is not supported yet and will result in an error or undefined behavior.
 )trtdoc";
 
 } // namespace DataTypeDoc

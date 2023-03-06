@@ -24,6 +24,9 @@
 //! It can be run with the following command line:
 //! Command: ./sample_io_formats
 
+// Define TRT entrypoints used in common code
+#define DEFINE_TRT_ENTRYPOINTS 1
+
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"
@@ -53,7 +56,7 @@ using samplesCommon::SampleUniquePtr;
 
 std::string const gSampleName = "TensorRT.sample_io_formats";
 
-int32_t divUp(int32_t a, int32_t b)
+inline int32_t divUp(int32_t a, int32_t b)
 {
     return (a + b - 1) / b;
 }
@@ -341,7 +344,7 @@ bool SampleIOFormats::build(int32_t dataWidth)
         config->setFlag(BuilderFlag::kINT8);
         network->getInput(0)->setType(DataType::kINT8);
         network->getOutput(0)->setType(DataType::kINT8);
-        samplesCommon::setAllDynamicRanges(network.get(), 127.0f, 127.0f);
+        samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
     }
     if (dataWidth == 2)
     {
@@ -494,8 +497,8 @@ bool SampleIOFormats::verifyOutput(SampleBuffer& outputBuf, int32_t groundTruthD
 {
     T const* prob = reinterpret_cast<T const*>(outputBuf.buffer);
 
-    float val{0.0f};
-    float elem{0.0f};
+    float val{0.0F};
+    float elem{0.0F};
     int32_t idx{0};
     int32_t const kDIGITS = 10;
 
@@ -510,7 +513,7 @@ bool SampleIOFormats::verifyOutput(SampleBuffer& outputBuf, int32_t groundTruthD
     }
     sample::gLogInfo << "Predicted Output: " << idx << std::endl;
 
-    return (idx == groundTruthDigit && val > 0.9f);
+    return (idx == groundTruthDigit && val > 0.9F);
 }
 
 int32_t calcIndex(SampleBuffer& buffer, int32_t c, int32_t h, int32_t w)

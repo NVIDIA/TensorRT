@@ -24,7 +24,6 @@
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 using nvinfer1::plugin::EfficientNMSExplicitTFTRTPlugin;
-using nvinfer1::plugin::EfficientNMSParameters;
 using nvinfer1::plugin::EfficientNMSExplicitTFTRTPluginCreator;
 
 namespace

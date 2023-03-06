@@ -33,11 +33,6 @@ For specific software versions, see the [TensorRT Installation Guide](https://do
     pip3 install -r requirements.txt
     ```
 
-On Jetson Nano, you will need nvcc in the `PATH` for installing pycuda:
-```bash
-export PATH=${PATH}:/usr/local/cuda/bin/
-```
-
 2.  Download sample data. See the "Download Sample Data" section of [the general setup guide](../README.md).
 
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
  * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
@@ -558,7 +558,8 @@ public:
     //!
     //! \brief Layer time reporting callback.
     //!
-    //! \param layerName The name of the layer, set when constructing the network definition.
+    //! \param layerName The name of the layer, set when constructing the network definition. If the engine is built
+    //!                  with profiling verbosity set to kNONE, the layerName is the decimal index of the layer.
     //! \param ms The time in milliseconds to execute the layer.
     //!
     virtual void reportLayerTime(char const* layerName, float ms) noexcept = 0;
@@ -606,6 +607,41 @@ constexpr inline int32_t EnumMax<DeviceType>() noexcept
 {
     return 2;
 }
+
+//!
+//! \enum TempfileControlFlag
+//!
+//! \brief Flags used to control TensorRT's behavior when creating executable temporary files.
+//!
+//! On some platforms the TensorRT runtime may need to create files in a temporary directory or use platform-specific
+//! APIs to create files in-memory to load temporary DLLs that implement runtime code. These flags allow the
+//! application to explicitly control TensorRT's use of these files. This will preclude the use of certain TensorRT
+//! APIs for deserializing and loading lean runtimes.
+//!
+enum class TempfileControlFlag : int32_t
+{
+    //! Allow creating and loading files in-memory (or unnamed files).
+    kALLOW_IN_MEMORY_FILES = 0,
+
+    //! Allow creating and loading named files in a temporary directory on the filesystem.
+    //!
+    //! \see IRuntime::setTemporaryDirectory()
+    kALLOW_TEMPORARY_FILES = 1,
+};
+
+//! Maximum number of elements in TempfileControlFlag enum. \see TempfileControlFlag
+template <>
+constexpr inline int32_t EnumMax<TempfileControlFlag>() noexcept
+{
+    return 2;
+}
+
+//! \brief Represents a collection of one or more TempfileControlFlag values combined using bitwise-OR operations.
+//!
+//! \see TempfileControlFlag,
+//!      IRuntime::setTempfileControlFlags(),
+//!      IRuntime::getTempfileControlFlags()
+using TempfileControlFlags = uint32_t;
 
 //!
 //! \class IRuntime
@@ -783,6 +819,130 @@ public:
     int32_t getMaxThreads() const noexcept
     {
         return mImpl->getMaxThreads();
+    }
+
+    //!
+    //! \brief Set the directory that will be used by this runtime for temporary files.
+    //!
+    //! On some platforms the TensorRT runtime may need to create and use temporary files
+    //! with read/write/execute permissions to implement runtime functionality.
+    //!
+    //! \param path Path to the temporary directory for use, or nullptr.
+    //!
+    //! If path is nullptr, then TensorRT will use platform-specific heuristics to pick
+    //! a default temporary directory if required:
+    //!
+    //! - On UNIX/Linux platforms, TensorRT will first try the TMPDIR environment variable, then fall back to /tmp
+    //! - On Windows, TensorRT will try the TEMP environment variable.
+    //!
+    //! See the TensorRT Developer Guide for more information.
+    //!
+    //! The default value is nullptr.
+    //!
+    //! \warning If path is not nullptr, it must be a non-empty string representing a relative
+    //! or absolute path in the format expected by the host operating system.
+    //!
+    //! \warning The string path must be null-terminated, and be at most 4096 bytes including the
+    //! terminator. Note that the operating system may have stricter path length requirements.
+    //!
+    //! \warning The process using TensorRT must have rwx permissions for the temporary directory,
+    //! and the directory shall be configured to disallow other users from modifying created files
+    //! (e.g. on Linux, if the directory is shared with other users, the sticky bit must be set).
+    //!
+    //! \see getTemporaryDirectory()
+    //!
+    void setTemporaryDirectory(char const* path) noexcept
+    {
+        return mImpl->setTemporaryDirectory(path);
+    }
+
+    //!
+    //! \brief Get the directory that will be used by this runtime for temporary files.
+    //!
+    //! \returns A path to the temporary directory in use, or nullptr if no path is specified.
+    //!
+    //! \see setTemporaryDirectory()
+    char const* getTemporaryDirectory() const noexcept
+    {
+        return mImpl->getTemporaryDirectory();
+    }
+
+    //!
+    //! \brief Set the tempfile control flags for this runtime.
+    //!
+    //! \param flags The flags to set.
+    //!
+    //! The default value is all flags set, i.e.
+    //!
+    //! (1U << static_cast<uint32_t>(kALLOW_IN_MEMORY_FILES)) | (1U << static_cast<uint32_t>(kALLOW_TEMPORARY_FILES))
+    //!
+    //! \see TempfileControlFlag, TempfileControlFlags, getTempfileControlFlags()
+    //!
+    void setTempfileControlFlags(TempfileControlFlags flags) noexcept
+    {
+        return mImpl->setTempfileControlFlags(flags);
+    }
+
+    //!
+    //! \brief Get the tempfile control flags for this runtime.
+    //!
+    //! \return The flags currently set.
+    //!
+    //! \see TempfileControlFlag, TempfileControlFlags, setTempfileControlFlags()
+    //!
+    TempfileControlFlags getTempfileControlFlags() const noexcept
+    {
+        return mImpl->getTempfileControlFlags();
+    }
+
+    //!
+    //! \brief Get the local plugin registry that can be used by the runtime.
+    //!
+    //! \return The local plugin registry that can be used by the runtime.
+    //!
+    IPluginRegistry& getPluginRegistry() noexcept
+    {
+        return mImpl->getPluginRegistry();
+    }
+
+    //!
+    //! \brief Load IRuntime from the file.
+    //!
+    //! This method loads a runtime library from a shared library file. The runtime can then be used to execute
+    //! a plan file built with BuilderFlag::kVERSION_COMPATIBLE and BuilderFlag::kEXCLUDE_LEAN_RUNTIME both set
+    //! and built with the same version of TensorRT as the loaded runtime library.
+    //!
+    //! \param path Path to the runtime lean library.
+    //!
+    //! \return the runtime library, or nullptr if it could not be loaded
+    //!
+    //! \warning The path string must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    IRuntime* loadRuntime(char const* path) noexcept
+    {
+        return mImpl->loadRuntime(path);
+    }
+
+    //!
+    //! \brief Set whether the runtime is allowed to deserialize engines with host executable code.
+    //!
+    //! \param allowed Whether the runtime is allowed to deserialize engines with host executable code.
+    //!
+    //! The default value is false.
+    //!
+    void setEngineHostCodeAllowed(bool allowed) noexcept
+    {
+        return mImpl->setEngineHostCodeAllowed(allowed);
+    }
+
+    //!
+    //! \brief Get whether the runtime is allowed to deserialize engines with host executable code.
+    //!
+    //! \return Whether the runtime is allowed to deserialize engines with host executable code.
+    //!
+    bool getEngineHostCodeAllowed() const noexcept
+    {
+        return mImpl->getEngineHostCodeAllowed();
     }
 
 protected:
@@ -1586,9 +1746,10 @@ public:
     //!
     //! \brief Create an execution context.
     //!
-    //! If the engine supports dynamic shapes, each execution context in concurrent use must use a separate optimization
-    //! profile. The first execution context created will call setOptimizationProfile(0) implicitly. For other execution
-    //! contexts, setOptimizationProfile() must be called with unique profile index before calling execute or enqueue.
+    //! The execution context created will call setOptimizationProfile(0) implicitly if there are
+    //! no other execution contexts assigned to optimization profile 0. This functionality is
+    //! deprecated in TensorRT 8.6 and will instead default all optimization profiles to 0 starting
+    //! in TensorRT 9.0.
     //! If an error recorder has been set for the engine, it will also be passed to the execution context.
     //!
     //! \see IExecutionContext.
@@ -2114,7 +2275,7 @@ public:
     //! \brief return the tactic sources required by this engine.
     //!
     //! The value returned is equal to zero or more tactics sources set
-    //! at build time via \ref IBuilderConfig::setTacticSources(). Sources
+    //! at build time via setTacticSources() in IBuilderConfig. Sources
     //! set by the latter but not returned by \ref ICudaEngine::getTacticSources
     //! do not reduce overall engine execution time, and can be removed from
     //! future builds to reduce build time.
@@ -2170,6 +2331,33 @@ public:
     char const* getIOTensorName(int32_t index) const noexcept
     {
         return mImpl->getIOTensorName(index);
+    }
+
+    //! \brief Return the hardware compatibility level of this engine.
+    //!
+    //! \return hardwareCompatibilityLevel The level of hardware
+    //!        compatibility.
+    //!
+    //! This is only supported for Ampere and newer architectures.
+    //!
+    HardwareCompatibilityLevel getHardwareCompatibilityLevel() const noexcept
+    {
+        return mImpl->getHardwareCompatibilityLevel();
+    }
+
+    //!
+    //! \brief Return the number of auxiliary streams used by this engine.
+    //!
+    //! This number will be less than or equal to the maximum allowed number of auxiliary streams set by
+    //! IBuilderConfig::setMaxAuxStreams() API call when the engine was built.
+    //!
+    //! \return the number of auxiliary streams used by this engine.
+    //!
+    //! \see IBuilderConfig::setMaxAuxStreams(), IExecutionContext::setAuxStreams()
+    //!
+    int32_t getNbAuxStreams() const noexcept
+    {
+        return mImpl->getNbAuxStreams();
     }
 
 protected:
@@ -2274,7 +2462,7 @@ public:
     }
 
     //!
-    //! \brief Asynchronously execute inference on a batch.
+    //! \brief Enqueue inference of a batch on a stream.
     //!
     //! This method requires an array of input and output buffers. The mapping from tensor names to indices can be
     //! queried using ICudaEngine::getBindingIndex()
@@ -2472,12 +2660,6 @@ public:
     //! enqueueV2()/enqueueV3() operations. To avoid these calls during enqueueV2()/enqueueV3(), use
     //! setOptimizationProfileAsync() instead.
     //!
-    //! If the associated CUDA engine has dynamic inputs, this method must be called at least once
-    //! with a unique profileIndex before calling execute or enqueue (i.e. the profile index
-    //! may not be in use by another execution context that has not been destroyed yet).
-    //! For the first execution context that is created for an engine, setOptimizationProfile(0)
-    //! is called implicitly.
-    //!
     //! If the associated CUDA engine does not have inputs with dynamic shapes, this method need not be
     //! called, in which case the default profile index of 0 will be used (this is particularly
     //! the case for all safe engines).
@@ -2505,9 +2687,11 @@ public:
     //!
     //! \brief Get the index of the currently selected optimization profile.
     //!
-    //! If the profile index has not been set yet (implicitly to 0 for the first execution context
-    //! to be created, or explicitly for all subsequent contexts), an invalid value of -1 will be returned
+    //! If the profile index has not been set yet (implicitly to 0 if no other execution context has been set to
+    //! profile 0, or explicitly for all subsequent contexts), an invalid value of -1 will be returned
     //! and all calls to enqueueV2()/enqueueV3()/executeV2() will fail until a valid profile index has been set.
+    //! This behavior is deprecated in TensorRT 8.6 and in TensorRT 9.0, all profiles will default to optimization
+    //! profile 0 and -1 will no longer be returned.
     //!
     int32_t getOptimizationProfile() const noexcept
     {
@@ -2787,7 +2971,7 @@ public:
     }
 
     //!
-    //! \brief Asynchronously execute inference.
+    //! \brief Enqueue inference on a stream.
     //!
     //! This method requires an array of input and output buffers. The mapping from tensor names to indices can be
     //! queried using ICudaEngine::getBindingIndex().
@@ -2832,11 +3016,11 @@ public:
     //! the profile sync stream and the enqueue stream occurs.
     //!
     //! The selected profile will be used in subsequent calls to executeV2()/enqueueV2()/enqueueV3().
-    //! If the associated CUDA engine has inputs with dynamic shapes, the
-    //! optimization profile must be set with a unique profileIndex before
-    //! calling execute or enqueue.
-    //! For the first execution context that is created for an engine,
-    //! setOptimizationProfile(0) is called implicitly.
+    //! If the associated CUDA engine has inputs with dynamic shapes, the optimization profile must
+    //! be set with its corresponding profileIndex before calling execute or enqueue. If no execution
+    //! context is assigned optimization profile 0 and a new context is created for an engine,
+    //! setOptimizationProfile(0) is called implicitly. This functionality is deprecated in TensorRT 8.6
+    //! and will instead default all optimization profiles to 0 starting in TensorRT 9.0.
     //!
     //! If the associated CUDA engine does not have inputs with dynamic shapes,
     //! this method need not be called, in which case the default profile index
@@ -3158,7 +3342,7 @@ public:
     }
 
     //!
-    //! \brief Asynchronously execute inference.
+    //! \brief Enqueue inference on a stream.
     //!
     //! \param stream A cuda stream on which the inference kernels will be enqueued.
     //!
@@ -3235,6 +3419,37 @@ public:
     ProfilingVerbosity getNvtxVerbosity() const noexcept
     {
         return mImpl->getNvtxVerbosity();
+    }
+
+    //!
+    //! \brief Set the auxiliary streams that TensorRT should launch kernels on in the next enqueueV3() call.
+    //!
+    //! If set, TensorRT will launch the kernels that are supposed to run on the auxiliary streams using the streams
+    //! provided by the user with this API. If this API is not called before the enqueueV3() call, then TensorRT will
+    //! use the auxiliary streams created by TensorRT internally.
+    //!
+    //! TensorRT will always insert event synchronizations between the main stream provided via enqueueV3() call and the
+    //! auxiliary streams:
+    //!  - At the beginning of the enqueueV3() call, TensorRT will make sure that all the auxiliary streams wait on
+    //!    the activities on the main stream.
+    //!  - At the end of the enqueueV3() call, TensorRT will make sure that the main stream wait on the activities on
+    //!    all the auxiliary streams.
+    //!
+    //! \param auxStreams The pointer to an array of cudaStream_t with the array length equal to nbStreams.
+    //! \param nbStreams The number of auxiliary streams provided. If nbStreams is greater than
+    //!        `engine->getNbAuxStreams()`, then only the first `engine->getNbAuxStreams()` streams will be used. If
+    //!        `nbStreams` is less than `engine->getNbAuxStreams()`, such as setting `nbStreams` to 0, then TensorRT
+    //!        will use the provided streams for the first `nbStreams` auxiliary streams, and will create additional
+    //!        streams internally for the rest of the auxiliary streams.
+    //!
+    //! \note The provided auxiliary streams must not be the default stream and must all be different to avoid
+    //!       deadlocks.
+    //!
+    //! \see enqueueV3(), IBuilderConfig::setMaxAuxStreams(), ICudaEngine::getNbAuxStreams()
+    //!
+    void setAuxStreams(cudaStream_t* auxStreams, int32_t nbStreams) noexcept
+    {
+        mImpl->setAuxStreams(auxStreams, nbStreams);
     }
 
 protected:
@@ -3339,8 +3554,6 @@ public:
     //!
     //! \brief Get a string describing the information about all the layers in the current engine or the execution
     //!        context.
-    //!
-    //! \param layerIndex the index of the layer. It must lie in range [0, engine.getNbLayers()).
     //!
     //! \param format the format the layer information should be printed in.
     //!
@@ -3481,4 +3694,33 @@ private:
 
 #define REGISTER_TENSORRT_PLUGIN(name)                                                                                 \
     static nvinfer1::PluginRegistrar<name> pluginRegistrar##name {}
+
+namespace nvinfer1
+{
+//!
+//! \class ILoggerFinder
+//!
+//! \brief A virtual base class to find a logger.
+//! Allows a plugin to find an instance of a logger if it needs to emit a log message.
+//! A pointer to an instance of this class is passed to a plugin shared library on initialization when that plugin
+//! is serialized as part of a version-compatible plan. See the plugin chapter in the developer guide for details.
+//!
+class ILoggerFinder
+{
+public:
+    //!
+    //! \brief Get the logger used by the engine or execution context which called the plugin method.
+    //!
+    //! \warning Must be called from the thread in which the plugin method was called.
+    //!
+    //! \return A pointer to the logger.
+    //!
+    virtual ILogger* findLogger() = 0;
+
+protected:
+    virtual ~ILoggerFinder() = default;
+};
+
+} // namespace nvinfer1
+
 #endif // NV_INFER_RUNTIME_H

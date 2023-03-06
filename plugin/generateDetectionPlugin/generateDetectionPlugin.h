@@ -115,7 +115,7 @@ class GenerateDetectionPluginCreator : public nvinfer1::pluginInternal::BaseCrea
 public:
     GenerateDetectionPluginCreator() noexcept;
 
-    ~GenerateDetectionPluginCreator() noexcept {};
+    ~GenerateDetectionPluginCreator() noexcept override{};
 
     const char* getPluginName() const noexcept override;
 

@@ -80,7 +80,7 @@ class SeqLen2SpatialPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     SeqLen2SpatialPluginCreator();
-    ~SeqLen2SpatialPluginCreator();
+    ~SeqLen2SpatialPluginCreator() override;
 
     SeqLen2SpatialPluginCreator(SeqLen2SpatialPluginCreator const& /*other*/) = delete;
     SeqLen2SpatialPluginCreator& operator=(SeqLen2SpatialPluginCreator const& /*other*/) = delete;

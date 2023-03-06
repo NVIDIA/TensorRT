@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,7 @@
 
 // Implementation of PyBind11 Binding Code for CaffeParser
 #include "ForwardDeclarations.h"
+#include "NvCaffeParser.h"
 #include "parsers/pyCaffeDoc.h"
 #include "utils.h"
 #include <pybind11/numpy.h>
@@ -63,15 +64,16 @@ static const auto PluginV2_create_plugin
 void bindCaffe(py::module& m)
 {
     py::class_<IBlobNameToTensor, std::unique_ptr<IBlobNameToTensor, py::nodelete>>(
-        m, "IBlobNameToTensor", IBlobNameToTensorDoc::descr)
+        m, "IBlobNameToTensor", IBlobNameToTensorDoc::descr, py::module_local())
         .def("find", &IBlobNameToTensor::find, "name"_a, IBlobNameToTensorDoc::find);
 
-    py::class_<IPluginFactoryV2>(m, "ICaffePluginFactoryV2", ICaffePluginFactoryV2Doc::descr)
+    py::class_<IPluginFactoryV2>(m, "ICaffePluginFactoryV2", ICaffePluginFactoryV2Doc::descr, py::module_local())
         .def("is_plugin_v2", &IPluginFactoryV2::isPluginV2, "layer_name"_a, ICaffePluginFactoryV2Doc::is_plugin_v2)
         .def("create_plugin", lambdas::PluginV2_create_plugin, "layer_name"_a, "weights"_a, py::keep_alive<1, 3>{},
             ICaffePluginFactoryV2Doc::create_plugin);
 
-    py::class_<ICaffeParser, std::unique_ptr<ICaffeParser, py::nodelete>>(m, "CaffeParser", ICaffeParserDoc::descr)
+    py::class_<ICaffeParser, std::unique_ptr<ICaffeParser, py::nodelete>>(
+        m, "CaffeParser", ICaffeParserDoc::descr, py::module_local())
         .def(py::init(&nvcaffeparser1::createCaffeParser))
         .def_property("protobuf_buffer_size", nullptr, &ICaffeParser::setProtobufBufferSize)
         .def_property(

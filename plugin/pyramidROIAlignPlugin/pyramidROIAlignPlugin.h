@@ -115,7 +115,7 @@ class PyramidROIAlignPluginCreator : public nvinfer1::pluginInternal::BaseCreato
 public:
     PyramidROIAlignPluginCreator();
 
-    ~PyramidROIAlignPluginCreator(){};
+    ~PyramidROIAlignPluginCreator() override{};
 
     char const* getPluginName() const noexcept override;
 

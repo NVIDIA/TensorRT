@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: LicenseRef-NvidiaProprietary
  *
  * NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
@@ -72,12 +72,17 @@ enum class FieldType : int32_t
 class TENSORRTAPI FieldMap
 {
 public:
-    char const* name;
-    void const* data;
-    FieldType type = FieldType::kUNKNOWN;
-    int32_t length = 1;
+    char const* name{};
+    void const* data{};
+    FieldType type{FieldType::kUNKNOWN};
+    int32_t length{1};
 
-    FieldMap(char const* name, void const* data, const FieldType type, int32_t length = 1);
+    //! \deprecated Legacy constructor, retained for ABI compatibility.  Deprecated in TensorRT 8.6.
+    //! Use the default constructor instead.
+    TRT_DEPRECATED FieldMap(char const* name, void const* data, FieldType const type, int32_t length = 1);
+
+    //! Default constructor
+    FieldMap() = default;
 };
 
 struct FieldCollection

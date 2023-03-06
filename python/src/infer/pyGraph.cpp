@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -225,7 +225,7 @@ namespace tensorrt
     void bindGraph(py::module& m)
     {
         // Bind to a Python enum called LayerType.
-        py::enum_<LayerType>(m, "LayerType", LayerTypeDoc::descr)
+        py::enum_<LayerType>(m, "LayerType", LayerTypeDoc::descr, py::module_local())
             .value("CONVOLUTION", LayerType::kCONVOLUTION, LayerTypeDoc::CONVOLUTION)
             .value("FULLY_CONNECTED", LayerType::kFULLY_CONNECTED, LayerTypeDoc::FULLY_CONNECTED)
             .value("GRID_SAMPLE", LayerType::kGRID_SAMPLE, LayerTypeDoc::GRID_SAMPLE)
@@ -250,6 +250,7 @@ namespace tensorrt
             .value("CONSTANT", LayerType::kCONSTANT, LayerTypeDoc::CONSTANT)
             .value("RNN_V2", LayerType::kRNN_V2, LayerTypeDoc::RNN_V2)
             .value("IDENTITY", LayerType::kIDENTITY, LayerTypeDoc::IDENTITY)
+            .value("CAST", LayerType::kCAST, LayerTypeDoc::CAST)
             .value("PLUGIN_V2", LayerType::kPLUGIN_V2, LayerTypeDoc::PLUGIN_V2)
             .value("SLICE", LayerType::kSLICE, LayerTypeDoc::SLICE)
             .value("SHAPE", LayerType::kSHAPE, LayerTypeDoc::SHAPE)
@@ -271,15 +272,17 @@ namespace tensorrt
             .value("EINSUM", LayerType::kEINSUM, LayerTypeDoc::EINSUM)
             .value("ONE_HOT", LayerType::kONE_HOT, LayerTypeDoc::ONE_HOT)
             .value("NON_ZERO", LayerType::kNON_ZERO, LayerTypeDoc::NON_ZERO)
+            .value("REVERSE_SEQUENCE", LayerType::kREVERSE_SEQUENCE, LayerTypeDoc::REVERSE_SEQUENCE)
+            .value("NORMALIZATION", LayerType::kNORMALIZATION, LayerTypeDoc::NORMALIZATION)
         ; // LayerType
 
         // Bind to a Python enum called TensorLocation.
-        py::enum_<TensorLocation>(m, "TensorLocation", TensorLocationDoc::descr)
+        py::enum_<TensorLocation>(m, "TensorLocation", TensorLocationDoc::descr, py::module_local())
             .value("DEVICE", TensorLocation::kDEVICE, TensorLocationDoc::DEVICE)
             .value("HOST", TensorLocation::kHOST, TensorLocationDoc::HOST)
         ; // TensorLocation
 
-        py::enum_<TensorFormat>(m, "TensorFormat", TensorFormatDoc::descr, py::arithmetic{})
+        py::enum_<TensorFormat>(m, "TensorFormat", TensorFormatDoc::descr, py::arithmetic{}, py::module_local())
             .value("LINEAR", TensorFormat::kLINEAR, TensorFormatDoc::LINEAR)
             .value("CHW2", TensorFormat::kCHW2, TensorFormatDoc::CHW2)
             .value("HWC8", TensorFormat::kHWC8, TensorFormatDoc::HWC8)
@@ -292,10 +295,11 @@ namespace tensorrt
             .value("DLA_LINEAR", TensorFormat::kDLA_LINEAR, TensorFormatDoc::DLA_LINEAR)
             .value("DLA_HWC4", TensorFormat::kDLA_HWC4, TensorFormatDoc::DLA_HWC4)
             .value("HWC16", TensorFormat::kHWC16, TensorFormatDoc::HWC16)
+            .value("DHWC", TensorFormat::kDHWC, TensorFormatDoc::DHWC)
         ; // TensorFormat
 
         // ITensor
-        py::class_<ITensor, std::unique_ptr<ITensor, py::nodelete>>(m, "ITensor", ITensorDoc::descr)
+        py::class_<ITensor, std::unique_ptr<ITensor, py::nodelete>>(m, "ITensor", ITensorDoc::descr, py::module_local())
             .def_property("name", &ITensor::getName, &ITensor::setName)
             .def_property("shape", &ITensor::getDimensions, &ITensor::setDimensions)
             .def_property("dtype", &ITensor::getType, &ITensor::setType)
@@ -314,8 +318,9 @@ namespace tensorrt
             .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
         ;
 
-        py::class_<ILayer, std::unique_ptr<ILayer, py::nodelete>>(m, "ILayer", ILayerDoc::descr)
+        py::class_<ILayer, std::unique_ptr<ILayer, py::nodelete>>(m, "ILayer", ILayerDoc::descr, py::module_local())
             .def_property("name", &ILayer::getName, &ILayer::setName)
+            .def_property("metadata", &ILayer::getMetadata, &ILayer::setMetadata)
             .def_property_readonly("type", &ILayer::getType)
             .def_property_readonly("num_inputs", &ILayer::getNbInputs)
             .def_property_readonly("num_outputs", &ILayer::getNbOutputs)
@@ -331,7 +336,7 @@ namespace tensorrt
             .def("reset_output_type", &ILayer::resetOutputType, "index"_a, ILayerDoc::reset_output_type)
         ;
 
-        py::enum_<PaddingMode>(m, "PaddingMode", PaddingModeDoc::descr)
+        py::enum_<PaddingMode>(m, "PaddingMode", PaddingModeDoc::descr, py::module_local())
             .value("EXPLICIT_ROUND_DOWN", PaddingMode::kEXPLICIT_ROUND_DOWN, PaddingModeDoc::EXPLICIT_ROUND_DOWN)
             .value("EXPLICIT_ROUND_UP", PaddingMode::kEXPLICIT_ROUND_UP, PaddingModeDoc::EXPLICIT_ROUND_UP)
             .value("SAME_UPPER", PaddingMode::kSAME_UPPER, PaddingModeDoc::SAME_UPPER)
@@ -340,7 +345,7 @@ namespace tensorrt
             .value("CAFFE_ROUND_UP", PaddingMode::kCAFFE_ROUND_UP, PaddingModeDoc::CAFFE_ROUND_UP)
         ;
 
-        py::class_<IConvolutionLayer, ILayer, std::unique_ptr<IConvolutionLayer, py::nodelete>>(m, "IConvolutionLayer", IConvolutionLayerDoc::descr)
+        py::class_<IConvolutionLayer, ILayer, std::unique_ptr<IConvolutionLayer, py::nodelete>>(m, "IConvolutionLayer", IConvolutionLayerDoc::descr, py::module_local())
             .def_property("kernel_size", utils::deprecateMember(&IConvolutionLayer::getKernelSize, "kernel_size_nd"), utils::deprecateMember(&IConvolutionLayer::setKernelSize, "kernel_size_nd"))
             .def_property("num_output_maps", &IConvolutionLayer::getNbOutputMaps, &IConvolutionLayer::setNbOutputMaps)
             .def_property("stride", utils::deprecateMember(&IConvolutionLayer::getStride, "stride_nd"), utils::deprecateMember(&IConvolutionLayer::setStride, "stride_nd"))
@@ -359,14 +364,14 @@ namespace tensorrt
             .def_property("dilation_nd", &IConvolutionLayer::getDilationNd, &IConvolutionLayer::setDilationNd)
         ;
 
-        py::class_<IFullyConnectedLayer, ILayer, std::unique_ptr<IFullyConnectedLayer, py::nodelete>>(m, "IFullyConnectedLayer", IFullyConnectedLayerDoc::descr)
+        py::class_<IFullyConnectedLayer, ILayer, std::unique_ptr<IFullyConnectedLayer, py::nodelete>>(m, "IFullyConnectedLayer", IFullyConnectedLayerDoc::descr, py::module_local())
             .def_property("num_output_channels", &IFullyConnectedLayer::getNbOutputChannels, &IFullyConnectedLayer::setNbOutputChannels)
             .def_property("kernel", lambdas::fc_get_kernel, py::cpp_function(&IFullyConnectedLayer::setKernelWeights, py::keep_alive<1, 2>{}))
             .def_property("bias", lambdas::fc_get_bias, py::cpp_function(&IFullyConnectedLayer::setBiasWeights, py::keep_alive<1, 2>{}))
         ;
 
         // Bind to a Python enum called ActivationType.
-        py::enum_<ActivationType>(m, "ActivationType", ActivationTypeDoc::descr)
+        py::enum_<ActivationType>(m, "ActivationType", ActivationTypeDoc::descr, py::module_local())
             .value("RELU", ActivationType::kRELU, ActivationTypeDoc::RELU)
             .value("SIGMOID", ActivationType::kSIGMOID, ActivationTypeDoc::SIGMOID)
             .value("TANH", ActivationType::kTANH, ActivationTypeDoc::TANH)
@@ -381,20 +386,20 @@ namespace tensorrt
             .value("THRESHOLDED_RELU", ActivationType::kTHRESHOLDED_RELU, ActivationTypeDoc::THRESHOLDED_RELU)
         ; // ActivationType
 
-        py::class_<IActivationLayer, ILayer, std::unique_ptr<IActivationLayer, py::nodelete>>(m, "IActivationLayer", IActivationLayerDoc::descr)
+        py::class_<IActivationLayer, ILayer, std::unique_ptr<IActivationLayer, py::nodelete>>(m, "IActivationLayer", IActivationLayerDoc::descr, py::module_local())
             .def_property("type", &IActivationLayer::getActivationType, &IActivationLayer::setActivationType)
             .def_property("alpha", &IActivationLayer::getAlpha, &IActivationLayer::setAlpha)
             .def_property("beta", &IActivationLayer::getBeta, &IActivationLayer::setBeta)
         ;
 
         // Bind to a Python enum called PoolingType.
-        py::enum_<PoolingType>(m, "PoolingType", PoolingTypeDoc::descr)
+        py::enum_<PoolingType>(m, "PoolingType", PoolingTypeDoc::descr, py::module_local())
             .value("MAX", PoolingType::kMAX, PoolingTypeDoc::MAX)
             .value("AVERAGE", PoolingType::kAVERAGE, PoolingTypeDoc::AVERAGE)
             .value("MAX_AVERAGE_BLEND", PoolingType::kMAX_AVERAGE_BLEND, PoolingTypeDoc::MAX_AVERAGE_BLEND)
         ; // PoolingType
 
-        py::class_<IPoolingLayer, ILayer, std::unique_ptr<IPoolingLayer, py::nodelete>>(m, "IPoolingLayer", IPoolingLayerDoc::descr)
+        py::class_<IPoolingLayer, ILayer, std::unique_ptr<IPoolingLayer, py::nodelete>>(m, "IPoolingLayer", IPoolingLayerDoc::descr, py::module_local())
             .def_property("type", &IPoolingLayer::getPoolingType, &IPoolingLayer::setPoolingType)
             .def_property("window_size", utils::deprecateMember(&IPoolingLayer::getWindowSize, "windnow_size_nd"), utils::deprecateMember(&IPoolingLayer::setWindowSize, "windnow_size_nd"))
             .def_property("stride", utils::deprecateMember(&IPoolingLayer::getStride, "stride_nd"), utils::deprecateMember(&IPoolingLayer::setStride, "stride_nd"))
@@ -409,7 +414,7 @@ namespace tensorrt
             .def_property("padding_nd", &IPoolingLayer::getPaddingNd, &IPoolingLayer::setPaddingNd)
         ;
 
-        py::class_<ILRNLayer, ILayer, std::unique_ptr<ILRNLayer, py::nodelete>>(m, "ILRNLayer", ILRNLayerDoc::descr)
+        py::class_<ILRNLayer, ILayer, std::unique_ptr<ILRNLayer, py::nodelete>>(m, "ILRNLayer", ILRNLayerDoc::descr, py::module_local())
             .def_property("window_size", &ILRNLayer::getWindowSize, &ILRNLayer::setWindowSize)
             .def_property("alpha", &ILRNLayer::getAlpha, &ILRNLayer::setAlpha)
             .def_property("beta", &ILRNLayer::getBeta, &ILRNLayer::setBeta)
@@ -417,13 +422,13 @@ namespace tensorrt
         ;
 
         // Bind to a Python enum called ScaleMode.
-        py::enum_<ScaleMode>(m, "ScaleMode", ScaleModeDoc::descr)
+        py::enum_<ScaleMode>(m, "ScaleMode", ScaleModeDoc::descr, py::module_local())
             .value("UNIFORM", ScaleMode::kUNIFORM, ScaleModeDoc::UNIFORM)
             .value("CHANNEL", ScaleMode::kCHANNEL, ScaleModeDoc::CHANNEL)
             .value("ELEMENTWISE", ScaleMode::kELEMENTWISE, ScaleModeDoc::ELEMENTWISE)
         ; // ScaleMode
 
-        py::class_<IScaleLayer, ILayer, std::unique_ptr<IScaleLayer, py::nodelete>>(m, "IScaleLayer", IScaleLayerDoc::descr)
+        py::class_<IScaleLayer, ILayer, std::unique_ptr<IScaleLayer, py::nodelete>>(m, "IScaleLayer", IScaleLayerDoc::descr, py::module_local())
             .def_property("mode", &IScaleLayer::getMode, &IScaleLayer::setMode)
             .def_property("shift", lambdas::scale_get_shift, py::cpp_function(&IScaleLayer::setShift, py::keep_alive<1, 2>{}))
             .def_property("scale", lambdas::scale_get_scale, py::cpp_function(&IScaleLayer::setScale, py::keep_alive<1, 2>{}))
@@ -431,23 +436,23 @@ namespace tensorrt
             .def_property("channel_axis", &IScaleLayer::getChannelAxis, &IScaleLayer::setChannelAxis)
         ;
 
-        py::class_<IQuantizeLayer, ILayer, std::unique_ptr<IQuantizeLayer, py::nodelete>>(m, "IQuantizeLayer", IQuantizeLayerDoc::descr)
+        py::class_<IQuantizeLayer, ILayer, std::unique_ptr<IQuantizeLayer, py::nodelete>>(m, "IQuantizeLayer", IQuantizeLayerDoc::descr, py::module_local())
             .def_property("axis", &IQuantizeLayer::getAxis, &IQuantizeLayer::setAxis)
         ;
 
-        py::class_<IDequantizeLayer, ILayer, std::unique_ptr<IDequantizeLayer, py::nodelete>>(m, "IDequantizeLayer", IDequantizeLayerDoc::descr)
+        py::class_<IDequantizeLayer, ILayer, std::unique_ptr<IDequantizeLayer, py::nodelete>>(m, "IDequantizeLayer", IDequantizeLayerDoc::descr, py::module_local())
             .def_property("axis", &IDequantizeLayer::getAxis, &IDequantizeLayer::setAxis)
         ;
 
-        py::class_<ISoftMaxLayer, ILayer, std::unique_ptr<ISoftMaxLayer, py::nodelete>>(m, "ISoftMaxLayer", ISoftMaxLayerDoc::descr)
+        py::class_<ISoftMaxLayer, ILayer, std::unique_ptr<ISoftMaxLayer, py::nodelete>>(m, "ISoftMaxLayer", ISoftMaxLayerDoc::descr, py::module_local())
             .def_property("axes", &ISoftMaxLayer::getAxes, &ISoftMaxLayer::setAxes)
         ;
 
-        py::class_<IConcatenationLayer, ILayer, std::unique_ptr<IConcatenationLayer, py::nodelete>>(m, "IConcatenationLayer", IConcatenationLayerDoc::descr)
+        py::class_<IConcatenationLayer, ILayer, std::unique_ptr<IConcatenationLayer, py::nodelete>>(m, "IConcatenationLayer", IConcatenationLayerDoc::descr, py::module_local())
             .def_property("axis", &IConcatenationLayer::getAxis, &IConcatenationLayer::setAxis)
         ;
 
-        py::class_<IDeconvolutionLayer, ILayer, std::unique_ptr<IDeconvolutionLayer, py::nodelete>>(m, "IDeconvolutionLayer", IDeconvolutionLayerDoc::descr)
+        py::class_<IDeconvolutionLayer, ILayer, std::unique_ptr<IDeconvolutionLayer, py::nodelete>>(m, "IDeconvolutionLayer", IDeconvolutionLayerDoc::descr, py::module_local())
             .def_property("kernel_size", utils::deprecateMember(&IDeconvolutionLayer::getKernelSize, "kernel_size_nd"), utils::deprecateMember(&IDeconvolutionLayer::setKernelSize, "kernel_size_nd"))
             .def_property("stride", utils::deprecateMember(&IDeconvolutionLayer::getStride, "stride_nd"), utils::deprecateMember(&IDeconvolutionLayer::setStride, "stride_nd"))
             .def_property("padding", utils::deprecateMember(&IDeconvolutionLayer::getPadding, "padding_nd"), utils::deprecateMember(&IDeconvolutionLayer::setPadding, "padding_nd"))
@@ -465,7 +470,7 @@ namespace tensorrt
         ;
 
         // Bind to a Python enum called ElementWiseOperation.
-        py::enum_<ElementWiseOperation>(m, "ElementWiseOperation", ElementWiseOperationDoc::descr)
+        py::enum_<ElementWiseOperation>(m, "ElementWiseOperation", ElementWiseOperationDoc::descr, py::module_local())
             .value("SUM", ElementWiseOperation::kSUM, ElementWiseOperationDoc::SUM)
             .value("PROD", ElementWiseOperation::kPROD, ElementWiseOperationDoc::PROD)
             .value("MAX", ElementWiseOperation::kMAX, ElementWiseOperationDoc::MAX)
@@ -482,50 +487,50 @@ namespace tensorrt
             .value("LESS", ElementWiseOperation::kLESS, ElementWiseOperationDoc::LESS)
         ; // ElementWiseOperation
 
-        py::class_<IElementWiseLayer, ILayer, std::unique_ptr<IElementWiseLayer, py::nodelete>>(m, "IElementWiseLayer", IElementWiseLayerDoc::descr)
+        py::class_<IElementWiseLayer, ILayer, std::unique_ptr<IElementWiseLayer, py::nodelete>>(m, "IElementWiseLayer", IElementWiseLayerDoc::descr, py::module_local())
             .def_property("op", &IElementWiseLayer::getOperation, &IElementWiseLayer::setOperation)
         ;
 
         // Bind to a Python enum called ScatterMode.
-        py::enum_<ScatterMode>(m, "ScatterMode", ScatterModeDoc::descr)
+        py::enum_<ScatterMode>(m, "ScatterMode", ScatterModeDoc::descr, py::module_local())
             .value("ELEMENT", ScatterMode::kELEMENT, ScatterModeDoc::ELEMENT)
             .value("ND", ScatterMode::kND, ScatterModeDoc::ND)
         ; // ScatterMode
 
-        py::class_<IScatterLayer, ILayer, std::unique_ptr<IScatterLayer,py::nodelete>>(m, "IScatterLayer", IScatterLayerDoc::descr)
+        py::class_<IScatterLayer, ILayer, std::unique_ptr<IScatterLayer,py::nodelete>>(m, "IScatterLayer", IScatterLayerDoc::descr, py::module_local())
             .def_property("axis", &IScatterLayer::getAxis, &IScatterLayer::setAxis)
             .def_property("mode", &IScatterLayer::getMode, &IScatterLayer::setMode);
 
-        py::class_<IGatherLayer, ILayer, std::unique_ptr<IGatherLayer, py::nodelete>>(m, "IGatherLayer", IGatherLayerDoc::descr)
+        py::class_<IGatherLayer, ILayer, std::unique_ptr<IGatherLayer, py::nodelete>>(m, "IGatherLayer", IGatherLayerDoc::descr, py::module_local())
             .def_property("axis", &IGatherLayer::getGatherAxis, &IGatherLayer::setGatherAxis)
             .def_property("num_elementwise_dims", &IGatherLayer::getNbElementWiseDims, &IGatherLayer::setNbElementWiseDims)
             .def_property("mode", &IGatherLayer::getMode, &IGatherLayer::setMode)
         ;
 
-        py::enum_<GatherMode>(m, "GatherMode", GatherModeDoc::descr)
+        py::enum_<GatherMode>(m, "GatherMode", GatherModeDoc::descr, py::module_local())
             .value("DEFAULT", GatherMode::kDEFAULT, GatherModeDoc::DEFAULT)
             .value("ELEMENT", GatherMode::kELEMENT, GatherModeDoc::ELEMENT)
             .value("ND", GatherMode::kND, GatherModeDoc::ND)
         ;
 
-        py::enum_<RNNOperation>(m, "RNNOperation", RNNOperationDoc::descr)
+        py::enum_<RNNOperation>(m, "RNNOperation", RNNOperationDoc::descr, py::module_local())
             .value("RELU", RNNOperation::kRELU, RNNOperationDoc::RELU)
             .value("TANH", RNNOperation::kTANH, RNNOperationDoc::TANH)
             .value("LSTM", RNNOperation::kLSTM, RNNOperationDoc::LSTM)
             .value("GRU", RNNOperation::kGRU, RNNOperationDoc::GRU)
         ;
 
-        py::enum_<RNNDirection>(m, "RNNDirection", RNNDirectionDoc::descr)
+        py::enum_<RNNDirection>(m, "RNNDirection", RNNDirectionDoc::descr, py::module_local())
             .value("UNIDIRECTION", RNNDirection::kUNIDIRECTION, RNNDirectionDoc::UNIDIRECTION)
             .value("BIDIRECTION", RNNDirection::kBIDIRECTION, RNNDirectionDoc::BIDIRECTION)
         ;
 
-        py::enum_<RNNInputMode>(m, "RNNInputMode", RNNInputModeDoc::descr)
+        py::enum_<RNNInputMode>(m, "RNNInputMode", RNNInputModeDoc::descr, py::module_local())
             .value("LINEAR", RNNInputMode::kLINEAR, RNNInputModeDoc::LINEAR)
             .value("SKIP", RNNInputMode::kSKIP, RNNInputModeDoc::SKIP)
         ;
 
-        py::enum_<RNNGateType>(m, "RNNGateType", RNNGateTypeDoc::descr)
+        py::enum_<RNNGateType>(m, "RNNGateType", RNNGateTypeDoc::descr, py::module_local())
             .value("INPUT", RNNGateType::kINPUT, RNNGateTypeDoc::INPUT)
             .value("OUTPUT", RNNGateType::kOUTPUT, RNNGateTypeDoc::OUTPUT)
             .value("FORGET", RNNGateType::kFORGET, RNNGateTypeDoc::FORGET)
@@ -535,7 +540,7 @@ namespace tensorrt
             .value("HIDDEN", RNNGateType::kHIDDEN, RNNGateTypeDoc::HIDDEN)
         ;
 
-        py::class_<IRNNv2Layer, ILayer, std::unique_ptr<IRNNv2Layer, py::nodelete>>(m, "IRNNv2Layer", IRNNv2LayerDoc::descr)
+        py::class_<IRNNv2Layer, ILayer, std::unique_ptr<IRNNv2Layer, py::nodelete>>(m, "IRNNv2Layer", IRNNv2LayerDoc::descr, py::module_local())
             .def_property_readonly("num_layers", &IRNNv2Layer::getLayerCount)
             .def_property_readonly("hidden_size", &IRNNv2Layer::getHiddenSize)
             .def_property_readonly("max_seq_length", &IRNNv2Layer::getMaxSeqLength)
@@ -552,11 +557,11 @@ namespace tensorrt
             .def_property("cell_state", &IRNNv2Layer::getCellState, py::cpp_function(&IRNNv2Layer::setCellState, py::keep_alive<1, 2>{}))
         ;
 
-        py::class_<IPluginV2Layer, ILayer, std::unique_ptr<IPluginV2Layer, py::nodelete>>(m, "IPluginV2Layer", IPluginV2LayerDoc::descr)
+        py::class_<IPluginV2Layer, ILayer, std::unique_ptr<IPluginV2Layer, py::nodelete>>(m, "IPluginV2Layer", IPluginV2LayerDoc::descr, py::module_local())
             .def_property_readonly("plugin", &IPluginV2Layer::getPlugin)
         ;
 
-        py::enum_<UnaryOperation>(m, "UnaryOperation", UnaryOperationDoc::descr)
+        py::enum_<UnaryOperation>(m, "UnaryOperation", UnaryOperationDoc::descr, py::module_local())
             .value("EXP", UnaryOperation::kEXP, UnaryOperationDoc::EXP)
             .value("LOG", UnaryOperation::kLOG, UnaryOperationDoc::LOG)
             .value("SQRT", UnaryOperation::kSQRT, UnaryOperationDoc::SQRT)
@@ -580,13 +585,14 @@ namespace tensorrt
             .value("NOT", UnaryOperation::kNOT, UnaryOperationDoc::NOT)
             .value("SIGN", UnaryOperation::kSIGN, UnaryOperationDoc::SIGN)
             .value("ROUND", UnaryOperation::kROUND, UnaryOperationDoc::ROUND)
+            .value("ISINF", UnaryOperation::kISINF, UnaryOperationDoc::ISINF)
         ;
 
-        py::class_<IUnaryLayer, ILayer, std::unique_ptr<IUnaryLayer, py::nodelete>>(m, "IUnaryLayer", IUnaryLayerDoc::descr)
+        py::class_<IUnaryLayer, ILayer, std::unique_ptr<IUnaryLayer, py::nodelete>>(m, "IUnaryLayer", IUnaryLayerDoc::descr, py::module_local())
             .def_property("op", &IUnaryLayer::getOperation, &IUnaryLayer::setOperation)
         ;
 
-        py::enum_<ReduceOperation>(m, "ReduceOperation", ReduceOperationDoc::descr)
+        py::enum_<ReduceOperation>(m, "ReduceOperation", ReduceOperationDoc::descr, py::module_local())
             .value("SUM", ReduceOperation::kSUM, ReduceOperationDoc::SUM)
             .value("PROD", ReduceOperation::kPROD, ReduceOperationDoc::PROD)
             .value("MAX", ReduceOperation::kMAX, ReduceOperationDoc::MAX)
@@ -594,20 +600,20 @@ namespace tensorrt
             .value("AVG", ReduceOperation::kAVG, ReduceOperationDoc::AVG)
         ;
 
-        py::class_<IReduceLayer, ILayer, std::unique_ptr<IReduceLayer, py::nodelete>>(m, "IReduceLayer", IReduceLayerDoc::descr)
+        py::class_<IReduceLayer, ILayer, std::unique_ptr<IReduceLayer, py::nodelete>>(m, "IReduceLayer", IReduceLayerDoc::descr, py::module_local())
             .def_property("op", &IReduceLayer::getOperation, &IReduceLayer::setOperation)
             .def_property("axes", &IReduceLayer::getReduceAxes, &IReduceLayer::setReduceAxes)
             .def_property("keep_dims", &IReduceLayer::getKeepDimensions, &IReduceLayer::setKeepDimensions)
         ;
 
-        py::class_<IPaddingLayer, ILayer, std::unique_ptr<IPaddingLayer, py::nodelete>>(m, "IPaddingLayer", IPaddingLayerDoc::descr)
+        py::class_<IPaddingLayer, ILayer, std::unique_ptr<IPaddingLayer, py::nodelete>>(m, "IPaddingLayer", IPaddingLayerDoc::descr, py::module_local())
             .def_property("pre_padding", utils::deprecateMember(&IPaddingLayer::getPrePadding, "pre_padding_nd"), utils::deprecateMember(&IPaddingLayer::setPrePadding, "pre_padding_nd"))
             .def_property("post_padding", utils::deprecateMember(&IPaddingLayer::getPostPadding, "post_padding_nd"), utils::deprecateMember(&IPaddingLayer::setPostPadding, "post_padding_nd"))
             .def_property("pre_padding_nd", &IPaddingLayer::getPrePaddingNd, &IPaddingLayer::setPrePaddingNd)
             .def_property("post_padding_nd", &IPaddingLayer::getPostPaddingNd, &IPaddingLayer::setPostPaddingNd)
         ;
 
-        py::class_<Permutation>(m, "Permutation", PermutationDoc::descr)
+        py::class_<Permutation>(m, "Permutation", PermutationDoc::descr, py::module_local())
             .def(py::init<>())
             .def(py::init(lambdas::permutation_vector_constructor))
             // Allow for string representations (displays like a python tuple).
@@ -622,7 +628,7 @@ namespace tensorrt
         // Make it possible to use tuples/lists in Python in place of Permutation.
         py::implicitly_convertible<std::vector<int32_t>, Permutation>();
 
-        py::class_<IShuffleLayer, ILayer, std::unique_ptr<IShuffleLayer, py::nodelete>>(m, "IShuffleLayer", IShuffleLayerDoc::descr)
+        py::class_<IShuffleLayer, ILayer, std::unique_ptr<IShuffleLayer, py::nodelete>>(m, "IShuffleLayer", IShuffleLayerDoc::descr, py::module_local())
             .def_property("first_transpose", &IShuffleLayer::getFirstTranspose, &IShuffleLayer::setFirstTranspose)
             .def_property("reshape_dims", &IShuffleLayer::getReshapeDimensions, &IShuffleLayer::setReshapeDimensions)
             .def_property("second_transpose", &IShuffleLayer::getSecondTranspose, &IShuffleLayer::setSecondTranspose)
@@ -630,7 +636,7 @@ namespace tensorrt
             .def("set_input", &IShuffleLayer::setInput, "index"_a, "tensor"_a, IShuffleLayerDoc::set_input)
         ;
 
-        py::class_<ISliceLayer, ILayer, std::unique_ptr<ISliceLayer, py::nodelete>>(m, "ISliceLayer", ISliceLayerDoc::descr)
+        py::class_<ISliceLayer, ILayer, std::unique_ptr<ISliceLayer, py::nodelete>>(m, "ISliceLayer", ISliceLayerDoc::descr, py::module_local())
             .def_property("start", &ISliceLayer::getStart, &ISliceLayer::setStart)
             .def_property("shape", &ISliceLayer::getSize, &ISliceLayer::setSize)
             .def_property("stride", &ISliceLayer::getStride, &ISliceLayer::setStride)
@@ -638,13 +644,13 @@ namespace tensorrt
             .def("set_input", &ISliceLayer::setInput, "index"_a, "tensor"_a, ISliceLayerDoc::set_input)
         ;
 
-        py::enum_<InterpolationMode>(m, "InterpolationMode", InterpolationModeDoc::descr)
+        py::enum_<InterpolationMode>(m, "InterpolationMode", InterpolationModeDoc::descr, py::module_local())
             .value("NEAREST", InterpolationMode::kNEAREST, InterpolationModeDoc::NEAREST)
             .value("LINEAR", InterpolationMode::kLINEAR, InterpolationModeDoc::LINEAR)
             .value("CUBIC", InterpolationMode::kCUBIC, InterpolationModeDoc::CUBIC)
         ;
 
-        py::enum_<SampleMode>(m, "SampleMode", SampleModeDoc::descr)
+        py::enum_<SampleMode>(m, "SampleMode", SampleModeDoc::descr, py::module_local())
             .value("STRICT_BOUNDS", SampleMode::kSTRICT_BOUNDS, SampleModeDoc::STRICT_BOUNDS)
             .value("DEFAULT", SampleMode::kDEFAULT, SampleModeDoc::DEFAULT)
             .value("WRAP", SampleMode::kWRAP, SampleModeDoc::WRAP)
@@ -653,60 +659,65 @@ namespace tensorrt
             .value("REFLECT", SampleMode::kREFLECT, SampleModeDoc::REFLECT)
         ;
 
-        py::class_<IShapeLayer, ILayer, std::unique_ptr<IShapeLayer, py::nodelete>>(m, "IShapeLayer", IShapeLayerDoc::descr);
+        py::class_<IShapeLayer, ILayer, std::unique_ptr<IShapeLayer, py::nodelete>>(m, "IShapeLayer", IShapeLayerDoc::descr, py::module_local());
 
-        py::enum_<TopKOperation>(m, "TopKOperation", TopKOperationDoc::descr)
+        py::enum_<TopKOperation>(m, "TopKOperation", TopKOperationDoc::descr, py::module_local())
             .value("MAX", TopKOperation::kMAX, TopKOperationDoc::MAX)
             .value("MIN", TopKOperation::kMIN, TopKOperationDoc::MIN)
         ;
 
-        py::class_<ITopKLayer, ILayer, std::unique_ptr<ITopKLayer, py::nodelete>>(m, "ITopKLayer", ITopKLayerDoc::descr)
+        py::class_<ITopKLayer, ILayer, std::unique_ptr<ITopKLayer, py::nodelete>>(m, "ITopKLayer", ITopKLayerDoc::descr, py::module_local())
             .def_property("op", &ITopKLayer::getOperation, &ITopKLayer::setOperation)
             .def_property("k", &ITopKLayer::getK, &ITopKLayer::setK)
             .def_property("axes", &ITopKLayer::getReduceAxes, &ITopKLayer::setReduceAxes)
+            .def("set_input", &ITopKLayer::setInput, "index"_a, "tensor"_a, ITopKLayerDoc::set_input)
         ;
 
-        py::enum_<MatrixOperation>(m, "MatrixOperation", MatrixOperationDoc::descr)
+        py::enum_<MatrixOperation>(m, "MatrixOperation", MatrixOperationDoc::descr, py::module_local())
             .value("NONE", MatrixOperation::kNONE, MatrixOperationDoc::NONE)
             .value("TRANSPOSE", MatrixOperation::kTRANSPOSE, MatrixOperationDoc::TRANSPOSE)
             .value("VECTOR", MatrixOperation::kVECTOR, MatrixOperationDoc::VECTOR)
         ;
 
-        py::class_<IMatrixMultiplyLayer, ILayer, std::unique_ptr<IMatrixMultiplyLayer, py::nodelete>>(m, "IMatrixMultiplyLayer", IMatrixMultiplyLayerDoc::descr)
+        py::class_<IMatrixMultiplyLayer, ILayer, std::unique_ptr<IMatrixMultiplyLayer, py::nodelete>>(m, "IMatrixMultiplyLayer", IMatrixMultiplyLayerDoc::descr, py::module_local())
             .def_property("op0", [](IMatrixMultiplyLayer& self) {return self.getOperation(0);}, [](IMatrixMultiplyLayer& self, MatrixOperation op) {return self.setOperation(0, op);})
             .def_property("op1", [](IMatrixMultiplyLayer& self) {return self.getOperation(1);}, [](IMatrixMultiplyLayer& self, MatrixOperation op) {return self.setOperation(1, op);})
         ;
 
-        py::class_<IRaggedSoftMaxLayer, ILayer, std::unique_ptr<IRaggedSoftMaxLayer, py::nodelete>>(m, "IRaggedSoftMaxLayer", IRaggedSoftMaxLayerDoc::descr);
+        py::class_<IRaggedSoftMaxLayer, ILayer, std::unique_ptr<IRaggedSoftMaxLayer, py::nodelete>>(m, "IRaggedSoftMaxLayer", IRaggedSoftMaxLayerDoc::descr, py::module_local());
 
-        py::class_<IIdentityLayer, ILayer, std::unique_ptr<IIdentityLayer, py::nodelete>>(m, "IIdentityLayer", IIdentityLayerDoc::descr);
+        py::class_<IIdentityLayer, ILayer, std::unique_ptr<IIdentityLayer, py::nodelete>>(m, "IIdentityLayer", IIdentityLayerDoc::descr, py::module_local());
 
-        py::class_<IConstantLayer, ILayer, std::unique_ptr<IConstantLayer, py::nodelete>>(m, "IConstantLayer", IConstantLayerDoc::descr)
+        py::class_<ICastLayer, ILayer, std::unique_ptr<ICastLayer, py::nodelete>>(m, "ICastLayer", ICastLayerDoc::descr, py::module_local())
+            .def_property("to_type", &ICastLayer::getToType, &ICastLayer::setToType)
+        ;
+
+        py::class_<IConstantLayer, ILayer, std::unique_ptr<IConstantLayer, py::nodelete>>(m, "IConstantLayer", IConstantLayerDoc::descr, py::module_local())
             .def_property("weights", lambdas::constant_get_weights, py::cpp_function(&IConstantLayer::setWeights, py::keep_alive<1, 2>{}))
             .def_property("shape", &IConstantLayer::getDimensions, &IConstantLayer::setDimensions)
         ;
 
-        py::class_<IParametricReLULayer, ILayer, std::unique_ptr<IParametricReLULayer, py::nodelete>>(m, "IParametricReLULayer", IParametricReLULayerDoc::descr);
+        py::class_<IParametricReLULayer, ILayer, std::unique_ptr<IParametricReLULayer, py::nodelete>>(m, "IParametricReLULayer", IParametricReLULayerDoc::descr, py::module_local());
 
-        py::enum_<ResizeCoordinateTransformation>(m, "ResizeCoordinateTransformation", ResizeCoordinateTransformationDoc::descr)
+        py::enum_<ResizeCoordinateTransformation>(m, "ResizeCoordinateTransformation", ResizeCoordinateTransformationDoc::descr, py::module_local())
             .value("ALIGN_CORNERS", ResizeCoordinateTransformation::kALIGN_CORNERS, ResizeCoordinateTransformationDoc::ALIGN_CORNERS)
             .value("ASYMMETRIC", ResizeCoordinateTransformation::kASYMMETRIC, ResizeCoordinateTransformationDoc::ASYMMETRIC)
             .value("HALF_PIXEL", ResizeCoordinateTransformation::kHALF_PIXEL, ResizeCoordinateTransformationDoc::HALF_PIXEL)
         ; // ResizeCoordinateTransformation
 
-        py::enum_<ResizeSelector>(m, "ResizeSelector", ResizeSelectorDoc::descr)
+        py::enum_<ResizeSelector>(m, "ResizeSelector", ResizeSelectorDoc::descr, py::module_local())
             .value("FORMULA", ResizeSelector::kFORMULA,ResizeSelectorDoc::FORMULA)
             .value("UPPER", ResizeSelector::kUPPER, ResizeSelectorDoc::UPPER)
         ; // ResizeSelector
 
-        py::enum_<ResizeRoundMode>(m, "ResizeRoundMode", ResizeRoundModeDoc::descr)
+        py::enum_<ResizeRoundMode>(m, "ResizeRoundMode", ResizeRoundModeDoc::descr, py::module_local())
             .value("HALF_UP", ResizeRoundMode::kHALF_UP,ResizeRoundModeDoc::HALF_UP)
             .value("HALF_DOWN", ResizeRoundMode::kHALF_DOWN, ResizeRoundModeDoc::HALF_DOWN)
             .value("FLOOR", ResizeRoundMode::kFLOOR,ResizeRoundModeDoc::FLOOR)
             .value("CEIL", ResizeRoundMode::kCEIL, ResizeRoundModeDoc::CEIL)
         ; // ResizeRoundMode
 
-        py::class_<IResizeLayer, ILayer, std::unique_ptr<IResizeLayer, py::nodelete>>(m, "IResizeLayer", IResizeLayerDoc::descr)
+        py::class_<IResizeLayer, ILayer, std::unique_ptr<IResizeLayer, py::nodelete>>(m, "IResizeLayer", IResizeLayerDoc::descr, py::module_local())
             .def_property("shape", &IResizeLayer::getOutputDimensions, &IResizeLayer::setOutputDimensions)
             .def_property("scales", lambdas::resize_get_scales, lambdas::resize_set_scales)
             .def_property("resize_mode", &IResizeLayer::getResizeMode, &IResizeLayer::setResizeMode)
@@ -718,79 +729,80 @@ namespace tensorrt
             .def("set_input", &IResizeLayer::setInput, "index"_a, "tensor"_a, IResizeLayerDoc::set_input)
         ;
 
-        py::enum_<LoopOutput>(m, "LoopOutput", LoopOutputDoc::descr)
+        py::enum_<LoopOutput>(m, "LoopOutput", LoopOutputDoc::descr, py::module_local())
             .value("LAST_VALUE", LoopOutput::kLAST_VALUE, LoopOutputDoc::LAST_VALUE)
             .value("CONCATENATE", LoopOutput::kCONCATENATE, LoopOutputDoc::CONCATENATE)
             .value("REVERSE", LoopOutput::kREVERSE, LoopOutputDoc::REVERSE)
         ;
 
-        py::enum_<TripLimit>(m, "TripLimit", TripLimitDoc::descr)
+        py::enum_<TripLimit>(m, "TripLimit", TripLimitDoc::descr, py::module_local())
             .value("COUNT", TripLimit::kCOUNT, TripLimitDoc::COUNT)
             .value("WHILE", TripLimit::kWHILE, TripLimitDoc::WHILE)
         ;
 
-        py::class_<ILoopBoundaryLayer, ILayer, std::unique_ptr<ILoopBoundaryLayer, py::nodelete>>(m, "ILoopBoundaryLayer", ILoopBoundaryLayerDoc::descr)
+        py::class_<ILoopBoundaryLayer, ILayer, std::unique_ptr<ILoopBoundaryLayer, py::nodelete>>(m, "ILoopBoundaryLayer", ILoopBoundaryLayerDoc::descr, py::module_local())
             .def_property_readonly("loop", &ILoopBoundaryLayer::getLoop)
         ;
 
-        py::class_<IRecurrenceLayer, ILoopBoundaryLayer, std::unique_ptr<IRecurrenceLayer, py::nodelete>>(m, "IRecurrenceLayer", IRecurrenceLayerDoc::descr)
+        py::class_<IRecurrenceLayer, ILoopBoundaryLayer, std::unique_ptr<IRecurrenceLayer, py::nodelete>>(m, "IRecurrenceLayer", IRecurrenceLayerDoc::descr, py::module_local())
             .def("set_input", &IRecurrenceLayer::setInput, "index"_a, "tensor"_a, IRecurrenceLayerDoc::set_input)
         ;
 
-        py::class_<ILoopOutputLayer, ILoopBoundaryLayer, std::unique_ptr<ILoopOutputLayer, py::nodelete>>(m, "ILoopOutputLayer", ILoopOutputLayerDoc::descr)
+        py::class_<ILoopOutputLayer, ILoopBoundaryLayer, std::unique_ptr<ILoopOutputLayer, py::nodelete>>(m, "ILoopOutputLayer", ILoopOutputLayerDoc::descr, py::module_local())
             .def("set_input", &ILoopOutputLayer::setInput, "index"_a, "tensor"_a, ILoopOutputLayerDoc::set_input)
             .def_property("axis", &ILoopOutputLayer::getAxis, &ILoopOutputLayer::setAxis)
             .def_property_readonly("kind", &ILoopOutputLayer::getLoopOutput)
         ;
 
-        py::class_<ITripLimitLayer, ILoopBoundaryLayer, std::unique_ptr<ITripLimitLayer, py::nodelete>>(m, "ITripLimitLayer", ITripLimitLayerDoc::descr)
+        py::class_<ITripLimitLayer, ILoopBoundaryLayer, std::unique_ptr<ITripLimitLayer, py::nodelete>>(m, "ITripLimitLayer", ITripLimitLayerDoc::descr, py::module_local())
             .def_property_readonly("kind", &ITripLimitLayer::getTripLimit)
         ;
 
-        py::class_<IIteratorLayer, ILoopBoundaryLayer, std::unique_ptr<IIteratorLayer, py::nodelete>>(m, "IIteratorLayer", IIteratorLayerDoc::descr)
+        py::class_<IIteratorLayer, ILoopBoundaryLayer, std::unique_ptr<IIteratorLayer, py::nodelete>>(m, "IIteratorLayer", IIteratorLayerDoc::descr, py::module_local())
             .def_property("axis", &IIteratorLayer::getAxis, &IIteratorLayer::setAxis)
             .def_property("reverse", &IIteratorLayer::getReverse, &IIteratorLayer::setReverse)
         ;
 
-        py::class_<ILoop, std::unique_ptr<ILoop, py::nodelete>>(m, "ILoop", ILoopDoc::descr)
+        py::class_<ILoop, std::unique_ptr<ILoop, py::nodelete>>(m, "ILoop", ILoopDoc::descr, py::module_local())
             .def("add_recurrence", &ILoop::addRecurrence, "initial_value"_a, ILoopDoc::add_recurrence)
             .def("add_trip_limit", &ILoop::addTripLimit, "tensor"_a, "kind"_a, ILoopDoc::add_trip_limit)
+            // cppcheck-suppress assignBoolToPointer
             .def("add_iterator", &ILoop::addIterator, "tensor"_a, "axis"_a = 0, "reverse"_a = false, ILoopDoc::add_iterator)
             .def("add_loop_output", &ILoop::addLoopOutput, "tensor"_a, "kind"_a, "axis"_a = 0, ILoopDoc::add_loop_output)
             .def_property("name", &ILoop::getName, &ILoop::setName)
         ;
 
-        py::class_<ISelectLayer, ILayer, std::unique_ptr<ISelectLayer, py::nodelete>>(m, "ISelectLayer", ISelectLayerDoc::descr)
+        py::class_<ISelectLayer, ILayer, std::unique_ptr<ISelectLayer, py::nodelete>>(m, "ISelectLayer", ISelectLayerDoc::descr, py::module_local())
         ;
 
-        py::class_<IAssertionLayer, ILayer, std::unique_ptr<IAssertionLayer, py::nodelete>>(m, "IAssertionLayer", IAssertionLayerDoc::descr)
+        py::class_<IAssertionLayer, ILayer, std::unique_ptr<IAssertionLayer, py::nodelete>>(m, "IAssertionLayer", IAssertionLayerDoc::descr, py::module_local())
             .def_property("message", &IAssertionLayer::getMessage, &IAssertionLayer::setMessage);
         ;
 
-        py::class_<IGridSampleLayer, ILayer, std::unique_ptr<IGridSampleLayer, py::nodelete>>(m, "IGridSampleLayer", IGridSampleLayerDoc::descr)
+        py::class_<IGridSampleLayer, ILayer, std::unique_ptr<IGridSampleLayer, py::nodelete>>(m, "IGridSampleLayer", IGridSampleLayerDoc::descr, py::module_local())
             .def_property("interpolation_mode", &IGridSampleLayer::getInterpolationMode, &IGridSampleLayer::setInterpolationMode)
             .def_property("align_corners", &IGridSampleLayer::getAlignCorners, &IGridSampleLayer::setAlignCorners)
             .def_property("sample_mode", &IGridSampleLayer::getSampleMode, &IGridSampleLayer::setSampleMode)
         ;
 
-        py::enum_<BoundingBoxFormat>(m, "BoundingBoxFormat", BoundingBoxFormatDoc::descr)
+        py::enum_<BoundingBoxFormat>(m, "BoundingBoxFormat", BoundingBoxFormatDoc::descr, py::module_local())
             .value("CORNER_PAIRS", BoundingBoxFormat::kCORNER_PAIRS, BoundingBoxFormatDoc::CORNER_PAIRS)
             .value("CENTER_SIZES", BoundingBoxFormat::kCENTER_SIZES, BoundingBoxFormatDoc::CENTER_SIZES)
         ;
 
-        py::class_<INMSLayer, ILayer, std::unique_ptr<INMSLayer, py::nodelete>>(m, "INMSLayer", INMSLayerDoc::descr)
+        py::class_<INMSLayer, ILayer, std::unique_ptr<INMSLayer, py::nodelete>>(m, "INMSLayer", INMSLayerDoc::descr, py::module_local())
             .def_property("bounding_box_format", &INMSLayer::getBoundingBoxFormat, &INMSLayer::setBoundingBoxFormat)
             .def_property("topk_box_limit", &INMSLayer::getTopKBoxLimit, &INMSLayer::setTopKBoxLimit)
             .def("set_input", &INMSLayer::setInput, "index"_a, "tensor"_a, INMSLayerDoc::set_input)
         ;
 
-        py::enum_<FillOperation>(m, "FillOperation", FillOperationDoc::descr)
+        py::enum_<FillOperation>(m, "FillOperation", FillOperationDoc::descr, py::module_local())
             .value("LINSPACE", FillOperation::kLINSPACE, FillOperationDoc::LINSPACE)
             .value("RANDOM_UNIFORM", FillOperation::kRANDOM_UNIFORM, FillOperationDoc::RANDOM_UNIFORM)
             .value("RANDOM_NORMAL", FillOperation::kRANDOM_NORMAL, FillOperationDoc::RANDOM_NORMAL)
         ; // FillOperation
 
-        py::class_<IFillLayer, ILayer, std::unique_ptr<IFillLayer, py::nodelete>>(m, "IFillLayer", IFillLayerDoc::descr)
+        py::class_<IFillLayer, ILayer, std::unique_ptr<IFillLayer, py::nodelete>>(m, "IFillLayer", IFillLayerDoc::descr, py::module_local())
             .def_property("shape", &IFillLayer::getDimensions, &IFillLayer::setDimensions)
             .def_property("operation", &IFillLayer::getOperation, &IFillLayer::setOperation)
             .def_property("alpha", &IFillLayer::getAlpha, &IFillLayer::setAlpha)
@@ -798,40 +810,52 @@ namespace tensorrt
             .def("set_input", &IFillLayer::setInput, "index"_a, "tensor"_a, IFillLayerDoc::set_input)
         ;
 
-        py::class_<IIfConditionalBoundaryLayer, ILayer, std::unique_ptr<IIfConditionalBoundaryLayer, py::nodelete>>(m, "IIfConditionalBoundaryLayer", IIfConditionalBoundaryLayerDoc::descr)
+        py::class_<IIfConditionalBoundaryLayer, ILayer, std::unique_ptr<IIfConditionalBoundaryLayer, py::nodelete>>(m, "IIfConditionalBoundaryLayer", IIfConditionalBoundaryLayerDoc::descr, py::module_local())
             .def_property_readonly("conditional", &IIfConditionalBoundaryLayer::getConditional)
         ;
 
-        py::class_<IIfConditionalOutputLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IIfConditionalOutputLayer, py::nodelete>>(m, "IIfConditionalOutputLayer", IIfConditionalOutputLayerDoc::descr)
+        py::class_<IIfConditionalOutputLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IIfConditionalOutputLayer, py::nodelete>>(m, "IIfConditionalOutputLayer", IIfConditionalOutputLayerDoc::descr, py::module_local())
         ;
 
-        py::class_<IIfConditionalInputLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IIfConditionalInputLayer, py::nodelete>>(m, "IIfConditionalInputLayer", IIfConditionalInputLayerDoc::descr)
+        py::class_<IIfConditionalInputLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IIfConditionalInputLayer, py::nodelete>>(m, "IIfConditionalInputLayer", IIfConditionalInputLayerDoc::descr, py::module_local())
         ;
 
-        py::class_<IConditionLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IConditionLayer, py::nodelete>>(m, "IConditionLayer", IConditionLayerDoc::descr)
+        py::class_<IConditionLayer, IIfConditionalBoundaryLayer, std::unique_ptr<IConditionLayer, py::nodelete>>(m, "IConditionLayer", IConditionLayerDoc::descr, py::module_local())
         ;
 
-        py::class_<IIfConditional, std::unique_ptr<IIfConditional, py::nodelete>>(m, "IIfConditional", IIfConditionalDoc::descr)
+        py::class_<IIfConditional, std::unique_ptr<IIfConditional, py::nodelete>>(m, "IIfConditional", IIfConditionalDoc::descr, py::module_local())
             .def("set_condition", &IIfConditional::setCondition, "condition"_a, IIfConditionalDoc::set_condition)
             .def("add_output", &IIfConditional::addOutput, "true_subgraph_output"_a, "false_subgraph_output"_a, IIfConditionalDoc::add_output)
             .def("add_input", &IIfConditional::addInput, "input"_a, IIfConditionalDoc::add_input)
             .def_property("name", &IIfConditional::getName, &IIfConditional::setName)
         ;
 
-        py::class_<IEinsumLayer, ILayer, std::unique_ptr<IEinsumLayer, py::nodelete>>(m, "IEinsumLayer", IEinsumLayerDoc::descr)
+        py::class_<IEinsumLayer, ILayer, std::unique_ptr<IEinsumLayer, py::nodelete>>(m, "IEinsumLayer", IEinsumLayerDoc::descr, py::module_local())
             .def_property("equation", &IEinsumLayer::getEquation, &IEinsumLayer::setEquation)
         ;
 
-        py::class_<IOneHotLayer, ILayer, std::unique_ptr<IOneHotLayer,py::nodelete>>(m, "IOneHotLayer", IOneHotLayerDoc::descr)
+        py::class_<IOneHotLayer, ILayer, std::unique_ptr<IOneHotLayer,py::nodelete>>(m, "IOneHotLayer", IOneHotLayerDoc::descr, py::module_local())
             .def_property("axis", &IOneHotLayer::getAxis, &IOneHotLayer::setAxis)
         ;
 
-        py::class_<INonZeroLayer, ILayer, std::unique_ptr<INonZeroLayer,py::nodelete>>(m, "INonZeroLayer", INonZeroLayerDoc::descr)
+        py::class_<INonZeroLayer, ILayer, std::unique_ptr<INonZeroLayer,py::nodelete>>(m, "INonZeroLayer", INonZeroLayerDoc::descr, py::module_local())
+        ;
+
+        py::class_<IReverseSequenceLayer, ILayer, std::unique_ptr<IReverseSequenceLayer, py::nodelete>>(m, "IReverseSequenceLayer", IReverseSequenceLayerDoc::descr, py::module_local())
+            .def_property("batch_axis", &IReverseSequenceLayer::getBatchAxis, &IReverseSequenceLayer::setBatchAxis)
+            .def_property("sequence_axis", &IReverseSequenceLayer::getSequenceAxis, &IReverseSequenceLayer::setSequenceAxis)
+        ;
+
+        py::class_<INormalizationLayer, ILayer, std::unique_ptr<INormalizationLayer, py::nodelete>>(m, "INormalizationLayer", INormalizationLayerDoc::descr, py::module_local())
+            .def_property("epsilon", &INormalizationLayer::getEpsilon, &INormalizationLayer::setEpsilon)
+            .def_property("axes", &INormalizationLayer::getAxes, &INormalizationLayer::setAxes)
+            .def_property("num_groups", &INormalizationLayer::getNbGroups, &INormalizationLayer::setNbGroups)
+            .def_property("compute_precision", &INormalizationLayer::getComputePrecision, &INormalizationLayer::setComputePrecision)
         ;
 
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
         // Additionally, we use reference_internal so that pybind11 does not free layers when they go out of scope.
-        py::class_<INetworkDefinition>(m, "INetworkDefinition", INetworkDefinitionDoc::descr)
+        py::class_<INetworkDefinition>(m, "INetworkDefinition", INetworkDefinitionDoc::descr, py::module_local())
             .def_property("name", &INetworkDefinition::getName, &INetworkDefinition::setName)
             .def_property_readonly("num_layers", &INetworkDefinition::getNbLayers)
             .def_property_readonly("num_inputs", &INetworkDefinition::getNbInputs)
@@ -932,6 +956,9 @@ namespace tensorrt
             .def("add_identity", &INetworkDefinition::addIdentity, "input"_a,
                 INetworkDefinitionDoc::add_identity,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_cast", &INetworkDefinition::addCast, "input"_a, "to_type"_a,
+                INetworkDefinitionDoc::add_cast,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_plugin_v2",  lambdas::add_plugin_v2, "inputs"_a, "plugin"_a,
                 INetworkDefinitionDoc::add_plugin_v2,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
@@ -971,6 +998,10 @@ namespace tensorrt
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("add_non_zero", &INetworkDefinition::addNonZero, "input"_a, INetworkDefinitionDoc::add_non_zero,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_reverse_sequence", &INetworkDefinition::addReverseSequence, "input"_a, "sequence_lens"_a, INetworkDefinitionDoc::add_reverse_sequence,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            .def("add_normalization", &INetworkDefinition::addNormalization, "input"_a, "scale"_a, "bias"_a, "axesMask"_a, INetworkDefinitionDoc::add_normalization,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
             .def("mark_output_for_shapes", &INetworkDefinition::markOutputForShapes, "tensor"_a, INetworkDefinitionDoc::mark_output_for_shapes)
@@ -983,6 +1014,11 @@ namespace tensorrt
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
             .def("get_output", &INetworkDefinition::getOutput, "index"_a, INetworkDefinitionDoc::get_output,
                 py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+            // Note: the builder is the _parent_ of the INetworkDefinition, so a reference_internal policy (which would
+            // keep the INetworkDefinition alive while the builder is referenced) is unnecessary here.
+            .def_property_readonly("builder", &INetworkDefinition::getBuilder, INetworkDefinitionDoc::builder,
+                py::keep_alive<1, 0>{}, py::return_value_policy::reference)
+
 #if ENABLE_INETWORK_SERIALIZE
             // Serialization
             .def("serialize", lambdas::network_serialize, INetworkDefinitionDoc::serialize)

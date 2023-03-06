@@ -38,7 +38,7 @@ PluginFieldCollection ScatterNDPluginCreator::mFC{};
 
 ScatterND::ScatterND()
 {
-    
+
 }
 
 int ScatterND::getNbOutputs() const noexcept
@@ -110,12 +110,12 @@ size_t ScatterND::getWorkspaceSize(const PluginTensorDesc* inputs, int32_t nbInp
 }
 
 void ScatterND::calculateTransformCoeff(const Dims& dataTensorDims, int indexRank, int32_t* transformCoeff) const noexcept
-{    
-    std::vector<int32_t> pitches;    
+{
+    std::vector<int32_t> pitches;
     for (int32_t i = indexRank - 1, nIndx = 1; i >= 0 ; i--)
     {
         pitches.push_back(nIndx);
-        nIndx *= dataTensorDims.d[i];        
+        nIndx *= dataTensorDims.d[i];
     }
 
     std::reverse(pitches.begin(), pitches.end()); //last dimension pitch is always one (assuming linear mem)
@@ -128,7 +128,7 @@ int32_t ScatterND::calculateCopySize(const Dims& dataDims) const noexcept
     int32_t copySize = 1;
     for (int i = 0; i < dataDims.nbDims; i++)
     {
-        copySize *= dataDims.d[i];    
+        copySize *= dataDims.d[i];
     }
     copySize *= sizeof(float);
     return copySize;
@@ -164,34 +164,34 @@ int32_t ScatterND::enqueue(const PluginTensorDesc* inputDesc, const PluginTensor
     case DataType::kBOOL:
         elementSizeInBytes = 1;
         break;
+    case DataType::kFP8: PLUGIN_FAIL("FP8 not implemented yet"); break;
     }
-    
+
     for (int i = indexRank; i < dataDims.nbDims; i++)
     {
         rowSize *= dataDims.d[i];
     }
-    
+
     calculateTransformCoeff(dataDims, indexRank, transformCoeff);
 
-    scatterNDInference(stream, transformCoeff, 
-    dataDims.nbDims, 
-    indexRank, 
-    nSlices, 
-    rowSize,  
-    copySize, 
-    elementSizeInBytes,  
+    scatterNDInference(stream, transformCoeff,
+    dataDims.nbDims,
+    indexRank,
+    nSlices,
+    rowSize,
+    copySize,
+    elementSizeInBytes,
     inputs[indexTensorIdx],
     inputs[updateTensorIdx],
     inputs[dataTensorIdx],
     outputs[0],
-    workspace );    
+    workspace );
 
     return 0;
 }
 
 size_t ScatterND::getSerializationSize() const noexcept
 {
-    
     return 0;
 }
 
@@ -221,7 +221,7 @@ DataType ScatterND::getOutputDataType(int index, const nvinfer1::DataType* input
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void ScatterND::attachToContext(cudnnContext* cudnn, cublasContext* cublas, IGpuAllocator* gpuAllocator) noexcept
 {
-    return;    
+    return;
 }
 
 // Detach the plugin object from its execution context.

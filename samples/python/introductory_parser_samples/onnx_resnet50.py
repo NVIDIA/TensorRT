@@ -23,16 +23,6 @@ import sys
 
 import numpy as np
 
-# This import causes pycuda to automatically manage CUDA context creation and cleanup.
-
-# Use autoprimaryctx if available (pycuda >= 2021.1) to
-# prevent issues with other modules that rely on the primary
-# device context.
-try:
-    import pycuda.autoprimaryctx
-except ModuleNotFoundError:
-    import pycuda.autoinit
-
 import tensorrt as trt
 from PIL import Image
 
@@ -121,6 +111,7 @@ def main():
     trt_outputs = common.do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
     # We use the highest probability as our prediction. Its index corresponds to the predicted label.
     pred = labels[np.argmax(trt_outputs[0])]
+    common.free_buffers(inputs, outputs, stream)
     if "_".join(pred.split()) in os.path.splitext(os.path.basename(test_case))[0]:
         print("Correctly recognized " + test_case + " as " + pred)
     else:

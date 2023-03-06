@@ -24,6 +24,10 @@
 //! Command: ./sample_dynamic_reshape [-h or --help [-d=/path/to/data/dir or --datadir=/path/to/data/dir]
 //!
 
+// Define TRT entrypoints used in common code
+#define DEFINE_TRT_ENTRYPOINTS 1
+#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
+
 #include "BatchStream.h"
 #include "EntropyCalibrator.h"
 #include "argsParser.h"
@@ -464,7 +468,7 @@ bool SampleDynamicReshape::validateOutput(int digit)
     {
         sample::gLogInfo << " Prob " << curIndex << "  " << std::fixed << std::setw(5) << std::setprecision(4) << elem
                          << " "
-                         << "Class " << curIndex << ": " << std::string(int(std::floor(elem * 10 + 0.5f)), '*')
+                         << "Class " << curIndex << ": " << std::string(int(std::floor(elem * 10 + 0.5F)), '*')
                          << std::endl;
         ++curIndex;
     }

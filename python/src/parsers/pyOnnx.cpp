@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +17,13 @@
 
 // Implementation of PyBind11 Binding Code for OnnxParser
 #include "ForwardDeclarations.h"
+#include "onnxOpenSource/NvOnnxParser.h"
 #include "parsers/pyOnnxDoc.h"
 #include "utils.h"
+#include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
+#include <string>
+#include <vector>
 
 using namespace nvonnxparser;
 
@@ -68,6 +72,23 @@ static const auto supportsModel = [](IParser& self, const py::buffer& model, con
     const bool supported = self.supportsModel(info.ptr, info.size * info.itemsize, subgraphs, path);
     return std::make_pair(supported, subgraphs);
 };
+
+static const auto get_used_vc_plugin_libraries = [](IParser& self) {
+    std::vector<std::string> vcPluginLibs;
+    int64_t nbPluginLibs;
+    auto libCArray = self.getUsedVCPluginLibraries(nbPluginLibs);
+    if (nbPluginLibs < 0)
+    {
+        utils::throwPyError(PyExc_RuntimeError, "Internal error");
+    }
+    vcPluginLibs.reserve(nbPluginLibs);
+    for (int64_t i = 0; i < nbPluginLibs; ++i)
+    {
+        vcPluginLibs.emplace_back(std::string{libCArray[i]});
+    }
+    return vcPluginLibs;
+};
+
 } // namespace lambdas
 
 void bindOnnx(py::module& m)
@@ -75,7 +96,7 @@ void bindOnnx(py::module& m)
     py::bind_vector<std::vector<size_t>>(m, "NodeIndices");
     py::bind_vector<SubGraphCollection_t>(m, "SubGraphCollection");
 
-    py::class_<IParser>(m, "OnnxParser", OnnxParserDoc::descr)
+    py::class_<IParser>(m, "OnnxParser", OnnxParserDoc::descr, py::module_local())
         .def(py::init(&nvonnxparser::createParser), "network"_a, "logger"_a, OnnxParserDoc::init,
             py::keep_alive<1, 2>{}, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
         .def("parse", lambdas::parse, "model"_a, "path"_a = nullptr, OnnxParserDoc::parse,
@@ -89,9 +110,18 @@ void bindOnnx(py::module& m)
         .def_property_readonly("num_errors", &IParser::getNbErrors)
         .def("get_error", &IParser::getError, "index"_a, OnnxParserDoc::get_error)
         .def("clear_errors", &IParser::clearErrors, OnnxParserDoc::clear_errors)
+        .def_property("flags", &IParser::getFlags, &IParser::setFlags)
+        .def("clear_flag", &IParser::clearFlag, "flag"_a, OnnxParserDoc::clear_flag)
+        .def("set_flag", &IParser::setFlag, "flag"_a, OnnxParserDoc::set_flag)
+        .def("get_flag", &IParser::getFlag, "flag"_a, OnnxParserDoc::get_flag)
+        .def("get_used_vc_plugin_libraries", lambdas::get_used_vc_plugin_libraries,
+            OnnxParserDoc::get_used_vc_plugin_libraries)
         .def("__del__", &utils::doNothingDel<IParser>);
 
-    py::enum_<ErrorCode>(m, "ErrorCode", ErrorCodeDoc::descr)
+    py::enum_<OnnxParserFlag>(m, "OnnxParserFlag", OnnxParserFlagDoc::descr, py::module_local())
+        .value("VERSION_COMPATIBLE", OnnxParserFlag::kVERSION_COMPATIBLE, OnnxParserFlagDoc::VERSION_COMPATIBLE);
+
+    py::enum_<ErrorCode>(m, "ErrorCode", ErrorCodeDoc::descr, py::module_local())
         .value("SUCCESS", ErrorCode::kSUCCESS)
         .value("INTERNAL_ERROR", ErrorCode::kINTERNAL_ERROR)
         .value("MEM_ALLOC_FAILED", ErrorCode::kMEM_ALLOC_FAILED)
@@ -104,7 +134,7 @@ void bindOnnx(py::module& m)
         .def("__str__", lambdas::error_code_str)
         .def("__repr__", lambdas::error_code_str);
 
-    py::class_<IParserError, std::unique_ptr<IParserError, py::nodelete>>(m, "ParserError")
+    py::class_<IParserError, std::unique_ptr<IParserError, py::nodelete>>(m, "ParserError", py::module_local())
         .def("code", &IParserError::code, ParserErrorDoc::code)
         .def("desc", &IParserError::desc, ParserErrorDoc::desc)
         .def("file", &IParserError::file, ParserErrorDoc::file)

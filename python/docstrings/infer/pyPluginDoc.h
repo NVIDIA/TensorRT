@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -248,6 +248,7 @@ constexpr const char* descr = R"trtdoc(
 
     :ivar plugin_creator_list: All the registered plugin creators.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
+    :ivar parent_search_enabled: bool variable indicating whether parent search is enabled. Default is True.
 )trtdoc";
 
 constexpr const char* register_creator = R"trtdoc(
@@ -280,6 +281,20 @@ constexpr const char* get_plugin_creator = R"trtdoc(
     :arg plugin_namespace: The namespace of the plugin.
 
     :returns: An :class:`IPluginCreator` .
+)trtdoc";
+
+constexpr const char* load_library = R"trtdoc(
+    Load and register a shared library of plugins.
+
+    :arg: plugin_path: the plugin library path.
+
+    :returns: The loaded plugin library handle. The call will fail and return None if any of the plugins are already registered.
+)trtdoc";
+
+constexpr const char* deregister_library = R"trtdoc(
+    Deregister plugins associated with a library. Any resources acquired when the library was loaded will be released.
+
+    :arg: handle: the plugin library handle to deregister.
 )trtdoc";
 } // namespace IPluginRegistryDoc
 

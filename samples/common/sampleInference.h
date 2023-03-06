@@ -88,7 +88,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
 //!
 //! \brief Deserialize the engine and time how long it takes.
 //!
-bool timeDeserialize(InferenceEnvironment& iEnv);
+bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys);
 
 //!
 //! \brief Run inference and collect timing, return false if any error hit during inference
@@ -170,6 +170,9 @@ public:
     template <typename ContextType>
     void dumpBindingValues(ContextType const& context, int32_t binding, std::ostream& os,
         std::string const& separator = " ", int32_t batch = 1) const;
+
+    template <typename ContextType>
+    void dumpRawBindingToFiles(ContextType const& context, std::ostream& os) const;
 
     template <typename ContextType>
     void dumpInputs(ContextType const& context, std::ostream& os) const
