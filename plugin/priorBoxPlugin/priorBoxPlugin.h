@@ -34,21 +34,21 @@ class PriorBox : public IPluginV2Ext
 public:
     PriorBox(PriorBoxParameters param, int32_t H = 0, int32_t W = 0);
 
-    PriorBox(const void* buffer, size_t length);
+    PriorBox(void const* buffer, size_t length);
 
     ~PriorBox() override = default;
 
     int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
     int32_t initialize() noexcept override;
 
-    void terminate() noexcept override {};
+    void terminate() noexcept override{};
 
     size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
 
-    int32_t enqueue(int32_t batchSize, const void* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
@@ -57,30 +57,32 @@ public:
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
-    const char* getPluginType() const noexcept override;
+    char const* getPluginType() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
     void destroy() noexcept override;
 
     IPluginV2Ext* clone() const noexcept override;
 
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int32_t index, const nvinfer1::DataType* inputTypes, int32_t nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int32_t outputIndex, const bool* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
+    bool isOutputBroadcastAcrossBatch(
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
     bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
-    void configurePlugin(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
-        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
+        DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     void detachFromContext() noexcept override;
 
@@ -114,15 +116,15 @@ public:
 
     ~PriorBoxPluginCreator() override;
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    const PluginFieldCollection* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
+    IPluginV2Ext* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
 
-    IPluginV2Ext* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    IPluginV2Ext* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept override;
 
 private:
     static PluginFieldCollection mFC;

@@ -35,13 +35,13 @@ namespace bert
 
 template <typename T>
 int32_t embSkipLayerNormHFace(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, int32_t const* inputIds,
-    int32_t const* tokenIds, int32_t const* cuSeqlens, float const* beta, float const* gamma, const T* wordEmb,
-    const T* posEmb, const T* tokEmb, int32_t const wordSize, int32_t const tokSize, T* output);
+    int32_t const* tokenIds, int32_t const* cuSeqlens, float const* beta, float const* gamma, T const* wordEmb,
+    T const* posEmb, T const* tokEmb, int32_t const wordSize, int32_t const tokSize, T* output);
 
 template <typename T>
 int32_t embSkipLayerNormMTron(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, int32_t const* inputIds,
-    int32_t const* tokenIds, int32_t const* cuSeqlens, float const* beta, float const* gamma, const T* wordEmb,
-    const T* posEmb, const T* tokEmb, int32_t const wordSize, int32_t const tokSize, T* output, T* skip);
+    int32_t const* tokenIds, int32_t const* cuSeqlens, float const* beta, float const* gamma, T const* wordEmb,
+    T const* posEmb, T const* tokEmb, int32_t const wordSize, int32_t const tokSize, T* output, T* skip);
 
 class EmbLayerNormVarSeqlenPluginBase : public nvinfer1::IPluginV2DynamicExt
 {
@@ -111,7 +111,7 @@ public:
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, const nvinfer1::DimsExprs* inputs, int32_t nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
         nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
@@ -140,7 +140,7 @@ public:
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, const nvinfer1::DimsExprs* inputs, int32_t nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
         nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
@@ -161,7 +161,7 @@ public:
 
     char const* getPluginName() const noexcept override;
 
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
 
     void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
@@ -176,7 +176,7 @@ protected:
 class EmbLayerNormVarSeqlenPluginHFaceCreator : public EmbLayerNormVarSeqlenPluginBaseCreator
 {
 public:
-    nvinfer1::IPluginV2* createPlugin(char const* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
     char const* getPluginVersion() const noexcept override;
     nvinfer1::IPluginV2* deserializePlugin(
         char const* name, void const* serialData, size_t serialLength) noexcept override;
@@ -185,7 +185,7 @@ public:
 class EmbLayerNormVarSeqlenPluginMTronCreator : public EmbLayerNormVarSeqlenPluginBaseCreator
 {
 public:
-    nvinfer1::IPluginV2* createPlugin(char const* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
     char const* getPluginVersion() const noexcept override;
     nvinfer1::IPluginV2* deserializePlugin(
         char const* name, void const* serialData, size_t serialLength) noexcept override;

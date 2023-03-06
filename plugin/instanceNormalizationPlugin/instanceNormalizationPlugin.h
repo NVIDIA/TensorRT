@@ -84,8 +84,8 @@ public:
 
     char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const
-        noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
@@ -135,14 +135,14 @@ public:
 
     PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2DynamicExt* createPlugin(char const* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    IPluginV2DynamicExt* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
 
     IPluginV2DynamicExt* deserializePlugin(
         char const* name, void const* serialData, size_t serialLength) noexcept override;
 
 protected:
     template <class PluginType>
-    IPluginV2DynamicExt* createPluginBase(char const* name, const nvinfer1::PluginFieldCollection* fc) noexcept;
+    IPluginV2DynamicExt* createPluginBase(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept;
 
     template <class PluginType>
     IPluginV2DynamicExt* deserializePluginBase(char const* name, void const* serialData, size_t serialLength) noexcept;
@@ -182,7 +182,7 @@ class InstanceNormalizationPluginCreatorV2 final : public InstanceNormalizationP
 {
 public:
     char const* getPluginVersion() const noexcept override;
-    IPluginV2DynamicExt* createPlugin(char const* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    IPluginV2DynamicExt* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
     IPluginV2DynamicExt* deserializePlugin(
         char const* name, void const* serialData, size_t serialLength) noexcept override;
 };

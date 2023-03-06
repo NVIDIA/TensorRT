@@ -355,14 +355,14 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputD
         auto const segmentIds = static_cast<int32_t const*>(inputs[1]);
         int32_t const* cuSeqlens = static_cast<int32_t const*>(inputs[2]);
 
-        const float* beta = mBetaDev.get();
-        const float* gamma = mGammaDev.get();
+        float const* beta = mBetaDev.get();
+        float const* gamma = mGammaDev.get();
         if (mType == DataType::kFLOAT)
         {
             auto output = static_cast<float*>(outputs[0]);
-            auto const wordEmb = static_cast<const float*>(mWordEmbDev.get());
-            auto const tokEmb = static_cast<const float*>(mTokEmbDev.get());
-            auto const posEmb = static_cast<const float*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<float const*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<float const*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
 
             return embSkipLayerNormHFace<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
                 cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
@@ -370,9 +370,9 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputD
         if (mType == DataType::kHALF)
         {
             auto output = static_cast<half*>(outputs[0]);
-            auto const wordEmb = static_cast<const half*>(mWordEmbDev.get());
-            auto const tokEmb = static_cast<const half*>(mTokEmbDev.get());
-            auto const posEmb = static_cast<const half*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<half const*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<half const*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
 
             return embSkipLayerNormHFace<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
                 cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
@@ -424,15 +424,15 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputD
         auto const segmentIds = static_cast<int32_t const*>(inputs[1]);
         int32_t const* cuSeqlens = static_cast<int32_t const*>(inputs[2]);
 
-        const float* beta = mBetaDev.get();
-        const float* gamma = mGammaDev.get();
+        float const* beta = mBetaDev.get();
+        float const* gamma = mGammaDev.get();
         if (mType == DataType::kFLOAT)
         {
             auto output = static_cast<float*>(outputs[0]);
             auto skip = static_cast<float*>(outputs[1]);
-            auto const wordEmb = static_cast<const float*>(mWordEmbDev.get());
-            auto const tokEmb = static_cast<const float*>(mTokEmbDev.get());
-            auto const posEmb = static_cast<const float*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<float const*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<float const*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
 
             return embSkipLayerNormMTron<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
                 cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);
@@ -441,9 +441,9 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputD
         {
             auto output = static_cast<half*>(outputs[0]);
             auto skip = static_cast<half*>(outputs[1]);
-            auto const wordEmb = static_cast<const half*>(mWordEmbDev.get());
-            auto const tokEmb = static_cast<const half*>(mTokEmbDev.get());
-            auto const posEmb = static_cast<const half*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<half const*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<half const*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
 
             return embSkipLayerNormMTron<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
                 cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);

@@ -32,13 +32,9 @@ static char const* DMHA_VERSION{"1"};
 static char const* DMHA_NAME{"MultiscaleDeformableAttnPlugin_TRT"};
 } // namespace
 
-MultiscaleDeformableAttnPlugin::MultiscaleDeformableAttnPlugin()
-{
-}
+MultiscaleDeformableAttnPlugin::MultiscaleDeformableAttnPlugin() {}
 
-MultiscaleDeformableAttnPlugin::MultiscaleDeformableAttnPlugin(void const* data, size_t length)
-{
-}
+MultiscaleDeformableAttnPlugin::MultiscaleDeformableAttnPlugin(void const* data, size_t length) {}
 
 nvinfer1::IPluginV2DynamicExt* MultiscaleDeformableAttnPlugin::clone() const PLUGIN_NOEXCEPT
 {
@@ -90,12 +86,12 @@ void MultiscaleDeformableAttnPlugin::configurePlugin(nvinfer1::DynamicPluginTens
     nvinfer1::DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) PLUGIN_NOEXCEPT
 {
     // Check for valid input dimensions
-    PLUGIN_ASSERT(inputs[0].desc.dims.nbDims==4);
-    PLUGIN_ASSERT(inputs[1].desc.dims.nbDims==2);
-    PLUGIN_ASSERT(inputs[2].desc.dims.nbDims==1);
-    PLUGIN_ASSERT(inputs[3].desc.dims.nbDims==6);
-    PLUGIN_ASSERT(inputs[4].desc.dims.nbDims==5);
-    
+    PLUGIN_ASSERT(inputs[0].desc.dims.nbDims == 4);
+    PLUGIN_ASSERT(inputs[1].desc.dims.nbDims == 2);
+    PLUGIN_ASSERT(inputs[2].desc.dims.nbDims == 1);
+    PLUGIN_ASSERT(inputs[3].desc.dims.nbDims == 6);
+    PLUGIN_ASSERT(inputs[4].desc.dims.nbDims == 5);
+
     // Check M dimensions consistency
     PLUGIN_ASSERT(inputs[0].desc.dims.d[2] == inputs[3].desc.dims.d[2]);
     PLUGIN_ASSERT(inputs[0].desc.dims.d[2] == inputs[4].desc.dims.d[2]);
@@ -150,7 +146,7 @@ int32_t MultiscaleDeformableAttnPlugin::enqueue(nvinfer1::PluginTensorDesc const
         const __half* samplingLoc = static_cast<const __half*>(inputs[3]);
         const __half* attnWeight = static_cast<const __half*>(inputs[4]);
         __half* output = static_cast<__half*>(outputs[0]);
-        
+
         rc = ms_deform_attn_cuda_forward(stream, value, spatialShapes, levelStartIndex, samplingLoc, attnWeight, output,
             batch, spatial_size, num_heads, channels, num_levels, num_query, num_point);
     }
@@ -200,9 +196,7 @@ size_t MultiscaleDeformableAttnPlugin::getSerializationSize() const PLUGIN_NOEXC
     return 0;
 }
 
-void MultiscaleDeformableAttnPlugin::serialize(void* buffer) const PLUGIN_NOEXCEPT
-{
-}
+void MultiscaleDeformableAttnPlugin::serialize(void* buffer) const PLUGIN_NOEXCEPT {}
 
 void MultiscaleDeformableAttnPlugin::destroy() PLUGIN_NOEXCEPT
 {

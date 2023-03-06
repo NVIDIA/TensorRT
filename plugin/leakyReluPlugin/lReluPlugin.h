@@ -33,13 +33,13 @@ class LReLU : public nvinfer1::pluginInternal::BasePlugin
 public:
     LReLU(float negSlope);
 
-    LReLU(const void* buffer, size_t length);
+    LReLU(void const* buffer, size_t length);
 
     ~LReLU() override = default;
 
     int getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
 
     int initialize() noexcept override;
 
@@ -47,20 +47,21 @@ public:
 
     size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
 
-    int enqueue(int batchSize, const void* const* inputs, void* const* outputs, void* workspace,
+    int enqueue(int batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
     void serialize(void* buffer) const noexcept override;
 
-    void configureWithFormat(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs, DataType type, PluginFormat format, int maxBatchSize) noexcept override;
+    void configureWithFormat(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs, DataType type,
+        PluginFormat format, int maxBatchSize) noexcept override;
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
-    const char* getPluginType() const noexcept override;
+    char const* getPluginType() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
     void destroy() noexcept override;
 
@@ -78,15 +79,15 @@ public:
 
     ~LReluPluginCreator() override = default;
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    const PluginFieldCollection* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
+    IPluginV2* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
 
-    IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    IPluginV2* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept override;
 
 private:
     static PluginFieldCollection mFC;

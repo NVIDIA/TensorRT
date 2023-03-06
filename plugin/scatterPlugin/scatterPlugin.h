@@ -38,57 +38,57 @@ public:
     int getNbOutputs() const noexcept override;
 
     DimsExprs getOutputDimensions(
-        int32_t outputIndex, const DimsExprs* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
+        int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
 
     bool supportsFormatCombination(
-        int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
 
-    void configurePlugin(const DynamicPluginTensorDesc* in, int32_t nbInputs, const DynamicPluginTensorDesc* out,
+    void configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
         int32_t nbOutputs) noexcept override;
 
-    size_t getWorkspaceSize(const PluginTensorDesc* inputs, int32_t nbInputs, const PluginTensorDesc* outputs,
+    size_t getWorkspaceSize(PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
         int32_t nbOutputs) const noexcept override;
 
     int initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    int32_t enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+    int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
+        void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
     void serialize(void* buffer) const noexcept override;
 
-    const char* getPluginType() const noexcept override;
+    char const* getPluginType() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
     void destroy() noexcept override;
 
     IPluginV2DynamicExt* clone() const noexcept override;
 
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs)  const noexcept override;
+    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
     void detachFromContext() noexcept override;
+
 private:
-
-    //calculate how many slices we need to scatter = reduce_mul(indexTensor.shape[:-1])
+    // calculate how many slices we need to scatter = reduce_mul(indexTensor.shape[:-1])
     int32_t calculateNumSlices(Dims indexTensorDims) const noexcept;
-    int32_t calculateCopySize(const Dims& dataDims) const noexcept;
-    void calculateTransformCoeff(const Dims& dataTensorDims, int indexRank, int32_t* transformCoeff) const noexcept;
-    std::string mPluginNamespace;    
+    int32_t calculateCopySize(Dims const& dataDims) const noexcept;
+    void calculateTransformCoeff(Dims const& dataTensorDims, int indexRank, int32_t* transformCoeff) const noexcept;
+    std::string mPluginNamespace;
 
-    static constexpr  int indexTensorIdx = 1;
-    static constexpr  int updateTensorIdx = 2;
-    static constexpr  int dataTensorIdx = 0;
+    static constexpr int indexTensorIdx = 1;
+    static constexpr int updateTensorIdx = 2;
+    static constexpr int dataTensorIdx = 0;
 };
 
 class ScatterNDPluginCreator : public nvinfer1::pluginInternal::BaseCreator
@@ -98,15 +98,15 @@ public:
 
     ~ScatterNDPluginCreator() override = default;
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion()const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    const PluginFieldCollection* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
+    IPluginV2Ext* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
 
-    IPluginV2Ext* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    IPluginV2Ext* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept override;
 
 private:
     static PluginFieldCollection mFC;

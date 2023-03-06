@@ -319,18 +319,20 @@ int32_t SkipLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, P
             auto const* const gamma = static_cast<half const*>(mGammaDev.get());
             if (mHasBias)
             {
-                status = computeSkipLayerNormDQQ<true>(stream, static_cast<int32_t>(mLd), inputVolume, input, skip, beta,
-                    gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
+                status = computeSkipLayerNormDQQ<true>(stream, static_cast<int32_t>(mLd), inputVolume, input, skip,
+                    beta, gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
             }
             else
             {
-                status = computeSkipLayerNormDQQ<false>(stream, static_cast<int32_t>(mLd), inputVolume, input, skip, beta,
-                    gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
+                status = computeSkipLayerNormDQQ<false>(stream, static_cast<int32_t>(mLd), inputVolume, input, skip,
+                    beta, gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
             }
         }
         else
         {
-            PLUGIN_ERROR(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received " + std::to_string(static_cast<int>(iType))).c_str());
+            PLUGIN_ERROR(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
+                + std::to_string(static_cast<int>(iType)))
+                             .c_str());
         }
     }
     catch (std::exception const& e)
@@ -436,7 +438,7 @@ void SkipLayerNormPluginDynamic::setPluginNamespace(char const* libNamespace) no
     {
         mNamespace = libNamespace;
     }
-    catch(std::exception const& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -533,7 +535,8 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(char const* name, Plu
         }
         BERT_DEBUG_VALUE("Type ", typeId);
 
-        PLUGIN_VALIDATE(typeId >= 0 && typeId <= 3, ("SkipLayerNorm: Invalid type ID: " + std::to_string(typeId)).c_str());
+        PLUGIN_VALIDATE(
+            typeId >= 0 && typeId <= 3, ("SkipLayerNorm: Invalid type ID: " + std::to_string(typeId)).c_str());
 
         PLUGIN_VALIDATE(beta.values != nullptr, "SkipLayerNorm: invalid beta");
         PLUGIN_VALIDATE(beta.count > 0, "SkipLayerNorm: invalid beta");
@@ -572,7 +575,7 @@ void SkipLayerNormPluginDynamicCreator::setPluginNamespace(char const* libNamesp
     {
         mNamespace = libNamespace;
     }
-    catch(std::exception const& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -842,18 +845,20 @@ int32_t SkipLayerNormVarSeqlenPlugin::enqueue(PluginTensorDesc const* inputDesc,
             auto const* const gamma = static_cast<half const*>(mGammaDev.get());
             if (mHasBias)
             {
-                status = computeSkipLayerNormDQQ<true>(stream, static_cast<int32_t>(mLd), inputVolume, input, skip, beta,
-                    gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
+                status = computeSkipLayerNormDQQ<true>(stream, static_cast<int32_t>(mLd), inputVolume, input, skip,
+                    beta, gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
             }
             else
             {
-                status = computeSkipLayerNormDQQ<false>(stream, static_cast<int32_t>(mLd), inputVolume, input, skip, beta,
-                    gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
+                status = computeSkipLayerNormDQQ<false>(stream, static_cast<int32_t>(mLd), inputVolume, input, skip,
+                    beta, gamma, output, bias, dqScaleIn, dqScaleSkip, qScale);
             }
         }
         else
         {
-            PLUGIN_VALIDATE(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received " + std::to_string(static_cast<int>(iType))).c_str());
+            PLUGIN_VALIDATE(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
+                + std::to_string(static_cast<int>(iType)))
+                                .c_str());
         }
     }
     catch (std::exception const& e)
@@ -1034,7 +1039,8 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(char const* name, P
         }
         BERT_DEBUG_VALUE("Type ", typeId);
 
-        PLUGIN_VALIDATE(typeId >= 0 && typeId <= 3, ("SkipLayerNorm: Invalid type ID: " +  std::to_string(typeId)).c_str());
+        PLUGIN_VALIDATE(
+            typeId >= 0 && typeId <= 3, ("SkipLayerNorm: Invalid type ID: " + std::to_string(typeId)).c_str());
 
         PLUGIN_VALIDATE(beta.values != nullptr, "SkipLayerNorm: invalid beta");
         PLUGIN_VALIDATE(beta.count > 0, "SkipLayerNorm: invalid beta");

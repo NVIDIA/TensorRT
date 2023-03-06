@@ -37,13 +37,13 @@ public:
 
     CoordConvACPlugin(DataType iType, int iC, int iH, int iW, int oC, int oH, int oW);
 
-    CoordConvACPlugin(const void* data, size_t length);
+    CoordConvACPlugin(void const* data, size_t length);
 
     ~CoordConvACPlugin() override = default;
 
     int getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
 
     int initialize() noexcept override;
 
@@ -58,27 +58,29 @@ public:
 
     void serialize(void* buffer) const noexcept override;
 
-    void configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-        const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-        const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+    void configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+        DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
-    const char* getPluginType() const noexcept override;
+    char const* getPluginType() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
     void destroy() noexcept override;
 
     IPluginV2Ext* clone() const noexcept override;
 
-    nvinfer1::DataType getOutputDataType(int index, const nvinfer1::DataType* inputType, int nbInputs) const noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int index, nvinfer1::DataType const* inputType, int nbInputs) const noexcept override;
 
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept override;
+    bool isOutputBroadcastAcrossBatch(
+        int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept override;
 
     bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
 
@@ -101,15 +103,15 @@ public:
 
     ~CoordConvACPluginCreator() override = default;
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    const PluginFieldCollection* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2Ext* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
+    IPluginV2Ext* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
 
-    IPluginV2Ext* deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept override;
+    IPluginV2Ext* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept override;
 
 private:
     static PluginFieldCollection mFC;

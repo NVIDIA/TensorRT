@@ -52,7 +52,7 @@ public:
         nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& word_emb,
         nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb, bool const useFullMask);
 
-    EmbLayerNormPluginDynamic(std::string const& name, const void* data, size_t length);
+    EmbLayerNormPluginDynamic(std::string const& name, void const* data, size_t length);
 
     // It doesn't make sense to make EmbLayerNormPluginDynamic without arguments, so we
     // delete default constructor.
@@ -64,12 +64,12 @@ public:
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
         int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int32_t nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
     size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
         nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext Methods
     nvinfer1::DataType getOutputDataType(

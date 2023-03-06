@@ -47,7 +47,7 @@ static char const* PLUGIN_NAME{"ModulatedDeformConv2d"};
 nvinfer1::PluginFieldCollection ModulatedDeformableConvPluginDynamicCreator::mFC{};
 std::vector<nvinfer1::PluginField> ModulatedDeformableConvPluginDynamicCreator::mPluginAttributes;
 
-ModulatedDeformableConvPluginDynamic::ModulatedDeformableConvPluginDynamic(const std::string& name,
+ModulatedDeformableConvPluginDynamic::ModulatedDeformableConvPluginDynamic(std::string const& name,
     const nvinfer1::Dims stride, const nvinfer1::Dims padding, const nvinfer1::Dims dilation,
     int32_t const deformableGroup, int32_t const group)
     : mLayerName(name)
@@ -64,7 +64,7 @@ ModulatedDeformableConvPluginDynamic::ModulatedDeformableConvPluginDynamic(
     const std::string name, void const* data, size_t length)
     : mLayerName(name)
 {
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    char const *d = reinterpret_cast<char const*>(data), *a = d;
     mStride = read<nvinfer1::Dims>(d);
     mPadding = read<nvinfer1::Dims>(d);
     mDilation = read<nvinfer1::Dims>(d);
@@ -85,7 +85,7 @@ nvinfer1::IPluginV2DynamicExt* ModulatedDeformableConvPluginDynamic::clone() con
         plugin->setPluginNamespace(getPluginNamespace());
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -106,7 +106,7 @@ nvinfer1::DimsExprs ModulatedDeformableConvPluginDynamic::getOutputDimensions(in
         ret.d[3] = inputs[1].d[3];
         return ret;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -192,7 +192,7 @@ int32_t ModulatedDeformableConvPluginDynamic::enqueue(nvinfer1::PluginTensorDesc
         default: return 1;
         }
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

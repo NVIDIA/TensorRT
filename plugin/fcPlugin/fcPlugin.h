@@ -447,7 +447,7 @@ class FCPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     FCPluginDynamic(
-        std::string const name, nvinfer1::DataType const type, int32_t const outDim, const nvinfer1::Weights& W);
+        std::string const name, nvinfer1::DataType const type, int32_t const outDim, nvinfer1::Weights const& W);
 
     FCPluginDynamic(std::string const name, void const* data, size_t length);
 
@@ -514,7 +514,7 @@ public:
 
     char const* getPluginVersion() const noexcept override;
 
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
 
     nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
 

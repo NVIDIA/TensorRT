@@ -40,8 +40,8 @@ public:
     GroupNormPlugin(std::string const& name, void const* buffer, size_t length);
     ~GroupNormPlugin() override = default;
 
-    GroupNormPlugin(const GroupNormPlugin& /*other*/) = default;
-    GroupNormPlugin& operator=(const GroupNormPlugin& /*other*/) = delete;
+    GroupNormPlugin(GroupNormPlugin const& /*other*/) = default;
+    GroupNormPlugin& operator=(GroupNormPlugin const& /*other*/) = delete;
     GroupNormPlugin(GroupNormPlugin&& /*other*/) noexcept = delete;
     GroupNormPlugin& operator=(GroupNormPlugin&& /*other*/) noexcept = delete;
 
@@ -90,8 +90,8 @@ public:
     GroupNormPluginCreator();
     ~GroupNormPluginCreator() override;
 
-    GroupNormPluginCreator(const GroupNormPluginCreator& /*other*/) = delete;
-    GroupNormPluginCreator& operator=(const GroupNormPluginCreator& /*other*/) = delete;
+    GroupNormPluginCreator(GroupNormPluginCreator const& /*other*/) = delete;
+    GroupNormPluginCreator& operator=(GroupNormPluginCreator const& /*other*/) = delete;
     GroupNormPluginCreator(GroupNormPluginCreator&& /*other*/) noexcept = delete;
     GroupNormPluginCreator& operator=(GroupNormPluginCreator&& /*other*/) noexcept = delete;
 

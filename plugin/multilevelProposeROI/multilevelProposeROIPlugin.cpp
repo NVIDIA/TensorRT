@@ -32,8 +32,8 @@ using nvinfer1::plugin::MultilevelProposeROIPluginCreator;
 
 namespace
 {
-const char* MULTILEVELPROPOSEROI_PLUGIN_VERSION{"1"};
-const char* MULTILEVELPROPOSEROI_PLUGIN_NAME{"MultilevelProposeROI_TRT"};
+char const* const kMULTILEVELPROPOSEROI_PLUGIN_VERSION{"1"};
+char const* const kMULTILEVELPROPOSEROI_PLUGIN_NAME{"MultilevelProposeROI_TRT"};
 } // namespace
 
 PluginFieldCollection MultilevelProposeROIPluginCreator::mFC{};
@@ -52,23 +52,23 @@ MultilevelProposeROIPluginCreator::MultilevelProposeROIPluginCreator() noexcept
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* MultilevelProposeROIPluginCreator::getPluginName() const noexcept
+char const* MultilevelProposeROIPluginCreator::getPluginName() const noexcept
 {
-    return MULTILEVELPROPOSEROI_PLUGIN_NAME;
+    return kMULTILEVELPROPOSEROI_PLUGIN_NAME;
 }
 
-const char* MultilevelProposeROIPluginCreator::getPluginVersion() const noexcept
+char const* MultilevelProposeROIPluginCreator::getPluginVersion() const noexcept
 {
-    return MULTILEVELPROPOSEROI_PLUGIN_VERSION;
+    return kMULTILEVELPROPOSEROI_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* MultilevelProposeROIPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* MultilevelProposeROIPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
 IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+    char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -77,7 +77,7 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            const char* attrName = fields[i].name;
+            char const* attrName = fields[i].name;
             if (!strcmp(attrName, "prenms_topk"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
@@ -101,7 +101,7 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
             if (!strcmp(attrName, "image_size"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                const auto dims = static_cast<int32_t const*>(fields[i].data);
+                auto const dims = static_cast<int32_t const*>(fields[i].data);
                 std::copy_n(dims, 3, imageSize.d);
             }
         }
@@ -115,7 +115,7 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
 }
 
 IPluginV2Ext* MultilevelProposeROIPluginCreator::deserializePlugin(
-    const char* name, const void* data, size_t length) noexcept
+    char const* name, void const* data, size_t length) noexcept
 {
     try
     {
@@ -188,8 +188,8 @@ int MultilevelProposeROI::initialize() noexcept
         uint8_t* device_ptr = static_cast<uint8_t*>(i_anchors_device->mPtr);
         for (int i = 0; i < mMaxBatchSize; i++)
         {
-            PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset), static_cast<void*>(i_anchors_host),
-                batch_offset, cudaMemcpyHostToDevice));
+            PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset),
+                static_cast<void*>(i_anchors_host), batch_offset, cudaMemcpyHostToDevice));
         }
         mAnchorBoxesDevice.push_back(i_anchors_device);
     }
@@ -229,9 +229,7 @@ int MultilevelProposeROI::initialize() noexcept
     return 0;
 }
 
-void MultilevelProposeROI::terminate() noexcept
-{
-}
+void MultilevelProposeROI::terminate() noexcept {}
 
 void MultilevelProposeROI::destroy() noexcept
 {
@@ -243,12 +241,12 @@ bool MultilevelProposeROI::supportsFormat(DataType type, PluginFormat format) co
     return ((type == DataType::kFLOAT || type == DataType::kHALF) && format == PluginFormat::kLINEAR);
 }
 
-const char* MultilevelProposeROI::getPluginType() const noexcept
+char const* MultilevelProposeROI::getPluginType() const noexcept
 {
     return "MultilevelProposeROI_TRT";
 }
 
-const char* MultilevelProposeROI::getPluginVersion() const noexcept
+char const* MultilevelProposeROI::getPluginVersion() const noexcept
 {
     return "1";
 }
@@ -266,19 +264,20 @@ IPluginV2Ext* MultilevelProposeROI::clone() const noexcept
     return nullptr;
 }
 
-void MultilevelProposeROI::setPluginNamespace(const char* libNamespace) noexcept
+void MultilevelProposeROI::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNameSpace = libNamespace;
 }
 
-const char* MultilevelProposeROI::getPluginNamespace() const noexcept
+char const* MultilevelProposeROI::getPluginNamespace() const noexcept
 {
     return mNameSpace.c_str();
 }
 
 size_t MultilevelProposeROI::getSerializationSize() const noexcept
 {
-    return sizeof(int) * 2 + sizeof(float) * 2 + sizeof(int) * (mFeatureCnt + 1) + sizeof(nvinfer1::Dims) + sizeof(DataType);
+    return sizeof(int) * 2 + sizeof(float) * 2 + sizeof(int) * (mFeatureCnt + 1) + sizeof(nvinfer1::Dims)
+        + sizeof(DataType);
 }
 
 void MultilevelProposeROI::serialize(void* buffer) const noexcept
@@ -298,11 +297,11 @@ void MultilevelProposeROI::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-MultilevelProposeROI::MultilevelProposeROI(const void* data, size_t length)
+MultilevelProposeROI::MultilevelProposeROI(void const* data, size_t length)
 {
     mFeatureCnt = TLTMaskRCNNConfig::MAX_LEVEL - TLTMaskRCNNConfig::MIN_LEVEL + 1;
 
-    const char *d = reinterpret_cast<const char*>(data), *a = d;
+    char const *d = reinterpret_cast<char const*>(data), *a = d;
     int prenms_topk = read<int>(d);
     int keep_topk = read<int>(d);
     float fg_threshold = read<float>(d);
@@ -332,7 +331,7 @@ MultilevelProposeROI::MultilevelProposeROI(const void* data, size_t length)
     generate_pyramid_anchors(mImageSize);
 }
 
-void MultilevelProposeROI::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims) noexcept
+void MultilevelProposeROI::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputDims) noexcept
 {
     // x=2,3,4,5,6
     // foreground_delta_px [N, h_x * w_x * anchors_per_location, 4, 1],
@@ -368,7 +367,7 @@ size_t MultilevelProposeROI::getWorkspaceSize(int batch_size) const noexcept
     return total_size;
 }
 
-Dims MultilevelProposeROI::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims MultilevelProposeROI::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
 
     check_valid_inputs(inputs, nbInputDims);
@@ -379,12 +378,12 @@ Dims MultilevelProposeROI::getOutputDimensions(int index, const Dims* inputs, in
 
 void MultilevelProposeROI::generate_pyramid_anchors(nvinfer1::Dims const& imageSize)
 {
-    const auto image_dims = imageSize;
+    auto const image_dims = imageSize;
 
-    const auto& anchor_scale = TLTMaskRCNNConfig::RPN_ANCHOR_SCALE;
-    const auto& min_level = TLTMaskRCNNConfig::MIN_LEVEL;
-    const auto& max_level = TLTMaskRCNNConfig::MAX_LEVEL;
-    const auto& aspect_ratios = TLTMaskRCNNConfig::ANCHOR_RATIOS;
+    auto const& anchor_scale = TLTMaskRCNNConfig::RPN_ANCHOR_SCALE;
+    auto const& min_level = TLTMaskRCNNConfig::MIN_LEVEL;
+    auto const& max_level = TLTMaskRCNNConfig::MAX_LEVEL;
+    auto const& aspect_ratios = TLTMaskRCNNConfig::ANCHOR_RATIOS;
 
     // Generate anchors strides and scales
     std::vector<float> anchor_scales;
@@ -424,7 +423,7 @@ void MultilevelProposeROI::generate_pyramid_anchors(nvinfer1::Dims const& imageS
 }
 
 int32_t MultilevelProposeROI::enqueue(
-    int32_t batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     void* final_proposals = outputs[0];
@@ -461,8 +460,8 @@ int32_t MultilevelProposeROI::enqueue(
             inputs[2 * i],     // inputs[bbox_delta]
             mValidCnt->mPtr,
             mAnchorBoxesDevice[i]->mPtr, // inputs[anchors]
-            mTempScores[i],        // temp scores [batch_size, topk, 1]
-            mTempBboxes[i]);       // temp
+            mTempScores[i],              // temp scores [batch_size, topk, 1]
+            mTempBboxes[i]);             // temp
         PLUGIN_ASSERT(status == cudaSuccess);
         kernel_workspace_offset += proposal_ws.totalSize;
     }
@@ -477,7 +476,8 @@ int32_t MultilevelProposeROI::enqueue(
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType MultilevelProposeROI::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType MultilevelProposeROI::getOutputDataType(
+    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     if ((inputTypes[0] == DataType::kFLOAT) || (inputTypes[0] == DataType::kHALF))
@@ -487,7 +487,7 @@ DataType MultilevelProposeROI::getOutputDataType(int index, const nvinfer1::Data
 
 // Return true if output tensor is broadcast across a batch.
 bool MultilevelProposeROI::isOutputBroadcastAcrossBatch(
-    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -499,9 +499,9 @@ bool MultilevelProposeROI::canBroadcastInputAcrossBatch(int inputIndex) const no
 }
 
 // Configure the layer with input and output data types.
-void MultilevelProposeROI::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void MultilevelProposeROI::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
 
@@ -524,6 +524,4 @@ void MultilevelProposeROI::attachToContext(
 }
 
 // Detach the plugin object from its execution context.
-void MultilevelProposeROI::detachFromContext() noexcept
-{
-}
+void MultilevelProposeROI::detachFromContext() noexcept {}

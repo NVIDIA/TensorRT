@@ -27,11 +27,11 @@
 using half = __half;
 
 template <typename T>
-int32_t computeLayerNorm(int32_t const gridSize, int32_t const nHiddenDimension, T const* input, T const* gamma, T const* beta,
-    T* output, float const epsilon, cudaStream_t stream);
+int32_t computeLayerNorm(int32_t const gridSize, int32_t const nHiddenDimension, T const* input, T const* gamma,
+    T const* beta, T* output, float const epsilon, cudaStream_t stream);
 
-int32_t computeLayerNormQDQ(int32_t const gridSize, int32_t const nHiddenDimension, int8_t const* input, __half const* gamma,
-    __half const* beta, int8_t* output, float const dqScaleIn, float const qScale, float const epsilon,
-    cudaStream_t stream);
+int32_t computeLayerNormQDQ(int32_t const gridSize, int32_t const nHiddenDimension, int8_t const* input,
+    __half const* gamma, __half const* beta, int8_t* output, float const dqScaleIn, float const qScale,
+    float const epsilon, cudaStream_t stream);
 
 #endif // TRT_LAYERNORM_KERNEL_H

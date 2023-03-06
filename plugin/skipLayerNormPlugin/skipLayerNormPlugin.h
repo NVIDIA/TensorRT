@@ -40,8 +40,8 @@ int32_t computeSkipLayerNormDQQ(cudaStream_t stream, int32_t const ld, int32_t c
     float const dqScaleIn, float const dqScaleSkip, float const qScale);
 
 template <typename T, bool hasBias>
-int32_t computeSkipLayerNorm(cudaStream_t stream, int32_t const ld, int32_t const n, const T* input, const T* skip,
-    const T* beta, const T* gamma, T* output, const T* bias);
+int32_t computeSkipLayerNorm(cudaStream_t stream, int32_t const ld, int32_t const n, T const* input, T const* skip,
+    T const* beta, T const* gamma, T* output, T const* bias);
 
 class SkipLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {

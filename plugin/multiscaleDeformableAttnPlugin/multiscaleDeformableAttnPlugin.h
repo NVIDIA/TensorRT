@@ -65,8 +65,8 @@ public:
     nvinfer1::IPluginV2DynamicExt* clone() const PLUGIN_NOEXCEPT override;
     nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) PLUGIN_NOEXCEPT override;
-    bool supportsFormatCombination(
-        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) PLUGIN_NOEXCEPT override;
+    bool supportsFormatCombination(int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs,
+        int32_t nbOutputs) PLUGIN_NOEXCEPT override;
     void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
         nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) PLUGIN_NOEXCEPT override;
     size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,

@@ -22,9 +22,9 @@
 #include <stdint.h>
 
 template <typename T>
-cudaError_t RoiAlignImpl(cudaStream_t stream, int32_t const maxThreadsPerBlock, T const* bottomData, T const spatialScale,
-    int32_t const numRois, int32_t const channels, int32_t const height, int32_t const width, int32_t const pooledHeight,
-    int32_t const pooledWidth, int32_t const samplingRatio, T const* bottomRois, T* topData, int32_t const isModeAvg,
-    int32_t const* batchIndicesPtr, int32_t const aligned);
+cudaError_t RoiAlignImpl(cudaStream_t stream, int32_t const maxThreadsPerBlock, T const* bottomData,
+    T const spatialScale, int32_t const numRois, int32_t const channels, int32_t const height, int32_t const width,
+    int32_t const pooledHeight, int32_t const pooledWidth, int32_t const samplingRatio, T const* bottomRois, T* topData,
+    int32_t const isModeAvg, int32_t const* batchIndicesPtr, int32_t const aligned);
 
 #endif // TRT_ROIALIGN_KERNEL_H

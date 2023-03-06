@@ -22,8 +22,8 @@ namespace nvinfer1
 {
 namespace plugin
 {
-static const char* LRELU_PLUGIN_VERSION{"1"};
-static const char* LRELU_PLUGIN_NAME{"LReLU_TRT"};
+static char const* const kLRELU_PLUGIN_VERSION{"1"};
+static char const* const kLRELU_PLUGIN_NAME{"LReLU_TRT"};
 PluginFieldCollection LReluPluginCreator::mFC{};
 std::vector<PluginField> LReluPluginCreator::mPluginAttributes;
 
@@ -35,9 +35,9 @@ LReLU::LReLU(float negSlope)
     PLUGIN_VALIDATE(negSlope >= 0.0F);
 }
 
-LReLU::LReLU(const void* buffer, size_t length)
+LReLU::LReLU(void const* buffer, size_t length)
 {
-    const char *d = reinterpret_cast<const char*>(buffer), *a = d;
+    char const *d = reinterpret_cast<char const*>(buffer), *a = d;
     mNegSlope = read<float>(d);
     mBatchDim = read<int>(d);
     PLUGIN_VALIDATE(d == a + length);
@@ -48,7 +48,7 @@ int LReLU::getNbOutputs() const noexcept
     return 1;
 }
 
-Dims LReLU::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims LReLU::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 1);
     PLUGIN_ASSERT(index == 0);
@@ -56,9 +56,9 @@ Dims LReLU::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) 
 }
 
 int LReLU::enqueue(
-    int batchSize, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    const void* inputData = inputs[0];
+    void const* inputData = inputs[0];
     void* outputData = outputs[0];
     pluginStatus_t status = lReLUInference(stream, mBatchDim * batchSize, mNegSlope, inputData, outputData);
     return status;
@@ -78,7 +78,7 @@ void LReLU::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-void LReLU::configureWithFormat(const Dims* inputDims, int /* nbInputs */, const Dims* /* outputDims */, int nbOutputs,
+void LReLU::configureWithFormat(Dims const* inputDims, int /* nbInputs */, Dims const* /* outputDims */, int nbOutputs,
     DataType type, PluginFormat format, int) noexcept
 {
     PLUGIN_ASSERT(type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
@@ -107,14 +107,14 @@ size_t LReLU::getWorkspaceSize(int /* maxBatchSize */) const noexcept
     return 0;
 }
 
-const char* LReLU::getPluginType() const noexcept
+char const* LReLU::getPluginType() const noexcept
 {
-    return LRELU_PLUGIN_NAME;
+    return kLRELU_PLUGIN_NAME;
 }
 
-const char* LReLU::getPluginVersion() const noexcept
+char const* LReLU::getPluginVersion() const noexcept
 {
-    return LRELU_PLUGIN_VERSION;
+    return kLRELU_PLUGIN_VERSION;
 }
 
 void LReLU::destroy() noexcept
@@ -146,30 +146,30 @@ LReluPluginCreator::LReluPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* LReluPluginCreator::getPluginName() const noexcept
+char const* LReluPluginCreator::getPluginName() const noexcept
 {
-    return LRELU_PLUGIN_NAME;
+    return kLRELU_PLUGIN_NAME;
 }
 
-const char* LReluPluginCreator::getPluginVersion() const noexcept
+char const* LReluPluginCreator::getPluginVersion() const noexcept
 {
-    return LRELU_PLUGIN_VERSION;
+    return kLRELU_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* LReluPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* LReluPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* LReluPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* LReluPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
         PLUGIN_VALIDATE(fc->nbFields == 1);
         PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kFLOAT32);
         PLUGIN_VALIDATE(!strcmp(fields[0].name, "negSlope"));
-        float negSlope = *(static_cast<const float*>(fields[0].data));
+        float negSlope = *(static_cast<float const*>(fields[0].data));
 
         return new LReLU(negSlope);
     }
@@ -180,7 +180,7 @@ IPluginV2* LReluPluginCreator::createPlugin(const char* name, const PluginFieldC
     return nullptr;
 }
 
-IPluginV2* LReluPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
+IPluginV2* LReluPluginCreator::deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

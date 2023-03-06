@@ -29,8 +29,8 @@ using nvinfer1::plugin::GenerateDetectionPluginCreator;
 
 namespace
 {
-const char* GENERATEDETECTION_PLUGIN_VERSION{"1"};
-const char* GENERATEDETECTION_PLUGIN_NAME{"GenerateDetection_TRT"};
+char const* const kGENERATEDETECTION_PLUGIN_VERSION{"1"};
+char const* const kGENERATEDETECTION_PLUGIN_NAME{"GenerateDetection_TRT"};
 } // namespace
 
 PluginFieldCollection GenerateDetectionPluginCreator::mFC{};
@@ -49,22 +49,22 @@ GenerateDetectionPluginCreator::GenerateDetectionPluginCreator() noexcept
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* GenerateDetectionPluginCreator::getPluginName() const noexcept
+char const* GenerateDetectionPluginCreator::getPluginName() const noexcept
 {
-    return GENERATEDETECTION_PLUGIN_NAME;
+    return kGENERATEDETECTION_PLUGIN_NAME;
 }
 
-const char* GenerateDetectionPluginCreator::getPluginVersion() const noexcept
+char const* GenerateDetectionPluginCreator::getPluginVersion() const noexcept
 {
-    return GENERATEDETECTION_PLUGIN_VERSION;
+    return kGENERATEDETECTION_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* GenerateDetectionPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* GenerateDetectionPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -74,7 +74,7 @@ IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(const char* name, con
 
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            const char* attrName = fields[i].name;
+            char const* attrName = fields[i].name;
             if (!strcmp(attrName, "num_classes"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
@@ -98,7 +98,7 @@ IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(const char* name, con
             if (!strcmp(attrName, "image_size"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                const auto dims = static_cast<int32_t const*>(fields[i].data);
+                auto const dims = static_cast<int32_t const*>(fields[i].data);
                 std::copy_n(dims, 3, image_size.d);
             }
         }
@@ -112,7 +112,7 @@ IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(const char* name, con
 }
 
 IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(
-    const char* name, const void* data, size_t length) noexcept
+    char const* name, void const* data, size_t length) noexcept
 {
     try
     {
@@ -125,8 +125,8 @@ IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(
     return nullptr;
 }
 
-GenerateDetection::GenerateDetection(int num_classes, int keep_topk, float score_threshold, float iou_threshold,
-    const nvinfer1::Dims& image_size)
+GenerateDetection::GenerateDetection(
+    int num_classes, int keep_topk, float score_threshold, float iou_threshold, nvinfer1::Dims const& image_size)
     : mNbClasses(num_classes)
     , mKeepTopK(keep_topk)
     , mScoreThreshold(score_threshold)
@@ -160,7 +160,7 @@ int GenerateDetection::initialize() noexcept
     // Init the regWeight [10, 10, 5, 5]
     mRegWeightDevice = std::make_shared<CudaBind<float>>(4);
     PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(mRegWeightDevice->mPtr),
-        static_cast<const void*>(TLTMaskRCNNConfig::DETECTION_REG_WEIGHTS), sizeof(float) * 4, cudaMemcpyHostToDevice));
+        static_cast<void const*>(TLTMaskRCNNConfig::DETECTION_REG_WEIGHTS), sizeof(float) * 4, cudaMemcpyHostToDevice));
 
     //@Init the mValidCnt and mDecodedBboxes for max batch size
     std::vector<int> tempValidCnt(mMaxBatchSize, mAnchorsCnt);
@@ -185,12 +185,12 @@ bool GenerateDetection::supportsFormat(DataType type, PluginFormat format) const
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-const char* GenerateDetection::getPluginType() const noexcept
+char const* GenerateDetection::getPluginType() const noexcept
 {
     return "GenerateDetection_TRT";
 }
 
-const char* GenerateDetection::getPluginVersion() const noexcept
+char const* GenerateDetection::getPluginVersion() const noexcept
 {
     return "1";
 }
@@ -208,12 +208,12 @@ IPluginV2Ext* GenerateDetection::clone() const noexcept
     return nullptr;
 }
 
-void GenerateDetection::setPluginNamespace(const char* libNamespace) noexcept
+void GenerateDetection::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNameSpace = libNamespace;
 }
 
-const char* GenerateDetection::getPluginNamespace() const noexcept
+char const* GenerateDetection::getPluginNamespace() const noexcept
 {
     return mNameSpace.c_str();
 }
@@ -267,7 +267,7 @@ void GenerateDetection::deserialize(int8_t const* data, size_t length)
     mType = DataType::kFLOAT;
 }
 
-void GenerateDetection::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims) noexcept
+void GenerateDetection::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputDims) noexcept
 {
     // classifier_delta_bbox[N, anchors, num_classes*4, 1, 1]
     // classifier_class[N, anchors, num_classes, 1, 1]
@@ -288,7 +288,7 @@ size_t GenerateDetection::getWorkspaceSize(int batch_size) const noexcept
     return refine.totalSize;
 }
 
-Dims GenerateDetection::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims GenerateDetection::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
 
     check_valid_inputs(inputs, nbInputDims);
@@ -298,7 +298,7 @@ Dims GenerateDetection::getOutputDimensions(int index, const Dims* inputs, int n
 }
 
 int32_t GenerateDetection::enqueue(
-    int32_t batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     void* detections = outputs[0];
@@ -321,7 +321,8 @@ int32_t GenerateDetection::enqueue(
     return status;
 }
 
-DataType GenerateDetection::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType GenerateDetection::getOutputDataType(
+    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
@@ -329,7 +330,7 @@ DataType GenerateDetection::getOutputDataType(int index, const nvinfer1::DataTyp
 
 // Return true if output tensor is broadcast across a batch.
 bool GenerateDetection::isOutputBroadcastAcrossBatch(
-    int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -341,9 +342,9 @@ bool GenerateDetection::canBroadcastInputAcrossBatch(int inputIndex) const noexc
 }
 
 // Configure the layer with input and output data types.
-void GenerateDetection::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void GenerateDetection::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
     PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0] && inputDims[1].d[0] == inputDims[2].d[0]);

@@ -31,36 +31,36 @@ class EfficientNMSPlugin : public IPluginV2DynamicExt
 {
 public:
     explicit EfficientNMSPlugin(EfficientNMSParameters param);
-    EfficientNMSPlugin(const void* data, size_t length);
+    EfficientNMSPlugin(void const* data, size_t length);
     ~EfficientNMSPlugin() override = default;
 
     // IPluginV2 methods
-    const char* getPluginType() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginType() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
     int getNbOutputs() const noexcept override;
     int initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
     void destroy() noexcept override;
-    void setPluginNamespace(const char* libNamespace) noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(char const* libNamespace) noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
     // IPluginV2Ext methods
     nvinfer1::DataType getOutputDataType(
-        int index, const nvinfer1::DataType* inputType, int nbInputs) const noexcept override;
+        int index, nvinfer1::DataType const* inputType, int nbInputs) const noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
-        int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept override;
+        int outputIndex, DimsExprs const* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out,
+        int pos, PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
+    void configurePlugin(DynamicPluginTensorDesc const* in, int nbInputs, DynamicPluginTensorDesc const* out,
         int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs,
+    size_t getWorkspaceSize(PluginTensorDesc const* inputs, int nbInputs, PluginTensorDesc const* outputs,
         int nbOutputs) const noexcept override;
-    int enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc, const void* const* inputs,
+    int enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
 protected:
@@ -79,13 +79,13 @@ public:
     EfficientNMSPluginCreator();
     ~EfficientNMSPluginCreator() override = default;
 
-    const char* getPluginName() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
-    const PluginFieldCollection* getFieldNames() noexcept override;
+    char const* getPluginName() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2DynamicExt* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
+    IPluginV2DynamicExt* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
     IPluginV2DynamicExt* deserializePlugin(
-        const char* name, const void* serialData, size_t serialLength) noexcept override;
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
 
 protected:
     PluginFieldCollection mFC;
@@ -101,13 +101,13 @@ public:
     EfficientNMSONNXPluginCreator();
     ~EfficientNMSONNXPluginCreator() override = default;
 
-    const char* getPluginName() const noexcept override;
-    const char* getPluginVersion() const noexcept override;
-    const PluginFieldCollection* getFieldNames() noexcept override;
+    char const* getPluginName() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2DynamicExt* createPlugin(const char* name, const PluginFieldCollection* fc) noexcept override;
+    IPluginV2DynamicExt* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
     IPluginV2DynamicExt* deserializePlugin(
-        const char* name, const void* serialData, size_t serialLength) noexcept override;
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
 
 protected:
     PluginFieldCollection mFC;

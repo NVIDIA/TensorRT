@@ -88,22 +88,22 @@ extern LogStream<ILogger::Severity::kINFO> gLogInfo;
 extern LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
 void reportValidationFailure(char const* msg, char const* file, int line);
-void reportAssertion(const char* msg, const char* file, int line);
-void logError(const char* msg, const char* file, const char* fn, int line);
+void reportAssertion(char const* msg, char const* file, int line);
+void logError(char const* msg, char const* file, char const* fn, int line);
 
 [[noreturn]] void throwCudaError(
-    const char* file, const char* function, int line, int status, const char* msg = nullptr);
+    char const* file, char const* function, int line, int status, char const* msg = nullptr);
 [[noreturn]] void throwCudnnError(
-    const char* file, const char* function, int line, int status, const char* msg = nullptr);
+    char const* file, char const* function, int line, int status, char const* msg = nullptr);
 [[noreturn]] void throwCublasError(
-    const char* file, const char* function, int line, int status, const char* msg = nullptr);
+    char const* file, char const* function, int line, int status, char const* msg = nullptr);
 [[noreturn]] void throwPluginError(
     char const* file, char const* function, int line, int status, char const* msg = nullptr);
 
 class TRTException : public std::exception
 {
 public:
-    TRTException(const char* fl, const char* fn, int ln, int st, const char* msg, const char* nm)
+    TRTException(char const* fl, char const* fn, int ln, int st, char const* msg, char const* nm)
         : file(fl)
         , function(fn)
         , line(ln)
@@ -113,21 +113,24 @@ public:
     {
     }
     virtual void log(std::ostream& logStream) const;
-    void setMessage(const char* msg) { message = msg; }
+    void setMessage(char const* msg)
+    {
+        message = msg;
+    }
 
 protected:
-    const char* file{nullptr};
-    const char* function{nullptr};
+    char const* file{nullptr};
+    char const* function{nullptr};
     int line{0};
     int status{0};
-    const char* message{nullptr};
-    const char* name{nullptr};
+    char const* message{nullptr};
+    char const* name{nullptr};
 };
 
 class CudaError : public TRTException
 {
 public:
-    CudaError(const char* fl, const char* fn, int ln, int stat, const char* msg = nullptr)
+    CudaError(char const* fl, char const* fn, int ln, int stat, char const* msg = nullptr)
         : TRTException(fl, fn, ln, stat, msg, "Cuda")
     {
     }
@@ -136,7 +139,7 @@ public:
 class CudnnError : public TRTException
 {
 public:
-    CudnnError(const char* fl, const char* fn, int ln, int stat, const char* msg = nullptr)
+    CudnnError(char const* fl, char const* fn, int ln, int stat, char const* msg = nullptr)
         : TRTException(fl, fn, ln, stat, msg, "Cudnn")
     {
     }
@@ -145,7 +148,7 @@ public:
 class CublasError : public TRTException
 {
 public:
-    CublasError(const char* fl, const char* fn, int ln, int stat, const char* msg = nullptr)
+    CublasError(char const* fl, char const* fn, int ln, int stat, char const* msg = nullptr)
         : TRTException(fl, fn, ln, stat, msg, "cuBLAS")
     {
     }
@@ -160,7 +163,7 @@ public:
     }
 };
 
-inline void caughtError(const std::exception& e)
+inline void caughtError(std::exception const& e)
 {
     gLogError << e.what() << std::endl;
 }

@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
-#include <numeric>
-#include <stdexcept>
 #include "disentangledAttentionPlugin.h"
 #include "NvInferPlugin.h"
 #include <cuda_fp16.h>
-
+#include <numeric>
+#include <stdexcept>
 
 using namespace nvinfer1;
 using nvinfer1::plugin::DisentangledAttentionPlugin;
 using nvinfer1::plugin::DisentangledAttentionPluginCreator;
-
 
 // Static class fields initialization
 PluginFieldCollection DisentangledAttentionPluginCreator::mFC{};
@@ -106,7 +104,8 @@ nvinfer1::DimsExprs DisentangledAttentionPlugin::getOutputDimensions(
     return output;
 }
 
-void DisentangledAttentionPlugin::attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+void DisentangledAttentionPlugin::attachToContext(
+    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
 {
 }
 

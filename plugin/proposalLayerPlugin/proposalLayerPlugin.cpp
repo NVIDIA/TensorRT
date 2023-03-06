@@ -29,8 +29,8 @@ using nvinfer1::plugin::ProposalLayerPluginCreator;
 
 namespace
 {
-const char* PROPOSALLAYER_PLUGIN_VERSION{"1"};
-const char* PROPOSALLAYER_PLUGIN_NAME{"ProposalLayer_TRT"};
+char const* const kPROPOSALLAYER_PLUGIN_VERSION{"1"};
+char const* const kPROPOSALLAYER_PLUGIN_NAME{"ProposalLayer_TRT"};
 } // namespace
 
 PluginFieldCollection ProposalLayerPluginCreator::mFC{};
@@ -48,27 +48,27 @@ ProposalLayerPluginCreator::ProposalLayerPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* ProposalLayerPluginCreator::getPluginName() const noexcept
+char const* ProposalLayerPluginCreator::getPluginName() const noexcept
 {
-    return PROPOSALLAYER_PLUGIN_NAME;
+    return kPROPOSALLAYER_PLUGIN_NAME;
 }
 
-const char* ProposalLayerPluginCreator::getPluginVersion() const noexcept
+char const* ProposalLayerPluginCreator::getPluginVersion() const noexcept
 {
-    return PROPOSALLAYER_PLUGIN_VERSION;
+    return kPROPOSALLAYER_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* ProposalLayerPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* ProposalLayerPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
         auto imageSize = MaskRCNNConfig::IMAGE_SHAPE;
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
         plugin::validateRequiredAttributesExist({"prenms_topk", "keep_topk", "iou_threshold"}, fc);
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
@@ -91,7 +91,7 @@ IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const P
             if (!strcmp(attrName, "image_size"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                const auto* const dims = static_cast<int32_t const*>(fields[i].data);
+                auto const* const dims = static_cast<int32_t const*>(fields[i].data);
                 std::copy_n(dims, 3, imageSize.d);
             }
         }
@@ -104,7 +104,7 @@ IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(const char* name, const P
     return nullptr;
 }
 
-IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(const char* name, const void* data, size_t length) noexcept
+IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(char const* name, void const* data, size_t length) noexcept
 {
     try
     {
@@ -117,7 +117,7 @@ IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(const char* name, co
     return nullptr;
 }
 
-ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold, const nvinfer1::Dims& imageSize)
+ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold, nvinfer1::Dims const& imageSize)
     : mPreNMSTopK(prenms_topk)
     , mKeepTopK(keep_topk)
     , mIOUThreshold(iou_threshold)
@@ -181,14 +181,14 @@ bool ProposalLayer::supportsFormat(DataType type, PluginFormat format) const noe
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-const char* ProposalLayer::getPluginType() const noexcept
+char const* ProposalLayer::getPluginType() const noexcept
 {
-    return PROPOSALLAYER_PLUGIN_NAME;
+    return kPROPOSALLAYER_PLUGIN_NAME;
 }
 
-const char* ProposalLayer::getPluginVersion() const noexcept
+char const* ProposalLayer::getPluginVersion() const noexcept
 {
-    return PROPOSALLAYER_PLUGIN_VERSION;
+    return kPROPOSALLAYER_PLUGIN_VERSION;
 }
 
 IPluginV2Ext* ProposalLayer::clone() const noexcept
@@ -206,12 +206,12 @@ IPluginV2Ext* ProposalLayer::clone() const noexcept
     return nullptr;
 }
 
-void ProposalLayer::setPluginNamespace(const char* libNamespace) noexcept
+void ProposalLayer::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNameSpace = libNamespace;
 }
 
-const char* ProposalLayer::getPluginNamespace() const noexcept
+char const* ProposalLayer::getPluginNamespace() const noexcept
 {
     return mNameSpace.c_str();
 }
@@ -233,7 +233,7 @@ void ProposalLayer::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-ProposalLayer::ProposalLayer(const void* data, size_t length)
+ProposalLayer::ProposalLayer(void const* data, size_t length)
 {
     deserialize(static_cast<int8_t const*>(data), length);
 }
@@ -265,7 +265,7 @@ void ProposalLayer::deserialize(int8_t const* data, size_t length)
     generate_pyramid_anchors(mImageSize);
 }
 
-void ProposalLayer::check_valid_inputs(const nvinfer1::Dims* inputs, int nbInputDims)
+void ProposalLayer::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputDims)
 {
     // object_score[N, anchors, 2, 1],
     // foreground_delta[N, anchors, 4, 1],
@@ -284,7 +284,7 @@ size_t ProposalLayer::getWorkspaceSize(int batch_size) const noexcept
     return proposal.totalSize;
 }
 
-Dims ProposalLayer::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
+Dims ProposalLayer::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
 {
 
     check_valid_inputs(inputs, nbInputDims);
@@ -297,13 +297,13 @@ void ProposalLayer::generate_pyramid_anchors(nvinfer1::Dims const& imageDims)
 {
     PLUGIN_VALIDATE(imageDims.nbDims == 3 && imageDims.d[0] == 3);
 
-    const auto& scales = MaskRCNNConfig::RPN_ANCHOR_SCALES;
-    const auto& ratios = MaskRCNNConfig::RPN_ANCHOR_RATIOS;
-    const auto& strides = MaskRCNNConfig::BACKBONE_STRIDES;
+    auto const& scales = MaskRCNNConfig::RPN_ANCHOR_SCALES;
+    auto const& ratios = MaskRCNNConfig::RPN_ANCHOR_RATIOS;
+    auto const& strides = MaskRCNNConfig::BACKBONE_STRIDES;
     auto anchor_stride = MaskRCNNConfig::RPN_ANCHOR_STRIDE;
 
-    const float cy = imageDims.d[1] - 1;
-    const float cx = imageDims.d[2] - 1;
+    float const cy = imageDims.d[1] - 1;
+    float const cx = imageDims.d[2] - 1;
 
     auto& anchors = mAnchorBoxesHost;
     PLUGIN_VALIDATE(anchors.empty());
@@ -331,7 +331,7 @@ void ProposalLayer::generate_pyramid_anchors(nvinfer1::Dims const& imageDims)
 }
 
 int ProposalLayer::enqueue(
-    int batch_size, const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    int batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     void* proposals = outputs[0];
@@ -352,14 +352,15 @@ int ProposalLayer::enqueue(
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType ProposalLayer::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+DataType ProposalLayer::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool ProposalLayer::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
+bool ProposalLayer::isOutputBroadcastAcrossBatch(
+    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
@@ -371,9 +372,9 @@ bool ProposalLayer::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 }
 
 // Configure the layer with input and output data types.
-void ProposalLayer::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void ProposalLayer::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
     PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0]);

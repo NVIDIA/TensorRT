@@ -27,41 +27,41 @@ namespace TLTMaskRCNNConfig
 static const nvinfer1::Dims3 IMAGE_SHAPE{3, 832, 1344};
 
 // Pooled ROIs
-static const int POOL_SIZE = 7;
-static const int MASK_POOL_SIZE = 14;
+static int const POOL_SIZE = 7;
+static int const MASK_POOL_SIZE = 14;
 
 // Threshold to determine the mask area out of final convolution output
-static const float MASK_THRESHOLD = 0.5;
+static float const MASK_THRESHOLD = 0.5;
 
 // Bounding box refinement standard deviation for RPN and final detections.
-static const float DETECTION_REG_WEIGHTS[] = {10, 10, 5, 5};
+static float const DETECTION_REG_WEIGHTS[] = {10, 10, 5, 5};
 
 // Max number of final detections
-static const int DETECTION_MAX_INSTANCES = 100;
+static int const DETECTION_MAX_INSTANCES = 100;
 
 // Minimum probability value to accept a detected instance
 // ROIs below this threshold are skipped
-static const float DETECTION_MIN_CONFIDENCE = 0;
+static float const DETECTION_MIN_CONFIDENCE = 0;
 
 // Non-maximum suppression threshold for detection
-static const float DETECTION_NMS_THRESHOLD = 0.5;
+static float const DETECTION_NMS_THRESHOLD = 0.5;
 
 // Size of the fully-connected layers in the classification graph
-static const int FPN_CLASSIF_FC_LAYERS_SIZE = 1024;
+static int const FPN_CLASSIF_FC_LAYERS_SIZE = 1024;
 
 // Size of the top-down layers used to build the feature pyramid
-static const int TOP_DOWN_PYRAMID_SIZE = 256;
+static int const TOP_DOWN_PYRAMID_SIZE = 256;
 
 // Number of classification classes (including background)
-static const int NUM_CLASSES = 1 + 90;
+static int const NUM_CLASSES = 1 + 90;
 
 // Min and max level of fpn feature pyramids:
 // p2, p3, p4, p5, p6.
-static const int MIN_LEVEL = 2;
-static const int MAX_LEVEL = 6;
+static int const MIN_LEVEL = 2;
+static int const MAX_LEVEL = 6;
 
 // Length of minimum square anchor side in pixels
-static const float RPN_ANCHOR_SCALE = 8;
+static float const RPN_ANCHOR_SCALE = 8;
 
 // Ratios of anchors at each cell (width,height)
 static const std::vector<std::pair<float, float>> ANCHOR_RATIOS
@@ -70,17 +70,17 @@ static const std::vector<std::pair<float, float>> ANCHOR_RATIOS
 // Anchor stride
 // If 1 then anchors are created for each cell in the backbone feature map.
 // If 2, then anchors are created for every other cell, and so on.
-static const int RPN_ANCHOR_STRIDE = 1;
+static int const RPN_ANCHOR_STRIDE = 1;
 
 //  TRT fails if this number larger than kMAX_TOPK_K defined in engine/checkMacros.h
-static const int MAX_PRE_NMS_RESULTS = 1000; // 3840;
+static int const MAX_PRE_NMS_RESULTS = 1000; // 3840;
 
 // Non-max suppression threshold to filter RPN proposals.
 // You can increase this during training to generate more propsals.
-static const float RPN_NMS_THRESHOLD = 0.7F;
+static float const RPN_NMS_THRESHOLD = 0.7F;
 
 // ROIs kept after non-maximum suppression (training and inference)
-static const int POST_NMS_ROIS_INFERENCE = 1000;
+static int const POST_NMS_ROIS_INFERENCE = 1000;
 
 // COCO Class names
 static const std::vector<std::string> CLASS_NAMES = {

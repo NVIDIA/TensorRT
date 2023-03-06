@@ -53,7 +53,7 @@ LogStream<ILogger::Severity::kINFO> gLogInfo;
 LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
 // break-pointable
-void throwCudaError(const char* file, const char* function, int line, int status, const char* msg)
+void throwCudaError(char const* file, char const* function, int line, int status, char const* msg)
 {
     CudaError error(file, function, line, status, msg);
     error.log(gLogError);
@@ -62,7 +62,7 @@ void throwCudaError(const char* file, const char* function, int line, int status
 }
 
 // break-pointable
-void throwCublasError(const char* file, const char* function, int line, int status, const char* msg)
+void throwCublasError(char const* file, char const* function, int line, int status, char const* msg)
 {
     if (msg == nullptr)
     {
@@ -88,7 +88,7 @@ void throwCublasError(const char* file, const char* function, int line, int stat
 }
 
 // break-pointable
-void throwCudnnError(const char* file, const char* function, int line, int status, const char* msg)
+void throwCudnnError(char const* file, char const* function, int line, int status, char const* msg)
 {
     CudnnError error(file, function, line, status, msg);
     error.log(gLogError);
@@ -105,7 +105,7 @@ void throwPluginError(char const* file, char const* function, int line, int stat
     throw error;
 }
 
-void logError(const char* msg, const char* file, const char* fn, int line)
+void logError(char const* msg, char const* file, char const* fn, int line)
 {
     gLogError << "Parameter check failed at: " << file << "::" << fn << "::" << line;
     gLogError << ", condition: " << msg << std::endl;
@@ -127,7 +127,7 @@ void reportValidationFailure(char const* msg, char const* file, int line)
 }
 
 // break-pointable
-void reportAssertion(const char* msg, const char* file, int line)
+void reportAssertion(char const* msg, char const* file, int line)
 {
     std::ostringstream stream;
     stream << "Assertion failed: " << msg << "\n"
