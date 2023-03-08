@@ -352,13 +352,13 @@ const char* const matmulTileName[] = {
 
 struct AlgoProps
 {
-    int algoId;
-    int tile;
-    int swizzle;
-    int customOption;
-    int numSplitsK;
-    int reductionScheme;
-    int mathMode;
+    int32_t algoId;
+    int32_t tile;
+    int32_t swizzle;
+    int32_t customOption;
+    int32_t numSplitsK;
+    int32_t reductionScheme;
+    uint64_t numericImpl;
 
     void populate(const cublasLtMatmulAlgo_t& algo)
     {
@@ -376,7 +376,7 @@ struct AlgoProps
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
             matmulAlgo, CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION, &customOption, sizeof(customOption), nullptr));
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CAP_MATHMODE_IMPL, &mathMode, sizeof(mathMode), nullptr));
+            matmulAlgo, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS, &numericImpl, sizeof(numericImpl), nullptr));
     }
 };
 

@@ -58,7 +58,11 @@ static void printPerfStructure(const customMatmulPerf_t& perf, int const& m, int
     double timeAvg = perf.time * 1e-3; // Convert to seconds. It has been divided by kernelRepeats in customMatmulRun().
     double gflop = (2 * static_cast<unsigned long long int>(m * n) * k) * 1e-9; // Real
 
-    gLogVerbose << "Algo=" << p.algoId << " Tile=" << p.tile << " (" << matmulTileName[p.tile] << ") K=" << p.numSplitsK << " Red.Sch.=" << p.reductionScheme << " Swiz=" << p.swizzle << " Cust=" << p.customOption << " Stat=" << perf.status << " Time=" << perf.time << " WSbytes=" << perf.workspaceSize << " math=" << p.mathMode << " waves=" << perf.wavesCount << "GFlops=" << (gflop / timeAvg) << std::endl;
+    gLogVerbose << "Algo=" << p.algoId << " Tile=" << p.tile << " (" << matmulTileName[p.tile] << ") K=" << p.numSplitsK
+                << " Red.Sch.=" << p.reductionScheme << " Swiz=" << p.swizzle << " Cust=" << p.customOption
+                << " Stat=" << perf.status << " Time=" << perf.time << " WSbytes=" << perf.workspaceSize
+                << " math=" << p.numericImpl << " waves=" << perf.wavesCount << "GFlops=" << (gflop / timeAvg)
+                << std::endl;
 }
 
 static inline bool time_compare(const customMatmulPerf_t& perf_a, const customMatmulPerf_t& perf_b)
@@ -166,9 +170,10 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceSetAttribute(
         preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workSpaceSize, sizeof(workSpaceSize)));
 
-    const int mathMode = Ctype == CUDA_R_16F ? 1 : 0;
+    uint64_t const numericImplPrefer
+        = Ctype == CUDA_R_16F ? CUBLASLT_NUMERICAL_IMPL_FLAGS_HMMA : CUBLASLT_NUMERICAL_IMPL_FLAGS_FMA;
     PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceSetAttribute(
-        preference, CUBLASLT_MATMUL_PREF_MATH_MODE_MASK, &mathMode, sizeof(mathMode)));
+        preference, CUBLASLT_MATMUL_PREF_IMPL_MASK, &numericImplPrefer, sizeof(numericImplPrefer)));
     // Create operation descriptor; see cublasLtMatmulDescAttributes_t for details
     // about defaults; here we just need to set the transforms for A and B
 #if CUBLAS_VER_MAJOR < 11
@@ -213,13 +218,12 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
             continue;
         }
 
-        int mathMode = -1;
+        uint64_t numericImpl = -1;
         PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_MATHMODE_IMPL, &mathMode, sizeof(mathMode), nullptr));
-        // TODO is this the right way to check that it's SGEMM?
-        if (Ctype == CUDA_R_32F && mathMode == 1)
+            &algo, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS, &numericImpl, sizeof(numericImpl), nullptr));
+        if (Ctype == CUDA_R_32F && numericImpl == CUBLASLT_NUMERICAL_IMPL_FLAGS_HMMA)
         {
-            // if mathMode is 1, cublasLt chooses automatically to run in mixed precision for certain sizes
+            // skip HMMA-fp32accu kernels
             continue;
         }
 
@@ -524,19 +528,19 @@ void FCPluginDynamic::configurePlugin(
         AlgoProps p;
         p.populate(mAlgo);
 
-        if (mType == DataType::kFLOAT && p.mathMode == 1)
+        if (mType == DataType::kFLOAT && p.numericImpl == CUBLASLT_NUMERICAL_IMPL_FLAGS_HMMA)
         {
             gLogWarning << "cuBLAS might use mixed precision instead of FP32" << std::endl;
         }
 
-        if (mType == DataType::kHALF && p.mathMode == 0)
+        if (mType == DataType::kHALF && p.numericImpl != CUBLASLT_NUMERICAL_IMPL_FLAGS_HMMA)
         {
             gLogWarning << "TensorCore support was not selected" << std::endl;
         }
 
         gLogVerbose << "FCPluginDynamic configuration Algo=" << p.algoId << " Tile=" << p.tile << " ("
                     << matmulTileName[p.tile] << ") K=" << p.numSplitsK << " Red.Sch.=" << p.reductionScheme
-                    << " Swiz=" << p.swizzle << " Cust=" << p.customOption << " mathMode=" << p.mathMode
+                    << " Swiz=" << p.swizzle << " Cust=" << p.customOption << " numericImpl=" << p.numericImpl
                     << " ws=" << actualWorkspace << std::endl;
     }
     catch (const std::exception& e)
