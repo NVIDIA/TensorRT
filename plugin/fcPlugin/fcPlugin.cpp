@@ -30,16 +30,19 @@
 #include <cuda_runtime.h>
 #include <vector>
 
-using namespace nvinfer1;
-using namespace nvinfer1::plugin;
-using namespace nvinfer1::plugin::bert;
-
 // plugin specific constants
 namespace
 {
 const char* FC_VERSION{"1"};
 const char* FC_NAME{"CustomFCPluginDynamic"};
 } // namespace
+
+namespace nvinfer1
+{
+namespace plugin
+{
+namespace bert
+{
 
 // Static class fields initialization
 PluginFieldCollection FCPluginDynamicCreator::mFC{};
@@ -816,5 +819,8 @@ const char* FCPluginDynamicCreator::getPluginNamespace() const noexcept
     return mNamespace.c_str();
 }
 
+} // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 
 #endif // #if CUDA_VERSION >= 10010
