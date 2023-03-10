@@ -9,6 +9,7 @@ TensorRT OSS release corresponding to TensorRT 8.6.0.12 EA release.
 Key Features and Updates:
 
 - demoDiffusion acceleration is now supported out of the box in TensorRT without requiring plugins.
+  - The following plugins have been removed accordingly: GroupNorm, LayerNorm, MultiHeadCrossAttention, MultiHeadFlashAttention, SeqLen2Spatial, and SplitGeLU.
 - Added a new sample called onnx_custom_plugin.
 
 ## [8.5.3 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3) - 2023-01-30
