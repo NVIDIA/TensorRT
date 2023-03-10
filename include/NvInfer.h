@@ -9009,7 +9009,9 @@ enum class PreviewFeature : int32_t
     //!
     //! The default value for this flag is on.
     //!
-    kFASTER_DYNAMIC_SHAPES_0805 = 0,
+    //! \deprecated Turning it off is deprecated in TensorRT 8.6. The flag kFASTER_DYNAMIC_SHAPES_0805 will be removed in 9.0.
+    //!
+    kFASTER_DYNAMIC_SHAPES_0805 TRT_DEPRECATED_ENUM = 0,
 
     //!
     //! Disable usage of cuDNN/cuBLAS/cuBLASLt tactics in the TensorRT core library.

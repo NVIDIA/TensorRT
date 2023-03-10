@@ -25,14 +25,14 @@ You can skip the **Build** section to enjoy TensorRT with Python.
 ## Prerequisites
 To build the TensorRT-OSS components, you will first need the following software packages.
 
-**TensorRT GA build**
-* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.5.3.1
+**TensorRT EA build**
+* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.6.0.12
 
 **System Packages**
 * [CUDA](https://developer.nvidia.com/cuda-toolkit)
   * Recommended versions:
-  * cuda-11.8.0 + cuDNN-8.6
-  * cuda-10.2 + cuDNN-8.4
+  * cuda-12.0.1 + cuDNN-8.8
+  * cuda-11.8.0 + cuDNN-8.8
 * [GNU make](https://ftp.gnu.org/gnu/make/) >= v4.1
 * [cmake](https://github.com/Kitware/CMake/releases) >= v3.13
 * [python](<https://www.python.org/downloads/>) >= v3.6.9, <= v3.10.x
@@ -70,18 +70,18 @@ To build the TensorRT-OSS components, you will first need the following software
 	git submodule update --init --recursive
 	```
 
-2. #### (Optional - if not using TensorRT container) Specify the TensorRT GA release build path
+2. #### (Optional - if not using TensorRT container) Specify the TensorRT EA release build path
 
     If using the TensorRT OSS build container, TensorRT libraries are preinstalled under `/usr/lib/x86_64-linux-gnu` and you may skip this step.
 
-    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com/nvidia-tensorrt-download).
+    Else download and extract the TensorRT EA build from [NVIDIA Developer Zone](https://developer.nvidia.com/nvidia-tensorrt-download).
 
-    **Example: Ubuntu 20.04 on x86-64 with cuda-11.8.0**
+    **Example: Ubuntu 20.04 on x86-64 with cuda-12.0**
 
     ```bash
     cd ~/Downloads
-    tar -xvzf TensorRT-8.5.3.1.Linux.x86_64-gnu.cuda-11.8.cudnn8.6.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-8.5.3.1
+    tar -xvzf TensorRT-8.6.0.12.Linux.x86_64-gnu.cuda-12.0.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-8.6.0.12
     ```
 
 
@@ -99,13 +99,13 @@ For Linux platforms, we recommend that you generate a docker container for build
 1. #### Generate the TensorRT-OSS build container.
     The TensorRT-OSS build container can be generated using the supplied Dockerfiles and build scripts. The build containers are configured for building TensorRT OSS out-of-the-box.
 
-    **Example: Ubuntu 20.04 on x86-64 with cuda-11.8.0 (default)**
+    **Example: Ubuntu 20.04 on x86-64 with cuda-12.0 (default)**
     ```bash
-    ./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda11.8
+    ./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda12.0
     ```
-    **Example: CentOS/RedHat 7 on x86-64 with cuda-10.2**
+    **Example: CentOS/RedHat 7 on x86-64 with cuda-12.0**
     ```bash
-    ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos7-cuda10.2 --cuda 10.2
+    ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos7-cuda12.0 --cuda 12.0
     ```
     **Example: Ubuntu 20.04 cross-compile for Jetson (aarch64) with cuda-11.4.2 (JetPack SDK)**
     ```bash
@@ -119,7 +119,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 2. #### Launch the TensorRT-OSS build container.
     **Example: Ubuntu 20.04 build container**
 	```bash
-	./docker/launch.sh --tag tensorrt-ubuntu20.04-cuda11.8 --gpus all
+	./docker/launch.sh --tag tensorrt-ubuntu20.04-cuda12.0 --gpus all
 	```
 	> NOTE:
   <br> 1. Use the `--tag` corresponding to build container generated in Step 1.
@@ -130,7 +130,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 ## Building TensorRT-OSS
 * Generate Makefiles and build.
 
-    **Example: Linux (x86-64) build with default cuda-11.8.0**
+    **Example: Linux (x86-64) build with default cuda-12.0**
 	```bash
 	cd $TRT_OSSPATH
 	mkdir -p build && cd build
@@ -146,7 +146,7 @@ For Linux platforms, we recommend that you generate a docker container for build
     export PATH="/opt/rh/devtoolset-8/root/bin:${PATH}
     ```
 
-    **Example: Linux (aarch64) build with default cuda-11.8.0**
+    **Example: Linux (aarch64) build with default cuda-12.0**
 	```bash
 	cd $TRT_OSSPATH
 	mkdir -p build && cd build
@@ -209,4 +209,4 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 ## Known Issues
 
-* Please refer to [TensorRT 8.5 Release Notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8)
+* Please refer to [TensorRT 8.6 Release Notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8)

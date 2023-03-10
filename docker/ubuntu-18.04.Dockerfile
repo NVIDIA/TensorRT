@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=11.8.0
+ARG CUDA_VERSION=12.0.1
 ARG OS_VERSION=18.04
 
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 8.5.3.1
+ENV TRT_VERSION 8.6.0.12
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -78,7 +78,7 @@ else \
     sudo apt-get install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
         libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
         python3-libnvinfer=${v}; \
-fi 
+fi
 
 # Install PyPI packages
 RUN pip3 install --upgrade pip
