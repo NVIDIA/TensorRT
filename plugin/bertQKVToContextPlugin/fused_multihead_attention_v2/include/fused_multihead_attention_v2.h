@@ -17,8 +17,8 @@
 
 #ifndef _BERT_FMHAV2_FMHAV2
 #define _BERT_FMHAV2_FMHAV2
-#include "bertQKVToContextPlugin/fused_multihead_attention/fused_multihead_attention.h"
-#include "bertQKVToContextPlugin/fused_multihead_attention/fused_multihead_attention_common.h"
+#include "bertQKVToContextPlugin/fused_multihead_attention/include/fused_multihead_attention.h"
+#include "bertQKVToContextPlugin/fused_multihead_attention/include/fused_multihead_attention_common.h"
 #include "common/bertCommon.h"
 #include <cstdint>
 

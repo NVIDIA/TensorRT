@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,6 @@ set(ENABLED_SMS "-DENABLE_SM72 -DENABLE_SM75 -DENABLE_SM80 -DENABLE_SM86 -DENABL
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ENABLED_SMS}")
 set(PLUGIN_SOURCES)
 set(PLUGIN_CU_SOURCES)
-
 
 set(PLUGIN_LISTS
     batchTilePlugin
@@ -124,7 +123,7 @@ if (STABLE_DIFFUSION_CU_SOURCES)
     list(APPEND PLUGIN_SOURCES "${STABLE_DIFFUSION_CU_SOURCES}")
 endif()
 
-list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/inferPlugin.cpp")
+list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/api/inferPlugin.cpp")
 list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../samples/common/logger.cpp")
 
 ################################## SHARED LIBRARY #######################################
