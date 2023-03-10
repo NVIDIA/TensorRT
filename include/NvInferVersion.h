@@ -21,7 +21,7 @@
 #define NV_TENSORRT_MAJOR 8 //!< TensorRT major version.
 #define NV_TENSORRT_MINOR 6 //!< TensorRT minor version.
 #define NV_TENSORRT_PATCH 0 //!< TensorRT patch version.
-#define NV_TENSORRT_BUILD 9 //!< TensorRT build number.
+#define NV_TENSORRT_BUILD 12 //!< TensorRT build number.
 
 #define NV_TENSORRT_LWS_MAJOR 0 //!< TensorRT LWS major version.
 #define NV_TENSORRT_LWS_MINOR 0 //!< TensorRT LWS minor version.

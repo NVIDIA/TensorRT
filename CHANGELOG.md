@@ -1,5 +1,16 @@
 # TensorRT OSS Release Changelog
 
+## [8.6.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2023-03-10
+
+TensorRT OSS release corresponding to TensorRT 8.6.0.12 EA release.
+- Updates since [TensorRT 8.5.3 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3).
+- Please refer to the [TensorRT 8.6.0.12 EA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) for more information.
+
+Key Features and Updates:
+
+- demoDiffusion acceleration is now supported out of the box in TensorRT without requiring plugins.
+- Added a new sample called onnx_custom_plugin.
+
 ## [8.5.3 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3) - 2023-01-30
 
 TensorRT OSS release corresponding to TensorRT 8.5.3.1 GA release.
@@ -416,7 +427,7 @@ Identical to the TensorRT-OSS [8.0.1](https://github.com/NVIDIA/TensorRT/release
 
 ## [8.0.1](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2021-07-02
 ### Added
-- Added support for the following ONNX operators: `Celu`, `CumSum`, `EyeLike`, `GatherElements`, `GlobalLpPool`, `GreaterOrEqual`, `LessOrEqual`, `LpNormalization`, `LpPool`, `ReverseSequence`, and `SoftmaxCrossEntropyLoss` [details](). 
+- Added support for the following ONNX operators: `Celu`, `CumSum`, `EyeLike`, `GatherElements`, `GlobalLpPool`, `GreaterOrEqual`, `LessOrEqual`, `LpNormalization`, `LpPool`, `ReverseSequence`, and `SoftmaxCrossEntropyLoss` [details]().
 - Rehauled `Resize` ONNX operator, now fully supporting the following modes:
   - Coordinate Transformation modes: `half_pixel`, `pytorch_half_pixel`, `tf_half_pixel_for_nn`, `asymmetric`, and `align_corners`.
   - Modes: `nearest`, `linear`.
