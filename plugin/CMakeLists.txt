@@ -85,22 +85,6 @@ if(BERT_GENCODES)
     include_directories(bertQKVToContextPlugin/fused_multihead_attention/include bertQKVToContextPlugin/fused_multihead_attention_v2/include)
 endif()
 
-# Add Stable Diffusion sources if ${STABLE_DIFFUSION_GENCODES} was populated
-if(STABLE_DIFFUSION_GENCODES)
-    set(STABLE_DIFFUSION_CU_SOURCES)
-    set(PLUGIN_LISTS
-        ${PLUGIN_LISTS}
-        groupNormPlugin
-        layerNormPlugin
-        seqLen2SpatialPlugin
-        splitGeLUPlugin
-        multiHeadFlashAttentionPlugin
-        multiHeadCrossAttentionPlugin
-        )
-    include_directories(multiHeadFlashAttentionPlugin/fmha_flash_attention/include/)
-    include_directories(multiHeadCrossAttentionPlugin/fmha_cross_attention/include/)
-endif()
-
 include_directories(common common/kernels ${CMAKE_SOURCE_DIR}/third_party)
 
 foreach(PLUGIN_ITER ${PLUGIN_LISTS})
@@ -117,10 +101,6 @@ list(APPEND PLUGIN_SOURCES "${PLUGIN_CU_SOURCES}")
 if (BERT_CU_SOURCES)
     set_source_files_properties(${BERT_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${BERT_GENCODES} ${ENABLED_SMS}")
     list(APPEND PLUGIN_SOURCES "${BERT_CU_SOURCES}")
-endif()
-if (STABLE_DIFFUSION_CU_SOURCES)
-    set_source_files_properties(${STABLE_DIFFUSION_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${STABLE_DIFFUSION_GENCODES} ${ENABLED_SMS}")
-    list(APPEND PLUGIN_SOURCES "${STABLE_DIFFUSION_CU_SOURCES}")
 endif()
 
 list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/api/inferPlugin.cpp")
