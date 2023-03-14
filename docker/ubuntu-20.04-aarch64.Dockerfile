@@ -67,7 +67,7 @@ RUN apt-get install -y --no-install-recommends \
     ln -s /usr/bin/pip3 pip;
 
 # Install TensorRT. This will also pull in CUDNN
-RUN v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION%.*}" &&\
+RUN v="${TRT_VERSION}-1+cuda${CUDA_VERSION%.*}" &&\
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/sbsa/3bf863cc.pub &&\
     apt-get update &&\
     sudo apt-get -y install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \

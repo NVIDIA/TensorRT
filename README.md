@@ -45,7 +45,7 @@ To build the TensorRT-OSS components, you will first need the following software
   * [Docker](https://docs.docker.com/install/) >= 19.03
   * [NVIDIA Container Toolkit](https://github.com/NVIDIA/nvidia-docker)
 * Toolchains and SDKs
-  * (Cross compilation for Jetson platform) [NVIDIA JetPack](https://developer.nvidia.com/embedded/jetpack) >= 5.0 (current support only for TensorRT 8.4.0)
+  * (Cross compilation for Jetson platform) [NVIDIA JetPack](https://developer.nvidia.com/embedded/jetpack) >= 5.0 (current support only for TensorRT 8.4.0 and TensorRT 8.5.2)
   * (Cross compilation for QNX platform) [QNX Toolchain](https://blackberry.qnx.com/en)
 * PyPI packages (for demo applications/tests)
   * [onnx](https://pypi.org/project/onnx/) 1.9.0
@@ -65,7 +65,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
 1. #### Download TensorRT OSS
 	```bash
-	git clone -b master https://github.com/nvidia/TensorRT TensorRT
+	git clone -b main https://github.com/nvidia/TensorRT TensorRT
 	cd TensorRT
 	git submodule update --init --recursive
 	```
@@ -103,9 +103,9 @@ For Linux platforms, we recommend that you generate a docker container for build
     ```bash
     ./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda12.0
     ```
-    **Example: CentOS/RedHat 7 on x86-64 with cuda-12.0**
+    **Example: CentOS/RedHat 7 on x86-64 with cuda-11.8**
     ```bash
-    ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos7-cuda12.0 --cuda 12.0
+    ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos7-cuda11.8 --cuda 11.8.0
     ```
     **Example: Ubuntu 20.04 cross-compile for Jetson (aarch64) with cuda-11.4.2 (JetPack SDK)**
     ```bash
@@ -171,7 +171,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 
     make -j$(nproc)
     ```
-    > NOTE: The latest JetPack SDK v5.0 only supports TensorRT 8.4.0.
+    > NOTE: The latest JetPack SDK v5.1 only supports TensorRT 8.5.2.
 
 	> NOTE:
 	<br> 1. The default CUDA version used by CMake is 11.8.0. To override this, for example to 10.2, append `-DCUDA_VERSION=10.2` to the cmake command.
