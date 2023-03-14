@@ -56,7 +56,7 @@ RUN if [ "${CUDA_VERSION}" = "10.2" ] ; then \
         libnvinfer-devel-${v} libnvparsers-devel-${v} libnvonnxparsers-devel-${v} libnvinfer-plugin-devel-${v} \
         python3-libnvinfer-${v}; \
 else \
-    v="${TRT_VERSION%.*}-1.cuda${CUDA_VERSION%.*}" &&\
+    v="${TRT_VERSION}-1.cuda${CUDA_VERSION%.*}" &&\
     yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo &&\
     yum -y install libnvinfer8-${v} libnvparsers8-${v} libnvonnxparsers8-${v} libnvinfer-plugin8-${v} \
         libnvinfer-devel-${v} libnvparsers-devel-${v} libnvonnxparsers-devel-${v} libnvinfer-plugin-devel-${v} \
@@ -72,8 +72,6 @@ RUN yum -y install devtoolset-8
 RUN pip3 install --upgrade pip
 RUN pip3 install setuptools>=41.0.0
 RUN pip3 install numpy
-COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install -r /tmp/requirements.txt
 RUN pip3 install jupyter jupyterlab
 
 # Install Cmake
