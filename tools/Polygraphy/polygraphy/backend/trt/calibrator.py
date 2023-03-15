@@ -78,7 +78,7 @@ def Calibrator(
 
         def __init__(self):
             # Must explicitly initialize parent for any trampoline class! Will mysteriously segfault without this.
-            BaseClass.__init__(self)
+            BaseClass.__init__(self)  # type: ignore
 
             self.data_loader = data_loader
             self._cache = cache
@@ -115,7 +115,7 @@ def Calibrator(
                 with contextlib.suppress(AttributeError):
                     self.data_loader.input_metadata = input_metadata
 
-        def reset(self, input_metadata=None):
+        def reset(self):
             """
             Reset this calibrator for reuse.
 
@@ -130,10 +130,6 @@ def Calibrator(
 
             # Make sure calibrator will check the cache again when reset.
             self.cache_contents = None
-
-            if input_metadata is not None:
-                mod.warn_deprecated("input_metadata parameter", "set_input_metadata", remove_in="0.45.0")
-                self.set_input_metadata(input_metadata)
 
         def get_batch_size(self):
             return self.batch_size

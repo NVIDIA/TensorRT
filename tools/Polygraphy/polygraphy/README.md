@@ -233,3 +233,14 @@ make docs
 
 The HTML documentation will be generated under `build/docs`
 To view the docs, open `build/docs/index.html` in a browser or HTML viewer.
+
+## Deprecation Policy
+
+When removing or modifying public APIs in breaking ways, Polygraphy follows the following procedure:
+
+1. The API is marked to be removed in some future version of Polygraphy (let's call it version `N`).
+
+2. The API continues to work as normal until *at least* version `N`, but will issue deprecation warnings when used.
+    These warnings typically suggest which new APIs should be used instead.
+
+3. The API may be removed in any Polygraphy version >= `N`.

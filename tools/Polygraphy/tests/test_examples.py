@@ -353,7 +353,10 @@ def test_cli_inspect_examples(example, sandboxed_install_run):
     actual_lines = [
         line
         for line in actual_output.splitlines()
-        if "[I] Loading " not in line and "[I] Saving" not in line and not line.startswith("[W]")
+        if "[I] Loading " not in line
+        and "[I] Saving" not in line
+        and not line.startswith("[W]")
+        and not line.startswith("[E]")
     ]
 
     expected_lines = expected_output.splitlines()

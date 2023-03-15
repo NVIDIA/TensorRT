@@ -230,13 +230,6 @@ class TrtConfigArgs(BaseArgs):
         )
 
         self.group.add_argument(
-            "--timing-cache",
-            help="[DEPRECATED - use --load-timing-cache/--save-timing-cache] Path to load/save tactic timing cache. "
-            "Used to cache tactic timing information to speed up the engine building process. "
-            "Existing caches will be appended to with any new timing information gathered. ",
-            default=None,
-        )
-        self.group.add_argument(
             "--load-timing-cache",
             help="Path to load tactic timing cache. "
             "Used to cache tactic timing information to speed up the engine building process. "
@@ -447,7 +440,7 @@ class TrtConfigArgs(BaseArgs):
             mod.warn_deprecated(
                 "--strict-types",
                 use_instead=f"--precision-constraints=obey",
-                remove_in="0.45.0",
+                remove_in="0.48.0",
                 always_show_warning=True,
             )
 
@@ -466,17 +459,6 @@ class TrtConfigArgs(BaseArgs):
         self.sparse_weights = args_util.get(args, "sparse_weights")
 
         self.load_timing_cache = args_util.get(args, "load_timing_cache")
-
-        self._timing_cache = args_util.get(args, "timing_cache")
-        if self._timing_cache:
-            mod.warn_deprecated(
-                "--timing-cache",
-                use_instead="--load-timing-cache/--save-timing-cache",
-                remove_in="0.45.0",
-                always_show_warning=True,
-            )
-            if os.path.exists(self._timing_cache):
-                self.load_timing_cache = self._timing_cache
 
         self.load_tactics = args_util.get(args, "load_tactics")
         self.save_tactics = args_util.get(args, "save_tactics")
@@ -511,7 +493,7 @@ class TrtConfigArgs(BaseArgs):
             mod.warn_deprecated(
                 "--workspace",
                 use_instead=f"--pool-limit workspace:{args_util.get(args, 'workspace')}",
-                remove_in="0.45.0",
+                remove_in="0.48.0",
                 always_show_warning=True,
             )
 

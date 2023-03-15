@@ -56,7 +56,7 @@ class OnnxrtRunner(BaseRunner):
             "tensor(uint64)": np.uint64,
             "tensor(uint8)": np.uint8,
             "tensor(bool)": bool,
-            "tensor(string)": np.unicode,
+            "tensor(string)": np.unicode_,
         }
 
         meta = TensorMetadata()

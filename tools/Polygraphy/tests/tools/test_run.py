@@ -134,9 +134,6 @@ class TestTrt:
     def test_dynamic_input_shape(self, poly_run):
         poly_run([ONNX_MODELS["dynamic_identity"].path, "--trt", "--onnxrt", "--input-shapes", "X:[1,2,-1,4]"])
 
-    def test_dynamic_input_shape(self, poly_run):
-        poly_run([ONNX_MODELS["dynamic_identity"].path, "--trt", "--onnxrt", "--input-shapes", "X,1x2x-1x4"])
-
     def test_explicit_profile(self, poly_run):
         poly_run(
             [

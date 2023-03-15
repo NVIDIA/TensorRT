@@ -85,10 +85,10 @@ It is recommended that you read these files in the following order:
     Install the wheel:
 
     <!-- Polygraphy Test
-        *NOTE: For tests, 'protobuf==3.19.4 onnx==1.10.0' is required to work around compatibility*
-            *breakages in more recent versions of protobuf*
+        *NOTE: For tests, this is required to work around compatibility*
+            *breakages in more recent versions of these packages*
         ```bash
-        python3 -m pip install protobuf==3.19.4 onnx==1.10.0
+        python3 -m pip install protobuf==3.19.4 onnx==1.10.0 numpy<=1.23.0
         ```
      Polygraphy Test -->
 

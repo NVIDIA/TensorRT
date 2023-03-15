@@ -59,7 +59,6 @@ Were you able to find the failing tactic?
     Go To: [Is Layerwise An Option?](#is-layerwise-an-option)
 
 
-
 ## Is Layerwise An Option?
 
 If the accuracy issue is consistently reproducible, the best next step is to figure out which

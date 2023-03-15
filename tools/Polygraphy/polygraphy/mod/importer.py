@@ -30,8 +30,7 @@ from polygraphy.mod import util as mod_util
 _all_external_lazy_imports = set()
 
 # Sometimes the Python package name differs from the module name.
-_PKG_NAME_FROM_MODULE = {
-}
+_PKG_NAME_FROM_MODULE = {}
 
 # Some packages need additional flags to install correctly.
 _EXTRA_FLAGS_FOR_MODULE = {
@@ -62,7 +61,6 @@ def _version_ok(ver, preferred):
 def lazy_import(
     name: str,
     log: bool = None,
-    version: str = None,
     pkg_name: str = None,
     install_flags: List[str] = None,
     requires: List[str] = None,
@@ -81,11 +79,6 @@ def lazy_import(
         log (bool):
                 Whether to log information about the module.
                 Defaults to True.
-        version (str):
-                [DEPRECATED - use `name` instead]
-                The preferred version of the package, formatted as a version string.
-                For example, ``'>=0.5.0'`` or ``'==1.8.0'``. Use ``LATEST_VERSION`` to
-                indicate that the latest version of the package is preferred.
         pkg_name (str):
                 The name of the package that provides this module, if it is different from the module name.
                 Used only if automatic installation of dependencies is enabled.
@@ -103,17 +96,6 @@ def lazy_import(
                 the module will be imported.
     """
     VERSION_CHARS = ["=", ">", "<"]
-    assert (
-        version is None or version == LATEST_VERSION or any(version.startswith(char) for char in VERSION_CHARS)
-    ), "version must be formatted as a version string!"
-
-    if version is not None:
-        warnings.warn(
-            "The version parameter in lazy_import is deprecated and will be removed in v0.45.0.\n"
-            "The version can instead be specified as part of the package name.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
 
     log = True if log is None else log
     requires = [] if requires is None else requires
@@ -126,7 +108,7 @@ def lazy_import(
         min_index = min(version_char_indices)
         return inp[:min_index], inp[min_index:]
 
-    name, version = split_name_version(name) if version is None else (name, version)
+    name, version = split_name_version(name)
     all_required_mods = list(map(split_name_version, requires)) + [(name, version)]
 
     if "polygraphy" not in name:

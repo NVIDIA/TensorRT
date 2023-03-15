@@ -302,7 +302,6 @@ class SetLayerPrecisions(PostprocessNetwork):
                 layer.precision = layer_precisions[layer.name]
         return network
 
-
     def __init__(self, network, layer_precisions):
         """
         Sets layer precisions in a TensorRT ``INetworkDefinition``.
@@ -377,8 +376,6 @@ class SetTensorFormats(PostprocessNetwork):
                 mask |= 1 << int(format)
             tensor_map[name].allowed_formats = mask
         return network
-
-
 
     def __init__(self, network, tensor_formats):
         """

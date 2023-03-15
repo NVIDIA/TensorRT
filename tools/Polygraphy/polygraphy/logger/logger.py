@@ -273,14 +273,14 @@ class Logger:
     @property
     def severity(self):
         print(
-            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.45.0. Use `module_severity` instead"
+            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.48.0. Use `module_severity` instead"
         )
         return self._module_severity.get()
 
     @severity.setter
     def severity(self, value):
         print(
-            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.45.0. Use `module_severity` instead"
+            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.48.0. Use `module_severity` instead"
         )
         self.module_severity = value
 

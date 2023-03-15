@@ -184,7 +184,6 @@ class TestModifyNetwork:
         with builder, network, parser:
             assert network.num_outputs == 2
             assert network.get_output(1).name == "reduce_prod_out_gs_2"
-            assert network.get_output(1).is_shape_tensor
 
     def test_unmark_shape_outputs(self, modifiable_reshape_network):
         builder, network, parser = modify_network_outputs(

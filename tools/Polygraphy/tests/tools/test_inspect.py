@@ -21,7 +21,7 @@ from textwrap import dedent
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod, util
+from polygraphy import mod, util, constants
 from polygraphy.backend.trt import (
     CreateConfig,
     Profile,
@@ -593,7 +593,7 @@ ENGINE_CASES = [
                     {X [shape=(1, 2, -1, -1)]}
                      -> {Y [shape=(1, 2, -1, -1)]}
                     ---- Attributes ----
-                    Origin = IDENTITY
+                    Origin = CAST
                     Tactic = 0x0
 
             - Profile: 1
@@ -601,7 +601,7 @@ ENGINE_CASES = [
                     {X [profile 1] [shape=(1, 2, -1, -1)]}
                      -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
                     ---- Attributes ----
-                    Origin = IDENTITY
+                    Origin = CAST
                     Tactic = 0x0
         """
             if not trt_util._should_use_v3_api()
@@ -633,7 +633,7 @@ ENGINE_CASES = [
                     {X [shape=(1, 2, -1, -1)]}
                      -> {Y [shape=(1, 2, -1, -1)]}
                     ---- Attributes ----
-                    Origin = IDENTITY
+                    Origin = CAST
                     Tactic = 0x0
 
             - Profile: 1
@@ -641,7 +641,7 @@ ENGINE_CASES = [
                     {X [profile 1] [shape=(1, 2, -1, -1)]}
                      -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
                     ---- Attributes ----
-                    Origin = IDENTITY
+                    Origin = CAST
                     Tactic = 0x0
         """
         ),
@@ -706,7 +706,7 @@ class TestInspectModel:
         check_lines_match(
             actual,
             expected,
-            should_check_line=lambda exline: "Tactic =" not in exline and "Device Memory" not in exline,
+            should_check_line=lambda exline: "Tactic =" not in exline and "Device Memory" not in exline and "Origin" not in exline,
         )
 
     def test_tf_sanity(self, run_inspect_model):
@@ -727,6 +727,36 @@ class TestInspectData:
         with util.NamedTemporaryFile() as outpath:
             poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
             poly_inspect(["data", outpath.name] + opts)
+
+    @pytest.mark.parametrize("num_items", [-1, 1, 2, 10, 12])
+    def test_num_items(self, poly_run, poly_inspect, num_items):
+        with util.NamedTemporaryFile() as outpath:
+            poly_run(
+                [
+                    ONNX_MODELS["dynamic_identity"].path,
+                    "--onnxrt",
+                    "--save-inputs",
+                    outpath.name,
+                    "--input-shapes=X:[1,2,24,24]",
+                ]
+            )
+            status = poly_inspect(
+                ["data", outpath.name, "--show-values", "--line-width=-1", f"--num-items={num_items}"]
+            )
+
+            # Process only lines containing array print outs (which are all indented)
+            lines = [
+                line.strip()
+                for line in status.stdout.splitlines()
+                if line.strip() and line.startswith(constants.TAB * 2) and line.strip() != "..."
+            ]
+            for line in lines:
+                items = [e for e in line.strip("[]").split() if "..." not in e]
+
+                if num_items == -1:
+                    assert len(items) == 24
+                else:
+                    assert len(items) == num_items * 2
 
 
 TACTIC_REPLAY_CASES = [

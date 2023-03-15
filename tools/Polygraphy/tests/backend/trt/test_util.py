@@ -47,9 +47,15 @@ def test_all_layer_types_mapped(layer_class_mapping, layer_type):
 # Can't use pytest.skip because we can't construct the test unless trt.MemoryPoolType exists.
 if mod.version(trt.__version__) >= mod.version("8.4"):
 
+    def adjust_memory_pool_limits_after_8_6(limits):
+        # Adjust tactic DRAM so we can match the output text reliably in add_default_preview_features_after_8_6.
+        if mod.version(trt.__version__) >= mod.version("8.6"):
+            limits[trt.MemoryPoolType.TACTIC_DRAM] = 1 << 30
+        return limits
+
     def add_default_preview_features_after_8_6(expected):
         if mod.version(trt.__version__) >= mod.version("8.6"):
-            expected = expected.replace("MiB]", "MiB, TACTIC_DRAM: 24267.00 MiB]")
+            expected = expected.replace("MiB]", "MiB, TACTIC_DRAM: 1024.00 MiB]")
 
             if "Preview Features" not in expected:
                 expected = (
@@ -64,7 +70,9 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
         # NOTE: We set workspace sizes here so we can have predictable output
         [
             (
-                CreateConfig(memory_pool_limits={trt.MemoryPoolType.WORKSPACE: 16 << 20}),
+                CreateConfig(
+                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20})
+                ),
                 add_default_preview_features_after_8_6(
                     """
                     Flags                  | []
@@ -76,7 +84,10 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
                 ),
             ),
             (
-                CreateConfig(memory_pool_limits={trt.MemoryPoolType.WORKSPACE: 16 << 20}, tactic_sources=[]),
+                CreateConfig(
+                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
+                    tactic_sources=[],
+                ),
                 add_default_preview_features_after_8_6(
                     """
                     Flags                  | []
@@ -88,7 +99,9 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
                 ),
             ),
             (
-                CreateConfig(memory_pool_limits={trt.MemoryPoolType.WORKSPACE: 4 << 20}),
+                CreateConfig(
+                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 4 << 20})
+                ),
                 add_default_preview_features_after_8_6(
                     """
                     Flags                  | []
@@ -101,7 +114,7 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
             ),
             (
                 CreateConfig(
-                    memory_pool_limits={trt.MemoryPoolType.WORKSPACE: 16 << 20},
+                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
                     fp16=True,
                     int8=True,
                     fp8=True,
@@ -121,7 +134,7 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
             ),
             (
                 CreateConfig(
-                    memory_pool_limits={trt.MemoryPoolType.WORKSPACE: 16 << 20},
+                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
                     profiles=[Profile().add("X", [1], [1], [1]), Profile().add("X", [2], [2], [2])],
                 ),
                 add_default_preview_features_after_8_6(
@@ -136,7 +149,10 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
                 ),
             ),
             (
-                CreateConfig(memory_pool_limits={trt.MemoryPoolType.WORKSPACE: 16 << 20}, use_dla=True),
+                CreateConfig(
+                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
+                    use_dla=True,
+                ),
                 add_default_preview_features_after_8_6(
                     """
                     Flags                  | []
@@ -152,7 +168,7 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
         + [
             (
                 CreateConfig(
-                    memory_pool_limits={trt.MemoryPoolType.WORKSPACE: 16 << 20},
+                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
                     preview_features=[trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
                 ),
                 add_default_preview_features_after_8_6(
