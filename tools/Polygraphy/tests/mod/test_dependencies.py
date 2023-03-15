@@ -111,8 +111,8 @@ class TestAutoinstallDeps:
         ],
     )
     def test_can_automatically_install_deps(self, poly_venv, cmd):
-        # WAR an issue with newer versions of protobuf and ONNX
-        poly_venv.run([poly_venv.python, "-m", "pip", "install", "protobuf==3.19.4", "onnx==1.10.0"])
+        # WAR an issue with newer versions of protobuf, ONNX, and NumPy
+        poly_venv.run([poly_venv.python, "-m", "pip", "install", "protobuf==3.19.4", "onnx==1.10.0", "numpy<=1.23.0"])
 
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
         cmd = [poly_venv.python, *POLYGRAPHY_CMD] + cmd
@@ -230,8 +230,8 @@ class TestAutoinstallDeps:
 
     # We can import inner modules, and Polygraphy should still autoinstall the outermost one.
     def test_can_install_for_nested_import(self, poly_venv):
-        # WAR an issue with newer versions of protobuf and ONNX
-        poly_venv.run([poly_venv.python, "-m", "pip", "install", "protobuf==3.19.4", "onnx==1.10.0"])
+        # WAR an issue with newer versions of protobuf, ONNX, and NumPy
+        poly_venv.run([poly_venv.python, "-m", "pip", "install", "protobuf==3.19.4", "onnx==1.10.0", "numpy<=1.23.0"])
 
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
 

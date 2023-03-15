@@ -133,11 +133,9 @@ class TestDataLoaderArgs:
         ],
     )
     def test_val_range_errors(self, data_loader_args, opts, expected_err):
-
         with pytest.raises(PolygraphyException, match=expected_err):
             data_loader_args.parse_args(opts)
 
     def test_cannot_provide_two_custom_data_loader_methods(self, data_loader_args):
-
         with pytest.raises(SystemExit):
             data_loader_args.parse_args(["--data-loader-script", "my_script.py", "--load-inputs", "inputs.json"])

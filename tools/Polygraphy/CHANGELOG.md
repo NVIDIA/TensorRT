@@ -2,6 +2,27 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.45.0 (2023-01-12)
+### Added
+- Added an `-n/--num-items` option to `inspect data` to control how many elements of an array are shown.
+- Added a `--line-width` option to `inspect data` to control how many characters are displayed per line when showing an array.
+
+### Fixed
+- Fixed a bug where `CreateConfig` was not included in the API documentation.
+- Reimplemented calibrator restriction so inputs always use `OPT` shape as TensorRT does not currently support
+    using other shapes during calibration.
+
+## Removed
+- Removed various deprecated APIs:
+    - `input_metadata` parameter in `Calibrator.reset()`.
+        Now, `Calibrator.set_input_metadata()` implements this functionality and generally does not need to be called manually.
+    - `version` parameter in `mod.lazy_import()`.
+        The version can now be specified as part of the package name. For example, `tensorrt>=8.0`.
+    - `--timing-cache` CLI argument.
+        This is replaced by `--load-timing-cache` and `--save-timing-cache`.
+    - Legacy CLI shape syntax. See the [CHANGELOG entry for v0.32.0](#v0320-2021-08-10) for details.
+
+
 ## v0.44.2 (2022-12-16)
 ### Added
 - Added `fp8` parameter to `CreateConfig` for TensorRT and corresponding `--fp8` command-line option.

@@ -70,3 +70,6 @@ venv.bak/
 
 # Crash dumps
 core
+
+# IDEs
+.vscode

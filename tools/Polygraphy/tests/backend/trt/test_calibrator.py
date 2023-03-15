@@ -285,6 +285,8 @@ class TestCalibrator:
             assert (calibrator.get_batch(list(expected_meta.keys())) is not None) == should_pass
         self.check_calibrator_cleanup(calibrator)
 
+    # TensorRT does not support changing input shapes during calibration
+    @pytest.mark.xfail
     def test_calibrator_dynamic_shapes(self, dynamic_identity_builder_network):
         builder, network = dynamic_identity_builder_network
 

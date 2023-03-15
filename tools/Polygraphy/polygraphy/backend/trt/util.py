@@ -457,7 +457,8 @@ def str_from_tensor(tensor, is_shape_tensor):
     return ret
 
 
-def get_input_metadata_from_network(network, profile):
+# Note: When `force_opt_shapes=True` this method is treated as being specific to calibration.
+def get_input_metadata_from_network(network, profile, force_opt_shapes=None):
     """
     Returns metadata about the inputs of a network, referring to the values
     set in a profile for dynamic shapes.
@@ -465,10 +466,13 @@ def get_input_metadata_from_network(network, profile):
     Args:
         network (trt.INetworkDefinition):
                 The network the profile applies to.
-
-
         profile (trt.IOptimizationProfile):
                 The profile from which to retrieve input metadata.
+
+        force_opt_shapes (bool):
+                Whether to ignore the minimum and maximum shapes in the profile
+                and always use OPT shapes.
+                Defaults to False.
 
     Returns:
         TensorMetadata:
@@ -480,26 +484,36 @@ def get_input_metadata_from_network(network, profile):
                 If the network has dynamic shapes or shape tensor inputs but no profile
                 was provided.
     """
+    force_opt_shapes = util.default(force_opt_shapes, False)
+
     input_metadata = TensorMetadata()
     for index in range(network.num_inputs):
         tensor = network.get_input(index)
         # Only access the profile if we actually need to.
         # This way, this method works with static networks even without a profile set.
-        shape = tensor.shape
         min_shape = None
         max_shape = None
+        opt_shape = tensor.shape
         if tensor.is_shape_tensor or util.is_shape_dynamic(tensor.shape):
             if tensor.is_shape_tensor:
-                min_shape, _, max_shape = profile.get_shape_input(tensor.name)
+                min_shape, opt_shape, max_shape = profile.get_shape_input(tensor.name)
             else:
-                min_shape, _, max_shape = profile.get_shape(tensor.name)
+                min_shape, opt_shape, max_shape = profile.get_shape(tensor.name)
+
+            if force_opt_shapes and tuple(min_shape) != tuple(max_shape):
+                G_LOGGER.warning(
+                    "TensorRT does not currently support using dynamic shapes during calibration. "
+                    "The `OPT` shapes from the calibration profile will be used for tensors with dynamic shapes. "
+                    "Calibration data is expected to conform to those shapes. ",
+                    mode=LogMode.ONCE,
+                )
 
         input_metadata.add(
             name=tensor.name,
             dtype=np_dtype_from_trt(tensor.dtype),
-            shape=shape,
-            min_shape=min_shape,
-            max_shape=max_shape,
+            shape=opt_shape if force_opt_shapes else tensor.shape,
+            min_shape=None if force_opt_shapes else min_shape,
+            max_shape=None if force_opt_shapes else max_shape,
         )
     return input_metadata
 
@@ -526,7 +540,8 @@ def try_setup_polygraphy_calibrator(config, network, calib_profile=None):
             return
 
     try:
-        input_metadata = get_input_metadata_from_network(network, calib_profile)
+        # TensorRT does not currently support shapes other than the OPT shape.
+        input_metadata = get_input_metadata_from_network(network, calib_profile, force_opt_shapes=True)
     except PolygraphyException as err:
         G_LOGGER.warning(
             "Could not determine input_metadata to provide to the calibrator because no calibration profile is set. "
@@ -570,7 +585,6 @@ def str_from_engine(engine, show_layers=None, show_attrs=None):
         output_metadata = get_output_metadata_from_engine(engine, 0, num_io_tensors)
 
     engine_str += f"---- {len(input_metadata)} Engine Input(s) ----\n{input_metadata}\n\n"
-
     engine_str += f"---- {len(output_metadata)} Engine Output(s) ----\n{output_metadata}\n\n"
 
     engine_str += f"---- Memory ----\nDevice Memory: {engine.device_memory_size} bytes\n\n"
@@ -589,19 +603,18 @@ def str_from_engine(engine, show_layers=None, show_attrs=None):
                 name = engine.get_tensor_name(idx)
                 binding_type = " (Input)" if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT else "(Output)"
                 engine_str += util.indent_block(f"Tensor: {name:<{max_width}} {binding_type}, Index: {idx}")
-            else:
-                binding = profile_index * num_io_tensors + idx
-                name = f"[Name: {engine.get_binding_name(binding)}]"
-                binding_type = "(Input) " if engine.binding_is_input(binding) else "(Output)"
-                engine_str += util.indent_block(f"Binding Index: {binding} {binding_type} {name:<{max_width}}")
 
-            if _should_use_v3_api():
                 if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
                     min_shape, opt_shape, max_shape = engine.get_tensor_profile_shape(name, profile_index)
                     engine_str += f" | Shapes: min={min_shape}, opt={opt_shape}, max={max_shape}\n"
                 else:
                     engine_str += f" | Shape: {engine.get_tensor_shape(name)}\n"
             else:
+                binding = profile_index * num_io_tensors + idx
+                name = f"[Name: {engine.get_binding_name(binding)}]"
+                binding_type = "(Input) " if engine.binding_is_input(binding) else "(Output)"
+                engine_str += util.indent_block(f"Binding Index: {binding} {binding_type} {name:<{max_width}}")
+
                 if engine.binding_is_input(binding):
                     if engine.is_shape_binding(binding):
                         min_shape, opt_shape, max_shape = engine.get_profile_shape_input(profile_index, binding)
@@ -685,7 +698,6 @@ def str_from_engine(engine, show_layers=None, show_attrs=None):
                     engine_str += "\n"
 
     return util.indent_block(engine_str, level=0)
-
 
 
 # V2 APIs

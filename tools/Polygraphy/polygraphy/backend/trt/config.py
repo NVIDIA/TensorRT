@@ -166,7 +166,7 @@ class CreateConfig(BaseLoader):
         """
         self.max_workspace_size = max_workspace_size
         if max_workspace_size is not None:
-            mod.warn_deprecated("max_workspace_size", use_instead="memory_pool_limits", remove_in="0.45.0")
+            mod.warn_deprecated("max_workspace_size", use_instead="memory_pool_limits", remove_in="0.48.0")
 
         self.tf32 = util.default(tf32, False)
         self.fp16 = util.default(fp16, False)
@@ -257,7 +257,7 @@ class CreateConfig(BaseLoader):
                 )
 
             if self.strict_types:
-                mod.warn_deprecated("strict_types", use_instead="precision_constraints", remove_in="0.45.0")
+                mod.warn_deprecated("strict_types", use_instead="precision_constraints", remove_in="0.48.0")
                 try_set_flag("STRICT_TYPES")
 
             if self.restricted:
@@ -277,7 +277,6 @@ class CreateConfig(BaseLoader):
 
             if self.fp16:
                 try_set_flag("FP16")
-
 
             if self.fp8:
                 try_set_flag("FP8")
@@ -436,6 +435,5 @@ class PostprocessConfig(BaseLoader):
                 stack.enter_context(util.FreeOnException([config]))
 
             self._func(builder, network, config)
-
 
             return config

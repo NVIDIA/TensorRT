@@ -439,8 +439,7 @@ class TrtLoadEngineArgs(BaseArgs):
             "EngineFromNetwork",
             self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, network_loader_name),
             config=config_loader_name,
-            # Needed to support legacy --timing-cache argument
-            save_timing_cache=self.save_timing_cache or self.arg_groups[TrtConfigArgs]._timing_cache,
+            save_timing_cache=self.save_timing_cache,
         )
         loader_name = script.add_loader(loader_str, "build_engine")
 

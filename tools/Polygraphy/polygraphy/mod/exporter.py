@@ -201,7 +201,6 @@ def export(funcify=False, func_name=None):
 
             # Now that the function has been defined, we just need to add it into the module's
             # __dict__ so it is accessible like a normal symbol.
-
             _define_in_module(func_name, func, module)
 
         # We don't actually want to modify the decorated object.

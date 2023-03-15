@@ -24,12 +24,6 @@ from polygraphy.tools.script import inline, safe
 
 @pytest.mark.parametrize("name", ["input", "input:0"])
 class TestParseMeta:
-    def test_parse_legacy(self, name):  # Legacy argument format used comma.
-        meta_args = [f"{name},1x3x224x224"]
-        meta = args_util.parse_meta(meta_args, includes_dtype=False)
-        assert meta[name].shape == [1, 3, 224, 224]
-        assert meta[name].dtype is None
-
     def test_parse_shape_only(self, name):
         meta_args = [f"{name}:[1,3,224,224]"]
         meta = args_util.parse_meta(meta_args, includes_dtype=False)

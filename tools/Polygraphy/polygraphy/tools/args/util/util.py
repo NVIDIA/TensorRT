@@ -304,14 +304,10 @@ def parse_script_and_func_name(arg, default_func_name=None):
     return script, func_name
 
 
-@mod.deprecate(
-    remove_in="0.45.0",
-    use_instead=": as a separator and write shapes in the form [dim0,...,dimN]",
-    name="Using , as a separator",
-)
-def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
+@mod.export()
+def parse_meta(meta_args, includes_shape=True, includes_dtype=True):
     """
-    Parses a list of tensor metadata arguments of the form "<name>,<shape>,<dtype>"
+    Parses a list of tensor metadata arguments of the form "<name>:<shape>:<dtype>"
     `shape` and `dtype` are optional, but `dtype` must always come after `shape` if they are both enabled.
 
     Args:
@@ -322,97 +318,6 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
     Returns:
         TensorMetadata: The parsed tensor metadata.
     """
-    SEP = ","
-    SHAPE_SEP = "x"
-    meta = TensorMetadata()
-    for orig_tensor_meta_arg in meta_args:
-        tensor_meta_arg = orig_tensor_meta_arg
-
-        def pop_meta(name):
-            nonlocal tensor_meta_arg
-            tensor_meta_arg, _, val = tensor_meta_arg.rpartition(SEP)
-            if not tensor_meta_arg:
-                G_LOGGER.critical(
-                    f"Could not parse {name} from argument: {orig_tensor_meta_arg}. Is it separated by a comma (,) from the tensor name?"
-                )
-            if val.lower() == "auto":
-                val = None
-            return val
-
-        def parse_dtype(dtype):
-            if dtype is not None:
-                dtype = np_type_from_str(dtype)
-            return dtype
-
-        def parse_shape(shape):
-            if shape is not None:
-
-                def parse_shape_dim(buf):
-                    try:
-                        buf = int(buf)
-                    except:
-                        pass
-                    return buf
-
-                parsed_shape = []
-                # Allow for quoted strings in shape dimensions
-                in_quotes = False
-                buf = ""
-                for char in shape.lower():
-                    if char in ['"', "'"]:
-                        in_quotes = not in_quotes
-                    elif not in_quotes and char == SHAPE_SEP:
-                        parsed_shape.append(parse_shape_dim(buf))
-                        buf = ""
-                    else:
-                        buf += char
-                # For the last dimension
-                if buf:
-                    parsed_shape.append(parse_shape_dim(buf))
-                shape = tuple(parsed_shape)
-            return shape
-
-        name = None
-        dtype = None
-        shape = None
-
-        if includes_dtype:
-            dtype = parse_dtype(pop_meta("data type"))
-
-        if includes_shape:
-            shape = parse_shape(pop_meta("shape"))
-
-        name = tensor_meta_arg
-        meta.add(name, dtype, shape)
-
-    new_style = []
-    for m_arg in meta_args:
-        arg = m_arg
-        if includes_shape:
-            arg = arg.replace(",", ":[", 1)
-            if includes_dtype:
-                arg = arg.replace(",", "]:", 1)
-            else:
-                arg += "]"
-
-        arg = arg.replace(",auto", ":auto")
-        arg = arg.replace(",", ":")
-
-        if includes_shape:
-            arg = arg.replace("x", ",")
-
-        new_style.append(arg)
-
-    G_LOGGER.warning(
-        "The old shape syntax is deprecated and will be removed in Polygraphy 0.45.0\n"
-        "See the CHANGELOG entry for v0.32.0 for the motivation behind this deprecation.",
-        mode=LogMode.ONCE,
-    )
-    G_LOGGER.warning(f"Instead of: '{' '.join(meta_args)}', use: '{' '.join(new_style)}'\n")
-    return meta
-
-
-def parse_meta_new_impl(meta_args, includes_shape=True, includes_dtype=True):
     SEP = ":"
     meta = TensorMetadata()
     for meta_arg in meta_args:
@@ -436,25 +341,6 @@ def parse_meta_new_impl(meta_args, includes_shape=True, includes_dtype=True):
 
         meta.add(name, dtype=dtype, shape=shape)
     return meta
-
-
-@mod.export()
-def parse_meta(meta_args, includes_shape=True, includes_dtype=True):
-    """
-    Parses a list of tensor metadata arguments of the form "<name>:<shape>:<dtype>"
-    `shape` and `dtype` are optional, but `dtype` must always come after `shape` if they are both enabled.
-
-    Args:
-        meta_args (List[str]): A list of tensor metadata arguments from the command-line.
-        includes_shape (bool): Whether the arguments include shape information.
-        includes_dtype (bool): Whether the arguments include dtype information.
-
-    Returns:
-        TensorMetadata: The parsed tensor metadata.
-    """
-    if all((includes_shape and "[" in arg) or (includes_dtype and "," not in arg) for arg in meta_args):
-        return parse_meta_new_impl(meta_args, includes_shape, includes_dtype)
-    return parse_meta_legacy(meta_args, includes_shape, includes_dtype)
 
 
 @mod.export()
