@@ -297,15 +297,21 @@ def _execute_quantize_model(
         cfg.is_config_object_created()
     ), "[E] Have you created the quantization config object before calling `quantize_model`?"
 
-    # Wrap quantizable layers
-    model = tf.keras.models.clone_model(
-        model, input_tensors=None, clone_function=_quantize_model_layer_clone_function
+    # 3. Ensure that the original model is kept untouched.
+    #    This step is needed as `clone_model` with our custom `clone_function` wraps layers in a destructive manner.
+    #    TODO: delete later if a better solution is found, most likely inside our custom `clone_function`.
+    cloned_model = tf.keras.models.clone_model(model)
+    cloned_model.set_weights(model.get_weights())
+
+    # 4. Wrap quantizable layers
+    quant_model = tf.keras.models.clone_model(
+        cloned_model, input_tensors=None, clone_function=_quantize_model_layer_clone_function
     )
 
-    # Clean global space afterwards
+    # 5. Clean global space afterwards
     q_config_object.clean()
 
-    return model
+    return quant_model
 
 
 def _recognize_config_class_id(
