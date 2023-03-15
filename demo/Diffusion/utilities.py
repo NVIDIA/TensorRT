@@ -1,6 +1,6 @@
 #
 # Copyright 2022 The HuggingFace Inc. team.
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -711,7 +711,7 @@ class DPMScheduler():
 
             timestep_list = [self.timesteps[step_index - 1], timestep]
             self.multistep_dpm_solver_second_order_coefs_precompute(timestep_list, prev_timestep)
-                
+
             timestep_list = [self.timesteps[step_index - 2], self.timesteps[step_index - 1], timestep]
             self.multistep_dpm_solver_third_order_coefs_precompute(timestep_list, prev_timestep)
 
@@ -738,7 +738,7 @@ class DPMScheduler():
         h = lambda_t - lambda_s0
         if self.algorithm_type == "dpmsolver++":
             # See https://arxiv.org/abs/2211.01095 for detailed derivations
-            if self.solver_type == "midpoint": 
+            if self.solver_type == "midpoint":
                 self.second_order_first_coef.append(sigma_t / sigma_s0)
                 self.second_order_second_coef.append((alpha_t * (torch.exp(-h) - 1.0)))
                 self.second_order_third_coef.append(0.5 * (alpha_t * (torch.exp(-h) - 1.0)))
@@ -1011,7 +1011,7 @@ class PNDMScheduler():
         alphas = 1.0 - betas
         self.alphas_cumprod = torch.cumprod(alphas, dim=0).to(device=self.device)
         self.final_alpha_cumprod = self.alphas_cumprod[0]
-        
+
         # standard deviation of the initial noise distribution
         self.init_noise_sigma = 1.0
         self.steps_offset = steps_offset
@@ -1041,7 +1041,7 @@ class PNDMScheduler():
 
     def scale_model_input(self, sample: torch.FloatTensor, idx, *args, **kwargs) -> torch.FloatTensor:
         return sample
-    
+
     def configure(self):
         self.alphas_cumprod_prev = torch.roll(self.alphas_cumprod, shifts=self.step_ratio)
         self.alphas_cumprod_prev[:self.step_ratio] = self.final_alpha_cumprod
@@ -1063,7 +1063,7 @@ class PNDMScheduler():
     def step(self, output, sample, idx, timestep):
         # step_plms: propagate the sample with the linear multi-step method. This has one forward pass with multiple
         # times to approximate the solution.
-        
+
         # prev_timestep = timestep - self.step_ratio
 
         if self.counter != 1:
@@ -1086,7 +1086,7 @@ class PNDMScheduler():
             output = (23 * self.ets[-1] - 16 * self.ets[-2] + 5 * self.ets[-3]) / 12
         else:
             output = (1 / 24) * (55 * self.ets[-1] - 59 * self.ets[-2] + 37 * self.ets[-3] - 9 * self.ets[-4])
-        
+
         if self.prediction_type == "v_prediction":
             output = (self.alphas_cumprod[idx]**0.5) * output + (self.beta_cumprod[idx]**0.5) * sample
         elif self.prediction_type != "epsilon":
@@ -1191,5 +1191,3 @@ def add_arguments(parser):
     parser.add_argument('--hf-token', type=str, help="HuggingFace API access token for downloading model checkpoints")
     parser.add_argument('-v', '--verbose', action='store_true', help="Show verbose output")
     return parser
-
-
