@@ -30,6 +30,7 @@ python3 -m pip install --upgrade tensorrt
 ### Install required packages
 
 ```bash
+export TRT_OSSPATH=/workspace
 cd $TRT_OSSPATH/demo/Diffusion
 pip3 install -r requirements.txt
 
@@ -58,9 +59,9 @@ transformers        4.26.1
 ### Review usage instructions for the supported pipelines
 
 ```bash
-python3 demo-txt2img.py --help
-python3 demo-img2img.py --help
-python3 demo-inpainting.py --help
+python3 demo_txt2img.py --help
+python3 demo_img2img.py --help
+python3 demo_inpainting.py --help
 ```
 
 ### HuggingFace user access token
