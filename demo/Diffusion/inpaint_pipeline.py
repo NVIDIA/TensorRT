@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +42,7 @@ class InpaintPipeline(StableDiffusionPipeline):
 
         if scheduler != "PNDM":
             raise ValueError(f"Inpainting only supports PNDM scheduler")
-        
+
         super(InpaintPipeline, self).__init__(*args, **kwargs, \
             inpaint=True, scheduler=scheduler, stages=[ 'vae_encoder', 'clip', 'unet', 'vae'])
 
@@ -132,4 +132,3 @@ class InpaintPipeline(StableDiffusionPipeline):
             if not warmup:
                 self.print_summary(self.denoising_steps, e2e_tic, e2e_toc, vae_enc=True)
                 self.save_image(images, 'inpaint', prompt)
-

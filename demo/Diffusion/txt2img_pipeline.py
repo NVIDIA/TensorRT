@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -72,7 +72,7 @@ class Txt2ImgPipeline(StableDiffusionPipeline):
                 Verbose in logging
         """
         assert len(prompt) == len(negative_prompt)
-    
+
         with torch.inference_mode(), torch.autocast("cuda"), trt.Runtime(TRT_LOGGER):
             # Pre-initialize latents
             latents = self.initialize_latents( \

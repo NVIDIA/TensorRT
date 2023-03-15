@@ -1,6 +1,6 @@
 # TensorRT OSS Release Changelog
 
-## [8.6.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2023-03-10
+## [8.6.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2023-03-14
 
 TensorRT OSS release corresponding to TensorRT 8.6.0.12 EA release.
 - Updates since [TensorRT 8.5.3 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3).
