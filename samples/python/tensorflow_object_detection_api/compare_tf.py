@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,13 +109,13 @@ class TensorFlowInfer:
                 # Depending on detection type you need slightly different data.
                 if self.detection_type == 'bbox':
                     mask = None
-                # Segmentation is only supported with Mask R-CNN, which has 
+                # Segmentation is only supported with Mask R-CNN, which has
                 # fixed_shape_resizer as image_resizer (lookup pipeline.config)
                 elif self.detection_type == 'segmentation':
                     # Select a mask
                     mask = masks[0][n]
                     # Slight scaling, to get binary masks after float32 -> uint8
-                    # conversion, if not scaled all pixels are zero. 
+                    # conversion, if not scaled all pixels are zero.
                     mask = mask > self.iou_threshold
                     # Convert float32 -> uint8.
                     mask = mask.astype(np.uint8)
@@ -131,7 +131,7 @@ class TensorFlowInfer:
                     scale_x = scale
                 if nms_threshold and scores[0][n] < nms_threshold:
                     continue
-            # Append to detections          
+            # Append to detections
             detections[0].append({
                 'ymin': boxes[0][n][0] * scale_y,
                 'xmin': boxes[0][n][1] * scale_x,
@@ -169,7 +169,7 @@ def parse_annotations(annotations_path, detection_type):
                 # Depending on detection type you need slightly different data.
                 if detection_type == 'bbox':
                     mask = None
-                # Segmentation is only supported with Mask R-CNN, which has 
+                # Segmentation is only supported with Mask R-CNN, which has
                 # fixed_shape_resizer as image_resizer (lookup pipeline.config)
                 elif detection_type == 'segmentation':
                     # Get np.array segmentation mask from annotation

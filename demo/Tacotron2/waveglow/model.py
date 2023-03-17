@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
+import numpy as np
 
 
 @torch.jit.script
@@ -293,7 +294,13 @@ class WaveGlow(torch.nn.Module):
 
         audio = z[:, :self.n_remaining_channels, :, :]
         z = z[:, self.n_remaining_channels:self.n_group, :, :]
-        audio = sigma*audio
+
+        # Convert sigma to a torch tensor to ensure constant is exported properly
+        if audio.type() == 'torch.cuda.HalfTensor' or audio.type() == 'torch.HalfTensor':
+            sigma = torch.tensor(np.float16(sigma))
+        else:
+            sigma = torch.tensor(np.float32(sigma))
+        audio = sigma * audio
 
         for k in reversed(range(self.n_flows)):
             n_half = int(audio.size(1) // 2)

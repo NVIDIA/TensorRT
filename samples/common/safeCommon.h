@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -154,11 +154,7 @@ public:
     void endCapture(cudaStream_t& stream)
     {
         CHECK(cudaStreamEndCapture(stream, &mGraph));
-#if CUDART_VERSION >= 12000
-        CHECK(cudaGraphInstantiate(&mGraphExec, mGraph, 0));
-#else
         CHECK(cudaGraphInstantiate(&mGraphExec, mGraph, nullptr, nullptr, 0));
-#endif
         CHECK(cudaGraphDestroy(mGraph));
     }
 

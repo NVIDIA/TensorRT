@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -115,6 +115,12 @@ bool initLibrary(LibraryPtr& libPtr, std::string const& libName, FetchPtrs fetch
     {
         libPtr.reset(new DynamicLibrary{libName});
         fetchFunc(libPtr.get());
+    }
+    catch (std::exception const& e)
+    {
+        libPtr.reset();
+        sample::gLogError << "Could not load library " << libName << ": " << e.what() << std::endl;
+        return false;
     }
     catch (...)
     {

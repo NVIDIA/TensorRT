@@ -88,7 +88,7 @@ public:
     void detachFromContext() noexcept override;
 
 private:
-    bool checkValidInputs(nvinfer1::Dims const* inputs, int32_t nbInputDims);
+    void checkValidInputs(nvinfer1::Dims const* inputs, int32_t nbInputDims);
 
     int32_t mBackgroundLabel;
     int32_t mNbClasses;

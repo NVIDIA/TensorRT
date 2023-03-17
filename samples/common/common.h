@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -271,8 +271,8 @@ inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int inH, i
 {
     std::ifstream infile(fileName, std::ifstream::binary);
     assert(infile.is_open() && "Attempting to read from a file that is not open.");
-    std::string magic, h, w, max;
-    infile >> magic >> h >> w >> max;
+    std::string magic, w, h, max;
+    infile >> magic >> w >> h >> max;
     infile.seekg(1, infile.cur);
     infile.read(reinterpret_cast<char*>(buffer), inH * inW);
 }
@@ -352,7 +352,7 @@ inline void* safeCudaMalloc(size_t memSize)
     if (deviceMem == nullptr)
     {
         std::cerr << "Out of memory" << std::endl;
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     return deviceMem;
 }
@@ -535,7 +535,7 @@ inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)
 //
 // The default parameter values choosen arbitrarily. Range values should be choosen such that
 // we avoid underflow or overflow. Also range value should be non zero to avoid uniform zero scale tensor.
-inline void setAllDynamicRanges(nvinfer1::INetworkDefinition* network, float inRange = 2.0f, float outRange = 4.0f)
+inline void setAllDynamicRanges(nvinfer1::INetworkDefinition* network, float inRange = 2.0F, float outRange = 4.0F)
 {
     // Ensure that all layer inputs have a scale.
     for (int i = 0; i < network->getNbLayers(); i++)
@@ -709,7 +709,7 @@ void writePPMFileWithBBox(const std::string& filename, PPM<C, H, W>& ppm, const 
             << ppm.w << " " << ppm.h << "\n"
             << ppm.max << "\n";
 
-    auto round = [](float x) -> int { return int(std::floor(x + 0.5f)); };
+    auto round = [](float x) -> int { return int(std::floor(x + 0.5F)); };
     const int x1 = std::min(std::max(0, round(int(bbox.x1))), W - 1);
     const int x2 = std::min(std::max(0, round(int(bbox.x2))), W - 1);
     const int y1 = std::min(std::max(0, round(int(bbox.y1))), H - 1);
@@ -750,7 +750,7 @@ inline void writePPMFileWithBBox(const std::string& filename, vPPM ppm, std::vec
             << "\n"
             << ppm.w << " " << ppm.h << "\n"
             << ppm.max << "\n";
-    auto round = [](float x) -> int { return int(std::floor(x + 0.5f)); };
+    auto round = [](float x) -> int { return int(std::floor(x + 0.5F)); };
 
     for (auto bbox : dets)
     {
@@ -789,7 +789,7 @@ public:
     virtual void stop() {}
     float microseconds() const noexcept
     {
-        return mMs * 1000.f;
+        return mMs * 1000.F;
     }
     float milliseconds() const noexcept
     {
@@ -797,15 +797,15 @@ public:
     }
     float seconds() const noexcept
     {
-        return mMs / 1000.f;
+        return mMs / 1000.F;
     }
     void reset() noexcept
     {
-        mMs = 0.f;
+        mMs = 0.F;
     }
 
 protected:
-    float mMs{0.0f};
+    float mMs{0.0F};
 };
 
 class GpuTimer : public TimerBase
@@ -829,7 +829,7 @@ public:
     void stop() override
     {
         CHECK(cudaEventRecord(mStop, mStream));
-        float ms{0.0f};
+        float ms{0.0F};
         CHECK(cudaEventSynchronize(mStop));
         CHECK(cudaEventElapsedTime(&ms, mStart, mStop));
         mMs += ms;

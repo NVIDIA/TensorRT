@@ -966,15 +966,73 @@ void bindCore(py::module& m)
         .def("get_tensor_shape", &ICudaEngine::getTensorShape, "name"_a, ICudaEngineDoc::get_tensor_shape)
         .def("get_tensor_dtype", &ICudaEngine::getTensorDataType, "name"_a, ICudaEngineDoc::get_tensor_dtype)
         .def("get_tensor_location", &ICudaEngine::getTensorLocation, "name"_a, ICudaEngineDoc::get_tensor_location)
-        .def("get_tensor_bytes_per_component", &ICudaEngine::getTensorBytesPerComponent, "name"_a,
-            ICudaEngineDoc::get_tensor_bytes_per_component)
-        .def("get_tensor_components_per_element", &ICudaEngine::getTensorComponentsPerElement, "name"_a,
-            ICudaEngineDoc::get_tensor_components_per_element)
-        .def("get_tensor_format", &ICudaEngine::getTensorFormat, "name"_a, ICudaEngineDoc::get_tensor_format)
-        .def("get_tensor_format_desc", &ICudaEngine::getTensorFormatDesc, "name"_a,
-            ICudaEngineDoc::get_tensor_format_desc)
-        .def("get_tensor_vectorized_dim", &ICudaEngine::getTensorVectorizedDim, "name"_a,
-            ICudaEngineDoc::get_tensor_vectorized_dim)
+
+        .def(
+            "get_tensor_bytes_per_component",
+            [](ICudaEngine& self, std::string const& name) -> int32_t {
+                return self.getTensorBytesPerComponent(name.c_str());
+            },
+            "name"_a, ICudaEngineDoc::get_tensor_bytes_per_component)
+        .def(
+            "get_tensor_bytes_per_component",
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
+                return self.getTensorBytesPerComponent(name.c_str(), profileIndex);
+            },
+            "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_bytes_per_component)
+
+        .def(
+            "get_tensor_components_per_element",
+            [](ICudaEngine& self, std::string const& name) -> int32_t {
+                return self.getTensorComponentsPerElement(name.c_str());
+            },
+            "name"_a, ICudaEngineDoc::get_tensor_components_per_element)
+        .def(
+            "get_tensor_components_per_element",
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
+                return self.getTensorComponentsPerElement(name.c_str(), profileIndex);
+            },
+            "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_components_per_element)
+
+        .def(
+            "get_tensor_format",
+            [](ICudaEngine& self, std::string const& name) -> TensorFormat {
+                return self.getTensorFormat(name.c_str());
+            },
+            "name"_a, ICudaEngineDoc::get_tensor_format)
+
+        .def(
+            "get_tensor_format",
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> TensorFormat {
+                return self.getTensorFormat(name.c_str(), profileIndex);
+            },
+            "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_format)
+
+        .def(
+            "get_tensor_format_desc",
+            [](ICudaEngine& self, std::string const& name) -> const char* {
+                return self.getTensorFormatDesc(name.c_str());
+            },
+            "name"_a, ICudaEngineDoc::get_tensor_format_desc)
+        .def(
+            "get_tensor_format_desc",
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> const char* {
+                return self.getTensorFormatDesc(name.c_str(), profileIndex);
+            },
+            "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_format_desc)
+
+        .def(
+            "get_tensor_vectorized_dim",
+            [](ICudaEngine& self, std::string const& name) -> int32_t {
+                return self.getTensorVectorizedDim(name.c_str());
+            },
+            "name"_a, ICudaEngineDoc::get_tensor_vectorized_dim)
+        .def(
+            "get_tensor_vectorized_dim",
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
+                return self.getTensorVectorizedDim(name.c_str(), profileIndex);
+            },
+            "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_vectorized_dim)
+
         .def("get_tensor_profile_shape", lambdas::get_tensor_profile_shape, "name"_a, "profile_index"_a,
             ICudaEngineDoc::get_tensor_profile_shape)
         // End of enqueueV3 related APIs.
@@ -982,8 +1040,8 @@ void bindCore(py::module& m)
             py::cpp_function(&ICudaEngine::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property_readonly("tactic_sources", &ICudaEngine::getTacticSources)
         .def_property_readonly("profiling_verbosity", &ICudaEngine::getProfilingVerbosity)
-        .def("create_engine_inspector",
-            &ICudaEngine::createEngineInspector, ICudaEngineDoc::create_engine_inspector, py::keep_alive<0, 1>{})
+        .def("create_engine_inspector", &ICudaEngine::createEngineInspector, ICudaEngineDoc::create_engine_inspector,
+            py::keep_alive<0, 1>{})
         .def_property_readonly("hardware_compatibility_level", &ICudaEngine::getHardwareCompatibilityLevel)
         .def_property_readonly("num_aux_streams", &ICudaEngine::getNbAuxStreams)
         .def("__del__", &utils::doNothingDel<ICudaEngine>);

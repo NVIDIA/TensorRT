@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,8 +98,8 @@ class BARTModelTRTConfig(NNConfig):
     TARGET_MODELS = ["facebook/bart-base", "facebook/bart-large", "facebook/bart-large-cnn", "facebook/mbart-large-50"]
 
     MAX_DECODER_WORKSPACE_MB = {
-        TARGET_MODELS[0]: 3072,
-        TARGET_MODELS[1]: 3072,
+        TARGET_MODELS[0]: 3072, 
+        TARGET_MODELS[1]: 3072, 
         TARGET_MODELS[2]: 3072,
         TARGET_MODELS[3]: 3072,
     }
@@ -108,23 +108,23 @@ class BARTModelTRTConfig(NNConfig):
     # bart-large: 24-layer, 1024-hidden, 406M parameters
     # in all bart variants, # of encoder layers and # of decoder layers are the same
     NUMBER_OF_LAYERS = {
-        TARGET_MODELS[0]: 12, 
-        TARGET_MODELS[1]: 24, 
+        TARGET_MODELS[0]: 12,
+        TARGET_MODELS[1]: 24,
         TARGET_MODELS[2]: 24,
         TARGET_MODELS[3]: 24,
-    } 
-    
+    }
+
     NUMBER_OF_DECODER_LAYERS = {
-        TARGET_MODELS[0]: 6, 
-        TARGET_MODELS[1]: 12, 
+        TARGET_MODELS[0]: 6,
+        TARGET_MODELS[1]: 12,
         TARGET_MODELS[2]: 12,
         TARGET_MODELS[3]: 12,
-    } 
-    
+    }
+
     # in all bart variants, # of heads in encoder and decoder are the same
     NUMBER_OF_HEADS = {
-        TARGET_MODELS[0]: 12, 
-        TARGET_MODELS[1]: 16, 
+        TARGET_MODELS[0]: 12,
+        TARGET_MODELS[1]: 16,
         TARGET_MODELS[2]: 16,
         TARGET_MODELS[3]: 16,
     }
@@ -142,7 +142,7 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 1024,
         TARGET_MODELS[2]: 1024,
         TARGET_MODELS[3]: 1024,
-    } 
+    }
 
     # To achieve identical results with original HuggingFace implementation, the min_length in model config should be consistent with each model variant
     # see task-specific params in config.json of each variant model
@@ -151,7 +151,7 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 0,
         TARGET_MODELS[2]: 56,
         TARGET_MODELS[3]: 0,
-    } 
+    }
 
     #TODO: this might better be an inference time input like the `max_length` arg in generate() and greedy_search(). The change needed is in NNDF/interface.py:__call__ so it's a fundamental change affecting GPT2 and T5 code. Here I just put this option in BART model config for now. But it's also reasonable to treat this as a model config, because the TRT engine building may need this to have fixed dimension (e.g., to enable KV-cache)
     # see task-specific params in config.json of each variant model
@@ -160,9 +160,9 @@ class BARTModelTRTConfig(NNConfig):
         TARGET_MODELS[1]: 1024,
         TARGET_MODELS[2]: 142,
         TARGET_MODELS[3]: 200,
-    } 
+    }
 
-    # BART specific configs: https://huggingface.co/facebook/bart-base/blob/main/config.json 
+    # BART specific configs: https://huggingface.co/facebook/bart-base/blob/main/config.json
     NO_REPEAT_NGRAM_SIZE = 3
     BOS_TOKEN_ID = 0
     EOS_TOKEN_ID = 2
@@ -178,7 +178,7 @@ class BARTModelTRTConfig(NNConfig):
     NETWORK_DECODER_SEGMENT_NAME = "decoder"
     NETWORK_ENCODER_SEGMENT_NAME = "encoder"
     NETWORK_SEGMENTS = [NETWORK_DECODER_SEGMENT_NAME, NETWORK_ENCODER_SEGMENT_NAME]
-    
+
     def __init__(self):
         precision_fp16 = [False, True]
         kv_caches = [False, True]
@@ -214,7 +214,7 @@ class BARTModelTRTConfig(NNConfig):
         # Remove redundant bart name prefix
         if "mbart" in metadata.variant:
             metadata = metadata._replace(variant=metadata.variant.replace("facebook/mbart-","mbart-"))
-        else:    
+        else:
             metadata = metadata._replace(variant=metadata.variant.replace("facebook/bart-",""))
         return super().get_metadata_string(metadata)
 
@@ -240,13 +240,13 @@ class BARTModelTRTConfig(NNConfig):
         if metadata.other.kv_cache:
             # for KV cache version, we need add per-layer KV cache inputs. `past_key_values` at each layer is (self-attention K, self-attention V, cross-attention K, cross-attention V)
             for i in range(BARTModelTRTConfig.NUMBER_OF_DECODER_LAYERS[metadata.variant]):
-                # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep) 
+                # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep)
                 self_attention_past_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("past_decoder_length"), "embedding_size_per_head")
                 decoder_inputs_dict[f"past_key_values.{i}.decoder.key"] = self_attention_past_kv_dims
                 decoder_inputs_dict[f"past_key_values.{i}.decoder.value"] = self_attention_past_kv_dims
-                
+
                 # encoder-decoder cross-attention KV cache (dim[0] & dim[2] are dynamic, but dim[2] is constant at each decoding timestep)
-                cross_attention_past_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("encoder_length"), "embedding_size_per_head") 
+                cross_attention_past_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("encoder_length"), "embedding_size_per_head")
                 decoder_inputs_dict[f"past_key_values.{i}.encoder.key"] = cross_attention_past_kv_dims
                 decoder_inputs_dict[f"past_key_values.{i}.encoder.value"] = cross_attention_past_kv_dims
 
@@ -273,16 +273,16 @@ class BARTModelTRTConfig(NNConfig):
 
         if metadata.other.kv_cache:
             # for KV cache version, we need add per-layer KV cache inputs. `past_key_values` at each layer is (self-attention K, self-attention V, cross-attention K, cross-attention V)
-            
+
             # for all BART variants, # encoder layers = # decoder layers, so just divide total # layers by 2
             for i in range(BARTModelTRTConfig.NUMBER_OF_DECODER_LAYERS[metadata.variant]):
-                # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep) 
+                # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep)
                 self_attention_present_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("decoder_length"), "embedding_size_per_head")
                 decoder_outputs_dict[f"present_key_values.{i}.decoder.key"] = self_attention_present_kv_dims
                 decoder_outputs_dict[f"present_key_values.{i}.decoder.value"] = self_attention_present_kv_dims
-                
+
                 # encoder-decoder cross-attention KV cache (dim[0] & dim[2] are dynamic, but dim[2] is constant at each decoding timestep)
-                cross_attention_present_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("encoder_length"), "embedding_size_per_head") 
+                cross_attention_present_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("encoder_length"), "embedding_size_per_head")
                 decoder_outputs_dict[f"present_key_values.{i}.encoder.key"] = cross_attention_present_kv_dims
                 decoder_outputs_dict[f"present_key_values.{i}.encoder.value"] = cross_attention_present_kv_dims
 

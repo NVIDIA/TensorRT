@@ -24,7 +24,7 @@ import os
 import onnx
 from polygraphy import cuda
 import torch
-from utilities import Engine, device_view, save_image
+from utilities import Engine, save_image
 from utilities import DPMScheduler, DDIMScheduler, EulerAncestralDiscreteScheduler, LMSDiscreteScheduler, PNDMScheduler
 
 class StableDiffusionPipeline:
@@ -45,6 +45,7 @@ class StableDiffusionPipeline:
         hf_token=None,
         verbose=False,
         nvtx_profile=False,
+        use_cuda_graph=False,
     ):
         """
         Initializes the Diffusion pipeline.
@@ -76,6 +77,8 @@ class StableDiffusionPipeline:
                 Enable verbose logging.
             nvtx_profile (bool):
                 Insert NVTX profiling markers.
+            use_cuda_graph (bool):
+                Use CUDA graph to capture engine execution and then launch inference
         """
 
         self.denoising_steps = denoising_steps
@@ -125,11 +128,15 @@ class StableDiffusionPipeline:
 
         self.stages = stages
         self.inpaint = inpaint
+        self.use_cuda_graph = use_cuda_graph
 
-        self.stream = None # loaded in loadResources()
-        self.tokenizer = None # loaded in loadResources()
-        self.models = {} # loaded in loadEngines()
-        self.engine = {} # loaded in loadEngines()
+        # initialized in loadResources()
+        self.stream = None
+        self.tokenizer = None
+        # initialized in loadEngines()
+        self.models = {}
+        self.engine = {}
+        self.shared_device_memory = None
 
     def loadResources(self, image_height, image_width, batch_size, seed):
         # Initialize noise generator
@@ -156,6 +163,9 @@ class StableDiffusionPipeline:
 
         for engine in self.engine.values():
             del engine
+
+        if self.shared_device_memory:
+            self.shared_device_memory.free()
 
         self.stream.free()
         del self.stream
@@ -301,18 +311,23 @@ class StableDiffusionPipeline:
             self.engine[model_name] = engine
 
         # Load and activate TensorRT engines
+        max_device_memory = 0
         for model_name, obj in self.models.items():
             engine = self.engine[model_name]
             engine.load()
+            max_device_memory = max(max_device_memory, engine.engine.device_memory_size)
             if onnx_refit_dir:
                 onnx_refit_path = self.getOnnxPath(model_name, onnx_refit_dir)
                 if os.path.exists(onnx_refit_path):
                     engine.refit(onnx_opt_path, onnx_refit_path)
-            engine.activate()
+
+        self.shared_device_memory = cuda.DeviceArray.raw((max_device_memory,))
+        for engine in self.engine.values():
+            engine.activate(reuse_device_memory=self.shared_device_memory.ptr)
 
     def runEngine(self, model_name, feed_dict):
         engine = self.engine[model_name]
-        return engine.infer(feed_dict, self.stream)
+        return engine.infer(feed_dict, self.stream, use_cuda_graph=self.use_cuda_graph)
 
     def initialize_latents(self, batch_size, unet_channels, latent_height, latent_width):
         latents_dtype = torch.float32 # text_embeddings.dtype
@@ -357,7 +372,7 @@ class StableDiffusionPipeline:
             return_tensors="pt",
         ).input_ids.type(torch.int32).to(self.device)
 
-        text_input_ids_inp = device_view(text_input_ids)
+        text_input_ids_inp = text_input_ids
         # NOTE: output tensor for CLIP must be cloned because it will be overwritten when called again for negative prompt
         text_embeddings = self.runEngine('clip', {"input_ids": text_input_ids_inp})['text_embeddings'].clone()
 
@@ -369,7 +384,7 @@ class StableDiffusionPipeline:
             truncation=True,
             return_tensors="pt",
         ).input_ids.type(torch.int32).to(self.device)
-        uncond_input_ids_inp = device_view(uncond_input_ids)
+        uncond_input_ids_inp = uncond_input_ids
         uncond_embeddings = self.runEngine('clip', {"input_ids": uncond_input_ids_inp})['text_embeddings']
 
         # Concatenate the unconditional and text embeddings into a single batch to avoid doing two forward passes for classifier free guidance
@@ -404,9 +419,9 @@ class StableDiffusionPipeline:
             embeddings_dtype = np.float16
             timestep_float = timestep.float() if timestep.dtype != torch.float32 else timestep
 
-            sample_inp = device_view(latent_model_input)
-            timestep_inp = device_view(timestep_float)
-            embeddings_inp = device_view(text_embeddings)
+            sample_inp = latent_model_input
+            timestep_inp = timestep_float
+            embeddings_inp = text_embeddings
             noise_pred = self.runEngine('unet', {"sample": sample_inp, "timestep": timestep_inp, "encoder_hidden_states": embeddings_inp})['latent']
             if self.nvtx_profile:
                 nvtx.end_range(nvtx_unet)
@@ -431,7 +446,7 @@ class StableDiffusionPipeline:
         if self.nvtx_profile:
             nvtx_vae = nvtx.start_range(message='vae_encoder', color='red')
         cudart.cudaEventRecord(self.events['vae_encoder-start'], 0)
-        init_latents = self.runEngine('vae_encoder', {"images": device_view(init_image)})['latent']
+        init_latents = self.runEngine('vae_encoder', {"images": init_image})['latent']
         cudart.cudaEventRecord(self.events['vae_encoder-stop'], 0)
         if self.nvtx_profile:
             nvtx.end_range(nvtx_vae)
@@ -443,7 +458,7 @@ class StableDiffusionPipeline:
         if self.nvtx_profile:
             nvtx_vae = nvtx.start_range(message='vae', color='red')
         cudart.cudaEventRecord(self.events['vae-start'], 0)
-        images = self.runEngine('vae', {"latent": device_view(latents)})['images']
+        images = self.runEngine('vae', {"latent": latents})['images']
         cudart.cudaEventRecord(self.events['vae-stop'], 0)
         if self.nvtx_profile:
             nvtx.end_range(nvtx_vae)

@@ -8971,8 +8971,8 @@ enum class MemoryPoolType : int32_t
     kDLA_GLOBAL_DRAM = 3,
 
     //!
-    //! kTACTIC_DRAM is the host DRAM used by the optimizer to
-    //! run tactics. On embedded devices, where host and device memory are unified, this includes all device
+    //! kTACTIC_DRAM is the device DRAM used by the optimizer to
+    //! run tactics. On embedded devices, where host and device memory are unified, this includes all host
     //! memory required by TensorRT to build the network up to the point of each memory allocation.
     //! This defaults to 75% of totalGlobalMem as reported by cudaGetDeviceProperties when
     //! cudaGetDeviceProperties.embedded is true, and 100% otherwise.

@@ -132,7 +132,7 @@ RPROIPlugin::~RPROIPlugin()
     }
 }
 
-int RPROIPlugin::initialize() noexcept
+int32_t RPROIPlugin::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
@@ -146,12 +146,12 @@ size_t RPROIPlugin::getSmemSize() const noexcept
     return prop.sharedMemPerBlockOptin;
 }
 
-int RPROIPlugin::getNbOutputs() const noexcept
+int32_t RPROIPlugin::getNbOutputs() const noexcept
 {
     return 2;
 }
 
-Dims RPROIPlugin::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims RPROIPlugin::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     PLUGIN_ASSERT(index >= 0 && index < 2);
     PLUGIN_ASSERT(nbInputDims == 4);
@@ -165,13 +165,13 @@ Dims RPROIPlugin::getOutputDimensions(int index, Dims const* inputs, int nbInput
     return Dims4(params.nmsMaxOut, inputs[2].d[0], params.poolingH, params.poolingW);
 }
 
-size_t RPROIPlugin::getWorkspaceSize(int maxBatchSize) const noexcept
+size_t RPROIPlugin::getWorkspaceSize(int32_t maxBatchSize) const noexcept
 {
     return RPROIInferenceFusedWorkspaceSize(maxBatchSize, A, H, W, params.nmsMaxOut);
 }
 
-int RPROIPlugin::enqueue(
-    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t RPROIPlugin::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     // Bounding box (region proposal) objectness scores.
     void const* const scores = inputs[0];
@@ -230,7 +230,7 @@ void RPROIPlugin::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-float* RPROIPlugin::copyToHost(void const* srcHostData, int count) noexcept
+float* RPROIPlugin::copyToHost(void const* srcHostData, int32_t count) noexcept
 {
     float* dstHostPtr = nullptr;
     PLUGIN_CHECK(cudaMallocHost(&dstHostPtr, count * sizeof(float)));
@@ -238,7 +238,7 @@ float* RPROIPlugin::copyToHost(void const* srcHostData, int count) noexcept
     return dstHostPtr;
 }
 
-int RPROIPlugin::copyFromHost(char* dstHostBuffer, void const* source, int count) const noexcept
+int32_t RPROIPlugin::copyFromHost(char* dstHostBuffer, void const* source, int32_t count) const noexcept
 {
     PLUGIN_CHECK(cudaMemcpy(dstHostBuffer, source, count * sizeof(float), cudaMemcpyHostToHost));
     return count * sizeof(float);
@@ -318,7 +318,8 @@ char const* RPROIPlugin::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index.
-DataType RPROIPlugin::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+DataType RPROIPlugin::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     // Two outputs
     PLUGIN_ASSERT(index == 0 || index == 1);
@@ -327,13 +328,13 @@ DataType RPROIPlugin::getOutputDataType(int index, nvinfer1::DataType const* inp
 
 // Return true if output tensor is broadcast across a batch.
 bool RPROIPlugin::isOutputBroadcastAcrossBatch(
-    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool RPROIPlugin::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool RPROIPlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
@@ -432,45 +433,45 @@ IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldColl
     try
     {
         PluginField const* fields = fc->fields;
-        int nbFields = fc->nbFields;
+        int32_t nbFields = fc->nbFields;
 
-        for (int i = 0; i < nbFields; ++i)
+        for (int32_t i = 0; i < nbFields; ++i)
         {
             char const* attrName = fields[i].name;
             if (!strcmp(attrName, "poolingH"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.poolingH = *(static_cast<int const*>(fields[i].data));
+                params.poolingH = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "poolingW"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.poolingW = *(static_cast<int const*>(fields[i].data));
+                params.poolingW = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "featureStride"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.featureStride = *(static_cast<int const*>(fields[i].data));
+                params.featureStride = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "preNmsTop"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.preNmsTop = *(static_cast<int const*>(fields[i].data));
+                params.preNmsTop = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "nmsMaxOut"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.nmsMaxOut = *(static_cast<int const*>(fields[i].data));
+                params.nmsMaxOut = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "anchorsRatioCount"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.anchorsRatioCount = *(static_cast<int const*>(fields[i].data));
+                params.anchorsRatioCount = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "anchorsScaleCount"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.anchorsScaleCount = *(static_cast<int const*>(fields[i].data));
+                params.anchorsScaleCount = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "iouThreshold"))
             {
@@ -492,7 +493,7 @@ IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldColl
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 anchorsRatios.reserve(params.anchorsRatioCount);
                 float const* ratios = static_cast<float const*>(fields[i].data);
-                for (int j = 0; j < params.anchorsRatioCount; ++j)
+                for (int32_t j = 0; j < params.anchorsRatioCount; ++j)
                 {
                     anchorsRatios.push_back(*ratios);
                     ratios++;
@@ -503,7 +504,7 @@ IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldColl
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 anchorsScales.reserve(params.anchorsScaleCount);
                 float const* scales = static_cast<float const*>(fields[i].data);
-                for (int j = 0; j < params.anchorsScaleCount; ++j)
+                for (int32_t j = 0; j < params.anchorsScaleCount; ++j)
                 {
                     anchorsScales.push_back(*scales);
                     scales++;

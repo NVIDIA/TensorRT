@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,7 +75,7 @@ def main(args):
             pred_boxes = []
             scores = []
             pred_classes = []
-            # Number of detections. 
+            # Number of detections.
             num_instances = len(detections[i])
             # Reserve numpy array to hold all mask predictions per image.
             pred_masks = np.empty((num_instances, 28, 28), dtype=np.float32)
@@ -84,7 +84,7 @@ def main(args):
             # Loop over every single detection.
             for n in range(num_instances):
                 det = detections[i][n]
-                # Append box coordinates data. 
+                # Append box coordinates data.
                 pred_boxes.append([det['ymin'], det['xmin'], det['ymax'], det['xmax']])
                 # Append score.
                 scores.append(det['score'])
@@ -105,21 +105,21 @@ def main(args):
             image_dict = [{'instances': instances}]
             input_dict = [{'image_id': source_id}]
             evaluator.process(input_dict, image_dict)
-            
+
     # Final evaluations, generation of mAP accuracy performance.
     evaluator.evaluate()
-                
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--engine", help="The TensorRT engine to infer with.")
     parser.add_argument("-i", "--input",
-                        help="The input to infer, either a single image path, or a directory of images.")  
+                        help="The input to infer, either a single image path, or a directory of images.")
     parser.add_argument("-c", "--det2_config", help="The Detectron 2 config file (.yaml) for the model", type=str)
-    parser.add_argument("-w", "--det2_weights", help="The Detectron 2 model weights (.pkl)", type=str)                
-    parser.add_argument("-t", "--nms_threshold", type=float, 
+    parser.add_argument("-w", "--det2_weights", help="The Detectron 2 model weights (.pkl)", type=str)
+    parser.add_argument("-t", "--nms_threshold", type=float,
                         help="Override the score threshold for the NMS operation, if higher than the threshold in the engine.")
-    parser.add_argument("--iou_threshold", default=0.5, type=float, 
+    parser.add_argument("--iou_threshold", default=0.5, type=float,
                         help="Select the IoU threshold for the mask segmentation. Range is 0 to 1. Pixel values more than threshold will become 1, less 0.")
     args = parser.parse_args()
     if not all([args.engine, args.input, args.det2_config, args.det2_weights]):

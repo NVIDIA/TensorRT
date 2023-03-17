@@ -56,7 +56,7 @@ To build the engine, create the builder and pass a logger created for TensorRT w
 `IBuilder* builder = createInferBuilder(sample::gLogger);`
 
 To build the engine from the generated TensorRT network, issue the following call:
-`nvinfer1::ICudaEngine* engine = builder->buildCudaEngine(*network);`
+`SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};`
 
 After you build the engine, verify that the engine is running properly by confirming the output is what you expected. The output format of this sample should be the same as the output of sampleMNIST.
 
@@ -91,6 +91,9 @@ The Scale layer implements a per-tensor, per-channel, or per-element affine tran
 [Shuffle layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#shuffle-layer)
 The Shuffle layer implements a reshape and transpose operator for tensors.
 
+## Preparing sample data
+
+Download the sample data from the [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#).
 
 ## Running the sample
 

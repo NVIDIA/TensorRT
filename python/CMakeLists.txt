@@ -40,7 +40,7 @@ set(CMAKE_CXX_STANDARD ${CPP_STANDARD})
 
 if (NOT MSVC)
     # This allows us to use TRT libs shipped with standalone wheels.
-    set(CMAKE_SHARED_LINKER_FLAGS -Wl,-rpath=$ORIGIN)
+    set(CMAKE_SHARED_LINKER_FLAGS -Wl,-rpath=$ORIGIN:$ORIGIN/../${TENSORRT_MODULE}_libs)
 endif()
 
 # -------- PATHS --------

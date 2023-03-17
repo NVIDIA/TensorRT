@@ -5,14 +5,12 @@ versions:
   "1":
     inputs:
       - input
-      - input_mask
     outputs:
       - output
     input_dims:
       input: 5
-      input_mask: 1
     output_dims:
-      output: "input_0, input_mask_0, hidden_size_0, 1, 1"
+      output: "input_0, input_1, hidden_size_0, 1, 1"
     attributes:
       - type_id
       - hidden_size
@@ -55,6 +53,85 @@ versions:
       - hidden_size
       - num_heads
       - has_mask
+    golden_io_path: "plugin/bertQKVToContextPlugin/CustomQKVToContextPluginDynamic_PluginGoldenIO.json"
+    abs_tol: 1e-5
+    rel_tol: 1e-5
+    fp16_atol: 1e-2
+    fp16_rtol: 1e-2
+    configs:
+      config1:
+        input_types:
+          input: float16
+        attribute_options:
+          type_id:
+            value: 1
+            shape: "1"
+          hidden_size:
+            value: 768
+            shape: "1"
+          num_heads:
+            value: 12
+            shape: "1"
+          has_mask:
+            value: 0
+            shape: "1"
+        output_types:
+          output: float16
+      config2:
+        input_types:
+          input: float16
+        attribute_options:
+          type_id:
+            value: 1
+            shape: "1"
+          hidden_size:
+            value: 1024
+            shape: "1"
+          num_heads:
+            value: 16
+            shape: "1"
+          has_mask:
+            value: 0
+            shape: "1"
+        output_types:
+          output: float16
+      config5:
+        input_types:
+          input: float16
+        attribute_options:
+          type_id:
+            value: 1
+            shape: "1"
+          hidden_size:
+            value: 384
+            shape: "1"
+          num_heads:
+            value: 12
+            shape: "1"
+          has_mask:
+            value: 0
+            shape: "1"
+        output_types:
+          output: float16
+      has_mask:
+        input_types:
+          input: float32
+          input_mask: int32
+        attribute_options:
+          type_id:
+            value: 0
+            shape: "1"
+          hidden_size:
+            value: 3
+            shape: "1"
+          num_heads:
+            value: 3
+            shape: "1"
+          has_mask:
+            value: 1
+            shape: "1"
+        output_types:
+          output: float32
   "2":
     inputs:
       - input

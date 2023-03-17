@@ -388,7 +388,7 @@ size_t QKVToContextPluginDynamic::getSerializationSize() const noexcept
 {
     PLUGIN_ASSERT(unfusedDispatcher.get());
     return sizeof(mNumHeads) + sizeof(mHeadSize) + sizeof(DataType) + sizeof(mHasImask) + sizeof(mHiddenSize)
-        + sizeof(mSM) + sizeof(mS) + sizeof(mB) + sizeof(mDqProbs) + sizeof(int)
+        + sizeof(mSM) + sizeof(mS) + sizeof(mB) + sizeof(mDqProbs) + sizeof(int32_t)
         + unfusedDispatcher->getSerializationSize();
 }
 
@@ -785,7 +785,7 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     PLUGIN_ASSERT(mUseVarSeqlen);
     if (pos == 2)
     { // must be cuSeqlens
-        // cuSeqlens is a int array of size B+1
+        // cuSeqlens is a int32_t array of size B+1
         auto const* seqlens = &inOut[pos];
         return (seqlens->type == DataType::kINT32) && (seqlens->format == TensorFormat::kLINEAR);
     }

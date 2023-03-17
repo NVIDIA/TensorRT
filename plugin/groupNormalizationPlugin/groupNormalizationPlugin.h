@@ -19,9 +19,8 @@
 #define TRT_GROUP_NORM_PLUGIN_H
 
 #include "common/plugin.h"
-#include "common/serialize.hpp"
+
 #include <cudnn.h>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -34,13 +33,13 @@ namespace plugin
 {
 
 template <typename T>
-cudaError_t scaleShiftChannelsInplace(T* inOut, int const B, int const C, int const channelVolume, float const* beta,
-    float const* gamma, cudaStream_t stream);
+cudaError_t scaleShiftChannelsInplace(T* inOut, int32_t const B, int32_t const C, int32_t const channelVolume,
+    float const* beta, float const* gamma, cudaStream_t stream);
 
 class GroupNormalizationPlugin final : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    GroupNormalizationPlugin(float epsilon, int const nbGroups);
+    GroupNormalizationPlugin(float epsilon, int32_t const nbGroups);
 
     GroupNormalizationPlugin(void const* data, size_t length);
 
@@ -48,20 +47,20 @@ public:
     // delete default constructor.
     GroupNormalizationPlugin() = delete;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
     // DynamicExt plugins returns DimsExprs class instead of Dims
-    DimsExprs getOutputDimensions(int index, nvinfer1::DimsExprs const* inputs, int nbInputDims,
+    DimsExprs getOutputDimensions(int32_t index, nvinfer1::DimsExprs const* inputs, int32_t nbInputDims,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int nbOutputs) const noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
 
-    int enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
@@ -69,7 +68,7 @@ public:
     void serialize(void* buffer) const noexcept override;
 
     bool supportsFormatCombination(
-        int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
+        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
 
     char const* getPluginType() const noexcept override;
 
@@ -79,7 +78,8 @@ public:
 
     void destroy() noexcept override;
 
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
@@ -90,21 +90,22 @@ public:
 
     char const* getPluginNamespace() const noexcept override;
 
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
 
 private:
-    char const* mPluginNamespace;
     std::string mNamespace;
 
     float mEpsilon;
-    int mNbGroups;
-    int mChannelVolume;
+    int32_t mNbGroups;
+    int32_t mChannelVolume;
 
-    cudnnHandle_t _cudnn_handle;
+    cudnnHandle_t mCudnnHandle{};
+
     // Describes input and output.
-    cudnnTensorDescriptor_t desc;
-    cudnnTensorDescriptor_t bnDesc;
+    cudnnTensorDescriptor_t mTensorDesc{};
+    cudnnTensorDescriptor_t mBNTensorDesc{};
+
     // These are buffers initialized to 1 and 0 respectively
     std::shared_ptr<CudaBind<float>> mBnScales{};
     std::shared_ptr<CudaBind<float>> mBnBias{};

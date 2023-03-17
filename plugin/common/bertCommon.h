@@ -91,19 +91,19 @@ namespace plugin
 namespace bert
 {
 
-inline int getSMVersion()
+inline int32_t getSMVersion()
 {
-    int device{-1};
+    int32_t device{-1};
     PLUGIN_CHECK(cudaGetDevice(&device));
     cudaDeviceProp props;
     PLUGIN_CHECK(cudaGetDeviceProperties(&props, device));
     return nvinfer1::plugin::getTrtSMVersionDec(props.major, props.minor);
 }
 
-inline int getMHAMaskPackedSize(int smVersion, nvinfer1::DataType dataType, int sequenceLength)
+inline int32_t getMHAMaskPackedSize(int32_t smVersion, nvinfer1::DataType dataType, int32_t sequenceLength)
 {
     // this code must match EmbLayerNormPluginDynamic::getOutputDimensions in embLayerNormPlugin.cpp
-    int packedSize = unfusedMaskSize;
+    int32_t packedSize = unfusedMaskSize;
     bool isSmOK = (smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86 || smVersion == kSM_87
         || smVersion == kSM_90);
     bool isPrecisionOK = (dataType == nvinfer1::DataType::kINT8 || dataType == nvinfer1::DataType::kHALF);
@@ -196,36 +196,38 @@ inline T* devToDev(T const* data, size_t nbElem)
 }
 
 template <typename T>
-cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m,
-    int n, int k, const T alpha, T const* A, int lda, T const* B, int ldb, const T beta, T* C, int ldc);
+cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
+    int32_t n, int32_t k, const T alpha, T const* A, int32_t lda, T const* B, int32_t ldb, const T beta, T* C,
+    int32_t ldc);
 
 template <>
-cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m,
-    int n, int k, float const alpha, float const* A, int lda, float const* B, int ldb, float const beta, float* C,
-    int ldc)
+cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
+    int32_t n, int32_t k, float const alpha, float const* A, int32_t lda, float const* B, int32_t ldb, float const beta,
+    float* C, int32_t ldc)
 {
 
     return cublasSgemm(handle, transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 template <>
-cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m,
-    int n, int k, const half alpha, half const* A, int lda, half const* B, int ldb, const half beta, half* C, int ldc)
+cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
+    int32_t n, int32_t k, const half alpha, half const* A, int32_t lda, half const* B, int32_t ldb, const half beta,
+    half* C, int32_t ldc)
 {
     return cublasHgemm(handle, transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 template <typename T>
 cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int m, int n, int k, const T alpha, T const* A, int lda, long long int strideA,
-    T const* B, int ldb, long long int strideB, const T beta, T* C, int ldc, long long int strideC, int batchCount,
+    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const T alpha, T const* A, int32_t lda, int64_t strideA,
+    T const* B, int32_t ldb, int64_t strideB, const T beta, T* C, int32_t ldc, int64_t strideC, int32_t batchCount,
     cublasGemmAlgo_t algo);
 
 template <>
 cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int m, int n, int k, float const alpha, float const* A, int lda, long long int strideA,
-    float const* B, int ldb, long long int strideB, float const beta, float* C, int ldc, long long int strideC,
-    int batchCount, cublasGemmAlgo_t algo)
+    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, float const alpha, float const* A, int32_t lda,
+    int64_t strideA, float const* B, int32_t ldb, int64_t strideB, float const beta, float* C, int32_t ldc,
+    int64_t strideC, int32_t batchCount, cublasGemmAlgo_t algo)
 {
 
     return ::cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_32F, lda, strideA, B,
@@ -234,9 +236,9 @@ cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOp
 
 template <>
 cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int m, int n, int k, const half alpha, half const* A, int lda, long long int strideA,
-    half const* B, int ldb, long long int strideB, const half beta, half* C, int ldc, long long int strideC,
-    int batchCount, cublasGemmAlgo_t algo)
+    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const half alpha, half const* A, int32_t lda,
+    int64_t strideA, half const* B, int32_t ldb, int64_t strideB, const half beta, half* C, int32_t ldc,
+    int64_t strideC, int32_t batchCount, cublasGemmAlgo_t algo)
 {
     return ::cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_16F, lda, strideA, B,
         CUDA_R_16F, ldb, strideB, &beta, C, CUDA_R_16F, ldc, strideC, batchCount, CUDA_R_16F, algo);
@@ -244,14 +246,14 @@ cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOp
 
 template <typename T>
 cublasStatus_t inline cublasGemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int m, int n, int k, const T alpha, T const* A, int lda, long long int strideA,
-    T const* B, int ldb, long long int strideB, const T beta, T* C, int ldc, long long int strideC, int batchCount);
+    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const T alpha, T const* A, int32_t lda, int64_t strideA,
+    T const* B, int32_t ldb, int64_t strideB, const T beta, T* C, int32_t ldc, int64_t strideC, int32_t batchCount);
 
 template <>
 cublasStatus_t inline cublasGemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int m, int n, int k, float const alpha, float const* A, int lda, long long int strideA,
-    float const* B, int ldb, long long int strideB, float const beta, float* C, int ldc, long long int strideC,
-    int batchCount)
+    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, float const alpha, float const* A, int32_t lda,
+    int64_t strideA, float const* B, int32_t ldb, int64_t strideB, float const beta, float* C, int32_t ldc,
+    int64_t strideC, int32_t batchCount)
 {
 
     return cublasSgemmStridedBatched(
@@ -260,9 +262,9 @@ cublasStatus_t inline cublasGemmStridedBatched(cublasHandle_t handle, cublasOper
 
 template <>
 cublasStatus_t inline cublasGemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int m, int n, int k, const half alpha, half const* A, int lda, long long int strideA,
-    half const* B, int ldb, long long int strideB, const half beta, half* C, int ldc, long long int strideC,
-    int batchCount)
+    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const half alpha, half const* A, int32_t lda,
+    int64_t strideA, half const* B, int32_t ldb, int64_t strideB, const half beta, half* C, int32_t ldc,
+    int64_t strideC, int32_t batchCount)
 {
     return cublasHgemmStridedBatched(
         handle, transa, transb, m, n, k, &alpha, A, lda, strideA, B, ldb, strideB, &beta, C, ldc, strideC, batchCount);

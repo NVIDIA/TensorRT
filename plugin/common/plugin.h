@@ -26,6 +26,7 @@
 #include <sstream>
 #include <string>
 
+// Enumerator for status
 typedef enum
 {
     STATUS_SUCCESS = 0,

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -148,10 +148,10 @@ class GPT2HuggingFace(FrameworkCommand):
         # By default, HuggingFace model structure is one giant file.
         gpt2_torch_fpath = network_fpaths.torch[0].fpath
         gpt2_model = AutoModelForCausalLM.from_pretrained(gpt2_torch_fpath)
+        
         # Framework fp16 does not support cpu mode for GPT2
-        # TODO: Enable true fp16. Using cuda 11.4 with PyTorch 1.13 will cause issue for this function.
-        # if metadata.precision.fp16:
-        #     gpt2_model = gpt2_model.cuda().half()
+        if metadata.precision.fp16:
+            gpt2_model = gpt2_model.cuda().half()
 
         gpt2_torch = GPT2TorchFile.TorchModule(
             gpt2_model.transformer, gpt2_model.lm_head, gpt2_model.config
@@ -185,9 +185,9 @@ class GPT2HuggingFace(FrameworkCommand):
 
         # get single decoder iteration inference timing profile
         _, decoder_e2e_time = gpt2_inference(
-            gpt2_torch,
-            input_ids,
-            timing_profile,
+            gpt2_torch, 
+            input_ids, 
+            timing_profile, 
             use_cuda=(not use_cpu),
             use_cache = metadata.other.kv_cache,
         )

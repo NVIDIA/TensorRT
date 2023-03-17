@@ -38,28 +38,28 @@ char const* const kGRID_ANCHOR_PLUGIN_VERSION = "1";
 PluginFieldCollection GridAnchorBasePluginCreator::mFC{};
 std::vector<PluginField> GridAnchorBasePluginCreator::mPluginAttributes;
 
-GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, int numLayers, char const* name)
+GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, int32_t numLayers, char const* name)
     : mPluginName(name)
     , mNumLayers(numLayers)
 {
-    PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
+    PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int32_t)));
     PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
     PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceHeights, mNumLayers * sizeof(Weights)));
 
     mParam.resize(mNumLayers);
-    for (int id = 0; id < mNumLayers; id++)
+    for (int32_t id = 0; id < mNumLayers; id++)
     {
         mParam[id] = paramIn[id];
         PLUGIN_VALIDATE(mParam[id].numAspectRatios >= 0 && mParam[id].aspectRatios != nullptr);
 
         mParam[id].aspectRatios = (float*) malloc(sizeof(float) * mParam[id].numAspectRatios);
 
-        for (int i = 0; i < paramIn[id].numAspectRatios; ++i)
+        for (int32_t i = 0; i < paramIn[id].numAspectRatios; ++i)
         {
             mParam[id].aspectRatios[i] = paramIn[id].aspectRatios[i];
         }
 
-        for (int i = 0; i < 4; ++i)
+        for (int32_t i = 0; i < 4; ++i)
         {
             mParam[id].variance[i] = paramIn[id].variance[i];
         }
@@ -67,7 +67,7 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
         std::vector<float> tmpScales(mNumLayers + 1);
 
         // Calculate the scales of SSD model for each layer
-        for (int i = 0; i < mNumLayers; i++)
+        for (int32_t i = 0; i < mNumLayers; i++)
         {
             tmpScales[i] = (mParam[id].minSize + (mParam[id].maxSize - mParam[id].minSize) * id / (mNumLayers - 1));
         }
@@ -82,7 +82,7 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
         // The first layer is different
         if (id == 0)
         {
-            for (int i = 0; i < mParam[id].numAspectRatios; i++)
+            for (int32_t i = 0; i < mParam[id].numAspectRatios; i++)
             {
                 aspect_ratios.push_back(mParam[id].aspectRatios[i]);
                 scales.push_back(scale0[i]);
@@ -92,7 +92,7 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
 
         else
         {
-            for (int i = 0; i < mParam[id].numAspectRatios; i++)
+            for (int32_t i = 0; i < mParam[id].numAspectRatios; i++)
             {
                 aspect_ratios.push_back(mParam[id].aspectRatios[i]);
             }
@@ -100,7 +100,7 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
             aspect_ratios.push_back(1.0);
 
             // scales
-            for (int i = 0; i < mParam[id].numAspectRatios; i++)
+            for (int32_t i = 0; i < mParam[id].numAspectRatios; i++)
             {
                 scales.push_back(tmpScales[id]);
             }
@@ -115,7 +115,7 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
         std::vector<float> tmpWidths;
         std::vector<float> tmpHeights;
         // Calculate the width and height of the prior boxes
-        for (int i = 0; i < mNumPriors[id]; i++)
+        for (int32_t i = 0; i < mNumPriors[id]; i++)
         {
             float sqrt_AR = sqrt(aspect_ratios[i]);
             tmpWidths.push_back(scales[i] * sqrt_AR);
@@ -131,30 +131,30 @@ GridAnchorGenerator::GridAnchorGenerator(void const* data, size_t length, char c
     : mPluginName(name)
 {
     char const *d = reinterpret_cast<char const*>(data), *a = d;
-    mNumLayers = read<int>(d);
-    PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int)));
+    mNumLayers = read<int32_t>(d);
+    PLUGIN_CUASSERT(cudaMallocHost((void**) &mNumPriors, mNumLayers * sizeof(int32_t)));
     PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceWidths, mNumLayers * sizeof(Weights)));
     PLUGIN_CUASSERT(cudaMallocHost((void**) &mDeviceHeights, mNumLayers * sizeof(Weights)));
     mParam.resize(mNumLayers);
-    for (int id = 0; id < mNumLayers; id++)
+    for (int32_t id = 0; id < mNumLayers; id++)
     {
         // we have to deserialize GridAnchorParameters by hand
         mParam[id].minSize = read<float>(d);
         mParam[id].maxSize = read<float>(d);
-        mParam[id].numAspectRatios = read<int>(d);
+        mParam[id].numAspectRatios = read<int32_t>(d);
         mParam[id].aspectRatios = (float*) malloc(sizeof(float) * mParam[id].numAspectRatios);
-        for (int i = 0; i < mParam[id].numAspectRatios; ++i)
+        for (int32_t i = 0; i < mParam[id].numAspectRatios; ++i)
         {
             mParam[id].aspectRatios[i] = read<float>(d);
         }
-        mParam[id].H = read<int>(d);
-        mParam[id].W = read<int>(d);
-        for (int i = 0; i < 4; ++i)
+        mParam[id].H = read<int32_t>(d);
+        mParam[id].W = read<int32_t>(d);
+        for (int32_t i = 0; i < 4; ++i)
         {
             mParam[id].variance[i] = read<float>(d);
         }
 
-        mNumPriors[id] = read<int>(d);
+        mNumPriors[id] = read<int32_t>(d);
         mDeviceWidths[id] = deserializeToDevice(d, mNumPriors[id]);
         mDeviceHeights[id] = deserializeToDevice(d, mNumPriors[id]);
     }
@@ -164,7 +164,7 @@ GridAnchorGenerator::GridAnchorGenerator(void const* data, size_t length, char c
 
 GridAnchorGenerator::~GridAnchorGenerator()
 {
-    for (int id = 0; id < mNumLayers; id++)
+    for (int32_t id = 0; id < mNumLayers; id++)
     {
         PLUGIN_CUERROR(cudaFree(const_cast<void*>(mDeviceWidths[id].values)));
         PLUGIN_CUERROR(cudaFree(const_cast<void*>(mDeviceHeights[id].values)));
@@ -175,12 +175,12 @@ GridAnchorGenerator::~GridAnchorGenerator()
     PLUGIN_CUERROR(cudaFreeHost(mDeviceHeights));
 }
 
-int GridAnchorGenerator::getNbOutputs() const noexcept
+int32_t GridAnchorGenerator::getNbOutputs() const noexcept
 {
     return mNumLayers;
 }
 
-Dims GridAnchorGenerator::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims GridAnchorGenerator::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     // Particularity of the PriorBox layer: no batchSize dimension needed
     // 2 channels. First channel stores the mean of each prior coordinate.
@@ -188,23 +188,23 @@ Dims GridAnchorGenerator::getOutputDimensions(int index, Dims const* inputs, int
     return Dims3(2, mParam[index].H * mParam[index].W * mNumPriors[index] * 4, 1);
 }
 
-int GridAnchorGenerator::initialize() noexcept
+int32_t GridAnchorGenerator::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
 void GridAnchorGenerator::terminate() noexcept {}
 
-size_t GridAnchorGenerator::getWorkspaceSize(int maxBatchSize) const noexcept
+size_t GridAnchorGenerator::getWorkspaceSize(int32_t maxBatchSize) const noexcept
 {
     return 0;
 }
 
-int GridAnchorGenerator::enqueue(
-    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t GridAnchorGenerator::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     // Generate prior boxes for each layer
-    for (int id = 0; id < mNumLayers; id++)
+    for (int32_t id = 0; id < mNumLayers; id++)
     {
         void* outputData = outputs[id];
         pluginStatus_t status = anchorGridInference(
@@ -219,10 +219,10 @@ int GridAnchorGenerator::enqueue(
 
 size_t GridAnchorGenerator::getSerializationSize() const noexcept
 {
-    size_t sum = sizeof(int); // mNumLayers
-    for (int i = 0; i < mNumLayers; i++)
+    size_t sum = sizeof(int32_t); // mNumLayers
+    for (int32_t i = 0; i < mNumLayers; i++)
     {
-        sum += 4 * sizeof(int); // mNumPriors, mParam[i].{numAspectRatios, H, W}
+        sum += 4 * sizeof(int32_t); // mNumPriors, mParam[i].{numAspectRatios, H, W}
         sum += (6 + mParam[i].numAspectRatios)
             * sizeof(float); // mParam[i].{minSize, maxSize, aspectRatios, variance[4]}
         sum += mDeviceWidths[i].count * sizeof(float);
@@ -235,19 +235,19 @@ void GridAnchorGenerator::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mNumLayers);
-    for (int id = 0; id < mNumLayers; id++)
+    for (int32_t id = 0; id < mNumLayers; id++)
     {
         // we have to serialize GridAnchorParameters by hand
         write(d, mParam[id].minSize);
         write(d, mParam[id].maxSize);
         write(d, mParam[id].numAspectRatios);
-        for (int i = 0; i < mParam[id].numAspectRatios; ++i)
+        for (int32_t i = 0; i < mParam[id].numAspectRatios; ++i)
         {
             write(d, mParam[id].aspectRatios[i]);
         }
         write(d, mParam[id].H);
         write(d, mParam[id].W);
-        for (int i = 0; i < 4; ++i)
+        for (int32_t i = 0; i < 4; ++i)
         {
             write(d, mParam[id].variance[i]);
         }
@@ -309,7 +309,7 @@ char const* GridAnchorGenerator::getPluginNamespace() const noexcept
 #include <iostream>
 // Return the DataType of the plugin output at the requested index
 DataType GridAnchorGenerator::getOutputDataType(
-    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index < mNumLayers);
     return DataType::kFLOAT;
@@ -317,21 +317,21 @@ DataType GridAnchorGenerator::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool GridAnchorGenerator::isOutputBroadcastAcrossBatch(
-    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool GridAnchorGenerator::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool GridAnchorGenerator::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void GridAnchorGenerator::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void GridAnchorGenerator::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
+    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(nbOutputs == mNumLayers);
     PLUGIN_ASSERT(outputDims[0].nbDims == 3);
@@ -400,20 +400,20 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
     try
     {
         float minScale = 0.2F, maxScale = 0.95F;
-        int numLayers = 6;
+        int32_t numLayers = 6;
         std::vector<float> aspectRatios;
-        std::vector<int> fMapShapes;
+        std::vector<int32_t> fMapShapes;
         std::vector<float> layerVariances;
         PluginField const* fields = fc->fields;
 
         bool const isFMapRect = (kGRID_ANCHOR_PLUGIN_NAMES[1] == mPluginName);
-        for (int i = 0; i < fc->nbFields; ++i)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             char const* attrName = fields[i].name;
             if (!strcmp(attrName, "numLayers"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                numLayers = static_cast<int>(*(static_cast<int const*>(fields[i].data)));
+                numLayers = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[i].data)));
             }
             else if (!strcmp(attrName, "minSize"))
             {
@@ -428,10 +428,10 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
             else if (!strcmp(attrName, "variance"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                int size = fields[i].length;
+                int32_t size = fields[i].length;
                 layerVariances.reserve(size);
                 auto const* lVar = static_cast<float const*>(fields[i].data);
-                for (int j = 0; j < size; j++)
+                for (int32_t j = 0; j < size; j++)
                 {
                     layerVariances.push_back(*lVar);
                     lVar++;
@@ -440,10 +440,10 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
             else if (!strcmp(attrName, "aspectRatios"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                int size = fields[i].length;
+                int32_t size = fields[i].length;
                 aspectRatios.reserve(size);
                 auto const* aR = static_cast<float const*>(fields[i].data);
-                for (int j = 0; j < size; j++)
+                for (int32_t j = 0; j < size; j++)
                 {
                     aspectRatios.push_back(*aR);
                     aR++;
@@ -452,11 +452,11 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
             else if (!strcmp(attrName, "featureMapShapes"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                int size = fields[i].length;
+                int32_t size = fields[i].length;
                 PLUGIN_VALIDATE(!isFMapRect || (size % 2 == 0));
                 fMapShapes.reserve(size);
-                int const* fMap = static_cast<int const*>(fields[i].data);
-                for (int j = 0; j < size; j++)
+                int32_t const* fMap = static_cast<int32_t const*>(fields[i].data);
+                for (int32_t j = 0; j < size; j++)
                 {
                     fMapShapes.push_back(*fMap);
                     fMap++;
@@ -468,13 +468,13 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
         std::vector<float> firstLayerAspectRatios;
 
         PLUGIN_VALIDATE(numLayers > 0);
-        int const numExpectedLayers = static_cast<int>(fMapShapes.size()) >> (isFMapRect ? 1 : 0);
+        int32_t const numExpectedLayers = static_cast<int32_t>(fMapShapes.size()) >> (isFMapRect ? 1 : 0);
         PLUGIN_VALIDATE(numExpectedLayers == numLayers);
 
-        int numFirstLayerARs = 3;
+        int32_t numFirstLayerARs = 3;
         // First layer only has the first 3 aspect ratios from aspectRatios
         firstLayerAspectRatios.reserve(numFirstLayerARs);
-        for (int i = 0; i < numFirstLayerARs; ++i)
+        for (int32_t i = 0; i < numFirstLayerARs; ++i)
         {
             firstLayerAspectRatios.push_back(aspectRatios[i]);
         }
@@ -482,21 +482,22 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
         std::vector<GridAnchorParameters> boxParams(numLayers);
 
         // One set of box parameters for one layer
-        for (int i = 0; i < numLayers; i++)
+        for (int32_t i = 0; i < numLayers; i++)
         {
-            int hOffset = (isFMapRect ? i * 2 : i);
-            int wOffset = (isFMapRect ? i * 2 + 1 : i);
+            int32_t hOffset = (isFMapRect ? i * 2 : i);
+            int32_t wOffset = (isFMapRect ? i * 2 + 1 : i);
             // Only the first layer is different
             if (i == 0)
             {
-                boxParams[i] = {minScale, maxScale, firstLayerAspectRatios.data(), (int) firstLayerAspectRatios.size(),
-                    fMapShapes[hOffset], fMapShapes[wOffset],
+                boxParams[i] = {minScale, maxScale, firstLayerAspectRatios.data(),
+                    (int32_t) firstLayerAspectRatios.size(), fMapShapes[hOffset], fMapShapes[wOffset],
                     {layerVariances[0], layerVariances[1], layerVariances[2], layerVariances[3]}};
             }
             else
             {
-                boxParams[i] = {minScale, maxScale, aspectRatios.data(), (int) aspectRatios.size(), fMapShapes[hOffset],
-                    fMapShapes[wOffset], {layerVariances[0], layerVariances[1], layerVariances[2], layerVariances[3]}};
+                boxParams[i] = {minScale, maxScale, aspectRatios.data(), (int32_t) aspectRatios.size(),
+                    fMapShapes[hOffset], fMapShapes[wOffset],
+                    {layerVariances[0], layerVariances[1], layerVariances[2], layerVariances[3]}};
             }
         }
 

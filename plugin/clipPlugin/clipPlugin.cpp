@@ -67,30 +67,30 @@ char const* ClipPlugin::getPluginVersion() const noexcept
     return kCLIP_PLUGIN_VERSION;
 }
 
-int ClipPlugin::getNbOutputs() const noexcept
+int32_t ClipPlugin::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims ClipPlugin::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims ClipPlugin::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 1);
     PLUGIN_ASSERT(index == 0);
     return *inputs;
 }
 
-int ClipPlugin::initialize() noexcept
+int32_t ClipPlugin::initialize() noexcept
 {
     return 0;
 }
 
-int ClipPlugin::enqueue(
-    int batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
+int32_t ClipPlugin::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
 {
     try
     {
         void* output = outputs[0];
-        int status = pluginStatus_t::STATUS_FAILURE;
+        int32_t status = pluginStatus_t::STATUS_FAILURE;
         status = clipInference(stream, mInputVolume * batchSize, mClipMin, mClipMax, inputs[0], output, mDataType);
 
         if (status != pluginStatus_t::STATUS_SUCCESS)
@@ -130,8 +130,8 @@ void ClipPlugin::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-void ClipPlugin::configureWithFormat(Dims const* inputs, int nbInputs, Dims const* outputs, int nbOutputs,
-    DataType type, PluginFormat format, int) noexcept
+void ClipPlugin::configureWithFormat(Dims const* inputs, int32_t nbInputs, Dims const* outputs, int32_t nbOutputs,
+    DataType type, PluginFormat format, int32_t) noexcept
 {
     PLUGIN_ASSERT(nbOutputs == 1);
     PLUGIN_API_CHECK_ENUM_RANGE(DataType, type);
@@ -139,7 +139,7 @@ void ClipPlugin::configureWithFormat(Dims const* inputs, int nbInputs, Dims cons
     mDataType = type;
 
     size_t volume = 1;
-    for (int i = 0; i < inputs->nbDims; i++)
+    for (int32_t i = 0; i < inputs->nbDims; i++)
     {
         volume *= inputs->d[i];
     }

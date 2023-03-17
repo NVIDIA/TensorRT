@@ -35,32 +35,32 @@ class CoordConvACPlugin : public IPluginV2Ext
 public:
     CoordConvACPlugin();
 
-    CoordConvACPlugin(DataType iType, int iC, int iH, int iW, int oC, int oH, int oW);
+    CoordConvACPlugin(DataType iType, int32_t iC, int32_t iH, int32_t iW, int32_t oC, int32_t oH, int32_t oW);
 
     CoordConvACPlugin(void const* data, size_t length);
 
     ~CoordConvACPlugin() override = default;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
 
-    int enqueue(int batchSize, void const* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
     void serialize(void* buffer) const noexcept override;
 
-    void configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
         DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-        bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
@@ -73,16 +73,16 @@ public:
     IPluginV2Ext* clone() const noexcept override;
 
     nvinfer1::DataType getOutputDataType(
-        int index, nvinfer1::DataType const* inputType, int nbInputs) const noexcept override;
+        int32_t index, nvinfer1::DataType const* inputType, int32_t nbInputs) const noexcept override;
 
     void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
     char const* getPluginNamespace() const noexcept override;
 
     bool isOutputBroadcastAcrossBatch(
-        int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept override;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
 private:
     void deserialize(uint8_t const* data, size_t length);

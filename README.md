@@ -25,8 +25,8 @@ You can skip the **Build** section to enjoy TensorRT with Python.
 ## Prerequisites
 To build the TensorRT-OSS components, you will first need the following software packages.
 
-**TensorRT EA build**
-* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.6.0.12
+**TensorRT GA build**
+* [TensorRT](https://developer.nvidia.com/nvidia-tensorrt-download) v8.6.1.6
 
 **System Packages**
 * [CUDA](https://developer.nvidia.com/cuda-toolkit)
@@ -48,8 +48,8 @@ To build the TensorRT-OSS components, you will first need the following software
   * (Cross compilation for Jetson platform) [NVIDIA JetPack](https://developer.nvidia.com/embedded/jetpack) >= 5.0 (current support only for TensorRT 8.4.0 and TensorRT 8.5.2)
   * (Cross compilation for QNX platform) [QNX Toolchain](https://blackberry.qnx.com/en)
 * PyPI packages (for demo applications/tests)
-  * [onnx](https://pypi.org/project/onnx/) 1.9.0
-  * [onnxruntime](https://pypi.org/project/onnxruntime/) 1.8.0
+  * [onnx](https://pypi.org/project/onnx/)
+  * [onnxruntime](https://pypi.org/project/onnxruntime/)
   * [tensorflow-gpu](https://pypi.org/project/tensorflow/) >= 2.5.1
   * [Pillow](https://pypi.org/project/Pillow/) >= 9.0.1
   * [pycuda](https://pypi.org/project/pycuda/) < 2021.1
@@ -70,18 +70,18 @@ To build the TensorRT-OSS components, you will first need the following software
 	git submodule update --init --recursive
 	```
 
-2. #### (Optional - if not using TensorRT container) Specify the TensorRT EA release build path
+2. #### (Optional - if not using TensorRT container) Specify the TensorRT GA release build path
 
     If using the TensorRT OSS build container, TensorRT libraries are preinstalled under `/usr/lib/x86_64-linux-gnu` and you may skip this step.
 
-    Else download and extract the TensorRT EA build from [NVIDIA Developer Zone](https://developer.nvidia.com/nvidia-tensorrt-download).
+    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com/nvidia-tensorrt-download).
 
     **Example: Ubuntu 20.04 on x86-64 with cuda-12.0**
 
     ```bash
     cd ~/Downloads
-    tar -xvzf TensorRT-8.6.0.12.Linux.x86_64-gnu.cuda-12.0.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-8.6.0.12
+    tar -xvzf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-8.6.1.6
     ```
 
 
@@ -111,9 +111,9 @@ For Linux platforms, we recommend that you generate a docker container for build
     ```bash
     ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda11.4
     ```
-    **Example: Ubuntu 20.04 on aarch64 with cuda-11.4.2**
+    **Example: Ubuntu 20.04 on aarch64 with cuda-11.8**
     ```bash
-    ./docker/build.sh --file docker/ubuntu-20.04-aarch64.Dockerfile --tag tensorrt-aarch64-ubuntu20.04-cuda11.4
+    ./docker/build.sh --file docker/ubuntu-20.04-aarch64.Dockerfile --tag tensorrt-aarch64-ubuntu20.04-cuda11.8 --cuda 11.8.0
     ```
 
 2. #### Launch the TensorRT-OSS build container.
@@ -143,7 +143,7 @@ For Linux platforms, we recommend that you generate a docker container for build
     yum -y install centos-release-scl
     yum-config-manager --enable rhel-server-rhscl-7-rpms
     yum -y install devtoolset-8
-    export PATH="/opt/rh/devtoolset-8/root/bin:${PATH}
+    export PATH="/opt/rh/devtoolset-8/root/bin:${PATH}"
     ```
 
     **Example: Linux (aarch64) build with default cuda-12.0**
@@ -174,14 +174,14 @@ For Linux platforms, we recommend that you generate a docker container for build
     > NOTE: The latest JetPack SDK v5.1 only supports TensorRT 8.5.2.
 
 	> NOTE:
-	<br> 1. The default CUDA version used by CMake is 11.8.0. To override this, for example to 10.2, append `-DCUDA_VERSION=10.2` to the cmake command.
+	<br> 1. The default CUDA version used by CMake is 12.0.1. To override this, for example to 11.8, append `-DCUDA_VERSION=11.8` to the cmake command.
 	<br> 2. If samples fail to link on CentOS7, create this symbolic link: `ln -s $TRT_OUT_DIR/libnvinfer_plugin.so $TRT_OUT_DIR/libnvinfer_plugin.so.8`
 * Required CMake build arguments are:
 	- `TRT_LIB_DIR`: Path to the TensorRT installation directory containing libraries.
 	- `TRT_OUT_DIR`: Output directory where generated build artifacts will be copied.
 * Optional CMake build arguments:
 	- `CMAKE_BUILD_TYPE`: Specify if binaries generated are for release or debug (contain debug symbols). Values consists of [`Release`] | `Debug`
-	- `CUDA_VERISON`: The version of CUDA to target, for example [`11.7.1`].
+	- `CUDA_VERSION`: The version of CUDA to target, for example [`11.7.1`].
 	- `CUDNN_VERSION`: The version of cuDNN to target, for example [`8.6`].
 	- `PROTOBUF_VERSION`:  The version of Protobuf to use, for example [`3.0.0`]. Note: Changing this will not configure CMake to use a system version of Protobuf, it will configure CMake to download and try building that version.
 	- `CMAKE_TOOLCHAIN_FILE`: The path to a toolchain file for cross compilation.

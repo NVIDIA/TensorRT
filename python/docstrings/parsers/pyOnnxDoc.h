@@ -134,10 +134,10 @@ namespace OnnxParserFlagDoc
 constexpr const char* descr = R"trtdoc(
     Flags that control how an ONNX model gets parsed.
 )trtdoc";
-constexpr const char* VERSION_COMPATIBLE = R"trtdoc(
-   Parse the ONNX model into the INetworkDefinition with the intention of building a version-compatible engine in TensorRT 8.6.
-   This flag is planned to be deprecated in TensorRT 8.7, and removed in TensorRT 9.0.
-   This will choose TensorRT's native InstanceNormalization implementation over the plugin implementation.
+constexpr const char* NATIVE_INSTANCENORM = R"trtdoc(
+   Parse the ONNX model into the INetworkDefinition with the intention of using TensorRT's native layer implementation over the plugin implementation for InstanceNormalization nodes. 
+   This flag is planned to be deprecated in TensorRT 8.7 and removed in TensorRT 9.0. 
+   This flag is required when building version-compatible or hardware-compatible engines. 
    There may be performance degradations when this flag is enabled.
 )trtdoc";
 } // namespace OnnxParserFlagDoc

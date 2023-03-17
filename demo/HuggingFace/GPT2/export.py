@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,7 +60,7 @@ class GPT2TorchFile(TorchModelFile):
             self.transformer = transformer
             self.lm_head = lm_head
             self.config = config
-            self.device = "cuda" # WAR to avoid beam search in framework
+            self.device = torch.device('cuda') # WAR to avoid beam search in framework
             self.main_input_name = "input_ids" # For better HuggingFace version compatibility
 
         def prepare_inputs_for_generation(self, input_ids, past = None, use_cache=None, **kwargs):
@@ -142,6 +142,17 @@ class GPT2TRTEngine(TRTEngineFile):
 
                 l_next.precision = trt.float32
                 l_next.set_output_type(0, trt.float32)
+
+        if self.network_metadata.precision.fp16:
+            for i in range(network_definition[1].num_inputs):
+                t = network_definition[1].get_input(i)
+                if t.dtype == trt.float32:
+                    t.dtype = trt.float16
+
+            for i in range(network_definition[1].num_outputs):
+                t = network_definition[1].get_output(i)
+                if t.dtype == trt.float32:
+                    t.dtype = trt.float16
 
         return network_definition
 

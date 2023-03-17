@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +16,8 @@
 #
 
 """Common utils used by demo folder.
-Note: 
-- For now, users/developers that are contributing to TensorRT OSS should NOT import non-default Python packages in this file, because the test pipeline's boot-up process cannot load extra dependencies. In the near future, alternative solutions such as creating a separate boot-up util list can be possible. 
+Note:
+- For now, users/developers that are contributing to TensorRT OSS should NOT import non-default Python packages in this file, because the test pipeline's boot-up process cannot load extra dependencies. In the near future, alternative solutions such as creating a separate boot-up util list can be possible.
 - Users/developers that are just using the TensorRT OSS without contributing are still free to modify this file and customize for deployment.
 """
 
@@ -170,7 +170,7 @@ def measure_python_inference_code(
         Temporary replacement for numpy.percentile() because TRT CI/CD pipeline requires additional packages to be added at boot up in this general_utils.py file.
         """
         assert p >= 0 and p <= 100, "Percentile must be between 1 and 99"
-        
+
         rank = len(data) * p / 100
         if rank.is_integer():
             return sorted(data)[int(rank)]
@@ -229,7 +229,7 @@ class NNFolderWorkspace:
         os.makedirs(self.decoder_path, exist_ok=True)
         if is_encoder_decoder:
             self.encoder_path = os.path.join(self.model_path, "encoder")
-            os.makedirs(self.encoder_path, exist_ok=True)  
+            os.makedirs(self.encoder_path, exist_ok=True)
         # For decoder only models, there is no encoder
         else:
             self.encoder_path = None
@@ -242,19 +242,19 @@ class NNFolderWorkspace:
             os.makedirs(self.decoder_kv_path, exist_ok=True)
 
         return self.model_path, self.encoder_path, self.decoder_path
-    
+
     def get_path(self) -> str:
         return self.dpath
-    
+
     def get_model_path(self) -> str:
         return self.model_path
-    
+
     def get_encoder_path(self) -> str:
         return self.encoder_path
-    
+
     def get_decoder_path(self) -> str:
         return self.decoder_path
-    
+
     def get_decoder_path_kv(self) -> (str, str):
         if not self.metadata.other.kv_cache:
             raise RuntimeError("Trying to access kv specific folder in non kv mode")
@@ -267,7 +267,7 @@ class NNFolderWorkspace:
         '''
         if force_remove:
             return shutil.rmtree(self.dpath)
-        
+
         if self.is_encoder_decoder_path_set:
             if self.encoder_path is not None:
                 remove_if_empty(self.encoder_path)
@@ -281,6 +281,6 @@ class NNFolderWorkspace:
             remove_if_empty(
                 self.decoder_path
             )
-        
+
         remove_if_empty(self.model_path)
         remove_if_empty(self.dpath)

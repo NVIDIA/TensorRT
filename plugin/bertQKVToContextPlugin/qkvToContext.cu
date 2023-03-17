@@ -109,7 +109,7 @@ __global__ void maskedSoftmax(const float rsqrtHeadSize, const T* input, T* outp
             rZ = (1.f) / Z;
         }
         __syncthreads();
-        local[it] *= rZ;
+        local[it] = (threadIdx.x < lastValid) ? local[it] * rZ : 0.F;
     }
 
 #pragma unroll
@@ -1264,3 +1264,4 @@ bool FusedMHARunnerInt8v2::isValid(int s) const
 } // namespace bert
 } // namespace plugin
 } // namespace nvinfer1
+

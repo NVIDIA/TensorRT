@@ -17,7 +17,7 @@
 
 // Implementation of PyBind11 Binding Code for OnnxParser
 #include "ForwardDeclarations.h"
-#include "onnxOpenSource/NvOnnxParser.h"
+#include "onnx/NvOnnxParser.h"
 #include "parsers/pyOnnxDoc.h"
 #include "utils.h"
 #include <pybind11/stl.h>
@@ -98,7 +98,7 @@ void bindOnnx(py::module& m)
 
     py::class_<IParser>(m, "OnnxParser", OnnxParserDoc::descr, py::module_local())
         .def(py::init(&nvonnxparser::createParser), "network"_a, "logger"_a, OnnxParserDoc::init,
-            py::keep_alive<1, 2>{}, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
+            py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
         .def("parse", lambdas::parse, "model"_a, "path"_a = nullptr, OnnxParserDoc::parse,
             py::call_guard<py::gil_scoped_release>{})
         .def("parse_with_weight_descriptors", lambdas::parse_with_weight_descriptors, "model"_a,
@@ -119,7 +119,7 @@ void bindOnnx(py::module& m)
         .def("__del__", &utils::doNothingDel<IParser>);
 
     py::enum_<OnnxParserFlag>(m, "OnnxParserFlag", OnnxParserFlagDoc::descr, py::module_local())
-        .value("VERSION_COMPATIBLE", OnnxParserFlag::kVERSION_COMPATIBLE, OnnxParserFlagDoc::VERSION_COMPATIBLE);
+        .value("NATIVE_INSTANCENORM", OnnxParserFlag::kNATIVE_INSTANCENORM, OnnxParserFlagDoc::NATIVE_INSTANCENORM);
 
     py::enum_<ErrorCode>(m, "ErrorCode", ErrorCodeDoc::descr, py::module_local())
         .value("SUCCESS", ErrorCode::kSUCCESS)

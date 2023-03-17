@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,7 +52,7 @@ def _do_graph_surgery(raw_model_path, trt_model_path):
     compress_node  = node_by_name['Compress_31']
 
     einsum_node = gs.Node(
-        'Einsum', 
+        'Einsum',
         'Dot_of_Hardmax_and_Transpose',
         attrs={'equation': 'ij,ij->i'}, # "Dot product" of 2d tensors
         inputs=[hardmax_node.outputs[0], transpose_node.outputs[0]],

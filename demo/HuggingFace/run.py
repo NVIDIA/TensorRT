@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +45,7 @@ WRAPPER_ACTIONS = [WRAPPER_RUN_ACTION, WRAPPER_LIST_ACTION, WRAPPER_COMPARE_ACTI
 # NNDF
 from NNDF.general_utils import process_per_result_entries, process_results, register_network_folders, RANDOM_SEED
 from NNDF.logger import G_LOGGER
+from NNDF.cuda_bootstrapper import bootstrap_ld_library_path
 
 # huggingface
 from transformers import set_seed
@@ -298,6 +299,12 @@ def main() -> None:
     # Delegate parser to action specifics
     action = get_action(known_args.action, networks, parser)
     known_args, _ = parser.parse_known_args()
+
+    # If bootstrap occurs, then the spawned process completes the rest of demo.
+    # We can exit safely. We spawn after parsing basic args to reduce loading churn on rudimentary help commands.
+    if bootstrap_ld_library_path():
+        sys.exit(0)
+
     return action.execute(known_args)
 
 

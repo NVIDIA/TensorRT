@@ -867,141 +867,113 @@ namespace tensorrt
             .def("mark_output", &INetworkDefinition::markOutput, "tensor"_a, INetworkDefinitionDoc::mark_output)
             // Layers
             .def("add_input", &INetworkDefinition::addInput, "name"_a, "dtype"_a, "shape"_a,
-                INetworkDefinitionDoc::add_input,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_input, py::return_value_policy::reference_internal)
             .def("add_convolution", utils::deprecate(lambdas::add_convolution, "add_convolution_nd"), "input"_a, "num_output_maps"_a, "kernel_shape"_a,
                 "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{}, INetworkDefinitionDoc::add_convolution,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_convolution_nd", lambdas::add_convolution_nd, "input"_a, "num_output_maps"_a,
                 "kernel_shape"_a, "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{},
-                INetworkDefinitionDoc::add_convolution_nd,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_convolution_nd, py::return_value_policy::reference_internal)
             .def("add_fully_connected", utils::deprecate(lambdas::add_fully_connected, "add_matrix_multiply"), "input"_a, "num_outputs"_a,
                 "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 4>{}, py::keep_alive<1, 5>{}, INetworkDefinitionDoc::add_fully_connected,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_activation", &INetworkDefinition::addActivation, "input"_a, "type"_a,
-                INetworkDefinitionDoc::add_activation,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_activation, py::return_value_policy::reference_internal)
             .def("add_pooling", utils::deprecateMember(&INetworkDefinition::addPooling, "add_pooling_nd"), "input"_a, "type"_a, "window_size"_a,
-                INetworkDefinitionDoc::add_pooling,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_pooling, py::return_value_policy::reference_internal)
             .def("add_pooling_nd", &INetworkDefinition::addPoolingNd, "input"_a, "type"_a, "window_size"_a,
-                INetworkDefinitionDoc::add_pooling_nd,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_pooling_nd, py::return_value_policy::reference_internal)
             .def("add_lrn", &INetworkDefinition::addLRN, "input"_a, "window"_a, "alpha"_a, "beta"_a, "k"_a,
-                INetworkDefinitionDoc::add_lrn,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_lrn, py::return_value_policy::reference_internal)
             .def("add_scale", lambdas::add_scale, "input"_a, "mode"_a, "shift"_a=nullptr, "scale"_a=nullptr, "power"_a=nullptr,
                 py::keep_alive<1, 4>{}, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{}, INetworkDefinitionDoc::add_scale,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_scale_nd", lambdas::add_scale_nd, "input"_a, "mode"_a, "shift"_a=nullptr, "scale"_a=nullptr, "power"_a=nullptr, "channel_axis"_a,
                 py::keep_alive<1, 4>{}, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{}, INetworkDefinitionDoc::add_scale_nd,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_softmax", &INetworkDefinition::addSoftMax, "input"_a, INetworkDefinitionDoc::add_softmax,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_concatenation", lambdas::add_concatenation, "inputs"_a, INetworkDefinitionDoc::add_concatenation,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_deconvolution", utils::deprecate(lambdas::add_deconvolution, "add_deconvolution_nd"), "input"_a, "num_output_maps"_a,
                 "kernel_shape"_a, "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{},
-                INetworkDefinitionDoc::add_deconvolution,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_deconvolution, py::return_value_policy::reference_internal)
             .def("add_deconvolution_nd", lambdas::add_deconvolution_nd, "input"_a, "num_output_maps"_a,
                 "kernel_shape"_a, "kernel"_a, "bias"_a=nullptr, py::keep_alive<1, 5>{}, py::keep_alive<1, 6>{},
-                INetworkDefinitionDoc::add_deconvolution_nd,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_deconvolution_nd, py::return_value_policy::reference_internal)
             .def("add_elementwise", &INetworkDefinition::addElementWise, "input1"_a, "input2"_a, "op"_a,
-                INetworkDefinitionDoc::add_elementwise,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_elementwise, py::return_value_policy::reference_internal)
             .def("add_unary", &INetworkDefinition::addUnary, "input"_a, "op"_a, INetworkDefinitionDoc::add_unary,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_padding", utils::deprecateMember(&INetworkDefinition::addPadding, "add_padding_nd"), "input"_a, "pre_padding"_a, "post_padding"_a,
-                INetworkDefinitionDoc::add_padding,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_padding, py::return_value_policy::reference_internal)
             .def("add_padding_nd", &INetworkDefinition::addPaddingNd, "input"_a, "pre_padding"_a, "post_padding"_a,
-                INetworkDefinitionDoc::add_padding_nd,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_padding_nd, py::return_value_policy::reference_internal)
             .def("add_shuffle", &INetworkDefinition::addShuffle, "input"_a, INetworkDefinitionDoc::add_shuffle,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_slice", &INetworkDefinition::addSlice, "input"_a, "start"_a, "shape"_a, "stride"_a,
-                INetworkDefinitionDoc::add_slice,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_slice, py::return_value_policy::reference_internal)
             .def("add_reduce", &INetworkDefinition::addReduce, "input"_a, "op"_a, "axes"_a, "keep_dims"_a,
-                INetworkDefinitionDoc::add_reduce,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_reduce, py::return_value_policy::reference_internal)
             .def("add_topk", &INetworkDefinition::addTopK, "input"_a, "op"_a, "k"_a, "axes"_a,
-                INetworkDefinitionDoc::add_topk,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_topk, py::return_value_policy::reference_internal)
             .def("add_gather", &INetworkDefinition::addGather, "input"_a, "indices"_a, "axis"_a,
-                INetworkDefinitionDoc::add_gather,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_gather, py::return_value_policy::reference_internal)
             .def("add_scatter", &INetworkDefinition::addScatter, "data"_a, "indices"_a, "updates"_a, "mode"_a,
-                INetworkDefinitionDoc::add_scatter,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_scatter, py::return_value_policy::reference_internal)
             .def("add_gather_v2", &INetworkDefinition::addGatherV2, "input"_a, "indices"_a, "mode"_a,
-                INetworkDefinitionDoc::add_gather_v2,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_gather_v2, py::return_value_policy::reference_internal)
             .def("add_ragged_softmax", &INetworkDefinition::addRaggedSoftMax, "input"_a, "bounds"_a,
-                INetworkDefinitionDoc::add_ragged_softmax,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_ragged_softmax, py::return_value_policy::reference_internal)
             .def("add_matrix_multiply",
                 static_cast<IMatrixMultiplyLayer* (INetworkDefinition::*)(ITensor&, MatrixOperation, ITensor&, MatrixOperation)>(&INetworkDefinition::addMatrixMultiply),
                 "input0"_a, "op0"_a, "input1"_a, "op1"_a, INetworkDefinitionDoc::add_matrix_multiply,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_constant", &INetworkDefinition::addConstant, "shape"_a, "weights"_a,
                 py::keep_alive<1, 3>{}, INetworkDefinitionDoc::add_constant,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_rnn_v2", utils::deprecateMember(&INetworkDefinition::addRNNv2, "addLoop"), "input"_a, "layer_count"_a,
-                "hidden_size"_a, "max_seq_length"_a, "op"_a,
-                py::keep_alive<1, 0>{}, INetworkDefinitionDoc::add_rnn_v2)
+                "hidden_size"_a, "max_seq_length"_a, "op"_a, INetworkDefinitionDoc::add_rnn_v2)
             .def("add_identity", &INetworkDefinition::addIdentity, "input"_a,
-                INetworkDefinitionDoc::add_identity,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_identity, py::return_value_policy::reference_internal)
             .def("add_cast", &INetworkDefinition::addCast, "input"_a, "to_type"_a,
-                INetworkDefinitionDoc::add_cast,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_cast, py::return_value_policy::reference_internal)
             .def("add_plugin_v2",  lambdas::add_plugin_v2, "inputs"_a, "plugin"_a,
-                INetworkDefinitionDoc::add_plugin_v2,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_plugin_v2, py::return_value_policy::reference_internal)
             .def("add_parametric_relu", &INetworkDefinition::addParametricReLU, "input"_a,
-                "slopes"_a, INetworkDefinitionDoc::add_parametric_relu,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                "slopes"_a, INetworkDefinitionDoc::add_parametric_relu, py::return_value_policy::reference_internal)
             .def("add_resize", &INetworkDefinition::addResize, "input"_a, INetworkDefinitionDoc::add_resize,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_loop", &INetworkDefinition::addLoop, INetworkDefinitionDoc::add_loop,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_shape", &INetworkDefinition::addShape, "input"_a, INetworkDefinitionDoc::add_shape,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_select", &INetworkDefinition::addSelect, "condition"_a, "then_input"_a,
-                "else_input"_a, INetworkDefinitionDoc::add_select,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                "else_input"_a, INetworkDefinitionDoc::add_select, py::return_value_policy::reference_internal)
             .def("add_assertion", &INetworkDefinition::addAssertion, "condition"_a, "message"_a,
                  INetworkDefinitionDoc::add_assertion, INetworkDefinitionDoc::add_assertion,
                  py::return_value_policy::reference_internal)
             .def("add_grid_sample", &INetworkDefinition::addGridSample, "input"_a, "grid"_a,
                   INetworkDefinitionDoc::add_grid_sample, py::return_value_policy::reference_internal)
             .def("add_nms", &INetworkDefinition::addNMS, "boxes"_a,
-                "scores"_a, "max_output_boxes_per_class"_a, INetworkDefinitionDoc::add_nms,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                "scores"_a, "max_output_boxes_per_class"_a, INetworkDefinitionDoc::add_nms, py::return_value_policy::reference_internal)
             .def("add_fill", &INetworkDefinition::addFill, "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
             .def("add_quantize",  &INetworkDefinition::addQuantize, "input"_a, "scale"_a,
-                INetworkDefinitionDoc::add_quantize,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_quantize, py::return_value_policy::reference_internal)
             .def("add_dequantize", &INetworkDefinition::addDequantize, "input"_a, "scale"_a,
-                INetworkDefinitionDoc::add_dequantize,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_dequantize, py::return_value_policy::reference_internal)
             .def("add_if_conditional", &INetworkDefinition::addIfConditional, INetworkDefinitionDoc::add_if_conditional,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_einsum", lambdas::add_einsum, "inputs"_a, "equation"_a, INetworkDefinitionDoc::add_einsum,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_one_hot", &INetworkDefinition::addOneHot, "indices"_a, "values"_a, "depth"_a, "axis"_a,
-                INetworkDefinitionDoc::add_one_hot,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                INetworkDefinitionDoc::add_one_hot, py::return_value_policy::reference_internal)
             .def("add_non_zero", &INetworkDefinition::addNonZero, "input"_a, INetworkDefinitionDoc::add_non_zero,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_reverse_sequence", &INetworkDefinition::addReverseSequence, "input"_a, "sequence_lens"_a, INetworkDefinitionDoc::add_reverse_sequence,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("add_normalization", &INetworkDefinition::addNormalization, "input"_a, "scale"_a, "bias"_a, "axesMask"_a, INetworkDefinitionDoc::add_normalization,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
             .def("mark_output_for_shapes", &INetworkDefinition::markOutputForShapes, "tensor"_a, INetworkDefinitionDoc::mark_output_for_shapes)
@@ -1009,15 +981,15 @@ namespace tensorrt
             .def("set_weights_name", &INetworkDefinition::setWeightsName, "weights"_a, "name"_a, INetworkDefinitionDoc::set_weights_name)
             // Getters
             .def("get_layer", &INetworkDefinition::getLayer, "index"_a, INetworkDefinitionDoc::get_layer,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("get_input", &INetworkDefinition::getInput, "index"_a, INetworkDefinitionDoc::get_input,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("get_output", &INetworkDefinition::getOutput, "index"_a, INetworkDefinitionDoc::get_output,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             // Note: the builder is the _parent_ of the INetworkDefinition, so a reference_internal policy (which would
             // keep the INetworkDefinition alive while the builder is referenced) is unnecessary here.
             .def_property_readonly("builder", &INetworkDefinition::getBuilder, INetworkDefinitionDoc::builder,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference)
+                py::return_value_policy::reference)
 
 #if ENABLE_INETWORK_SERIALIZE
             // Serialization
@@ -1026,7 +998,7 @@ namespace tensorrt
             // Allow iteration over the layers of a network
             .def("__len__", &INetworkDefinition::getNbLayers)
             .def("__getitem__", lambdas::network_getitem, py::return_value_policy::reference_internal,
-                py::keep_alive<1, 0>{}, py::return_value_policy::reference_internal)
+                py::return_value_policy::reference_internal)
             .def("__del__", &utils::doNothingDel<INetworkDefinition>)
         ;
 

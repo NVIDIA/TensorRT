@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-typedef unsigned short half_type;
+typedef uint16_t half_type;
 
 namespace nvinfer1
 {

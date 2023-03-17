@@ -33,10 +33,10 @@ namespace plugin
 class FlattenConcat : public IPluginV2Ext
 {
 public:
-    FlattenConcat(int concatAxis, bool ignoreBatch);
+    FlattenConcat(int32_t concatAxis, bool ignoreBatch);
 
-    FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, int outputConcatAxis, int const* inputConcatAxis,
-        size_t const* copySize, nvinfer1::Dims const& chwDims);
+    FlattenConcat(int32_t concatAxis, bool ignoreBatch, int32_t numInputs, int32_t outputConcatAxis,
+        int32_t const* inputConcatAxis, size_t const* copySize, nvinfer1::Dims const& chwDims);
 
     FlattenConcat(void const* data, size_t length);
 
@@ -44,33 +44,34 @@ public:
 
     FlattenConcat() = delete;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int) const noexcept override;
+    size_t getWorkspaceSize(int32_t) const noexcept override;
 
-    int enqueue(int batchSize, void const* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
     void serialize(void* buffer) const noexcept override;
 
     bool isOutputBroadcastAcrossBatch(
-        int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept override;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
-    void configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
         DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-        bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
@@ -98,9 +99,9 @@ private:
     Weights deserializeToDevice(char const*& hostBuffer, size_t count) noexcept;
 
     std::vector<size_t> mCopySize;
-    std::vector<int> mInputConcatAxis;
+    std::vector<int32_t> mInputConcatAxis;
     bool mIgnoreBatch{false};
-    int mConcatAxisID{0}, mOutputConcatAxis{0}, mNumInputs{0};
+    int32_t mConcatAxisID{0}, mOutputConcatAxis{0}, mNumInputs{0};
     nvinfer1::Dims mCHW;
     std::string mPluginNamespace;
     cublasHandle_t mCublas{nullptr};
@@ -126,7 +127,7 @@ public:
 private:
     static PluginFieldCollection mFC;
     bool mIgnoreBatch{false};
-    int mConcatAxisID;
+    int32_t mConcatAxisID;
     static std::vector<PluginField> mPluginAttributes;
 };
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,7 @@ def main(args):
     # Read annotations json as dictionary.
     with open(args.annotations) as f:
         data = json.load(f)
-    groundtruth = coco_tools.COCOWrapper(data, detection_type=args.detection_type)   
+    groundtruth = coco_tools.COCOWrapper(data, detection_type=args.detection_type)
     detections_list = []
     for batch, images, scales in batcher.get_batch():
         print("Processing Image {} / {}".format(batcher.image_index, batcher.num_images), end="\r")
@@ -59,7 +59,7 @@ def main(args):
                     detections_list.append(coco_det)
                 elif args.detection_type == 'segmentation':
                     # Get detection bbox resolution.
-                    det_width = round(det['xmax'] - det['xmin'])                
+                    det_width = round(det['xmax'] - det['xmin'])
                     det_height = round(det['ymax'] - det['ymin'])
                     # Create an image out of predicted mask array.
                     small_mask = Image.fromarray(det['mask'])
@@ -94,13 +94,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--engine", help="The TensorRT engine to infer with.")
     parser.add_argument("-i", "--input",
-                        help="The input to infer, either a single image path, or a directory of images.")                  
+                        help="The input to infer, either a single image path, or a directory of images.")
     parser.add_argument("-d", "--detection_type", default="bbox", choices=["bbox", "segmentation"],
                         help="Detection type for COCO, either bbox or if you are using Mask R-CNN's instance segmentation - segmentation.")
     parser.add_argument("-a", "--annotations", help="Set the json file to use for COCO instance annotations.")
-    parser.add_argument("-t", "--nms_threshold", type=float, 
+    parser.add_argument("-t", "--nms_threshold", type=float,
                         help="Override the score threshold for the NMS operation, if higher than the threshold in the engine.")
-    parser.add_argument("--iou_threshold", default=0.5, type=float, 
+    parser.add_argument("--iou_threshold", default=0.5, type=float,
                         help="Select the IoU threshold for the mask segmentation. Range is 0 to 1. Pixel values more than threshold will become 1, less 0.")
     parser.add_argument("--preprocessor", default="fixed_shape_resizer", choices=["fixed_shape_resizer", "keep_aspect_ratio_resizer"],
                         help="Select the image preprocessor to use based on your pipeline.config, either 'fixed_shape_resizer' or 'keep_aspect_ratio_resizer', default: fixed_shape_resizer.")

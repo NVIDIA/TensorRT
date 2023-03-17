@@ -306,6 +306,12 @@ public:
     virtual HardwareCompatibilityLevel getHardwareCompatibilityLevel() const noexcept = 0;
     virtual ICudaEngine* getPImpl() noexcept = 0;
     virtual int32_t getNbAuxStreams() const noexcept = 0;
+
+    virtual int32_t getTensorBytesPerComponentV2(char const* tensorName, int32_t profileIndex) const noexcept = 0;
+    virtual int32_t getTensorComponentsPerElementV2(char const* tensorName, int32_t profileIndex) const noexcept = 0;
+    virtual TensorFormat getTensorFormatV2(char const* tensorName, int32_t profileIndex) const noexcept = 0;
+    virtual char const* getTensorFormatDescV2(char const* tensorName, int32_t profileIndex) const noexcept = 0;
+    virtual int32_t getTensorVectorizedDimV2(char const* tensorName, int32_t profileIndex) const noexcept = 0;
 };
 
 class VExecutionContext : public VRoot

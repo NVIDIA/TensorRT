@@ -42,7 +42,7 @@ public:
     int32_t initialize() noexcept override;
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int) const noexcept override;
+    size_t getWorkspaceSize(int32_t) const noexcept override;
 
     int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;

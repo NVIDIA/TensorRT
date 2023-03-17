@@ -35,7 +35,7 @@ public:
 
     ~ScatterND() override = default;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
     DimsExprs getOutputDimensions(
         int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
@@ -49,7 +49,7 @@ public:
     size_t getWorkspaceSize(PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
         int32_t nbOutputs) const noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
@@ -72,7 +72,8 @@ public:
 
     char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
@@ -83,12 +84,12 @@ private:
     // calculate how many slices we need to scatter = reduce_mul(indexTensor.shape[:-1])
     int32_t calculateNumSlices(Dims indexTensorDims) const noexcept;
     int32_t calculateCopySize(Dims const& dataDims) const noexcept;
-    void calculateTransformCoeff(Dims const& dataTensorDims, int indexRank, int32_t* transformCoeff) const noexcept;
+    void calculateTransformCoeff(Dims const& dataTensorDims, int32_t indexRank, int32_t* transformCoeff) const noexcept;
     std::string mPluginNamespace;
 
-    static constexpr int indexTensorIdx = 1;
-    static constexpr int updateTensorIdx = 2;
-    static constexpr int dataTensorIdx = 0;
+    static constexpr int32_t indexTensorIdx = 1;
+    static constexpr int32_t updateTensorIdx = 2;
+    static constexpr int32_t dataTensorIdx = 0;
 };
 
 class ScatterNDPluginCreator : public nvinfer1::pluginInternal::BaseCreator

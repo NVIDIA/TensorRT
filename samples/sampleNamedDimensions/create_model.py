@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +29,7 @@ def main():
     graph = gs.Graph(nodes=[node], inputs=[input0, input1], outputs=[output])
 
     model = gs.export_onnx(graph)
-    onnx.save(model, "concat_layer.onnx")    
+    onnx.save(model, "concat_layer.onnx")
 
 if __name__ == '__main__':
     main()

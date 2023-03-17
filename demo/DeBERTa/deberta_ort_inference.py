@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,21 +18,21 @@
 """
 Test ORT-TRT engine of DeBERTa model. Different precisions are supported.
 
-Usage: 
+Usage:
 Test model inference time:
     - python deberta_ort_inference.py --onnx=./test/deberta.onnx --test fp16
 
 Correctness check by comparing original model and model with plugin:
     - python deberta_ort_inference.py --onnx=./test/deberta --correctness-check fp16
 
-Notes: 
+Notes:
     - supported precisions are fp32/fp16. For test, you can specify more than one precisions, and TensorRT engine of each precision will be built sequentially.
-    - engine files are saved at `./engine_cache/[Model name]_[GPU name]_[Precision]/`. Note that TensorRT engine is specific to both GPU architecture and TensorRT version. 
+    - engine files are saved at `./engine_cache/[Model name]_[GPU name]_[Precision]/`. Note that TensorRT engine is specific to both GPU architecture and TensorRT version.
     - if in --correctness-check mode, the argument for --onnx is the stem name for the model without .onnx extension.
 """
 
-import os, argparse 
-import onnxruntime as ort 
+import os, argparse
+import onnxruntime as ort
 import numpy as np
 import torch
 from time import time
@@ -44,10 +44,10 @@ if not os.path.exists(ENGINE_PATH):
 def GPU_ABBREV(name):
     '''
     Map GPU device query name to abbreviation.
-    
+
     ::param str name Device name from torch.cuda.get_device_name().
     ::return str GPU abbreviation.
-    ''' 
+    '''
 
     GPU_LIST = [
         'V100',
@@ -56,13 +56,13 @@ def GPU_ABBREV(name):
         'A100',
         'A10G',
         'A10'
-    ] 
+    ]
     # Partial list, can be extended. The order of A100, A10G, A10 matters. They're put in a way to not detect substring A10 as A100
-    
+
     for i in GPU_LIST:
         if i in name:
-            return i 
-    
+            return i
+
     return 'GPU' # for names not in the partial list, use 'GPU' as default
 
 gpu_name = GPU_ABBREV(torch.cuda.get_device_name())
@@ -79,7 +79,7 @@ parser.add_argument('--correctness-check', nargs='+', help='Correctness check fo
 
 args = parser.parse_args()
 
-ONNX_MODEL = args.onnx    
+ONNX_MODEL = args.onnx
 MODEL_STEM = os.path.splitext(args.onnx)[0].split('/')[-1]
 TEST = args.test
 CORRECTNESS = args.correctness_check
@@ -96,8 +96,8 @@ if CORRECTNESS:
 def test_engine():
 
     for precision in TEST:
-        
-        engine_cachepath = '/'.join([ENGINE_PATH, '_'.join([MODEL_STEM, gpu_name, precision, 'ort'])])     
+
+        engine_cachepath = '/'.join([ENGINE_PATH, '_'.join([MODEL_STEM, gpu_name, precision, 'ort'])])
 
         providers = [
             ('TensorrtExecutionProvider', {
@@ -110,7 +110,7 @@ def test_engine():
 
         so = ort.SessionOptions()
 
-        sess = ort.InferenceSession(ONNX_MODEL, sess_options=so, providers=providers) 
+        sess = ort.InferenceSession(ONNX_MODEL, sess_options=so, providers=providers)
 
         print(f'Running inference on engine {engine_cachepath}')
 
@@ -121,7 +121,7 @@ def test_engine():
         input_ids = torch.randint(0, vocab, (batch_size, seq_len), dtype=torch.long)
         attention_mask = torch.randint(0, 2, (batch_size, seq_len), dtype=torch.long)
         inputs = {
-            'input_ids': input_ids.numpy(), 
+            'input_ids': input_ids.numpy(),
             'attention_mask': attention_mask.numpy()
         }
 
@@ -137,7 +137,7 @@ def test_engine():
         print(f'Average Inference time (ms) of {nreps} runs: {duration/nreps*1000:.3f}. For more accurate test, please use the onnxruntime_perf_test commands.')
 
 def correctness_check_engines():
-    
+
     for precision in CORRECTNESS:
 
         engine_cachepath1 = '/'.join([ENGINE_PATH, '_'.join([MODEL_STEM, 'original', gpu_name, precision, 'ort'])])
@@ -145,7 +145,7 @@ def correctness_check_engines():
 
         if not os.path.exists(engine_cachepath1) or not os.path.exists(engine_cachepath2):
             print('At least one of the original and/or plugin engines do not exist. Please build them first by --test')
-            return 
+            return
 
         print(f'Running inference on original engine {engine_cachepath1} and plugin engine {engine_cachepath2}')
 
@@ -158,7 +158,7 @@ def correctness_check_engines():
                 'trt_engine_cache_enable': True,
                 'trt_engine_cache_path': engine_cachepath1
             }),
-            'CUDAExecutionProvider'] 
+            'CUDAExecutionProvider']
 
         providers2 = [
             ('TensorrtExecutionProvider', {
@@ -167,7 +167,7 @@ def correctness_check_engines():
                 'trt_engine_cache_enable': True,
                 'trt_engine_cache_path': engine_cachepath2
             }),
-            'CUDAExecutionProvider'] 
+            'CUDAExecutionProvider']
 
         sess1 = ort.InferenceSession(ONNX_MODEL+'_original.onnx', sess_options=so, providers=providers1)
         sess2 = ort.InferenceSession(ONNX_MODEL+'_plugin.onnx', sess_options=so, providers=providers2)
@@ -179,7 +179,7 @@ def correctness_check_engines():
         input_ids = torch.randint(0, vocab, (batch_size, seq_len), dtype=torch.long)
         attention_mask = torch.randint(0, 2, (batch_size, seq_len), dtype=torch.long)
         inputs = {
-            'input_ids': input_ids.numpy(), 
+            'input_ids': input_ids.numpy(),
             'attention_mask': attention_mask.numpy()
         }
 

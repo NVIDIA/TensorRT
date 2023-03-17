@@ -98,7 +98,7 @@ constexpr const char* descr = R"trtdoc(
 constexpr const char* LINEAR = R"trtdoc(
     Row major linear format.
 
-    For a tensor with dimensions {N, C, H, W}, the W axis always has unit stride, and the stride of every other axis is at least the the product of of the next dimension times the next stride. the strides are the same as for a C array with dimensions [N][C][H][W].
+    For a tensor with dimensions {N, C, H, W}, the W axis always has unit stride, and the stride of every other axis is at least the product of the next dimension times the next stride. the strides are the same as for a C array with dimensions [N][C][H][W].
 )trtdoc";
 
 constexpr const char* CHW2 = R"trtdoc(
@@ -232,14 +232,14 @@ constexpr const char* reset_dynamic_range = R"trtdoc(
 
 constexpr const char* set_dimension_name = R"trtdoc(
     Name a dimension of an input tensor.
-    
+
     Associate a runtime dimension of an input tensor with a symbolic name.
-    Dimensions with the same non-empty name must be equal at runtime. 
+    Dimensions with the same non-empty name must be equal at runtime.
     Knowing this equality for runtime dimensions may help the TensorRT optimizer.
     Both runtime and build-time dimensions can be named.
     If the function is called again, with the same index, it will overwrite the previous name.
     If None is passed as name, it will clear the name of the dimension.
-    
+
     For example, setDimensionName(0, "n") associates the symbolic name "n" with the leading dimension.
 
     :arg index: index of the dimension.

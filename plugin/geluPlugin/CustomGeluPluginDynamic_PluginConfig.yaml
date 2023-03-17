@@ -48,4 +48,24 @@ versions:
         max: "=pinf"
     attributes_required:
       - type_id
+    abs_tol: 1e-2
+    rel_tol: 1e-2
+    golden_reference_script: "plugin/geluPlugin/CustomGeluPluginDynamic_PluginReference.py"
+    configs:
+      config1:
+        input_types:
+          input: float32
+        attribute_options:
+          type_id:
+            value: 0
+          bias: 
+            shape: "1, 1, 128, 1, 1"
+      config2:
+        input_types:
+          input: float16
+        attribute_options:
+          type_id:
+            value: 1
+          bias: 
+            shape: "1, 1, 784, 1, 1"
 ...

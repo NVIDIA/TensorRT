@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +35,7 @@ from NNDF.networks import (
     TimingProfile,
 )
 from NNDF.logger import G_LOGGER
+from NNDF.general_utils import NNFolderWorkspace
 
 # externals
 # None, there should be no external dependencies for testing purposes.
@@ -321,6 +322,21 @@ class TRTInferenceCommand(NetworkCommand):
         self.framework_name = FRAMEWORK_TENSORRT
         # Should be set by
         self.frameworks_cmd = frameworks_cmd()
+
+    def _setup_workspace(self, metadata: NetworkMetadata, working_directory: str) -> NNFolderWorkspace:
+        return NNFolderWorkspace(
+            self.frameworks_cmd.config.network_name, metadata, working_directory
+        )
+
+    def _download_models(
+        self,
+        workspace: NNFolderWorkspace,
+        metadata: NetworkMetadata,
+    ) -> Tuple[NetworkModel]:
+        # No fpath provided for onnx files, download them from HuggingFace repo.
+        return self.frameworks_cmd.generate_and_download_framework(
+            metadata, workspace
+        ).onnx
 
     @abstractmethod
     def run_trt(

@@ -24,7 +24,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-size_t detectionForwardBBoxDataSize(int N, int C1, DataType DT_BBOX)
+size_t detectionForwardBBoxDataSize(int32_t N, int32_t C1, DataType DT_BBOX)
 {
     if (DT_BBOX == DataType::kFLOAT)
     {
@@ -39,7 +39,7 @@ size_t detectionForwardBBoxDataSize(int N, int C1, DataType DT_BBOX)
     return (size_t) -1;
 }
 
-size_t detectionForwardBBoxPermuteSize(bool shareLocation, int N, int C1, DataType DT_BBOX)
+size_t detectionForwardBBoxPermuteSize(bool shareLocation, int32_t N, int32_t C1, DataType DT_BBOX)
 {
     if (DT_BBOX == DataType::kFLOAT)
     {
@@ -54,15 +54,15 @@ size_t detectionForwardBBoxPermuteSize(bool shareLocation, int N, int C1, DataTy
     return (size_t) -1;
 }
 
-size_t detectionForwardPreNMSSize(int N, int C2)
+size_t detectionForwardPreNMSSize(int32_t N, int32_t C2)
 {
-    PLUGIN_ASSERT(sizeof(float) == sizeof(int));
+    PLUGIN_ASSERT(sizeof(float) == sizeof(int32_t));
     return N * C2 * sizeof(float);
 }
 
-size_t detectionForwardPostNMSSize(int N, int numClasses, int topK)
+size_t detectionForwardPostNMSSize(int32_t N, int32_t numClasses, int32_t topK)
 {
-    PLUGIN_ASSERT(sizeof(float) == sizeof(int));
+    PLUGIN_ASSERT(sizeof(float) == sizeof(int32_t));
     return N * numClasses * topK * sizeof(float);
 }
 } // namespace plugin

@@ -40,10 +40,10 @@ template <typename T>
 struct BboxInfo
 {
     T conf_score;
-    int label;
-    int bbox_idx;
+    int32_t label;
+    int32_t bbox_idx;
     bool kept;
-    BboxInfo(T conf_score, int label, int bbox_idx, bool kept)
+    BboxInfo(T conf_score, int32_t label, int32_t bbox_idx, bool kept)
         : conf_score(conf_score)
         , label(label)
         , bbox_idx(bbox_idx)
@@ -72,7 +72,7 @@ int8_t* nextWorkspacePtr(int8_t* ptr, uintptr_t previousWorkspaceSize);
 
 size_t dataTypeSize(nvinfer1::DataType dtype);
 
-void setUniformOffsets(cudaStream_t stream, int num_segments, int offset, int* d_offsets);
+void setUniformOffsets(cudaStream_t stream, int32_t num_segments, int32_t offset, int32_t* d_offsets);
 } // namespace plugin
 } // namespace nvinfer1
 #endif

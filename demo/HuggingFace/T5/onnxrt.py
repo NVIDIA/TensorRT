@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -146,7 +146,7 @@ class T5ONNXRT(OnnxRTCommand):
             self.t5_ort_encoder, input_ids, timing_profile
         )
 
-        # Need to feed the decoder a new empty input_ids for text generation. 
+        # Need to feed the decoder a new empty input_ids for text generation.
         decoder_output_len = output_seq_len // 2
 
         decoder_input_ids = torch.full(

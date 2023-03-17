@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -381,6 +381,11 @@ void print(std::ostream& os, T v)
 void print(std::ostream& os, int8_t v)
 {
     os << static_cast<int32_t>(v);
+}
+
+void print(std::ostream& os, __half v)
+{
+    os << static_cast<float>(v);
 }
 
 template <typename T>

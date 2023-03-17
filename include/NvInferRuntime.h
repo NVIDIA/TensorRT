@@ -388,7 +388,7 @@ public:
     //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
     //!
     //! For this method inputs are numbered 0..(nbInputs-1) and outputs are numbered nbInputs..(nbInputs+nbOutputs-1).
-    //! Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs+nbOutputs-1.
+    //! Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs+nbOutputs.
     //!
     //! TensorRT invokes this method to ask if the input/output indexed by pos supports the format/datatype specified
     //! by inOut[pos].format and inOut[pos].type.  The override should return true if that format/datatype at inOut[pos]
@@ -406,8 +406,8 @@ public:
     //! * A definition for a plugin that supports only FP16 NCHW for its two inputs,
     //!   and FP32 NCHW for its single output:
     //!
-    //!         return inOut.format[pos] == TensorFormat::kLINEAR && (inOut.type[pos] == pos < 2 ?  DataType::kHALF :
-    //!         DataType::kFLOAT);
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && (inOut.type[pos] == (pos < 2 ? DataType::kHALF :
+    //!         DataType::kFLOAT));
     //!
     //! * A definition for a "polymorphic" plugin with two inputs and one output that supports
     //!   any format or type, but the inputs and output must have the same format and type:
@@ -1896,12 +1896,34 @@ public:
     //! \param tensorName The name of an input or output tensor.
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //! \warning The function can only return the result of profile 0, and issues a warning message when there are
+    //! multiple profiles in the engine, use getTensorBytesPerComponent with profileIndex when there are multiple
+    //! profiles.
     //!
     //! \see getTensorVectorizedDim()
+    //! \see getTensorBytesPerComponent(tensorName, profileIndex)
     //!
     int32_t getTensorBytesPerComponent(char const* tensorName) const noexcept
     {
         return mImpl->getTensorBytesPerComponent(tensorName);
+    }
+
+    //!
+    //! \brief Return the number of bytes per component of an element of given profile, or -1 if the provided name does
+    //! not map to an input or output tensor.
+    //!
+    //! The vector component size is returned if getTensorVectorizedDim(tensorName, profileIndex) != -1.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //! \param profileIndex The profile index to query
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see getTensorVectorizedDim(tensorName, profileIndex)
+    //!
+    int32_t getTensorBytesPerComponent(char const* tensorName, int32_t profileIndex) const noexcept
+    {
+        return mImpl->getTensorBytesPerComponentV2(tensorName, profileIndex);
     }
 
     //!
@@ -1929,12 +1951,34 @@ public:
     //! \param tensorName The name of an input or output tensor.
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //! \warning The function can only return the result of profile 0, and issues a warning message when there
+    //! are multiple profiles in the engine, use getTensorComponentsPerElement with profileIndex when there are
+    //! multiple profiles.
     //!
     //! \see getTensorVectorizedDim()
+    //! \see getTensorComponentsPerElement(tensorName, profileIndex)
     //!
     int32_t getTensorComponentsPerElement(char const* tensorName) const noexcept
     {
         return mImpl->getTensorComponentsPerElement(tensorName);
+    }
+
+    //!
+    //! \brief Return the number of components included in one element of given profile, or -1 if the provided name does
+    //! not map to an input or output tensor.
+    //!
+    //! The number of elements in the vectors is returned if getTensorVectorizedDim(tensorName, profileIndex) != -1.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //! \param profileIndex The profile index to query
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see getTensorVectorizedDim(tensorName, profileIndex)
+    //!
+    int32_t getTensorComponentsPerElement(char const* tensorName, int32_t profileIndex) const noexcept
+    {
+        return mImpl->getTensorComponentsPerElementV2(tensorName, profileIndex);
     }
 
     //!
@@ -1952,16 +1996,32 @@ public:
     }
 
     //!
-    //! \brief Return the binding format, or TensorFormat::kLINEAR if the provided name does not map to an input or
+    //! \brief Return the tensor format, or TensorFormat::kLINEAR if the provided name does not map to an input or
     //! output tensor.
     //!
-    //! \param tensorName The name of an input or output tensor.
-    //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //! \warning This API can only return the tensor format of profile 0, and issues a warning message when there are
+    //! multiple profiles in the engine, use getTensorFormat with profileIndex when there are multiple profiles.
+    //!
+    //! \see getTensorFormat(tensorName, profileIndex)
     //!
     TensorFormat getTensorFormat(char const* tensorName) const noexcept
     {
         return mImpl->getTensorFormat(tensorName);
+    }
+
+    //!
+    //! \brief Return the tensor format of given profile, or TensorFormat::kLINEAR if the provided name does not map to
+    //! an input or output tensor.
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //! \param profileIndex The profile index to query the format for.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    TensorFormat getTensorFormat(char const* tensorName, int32_t profileIndex) const noexcept
+    {
+        return mImpl->getTensorFormatV2(tensorName, profileIndex);
     }
 
     //!
@@ -2004,10 +2064,35 @@ public:
     //! \param tensorName The name of an input or output tensor.
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //! \warning The function can only return the result of profile 0, and issues a warning message when there are
+    //! multiple profiles in the engine, use getTensorFormatDesc with profileIndex when there are multiple profiles.
     //!
     char const* getTensorFormatDesc(char const* tensorName) const noexcept
     {
         return mImpl->getTensorFormatDesc(tensorName);
+    }
+
+    //!
+    //! \brief Return the human readable description of the tensor format of given profile, or empty string if the
+    //! provided name does not map to an input or output tensor.
+    //!
+    //! The description includes the order, vectorization, data type, and strides.
+    //! Examples are shown as follows:
+    //!   Example 1: kCHW + FP32
+    //!     "Row major linear FP32 format"
+    //!   Example 2: kCHW2 + FP16
+    //!     "Two wide channel vectorized row major FP16 format"
+    //!   Example 3: kHWC8 + FP16 + Line Stride = 32
+    //!     "Channel major FP16 format where C % 8 == 0 and H Stride % 32 == 0"
+    //!
+    //! \param tensorName The name of an input or output tensor.
+    //! \param profileIndex The profile index to query the format for.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    char const* getTensorFormatDesc(char const* tensorName, int32_t profileIndex) const noexcept
+    {
+        return mImpl->getTensorFormatDescV2(tensorName, profileIndex);
     }
 
     //!
@@ -2035,10 +2120,28 @@ public:
     //! \param tensorName The name of an input or output tensor.
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //! \warning The function can only return the result of profile 0, and issues a warning message when there are
+    //!  multiple profiles in the engine, use getTensorVectorizedDim with profileIndex when there are multiple profiles.
     //!
     int32_t getTensorVectorizedDim(char const* tensorName) const noexcept
     {
         return mImpl->getTensorVectorizedDim(tensorName);
+    }
+
+    //!
+    //! \brief Return the dimension index that the buffer is vectorized of given profile, or -1 if the provided name
+    //! does not map to an input or output tensor.
+    //!
+    //! Specifically -1 is returned if scalars per vector is 1.
+    //!
+    //! \param tensorName The name of an input.
+    //! \param profileIndex The profile index to query the format for.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    int32_t getTensorVectorizedDim(char const* tensorName, int32_t profileIndex) const noexcept
+    {
+        return mImpl->getTensorVectorizedDimV2(tensorName, profileIndex);
     }
 
     //!

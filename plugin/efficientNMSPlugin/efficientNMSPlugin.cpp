@@ -59,7 +59,7 @@ char const* EfficientNMSPlugin::getPluginVersion() const noexcept
     return kEFFICIENT_NMS_PLUGIN_VERSION;
 }
 
-int EfficientNMSPlugin::getNbOutputs() const noexcept
+int32_t EfficientNMSPlugin::getNbOutputs() const noexcept
 {
     if (mParam.outputONNXIndices)
     {
@@ -71,7 +71,7 @@ int EfficientNMSPlugin::getNbOutputs() const noexcept
     return 4;
 }
 
-int EfficientNMSPlugin::initialize() noexcept
+int32_t EfficientNMSPlugin::initialize() noexcept
 {
     if (!initialized)
     {
@@ -131,7 +131,7 @@ char const* EfficientNMSPlugin::getPluginNamespace() const noexcept
 }
 
 nvinfer1::DataType EfficientNMSPlugin::getOutputDataType(
-    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     if (mParam.outputONNXIndices)
     {
@@ -164,7 +164,7 @@ IPluginV2DynamicExt* EfficientNMSPlugin::clone() const noexcept
 }
 
 DimsExprs EfficientNMSPlugin::getOutputDimensions(
-    int outputIndex, DimsExprs const* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     try
     {
@@ -234,7 +234,7 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
 }
 
 bool EfficientNMSPlugin::supportsFormatCombination(
-    int pos, PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     if (inOut[pos].format != PluginFormat::kLINEAR)
     {
@@ -246,7 +246,7 @@ bool EfficientNMSPlugin::supportsFormatCombination(
         PLUGIN_ASSERT(nbInputs == 2);
         PLUGIN_ASSERT(nbOutputs == 1);
 
-        // detection_indices output: int
+        // detection_indices output: int32_t
         if (pos == 2)
         {
             return inOut[pos].type == DataType::kINT32;
@@ -268,8 +268,8 @@ bool EfficientNMSPlugin::supportsFormatCombination(
         PLUGIN_ASSERT(0 <= pos && pos <= 6);
     }
 
-    // num_detections and detection_classes output: int
-    int const posOut = pos - nbInputs;
+    // num_detections and detection_classes output: int32_t
+    int32_t const posOut = pos - nbInputs;
     if (posOut == 0 || posOut == 3)
     {
         return inOut[pos].type == DataType::kINT32 && inOut[pos].format == PluginFormat::kLINEAR;
@@ -281,7 +281,7 @@ bool EfficientNMSPlugin::supportsFormatCombination(
 }
 
 void EfficientNMSPlugin::configurePlugin(
-    DynamicPluginTensorDesc const* in, int nbInputs, DynamicPluginTensorDesc const* out, int nbOutputs) noexcept
+    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
     try
     {
@@ -308,7 +308,7 @@ void EfficientNMSPlugin::configurePlugin(
         mParam.numScoreElements = in[1].desc.dims.d[1] * in[1].desc.dims.d[2];
         mParam.numClasses = in[1].desc.dims.d[2];
 
-        // When pad per class is set, the total ouput boxes size may need to be reduced.
+        // When pad per class is set, the total output boxes size may need to be reduced.
         // This operation is also done in getOutputDimension(), but for dynamic shapes, the
         // numOutputBoxes param can't be set until the number of classes is fully known here.
         if (mParam.padOutputBoxesPerClass && mParam.numOutputBoxesPerClass > 0)
@@ -359,15 +359,15 @@ void EfficientNMSPlugin::configurePlugin(
 }
 
 size_t EfficientNMSPlugin::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int nbInputs, PluginTensorDesc const* outputs, int nbOutputs) const noexcept
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
-    int batchSize = inputs[1].dims.d[0];
-    int numScoreElements = inputs[1].dims.d[1] * inputs[1].dims.d[2];
-    int numClasses = inputs[1].dims.d[2];
+    int32_t batchSize = inputs[1].dims.d[0];
+    int32_t numScoreElements = inputs[1].dims.d[1] * inputs[1].dims.d[2];
+    int32_t numClasses = inputs[1].dims.d[2];
     return EfficientNMSWorkspaceSize(batchSize, numScoreElements, numClasses, mParam.datatype);
 }
 
-int EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
@@ -562,7 +562,7 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
     try
     {
         PluginField const* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             char const* attrName = fields[i].name;
             if (!strcmp(attrName, "score_threshold"))
@@ -578,12 +578,12 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
             if (!strcmp(attrName, "max_output_boxes_per_class"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxesPerClass = *(static_cast<int const*>(fields[i].data));
+                mParam.numOutputBoxesPerClass = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "center_point_box"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mParam.boxCoding = *(static_cast<int const*>(fields[i].data));
+                mParam.boxCoding = *(static_cast<int32_t const*>(fields[i].data));
             }
         }
 

@@ -329,8 +329,8 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
             auto const wordEmb = static_cast<float const*>(mWordEmbDev.get());
             auto const tokEmb = static_cast<float const*>(mTokEmbDev.get());
             auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
-            status = embSkipLayerNorm<float>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta,
-                gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+            status = embSkipLayerNorm<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
+                beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
 
             if (status != cudaSuccess)
             {
@@ -343,7 +343,7 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
             auto const wordEmb = static_cast<half const*>(mWordEmbDev.get());
             auto const tokEmb = static_cast<half const*>(mTokEmbDev.get());
             auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
-            status = embSkipLayerNorm<half>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta,
+            status = embSkipLayerNorm<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds, beta,
                 gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
 
             if (status != cudaSuccess)
@@ -353,7 +353,7 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
         }
         else
         {
-            gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int>(mType)
+            gLogError << "Unsupported type error, expected [kHALF,kFLOAT], but received " << static_cast<int32_t>(mType)
                       << std::endl;
 
             return STATUS_NOT_SUPPORTED;

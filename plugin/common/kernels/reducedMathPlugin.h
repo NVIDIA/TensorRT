@@ -32,7 +32,7 @@ namespace plugin
 namespace detail
 {
 
-void findDivisor(int denom, unsigned int& mul_coeff, unsigned int& shift_coeff);
+void findDivisor(int32_t denom, uint32_t& mul_coeff, uint32_t& shift_coeff);
 
 __host__ __device__ __forceinline__ uint32_t umulhi(uint32_t x, uint32_t y)
 {
@@ -46,51 +46,49 @@ __host__ __device__ __forceinline__ uint32_t umulhi(uint32_t x, uint32_t y)
 
 // This is a weird implementation that returns div_up(0,1)=0 but
 // div_up(0,2)=1 (wrong) -- just do not use it with a=0.
-__host__ __device__ inline int div_up(int a, int b)
+__host__ __device__ inline int32_t div_up(int32_t a, int32_t b)
 {
     return (a - 1) / b + 1;
 }
 
-} //end namespace detail
+} // end namespace detail
 
 class ReducedDivisor
 {
 public:
     ReducedDivisor() {}
-    __host__ __forceinline__
-    ReducedDivisor(int _y)
+    __host__ __forceinline__ ReducedDivisor(int32_t _y)
         : y(_y)
     {
         detail::findDivisor(y, mul_coeff, shift_coeff);
     }
-    __host__ __device__ __forceinline__
-    ReducedDivisor(unsigned _mul_coeff, unsigned _shift_coeff, int _y)
+    __host__ __device__ __forceinline__ ReducedDivisor(uint32_t _mul_coeff, uint32_t _shift_coeff, int32_t _y)
         : mul_coeff(_mul_coeff)
         , shift_coeff(_shift_coeff)
         , y(_y)
     {
     }
-    __host__ __device__ __forceinline__ int div(int x) const
+    __host__ __device__ __forceinline__ int32_t div(int32_t x) const
     {
         // if dividing by 1, then findDivisor wouldn't have worked because
         // mul_coeff would have had to be 2^32, which can't be represented,
         // so we have to special case that one.
         return (y != 1) ? detail::umulhi((uint32_t) x, mul_coeff) >> shift_coeff : x;
     }
-    __host__ __device__ __forceinline__ int mod(int x) const
+    __host__ __device__ __forceinline__ int32_t mod(int32_t x) const
     {
         return x - (div(x) * y);
     }
-    __host__ __device__ __forceinline__ void divmod(int x, int& q, int& mod) const
+    __host__ __device__ __forceinline__ void divmod(int32_t x, int32_t& q, int32_t& mod) const
     {
         q = div(x);
         mod = x - (q * y);
     }
-    __host__ __device__ __forceinline__ int get() const
+    __host__ __device__ __forceinline__ int32_t get() const
     {
         return y;
     }
-    inline __host__ void get_mul_shift(unsigned& mul, unsigned& shift)
+    inline __host__ void get_mul_shift(uint32_t& mul, uint32_t& shift)
     {
         mul = mul_coeff;
         shift = shift_coeff;
@@ -99,7 +97,7 @@ public:
 protected:
     uint32_t mul_coeff{};
     uint32_t shift_coeff{};
-    int y{};
+    int32_t y{};
 };
 
 } // namespace plugin

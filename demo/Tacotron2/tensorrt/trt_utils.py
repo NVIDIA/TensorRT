@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,7 @@ def parse_dynamic_size(dim):
     split = str(dim).split(',')
     assert len(split) in (1,3) , "Dynamic size input must be either 1 or 3 comma-separated integers"
     ints = [int(i) for i in split]
-    
+
     if len(ints) == 1:
         ints *= 3
 

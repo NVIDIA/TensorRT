@@ -38,11 +38,11 @@ namespace plugin
 {
 class SplitPlugin final : public nvinfer1::IPluginV2DynamicExt
 {
-    int _axis;
-    std::vector<int> _output_lengths;
-    int _nx, _ny, _nz;
-    int _x_stride, _y_stride, _z_stride;
-    thrust::device_vector<int> _d_segment_offsets;
+    int32_t _axis;
+    std::vector<int32_t> _output_lengths;
+    int32_t _nx, _ny, _nz;
+    int32_t _x_stride, _y_stride, _z_stride;
+    thrust::device_vector<int32_t> _d_segment_offsets;
     thrust::device_vector<float*> _d_output_ptrs;
 
     using IPluginV2::getOutputDimensions;
@@ -67,13 +67,13 @@ protected:
     }
 
 public:
-    SplitPlugin(int axis, int* const& output_lengths, int noutput)
+    SplitPlugin(int32_t axis, int32_t* const& output_lengths, int32_t noutput)
         : _axis(axis)
-        , _output_lengths(std::vector<int>(output_lengths, output_lengths + noutput))
+        , _output_lengths(std::vector<int32_t>(output_lengths, output_lengths + noutput))
     {
         PLUGIN_ASSERT(axis <= nvinfer1::Dims::MAX_DIMS);
     }
-    SplitPlugin(int axis, std::vector<int> output_lengths)
+    SplitPlugin(int32_t axis, std::vector<int32_t> output_lengths)
         : _axis(axis)
         , _output_lengths(output_lengths)
     {
@@ -85,16 +85,16 @@ public:
     }
 
     bool supportsFormatCombination(
-        int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
+        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
     nvinfer1::DataType getOutputDataType(
-        int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
-    int initialize() noexcept override;
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept override;
-    int enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+    int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, nvinfer1::DimsExprs const* inputs, int nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
 
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override
@@ -113,8 +113,8 @@ public:
     {
         return SPLIT_PLUGIN_NAME;
     }
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/, int /*nbInputs*/,
-        nvinfer1::PluginTensorDesc const* /*outputs*/, int /*nbOutputs*/) const noexcept override
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+        nvinfer1::PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept override
     {
         return 0;
     }
@@ -123,7 +123,7 @@ public:
     {
         return "";
     }
-    int getNbOutputs() const noexcept override
+    int32_t getNbOutputs() const noexcept override
     {
         return _output_lengths.size();
     }

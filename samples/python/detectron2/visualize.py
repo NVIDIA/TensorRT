@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -69,7 +69,7 @@ def visualize_detections(image_path, output_path, detections, labels=[], iou_thr
             det_width = round(d['xmax'] - d['xmin'])
             det_height = round(d['ymax'] - d['ymin'])
             # Slight scaling, to get binary masks after float32 -> uint8
-            # conversion, if not scaled all pixels are zero. 
+            # conversion, if not scaled all pixels are zero.
             mask = d['mask'] > iou_threshold
             # Convert float32 -> uint8.
             mask = mask.astype(np.uint8)

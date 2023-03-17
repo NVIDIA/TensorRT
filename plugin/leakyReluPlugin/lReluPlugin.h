@@ -37,25 +37,25 @@ public:
 
     ~LReLU() override = default;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
 
-    int enqueue(int batchSize, void const* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
     void serialize(void* buffer) const noexcept override;
 
-    void configureWithFormat(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs, DataType type,
-        PluginFormat format, int maxBatchSize) noexcept override;
+    void configureWithFormat(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
+        DataType type, PluginFormat format, int32_t maxBatchSize) noexcept override;
 
     bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
 
@@ -69,7 +69,7 @@ public:
 
 private:
     float mNegSlope;
-    int mBatchDim;
+    int32_t mBatchDim;
 };
 
 class LReluPluginCreator : public nvinfer1::pluginInternal::BaseCreator

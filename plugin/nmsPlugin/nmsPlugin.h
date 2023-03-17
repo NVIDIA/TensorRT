@@ -32,23 +32,23 @@ class DetectionOutput : public IPluginV2Ext
 public:
     DetectionOutput(DetectionOutputParameters param);
 
-    DetectionOutput(DetectionOutputParameters param, int C1, int C2, int numPriors);
+    DetectionOutput(DetectionOutputParameters param, int32_t C1, int32_t C2, int32_t numPriors);
 
     DetectionOutput(void const* data, size_t length);
 
     ~DetectionOutput() override = default;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
 
-    int enqueue(int batchSize, void const* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
@@ -69,19 +69,20 @@ public:
 
     char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     bool isOutputBroadcastAcrossBatch(
-        int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept override;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
-    void configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
         DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-        bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     void detachFromContext() noexcept override;
 
@@ -89,7 +90,7 @@ public:
 
 private:
     DetectionOutputParameters param;
-    int C1, C2, numPriors;
+    int32_t C1, C2, numPriors;
     DataType mType;
     int32_t mScoreBits;
     std::string mPluginNamespace;
@@ -99,15 +100,15 @@ class DetectionOutputDynamic : public IPluginV2DynamicExt
 {
 public:
     DetectionOutputDynamic(DetectionOutputParameters param);
-    DetectionOutputDynamic(DetectionOutputParameters param, int C1, int C2, int numPriors);
+    DetectionOutputDynamic(DetectionOutputParameters param, int32_t C1, int32_t C2, int32_t numPriors);
     DetectionOutputDynamic(void const* data, size_t length);
     ~DetectionOutputDynamic() override = default;
 
     // IPluginV2 methods
     char const* getPluginType() const noexcept override;
     char const* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
@@ -117,24 +118,25 @@ public:
     void setScoreBits(int32_t scoreBits) noexcept;
 
     // IPluginV2Ext methods
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputType, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputType, int32_t nbInputs) const noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
-        int outputIndex, DimsExprs const* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept override;
+        int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(DynamicPluginTensorDesc const* in, int nbInputs, DynamicPluginTensorDesc const* out,
-        int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(PluginTensorDesc const* inputs, int nbInputs, PluginTensorDesc const* outputs,
-        int nbOutputs) const noexcept override;
+        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
+        int32_t nbOutputs) const noexcept override;
     int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
 private:
     DetectionOutputParameters param;
-    int C1, C2, numPriors;
+    int32_t C1, C2, numPriors;
     DataType mType;
     int32_t mScoreBits;
     std::string mPluginNamespace;
