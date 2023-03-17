@@ -55,7 +55,7 @@ public:
 
     ModulatedDeformableConvPluginDynamic() = delete;
 
-    ~ModulatedDeformableConvPluginDynamic();
+    ~ModulatedDeformableConvPluginDynamic() override;
 
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
     nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,

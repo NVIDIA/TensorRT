@@ -37,7 +37,7 @@ void safeFree(T* ptr)
 }
 
 template <typename T>
-void allocateChunk(T*& ptr, int count)
+void allocateChunk(T*& ptr, int32_t count)
 {
     ptr = static_cast<T*>(malloc(count * sizeof(T)));
 }
@@ -55,7 +55,7 @@ struct SoftmaxTreeDeleter
             safeFree(smTree->group);
             if (smTree->name)
             {
-                for (int i = 0; i < smTree->n; i++)
+                for (int32_t i = 0; i < smTree->n; i++)
                 {
                     safeFree(smTree->name[i]);
                 }
@@ -83,7 +83,7 @@ Region::Region(RegionParameters params)
 {
 }
 
-Region::Region(RegionParameters params, int C, int H, int W)
+Region::Region(RegionParameters params, int32_t C, int32_t H, int32_t W)
     : num(params.num)
     , coords(params.coords)
     , classes(params.classes)
@@ -97,12 +97,12 @@ Region::Region(RegionParameters params, int C, int H, int W)
 Region::Region(void const* buffer, size_t length)
 {
     char const *d = reinterpret_cast<char const*>(buffer), *a = d;
-    C = read<int>(d);
-    H = read<int>(d);
-    W = read<int>(d);
-    num = read<int>(d);
-    classes = read<int>(d);
-    coords = read<int>(d);
+    C = read<int32_t>(d);
+    H = read<int32_t>(d);
+    W = read<int32_t>(d);
+    num = read<int32_t>(d);
+    classes = read<int32_t>(d);
+    coords = read<int32_t>(d);
     bool softmaxTreePresent = read<bool>(d);
     bool leafPresent = read<bool>(d);
     bool parentPresent = read<bool>(d);
@@ -117,7 +117,7 @@ Region::Region(void const* buffer, size_t length)
         // need to read each element individually
         allocateChunk(smTreeTemp, 1);
 
-        smTreeTemp->n = read<int>(d);
+        smTreeTemp->n = read<int32_t>(d);
 
         if (leafPresent)
         {
@@ -152,23 +152,23 @@ Region::Region(void const* buffer, size_t length)
             smTreeTemp->group = nullptr;
         }
 
-        for (int i = 0; i < smTreeTemp->n; i++)
+        for (int32_t i = 0; i < smTreeTemp->n; i++)
         {
             if (leafPresent)
             {
-                smTreeTemp->leaf[i] = read<int>(d);
+                smTreeTemp->leaf[i] = read<int32_t>(d);
             }
             if (parentPresent)
             {
-                smTreeTemp->parent[i] = read<int>(d);
+                smTreeTemp->parent[i] = read<int32_t>(d);
             }
             if (childPresent)
             {
-                smTreeTemp->child[i] = read<int>(d);
+                smTreeTemp->child[i] = read<int32_t>(d);
             }
             if (groupPresent)
             {
-                smTreeTemp->group[i] = read<int>(d);
+                smTreeTemp->group[i] = read<int32_t>(d);
             }
         }
 
@@ -183,17 +183,17 @@ Region::Region(void const* buffer, size_t length)
 
         if (namePresent)
         {
-            for (int i = 0; i < smTreeTemp->n; i++)
+            for (int32_t i = 0; i < smTreeTemp->n; i++)
             {
                 allocateChunk(smTreeTemp->name[i], 256);
-                for (int j = 0; j < 256; j++)
+                for (int32_t j = 0; j < 256; j++)
                 {
                     smTreeTemp->name[i][j] = read<char>(d);
                 }
             }
         }
 
-        smTreeTemp->groups = read<int>(d);
+        smTreeTemp->groups = read<int32_t>(d);
         if (groupSizePresent)
         {
             allocateChunk(smTreeTemp->groupSize, smTreeTemp->groups);
@@ -210,15 +210,15 @@ Region::Region(void const* buffer, size_t length)
         {
             smTreeTemp->groupOffset = nullptr;
         }
-        for (int i = 0; i < smTreeTemp->groups; i++)
+        for (int32_t i = 0; i < smTreeTemp->groups; i++)
         {
             if (groupSizePresent)
             {
-                smTreeTemp->groupSize[i] = read<int>(d);
+                smTreeTemp->groupSize[i] = read<int32_t>(d);
             }
             if (groupOffsetPresent)
             {
-                smTreeTemp->groupOffset[i] = read<int>(d);
+                smTreeTemp->groupOffset[i] = read<int32_t>(d);
             }
         }
         smTree = std::shared_ptr<softmaxTree>(smTreeTemp, SoftmaxTreeDeleter());
@@ -230,20 +230,20 @@ Region::Region(void const* buffer, size_t length)
     PLUGIN_VALIDATE(d == a + length);
 }
 
-int Region::getNbOutputs() const noexcept
+int32_t Region::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims Region::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims Region::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 1);
     PLUGIN_ASSERT(index == 0);
     return inputs[0];
 }
 
-int Region::enqueue(
-    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t Region::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     void const* inputData = inputs[0];
     void* outputData = outputs[0];
@@ -263,26 +263,26 @@ int Region::enqueue(
 size_t Region::getSerializationSize() const noexcept
 {
     // C, H, W, num, classes, coords, smTree !nullptr and other array members !nullptr, softmaxTree members
-    size_t count = 6 * sizeof(int) + 8 * sizeof(bool);
+    size_t count = 6 * sizeof(int32_t) + 8 * sizeof(bool);
     if (smTree.get())
     {
-        count += 2 * sizeof(int);
+        count += 2 * sizeof(int32_t);
 
         if (smTree->leaf)
         {
-            count += smTree->n * sizeof(int);
+            count += smTree->n * sizeof(int32_t);
         }
         if (smTree->parent)
         {
-            count += smTree->n * sizeof(int);
+            count += smTree->n * sizeof(int32_t);
         }
         if (smTree->child)
         {
-            count += smTree->n * sizeof(int);
+            count += smTree->n * sizeof(int32_t);
         }
         if (smTree->group)
         {
-            count += smTree->n * sizeof(int);
+            count += smTree->n * sizeof(int32_t);
         }
         if (smTree->name)
         {
@@ -290,11 +290,11 @@ size_t Region::getSerializationSize() const noexcept
         }
         if (smTree->groupSize)
         {
-            count += smTree->groups * sizeof(int);
+            count += smTree->groups * sizeof(int32_t);
         }
         if (smTree->groupOffset)
         {
-            count += smTree->groups * sizeof(int);
+            count += smTree->groups * sizeof(int32_t);
         }
     }
     return count;
@@ -321,7 +321,7 @@ void Region::serialize(void* buffer) const noexcept
     if (smTree)
     {
         write(d, smTree->n);
-        for (int i = 0; i < smTree->n; i++)
+        for (int32_t i = 0; i < smTree->n; i++)
         {
             if (smTree->leaf)
             {
@@ -342,17 +342,17 @@ void Region::serialize(void* buffer) const noexcept
         }
         if (smTree->name)
         {
-            for (int i = 0; i < smTree->n; i++)
+            for (int32_t i = 0; i < smTree->n; i++)
             {
                 char const* str = smTree->name[i];
-                for (int j = 0; j < 256; j++)
+                for (int32_t j = 0; j < 256; j++)
                 {
                     write(d, str[j]);
                 }
             }
         }
         write(d, smTree->groups);
-        for (int i = 0; i < smTree->groups; i++)
+        for (int32_t i = 0; i < smTree->groups; i++)
         {
             if (smTree->groupSize)
             {
@@ -372,7 +372,7 @@ bool Region::supportsFormat(DataType type, PluginFormat format) const noexcept
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-int Region::initialize() noexcept
+int32_t Region::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
@@ -389,7 +389,7 @@ char const* Region::getPluginVersion() const noexcept
     return kREGION_PLUGIN_VERSION;
 }
 
-size_t Region::getWorkspaceSize(int maxBatchSize) const noexcept
+size_t Region::getWorkspaceSize(int32_t maxBatchSize) const noexcept
 {
     return 0;
 }
@@ -429,28 +429,29 @@ char const* Region::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType Region::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+DataType Region::getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return DataType::kFLOAT;
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool Region::isOutputBroadcastAcrossBatch(int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+bool Region::isOutputBroadcastAcrossBatch(
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool Region::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool Region::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void Region::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+void Region::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     PLUGIN_ASSERT(nbInputs == 1);
@@ -507,23 +508,23 @@ IPluginV2Ext* RegionPluginCreator::createPlugin(char const* name, PluginFieldCol
     try
     {
         PluginField const* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             char const* attrName = fields[i].name;
             if (!strcmp(attrName, "num"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.num = *(static_cast<int const*>(fields[i].data));
+                params.num = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "coords"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.coords = *(static_cast<int const*>(fields[i].data));
+                params.coords = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "classes"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                params.classes = *(static_cast<int const*>(fields[i].data));
+                params.classes = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "smTree"))
             {

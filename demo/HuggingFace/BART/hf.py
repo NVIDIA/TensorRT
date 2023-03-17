@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,7 @@ Obtain the benchmark timing and output from the original HuggingFace BART model.
 Usage: python3 hf.py --variant facebook/bart-base [--enable-kv-cache] [--fp16]
 """
 
-import time 
+import time
 from transformers import BartTokenizer, BartForConditionalGeneration
 import argparse
 
@@ -63,6 +63,6 @@ end = time.time()
 
 output = tokenizer.decode(summary_ids[-1,:], skip_special_tokens=True)
 
-print('BART output: ', output) 
+print('BART output: ', output)
 print(f"Input sequence length: {input_ids.size(1)}, Output sequence length: {summary_ids[-1,:].size(0)}")
 print("Average run time: {:.2f} ms".format((end - start)/trials*1000))

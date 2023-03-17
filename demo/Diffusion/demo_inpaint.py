@@ -34,7 +34,7 @@ if __name__ == "__main__":
     print("[I] Initializing StableDiffusion inpainting demo using TensorRT")
     args = parseArgs()
 
-    # Inpainting is currently only supported for v1.5 and v2.1
+    # Inpainting is currently only supported for v1.5 and v2.0
     if args.version not in ("1.5", "2.0"):
         raise ValueError(f"Inpainting not supported in version {args.version}. Use v2.0, or v1.5")
 
@@ -84,6 +84,9 @@ if __name__ == "__main__":
     if batch_size > max_batch_size:
         raise ValueError(f"Batch size {len(prompt)} is larger than allowed {max_batch_size}. If dynamic shape is used, then maximum batch size is 4")
 
+    if args.use_cuda_graph and (not args.build_static_batch or args.build_dynamic_shape):
+        raise ValueError(f"Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`")
+
     # Initialize demo
     demo = InpaintPipeline(
         scheduler=args.scheduler,
@@ -104,6 +107,11 @@ if __name__ == "__main__":
         enable_preview=args.build_preview_features, enable_all_tactics=args.build_all_tactics, \
         timing_cache=args.timing_cache)
     demo.loadResources(image_height, image_width, batch_size, args.seed)
+
+
+    if args.use_cuda_graph:
+        # inference once to get cuda graph
+        images = demo.infer(prompt, negative_prompt, input_image, mask_image, image_height, image_width, strength=0.75, warmup=True)
 
     print("[I] Warming up ..")
     for _ in range(args.num_warmup_runs):

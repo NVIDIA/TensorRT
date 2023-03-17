@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,7 +50,7 @@ def main():
     parser.add_argument('--output', default="mnist_with_coordconv.onnx",
                         help='input batch size for testing (default: output.onnx)')
     args = parser.parse_args()
-    
+
     # Load ONNX file
     graph = gs.import_onnx(onnx.load(args.onnx))
 

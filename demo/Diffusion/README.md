@@ -93,7 +93,10 @@ Use `--input-image=<path to image>` to specify your image. Otherwise the example
 ### Generate an inpainted image guided by an image, mask and single text prompt
 
 ```bash
-python3 demo_inpaint.py "a mecha robot sitting on a bench" --hf-token=$HF_TOKEN -v
+# Create separate onnx/engine directories when switching versions
+mkdir -p onnx-1.5 engine-1.5
+
+python3 demo_inpaint.py "a mecha robot sitting on a bench" --hf-token=$HF_TOKEN --version=1.5 --onnx-dir=onnx-1.5 --engine-dir=engine-1.5 -v
 ```
 
 Use `--input-image=<path to image>` and `--mask-image=<path to mask>` to specify your inputs. They must have the same dimensions. Otherwise the example image and mask will be downloaded from the Internet.
@@ -102,4 +105,4 @@ Use `--input-image=<path to image>` and `--mask-image=<path to mask>` to specify
 - One can set schdeuler using `--scheduler=EulerA`. Note that some schedulers are not available for some pipelines or version.
 - To accelerate engine building time one can use `--timing-cache=<path to cache file>`. This cache file will be created if does not exist. Note, that it may influence the performance if the cache file created on the other hardware is used. It is suggested to use this flag only during development. To achieve the best perfromance during deployment, please, build engines without timing cache.
 - To switch between versions or pipelines one needs either to clear onnx and engine dirs, or to specify `--force-onnx-export --force-onnx-optimize --force-engine-build` or to create new dirs and to specify `--onnx-dir=<new onnx dir> --engine-dir=<new engine dir>`.
-
+- Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.

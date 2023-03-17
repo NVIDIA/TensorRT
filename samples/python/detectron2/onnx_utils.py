@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -119,8 +119,8 @@ def gather(self, name, data, indices, axes=0):
     :param self: The gs.Graph object being extended.
     :param name: The name to use for the node.
     :param data: Data from which to gather specific tensors.
-    :param indices: Indices by which to gather data tensors. 
-    :param axes: A list of axes on which to perform gather operation 
+    :param indices: Indices by which to gather data tensors.
+    :param axes: A list of axes on which to perform gather operation
     """
     data_tensor = data if type(data) is gs.Variable else data[0]
     indices_tensor = indices if type(indices) is gs.Variable else indices[0]
@@ -217,7 +217,7 @@ def find_node_by_op_input_output_name(self, op, input_name, output_name, input_p
 @gs.Graph.register()
 def find_descendant_by_op(self, node, op, depth=10):
     """
-    Starting from the given node, finds a node lower in the graph matching the given operation name. 
+    Starting from the given node, finds a node lower in the graph matching the given operation name.
     This is not an exhaustive graph search.
     In order to graph search bfs is used, so runtime complexity is O(V+E).
     :param self: The gs.Graph object being extended.
@@ -242,7 +242,7 @@ def find_ancestor_by_op(self, node, op, depth=10):
     """
     Starting from the given node, finds a node higher in the graph matching the given operation name.
     This is not an exhaustive graph search.
-    In order to graph search bfs is used, so runtime complexity is O(V+E). 
+    In order to graph search bfs is used, so runtime complexity is O(V+E).
     :param self: The gs.Graph object being extended.
     :param node: The node to start searching from.
     :param op: The operation name to search for.

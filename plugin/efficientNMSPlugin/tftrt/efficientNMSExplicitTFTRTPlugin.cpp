@@ -102,18 +102,18 @@ IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::createPlugin(
     try
     {
         const PluginField* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "max_output_size_per_class"))
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
+                mParam.numOutputBoxesPerClass = *(static_cast<const int32_t*>(fields[i].data));
             }
             if (!strcmp(attrName, "max_total_size"))
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxes = *(static_cast<const int*>(fields[i].data));
+                mParam.numOutputBoxes = *(static_cast<const int32_t*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
@@ -128,12 +128,12 @@ IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::createPlugin(
             if (!strcmp(attrName, "pad_per_class"))
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.padOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
+                mParam.padOutputBoxesPerClass = *(static_cast<const int32_t*>(fields[i].data));
             }
             if (!strcmp(attrName, "clip_boxes"))
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.clipBoxes = *(static_cast<const int*>(fields[i].data));
+                mParam.clipBoxes = *(static_cast<const int32_t*>(fields[i].data));
             }
         }
 

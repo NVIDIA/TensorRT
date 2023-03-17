@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -125,7 +125,7 @@ class BARTONNXRT(OnnxRTCommand):
         benchmarking_mode: bool = False,
         benchmarking_args: BARTBenchmarkingArgs = None,
     ) -> NetworkResult:
-        
+
         if "mbart" not in metadata.variant:
             tokenizer = BartTokenizer.from_pretrained(metadata.variant)
         else:
@@ -207,7 +207,7 @@ class BARTONNXRT(OnnxRTCommand):
             onnx=list(onnx_fpaths.values()),
             trt=None
         )
-        
+
         # Skip result checking in benchmarking mode since the input data is random.
         if benchmarking_mode:
             return BenchmarkingResult(median_runtime=runtime, models=models)

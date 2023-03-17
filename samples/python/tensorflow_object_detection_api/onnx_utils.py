@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -172,7 +172,7 @@ def find_node_by_op(self, op):
 @gs.Graph.register()
 def find_descendant_by_op(self, node, op, depth=10):
     """
-    Starting from the given node, finds a node lower in the graph matching the given operation name. 
+    Starting from the given node, finds a node lower in the graph matching the given operation name.
     This is not an exhaustive graph search.
     In order to graph search bfs is used, so runtime complexity is O(V+E).
     :param self: The gs.Graph object being extended.
@@ -198,7 +198,7 @@ def find_ancestor_by_op(self, node, op, depth=10):
     """
     Starting from the given node, finds a node higher in the graph matching the given operation name.
     This is not an exhaustive graph search.
-    In order to graph search bfs is used, so runtime complexity is O(V+E). 
+    In order to graph search bfs is used, so runtime complexity is O(V+E).
     :param self: The gs.Graph object being extended.
     :param node: The node to start searching from.
     :param op: The operation name to search for.

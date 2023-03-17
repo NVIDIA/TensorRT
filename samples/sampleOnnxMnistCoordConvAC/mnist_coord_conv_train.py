@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,14 +28,14 @@ from coord_conv import CoordConv2d
 
 
 class Net(nn.Module):
-    """ 
-    Original implementation of Convnet from 
+    """
+    Original implementation of Convnet from
     PyTorch repo https://github.com/pytorch/examples/tree/master/mnist
     but with CoordConv2d layers instead of Conv layers
     """
     def __init__(self):
         super(Net, self).__init__()
-        # Regular Conv layer replaced with CoordConv2d layer 
+        # Regular Conv layer replaced with CoordConv2d layer
         self.conv1 = CoordConv2d(1, 32, 3, 1)
         # Regular Conv layer replaced with CoordConv2d layer
         self.conv2 = CoordConv2d(32, 64, 3, 1)
@@ -138,8 +138,8 @@ def main():
                            transforms.Normalize((0.1307,), (0.3081,))
                        ])),
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
-    
-    
+
+
     model = Net().to(device)
     print(model)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)

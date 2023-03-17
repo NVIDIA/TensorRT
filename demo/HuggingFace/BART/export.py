@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,7 @@ from transformers import BartForConditionalGeneration
 
 # TRT-HuggingFace
 from BART.BARTModelConfig import BARTModelTRTConfig
-from NNDF.tensorrt_utils import clamp_weights_onnx_to_fp16_bounds, move_t5_cast_op
+from NNDF.tensorrt_utils import OnnxProcessOperation, process_onnx
 from NNDF.networks import NetworkMetadata, Precision, Dims
 from NNDF.logger import G_LOGGER
 from NNDF.models import (
@@ -354,13 +354,14 @@ class BARTDecoderConverter(ModelFileConverter):
 
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for BART")
-            # move_t5_cast_op(output_fpath, output_fpath) # BART doesn't have T5's Add-Cast-Pow ordering issue
+            # BART doesn't have T5's Add-Cast-Pow ordering issue
             if network_metadata.other.kv_cache:
                 # both onnx files need clamp
-                clamp_weights_onnx_to_fp16_bounds(non_kv_fpath, non_kv_fpath)
-                clamp_weights_onnx_to_fp16_bounds(kv_fpath, kv_fpath)
+                process_onnx([OnnxProcessOperation.CLAMP_WEIGHTS], kv_fpath, kv_fpath)
+                process_onnx([OnnxProcessOperation.CLAMP_WEIGHTS], non_kv_fpath, non_kv_fpath)
+
             else:
-                clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
+                process_onnx([OnnxProcessOperation.CLAMP_WEIGHTS], output_fpath, output_fpath)
 
         return BARTDecoderONNXFile(output_fpath, network_metadata)
 
@@ -412,7 +413,7 @@ class BARTEncoderConverter(ModelFileConverter):
 
         if network_metadata.precision.fp16:
             G_LOGGER.debug("Clamping FP16 weights for BART")
-            # move_t5_cast_op(output_fpath, output_fpath) # BART doesn't have T5's Add-Cast-Pow ordering issue
-            clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
+            # BART doesn't have T5's Add-Cast-Pow ordering issue
+            process_onnx([OnnxProcessOperation.CLAMP_WEIGHTS], output_fpath, output_fpath)
 
         return BARTEncoderONNXFile(output_fpath, network_metadata)

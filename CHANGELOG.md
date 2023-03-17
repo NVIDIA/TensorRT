@@ -1,10 +1,21 @@
 # TensorRT OSS Release Changelog
 
-## [8.6.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2023-03-14
+## [8.6.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-6-1) - 2023-05-02
+
+TensorRT OSS release corresponding to TensorRT 8.6.1.6 GA release.
+- Updates since [TensorRT 8.6.0 EA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-6-0-EA).
+- Please refer to the [TensorRT 8.6.1.6 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-6-1) for more information.
+
+Key Features and Updates:
+
+- Added a new flag `--use-cuda-graph` to demoDiffusion to improve performance.
+- Optimized GPT2 and T5 HuggingFace demos to use fp16 I/O tensors for fp16 networks.
+
+## [8.6.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-6-0-EA) - 2023-03-10
 
 TensorRT OSS release corresponding to TensorRT 8.6.0.12 EA release.
-- Updates since [TensorRT 8.5.3 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3).
-- Please refer to the [TensorRT 8.6.0.12 EA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) for more information.
+- Updates since [TensorRT 8.5.3 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-3).
+- Please refer to the [TensorRT 8.6.0.12 EA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-6-0-EA) for more information.
 
 Key Features and Updates:
 
@@ -12,11 +23,11 @@ Key Features and Updates:
   - The following plugins have been removed accordingly: GroupNorm, LayerNorm, MultiHeadCrossAttention, MultiHeadFlashAttention, SeqLen2Spatial, and SplitGeLU.
 - Added a new sample called onnx_custom_plugin.
 
-## [8.5.3 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3) - 2023-01-30
+## [8.5.3 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-3) - 2023-01-30
 
 TensorRT OSS release corresponding to TensorRT 8.5.3.1 GA release.
-- Updates since [TensorRT 8.5.2 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2).
-- Please refer to the [TensorRT 8.5.3 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3) for more information.
+- Updates since [TensorRT 8.5.2 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-2).
+- Please refer to the [TensorRT 8.5.3 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-3) for more information.
 
 Key Features and Updates:
 
@@ -24,11 +35,11 @@ Key Features and Updates:
 - Added nvinfer1::plugin namespace
 - Optimized KV Cache performance for T5
 
-## [8.5.2 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2) - 2022-12-12
+## [8.5.2 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-2) - 2022-12-12
 
 TensorRT OSS release corresponding to TensorRT 8.5.2.2 GA release.
-- Updates since [TensorRT 8.5.1 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1).
-- Please refer to the [TensorRT 8.5.2 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2) for more information.
+- Updates since [TensorRT 8.5.1 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-1).
+- Please refer to the [TensorRT 8.5.2 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-2) for more information.
 
 Key Features and Updates:
 
@@ -51,11 +62,11 @@ Key Features and Updates:
 ### Removed
 - None
 
-## [8.5.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1) - 2022-11-01
+## [8.5.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-1) - 2022-11-01
 
 TensorRT OSS release corresponding to TensorRT 8.5.1.7 GA release.
 - Updates since [TensorRT 8.4.1 GA release](https://github.com/NVIDIA/TensorRT/releases/tag/8.4.1).
-- Please refer to the [TensorRT 8.5.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1) for more information.
+- Please refer to the [TensorRT 8.5.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-5-1) for more information.
 
 Key Features and Updates:
 
@@ -84,7 +95,7 @@ Key Features and Updates:
 
 ## [22.08](https://github.com/NVIDIA/TensorRT/releases/tag/22.08) - 2022-08-16
 
-Updated TensorRT version to 8.4.2 - see the [TensorRT 8.4.2 release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-2) for more information
+Updated TensorRT version to 8.4.2 - see the [TensorRT 8.4.2 release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-4-2) for more information
 
 ### Changed
 - Updated default protobuf version to 3.20.x
@@ -114,11 +125,11 @@ Updated TensorRT version to 8.4.2 - see the [TensorRT 8.4.2 release notes](https
 ### Removed
 - None
 
-## [8.4.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-1) - 2022-06-14
+## [8.4.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-4-1) - 2022-06-14
 
 TensorRT OSS release corresponding to TensorRT 8.4.1.5 GA release.
 - Updates since [TensorRT 8.2.1 GA release](https://github.com/NVIDIA/TensorRT/releases/tag/8.2.1).
-- Please refer to the [TensorRT 8.4.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-4-1) for more information.
+- Please refer to the [TensorRT 8.4.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-4-1) for more information.
 
 Key Features and Updates:
 
@@ -258,11 +269,11 @@ Key Features and Updates:
 ### Removed
 - Unused source file(s) in demo/BERT
 
-## [8.2.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-2-1) - 2021-11-24
+## [8.2.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-2-1) - 2021-11-24
 
 TensorRT OSS release corresponding to TensorRT 8.2.1.8 GA release.
 - Updates since [TensorRT 8.2.0 EA release](https://github.com/NVIDIA/TensorRT/releases/tag/8.2.0-EA).
-- Please refer to the [TensorRT 8.2.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-2-1) for more information.
+- Please refer to the [TensorRT 8.2.1 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-2-1) for more information.
 
 - ONNX parser [v8.2.1](https://github.com/onnx/onnx-tensorrt/releases/tag/release%2F8.2-GA)
   - Removed duplicate constant layer checks that caused some performance regressions
@@ -316,7 +327,7 @@ TensorRT OSS release corresponding to TensorRT 8.2.1.8 GA release.
   - Updated Python documentation for `add_reduce`, `add_top_k`, and `ISoftMaxLayer`
   - Renamed default GitHub branch to `main` and updated hyperlinks
 
-## [8.2.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-2-0-EA) - 2021-10-05
+## [8.2.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-2-0-EA) - 2021-10-05
 ### Added
 - [Demo applications](demo/HuggingFace) showcasing TensorRT inference of [HuggingFace Transformers](https://huggingface.co/transformers).
   - Support is currently extended to GPT-2 and T5 models.
@@ -426,7 +437,7 @@ TensorRT OSS release corresponding to TensorRT 8.2.1.8 GA release.
 ## [21.07](https://github.com/NVIDIA/TensorRT/releases/tag/21.07) - 2021-07-21
 Identical to the TensorRT-OSS [8.0.1](https://github.com/NVIDIA/TensorRT/releases/tag/8.0.1) Release.
 
-## [8.0.1](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2021-07-02
+## [8.0.1](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#tensorrt-8) - 2021-07-02
 ### Added
 - Added support for the following ONNX operators: `Celu`, `CumSum`, `EyeLike`, `GatherElements`, `GlobalLpPool`, `GreaterOrEqual`, `LessOrEqual`, `LpNormalization`, `LpPool`, `ReverseSequence`, and `SoftmaxCrossEntropyLoss` [details]().
 - Rehauled `Resize` ONNX operator, now fully supporting the following modes:

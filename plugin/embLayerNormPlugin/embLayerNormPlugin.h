@@ -35,7 +35,7 @@ namespace plugin
 namespace bert
 {
 
-int32_t computeMaskIdx(cudaStream_t stream, int32_t const S, int32_t const B, int32_t const* mask, int* maskIdx);
+int32_t computeMaskIdx(cudaStream_t stream, int32_t const S, int32_t const B, int32_t const* mask, int32_t* maskIdx);
 
 template <typename T>
 int32_t embSkipLayerNorm(cudaStream_t stream, int32_t ld, int32_t B, int32_t S, int32_t const* inputIds,

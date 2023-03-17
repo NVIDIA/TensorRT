@@ -108,7 +108,8 @@ protected:
     float mRsqrtHeadSize;
 };
 
-std::pair<int, int> tuneBatchedGemm(const int32_t B, const int32_t S, const int32_t numHeads, const int32_t headSize);
+std::pair<int32_t, int32_t> tuneBatchedGemm(
+    const int32_t B, const int32_t S, const int32_t numHeads, const int32_t headSize);
 
 template <typename T>
 int32_t computeScaledSoftmax(cudaStream_t stream, const int32_t ld, const int32_t B, const int32_t N,
@@ -116,7 +117,7 @@ int32_t computeScaledSoftmax(cudaStream_t stream, const int32_t ld, const int32_
 
 template <typename T>
 int32_t computeMaskedScaledSoftmax(cudaStream_t stream, const int32_t ld, const int32_t B, const int32_t N,
-    float const rsqrtHeadSize, int const* maskIdx, T const* input, T* output);
+    float const rsqrtHeadSize, int32_t const* maskIdx, T const* input, T* output);
 
 // One of the preferred ways of making TensorRT to be able to see
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.

@@ -79,7 +79,7 @@ IPluginV2Ext* SpecialSlicePluginCreator::deserializePlugin(char const* name, voi
     return nullptr;
 }
 
-size_t SpecialSlice::getWorkspaceSize(int) const noexcept
+size_t SpecialSlice::getWorkspaceSize(int32_t) const noexcept
 {
     return 0;
 }
@@ -126,7 +126,7 @@ char const* SpecialSlice::getPluginNamespace() const noexcept
 
 size_t SpecialSlice::getSerializationSize() const noexcept
 {
-    return sizeof(int);
+    return sizeof(int32_t);
 }
 
 void SpecialSlice::serialize(void* buffer) const noexcept
@@ -139,23 +139,23 @@ void SpecialSlice::serialize(void* buffer) const noexcept
 SpecialSlice::SpecialSlice(void const* data, size_t length)
 {
     char const *d = reinterpret_cast<char const*>(data), *a = d;
-    mBboxesCnt = read<int>(d);
+    mBboxesCnt = read<int32_t>(d);
     PLUGIN_VALIDATE(d == a + length);
 }
 
 SpecialSlice::SpecialSlice() {}
 
-int SpecialSlice::initialize() noexcept
+int32_t SpecialSlice::initialize() noexcept
 {
     return 0;
 }
 
-int SpecialSlice::getNbOutputs() const noexcept
+int32_t SpecialSlice::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-void SpecialSlice::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputDims)
+void SpecialSlice::check_valid_inputs(nvinfer1::Dims const* inputs, int32_t nbInputDims)
 {
 
     PLUGIN_ASSERT(nbInputDims == 1);
@@ -163,7 +163,7 @@ void SpecialSlice::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputD
     PLUGIN_ASSERT(inputs[0].nbDims == 2 && inputs[0].d[1] == 6);
 }
 
-Dims SpecialSlice::getOutputDimensions(int index, Dims const* inputDims, int nbInputs) noexcept
+Dims SpecialSlice::getOutputDimensions(int32_t index, Dims const* inputDims, int32_t nbInputs) noexcept
 {
 
     PLUGIN_ASSERT(index == 0);
@@ -180,8 +180,8 @@ Dims SpecialSlice::getOutputDimensions(int index, Dims const* inputDims, int nbI
     return output;
 }
 
-int SpecialSlice::enqueue(
-    int batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t SpecialSlice::enqueue(
+    int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     specialSlice(stream, batch_size, mBboxesCnt, inputs[0], outputs[0]);
@@ -190,7 +190,8 @@ int SpecialSlice::enqueue(
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType SpecialSlice::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+DataType SpecialSlice::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
     PLUGIN_ASSERT(index == 0);
@@ -201,21 +202,21 @@ DataType SpecialSlice::getOutputDataType(int index, nvinfer1::DataType const* in
 
 // Return true if output tensor is broadcast across a batch.
 bool SpecialSlice::isOutputBroadcastAcrossBatch(
-    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool SpecialSlice::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool SpecialSlice::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void SpecialSlice::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+void SpecialSlice::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1);
 

@@ -1,12 +1,13 @@
 #!/bin/bash
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
+
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,7 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 # This short shell script will extract all the strong "text" symbols from the
 # shared library and create a new "stub" shared library with the same symbols.
 # The body of these functions will be empty and therefore have no dependencies.
@@ -40,15 +40,22 @@ fi
 
 SONAME=$(readelf -d "${IN_LIBFILE}" | grep '(SONAME)' | cut -d [ -f 2 | cut -d ] -f 1)
 
+OS=$(lsb_release -si)-$(lsb_release -sr | cut -d '.' -f 1-2)
+
+if [ "$OS" = "Ubuntu-22.04" ] ; then
+    EXTRA_NM_FLAG="--without-symbol-versions"
+fi
+
 # make stub library
 if [ -z "${CC_ARGS}" ] ; then
     nm -D "${IN_LIBFILE}" ${EXTRA_NM_FLAG} | \
         awk '{if ($2 == "T") { print "void",$3,"() {}" }}' | \
-        "${CC}" -c -x c -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" -
+        "${CC}" -x c -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" -
 else
     nm -D "${IN_LIBFILE}" ${EXTRA_NM_FLAG} | \
         awk '{if ($2 == "T") { print "void",$3,"() {}" }}' | \
-        "${CC}" -c -x c -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" "${CC_ARGS}" -
+        "${CC}" -x c -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" "${CC_ARGS}" -
 fi
 
 exit $?
+

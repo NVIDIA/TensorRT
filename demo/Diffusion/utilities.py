@@ -35,6 +35,7 @@ import tensorrt as trt
 import torch
 import requests
 from io import BytesIO
+from cuda import cudart
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 
@@ -59,9 +60,13 @@ else:
 # Map of torch dtype -> numpy dtype
 torch_to_numpy_dtype_dict = {value : key for (key, value) in numpy_to_torch_dtype_dict.items()}
 
-def device_view(t):
-    return cuda.DeviceView(ptr=t.data_ptr(), shape=t.shape, dtype=torch_to_numpy_dtype_dict[t.dtype])
-
+def CUASSERT(cuda_ret):
+    err = cuda_ret[0]
+    if err != cudart.cudaError_t.cudaSuccess:
+         raise RuntimeError(f"CUDA ERROR: {err}, error code reference: https://nvidia.github.io/cuda-python/module/cudart.html#cuda.cudart.cudaError_t")
+    if len(cuda_ret) > 1:
+        return cuda_ret[1]
+    return None
 
 class Engine():
     def __init__(
@@ -73,6 +78,7 @@ class Engine():
         self.context = None
         self.buffers = OrderedDict()
         self.tensors = OrderedDict()
+        self.cuda_graph_instance = None # cuda graph
 
     def __del__(self):
         [buf.free() for buf in self.buffers.values() if isinstance(buf, cuda.DeviceArray) ]
@@ -219,8 +225,12 @@ class Engine():
         print(f"Loading TensorRT engine: {self.engine_path}")
         self.engine = engine_from_bytes(bytes_from_path(self.engine_path))
 
-    def activate(self):
-        self.context = self.engine.create_execution_context()
+    def activate(self, reuse_device_memory=None):
+        if reuse_device_memory:
+            self.context = self.engine.create_execution_context_without_device_memory()
+            self.context.device_memory = reuse_device_memory
+        else:
+            self.context = self.engine.create_execution_context()
 
     def allocate_buffers(self, shape_dict=None, device='cuda'):
         for idx in range(trt_util.get_bindings_per_profile(self.engine)):
@@ -234,19 +244,32 @@ class Engine():
                 self.context.set_binding_shape(idx, shape)
             tensor = torch.empty(tuple(shape), dtype=numpy_to_torch_dtype_dict[dtype]).to(device=device)
             self.tensors[binding] = tensor
-            self.buffers[binding] = cuda.DeviceView(ptr=tensor.data_ptr(), shape=shape, dtype=dtype)
 
-    def infer(self, feed_dict, stream):
-        start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
-        # shallow copy of ordered dict
-        device_buffers = copy(self.buffers)
+    def infer(self, feed_dict, stream, use_cuda_graph=False):
         for name, buf in feed_dict.items():
-            assert isinstance(buf, cuda.DeviceView)
-            device_buffers[name] = buf
-        bindings = [0] * start_binding + [buf.ptr for buf in device_buffers.values()]
-        noerror = self.context.execute_async_v2(bindings=bindings, stream_handle=stream.ptr)
-        if not noerror:
-            raise ValueError(f"ERROR: inference failed.")
+            self.tensors[name].copy_(buf)
+
+        for name, tensor in self.tensors.items():
+            self.context.set_tensor_address(name, tensor.data_ptr())
+
+        if use_cuda_graph:
+            if self.cuda_graph_instance is not None:
+                CUASSERT(cudart.cudaGraphLaunch(self.cuda_graph_instance, stream.ptr))
+                CUASSERT(cudart.cudaStreamSynchronize(stream.ptr))
+            else:
+                # do inference before CUDA graph capture
+                noerror = self.context.execute_async_v3(stream.ptr)
+                if not noerror:
+                    raise ValueError(f"ERROR: inference failed.")
+                # capture cuda graph
+                CUASSERT(cudart.cudaStreamBeginCapture(stream.ptr, cudart.cudaStreamCaptureMode.cudaStreamCaptureModeGlobal))
+                self.context.execute_async_v3(stream.ptr)
+                self.graph = CUASSERT(cudart.cudaStreamEndCapture(stream.ptr))
+                self.cuda_graph_instance = CUASSERT(cudart.cudaGraphInstantiate(self.graph, 0))
+        else:
+            noerror = self.context.execute_async_v3(stream.ptr)
+            if not noerror:
+                raise ValueError(f"ERROR: inference failed.")
 
         return self.tensors
 
@@ -1186,8 +1209,11 @@ def add_arguments(parser):
     parser.add_argument('--num-warmup-runs', type=int, default=5, help="Number of warmup runs before benchmarking performance")
     parser.add_argument('--nvtx-profile', action='store_true', help="Enable NVTX markers for performance profiling")
     parser.add_argument('--seed', type=int, default=None, help="Seed for random generator to get consistent results")
+    parser.add_argument('--use-cuda-graph', action='store_true', help="Enable cuda graph")
 
     parser.add_argument('--output-dir', default='output', help="Output directory for logs and image artifacts")
     parser.add_argument('--hf-token', type=str, help="HuggingFace API access token for downloading model checkpoints")
     parser.add_argument('-v', '--verbose', action='store_true', help="Show verbose output")
     return parser
+
+

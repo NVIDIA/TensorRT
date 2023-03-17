@@ -88,4 +88,38 @@ versions:
       - ld
       - beta
       - gamma
+    golden_reference_script: "plugin/skipLayerNormPlugin/CustomSkipLayerNormPluginDynamic_PluginReference.py"
+    abs_tol: 1e-2
+    rel_tol: 1e-2
+    configs:
+      config1:
+        input_types:
+          input: float32
+          skip: float32
+        attribute_options:
+          type_id:
+            value: 0
+          ld: 
+            value: 128
+          beta: 
+            shape: "1, 1, 128"
+          gamma: 
+            shape: "1, 1, 128"
+          bias: 
+            shape: "1, 1, 128"
+      config2:
+        input_types:
+          input: float16
+          skip: float16
+        attribute_options:
+          type_id:
+            value: 1
+          ld: 
+            value: 768
+          beta: 
+            shape: "1, 1, 768"
+          gamma: 
+            shape: "1, 1, 768"
+          bias: 
+            shape: "1, 1, 768"
 ...

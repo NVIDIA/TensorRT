@@ -89,43 +89,6 @@ public:
         AsciiChar const* const pluginNamespace = "") noexcept
         = 0;
 
-    //!
-    //! \brief Return whether the parent registry will be searched if a plugin is not found in this registry
-    //! default: true
-    //!
-    //! \return bool variable indicating whether parent search is enabled.
-    //!
-    //! \see setParentSearchEnabled
-    //!
-    virtual bool isParentSearchEnabled() const = 0;
-
-    //!
-    //! \brief Set whether the parent registry will be searched if a plugin is not found in this registry.
-    //!
-    //! \param enabled The bool variable indicating whether parent search is enabled.
-    //!
-    //! \see isParentSearchEnabled
-    //!
-    virtual void setParentSearchEnabled(bool const enabled) = 0;
-
-    //!
-    //! \brief Load and register a shared library of plugins.
-    //!
-    //! \param pluginPath the plugin library path.
-    //!
-    //! \return The loaded plugin library handle. The call will fail and return
-    //! nullptr if any of the plugins are already registered.
-    //!
-    virtual PluginLibraryHandle loadLibrary(AsciiChar const* pluginPath) noexcept = 0;
-
-    //!
-    //! \brief Deregister plugins associated with a library. Any resources acquired when the library
-    //! was loaded will be released.
-    //!
-    //! \param handle the plugin library handle to deregister.
-    //!
-    virtual void deregisterLibrary(PluginLibraryHandle handle) noexcept = 0;
-
     // @cond SuppressDoxyWarnings
     IPluginRegistry() = default;
     IPluginRegistry(IPluginRegistry const&) = delete;
@@ -189,6 +152,43 @@ public:
     //!   - Thread-safe: Yes
     //!
     virtual bool deregisterCreator(IPluginCreator const& creator) noexcept = 0;
+
+    //!
+    //! \brief Return whether the parent registry will be searched if a plugin is not found in this registry
+    //! default: true
+    //!
+    //! \return bool variable indicating whether parent search is enabled.
+    //!
+    //! \see setParentSearchEnabled
+    //!
+    virtual bool isParentSearchEnabled() const = 0;
+
+    //!
+    //! \brief Set whether the parent registry will be searched if a plugin is not found in this registry.
+    //!
+    //! \param enabled The bool variable indicating whether parent search is enabled.
+    //!
+    //! \see isParentSearchEnabled
+    //!
+    virtual void setParentSearchEnabled(bool const enabled) = 0;
+
+    //!
+    //! \brief Load and register a shared library of plugins.
+    //!
+    //! \param pluginPath the plugin library path.
+    //!
+    //! \return The loaded plugin library handle. The call will fail and return
+    //! nullptr if any of the plugins are already registered.
+    //!
+    virtual PluginLibraryHandle loadLibrary(AsciiChar const* pluginPath) noexcept = 0;
+
+    //!
+    //! \brief Deregister plugins associated with a library. Any resources acquired when the library
+    //! was loaded will be released.
+    //!
+    //! \param handle the plugin library handle to deregister.
+    //!
+    virtual void deregisterLibrary(PluginLibraryHandle handle) noexcept = 0;
 };
 
 } // namespace nvinfer1

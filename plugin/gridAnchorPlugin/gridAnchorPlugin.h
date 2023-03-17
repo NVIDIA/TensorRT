@@ -31,23 +31,23 @@ namespace plugin
 class GridAnchorGenerator : public IPluginV2Ext
 {
 public:
-    GridAnchorGenerator(GridAnchorParameters const* param, int numLayers, char const* version);
+    GridAnchorGenerator(GridAnchorParameters const* param, int32_t numLayers, char const* version);
 
     GridAnchorGenerator(void const* data, size_t length, char const* version);
 
     ~GridAnchorGenerator() override;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
 
-    int enqueue(int batchSize, void const* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
@@ -68,19 +68,20 @@ public:
 
     char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     bool isOutputBroadcastAcrossBatch(
-        int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept override;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
-    void configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
         DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-        bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     void detachFromContext() noexcept override;
 
@@ -94,9 +95,9 @@ private:
 
     Weights deserializeToDevice(char const*& hostBuffer, size_t count) noexcept;
 
-    int mNumLayers;
+    int32_t mNumLayers;
     std::vector<GridAnchorParameters> mParam;
-    int* mNumPriors;
+    int32_t* mNumPriors;
     Weights *mDeviceWidths, *mDeviceHeights;
     std::string mPluginNamespace;
 };

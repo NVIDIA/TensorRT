@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,9 +56,9 @@ private:
     bool mDebugBuilder{false};
     InputDataFormat mInputDataFormat{InputDataFormat::kASCII};
     uint64_t mTopK{0};
-    float mFailurePercentage{-1.0f};
-    float mTolerance{0.0f};
-    float mAbsTolerance{1e-5f};
+    float mFailurePercentage{-1.0F};
+    float mTolerance{0.0F};
+    float mAbsTolerance{1e-5F};
 
 public:
     SampleConfig()
@@ -313,7 +313,7 @@ public:
     {
         return mTimingCacheFilename.c_str();
     }
-    
+
     void setTimingCacheFileName(const char* timingCacheFilename) noexcept
     {
         mTimingCacheFilename = std::string(timingCacheFilename);

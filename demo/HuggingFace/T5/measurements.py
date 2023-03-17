@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,7 @@ def decoder_inference(
 
     def decoder_stmt():
         t5_decoder(
-            input_ids=input_ids, encoder_hidden_states=encoder_last_hidden_state, use_cache=use_cache, 
+            input_ids=input_ids, encoder_hidden_states=encoder_last_hidden_state, use_cache=use_cache,
             past_key_values=past_key_values
         )
 
@@ -90,7 +90,7 @@ def full_inference(
                 encoder_outputs = BaseModelOutput(last_hidden_state = encoder_last_hidden_state),
             )
         return decoder_output
-
+    
     if isinstance(t5_decoder, TRTNativeRunner):
         t5_decoder.set_return_device("cuda" if use_cuda else "cpu")
 

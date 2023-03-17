@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,7 @@
 """
 Build and test TensorRT engines generated from the DeBERTa model. Different precisions are supported.
 
-Usage: 
+Usage:
 Build and test a model:
     - build: python deberta_tensorrt_inference.py --onnx=xx.onnx --build fp16 # build TRT engines
     - test: python deberta_tensorrt_inference.py --onnx=xx.onnx --test fp16 # test will measure the inference time
@@ -30,15 +30,15 @@ Correctness check is done by comparing engines generated from the original model
     - [3] build plugin model: python deberta_tensorrt_inference.py --onnx=xx_correctness_check_plugin.onnx --build fp16
     - [4] correctness check: python deberta_tensorrt_inference.py --onnx=deberta --correctness_check fp16
 
-Notes: 
+Notes:
     - supported precisions are fp32/tf32/fp16. For both --build and --test, you can specify more than one precisions, and TensorRT engines of each precision will be built sequentially.
-    - engine files are saved as `**/[Model name]_[GPU name]_[Precision].engine`. Note that TensorRT engines are specific to both GPU architecture and TensorRT version, and therefore are not compatible cross-version nor cross-device. 
+    - engine files are saved as `**/[Model name]_[GPU name]_[Precision].engine`. Note that TensorRT engines are specific to both GPU architecture and TensorRT version, and therefore are not compatible cross-version nor cross-device.
     - in --correctness-check mode, the argument for --onnx is the `root` name for the models [root]_correctness_check_original/plugin.onnx
 """
 
 import torch
 import tensorrt as trt
-import os, sys, argparse 
+import os, sys, argparse
 import numpy as np
 import pycuda.driver as cuda
 import pycuda.autoinit # without this, "LogicError: explicit_context_dependent failed: invalid device context - no currently active context?"
@@ -49,10 +49,10 @@ TRT_VERSION = int(trt.__version__[:3].replace('.','')) # e.g., version 8.4.1.5 b
 def GPU_ABBREV(name):
     '''
     Map GPU device query name to abbreviation.
-    
+
     ::param str name Device name from torch.cuda.get_device_name().
     ::return str GPU abbreviation.
-    ''' 
+    '''
 
     GPU_LIST = [
         'V100',
@@ -61,13 +61,13 @@ def GPU_ABBREV(name):
         'A100',
         'A10G',
         'A10'
-    ] 
+    ]
     # Partial list, can be extended. The order of A100, A10G, A10 matters. They're put in a way to not detect substring A10 as A100
-    
+
     for i in GPU_LIST:
         if i in name:
-            return i 
-    
+            return i
+
     return 'GPU' # for names not in the partial list, use 'GPU' as default
 
 gpu_name = GPU_ABBREV(torch.cuda.get_device_name())
@@ -86,7 +86,7 @@ parser.add_argument('--correctness-check', nargs='+', help='Correctness check fo
 
 args = parser.parse_args()
 
-ONNX_MODEL = args.onnx    
+ONNX_MODEL = args.onnx
 MODEL_NAME = os.path.splitext(args.onnx)[0]
 BUILD = args.build
 TEST = args.test
@@ -127,7 +127,7 @@ class TRTModel:
             return self.__str__()
 
     def __init__(self, engine_path):
-        self.engine_path = engine_path 
+        self.engine_path = engine_path
         self.logger = trt.Logger(trt.Logger.WARNING)
         self.runtime = trt.Runtime(self.logger)
 
@@ -159,7 +159,7 @@ class TRTModel:
         with open(self.engine_path, 'rb') as f:
             engine = self.runtime.deserialize_cuda_engine(f.read())
         return engine
-    
+
     def allocate_buffers(self, engine):
         '''
         Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
@@ -172,7 +172,7 @@ class TRTModel:
         for binding in engine: # binding is the name of input/output
             size = trt.volume(engine.get_binding_shape(binding)) * engine.max_batch_size
             dtype = trt.nptype(engine.get_binding_dtype(binding))
-            
+
             # Allocate host and device buffers
             host_mem = cuda.pagelocked_empty(size, dtype) # page-locked memory buffer (won't swapped to disk)
             device_mem = cuda.mem_alloc(host_mem.nbytes)
@@ -202,7 +202,7 @@ class TRTModel:
             TORCH = True
         else:
             assert False, 'Unsupported input data format!'
-        
+
         # batch size consistency check
         if NUMPY:
             batch_size = np.unique(np.array([i.shape[0] for i in model_inputs]))
@@ -226,18 +226,18 @@ class TRTModel:
                 np.copyto(self.inputs[i].host, model_input.ravel())
             elif TORCH:
                 if timing:
-                    cuda.memcpy_dtod(self.inputs[i].device, model_input.data_ptr(), model_input.element_size() * model_input.nelement()) 
+                    cuda.memcpy_dtod(self.inputs[i].device, model_input.data_ptr(), model_input.element_size() * model_input.nelement())
                 else:
                     # for Torch GPU tensor it's easier, can just do Device to Device copy
                     cuda.memcpy_dtod_async(self.inputs[i].device, model_input.data_ptr(), model_input.element_size() * model_input.nelement(), self.stream) # dtod need size in bytes
 
-        if NUMPY:   
+        if NUMPY:
             if timing:
                 [cuda.memcpy_htod(inp.device, inp.host) for inp in self.inputs]
             else:
                 # input, Host to Device
                 [cuda.memcpy_htod_async(inp.device, inp.host, self.stream) for inp in self.inputs]
-        
+
         duration = 0
         if timing:
             start_time = time()
@@ -258,7 +258,7 @@ class TRTModel:
             # synchronize to ensure completion of async calls
             self.stream.synchronize()
 
-        if NUMPY: 
+        if NUMPY:
             return [out.host.reshape(batch_size,-1) for out in self.outputs], duration
         elif TORCH:
             return [torch.from_numpy(out.host.reshape(batch_size,-1)) for out in self.outputs], duration
@@ -284,19 +284,19 @@ def build_engine():
             print(onnx_parser.get_error(idx))
         if not parse_success:
             sys.exit('ONNX model parsing failed')
-        
+
         ## build TRT engine (configuration options at: https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/Core/BuilderConfig.html#ibuilderconfig)
         config = TRT_BUILDER.create_builder_config()
-        
+
         seq_len = network.get_input(0).shape[1]
-        
+
         # handle dynamic shape (min/opt/max): https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#work_dynamic_shapes
         # by default batch dim set as 1 for all min/opt/max. If there are batch need, change the value for opt and max accordingly
-        profile = TRT_BUILDER.create_optimization_profile() 
-        profile.set_shape("input_ids", (1,seq_len), (1,seq_len), (1,seq_len)) 
-        profile.set_shape("attention_mask", (1,seq_len), (1,seq_len), (1,seq_len)) 
+        profile = TRT_BUILDER.create_optimization_profile()
+        profile.set_shape("input_ids", (1,seq_len), (1,seq_len), (1,seq_len))
+        profile.set_shape("attention_mask", (1,seq_len), (1,seq_len), (1,seq_len))
         config.add_optimization_profile(profile)
-        
+
         if TRT_VERSION >= 84:
             config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 4096 * (1 << 20)) # 4096 MiB, syntax after TRT 8.4
         else:
@@ -312,7 +312,7 @@ def build_engine():
 
         # build
         serialized_engine = TRT_BUILDER.build_serialized_network(network, config)
-        
+
         ## save TRT engine
         with open(engine_filename, 'wb') as f:
             f.write(serialized_engine)
@@ -326,7 +326,7 @@ def test_engine():
         print(f'Running inference on engine {engine_filename}')
 
         model = TRTModel(engine_filename)
-        
+
         ## psuedo-random input test
         batch_size = 1
         seq_len = model.engine.get_binding_shape(0)[1]
@@ -343,7 +343,7 @@ def test_engine():
         for _ in range(nreps):
             outputs, duration = model(inputs, timing=True)
             duration_total += duration
-        
+
         print(f'Average Inference time (ms) of {nreps} runs: {duration_total/nreps*1000:.3f}')
 
 def correctness_check_engines():
@@ -351,7 +351,7 @@ def correctness_check_engines():
         ## load and deserialize TRT engine
         engine_filename1 = '_'.join([ONNX_MODEL, 'correctness_check_original', gpu_name, precision]) + '.engine'
         engine_filename2 = '_'.join([ONNX_MODEL, 'correctness_check_plugin', gpu_name, precision]) + '.engine'
-        
+
         assert os.path.exists(engine_filename1), f'Engine file {engine_filename1} does not exist. Please build the engine first by --build'
         assert os.path.exists(engine_filename2), f'Engine file {engine_filename2} does not exist. Please build the engine first by --build'
 
@@ -359,7 +359,7 @@ def correctness_check_engines():
 
         model1 = TRTModel(engine_filename1)
         model2 = TRTModel(engine_filename2)
-        
+
         ## psuedo-random input test
         batch_size = 1
         seq_len = model1.engine.get_binding_shape(0)[1]
@@ -369,7 +369,7 @@ def correctness_check_engines():
         input_ids = torch.randint(0, vocab, (batch_size, seq_len), dtype=torch.long, device=gpu)
         attention_mask = torch.randint(0, 2, (batch_size, seq_len), dtype=torch.long, device=gpu)
         inputs = [input_ids, attention_mask]
-        
+
         outputs1, _ = model1(inputs)
         outputs2, _ = model2(inputs)
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +15,12 @@
 # limitations under the License.
 #
 
-# Multi-arch container support available in non-cudnn containers.
-FROM nvidia/cuda:12.0.1-devel-ubuntu20.04
+ARG CUDA_VERSION=12.0.1
 
-ENV TRT_VERSION 8.6.0.12
+# Multi-arch container support available in non-cudnn containers.
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu20.04
+
+ENV TRT_VERSION 8.6.1.6
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -72,7 +74,9 @@ RUN v="${TRT_VERSION}-1+cuda${CUDA_VERSION%.*}" &&\
     apt-get update &&\
     sudo apt-get -y install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
         libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
-        python3-libnvinfer=${v};
+        python3-libnvinfer=${v} libnvinfer-dispatch8=${v} libnvinfer-dispatch-dev=${v} libnvinfer-lean8=${v} \
+        libnvinfer-lean-dev=${v} libnvinfer-vc-plugin8=${v} libnvinfer-vc-plugin-dev=${v} \
+        libnvinfer-headers-dev=${v} libnvinfer-headers-plugin-dev=${v};
 
 # Install Cmake
 RUN cd /tmp && \

@@ -16,117 +16,111 @@
  */
 
 #include "decodeBbox3D.h"
+#include "common/bboxUtils.h"
+#include "common/checkMacrosPlugin.h"
+#include "common/kernels/kernel.h"
 #include "common/templates.h"
-#include <cstring>
-#include <iostream>
 
 namespace nvinfer1
 {
 namespace plugin
 {
-#define checkCudaErrors(status)                                                                                        \
-    {                                                                                                                  \
-        if ((status) != 0)                                                                                             \
-        {                                                                                                              \
-            std::cout << "Cuda failure: " << cudaGetErrorString(status) << " at line " << __LINE__ << " in file "      \
-                      << __FILE__ << " error status: " << (status) << std::endl;                                       \
-            abort();                                                                                                   \
-        }                                                                                                              \
-    }
 
 using nvinfer1::plugin::DecodeBbox3DPlugin;
 using nvinfer1::plugin::DecodeBbox3DPluginCreator;
 
+namespace
+{
 static char const* const kPLUGIN_VERSION{"1"};
 static char const* const kPLUGIN_NAME{"DecodeBbox3DPlugin"};
+} // namespace
 
 // Static class fields initialization
 PluginFieldCollection DecodeBbox3DPluginCreator::mFC{};
 std::vector<PluginField> DecodeBbox3DPluginCreator::mPluginAttributes;
 
-DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max, float z_min, float z_max,
-    int32_t num_dir_bins, float dir_offset, float dir_limit_offset, std::vector<float> const& anchor_bottom_height,
-    std::vector<float> const& anchors, float score_thresh)
-    : min_x_range_(x_min)
-    , max_x_range_(x_max)
-    , min_y_range_(y_min)
-    , max_y_range_(y_max)
-    , min_z_range_(z_min)
-    , max_z_range_(z_max)
-    , num_dir_bins_(num_dir_bins)
-    , dir_offset_(dir_offset)
-    , dir_limit_offset_(dir_limit_offset)
-    , score_thresh_(score_thresh)
+DecodeBbox3DPlugin::DecodeBbox3DPlugin(float xMin, float xMax, float yMin, float yMax, float zMin, float zMax,
+    int32_t numDirBins, float dirOffset, float dirLimitOffset, std::vector<float> const& anchorBottomHeight,
+    std::vector<float> const& anchors, float scoreThreshold)
+    : mMinXRange(xMin)
+    , mMaxXRange(xMax)
+    , mMinYRange(yMin)
+    , mMaxYRange(yMax)
+    , mMinZRange(zMin)
+    , mMaxZRange(zMax)
+    , mNumDirBins(numDirBins)
+    , mDirOffset(dirOffset)
+    , mDirLimitOffset(dirLimitOffset)
+    , mScoreThreashold(scoreThreshold)
 {
-    anchor_bottom_height_.clear();
-    for (size_t i = 0; i < anchor_bottom_height.size(); i++)
-        anchor_bottom_height_.push_back(anchor_bottom_height[i]);
-    anchors_.clear();
-    for (size_t i = 0; i < anchors.size(); i++)
-        anchors_.push_back(anchors[i]);
-    num_classes_ = int(anchor_bottom_height_.size());
-    PLUGIN_VALIDATE(num_classes_ > 0);
-    PLUGIN_VALIDATE(static_cast<size_t>(num_classes_) * 2 * 4 == anchors_.size());
+    mAnchorBottomHeight = anchorBottomHeight;
+    mAnchors = anchors;
+    mNumClasses = static_cast<int32_t>(mAnchorBottomHeight.size());
+    PLUGIN_VALIDATE(static_cast<size_t>(mNumClasses) * 2 * 4 == mAnchors.size());
 }
 
-DecodeBbox3DPlugin::DecodeBbox3DPlugin(float x_min, float x_max, float y_min, float y_max, float z_min, float z_max,
-    int num_dir_bins, float dir_offset, float dir_limit_offset, std::vector<float> const& anchor_bottom_height,
-    std::vector<float> const& anchors, float score_thresh, int feature_h, int feature_w)
-    : min_x_range_(x_min)
-    , max_x_range_(x_max)
-    , min_y_range_(y_min)
-    , max_y_range_(y_max)
-    , min_z_range_(z_min)
-    , max_z_range_(z_max)
-    , num_dir_bins_(num_dir_bins)
-    , dir_offset_(dir_offset)
-    , dir_limit_offset_(dir_limit_offset)
-    , score_thresh_(score_thresh)
-    , feature_h_(feature_h)
-    , feature_w_(feature_w)
+DecodeBbox3DPlugin::DecodeBbox3DPlugin(float xMin, float xMax, float yMin, float yMax, float zMin, float zMax,
+    int32_t numDirBins, float dirOffset, float dirLimitOffset, std::vector<float> const& anchorBottomHeight,
+    std::vector<float> const& anchors, float scoreThreshold, int32_t feature_h, int32_t feature_w)
+    : mMinXRange(xMin)
+    , mMaxXRange(xMax)
+    , mMinYRange(yMin)
+    , mMaxYRange(yMax)
+    , mMinZRange(zMin)
+    , mMaxZRange(zMax)
+    , mNumDirBins(numDirBins)
+    , mDirOffset(dirOffset)
+    , mDirLimitOffset(dirLimitOffset)
+    , mScoreThreashold(scoreThreshold)
+    , mFeatureH(feature_h)
+    , mFeatureW(feature_w)
 {
-    anchor_bottom_height_.clear();
-    for (size_t i = 0; i < anchor_bottom_height.size(); i++)
-        anchor_bottom_height_.push_back(anchor_bottom_height[i]);
-    anchors_.clear();
-    for (size_t i = 0; i < anchors.size(); i++)
-        anchors_.push_back(anchors[i]);
-    num_classes_ = int(anchor_bottom_height_.size());
-    PLUGIN_VALIDATE(num_classes_ > 0);
-    PLUGIN_VALIDATE(static_cast<size_t>(num_classes_) * 2 * 4 == anchors_.size());
+    mAnchorBottomHeight = anchorBottomHeight;
+    mAnchors = anchors;
+    mNumClasses = static_cast<int32_t>(mAnchorBottomHeight.size());
+    PLUGIN_VALIDATE(static_cast<size_t>(mNumClasses) * 2 * 4 == mAnchors.size());
 }
 
 DecodeBbox3DPlugin::DecodeBbox3DPlugin(void const* data, size_t length)
 {
-    char const* d = reinterpret_cast<char const*>(data);
-    min_x_range_ = readFromBuffer<float>(d);
-    max_x_range_ = readFromBuffer<float>(d);
-    min_y_range_ = readFromBuffer<float>(d);
-    max_y_range_ = readFromBuffer<float>(d);
-    min_z_range_ = readFromBuffer<float>(d);
-    max_z_range_ = readFromBuffer<float>(d);
-    num_dir_bins_ = readFromBuffer<int>(d);
-    dir_offset_ = readFromBuffer<float>(d);
-    dir_limit_offset_ = readFromBuffer<float>(d);
-    score_thresh_ = readFromBuffer<float>(d);
-    num_classes_ = readFromBuffer<int>(d);
-    feature_h_ = readFromBuffer<int>(d);
-    feature_w_ = readFromBuffer<int>(d);
-    anchor_bottom_height_.clear();
-    anchors_.clear();
-    for (int i = 0; i < num_classes_; i++)
-        anchor_bottom_height_.push_back(readFromBuffer<float>(d));
-    for (int i = 0; i < num_classes_ * 2 * 4; i++)
-        anchors_.push_back(readFromBuffer<float>(d));
+    PLUGIN_VALIDATE(data != nullptr);
+    auto const* d = reinterpret_cast<uint8_t const*>(data);
+    mMinXRange = readFromBuffer<float>(d);
+    mMaxXRange = readFromBuffer<float>(d);
+    mMinYRange = readFromBuffer<float>(d);
+    mMaxYRange = readFromBuffer<float>(d);
+    mMinZRange = readFromBuffer<float>(d);
+    mMaxZRange = readFromBuffer<float>(d);
+    mNumDirBins = readFromBuffer<int32_t>(d);
+    mDirOffset = readFromBuffer<float>(d);
+    mDirLimitOffset = readFromBuffer<float>(d);
+    mScoreThreashold = readFromBuffer<float>(d);
+    mNumClasses = readFromBuffer<int32_t>(d);
+    mFeatureH = readFromBuffer<int32_t>(d);
+    mFeatureW = readFromBuffer<int32_t>(d);
+
+    mAnchorBottomHeight.resize(mNumClasses);
+    for (int32_t i = 0; i < mNumClasses; i++)
+    {
+        mAnchorBottomHeight[i] = readFromBuffer<float>(d);
+    }
+
+    mAnchors.resize(mNumClasses * 2 * 4);
+    for (int32_t i = 0; i < mNumClasses * 2 * 4; i++)
+    {
+        mAnchors[i] = readFromBuffer<float>(d);
+    }
+
+    PLUGIN_VALIDATE(d == reinterpret_cast<uint8_t const*>(data) + length);
 }
 
 nvinfer1::IPluginV2DynamicExt* DecodeBbox3DPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new DecodeBbox3DPlugin(min_x_range_, max_x_range_, min_y_range_, max_y_range_, min_z_range_,
-            max_z_range_, num_dir_bins_, dir_offset_, dir_limit_offset_, anchor_bottom_height_, anchors_, score_thresh_,
-            feature_h_, feature_w_);
+        auto* plugin = new DecodeBbox3DPlugin(mMinXRange, mMaxXRange, mMinYRange, mMaxYRange, mMinZRange, mMaxZRange,
+            mNumDirBins, mDirOffset, mDirLimitOffset, mAnchorBottomHeight, mAnchors, mScoreThreashold, mFeatureH,
+            mFeatureW);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
@@ -137,36 +131,56 @@ nvinfer1::IPluginV2DynamicExt* DecodeBbox3DPlugin::clone() const noexcept
     return nullptr;
 }
 
-nvinfer1::DimsExprs DecodeBbox3DPlugin::getOutputDimensions(
-    int outputIndex, nvinfer1::DimsExprs const* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+nvinfer1::DimsExprs DecodeBbox3DPlugin::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
+    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
-    PLUGIN_ASSERT(this->getNbOutputs() == 2);
-    PLUGIN_ASSERT(outputIndex >= 0 && outputIndex < this->getNbOutputs());
-    auto feature_h = inputs[0].d[1];
-    auto feature_w = inputs[0].d[2];
-    auto batch_size = inputs[0].d[0];
-    if (outputIndex == 0)
+    try
     {
-        nvinfer1::DimsExprs dim0{};
-        dim0.nbDims = 3;
-        dim0.d[0] = batch_size;
-        dim0.d[1] = exprBuilder.operation(nvinfer1::DimensionOperation::kPROD, feature_h[0],
-            exprBuilder.operation(
-                nvinfer1::DimensionOperation::kPROD, feature_w[0], exprBuilder.constant(num_classes_ * 2)[0])[0]);
-        dim0.d[2] = exprBuilder.constant(9);
-        return dim0;
+        PLUGIN_VALIDATE(getNbOutputs() == 2);
+        PLUGIN_VALIDATE(outputIndex >= 0 && outputIndex < getNbOutputs());
+        PLUGIN_VALIDATE(inputs != nullptr);
+        auto const& featureH = inputs[0].d[1];
+        auto const& featureW = inputs[0].d[2];
+        auto const& batchSize = inputs[0].d[0];
+        if (outputIndex == 0)
+        {
+            nvinfer1::DimsExprs dim0{};
+            dim0.nbDims = 3;
+            dim0.d[0] = batchSize;
+            dim0.d[1] = exprBuilder.operation(nvinfer1::DimensionOperation::kPROD, featureH[0],
+                exprBuilder.operation(
+                    nvinfer1::DimensionOperation::kPROD, featureW[0], exprBuilder.constant(mNumClasses * 2)[0])[0]);
+            dim0.d[2] = exprBuilder.constant(9);
+            return dim0;
+        }
+        nvinfer1::DimsExprs dim1{};
+        dim1.nbDims = 1;
+        dim1.d[0] = batchSize;
+        return dim1;
     }
-    nvinfer1::DimsExprs dim1{};
-    dim1.nbDims = 1;
-    dim1.d[0] = batch_size;
-    return dim1;
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nvinfer1::DimsExprs{};
 }
 
 bool DecodeBbox3DPlugin::supportsFormatCombination(
-    int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept
+    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    PLUGIN_ASSERT(nbInputs == 3);
-    PLUGIN_ASSERT(nbOutputs == 2);
+    try
+    {
+        PLUGIN_VALIDATE(nbInputs == 3);
+        PLUGIN_VALIDATE(nbOutputs == 2);
+        PLUGIN_VALIDATE(inOut != nullptr);
+        PLUGIN_VALIDATE((pos >= 0) && (pos < nbInputs + nbOutputs));
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+        return false;
+    }
+
     PluginTensorDesc const& in = inOut[pos];
     if (pos == 0) // cls_preds
     {
@@ -191,58 +205,90 @@ bool DecodeBbox3DPlugin::supportsFormatCombination(
     return false;
 }
 
-void DecodeBbox3DPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept
+void DecodeBbox3DPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
-    feature_h_ = in[0].desc.dims.d[1];
-    feature_w_ = in[0].desc.dims.d[2];
+    try
+    {
+        PLUGIN_VALIDATE(in != nullptr);
+        mFeatureH = in[0].desc.dims.d[1];
+        mFeatureW = in[0].desc.dims.d[2];
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
-size_t DecodeBbox3DPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int nbOutputs) const noexcept
+size_t DecodeBbox3DPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
-    size_t anchors_size = num_classes_ * 2 * 4 * sizeof(float);
-    size_t anchor_bottom_height_size = num_classes_ * sizeof(float);
+    size_t mAnchorsSize = mNumClasses * 2 * 4 * sizeof(float);
+    size_t mAnchorBottomHeightSize = mNumClasses * sizeof(float);
     size_t workspaces[2];
-    workspaces[0] = anchors_size;
-    workspaces[1] = anchor_bottom_height_size;
+    workspaces[0] = mAnchorsSize;
+    workspaces[1] = mAnchorBottomHeightSize;
     return calculateTotalWorkspaceSize(workspaces, 2);
 }
 
-int DecodeBbox3DPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
+int32_t DecodeBbox3DPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
     nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
-    int batchSize = inputDesc[0].dims.d[0];
-    // Inputs
-    float* cls_input = const_cast<float*>((float const*) (inputs[0]));
-    float* box_input = const_cast<float*>((float const*) inputs[1]);
-    float* dir_cls_input = const_cast<float*>((float const*) (inputs[2]));
-    // Outputs
-    float* bndbox_output = (float*) (outputs[0]);
-    int* box_num = (int*) (outputs[1]);
-    // Initialize workspaces
-    float* anchors = (float*) workspace;
-    size_t anchors_size = num_classes_ * 2 * 4 * sizeof(float);
-    float* anchor_bottom_height = (float*) nextWorkspacePtr((int8_t*) anchors, anchors_size);
-    size_t anchor_bottom_height_size = num_classes_ * sizeof(float);
-    checkCudaErrors(cudaMemcpyAsync(anchors, &anchors_[0], anchors_size, cudaMemcpyHostToDevice, stream));
-    checkCudaErrors(cudaMemcpyAsync(
-        anchor_bottom_height, &anchor_bottom_height_[0], anchor_bottom_height_size, cudaMemcpyHostToDevice, stream));
-    // Initialize box_num to 0
-    checkCudaErrors(cudaMemsetAsync(box_num, 0, batchSize * sizeof(int), stream));
-    decodeBbox3DLaunch(batchSize, cls_input, box_input, dir_cls_input, anchors, anchor_bottom_height, bndbox_output,
-        box_num, min_x_range_, max_x_range_, min_y_range_, max_y_range_, feature_w_, feature_h_, num_classes_ * 2,
-        num_classes_, 7, score_thresh_, dir_offset_, dir_limit_offset_, num_dir_bins_, stream);
-    return 0;
+    try
+    {
+        int32_t batchSize = inputDesc[0].dims.d[0];
+
+        // Inputs
+        auto const* clsInput = static_cast<float const*>(inputs[0]);
+        auto const* boxInput = static_cast<float const*>(inputs[1]);
+        auto const* dirClsInput = static_cast<float const*>(inputs[2]);
+
+        // Outputs
+        auto* bndboxOutput = static_cast<float*>(outputs[0]);
+        auto* boxNum = static_cast<int32_t*>(outputs[1]);
+
+        // Initialize workspaces
+        auto* anchors = static_cast<float*>(workspace);
+        size_t anchorsSize = mNumClasses * 2 * 4 * sizeof(float);
+        auto* anchorBottomHeight
+            = reinterpret_cast<float*>(nextWorkspacePtr(reinterpret_cast<int8_t*>(anchors), anchorsSize));
+        size_t anchorBottomHeightSize = mNumClasses * sizeof(float);
+        PLUGIN_CUASSERT(cudaMemcpyAsync(anchors, &mAnchors[0], anchorsSize, cudaMemcpyHostToDevice, stream));
+        PLUGIN_CUASSERT(cudaMemcpyAsync(
+            anchorBottomHeight, &mAnchorBottomHeight[0], anchorBottomHeightSize, cudaMemcpyHostToDevice, stream));
+        // Initialize boxNum to 0
+        PLUGIN_CUASSERT(cudaMemsetAsync(boxNum, 0, batchSize * sizeof(int32_t), stream));
+
+        decodeBbox3DLaunch(batchSize, clsInput, boxInput, dirClsInput, anchors, anchorBottomHeight, bndboxOutput,
+            boxNum, mMinXRange, mMaxXRange, mMinYRange, mMaxYRange, mFeatureW, mFeatureH, mNumClasses * 2, mNumClasses,
+            7, mScoreThreashold, mDirOffset, mDirLimitOffset, mNumDirBins, stream);
+        return cudaPeekAtLastError();
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
 }
 
 nvinfer1::DataType DecodeBbox3DPlugin::getOutputDataType(
-    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    if (index == 0)
-        return inputTypes[0];
-    return nvinfer1::DataType::kINT32;
+    try
+    {
+        PLUGIN_VALIDATE(inputTypes != nullptr);
+        if (index == 0)
+        {
+            return inputTypes[0];
+        }
+        return nvinfer1::DataType::kINT32;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nvinfer1::DataType{};
 }
 
 char const* DecodeBbox3DPlugin::getPluginType() const noexcept
@@ -255,12 +301,12 @@ char const* DecodeBbox3DPlugin::getPluginVersion() const noexcept
     return kPLUGIN_VERSION;
 }
 
-int DecodeBbox3DPlugin::getNbOutputs() const noexcept
+int32_t DecodeBbox3DPlugin::getNbOutputs() const noexcept
 {
     return 2;
 }
 
-int DecodeBbox3DPlugin::initialize() noexcept
+int32_t DecodeBbox3DPlugin::initialize() noexcept
 {
     return 0;
 }
@@ -269,31 +315,38 @@ void DecodeBbox3DPlugin::terminate() noexcept {}
 
 size_t DecodeBbox3DPlugin::getSerializationSize() const noexcept
 {
-    size_t scalar_size = 9 * sizeof(float) + 4 * sizeof(int);
-    size_t vector_size = num_classes_ * 9 * sizeof(float);
-    return scalar_size + vector_size;
+    size_t scalarSize = 9 * sizeof(float) + 4 * sizeof(int32_t);
+    size_t vectorSize = mNumClasses * 9 * sizeof(float);
+    return scalarSize + vectorSize;
 }
 
 void DecodeBbox3DPlugin::serialize(void* buffer) const noexcept
 {
-    char* d = reinterpret_cast<char*>(buffer);
-    writeToBuffer<float>(d, min_x_range_);
-    writeToBuffer<float>(d, max_x_range_);
-    writeToBuffer<float>(d, min_y_range_);
-    writeToBuffer<float>(d, max_y_range_);
-    writeToBuffer<float>(d, min_z_range_);
-    writeToBuffer<float>(d, max_z_range_);
-    writeToBuffer<int>(d, num_dir_bins_);
-    writeToBuffer<float>(d, dir_offset_);
-    writeToBuffer<float>(d, dir_limit_offset_);
-    writeToBuffer<float>(d, score_thresh_);
-    writeToBuffer<int>(d, num_classes_);
-    writeToBuffer<int>(d, feature_h_);
-    writeToBuffer<int>(d, feature_w_);
-    for (int i = 0; i < num_classes_; i++)
-        writeToBuffer<float>(d, anchor_bottom_height_[i]);
-    for (int i = 0; i < num_classes_ * 2 * 4; i++)
-        writeToBuffer<float>(d, anchors_[i]);
+    PLUGIN_ASSERT(buffer != nullptr);
+    auto* d = reinterpret_cast<uint8_t*>(buffer);
+    auto* const start = d;
+    writeToBuffer<float>(d, mMinXRange);
+    writeToBuffer<float>(d, mMaxXRange);
+    writeToBuffer<float>(d, mMinYRange);
+    writeToBuffer<float>(d, mMaxYRange);
+    writeToBuffer<float>(d, mMinZRange);
+    writeToBuffer<float>(d, mMaxZRange);
+    writeToBuffer<int32_t>(d, mNumDirBins);
+    writeToBuffer<float>(d, mDirOffset);
+    writeToBuffer<float>(d, mDirLimitOffset);
+    writeToBuffer<float>(d, mScoreThreashold);
+    writeToBuffer<int32_t>(d, mNumClasses);
+    writeToBuffer<int32_t>(d, mFeatureH);
+    writeToBuffer<int32_t>(d, mFeatureW);
+    for (int32_t i = 0; i < mNumClasses; i++)
+    {
+        writeToBuffer<float>(d, mAnchorBottomHeight[i]);
+    }
+    for (int32_t i = 0; i < mNumClasses * 2 * 4; i++)
+    {
+        writeToBuffer<float>(d, mAnchors[i]);
+    }
+    PLUGIN_ASSERT(d == start + getSerializationSize());
 }
 
 void DecodeBbox3DPlugin::destroy() noexcept
@@ -303,7 +356,15 @@ void DecodeBbox3DPlugin::destroy() noexcept
 
 void DecodeBbox3DPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 char const* DecodeBbox3DPlugin::getPluginNamespace() const noexcept
@@ -341,74 +402,73 @@ PluginFieldCollection const* DecodeBbox3DPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(fc != nullptr);
         PluginField const* fields = fc->fields;
-        int nbFields = fc->nbFields;
-        float point_cloud_range[6] = {0.0F};
+
+        // Initialize default values for attributes.
+        float pointCloudRange[6] = {0.F};
         std::vector<float> anchors{};
-        std::vector<float> anchor_bottom_height{};
-        float dir_offset = 0.78539F;
-        float dir_limit_offset = 0.0F;
-        int num_dir_bins = 2;
-        float score_thresh = 0.1F;
-        for (int i = 0; i < nbFields; ++i)
+        std::vector<float> anchorBottomHeight{};
+        float dirOffset = 0.78539F;
+        float dirLimitOffset = 0.F;
+        int32_t numDirBins = 2;
+        float scoreThreshold = 0.F;
+
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             char const* attr_name = fields[i].name;
             if (!strcmp(attr_name, "point_cloud_range"))
             {
-                float const* d = static_cast<float const*>(fields[i].data);
-                point_cloud_range[0] = d[0];
-                point_cloud_range[1] = d[1];
-                point_cloud_range[2] = d[2];
-                point_cloud_range[3] = d[3];
-                point_cloud_range[4] = d[4];
-                point_cloud_range[5] = d[5];
+                auto const* d = static_cast<float const*>(fields[i].data);
+                for (int32_t pointCloudIdx = 0; pointCloudIdx < 6; pointCloudIdx++)
+                {
+                    pointCloudRange[pointCloudIdx] = d[pointCloudIdx];
+                }
             }
             else if (!strcmp(attr_name, "anchors"))
             {
-                float const* as = static_cast<float const*>(fields[i].data);
-                for (int j = 0; j < fields[i].length; ++j)
+                auto const* d = static_cast<float const*>(fields[i].data);
+                for (int32_t j = 0; j < fields[i].length; ++j)
                 {
-                    anchors.push_back(*as);
-                    ++as;
+                    anchors.push_back(d[j]);
                 }
             }
             else if (!strcmp(attr_name, "anchor_bottom_height"))
             {
-                float const* ah = static_cast<float const*>(fields[i].data);
-                for (int j = 0; j < fields[i].length; ++j)
+                auto const* d = static_cast<float const*>(fields[i].data);
+                for (int32_t j = 0; j < fields[i].length; ++j)
                 {
-                    anchor_bottom_height.push_back(*ah);
-                    ++ah;
+                    anchorBottomHeight.push_back(d[j]);
                 }
             }
             else if (!strcmp(attr_name, "dir_offset"))
             {
-                float const* d = static_cast<float const*>(fields[i].data);
-                dir_offset = d[0];
+                auto const* d = static_cast<float const*>(fields[i].data);
+                dirOffset = d[0];
             }
             else if (!strcmp(attr_name, "dir_limit_offset"))
             {
-                float const* d = static_cast<float const*>(fields[i].data);
-                dir_limit_offset = d[0];
+                auto const* d = static_cast<float const*>(fields[i].data);
+                dirLimitOffset = d[0];
             }
             else if (!strcmp(attr_name, "num_dir_bins"))
             {
-                int const* d = static_cast<int const*>(fields[i].data);
-                num_dir_bins = d[0];
+                auto const* d = static_cast<int32_t const*>(fields[i].data);
+                numDirBins = d[0];
             }
             else if (!strcmp(attr_name, "score_thresh"))
             {
-                float const* d = static_cast<float const*>(fields[i].data);
-                score_thresh = d[0];
+                auto const* d = static_cast<float const*>(fields[i].data);
+                scoreThreshold = d[0];
             }
         }
-        IPluginV2* plugin = new DecodeBbox3DPlugin(point_cloud_range[0], point_cloud_range[3], point_cloud_range[1],
-            point_cloud_range[4], point_cloud_range[2], point_cloud_range[5], num_dir_bins, dir_offset,
-            dir_limit_offset, anchor_bottom_height, anchors, score_thresh);
+        IPluginV2* plugin = new DecodeBbox3DPlugin(pointCloudRange[0], pointCloudRange[3], pointCloudRange[1],
+            pointCloudRange[4], pointCloudRange[2], pointCloudRange[5], numDirBins, dirOffset, dirLimitOffset,
+            anchorBottomHeight, anchors, scoreThreshold);
         return plugin;
     }
     catch (std::exception const& e)
@@ -419,7 +479,7 @@ IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* name, PluginField
 }
 
 IPluginV2* DecodeBbox3DPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -434,7 +494,15 @@ IPluginV2* DecodeBbox3DPluginCreator::deserializePlugin(
 
 void DecodeBbox3DPluginCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 char const* DecodeBbox3DPluginCreator::getPluginNamespace() const noexcept

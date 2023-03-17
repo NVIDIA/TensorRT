@@ -125,8 +125,8 @@ IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(
     return nullptr;
 }
 
-GenerateDetection::GenerateDetection(
-    int num_classes, int keep_topk, float score_threshold, float iou_threshold, nvinfer1::Dims const& image_size)
+GenerateDetection::GenerateDetection(int32_t num_classes, int32_t keep_topk, float score_threshold, float iou_threshold,
+    nvinfer1::Dims const& image_size)
     : mNbClasses(num_classes)
     , mKeepTopK(keep_topk)
     , mScoreThreshold(score_threshold)
@@ -150,12 +150,12 @@ GenerateDetection::GenerateDetection(
     mType = DataType::kFLOAT;
 }
 
-int GenerateDetection::getNbOutputs() const noexcept
+int32_t GenerateDetection::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-int GenerateDetection::initialize() noexcept
+int32_t GenerateDetection::initialize() noexcept
 {
     // Init the regWeight [10, 10, 5, 5]
     mRegWeightDevice = std::make_shared<CudaBind<float>>(4);
@@ -163,12 +163,12 @@ int GenerateDetection::initialize() noexcept
         static_cast<void const*>(TLTMaskRCNNConfig::DETECTION_REG_WEIGHTS), sizeof(float) * 4, cudaMemcpyHostToDevice));
 
     //@Init the mValidCnt and mDecodedBboxes for max batch size
-    std::vector<int> tempValidCnt(mMaxBatchSize, mAnchorsCnt);
+    std::vector<int32_t> tempValidCnt(mMaxBatchSize, mAnchorsCnt);
 
-    mValidCnt = std::make_shared<CudaBind<int>>(mMaxBatchSize);
+    mValidCnt = std::make_shared<CudaBind<int32_t>>(mMaxBatchSize);
 
-    PLUGIN_CUASSERT(cudaMemcpy(
-        mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()), sizeof(int) * mMaxBatchSize, cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMemcpy(mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()),
+        sizeof(int32_t) * mMaxBatchSize, cudaMemcpyHostToDevice));
 
     return 0;
 }
@@ -220,7 +220,7 @@ char const* GenerateDetection::getPluginNamespace() const noexcept
 
 size_t GenerateDetection::getSerializationSize() const noexcept
 {
-    return sizeof(int) * 2 + sizeof(float) * 2 + sizeof(int) * 2 + sizeof(nvinfer1::Dims);
+    return sizeof(int32_t) * 2 + sizeof(float) * 2 + sizeof(int32_t) * 2 + sizeof(nvinfer1::Dims);
 }
 
 void GenerateDetection::serialize(void* buffer) const noexcept
@@ -267,7 +267,7 @@ void GenerateDetection::deserialize(int8_t const* data, size_t length)
     mType = DataType::kFLOAT;
 }
 
-void GenerateDetection::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputDims) noexcept
+void GenerateDetection::check_valid_inputs(nvinfer1::Dims const* inputs, int32_t nbInputDims) noexcept
 {
     // classifier_delta_bbox[N, anchors, num_classes*4, 1, 1]
     // classifier_class[N, anchors, num_classes, 1, 1]
@@ -282,13 +282,13 @@ void GenerateDetection::check_valid_inputs(nvinfer1::Dims const* inputs, int nbI
     PLUGIN_ASSERT(inputs[2].nbDims == 2 && inputs[2].d[1] == 4);
 }
 
-size_t GenerateDetection::getWorkspaceSize(int batch_size) const noexcept
+size_t GenerateDetection::getWorkspaceSize(int32_t batch_size) const noexcept
 {
     RefineDetectionWorkSpace refine(batch_size, mAnchorsCnt, mParam, mType);
     return refine.totalSize;
 }
 
-Dims GenerateDetection::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims GenerateDetection::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
 
     check_valid_inputs(inputs, nbInputDims);
@@ -322,7 +322,7 @@ int32_t GenerateDetection::enqueue(
 }
 
 DataType GenerateDetection::getOutputDataType(
-    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
@@ -330,21 +330,21 @@ DataType GenerateDetection::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool GenerateDetection::isOutputBroadcastAcrossBatch(
-    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool GenerateDetection::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool GenerateDetection::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void GenerateDetection::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void GenerateDetection::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
+    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
     PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0] && inputDims[1].d[0] == inputDims[2].d[0]);

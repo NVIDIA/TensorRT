@@ -263,25 +263,16 @@ void disentangled_kernel_wrapper(TDataType const* data0, TDataType const* data1,
         data0, data1, data2, result, dimData0, dimData1, dimData2, dimResult, factor, span);
 }
 
-template void disentangled_kernel_wrapper<float, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(
+template void disentangled_kernel_wrapper<float, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(
     float const*, float const*, float const*, float*, dim3, dim3, dim3, dim3, float, int32_t, dim3, dim3, cudaStream_t);
 
-template void disentangled_kernel_wrapper<__half, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(__half const*,
+template void disentangled_kernel_wrapper<__half, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(__half const*,
     __half const*, __half const*, __half*, dim3, dim3, dim3, dim3, __half, int32_t, dim3, dim3, cudaStream_t);
 
-template void disentangled_kernel_wrapper<int8_t, kDISENTANGLED_TILESIZE_V1, kDISENTANGLED_BLOCKDIMY_V1>(int8_t const*,
-    int8_t const*, int8_t const*, int8_t*, dim3, dim3, dim3, dim3, int8_t, int32_t, dim3, dim3, cudaStream_t);
-
-template void disentangled_kernel_wrapper<float, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(
-    float const*, float const*, float const*, float*, dim3, dim3, dim3, dim3, float, int32_t, dim3, dim3, cudaStream_t);
-
-template void disentangled_kernel_wrapper<__half, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(__half const*,
-    __half const*, __half const*, __half*, dim3, dim3, dim3, dim3, __half, int32_t, dim3, dim3, cudaStream_t);
-
-template void disentangled_kernel_wrapper<int8_t, kDISENTANGLED_TILESIZE_V2, kDISENTANGLED_BLOCKDIMY_V2>(int8_t const*,
+template void disentangled_kernel_wrapper<int8_t, kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY>(int8_t const*,
     int8_t const*, int8_t const*, int8_t*, dim3, dim3, dim3, dim3, int8_t, int32_t, dim3, dim3, cudaStream_t);
 
 #undef IND
 
-} /* plugin */
+} // namespace plugin
 } // namespace nvinfer1

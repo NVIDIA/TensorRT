@@ -243,9 +243,9 @@ __device__ inline kv_half2 operator+(const kv_half2& a, const kv_half2& b)
 template <typename T>
 using kvp = cub::KeyValuePair<T, T>;
 
-template <typename T, typename R, typename P, int TPB>
+template <typename T, typename R, typename P, int32_t TPB>
 __device__ inline void layerNorm(
-    const kvp<R>& threadData, const int ld, const int offset, const P* beta, const P* gamma, T* output)
+    const kvp<R>& threadData, const int32_t ld, const int32_t offset, const P* beta, const P* gamma, T* output)
 {
     // Assuming threadData is already divided by ld
 
@@ -263,9 +263,9 @@ __device__ inline void layerNorm(
     }
     __syncthreads();
 
-    for (int i = threadIdx.x; i < ld; i += TPB)
+    for (int32_t i = threadIdx.x; i < ld; i += TPB)
     {
-        const int idx = offset + i;
+        const int32_t idx = offset + i;
         const R val = output[idx];
         const R g(gamma[i]);
         const R b(beta[i]);
@@ -273,9 +273,9 @@ __device__ inline void layerNorm(
     }
 }
 
-template <typename T, typename P, int TPB>
+template <typename T, typename P, int32_t TPB>
 __device__ inline void layerNormSmall(
-    const T val, const kvp<T>& threadData, const int ld, const int idx, const P* beta, const P* gamma, T* output)
+    const T val, const kvp<T>& threadData, const int32_t ld, const int32_t idx, const P* beta, const P* gamma, T* output)
 {
     // Assuming threadData is already divided by ld
     // Small settings: the block covers the leading dimension TPB >= ld. The input
@@ -305,7 +305,7 @@ __device__ inline void layerNormSmall(
 
 template <typename T, unsigned TPB>
 __device__ inline void scaledSoftmaxSmall(
-    const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
+    const int32_t ld, const int32_t lastValid, const float rsqrtHeadSize, const T* input, T* output)
 {
 
     using BlockReduce = cub::BlockReduce<float, TPB>;
@@ -315,13 +315,13 @@ __device__ inline void scaledSoftmaxSmall(
     __shared__ float rZ;
     __shared__ float fMax;
 
-    const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
+    const int32_t offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
 
     const float w(rsqrtHeadSize);
     cub::Sum sum;
     float threadData(-FLT_MAX);
 
-    const int idx = offset + threadIdx.x;
+    const int32_t idx = offset + threadIdx.x;
     if (threadIdx.x < lastValid)
     {
         threadData = input[idx];
@@ -353,14 +353,14 @@ __device__ inline void scaledSoftmaxSmall(
 
     if (threadIdx.x < ld)
     {
-        // this will be 0 for threadIdx.x >= lastValid
-        output[idx] = T(threadData * rZ);
+        float const val = (threadIdx.x < lastValid) ? threadData * rZ : 0.F;
+        output[idx] = static_cast<T>(val);
     }
 }
 
 template <typename T, unsigned TPB>
 __device__ inline void scaledSoftmax(
-    const int ld, const int lastValid, const float rsqrtHeadSize, const T* input, T* output)
+    const int32_t ld, const int32_t lastValid, const float rsqrtHeadSize, const T* input, T* output)
 {
     using BlockReduce = cub::BlockReduce<float, TPB>;
     __shared__ typename BlockReduce::TempStorage tmpStorage;
@@ -368,7 +368,7 @@ __device__ inline void scaledSoftmax(
     __shared__ float rZ;
     __shared__ float fMax;
 
-    const int offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
+    const int32_t offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
 
     const float w(rsqrtHeadSize);
     cub::Sum sum;
@@ -378,9 +378,9 @@ __device__ inline void scaledSoftmax(
     {
         threadData = 0;
     }
-    for (int i = threadIdx.x; i < lastValid; i += TPB)
+    for (int32_t i = threadIdx.x; i < lastValid; i += TPB)
     {
-        const int idx = offset + i;
+        const int32_t idx = offset + i;
         threadData = max(static_cast<float>(input[idx]), threadData);
     }
 
@@ -393,9 +393,9 @@ __device__ inline void scaledSoftmax(
 
     threadData = 0;
 
-    for (int i = threadIdx.x; i < lastValid; i += TPB)
+    for (int32_t i = threadIdx.x; i < lastValid; i += TPB)
     {
-        const int idx = offset + i;
+        const int32_t idx = offset + i;
         threadData += exp((static_cast<float>(input[idx]) - fMax) * w);
     }
 
@@ -407,9 +407,9 @@ __device__ inline void scaledSoftmax(
     }
     __syncthreads();
 
-    for (int i = threadIdx.x; i < ld; i += TPB)
+    for (int32_t i = threadIdx.x; i < ld; i += TPB)
     {
-        const int idx = offset + i;
+        const int32_t idx = offset + i;
         const float val = (i < lastValid) ? exp((static_cast<float>(input[idx]) - fMax) * w) * rZ : 0.f;
         output[idx] = T(val);
     }
@@ -426,7 +426,7 @@ constexpr HDI IntType alignTo(IntType a, IntType b)
     return ceildiv(a, b) * b;
 }
 
-template <int VPT>
+template <int32_t VPT>
 struct BytesToType;
 
 template <>
@@ -450,7 +450,7 @@ struct BytesToType<16>
     using type = float4;
 };
 
-template <int Bytes>
+template <int32_t Bytes>
 __device__ inline void copy(const void* local, void* data)
 {
     using T = typename BytesToType<Bytes>::type;
@@ -500,7 +500,7 @@ static inline __device__ uint32_t float4_to_char4(float x,
 
 inline __device__ char quantize(const float x, const float qScale)
 {
-    int tmpq = __float2int_rn(qScale * x);  // scale and round
+    int32_t tmpq = __float2int_rn(qScale * x);  // scale and round
     char tmpq8 = min(127, max(-127, tmpq)); // clip and cast
     return tmpq8;
 }

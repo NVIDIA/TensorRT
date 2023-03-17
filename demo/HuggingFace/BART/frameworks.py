@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,16 +68,16 @@ class BARTHuggingFace(FrameworkCommand):
     def generate_and_download_framework(
         self, metadata: NetworkMetadata, workspace: NNFolderWorkspace
     ) -> NetworkModels:
-    
+
         cache_variant = False
         if metadata.other.kv_cache:
             cache_variant = True
-        
+
         trt_BART_config = self.config
         metadata_serialized = trt_BART_config.get_metadata_string(metadata)
         workspace_dir, encoder_onnx_root, decoder_onnx_root = workspace.set_model_path(metadata_serialized, is_encoder_decoder = True)
         pytorch_model_dir = os.path.join(workspace_dir, "pytorch_model")
-        
+
         # We keep track of the generated torch location for cleanup later
         self.torch_BART_dir = pytorch_model_dir
 
@@ -111,8 +111,8 @@ class BARTHuggingFace(FrameworkCommand):
                 model = MBartForConditionalGeneration.from_pretrained(pytorch_model_dir)
 
             model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
-        
-        # These ONNX models can be converted using special encoder and decoder classes.        
+
+        # These ONNX models can be converted using special encoder and decoder classes.
         encoder_onnx_model_fpath = os.path.join(encoder_onnx_root, metadata_serialized + "-encoder.onnx")
         decoder_onnx_model_fpath = os.path.join(decoder_onnx_root, metadata_serialized + "-decoder-with-lm-head.onnx")
 
@@ -262,7 +262,7 @@ class BARTHuggingFace(FrameworkCommand):
                 batch_size=batch_size,
                 use_cache=metadata.other.kv_cache,
             )
-        
+
         # Prepare runtime results.
         runtime=[
             NetworkRuntime(

@@ -36,13 +36,16 @@ namespace plugin
 
 // using namespace nvinfer1;
 
-#define kDISENTANGLED_VERSION 2
 // Version 1: regular relative position index
 // Version 2: log bucket relative position index
-constexpr int32_t kDISENTANGLED_TILESIZE_V1 = 32;
-constexpr int32_t kDISENTANGLED_BLOCKDIMY_V1 = 8;
-constexpr int32_t kDISENTANGLED_TILESIZE_V2 = 64;
-constexpr int32_t kDISENTANGLED_BLOCKDIMY_V2 = 4;
+#define kDISENTANGLED_VERSION 2
+#if kDISENTANGLED_VERSION == 1
+constexpr int32_t kDISENTANGLED_TILESIZE = 32;
+constexpr int32_t kDISENTANGLED_BLOCKDIMY = 8;
+#elif kDISENTANGLED_VERSION == 2
+constexpr int32_t kDISENTANGLED_TILESIZE = 64;
+constexpr int32_t kDISENTANGLED_BLOCKDIMY = 4;
+#endif
 
 template <typename TDataType, int32_t tTileSize, int32_t tBlockDimY>
 void disentangled_kernel_wrapper(TDataType const* data0, TDataType const* data1, TDataType const* data2,
@@ -58,14 +61,6 @@ public:
 
     DisentangledAttentionPlugin(void const* serialData, size_t serialLength);
 
-    ~DisentangledAttentionPlugin() override;
-
-    template <typename TDataType>
-    TDataType const* pointer_const_cast(void const* const p);
-
-    template <typename TDataType>
-    TDataType* pointer_cast(void* p);
-
     int32_t getNbOutputs() const noexcept override;
 
     // DynamicExt plugins returns DimsExprs class instead of Dims
@@ -79,9 +74,9 @@ public:
     size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
         nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
 
+    // This is where the plugin work is done.
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace,
-        cudaStream_t stream) noexcept override; // this is where the plugin work is done
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
 
@@ -101,11 +96,6 @@ public:
     nvinfer1::DataType getOutputDataType(
         int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    void attachToContext(
-        cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
-
-    void detachFromContext() noexcept override;
-
     void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
     char const* getPluginNamespace() const noexcept override;
@@ -114,7 +104,11 @@ public:
         nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
 
 private:
-    char const* mPluginNamespace;
+    // Helper method for enqueue()
+    template <typename TDataType>
+    void enqueueType(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        void const* const* inputs, void* const* outputs, cudaStream_t stream, TDataType factor);
+
     std::string mNamespace;
 
     // attributes

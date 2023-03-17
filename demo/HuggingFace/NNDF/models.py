@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -422,7 +422,7 @@ class ONNXModelFile(NNModelFile):
             return converter.torch_class(output_fpath, self.network_metadata)
 
         return converter.onnx_to_torch(output_fpath, self.fpath, self.network_metadata)
-    
+
     def _cleanup_onnx_folder(self, folder_dir):
         for d in os.listdir(folder_dir):
             fpath = os.path.join(folder_dir, d)

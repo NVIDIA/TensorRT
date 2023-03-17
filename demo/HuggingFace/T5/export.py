@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,7 +44,7 @@ from transformers import T5ForConditionalGeneration
 
 # TRT-HuggingFace
 from T5.T5ModelConfig import T5ModelTRTConfig
-from NNDF.tensorrt_utils import clamp_weights_onnx_to_fp16_bounds, move_t5_cast_op
+from NNDF.tensorrt_utils import OnnxProcessOperation, process_onnx
 from NNDF.networks import NetworkMetadata, Precision, Dims
 from NNDF.logger import G_LOGGER
 from NNDF.models import (
@@ -123,17 +123,18 @@ class T5DecoderTorchFile(TorchModelFile):
             self.decoder = decoder
             self.lm_head = lm_head
             self.config = config
-            self.device = "cuda" # HuggingFace's beam search requires to set self.device. Set it to avoid application crash
+            # HuggingFace's beam search requires to set self.device. Set it to avoid application crash
+            self.device = torch.device('cuda')
             # Use hardcoded value to extend compatibility with older HF versions.
             self.main_input_name = "input_ids"
             # trt uses cached and precomputed cross attention vs. framework uses the entire kv cache as output. Need to treat them differently.
             self.is_trt = is_trt
 
         def prepare_inputs_for_generation(
-            self,
-            input_ids,
-            past=None,
-            use_cache=None,
+            self, 
+            input_ids, 
+            past=None, 
+            use_cache=None, 
             **kwargs
         ):
             # cut decoder_input_ids if past is used
@@ -148,10 +149,10 @@ class T5DecoderTorchFile(TorchModelFile):
             }
 
         def forward(
-            self,
-            input_ids,
-            encoder_hidden_states,
-            use_cache = None,
+            self, 
+            input_ids, 
+            encoder_hidden_states, 
+            use_cache = None, 
             past_key_values = None,
             return_dict = None,
             **kwargs,
@@ -181,9 +182,9 @@ class T5DecoderTorchFile(TorchModelFile):
 
             if not return_dict:
                 return (logits, past_key_values)
-
+            
             return Seq2SeqLMOutput(
-                logits=logits,
+                logits=logits, 
                 past_key_values=past_key_values
             )
 
@@ -206,16 +207,16 @@ class T5DecoderCrossAttentionKVGenerator(Module):
             dummy_hidden_states = torch.zeros(1,1).to(self.device)
             dummy_position_bias = torch.zeros(1, layer_module.layer[1].EncDecAttention.n_heads, 1, encoder_hidden_states.shape[1]).to(self.device)
             cross_attention_outputs = layer_module.layer[1](
-                hidden_states=dummy_hidden_states,
-                key_value_states=encoder_hidden_states,
-                use_cache=True,
+                hidden_states=dummy_hidden_states, 
+                key_value_states=encoder_hidden_states, 
+                use_cache=True, 
                 past_key_value=None,
                 position_bias=dummy_position_bias
             )
             present_key_values = present_key_values + cross_attention_outputs[1]
-
+        
         return present_key_values
-
+    
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
@@ -256,9 +257,20 @@ class T5DecoderTRTEngine(TRTEngineFile):
     def __init__(self, model, network_metadata):
         super().__init__(model, T5DecoderConverter, network_metadata)
         self.max_trt_workspace = T5ModelTRTConfig.MAX_DECODER_WORKSPACE_MB[network_metadata.variant]
-
+        
 
     def get_network_definition(self, network_definition):
+        if self.network_metadata.precision.fp16:
+            for i in range(network_definition[1].num_inputs):
+                t = network_definition[1].get_input(i)
+                if t.dtype == trt.float32:
+                    t.dtype = trt.float16
+
+            for i in range(network_definition[1].num_outputs):
+                t = network_definition[1].get_output(i)
+                if t.dtype == trt.float32:
+                    t.dtype = trt.float16
+        
         return add_extra_fp32(network_definition)
 
     def use_obey_precision_constraints(self):
@@ -393,11 +405,10 @@ class T5DecoderConverter(ModelFileConverter):
             )
 
             if network_metadata.precision.fp16:
-                clamp_weights_onnx_to_fp16_bounds(output_fpath_kv_generator, output_fpath_kv_generator)
+                process_onnx([OnnxProcessOperation.CLAMP_WEIGHTS], output_fpath_kv_generator, output_fpath_kv_generator)
 
         if network_metadata.precision.fp16:
-            move_t5_cast_op(output_fpath, output_fpath)
-            clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
+            process_onnx([OnnxProcessOperation.MOVE_CAST_OP, OnnxProcessOperation.CLAMP_WEIGHTS], output_fpath, output_fpath)
 
         return T5DecoderONNXFile(output_fpath, network_metadata)
 
@@ -467,7 +478,6 @@ class T5EncoderConverter(ModelFileConverter):
         )
 
         if network_metadata.precision.fp16:
-            move_t5_cast_op(output_fpath, output_fpath)
-            clamp_weights_onnx_to_fp16_bounds(output_fpath, output_fpath)
+            process_onnx([OnnxProcessOperation.MOVE_CAST_OP, OnnxProcessOperation.CLAMP_WEIGHTS], output_fpath, output_fpath)
 
         return T5EncoderONNXFile(output_fpath, network_metadata)

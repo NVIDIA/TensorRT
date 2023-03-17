@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,14 +64,14 @@ def full_inference(
 
     if isinstance(gpt2, TRTNativeRunner):
         gpt2.set_return_device("cuda" if use_cuda else "cpu")
-    
+
     def _e2e():
         with torch.no_grad():
             output = gpt2.generate(
-                input_ids, 
-                max_length=max_length, 
-                min_length=min_length, 
-                batch_size=batch_size, 
+                input_ids,
+                max_length=max_length,
+                min_length=min_length,
+                batch_size=batch_size,
                 num_beams=num_beams,
                 use_cache=use_cache,
                 early_stopping=early_stopping

@@ -59,8 +59,8 @@ nvinfer1::IPluginV2DynamicExt* PillarScatterPlugin::clone() const noexcept
     return nullptr;
 }
 
-nvinfer1::DimsExprs PillarScatterPlugin::getOutputDimensions(
-    int outputIndex, nvinfer1::DimsExprs const* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+nvinfer1::DimsExprs PillarScatterPlugin::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
+    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
     PLUGIN_ASSERT(outputIndex == 0);
     nvinfer1::DimsExprs output;
@@ -74,7 +74,7 @@ nvinfer1::DimsExprs PillarScatterPlugin::getOutputDimensions(
 }
 
 bool PillarScatterPlugin::supportsFormatCombination(
-    int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept
+    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 3);
     PLUGIN_ASSERT(nbOutputs == 1);
@@ -99,36 +99,36 @@ bool PillarScatterPlugin::supportsFormatCombination(
     return false;
 }
 
-void PillarScatterPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept
+void PillarScatterPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
     return;
 }
 
-size_t PillarScatterPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int nbOutputs) const noexcept
+size_t PillarScatterPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
     return 0;
 }
-int PillarScatterPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
+int32_t PillarScatterPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
     nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
     try
     {
-        int batchSize = inputDesc[0].dims.d[0];
-        int maxPillarNum = inputDesc[0].dims.d[1];
-        int numFeatures = inputDesc[0].dims.d[2];
+        int32_t batchSize = inputDesc[0].dims.d[0];
+        int32_t maxPillarNum = inputDesc[0].dims.d[1];
+        int32_t numFeatures = inputDesc[0].dims.d[2];
 
         nvinfer1::DataType inputType = inputDesc[0].type;
 
-        auto coords_data = static_cast<unsigned int const*>(inputs[1]);
-        auto params_data = static_cast<unsigned int const*>(inputs[2]);
+        auto coords_data = static_cast<uint32_t const*>(inputs[1]);
+        auto params_data = static_cast<uint32_t const*>(inputs[2]);
 
-        unsigned int featureY = feature_y_size_;
-        unsigned int featureX = feature_x_size_;
+        uint32_t featureY = feature_y_size_;
+        uint32_t featureX = feature_x_size_;
 
-        int status = -1;
+        int32_t status = -1;
 
         if (inputType == nvinfer1::DataType::kHALF)
         {
@@ -159,7 +159,7 @@ int PillarScatterPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
 }
 
 nvinfer1::DataType PillarScatterPlugin::getOutputDataType(
-    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     return inputTypes[0];
 }
@@ -174,12 +174,12 @@ char const* PillarScatterPlugin::getPluginVersion() const noexcept
     return kPLUGIN_VERSION;
 }
 
-int PillarScatterPlugin::getNbOutputs() const noexcept
+int32_t PillarScatterPlugin::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-int PillarScatterPlugin::initialize() noexcept
+int32_t PillarScatterPlugin::initialize() noexcept
 {
     return 0;
 }

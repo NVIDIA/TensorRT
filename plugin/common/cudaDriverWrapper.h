@@ -42,7 +42,7 @@ public:
 
     CUresult cuGetErrorName(CUresult error, char const** pStr) const;
 
-    CUresult cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attrib, int value) const;
+    CUresult cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attrib, int32_t value) const;
 
     CUresult cuLinkComplete(CUlinkState state, void** cubinOut, size_t* sizeOut) const;
 
@@ -73,24 +73,24 @@ public:
 private:
     void* handle;
     CUresult (*_cuGetErrorName)(CUresult, char const**);
-    CUresult (*_cuFuncSetAttribute)(CUfunction, CUfunction_attribute, int);
+    CUresult (*_cuFuncSetAttribute)(CUfunction, CUfunction_attribute, int32_t);
     CUresult (*_cuLinkComplete)(CUlinkState, void**, size_t*);
     CUresult (*_cuModuleUnload)(CUmodule);
     CUresult (*_cuLinkDestroy)(CUlinkState);
-    CUresult (*_cuLinkCreate)(unsigned int, CUjit_option*, void**, CUlinkState*);
+    CUresult (*_cuLinkCreate)(uint32_t, CUjit_option*, void**, CUlinkState*);
     CUresult (*_cuModuleLoadData)(CUmodule*, void const*);
     CUresult (*_cuModuleGetFunction)(CUfunction*, CUmodule, char const*);
-    CUresult (*_cuLinkAddFile)(CUlinkState, CUjitInputType, char const*, unsigned int, CUjit_option*, void**);
+    CUresult (*_cuLinkAddFile)(CUlinkState, CUjitInputType, char const*, uint32_t, CUjit_option*, void**);
     CUresult (*_cuLinkAddData)(
-        CUlinkState, CUjitInputType, void*, size_t, char const*, unsigned int, CUjit_option*, void**);
-    CUresult (*_cuLaunchCooperativeKernel)(CUfunction, unsigned int, unsigned int, unsigned int, unsigned int,
-        unsigned int, unsigned int, unsigned int, CUstream, void**);
+        CUlinkState, CUjitInputType, void*, size_t, char const*, uint32_t, CUjit_option*, void**);
+    CUresult (*_cuLaunchCooperativeKernel)(
+        CUfunction, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, CUstream, void**);
     CUresult (*_cuLaunchKernel)(CUfunction f, uint32_t gridDimX, uint32_t gridDimY, uint32_t gridDimZ,
         uint32_t blockDimX, uint32_t blockDimY, uint32_t blockDimZ, uint32_t sharedMemBytes, CUstream hStream,
         void** kernelParams, void** extra);
 };
 
-inline void cuErrCheck_(CUresult stat, CUDADriverWrapper const& wrap, char const* file, int line)
+inline void cuErrCheck_(CUresult stat, CUDADriverWrapper const& wrap, char const* file, int32_t line)
 {
     if (stat != CUDA_SUCCESS)
     {
