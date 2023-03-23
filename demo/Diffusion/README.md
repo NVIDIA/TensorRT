@@ -19,12 +19,16 @@ Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacent
 docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:23.02-py3 /bin/bash
 ```
 
-### (Optional) Install latest TensorRT release
+### Install latest TensorRT release
 
 ```bash
 python3 -m pip install --upgrade pip
 python3 -m pip install --upgrade tensorrt
 ```
+
+Minimum required version is TensorRT 8.6.0. Check your installed version using:
+`python3 -c 'import tensorrt;print(tensorrt.__version__)'`
+
 > NOTE: Alternatively, you can download and install TensorRT packages from [NVIDIA TensorRT Developer Zone](https://developer.nvidia.com/tensorrt).
 
 ### Install required packages
