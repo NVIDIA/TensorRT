@@ -127,7 +127,7 @@ class StableDiffusionPipeline:
         self.inpaint = inpaint
 
         self.stream = None # loaded in loadResources()
-        self.tokenizer = None # loaded in loadResources()
+        self.tokenizer = None # loaded in loadEngines()
         self.models = {} # loaded in loadEngines()
         self.engine = {} # loaded in loadEngines()
 
