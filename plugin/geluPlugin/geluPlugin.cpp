@@ -60,7 +60,7 @@ GeluPluginDynamic::GeluPluginDynamic(const std::string name, const DataType type
 GeluPluginDynamic::GeluPluginDynamic(const std::string name, void const* data, size_t length)
     : mLayerName(name)
 {
-    gLogVerbose << "GeluPluginDynamic deserialize\n";
+    BERT_DEBUG_MSG("GeluPluginDynamic deserialize.");
     deserialize_value(&data, &length, &mType);
     deserialize_value(&data, &length, &mLd);
     deserialize_value(&data, &length, &mHasBias);
@@ -77,7 +77,7 @@ nvinfer1::IPluginV2DynamicExt* GeluPluginDynamic::clone() const noexcept
 {
     try
     {
-        gLogVerbose << "GeluPluginDynamic clone\n";
+        BERT_DEBUG_MSG("GeluPluginDynamic clone.");
         auto* plugin = new GeluPluginDynamic(*this);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
@@ -115,7 +115,7 @@ bool GeluPluginDynamic::supportsFormatCombination(
 void GeluPluginDynamic::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
     nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept
 {
-    gLogVerbose << "GeluPluginDynamic configurePlugin\n";
+    BERT_DEBUG_MSG("GeluPluginDynamic configurePlugin.");
     PLUGIN_ASSERT(mType == in[0].desc.type);
 }
 
@@ -204,13 +204,13 @@ int GeluPluginDynamic::getNbOutputs() const noexcept
 
 int GeluPluginDynamic::initialize() noexcept
 {
-    gLogVerbose << "GeluPluginDynamic initalize\n";
+    BERT_DEBUG_MSG("GeluPluginDynamic initalize.");
     return 0;
 }
 
 void GeluPluginDynamic::terminate() noexcept
 {
-    gLogVerbose << "GeluPluginDynamic terminate\n";
+    BERT_DEBUG_MSG("GeluPluginDynamic terminate.");
 }
 
 size_t GeluPluginDynamic::getSerializationSize() const noexcept
@@ -235,7 +235,7 @@ void GeluPluginDynamic::serialize(void* buffer) const noexcept
 
 void GeluPluginDynamic::destroy() noexcept
 {
-    gLogVerbose << "GeluPluginDynamic destroy\n";
+    BERT_DEBUG_MSG("GeluPluginDynamic destroy.");
     // This gets called when the network containing plugin is destroyed
     mBiasDev.reset();
     delete this;
@@ -282,7 +282,7 @@ IPluginV2* GeluPluginDynamicCreator::createPlugin(char const* name, PluginFieldC
 {
     try
     {
-        gLogVerbose << "GeluPluginDynamicCreator createPlugin\n";
+        BERT_DEBUG_MSG("GeluPluginDynamicCreator createPlugin.");
 
         Weights bias{DataType::kFLOAT, nullptr, 0};
         int32_t typeId = -1;
