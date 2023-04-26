@@ -68,8 +68,9 @@ class PytRunner(BaseRunner):
 
         out_dict = OrderedDict()
         for name, output in zip(self.output_names, outputs):
-            out_dict[name] = output.cpu().numpy()
-        return out_dict, end - start
+            out_dict[name] = output.detach().cpu().numpy()
+        self.inference_time = end - start
+        return out_dict
 
     def deactivate_impl(self):
         del self.model
