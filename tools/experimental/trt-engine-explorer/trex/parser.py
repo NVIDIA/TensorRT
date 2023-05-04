@@ -172,7 +172,23 @@ def import_graph_file(graph_file: str, profile_id: int=None):
                 pass
         return raw_layers
 
+    def fix_metadata(raw_layers: List) -> List:
+        """TensorRT 8.6 introduced the Metadata field, with a non-ASCII character
+        that triggers an SVG rendering error. This function replaces this character.
+
+        See: https://github.com/NVIDIA/TensorRT/issues/2779
+        """
+        TRT_METADATA_DELIM = '\x1E'
+        for l in raw_layers:
+            try:
+                if TRT_METADATA_DELIM in l['Metadata']:
+                    l['Metadata'] = l['Metadata'].replace(TRT_METADATA_DELIM, '+')
+            except KeyError:
+                pass
+        return raw_layers
+
     raw_layers, bindings = read_graph_file(graph_file)
+    raw_layers = fix_metadata(raw_layers)
     raw_layers = convert_deconv(raw_layers)
     raw_layers = disambiguate_layer_names(raw_layers)
     raw_layers, bindings = filter_profiles(raw_layers, bindings, profile_id)

@@ -22,6 +22,7 @@ This file contains code to generate graph diagrams for an engine-plan.
 
 import os
 import re
+import warnings
 from enum import Enum
 from graphviz import Digraph
 from typing import Callable, NamedTuple, List, Dict
@@ -434,6 +435,17 @@ def layer_node_renderer_keras(
     return label
 
 
+def layer_node_highlighter(node_id: str, highlighted_layers_ids: List[int]
+) -> Dict:
+    """Highlight a layer node.
+
+    Create a yellow hailo around the node.
+    """
+    should_highlight = highlighted_layers_ids and node_id in highlighted_layers_ids
+    formatting = {'penwidth': str(6), 'color': 'yellow'}
+    return formatting if should_highlight else {}
+
+
 def layer_node_configurable_renderer(
     layer: Layer,
     latency: float,
@@ -584,10 +596,12 @@ def layer_type_formatter(layer: Layer):
     except KeyError:
         layer_color = "#E5E7E9"
 
-    formatting = {'style': 'filled',
+    formatting = {'shape': 'Mrecord',
+                  'style': 'filled',
                   'tooltip': layer.tooltip(),
                   'fillcolor': layer_color,
-                  'color': 'white',}
+                  'color': 'lightgray',
+                  'fontname': 'Helvetica'}
     return formatting
 
 
@@ -623,11 +637,16 @@ def get_latency(plan: EnginePlan, layer: Layer, latency_type) -> float:
     return latency
 
 
+def get_dot_id(layer_name: str) -> str:
+    return layer_name.replace(":", "###") # f"l_{dot_node_id}"
+
+
 class DotGraph(object):
     """This class converts a TensorRT plan into Graphviz DOT graphs"""
     def __init__(self,
         plan: EnginePlan,
         layer_node_formatter: Callable,
+        layer_node_highlighter: Callable=layer_node_highlighter,
         layer_node_renderer: Callable=layer_node_configurable_renderer,
         region_formatter: Callable=region_precision_formatter,
         display_layer_names: bool=True,
@@ -642,11 +661,13 @@ class DotGraph(object):
         display_region_names: bool=False,
         display_edge_name: bool=False,
         display_edge_details: bool=True,
+        highlight_layers: list=None,
     ):
         plan_graph = PlanGraph(
             plan, display_regions, display_constants, display_forking_regions)
         self.dot = Digraph()
         self.layer_node_formatter = layer_node_formatter
+        self.layer_node_highlighter = layer_node_highlighter
         self.layer_node_renderer = layer_node_renderer
         self.region_formatter = region_formatter
         self.expand_layer_details = expand_layer_details
@@ -659,6 +680,14 @@ class DotGraph(object):
         self.display_region_names = display_region_names
         self.display_edge_name = display_edge_name
         self.display_edge_details = display_edge_details
+        # Get the node names of the layers to highlight
+        self.highlighted_layers_ids = None
+        if highlight_layers:
+            try:
+                highlight_layers_name = plan.df['Name'].iloc[highlight_layers].to_list()
+                self.highlighted_layers_ids = [get_dot_id(name) for name in highlight_layers_name]
+            except IndexError:
+                warnings.warn("The layers indices specified for highlighting are incorrect")
 
         node_name_2_node_id = {}
         self.__add_dot_region_nodes(plan_graph, node_name_2_node_id)
@@ -672,7 +701,7 @@ class DotGraph(object):
     def __add_dot_region_nodes(self, plan_graph, node_name_2_node_id):
         dot_node_id = 0
         for mem_node in plan_graph.memory_nodes:
-            node_name_2_node_id[mem_node.name] = dot_id = mem_node.name.replace(":", "###") #f"r_{dot_node_id}"
+            node_name_2_node_id[mem_node.name] = dot_id = get_dot_id(mem_node.name)
             self.__create_dot_region_node(dot_id, mem_node.tensor, mem_node.is_user, mem_node.region_gen)
             dot_node_id += 1
 
@@ -681,7 +710,7 @@ class DotGraph(object):
             layer = layer_node.layer
             latency = get_latency(plan, layer, self.latency_type)
             if not layer.type == 'Constant' or plan_graph.include_constants:
-                dot_id = layer.name.replace(":", "###") # f"l_{dot_node_id}"
+                dot_id = get_dot_id(layer.name)
                 node_name_2_node_id[layer.name] = dot_id
                 self.__create_dot_layer_node(
                     dot_id, layer, latency, layer_node_renderer=self.layer_node_renderer)
@@ -713,6 +742,7 @@ class DotGraph(object):
         self, node_id: int, layer: Layer, latency: float, layer_node_renderer: Callable
     ):
         formatting = self.layer_node_formatter(layer)
+        formatting.update(self.layer_node_highlighter(node_id, self.highlighted_layers_ids))
         self.dot.node(
             str(node_id),
             layer_node_renderer(
@@ -721,8 +751,7 @@ class DotGraph(object):
                 expand_layer_details=self.expand_layer_details,
                 display_layer_names=self.display_layer_names,
                 stack_layer_names=self.stack_layer_names),
-            shape='Mrecord',
-            fontname="Helvetica", **formatting)
+                **formatting)
 
     def __create_dot_edge(self, src, end, tensor, region_gen):
         def generation_color(gen: int, line_color: str) -> str:
